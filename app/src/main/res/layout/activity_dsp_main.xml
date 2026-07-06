@@ -11,10 +11,10 @@
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorPrimaryContainer"
+        android:background="?android:colorBackground"
         android:fitsSystemWindows="true"
         app:liftOnScroll="true"
-        app:liftOnScrollColor="?attr/colorSurface"
+        app:liftOnScrollColor="?attr/colorPrimaryContainer"
         app:liftOnScrollTargetViewId="@id/dsp_scrollview"
         app:statusBarForeground="@android:color/transparent">
 
