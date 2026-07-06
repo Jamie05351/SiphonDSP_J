@@ -168,7 +168,7 @@ class OnboardingFragment : Fragment() {
         if(!useRoot && SdkCheck.isQ) {
             // Highlight Shizuku card as preferred option
             methodPage.methodsShizukuCard.setCardBackgroundColor(
-                requireContext().resolveColorAttribute(com.google.android.material.R.attr.colorSecondaryContainer)
+                requireContext().resolveColorAttribute(com.google.android.material.R.attr.colorSurfaceVariant)
             )
         }
 

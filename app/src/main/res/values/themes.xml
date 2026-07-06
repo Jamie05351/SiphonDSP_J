@@ -10,7 +10,9 @@
         <!-- Ripples -->
         <!--<item name="colorControlHighlight">?attr/colorSurfaceVariant</item>-->
 
-        <item name="materialSwitchStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch</item>
+        <item name="materialSwitchStyle">@style/Theme.SiphonDSP.MaterialSwitch</item>
+        <item name="toolbarStyle">@style/Theme.SiphonDSP.Toolbar</item>
+        <item name="bottomAppBarStyle">@style/Theme.SiphonDSP.BottomAppBar</item>
         <item name="alertDialogTheme">@style/AppTheme.AlertDialogTheme</item>
         <item name="materialCardViewStyle">@style/Theme.SiphonDSP.CardView</item>
         <item name="cardCornerRadius">@dimen/corner_radius</item>
@@ -40,7 +42,9 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="windowNoTitle">true</item>
 
-        <item name="materialSwitchStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch</item>
+        <item name="materialSwitchStyle">@style/Theme.SiphonDSP.MaterialSwitch</item>
+        <item name="toolbarStyle">@style/Theme.SiphonDSP.Toolbar</item>
+        <item name="bottomAppBarStyle">@style/Theme.SiphonDSP.BottomAppBar</item>
         <item name="alertDialogTheme">@style/AppTheme.AlertDialogTheme</item>
         <item name="cardCornerRadius">@dimen/corner_radius</item>
     </style>
@@ -62,8 +66,27 @@
         <item name="android:background">?attr/actionBarItemBackground</item>
     </style>
 
-    <style name="Theme.SiphonDSP.CardView" parent="Widget.Material3.CardView.Elevated">
-        <item name="cardBackgroundColor">?attr/colorSecondaryContainer</item>
+    <style name="Theme.SiphonDSP.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">?attr/colorSurface</item>
+        <item name="titleTextColor">?attr/colorOnSurface</item>
+        <item name="subtitleTextColor">?attr/colorOnSurfaceVariant</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Theme.SiphonDSP.BottomAppBar" parent="Widget.Material3.BottomAppBar">
+        <item name="backgroundTint">?attr/colorSurface</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Theme.SiphonDSP.CardView" parent="Widget.Material3.CardView.Outlined">
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="strokeColor">?attr/colorOutline</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Theme.SiphonDSP.MaterialSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/selector_material_switch_thumb_tint</item>
+        <item name="trackTint">@color/selector_material_switch_track_tint</item>
     </style>
 
     <!-- === Custom themes taken from Tachiyomi: https://github.com/tachiyomiorg/tachiyomi === -->

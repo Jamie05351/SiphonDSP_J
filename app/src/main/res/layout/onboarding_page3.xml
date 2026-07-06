@@ -45,7 +45,7 @@
                 android:layout_margin="8dp"
                 android:clickable="true"
                 android:focusable="true"
-                app:cardBackgroundColor="?attr/colorSecondaryContainer"
+                app:cardBackgroundColor="?attr/colorSurfaceVariant"
                 app:contentPadding="16dp">
                 <LinearLayout
                     android:layout_width="match_parent"

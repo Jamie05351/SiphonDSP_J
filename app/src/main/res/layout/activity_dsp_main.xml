@@ -17,6 +17,7 @@
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
+            style="@style/Theme.SiphonDSP.Toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:titleCentered="true" />
@@ -30,6 +31,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:layout_gravity="bottom"
+        app:backgroundTint="?attr/colorSurface"
         app:fabAlignmentMode="center"
         app:fabAnchorMode="cradle"
         app:menuAlignmentMode="auto"

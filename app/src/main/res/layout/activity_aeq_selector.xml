@@ -20,6 +20,7 @@
 
             <androidx.appcompat.widget.Toolbar
                 android:id="@+id/toolbar"
+                style="@style/Theme.SiphonDSP.Toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:layout_collapseMode="pin">
@@ -102,8 +103,8 @@
                 android:layout_height="wrap_content"
                 app:iconCentered="true"
                 app:iconSrc="@drawable/ic_twotone_warning_24dp"
-                app:iconTint="?attr/colorSecondary"
-                app:cardBackground="?attr/colorSecondaryContainer"
+                app:iconTint="?attr/colorOnSurfaceVariant"
+                app:cardBackground="?attr/colorSurfaceVariant"
                 app:bodyText="@string/autoeq_partial_results_warning"
                 app:cardMargin="8dp"/>
 

@@ -71,7 +71,7 @@ jobs:
           echo "OUTPUT_TYPE=${OUTPUT_TYPE}" >> "$GITHUB_ENV"
 
       - name: Configure release signing
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/') || matrix.branch_build_type == 'Release')
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -86,7 +86,7 @@ jobs:
             exit 1
           fi
 
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.jks
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > release.jks
           cat > keystore.properties <<EOF
           storeFile=../release.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD

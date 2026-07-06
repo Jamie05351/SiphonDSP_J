@@ -116,6 +116,7 @@ class SwitchPreferenceGroup(context: Context, attrs: AttributeSet) : PreferenceG
 
     companion object {
         private const val TRANSITION_MIN = 0
-        private const val TRANSITION_MAX = 255
+        // Keep enabled sections visibly active without flooding the whole card with accent color.
+        private const val TRANSITION_MAX = 96
     }
 }
