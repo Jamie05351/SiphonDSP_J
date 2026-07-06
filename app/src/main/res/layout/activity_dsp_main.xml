@@ -11,15 +11,19 @@
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:liftOnScrollTargetViewId="@id/dsp_scrollview"
+        android:background="?attr/colorPrimaryContainer"
+        android:fitsSystemWindows="true"
         app:liftOnScroll="true"
-        android:fitsSystemWindows="true">
+        app:liftOnScrollColor="?attr/colorSurface"
+        app:liftOnScrollTargetViewId="@id/dsp_scrollview"
+        app:statusBarForeground="@android:color/transparent">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             style="@style/Theme.SiphonDSP.Toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
+            android:background="@android:color/transparent"
             app:titleCentered="true" />
 
     </com.google.android.material.appbar.AppBarLayout>
