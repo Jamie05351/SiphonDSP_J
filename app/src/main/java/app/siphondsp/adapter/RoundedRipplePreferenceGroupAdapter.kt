@@ -17,7 +17,7 @@ class RoundedRipplePreferenceGroupAdapter(preferenceGroup: PreferenceGroup) : Pr
         val preference = getItem(position)
         preference ?: return
 
-        if(preference !is PreferenceGroup) {
+        if(preference !is PreferenceGroup && preference.isSelectable) {
             holder.itemView.background = ContextCompat.getDrawable(
                 preference.context,
                 R.drawable.ripple_rounded

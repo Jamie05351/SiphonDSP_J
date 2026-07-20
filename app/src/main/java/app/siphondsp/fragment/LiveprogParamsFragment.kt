@@ -4,9 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.StyleSpan
 import android.view.*
-import androidx.preference.PreferenceCategory
+import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
@@ -91,9 +95,13 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
 
         eelParser.properties.forEach { prop ->
             if(prop is EelLabelProperty) {
-                PreferenceCategory(requireContext()).apply {
+                Preference(requireContext()).apply {
                     key = prop.key
-                    title = prop.description
+                    title = SpannableString(prop.description).apply {
+                        setSpan(StyleSpan(Typeface.BOLD), 0, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                    if(prop.summary.isNotBlank())
+                        summary = prop.summary
                     isIconSpaceReserved = false
                     isSelectable = false
                 }.let(screen::addPreference)
