@@ -32,11 +32,6 @@ jobs:
             output_flavor: rootlessFull
             branch_build_type: Preview
             tag_build_type: Release
-          - name: RootlessFdroid
-            gradle_variant: RootlessFdroid
-            output_flavor: rootlessFdroid
-            branch_build_type: Release
-            tag_build_type: Release
 
     steps:
       - name: Checkout
