@@ -40,6 +40,12 @@ class ThemesPreferenceAdapter(private val clickListener: OnItemClickListener) :
                 themedContext,
                 ThemingDelegate.customColorOptions(seedColor),
             )
+
+            // Applied after DynamicColors, same as in ThemingDelegateImpl, so pure-black
+            // surfaces aren't overwritten by the generated palette.
+            if (isAmoled) {
+                themedContext = ContextThemeWrapper(themedContext, R.style.ThemeOverlay_SiphonDSP_Amoled)
+            }
         }
 
         binding = PreferenceThemeItemBinding.inflate(LayoutInflater.from(themedContext), parent, false)

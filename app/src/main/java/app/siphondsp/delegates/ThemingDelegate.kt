@@ -27,7 +27,9 @@ interface ThemingDelegate {
                 else -> R.style.Theme_SiphonDSP
             }
 
-            if (isAmoled) {
+            // CUSTOM applies the Amoled overlay itself, after DynamicColors generates the
+            // palette -- otherwise DynamicColors would overwrite the pure-black surface override.
+            if (isAmoled && appTheme != AppTheme.CUSTOM) {
                 resIds += R.style.ThemeOverlay_SiphonDSP_Amoled
             }
 
@@ -57,6 +59,10 @@ class ThemingDelegateImpl : ThemingDelegate, KoinComponent {
         if (appTheme == AppTheme.CUSTOM) {
             val seedColor = preferences.get<Int>(R.string.key_appearance_custom_color)
             DynamicColors.applyToActivityIfAvailable(activity, ThemingDelegate.customColorOptions(seedColor))
+
+            if (isAmoled) {
+                activity.setTheme(R.style.ThemeOverlay_SiphonDSP_Amoled)
+            }
         }
     }
 }
