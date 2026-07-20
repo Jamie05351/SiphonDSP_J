@@ -222,7 +222,7 @@ class EelParser {
          * e.g. `/* GROUP */` or `/* GROUP Routing */`. The optional name is for the script
          * author's own reference only; the visible section title still comes from a regular
          * //key:...>Label line. Deliberately self-closing on one line so it can't accidentally
-         * swallow real code the way an open /* block comment would.
+         * swallow real code the way an unterminated block comment would.
          */
         val groupMarkerRegex = """^\s*/\*\s*GROUP\b.*\*/\s*$""".toRegex(RegexOption.IGNORE_CASE)
     }
