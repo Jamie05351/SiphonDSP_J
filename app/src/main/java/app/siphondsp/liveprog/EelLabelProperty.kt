@@ -3,11 +3,13 @@ package app.siphondsp.liveprog
 /**
  * Represents a commented-out slider/list declaration (`//key:default<min,max,step{opts}>Label`)
  * used purely as a static section header, a convention some community scripts use for visual
- * grouping. Rendered as a non-interactive PreferenceCategory rather than a real control.
+ * grouping. Rendered as a bold, non-interactive header rather than a real control. Any bracketed
+ * `{opts}` content is kept as [summary] so a single line can still carry a second decorative line.
  */
 class EelLabelProperty(
     key: String,
     description: String,
+    val summary: String = "",
 ) : EelBaseProperty(key, description) {
     override fun hasDefault() = false
     override fun isDefault() = true
@@ -16,7 +18,7 @@ class EelLabelProperty(
     override fun manipulateProperty(contents: String): String? = contents
 
     override fun toString(): String {
-        return "key=$key; desc=$description (label)"
+        return "key=$key; desc=$description; summary=$summary (label)"
     }
 
     companion object : IPropertyCompanion {
@@ -29,8 +31,9 @@ class EelLabelProperty(
 
             val key = groups[1]?.value ?: return null
             val desc = groups[7]?.value?.trim() ?: return null
+            val summary = groups[6]?.value?.trim('{', '}')?.trim() ?: ""
 
-            return EelLabelProperty(key, desc)
+            return EelLabelProperty(key, desc, summary)
         }
     }
 }
