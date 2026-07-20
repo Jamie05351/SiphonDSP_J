@@ -1,6 +1,7 @@
 package app.siphondsp.adapter
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +13,7 @@ import app.siphondsp.delegates.ThemingDelegate
 import app.siphondsp.model.preference.AppTheme
 import app.siphondsp.utils.extensions.ContextExtensions.getResourceColor
 import app.siphondsp.utils.preferences.Preferences
+import com.google.android.material.color.DynamicColors
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -25,10 +27,25 @@ class ThemesPreferenceAdapter(private val clickListener: OnItemClickListener) :
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ThemeViewHolder {
         val isAmoled = preferences.get<Boolean>(R.string.key_appearance_pure_black)
-        val themeResIds = ThemingDelegate.getThemeResIds(themes[viewType], isAmoled)
-        val themedContext = themeResIds.fold(parent.context) {
+        val appTheme = themes[viewType]
+        val themeResIds = ThemingDelegate.getThemeResIds(appTheme, isAmoled)
+        var themedContext: Context = themeResIds.fold(parent.context) {
                 context, themeResId ->
             ContextThemeWrapper(context, themeResId)
+        }
+
+        if (appTheme == AppTheme.CUSTOM) {
+            val seedColor = preferences.get<Int>(R.string.key_appearance_custom_color)
+            themedContext = DynamicColors.wrapContextIfAvailable(
+                themedContext,
+                ThemingDelegate.customColorOptions(seedColor),
+            )
+
+            // Applied after DynamicColors, same as in ThemingDelegateImpl, so pure-black
+            // surfaces aren't overwritten by the generated palette.
+            if (isAmoled) {
+                themedContext = ContextThemeWrapper(themedContext, R.style.ThemeOverlay_SiphonDSP_Amoled)
+            }
         }
 
         binding = PreferenceThemeItemBinding.inflate(LayoutInflater.from(themedContext), parent, false)

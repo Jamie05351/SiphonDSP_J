@@ -467,6 +467,12 @@
     <string name="theme_yinyang">Yin &amp; Yang</string>
     <string name="theme_yotsuba">Yotsuba</string>
     <string name="theme_tidalwave">Tidal Wave</string>
+    <string name="theme_custom">Custom</string>
+
+    <!-- Custom theme color picker -->
+    <string name="custom_theme_color_title">Pick a color</string>
+    <string name="custom_theme_color_hint">Hex color (e.g. #6750A4)</string>
+    <string name="custom_theme_color_invalid">Enter a valid hex color, e.g. #6750A4</string>
 
     <!-- File library preference -->
     <string name="action_import">Import</string>

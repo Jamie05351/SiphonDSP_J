@@ -5,6 +5,7 @@ import app.siphondsp.R
 enum class AppTheme(val titleResId: Int?) {
     DEFAULT(R.string.theme_default),
     MONET(R.string.theme_monet),
+    CUSTOM(R.string.theme_custom),
     GREEN_APPLE(R.string.theme_greenapple),
     HONEY(R.string.theme_honey),
     STRAWBERRY_DAIQUIRI(R.string.theme_strawberrydaiquiri),
