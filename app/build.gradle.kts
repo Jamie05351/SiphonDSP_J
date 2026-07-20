@@ -47,10 +47,6 @@ android {
                 cFlags.add("-std=gnu11 -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-implicit-function-declaration")
             }
         }
-
-        ndk {
-            abiFilters += SUPPORTED_ABIS
-        }
     }
 
     signingConfigs {
