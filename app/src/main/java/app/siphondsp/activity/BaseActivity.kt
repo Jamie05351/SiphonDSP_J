@@ -52,7 +52,8 @@ abstract class BaseActivity :
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if(key == getString(R.string.key_appearance_pure_black) ||
-            key == getString(R.string.key_appearance_app_theme)) {
+            key == getString(R.string.key_appearance_app_theme) ||
+            key == getString(R.string.key_appearance_custom_color)) {
             if(!disableAppTheme)
                 ActivityCompat.recreate(this)
         }

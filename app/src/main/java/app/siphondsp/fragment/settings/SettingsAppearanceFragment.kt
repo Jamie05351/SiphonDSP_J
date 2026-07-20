@@ -7,9 +7,14 @@ import app.siphondsp.model.preference.AppTheme
 import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.preference.ThemesPreference
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.showColorPickerAlert
 import app.siphondsp.utils.extensions.isDynamicColorAvailable
+import app.siphondsp.utils.preferences.Preferences
+import org.koin.android.ext.android.inject
 
 class SettingsAppearanceFragment : SettingsBaseFragment() {
+
+    private val preferences: Preferences.App by inject()
 
     private val themeMode by lazy { findPreference<ListPreference>(getString(R.string.key_appearance_theme_mode)) }
     private val amoledMode by lazy { findPreference<Preference>(getString(R.string.key_appearance_pure_black)) }
@@ -20,14 +25,22 @@ class SettingsAppearanceFragment : SettingsBaseFragment() {
         setPreferencesFromResource(R.xml.app_appearance_preferences, rootKey)
 
         val appThemes = AppTheme.values().filter {
-            val monetFilter = if (it == AppTheme.MONET) {
+            val dynamicFilter = if (it == AppTheme.MONET || it == AppTheme.CUSTOM) {
                 isDynamicColorAvailable
             } else {
                 true
             }
-            it.titleResId != null && monetFilter
+            it.titleResId != null && dynamicFilter
         }
         appTheme?.entries = appThemes
+        appTheme?.onThemeClick = { theme ->
+            if (theme == AppTheme.CUSTOM) {
+                showCustomColorPicker()
+                true
+            } else {
+                false
+            }
+        }
 
         themeMode?.setOnPreferenceChangeListener { _, _ ->
             updateViewStates()
@@ -37,6 +50,20 @@ class SettingsAppearanceFragment : SettingsBaseFragment() {
 
         savedInstanceState?.let {
             appTheme?.lastScrollPosition = it.getInt(STATE_THEMES_SCROLL_POSITION, 0)
+        }
+    }
+
+    private fun showCustomColorPicker() {
+        val currentColor = preferences.get<Int>(R.string.key_appearance_custom_color)
+        requireContext().showColorPickerAlert(
+            layoutInflater,
+            R.string.custom_theme_color_title,
+            currentColor,
+        ) { color ->
+            color ?: return@showColorPickerAlert
+            preferences.set(R.string.key_appearance_custom_color, color)
+            appTheme?.refreshPreviews()
+            appTheme?.value = AppTheme.CUSTOM.name
         }
     }
 

@@ -20,6 +20,9 @@ class ThemesPreference @JvmOverloads constructor(context: Context, attrs: Attrib
 
     var lastScrollPosition: Int? = null
 
+    /** Intercept a theme tap. Return true if handled (skip the default select-and-persist behavior). */
+    var onThemeClick: ((AppTheme) -> Boolean)? = null
+
     var entries: List<AppTheme> = emptyList()
         set(value) {
             field = value
@@ -49,13 +52,28 @@ class ThemesPreference @JvmOverloads constructor(context: Context, attrs: Attrib
         lastScrollPosition?.let { scrollToOffset(it) }
     }
 
+    /**
+     * Forces every theme swatch to be recreated, e.g. after the custom theme's color changes.
+     * A plain notifyDataSetChanged() isn't enough here since each swatch's colors are baked
+     * into its themed context at creation time, not re-resolved on every bind.
+     */
+    fun refreshPreviews() {
+        recycler?.adapter = null
+        recycler?.adapter = adapter
+    }
+
     override fun onItemClick(position: Int) {
         if (position !in 0..entries.size) {
             return
         }
 
+        val theme = entries[position]
+        if (onThemeClick?.invoke(theme) == true) {
+            return
+        }
+
         callChangeListener(value)
-        value = entries[position].name
+        value = theme.name
     }
 
     override fun onClick() {
