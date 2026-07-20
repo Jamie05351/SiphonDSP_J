@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.view.*
+import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
@@ -13,6 +14,7 @@ import app.siphondsp.R
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.interop.PreferenceCache
+import app.siphondsp.liveprog.EelLabelProperty
 import app.siphondsp.liveprog.EelListProperty
 import app.siphondsp.liveprog.EelNumberRangeProperty
 import app.siphondsp.liveprog.EelParser
@@ -88,7 +90,15 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
         val screen = preferenceManager.createPreferenceScreen(requireContext())
 
         eelParser.properties.forEach { prop ->
-            if(prop is EelListProperty) {
+            if(prop is EelLabelProperty) {
+                PreferenceCategory(requireContext()).apply {
+                    key = prop.key
+                    title = prop.description
+                    isIconSpaceReserved = false
+                    isSelectable = false
+                }.let(screen::addPreference)
+            }
+            else if(prop is EelListProperty) {
                 DropDownPreference(requireContext()).apply {
                     key = prop.key
                     title = prop.description

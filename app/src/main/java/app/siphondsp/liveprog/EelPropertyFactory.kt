@@ -4,6 +4,7 @@ import kotlin.reflect.full.companionObjectInstance
 
 object EelPropertyFactory {
     private val typeOrder = arrayOf(
+        EelLabelProperty::class.companionObjectInstance,
         EelNumberRangeProperty::class.companionObjectInstance,
         EelListProperty::class.companionObjectInstance
     ).map {
