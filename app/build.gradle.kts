@@ -20,7 +20,7 @@ plugins {
 
 android {
 
-    val SUPPORTED_ABIS = setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    val SUPPORTED_ABIS = setOf("arm64-v8a")
     compileSdk = AndroidConfig.compileSdk
     project.extensions.configure<BasePluginExtension>("base") {
         archivesName.set("SiphonDSP-v${AndroidConfig.versionName}")
@@ -149,7 +149,7 @@ android {
             isEnable = true
             reset()
             include(*SUPPORTED_ABIS.toTypedArray())
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
 
