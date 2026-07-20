@@ -11,8 +11,9 @@ class EelListProperty(
     minimum: Int,
     maximum: Int,
     step: Int,
-    val options: List<String>
-) : EelNumberRangeProperty<Int>(key, description, default, value, minimum, maximum, step) {
+    val options: List<String>,
+    groupIndex: Int = 0
+) : EelNumberRangeProperty<Int>(key, description, default, value, minimum, maximum, step, groupIndex) {
 
     init {
         if (minimum != 0) {
@@ -55,7 +56,7 @@ class EelListProperty(
             """(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?\{(?<opt>[^\}]*)\}>(?<desc>[\s\S][^\n]*)""".toRegex()
 
         @Suppress("UNUSED_VARIABLE")
-        override fun parse(line: String, contents: String): EelBaseProperty? {
+        override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val matchList = definitionRegex.find(line)
             val groupsList = matchList?.groups ?: return null
 
@@ -86,7 +87,8 @@ class EelListProperty(
                     min.toInt(),
                     max.toInt(),
                     1,
-                    opt.split(',').map(String::trim)
+                    opt.split(',').map(String::trim),
+                    groupIndex
                 ).also { Timber.d("Found list option property: $it") }
             } catch (ex: NumberFormatException) {
                 Timber.e("Failed to parse list option parameter (key=$key)")

@@ -95,10 +95,10 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
         val properties = eelParser.properties
 
         properties.forEachIndexed { index, prop ->
-            // A header always starts a new group; a non-header only starts one if it's the very
-            // first property with no preceding header (a script with controls before any label).
-            val isGroupStart = prop is EelLabelProperty || index == 0
-            val isGroupEnd = index == properties.lastIndex || properties[index + 1] is EelLabelProperty
+            // Group boundaries come from /* GROUP */ marker lines (see EelParser.groupMarkerRegex),
+            // not from headers -- a section can contain multiple (or zero) header/spacer lines.
+            val isGroupStart = index == 0 || properties[index - 1].groupIndex != prop.groupIndex
+            val isGroupEnd = index == properties.lastIndex || properties[index + 1].groupIndex != prop.groupIndex
             val groupBackgroundRes = when {
                 isGroupStart && isGroupEnd -> R.drawable.ripple_group_single
                 isGroupStart -> R.drawable.ripple_group_top

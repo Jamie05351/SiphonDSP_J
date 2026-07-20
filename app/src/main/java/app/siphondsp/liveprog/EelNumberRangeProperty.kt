@@ -14,8 +14,9 @@ open class EelNumberRangeProperty<T:Number>(
     var value: T,
     val minimum: T,
     val maximum: T,
-    val step: T
-) : EelBaseProperty(key, description) {
+    val step: T,
+    groupIndex: Int = 0
+) : EelBaseProperty(key, description, groupIndex) {
     init {
         if(minimum.toDouble() >= maximum.toDouble()) {
             throw NumberFormatException("Minimum must be smaller than the maximum (key=$key)")
@@ -96,7 +97,7 @@ open class EelNumberRangeProperty<T:Number>(
         override val definitionRegex =
             """(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[\s\S][^\n]*)""".toRegex()
 
-        override fun parse(line: String, contents: String): EelBaseProperty? {
+        override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val matchRange = definitionRegex.find(line)
             val groupsRange = matchRange?.groups
             groupsRange ?: return null
@@ -126,7 +127,8 @@ open class EelNumberRangeProperty<T:Number>(
                     current,
                     min.toFloat(),
                     max.toFloat(),
-                    step.toFloatOrNull() ?: 0.1
+                    step.toFloatOrNull() ?: 0.1,
+                    groupIndex
                 ).also { Timber.d("Found number range property: $it") }
             } catch (ex: NumberFormatException) {
                 Timber.e("Failed to parse number range parameter (key=$key)")
