@@ -18,6 +18,13 @@ class ThemesPreference @JvmOverloads constructor(context: Context, attrs: Attrib
     private var recycler: RecyclerView? = null
     private val adapter = ThemesPreferenceAdapter(this)
 
+    private val scrollListener = object : RecyclerView.OnScrollListener() {
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            super.onScrolled(recyclerView, dx, dy)
+            lastScrollPosition = recyclerView.computeHorizontalScrollOffset()
+        }
+    }
+
     var lastScrollPosition: Int? = null
 
     /** Intercept a theme tap. Return true if handled (skip the default select-and-persist behavior). */
@@ -36,19 +43,17 @@ class ThemesPreference @JvmOverloads constructor(context: Context, attrs: Attrib
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
 
-        recycler = holder.findViewById(R.id.themes_list) as RecyclerView
-        recycler?.layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
-        recycler?.adapter = adapter
+        val boundRecycler = holder.findViewById(R.id.themes_list) as RecyclerView
+        if(recycler !== boundRecycler) {
+            recycler?.removeOnScrollListener(scrollListener)
+            recycler = boundRecycler
+            recycler?.addOnScrollListener(scrollListener)
+        }
+
+        boundRecycler.layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
+        boundRecycler.adapter = adapter
 
         // Retain scroll position on activity recreate after changing theme
-        recycler?.addOnScrollListener(
-            object : RecyclerView.OnScrollListener() {
-                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    super.onScrolled(recyclerView, dx, dy)
-                    lastScrollPosition = recyclerView.computeHorizontalScrollOffset()
-                }
-            },
-        )
         lastScrollPosition?.let { scrollToOffset(it) }
     }
 
@@ -63,17 +68,16 @@ class ThemesPreference @JvmOverloads constructor(context: Context, attrs: Attrib
     }
 
     override fun onItemClick(position: Int) {
-        if (position !in 0..entries.size) {
+        if(position !in entries.indices)
             return
-        }
 
         val theme = entries[position]
-        if (onThemeClick?.invoke(theme) == true) {
+        if(onThemeClick?.invoke(theme) == true)
             return
-        }
 
-        callChangeListener(value)
-        value = theme.name
+        val newValue = theme.name
+        if(callChangeListener(newValue))
+            value = newValue
     }
 
     override fun onClick() {
