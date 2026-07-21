@@ -10,7 +10,8 @@ class EelLabelProperty(
     key: String,
     description: String,
     val summary: String = "",
-) : EelBaseProperty(key, description) {
+    groupIndex: Int = 0,
+) : EelBaseProperty(key, description, groupIndex) {
     override fun hasDefault() = false
     override fun isDefault() = true
     override fun restoreDefaults() {}
@@ -25,7 +26,7 @@ class EelLabelProperty(
         override val definitionRegex =
             """^\s*//\s*(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?(?<opt>\{[^}]*\})?>(?<desc>[\s\S][^\n]*)""".toRegex()
 
-        override fun parse(line: String, contents: String): EelBaseProperty? {
+        override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val match = definitionRegex.find(line) ?: return null
             val groups = match.groups
 
@@ -33,7 +34,7 @@ class EelLabelProperty(
             val desc = groups[7]?.value?.trim() ?: return null
             val summary = groups[6]?.value?.trim('{', '}')?.trim() ?: ""
 
-            return EelLabelProperty(key, desc, summary)
+            return EelLabelProperty(key, desc, summary, groupIndex)
         }
     }
 }

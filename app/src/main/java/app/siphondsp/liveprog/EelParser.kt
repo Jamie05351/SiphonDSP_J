@@ -95,9 +95,15 @@ class EelParser {
         if(skipProperties)
             return
 
-        // Parse number range parameters
-        contents?.lines()?.forEach next@ {
-            EelPropertyFactory.create(it, contents!!)?.let(properties::add)
+        // Parse number range parameters, tracking /* GROUP ... */ marker lines so the params
+        // screen can render each marked section as its own visually grouped card.
+        var groupIndex = 0
+        contents?.lines()?.forEach { line ->
+            if(groupMarkerRegex.matches(line)) {
+                groupIndex++
+                return@forEach
+            }
+            EelPropertyFactory.create(line, contents!!, groupIndex)?.let(properties::add)
         }
     }
 
@@ -208,5 +214,16 @@ class EelParser {
         tags = match?.groups?.get(1)?.value?.trim()?.split(" ")?.map(String::trim) ?: listOf()
 
         Timber.d("Found tags: $tags")
+    }
+
+    companion object {
+        /**
+         * A self-contained single-line comment marking the start of a new params-screen group,
+         * e.g. `/* GROUP */` or `/* GROUP Routing */`. The optional name is for the script
+         * author's own reference only; the visible section title still comes from a regular
+         * //key:...>Label line. Deliberately self-closing on one line so it can't accidentally
+         * swallow real code the way an unterminated block comment would.
+         */
+        val groupMarkerRegex = """^\s*/\*\s*GROUP\b.*\*/\s*$""".toRegex(RegexOption.IGNORE_CASE)
     }
 }

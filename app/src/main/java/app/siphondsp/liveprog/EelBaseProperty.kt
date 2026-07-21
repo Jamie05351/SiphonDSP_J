@@ -1,7 +1,7 @@
 package app.siphondsp.liveprog
 
 
-abstract class EelBaseProperty(val key: String, val description: String) {
+abstract class EelBaseProperty(val key: String, val description: String, val groupIndex: Int = 0) {
     /** Whether the property has a default value */
     abstract fun hasDefault(): Boolean
     /** Whether the value is the property is currently set to the default value */

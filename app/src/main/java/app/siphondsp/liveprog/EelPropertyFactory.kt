@@ -11,9 +11,9 @@ object EelPropertyFactory {
         it as IPropertyCompanion
     }
 
-    fun create(line: String, contents: String): EelBaseProperty? {
+    fun create(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
         typeOrder.forEach { factory ->
-            factory.parse(line, contents)?.let { return it }
+            factory.parse(line, contents, groupIndex)?.let { return it }
         }
         return null
     }

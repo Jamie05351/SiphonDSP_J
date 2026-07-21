@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?android:attr/colorControlHighlight">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="#000000" />
+        </shape>
+    </item>
+    <item>
+        <layer-list>
+            <!-- Full border, no rounding -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="?attr/colorSurface" />
+                    <stroke android:width="1dp" android:color="?attr/colorOutline" />
+                </shape>
+            </item>
+            <!-- Erase the top and bottom edges: both face into this group's neighboring rows -->
+            <item android:height="1dp" android:gravity="top|fill_horizontal">
+                <shape android:shape="rectangle">
+                    <solid android:color="?attr/colorSurface" />
+                </shape>
+            </item>
+            <item android:height="1dp" android:gravity="bottom|fill_horizontal">
+                <shape android:shape="rectangle">
+                    <solid android:color="?attr/colorSurface" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</ripple>

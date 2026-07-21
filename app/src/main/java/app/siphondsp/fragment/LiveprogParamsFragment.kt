@@ -92,10 +92,22 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
 
     private fun createPreferences(): PreferenceScreen {
         val screen = preferenceManager.createPreferenceScreen(requireContext())
+        val properties = eelParser.properties
 
-        eelParser.properties.forEach { prop ->
-            if(prop is EelLabelProperty) {
-                Preference(requireContext()).apply {
+        properties.forEachIndexed { index, prop ->
+            // Group boundaries come from /* GROUP */ marker lines (see EelParser.groupMarkerRegex),
+            // not from headers -- a section can contain multiple (or zero) header/spacer lines.
+            val isGroupStart = index == 0 || properties[index - 1].groupIndex != prop.groupIndex
+            val isGroupEnd = index == properties.lastIndex || properties[index + 1].groupIndex != prop.groupIndex
+            val groupBackgroundRes = when {
+                isGroupStart && isGroupEnd -> R.drawable.ripple_group_single
+                isGroupStart -> R.drawable.ripple_group_top
+                isGroupEnd -> R.drawable.ripple_group_bottom
+                else -> R.drawable.ripple_group_middle
+            }
+
+            val preference: Preference? = when (prop) {
+                is EelLabelProperty -> Preference(requireContext()).apply {
                     key = prop.key
                     title = SpannableString(prop.description).apply {
                         setSpan(StyleSpan(Typeface.BOLD), 0, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -104,10 +116,8 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
                         summary = prop.summary
                     isIconSpaceReserved = false
                     isSelectable = false
-                }.let(screen::addPreference)
-            }
-            else if(prop is EelListProperty) {
-                DropDownPreference(requireContext()).apply {
+                }
+                is EelListProperty -> DropDownPreference(requireContext()).apply {
                     key = prop.key
                     title = prop.description
                     setDefaultValue(prop.value.toString())
@@ -132,10 +142,8 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
                         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_RELOAD_LIVEPROG))
                         true
                     }
-                }.let(screen::addPreference)
-            }
-            else if(prop is EelNumberRangeProperty<*>) {
-                MaterialSeekbarPreference(requireContext()).apply {
+                }
+                is EelNumberRangeProperty<*> -> MaterialSeekbarPreference(requireContext()).apply {
                     key = prop.key
                     title = prop.description
                     mPrecision = if(prop.handleAsInt()) 0 else 2
@@ -144,8 +152,12 @@ class LiveprogParamsFragment : PreferenceFragmentCompat(), NonPersistentDatastor
                     setUpdatesContinuously(false)
                     setShowSeekBarValue(true)
                     setDefaultValue(prop.value)
-                }.let(screen::addPreference)
+                }
+                else -> null
             }
+
+            preference?.extras?.putInt(RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_BACKGROUND_RES, groupBackgroundRes)
+            preference?.let(screen::addPreference)
         }
 
         return screen
