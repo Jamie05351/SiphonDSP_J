@@ -10,17 +10,17 @@ import java.io.IOException
  * objects are cleared during shutdown.
  */
 internal val AudioRecord?.recordingState: Int
-    get() = this?.recordingState ?: AudioRecord.RECORDSTATE_STOPPED
+    get() = this?.let { record -> record.recordingState } ?: AudioRecord.RECORDSTATE_STOPPED
 
 internal val AudioTrack?.playState: Int
-    get() = this?.playState ?: AudioTrack.PLAYSTATE_STOPPED
+    get() = this?.let { output -> output.playState } ?: AudioTrack.PLAYSTATE_STOPPED
 
 internal fun AudioRecord?.startRecording() {
-    this?.startRecording()
+    this?.let { record -> record.startRecording() }
 }
 
 internal fun AudioTrack?.play() {
-    this?.play()
+    this?.let { output -> output.play() }
 }
 
 internal fun AudioRecord?.read(
@@ -28,14 +28,16 @@ internal fun AudioRecord?.read(
     offset: Int,
     length: Int,
     mode: Int
-): Int = this?.read(buffer, offset, length, mode) ?: AudioRecord.ERROR_INVALID_OPERATION
+): Int = this?.let { record -> record.read(buffer, offset, length, mode) }
+    ?: AudioRecord.ERROR_INVALID_OPERATION
 
 internal fun AudioRecord?.read(
     buffer: FloatArray,
     offset: Int,
     length: Int,
     mode: Int
-): Int = this?.read(buffer, offset, length, mode) ?: AudioRecord.ERROR_INVALID_OPERATION
+): Int = this?.let { record -> record.read(buffer, offset, length, mode) }
+    ?: AudioRecord.ERROR_INVALID_OPERATION
 
 internal fun writeFully(track: AudioTrack?, buffer: ShortArray, length: Int) {
     val output = track ?: throw IOException("AudioTrack is unavailable")
