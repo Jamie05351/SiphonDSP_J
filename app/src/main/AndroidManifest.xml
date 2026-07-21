@@ -21,6 +21,13 @@
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
+
+        <!-- Needed to see other apps' names/icons (app exclusion list, audio session
+             attribution) despite Android 11+ package visibility filtering. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
