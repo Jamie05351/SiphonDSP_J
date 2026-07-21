@@ -5,39 +5,40 @@ import android.media.AudioTrack
 import java.io.IOException
 
 /**
- * Nullable audio helpers used by the rootless worker while its recorder can be
- * replaced and while shutdown may clear/release the active objects.
+ * Nullable receiver overloads for the rootless worker. The recorder is mutable
+ * because it can be replaced while the worker remains alive, and both audio
+ * objects are cleared during shutdown.
  */
-internal val AudioRecord?.recordingStateCompat: Int
+internal val AudioRecord?.recordingState: Int
     get() = this?.recordingState ?: AudioRecord.RECORDSTATE_STOPPED
 
-internal val AudioTrack?.playStateCompat: Int
+internal val AudioTrack?.playState: Int
     get() = this?.playState ?: AudioTrack.PLAYSTATE_STOPPED
 
-internal fun AudioRecord?.startRecordingCompat() {
+internal fun AudioRecord?.startRecording() {
     this?.startRecording()
 }
 
-internal fun AudioTrack?.playCompat() {
+internal fun AudioTrack?.play() {
     this?.play()
 }
 
-internal fun AudioRecord?.readCompat(
+internal fun AudioRecord?.read(
     buffer: ShortArray,
     offset: Int,
     length: Int,
     mode: Int
 ): Int = this?.read(buffer, offset, length, mode) ?: AudioRecord.ERROR_INVALID_OPERATION
 
-internal fun AudioRecord?.readCompat(
+internal fun AudioRecord?.read(
     buffer: FloatArray,
     offset: Int,
     length: Int,
     mode: Int
 ): Int = this?.read(buffer, offset, length, mode) ?: AudioRecord.ERROR_INVALID_OPERATION
 
-internal fun AudioTrack?.writeFullyCompat(buffer: ShortArray, length: Int) {
-    val output = this ?: throw IOException("AudioTrack is unavailable")
+internal fun writeFully(track: AudioTrack?, buffer: ShortArray, length: Int) {
+    val output = track ?: throw IOException("AudioTrack is unavailable")
     var offset = 0
     while(offset < length) {
         val written = output.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
@@ -49,8 +50,8 @@ internal fun AudioTrack?.writeFullyCompat(buffer: ShortArray, length: Int) {
     }
 }
 
-internal fun AudioTrack?.writeFullyCompat(buffer: FloatArray, length: Int) {
-    val output = this ?: throw IOException("AudioTrack is unavailable")
+internal fun writeFully(track: AudioTrack?, buffer: FloatArray, length: Int) {
+    val output = track ?: throw IOException("AudioTrack is unavailable")
     var offset = 0
     while(offset < length) {
         val written = output.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
