@@ -182,7 +182,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     // EEL VM utilities
     override fun enumerateEelVariables(): ArrayList<EelVmVariable> =
-        withHandle(arrayListOf()) { JamesDspWrapper.enumerateEelVariables(it) }
+        withHandle(arrayListOf<EelVmVariable>()) { JamesDspWrapper.enumerateEelVariables(it) }
 
     override fun manipulateEelVariable(name: String, value: Float): Boolean =
         withHandle(false) { JamesDspWrapper.manipulateEelVariable(it, name, value) }
