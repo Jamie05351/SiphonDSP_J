@@ -26,8 +26,6 @@ import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
 import androidx.lifecycle.Observer
 import androidx.lifecycle.asLiveData
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.flavor.CrashlyticsImpl
@@ -59,49 +57,60 @@ import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.notifications.ServiceNotificationHelper
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
 
-
 @RequiresApi(Build.VERSION_CODES.Q)
 class RootlessAudioProcessorService : BaseAudioProcessorService() {
-    // System services
     private lateinit var mediaProjectionManager: MediaProjectionManager
     private lateinit var notificationManager: NotificationManager
     private lateinit var audioManager: AudioManager
 
-    // Media projection token
     private var mediaProjection: MediaProjection? = null
     private var mediaProjectionStartIntent: Intent? = null
 
-    // Processing
+    private val recorderLifecycleLock = Any()
+
+    @Volatile
     private var recreateRecorderRequested = false
+
+    @Volatile
     private var recorderThread: Thread? = null
+
+    @Volatile
+    private var activeRecorder: AudioRecord? = null
+
+    @Volatile
+    private var activeTrack: AudioTrack? = null
+
     private lateinit var engine: JamesDspLocalEngine
     private val isRunning: Boolean
-        get() = recorderThread != null
+        get() = recorderThread?.isAlive == true
 
-    // Session management
     private lateinit var sessionManager: RootlessSessionManager
     private var sessionLossRetryCount = 0
 
-    // Idle detection
+    @Volatile
     private var isProcessorIdle = false
+
+    @Volatile
     private var suspendOnIdle = false
 
-    // Exclude restricted apps flag
+    @Volatile
     private var excludeRestrictedSessions = false
 
-    // Termination flags
+    @Volatile
     private var isProcessorDisposing = false
+
+    @Volatile
     private var isServiceDisposing = false
 
-    // Shared preferences
     private val preferences: Preferences.App by inject()
     private val preferencesVar: Preferences.Var by inject()
 
-    // Room databases
     private val applicationScope = CoroutineScope(SupervisorJob())
     private val blockedAppDatabase by lazy { AppBlocklistDatabase.getDatabase(this, applicationScope) }
     private val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
@@ -115,23 +124,19 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Get reference to system services
         audioManager = getSystemService<AudioManager>()!!
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
         notificationManager = getSystemService<NotificationManager>()!!
 
-        // Setup session manager
         sessionManager = RootlessSessionManager(this)
         sessionManager.sessionDatabase.setOnSessionLossListener(onSessionLossListener)
         sessionManager.sessionDatabase.setOnAppProblemListener(onAppProblemListener)
         sessionManager.sessionDatabase.registerOnSessionChangeListener(onSessionChangeListener)
         sessionManager.sessionPolicyDatabase.registerOnRestrictedSessionChangeListener(onSessionPolicyChangeListener)
 
-        // Setup core engine
         engine = JamesDspLocalEngine(this, ProcessorMessageHandler())
         engine.syncWithPreferences()
 
-        // Setup general-purpose broadcast receiver
         val filter = IntentFilter()
         filter.addAction(ACTION_PREFERENCES_UPDATED)
         filter.addAction(ACTION_SAMPLE_RATE_UPDATED)
@@ -140,20 +145,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
         registerLocalReceiver(broadcastReceiver, filter)
 
-        // Setup shared preferences
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
         loadFromPreferences(getString(R.string.key_powersave_suspend))
         loadFromPreferences(getString(R.string.key_session_exclude_restricted))
 
-        // Setup database observer
         blockedApps.observeForever(blockedAppObserver)
-
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
-
-        // No need to recreate in this stage
         recreateRecorderRequested = false
 
-        // Launch foreground service
         startForeground(
             Notifications.ID_SERVICE_STATUS,
             ServiceNotificationHelper.createServiceNotification(this, arrayOf()),
@@ -162,17 +161,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-
         Timber.d("onStartCommand")
 
-        // Handle intent action
         when (intent.action) {
-            null -> {
-                Timber.wtf("onStartCommand: intent.action is null")
-            }
-            ACTION_START -> {
-                Timber.d("Starting service")
-            }
+            null -> Timber.wtf("onStartCommand: intent.action is null")
+            ACTION_START -> Timber.d("Starting service")
             ACTION_STOP -> {
                 Timber.d("Stopping service")
                 stopSelf()
@@ -180,22 +173,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
         }
 
-        if (isRunning) {
+        if (isRunning)
             return START_NOT_STICKY
-        }
 
-        // Cancel outdated notifications
         notificationManager.cancel(Notifications.ID_SERVICE_SESSION_LOSS)
         notificationManager.cancel(Notifications.ID_SERVICE_APPCOMPAT)
 
-        // Setup media projection
         mediaProjectionStartIntent = intent.extras?.getParcelableAs(EXTRA_MEDIA_PROJECTION_DATA)
-
         mediaProjection = try {
-            mediaProjectionManager.getMediaProjection(
-                Activity.RESULT_OK,
-                mediaProjectionStartIntent!!
-            )
+            mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, mediaProjectionStartIntent!!)
         }
         catch (ex: Exception) {
             Timber.e("Failed to acquire media projection")
@@ -209,7 +195,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (mediaProjection != null) {
             startRecording()
             sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STARTED))
-        } else {
+        }
+        else {
             Timber.w("Failed to capture audio")
             stopSelf()
         }
@@ -219,23 +206,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     override fun onDestroy() {
         isServiceDisposing = true
-
-        // Stop recording and release engine
         stopRecording()
         engine.close()
 
-        // Stop foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
-
-        // Notify app about service termination
         sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STOPPED))
 
-        // Unregister database observer
         blockedApps.removeObserver(blockedAppObserver)
-
-        // Unregister receivers and release resources
         unregisterLocalReceiver(broadcastReceiver)
         mediaProjection?.unregisterCallback(projectionCallback)
+        mediaProjection?.stop()
         mediaProjection = null
 
         sessionManager.sessionPolicyDatabase.unregisterOnRestrictedSessionChangeListener(onSessionPolicyChangeListener)
@@ -245,41 +225,29 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener)
         notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
-        stopSelf()
         super.onDestroy()
     }
 
-    // Preferences listener
-    private val preferencesListener = SharedPreferences.OnSharedPreferenceChangeListener {
-            _, key ->
+    private val preferencesListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         loadFromPreferences(key)
     }
 
-    // Projection termination callback
     private val projectionCallback = object: MediaProjection.Callback() {
         override fun onStop() {
-            if(isServiceDisposing) {
-                // Planned shutdown
+            if(isServiceDisposing)
                 return
-            }
-
-            if(preferencesVar.get<Boolean>(R.string.key_is_activity_active)) {
-                // Activity in foreground, toast too disruptive
-                return
-            }
 
             Timber.w("Capture permission revoked. Stopping service.")
-
             sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
 
-            this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
+            if(!preferencesVar.get<Boolean>(R.string.key_is_activity_active))
+                this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
 
             notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
             stopSelf()
         }
     }
 
-    // General purpose broadcast receiver
     private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -292,14 +260,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    // Session loss listener
     private val onSessionLossListener = object: RootlessSessionDatabase.OnSessionLossListener {
         override fun onSessionLost(sid: Int) {
-            // Push notification if enabled
             if(!preferences.get<Boolean>(R.string.key_session_loss_ignore)) {
-                // Check if retry count exceeded
                 if(sessionLossRetryCount < SESSION_LOSS_MAX_RETRIES) {
-                    // Retry
                     sessionLossRetryCount++
                     Timber.d("Session lost. Retry count: $sessionLossRetryCount/$SESSION_LOSS_MAX_RETRIES")
                     sessionManager.pollOnce(false)
@@ -311,7 +275,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     Timber.d("Giving up on saving session. User interaction required.")
                 }
 
-                // Request users attention
                 notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
                 ServiceNotificationHelper.pushSessionLossNotification(this@RootlessAudioProcessorService, mediaProjectionStartIntent)
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_control_loss_toast), false)
@@ -321,12 +284,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    // Session change listener
     private val onSessionChangeListener = object : OnRootlessSessionChangeListener {
         override fun onSessionChanged(sessionList: HashMap<Int, IEffectSession>) {
-            isProcessorIdle = sessionList.size == 0
-            Timber.d("onSessionChanged: isProcessorIdle=$isProcessorIdle")
+            isProcessorIdle = sessionList.isEmpty()
+            if(!isProcessorIdle)
+                sessionLossRetryCount = 0
 
+            Timber.d("onSessionChanged: isProcessorIdle=$isProcessorIdle")
             ServiceNotificationHelper.pushServiceNotification(
                 this@RootlessAudioProcessorService,
                 sessionList.map { it.value }.toTypedArray()
@@ -334,15 +298,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    // App problem listener
     private val onAppProblemListener = object : RootlessSessionDatabase.OnAppProblemListener {
         override fun onAppProblemDetected(uid: Int) {
-            // Push notification if enabled
             if(!preferences.get<Boolean>(R.string.key_session_app_problem_ignore)) {
-                // Request users attention
                 notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
-                // Determine if we should redirect instantly, or push a non-intrusive notification
                 if(preferencesVar.get<Boolean>(R.string.key_is_activity_active) ||
                     preferencesVar.get<Boolean>(R.string.key_is_app_compat_activity_active)) {
                     startActivity(
@@ -355,8 +315,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     )
                     notificationManager.cancel(Notifications.ID_SERVICE_APPCOMPAT)
                 }
-                else
-                    ServiceNotificationHelper.pushAppIssueNotification(this@RootlessAudioProcessorService, mediaProjectionStartIntent, uid)
+                else {
+                    ServiceNotificationHelper.pushAppIssueNotification(
+                        this@RootlessAudioProcessorService,
+                        mediaProjectionStartIntent,
+                        uid
+                    )
+                }
 
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_app_compat_toast), false)
                 Timber.w("Terminating service due to app incompatibility; redirect user to troubleshooting options")
@@ -365,10 +330,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    // Session policy change listener
     private val onSessionPolicyChangeListener = object : SessionRecordingPolicyManager.OnSessionRecordingPolicyChangeListener {
-        override fun onSessionRecordingPolicyChanged(sessionList: HashMap<String, SessionRecordingPolicyEntry>, isMinorUpdate: Boolean) {
-            if(!this@RootlessAudioProcessorService.excludeRestrictedSessions) {
+        override fun onSessionRecordingPolicyChanged(
+            sessionList: HashMap<String, SessionRecordingPolicyEntry>,
+            isMinorUpdate: Boolean
+        ) {
+            if(!excludeRestrictedSessions) {
                 Timber.d("onRestrictedSessionChanged: blocked; excludeRestrictedSessions disabled")
                 return
             }
@@ -383,7 +350,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    private fun loadFromPreferences(key: String?){
+    private fun loadFromPreferences(key: String?) {
         when (key) {
             getString(R.string.key_powersave_suspend) -> {
                 suspendOnIdle = preferences.get<Boolean>(R.string.key_powersave_suspend)
@@ -392,182 +359,260 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             getString(R.string.key_session_exclude_restricted) -> {
                 excludeRestrictedSessions = preferences.get<Boolean>(R.string.key_session_exclude_restricted)
                 Timber.d("Exclude restricted set to $excludeRestrictedSessions")
-
                 requestAudioRecordRecreation()
             }
         }
     }
 
-    // Request recreation of the AudioRecord object to update AudioPlaybackRecordingConfiguration
     fun requestAudioRecordRecreation() {
         if(isProcessorDisposing || isServiceDisposing) {
             Timber.e("recreateAudioRecorder: service or processor already disposing")
             return
         }
-
         recreateRecorderRequested = true
     }
 
-    // Start recording thread
     @SuppressLint("BinaryOperationInTimber")
     private fun startRecording() {
-        // Sanity check
-        if (!hasRecordPermission()) {
-            Timber.e("Record audio permission missing. Can't record")
-            stopSelf()
-            return
-        }
+        synchronized(recorderLifecycleLock) {
+            if(recorderThread?.isAlive == true) {
+                Timber.w("startRecording: recorder thread already running")
+                return
+            }
 
-        // Load preferences
-        val encoding = AudioEncoding.fromInt(
-            preferences.get<String>(R.string.key_audioformat_encoding).toIntOrNull() ?: 1
-        )
-        val bufferSize = preferences.get<Float>(R.string.key_audioformat_buffersize).toInt()
-        val bufferSizeBytes = when (encoding) {
-            AudioEncoding.PcmFloat -> bufferSize * Float.SIZE_BYTES
-            else -> bufferSize * Short.SIZE_BYTES
-        }
-        val encodingFormat = when (encoding) {
-            AudioEncoding.PcmShort -> AudioFormat.ENCODING_PCM_16BIT
-            else -> AudioFormat.ENCODING_PCM_FLOAT
-        }
-        val sampleRate = clamp(determineSamplingRate(), 44100, 48000)
+            if (!hasRecordPermission()) {
+                Timber.e("Record audio permission missing. Can't record")
+                stopSelf()
+                return
+            }
 
-        Timber.i("Sample rate: $sampleRate; Encoding: ${encoding.name}; " +
-                "Buffer size: $bufferSize; Buffer size (bytes): $bufferSizeBytes ; " +
-                "HAL buffer size (bytes): ${determineBufferSize()}")
+            isProcessorDisposing = false
+            recreateRecorderRequested = false
 
-        // Create recorder and track
-        var recorder: AudioRecord
-        val track: AudioTrack
+            val encoding = AudioEncoding.fromInt(
+                preferences.get<String>(R.string.key_audioformat_encoding).toIntOrNull() ?: 1
+            )
+            val requestedSamples = preferences.get<Float>(R.string.key_audioformat_buffersize).toInt().coerceAtLeast(2)
+            val bytesPerSample = if (encoding == AudioEncoding.PcmFloat) Float.SIZE_BYTES else Short.SIZE_BYTES
+            val encodingFormat = if (encoding == AudioEncoding.PcmShort)
+                AudioFormat.ENCODING_PCM_16BIT
+            else
+                AudioFormat.ENCODING_PCM_FLOAT
+            val sampleRate = clamp(determineSamplingRate(), 44100, 48000)
+            val frameSizeBytes = CHANNEL_COUNT * bytesPerSample
+            val requestedBytes = requestedSamples * bytesPerSample
+            val minRecordBytes = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_STEREO, encodingFormat)
+                .takeIf { it > 0 } ?: requestedBytes
+            val minTrackBytes = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, encodingFormat)
+                .takeIf { it > 0 } ?: requestedBytes
+            val bufferSizeBytes = alignUp(maxOf(requestedBytes, minRecordBytes, minTrackBytes), frameSizeBytes)
+            val bufferSamples = bufferSizeBytes / bytesPerSample
+
+            Timber.i(
+                "Sample rate: $sampleRate; Encoding: ${encoding.name}; " +
+                    "Requested samples: $requestedSamples; Buffer samples: $bufferSamples; " +
+                    "Buffer bytes: $bufferSizeBytes; HAL frames: ${determineBufferSize()}"
+            )
+
+            if(engine.sampleRate.toInt() != sampleRate) {
+                Timber.d("Sampling rate changed to ${sampleRate}Hz")
+                engine.sampleRate = sampleRate.toFloat()
+            }
+
+            val worker = Thread({
+                runRecorderLoop(encoding, encodingFormat, sampleRate, bufferSizeBytes, bufferSamples)
+            }, "SiphonDSP-RootlessAudio")
+
+            recorderThread = worker
+            worker.start()
+        }
+    }
+
+    private fun runRecorderLoop(
+        encoding: AudioEncoding,
+        encodingFormat: Int,
+        sampleRate: Int,
+        bufferSizeBytes: Int,
+        bufferSamples: Int
+    ) {
+        var recorder: AudioRecord? = null
+        var track: AudioTrack? = null
+
         try {
             recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
             track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
-        }
-        catch(ex: Exception) {
-            Timber.e("Failed to create initial audio record/track")
-            Timber.e(ex)
-            stopSelf()
-            return
-        }
+            activeRecorder = recorder
+            activeTrack = track
 
-        if(engine.sampleRate.toInt() != sampleRate) {
-            Timber.d("Sampling rate changed to ${sampleRate}Hz")
-            engine.sampleRate = sampleRate.toFloat()
-        }
+            ServiceNotificationHelper.pushServiceNotification(applicationContext, arrayOf())
 
-        // TODO Move all audio-related code to C++
-        recorderThread = Thread {
-            try {
-                ServiceNotificationHelper.pushServiceNotification(applicationContext, arrayOf())
+            val floatBuffer = FloatArray(bufferSamples)
+            val floatOutBuffer = FloatArray(bufferSamples)
+            val shortBuffer = ShortArray(bufferSamples)
+            val shortOutBuffer = ShortArray(bufferSamples)
 
-                val floatBuffer = FloatArray(bufferSize)
-                val floatOutBuffer = FloatArray(bufferSize)
-                val shortBuffer = ShortArray(bufferSize)
-                val shortOutBuffer = ShortArray(bufferSize)
-                while (!isProcessorDisposing) {
-                    if(recreateRecorderRequested) {
-                        recreateRecorderRequested = false
-                        Timber.d("Recreating recorder without stopping thread...")
+            while (!isProcessorDisposing) {
+                if(recreateRecorderRequested) {
+                    recreateRecorderRequested = false
+                    Timber.d("Recreating recorder without replacing worker thread...")
 
-                        // Suspend track, release recorder
-                        recorder.stop()
-                        track.stop()
-                        recorder.release()
+                    safeStop(recorder)
+                    safeStop(track)
+                    safeRelease(recorder)
+                    activeRecorder = null
 
-
-                        if (mediaProjection == null) {
-                            Timber.e("Media projection handle is null, stopping service")
-                            stopSelf()
-                            return@Thread
-                        }
-
-                        // Recreate recorder with new AudioPlaybackRecordingConfiguration
-                        recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
-                        Timber.d("Recorder recreated")
+                    if (mediaProjection == null || isProcessorDisposing) {
+                        Timber.e("Media projection handle is null, stopping recorder worker")
+                        break
                     }
 
-                    // Suspend core while idle
-                    if(isProcessorIdle && suspendOnIdle)
-                    {
-                        if(recorder.state == AudioRecord.STATE_INITIALIZED &&
-                            recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
-                            recorder.stop()
-                        if(track.state == AudioTrack.STATE_INITIALIZED &&
-                            track.playState != AudioTrack.PLAYSTATE_STOPPED)
-                            track.stop()
+                    recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+                    activeRecorder = recorder
+                    Timber.d("Recorder recreated")
+                }
 
-                        try {
-                            Thread.sleep(50)
-                        }
-                        catch(e: InterruptedException) {
+                if(isProcessorIdle && suspendOnIdle) {
+                    safeStop(recorder)
+                    safeStop(track)
+                    try {
+                        Thread.sleep(50)
+                    }
+                    catch(e: InterruptedException) {
+                        if(isProcessorDisposing)
                             break
-                        }
-                        continue
                     }
-
-                    // Resume recorder if suspended
-                    if(recorder.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
-                        recorder.startRecording()
-                    }
-                    // Resume track if suspended
-                    if(track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                        track.play()
-                    }
-
-                    // Choose encoding and process data
-                    if(encoding == AudioEncoding.PcmShort) {
-                        recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
-                        engine.processInt16(shortBuffer, shortOutBuffer)
-                        track.write(shortOutBuffer, 0, shortOutBuffer.size, AudioTrack.WRITE_BLOCKING)
-                    }
-                    else {
-                        recorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
-                        engine.processFloat(floatBuffer, floatOutBuffer)
-                        track.write(floatOutBuffer, 0, floatOutBuffer.size, AudioTrack.WRITE_BLOCKING)
-                    }
-                }
-            } catch (e: IOException) {
-                Timber.w(e)
-                // ignore
-            } catch (e: Exception) {
-                Timber.e("Exception in recorderThread raised")
-                Timber.e(e)
-                stopSelf()
-            } finally {
-                // Clean up recorder and track
-                if(recorder.state != AudioRecord.STATE_UNINITIALIZED) {
-                    recorder.stop()
-                }
-                if(track.state != AudioTrack.STATE_UNINITIALIZED) {
-                    track.stop()
+                    continue
                 }
 
-                recorder.release()
-                track.release()
+                if(recorder.recordingState == AudioRecord.RECORDSTATE_STOPPED)
+                    recorder.startRecording()
+                if(track.playState != AudioTrack.PLAYSTATE_PLAYING)
+                    track.play()
+
+                val readCount = if(encoding == AudioEncoding.PcmShort)
+                    recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
+                else
+                    recorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
+
+                if(readCount < 0) {
+                    if(isProcessorDisposing)
+                        break
+                    throw IOException("AudioRecord.read failed with error $readCount")
+                }
+                if(readCount == 0)
+                    continue
+
+                val processCount = readCount - (readCount % CHANNEL_COUNT)
+                if(processCount <= 0)
+                    continue
+
+                if(encoding == AudioEncoding.PcmShort) {
+                    engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
+                    writeFully(track, shortOutBuffer, processCount)
+                }
+                else {
+                    engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
+                    writeFully(track, floatOutBuffer, processCount)
+                }
             }
         }
-        recorderThread!!.start()
-    }
+        catch (e: IOException) {
+            if(!isProcessorDisposing) {
+                Timber.e(e, "Audio worker I/O failure")
+                stopSelf()
+            }
+        }
+        catch (e: Exception) {
+            if(!isProcessorDisposing) {
+                Timber.e(e, "Exception in recorder worker")
+                stopSelf()
+            }
+        }
+        finally {
+            activeRecorder = null
+            activeTrack = null
+            safeStop(recorder)
+            safeStop(track)
+            safeRelease(recorder)
+            safeRelease(track)
 
-    // Terminate recording thread
-    fun stopRecording() {
-        if (recorderThread != null) {
-            isProcessorDisposing = true
-            recorderThread!!.interrupt()
-            recorderThread!!.join(500)
-            recorderThread = null
+            synchronized(recorderLifecycleLock) {
+                if(recorderThread === Thread.currentThread())
+                    recorderThread = null
+            }
         }
     }
 
-    // Hard restart recording thread
+    private fun writeFully(track: AudioTrack, buffer: ShortArray, length: Int) {
+        var offset = 0
+        while(offset < length && !isProcessorDisposing) {
+            val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
+            if(written < 0)
+                throw IOException("AudioTrack.write failed with error $written")
+            if(written == 0)
+                continue
+            offset += written
+        }
+    }
+
+    private fun writeFully(track: AudioTrack, buffer: FloatArray, length: Int) {
+        var offset = 0
+        while(offset < length && !isProcessorDisposing) {
+            val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
+            if(written < 0)
+                throw IOException("AudioTrack.write failed with error $written")
+            if(written == 0)
+                continue
+            offset += written
+        }
+    }
+
+    fun stopRecording() {
+        val worker: Thread?
+        synchronized(recorderLifecycleLock) {
+            worker = recorderThread
+            if(worker == null)
+                return
+            isProcessorDisposing = true
+        }
+
+        safeStop(activeRecorder)
+        safeStop(activeTrack)
+        safeRelease(activeRecorder)
+        safeRelease(activeTrack)
+        worker.interrupt()
+
+        if(worker !== Thread.currentThread()) {
+            while(worker.isAlive) {
+                try {
+                    worker.join(250)
+                }
+                catch(e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+        }
+
+        synchronized(recorderLifecycleLock) {
+            if(recorderThread === worker && !worker.isAlive)
+                recorderThread = null
+        }
+    }
+
     fun restartRecording() {
-        if(isProcessorDisposing || isServiceDisposing) {
-            Timber.e("restartRecording: service or processor already disposing")
+        if(isServiceDisposing) {
+            Timber.e("restartRecording: service already disposing")
             return
         }
 
         stopRecording()
+        if(recorderThread?.isAlive == true) {
+            Timber.e("restartRecording: previous recorder worker did not terminate")
+            stopSelf()
+            return
+        }
+
         isProcessorDisposing = false
         recreateRecorderRequested = false
         startRecording()
@@ -589,42 +634,33 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             .setSampleRate(sampleRate)
             .build()
 
-        val frameSizeInBytes: Int = if (encoding == AudioFormat.ENCODING_PCM_16BIT) {
-            2 /* channels */ * 2 /* bytes */
-        } else {
-            2 /* channels */ * 4 /* bytes */
-        }
-
-        val bufferSize = if (((bufferSizeBytes % frameSizeInBytes) != 0 || bufferSizeBytes < 1)) {
-            Timber.e("Invalid audio buffer size $bufferSizeBytes")
-            128 * (bufferSizeBytes / 128)
-        }
-        else bufferSizeBytes
-
-        Timber.d("Using buffer size $bufferSize")
-
         return AudioTrack.Builder()
             .setAudioFormat(format)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setAudioAttributes(attributesBuilder.build())
-            .setBufferSizeInBytes(bufferSize)
+            .setBufferSizeInBytes(bufferSizeBytes)
             .build()
+            .also {
+                check(it.state == AudioTrack.STATE_INITIALIZED) { "AudioTrack failed to initialize" }
+                check(it.sampleRate == sampleRate) {
+                    "AudioTrack sample rate ${it.sampleRate} does not match requested $sampleRate"
+                }
+            }
     }
 
     @SuppressLint("MissingPermission")
     private fun buildAudioRecord(encoding: Int, sampleRate: Int, bufferSizeBytes: Int): AudioRecord {
-        if (!hasRecordPermission()) {
-            Timber.e("buildAudioRecord: RECORD_AUDIO not granted")
-            throw RuntimeException("RECORD_AUDIO not granted")
-        }
+        if (!hasRecordPermission())
+            throw SecurityException("RECORD_AUDIO not granted")
 
+        val projection = mediaProjection ?: throw IllegalStateException("Media projection is unavailable")
         val format = AudioFormat.Builder()
             .setEncoding(encoding)
             .setSampleRate(sampleRate)
             .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
             .build()
 
-        val configBuilder = AudioPlaybackCaptureConfiguration.Builder(mediaProjection!!)
+        val configBuilder = AudioPlaybackCaptureConfiguration.Builder(projection)
             .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
             .addMatchingUsage(AudioAttributes.USAGE_GAME)
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
@@ -636,39 +672,88 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             emptyList()
         }).toMutableList()
 
-        blockedApps.value?.map { it.uid }?.let {
-            excluded += it
-        }
+        blockedApps.value?.map { it.uid }?.let { excluded += it }
         excluded += Process.myUid()
 
-        excluded.forEach { configBuilder.excludeUid(it) }
-        sessionManager.sessionDatabase.setExcludedUids(excluded.toTypedArray())
+        excluded.distinct().forEach { configBuilder.excludeUid(it) }
+        sessionManager.sessionDatabase.setExcludedUids(excluded.distinct().toTypedArray())
         sessionManager.pollOnce(false)
 
-        Timber.d("buildAudioRecord: Excluded UIDs: ${excluded.joinToString("; ")}")
+        Timber.d("buildAudioRecord: Excluded UIDs: ${excluded.distinct().joinToString("; ")}")
 
         return AudioRecord.Builder()
             .setAudioFormat(format)
             .setBufferSizeInBytes(bufferSizeBytes)
             .setAudioPlaybackCaptureConfig(configBuilder.build())
             .build()
+            .also {
+                check(it.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord failed to initialize" }
+                check(it.sampleRate == sampleRate) {
+                    "AudioRecord sample rate ${it.sampleRate} does not match requested $sampleRate"
+                }
+            }
     }
 
-    // Determine HAL sampling rate
+    private fun safeStop(recorder: AudioRecord?) {
+        if(recorder == null)
+            return
+        try {
+            if(recorder.state == AudioRecord.STATE_INITIALIZED &&
+                recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
+                recorder.stop()
+        }
+        catch(_: IllegalStateException) {
+        }
+    }
+
+    private fun safeStop(track: AudioTrack?) {
+        if(track == null)
+            return
+        try {
+            if(track.state == AudioTrack.STATE_INITIALIZED &&
+                track.playState != AudioTrack.PLAYSTATE_STOPPED)
+                track.stop()
+        }
+        catch(_: IllegalStateException) {
+        }
+    }
+
+    private fun safeRelease(recorder: AudioRecord?) {
+        try {
+            recorder?.release()
+        }
+        catch(_: Exception) {
+        }
+    }
+
+    private fun safeRelease(track: AudioTrack?) {
+        try {
+            track?.release()
+        }
+        catch(_: Exception) {
+        }
+    }
+
+    private fun alignUp(value: Int, alignment: Int): Int {
+        if(alignment <= 1)
+            return value
+        return ((value + alignment - 1) / alignment) * alignment
+    }
+
     private fun determineSamplingRate(): Int {
-        val sampleRateStr: String? = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
-        val srate = sampleRateStr?.let { str -> Integer.parseInt(str).takeUnless { it == 0 } } ?: 48000
-        Timber.i("Real HAL sampling rate is $srate")
-        return srate
+        val sampleRateStr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+        val sampleRate = sampleRateStr?.toIntOrNull()?.takeUnless { it == 0 } ?: 48000
+        Timber.i("Real HAL sampling rate is $sampleRate")
+        return sampleRate
     }
 
-    // Determine HAL buffer size
     private fun determineBufferSize(): Int {
-        val framesPerBuffer: String? = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
-        return framesPerBuffer?.let { str -> Integer.parseInt(str).takeUnless { it == 0 } } ?: 256
+        val framesPerBuffer = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+        return framesPerBuffer?.toIntOrNull()?.takeUnless { it == 0 } ?: 256
     }
 
     companion object {
+        private const val CHANNEL_COUNT = 2
         const val SESSION_LOSS_MAX_RETRIES = 1
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
