@@ -76,7 +76,8 @@ open class EelNumberRangeProperty<T:Number>(
 
     companion object : IPropertyCompanion {
         private fun matchVariable(key: String, contents: String): MatchResult? {
-            val regex = """$key\s*=\s*(-?\d+\.?\d*)\s*;""".toRegex()
+            val escapedKey = Regex.escape(key)
+            val regex = """(?m)^\s*$escapedKey\s*=\s*(-?\d+\.?\d*)\s*;""".toRegex()
             return regex.find(contents)
         }
 
@@ -95,7 +96,7 @@ open class EelNumberRangeProperty<T:Number>(
         }
 
         override val definitionRegex =
-            """(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[\s\S][^\n]*)""".toRegex()
+            """^\s*(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[^\n]+)\s*$""".toRegex()
 
         override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val matchRange = definitionRegex.find(line)
