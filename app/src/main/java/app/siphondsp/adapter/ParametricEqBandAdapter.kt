@@ -14,7 +14,6 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import java.util.*
 
 class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     RecyclerView.Adapter<ParametricEqBandAdapter.ViewHolder>() {
@@ -31,56 +30,29 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
 
     var onItemsChanged: ((ParametricEqBandAdapter) -> Unit)? = null
     var onItemClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onChannelClicked: ((ParametricEqBand, Int) -> Unit)? = null
 
     private val callback = object : ObservableList.OnListChangedCallback<ObservableArrayList<ParametricEqBand>>() {
         @SuppressLint("NotifyDataSetChanged")
         override fun onChanged(sender: ObservableArrayList<ParametricEqBand>?) {
-            this@ParametricEqBandAdapter.notifyDataSetChanged()
-            onItemsChanged()
+            notifyDataSetChanged(); onItemsChanged()
         }
-
-        override fun onItemRangeChanged(
-            sender: ObservableArrayList<ParametricEqBand>?,
-            positionStart: Int,
-            itemCount: Int,
-        ) {
-            this@ParametricEqBandAdapter.notifyItemRangeChanged(positionStart, itemCount)
-            onItemsChanged()
+        override fun onItemRangeChanged(sender: ObservableArrayList<ParametricEqBand>?, positionStart: Int, itemCount: Int) {
+            notifyItemRangeChanged(positionStart, itemCount); onItemsChanged()
         }
-
-        override fun onItemRangeInserted(
-            sender: ObservableArrayList<ParametricEqBand>?,
-            positionStart: Int,
-            itemCount: Int,
-        ) {
-            this@ParametricEqBandAdapter.notifyItemRangeInserted(positionStart, itemCount)
-            onItemsChanged()
+        override fun onItemRangeInserted(sender: ObservableArrayList<ParametricEqBand>?, positionStart: Int, itemCount: Int) {
+            notifyItemRangeInserted(positionStart, itemCount); onItemsChanged()
         }
-
         @SuppressLint("NotifyDataSetChanged")
-        override fun onItemRangeMoved(
-            sender: ObservableArrayList<ParametricEqBand>?,
-            fromPosition: Int,
-            toPosition: Int,
-            itemCount: Int,
-        ) {
-            this@ParametricEqBandAdapter.notifyDataSetChanged()
-            onItemsChanged()
+        override fun onItemRangeMoved(sender: ObservableArrayList<ParametricEqBand>?, fromPosition: Int, toPosition: Int, itemCount: Int) {
+            notifyDataSetChanged(); onItemsChanged()
         }
-
-        override fun onItemRangeRemoved(
-            sender: ObservableArrayList<ParametricEqBand>?,
-            positionStart: Int,
-            itemCount: Int,
-        ) {
-            this@ParametricEqBandAdapter.notifyItemRangeRemoved(positionStart, itemCount)
-            onItemsChanged()
+        override fun onItemRangeRemoved(sender: ObservableArrayList<ParametricEqBand>?, positionStart: Int, itemCount: Int) {
+            notifyItemRangeRemoved(positionStart, itemCount); onItemsChanged()
         }
     }
 
-    private fun onItemsChanged() {
-        this.onItemsChanged?.invoke(this)
-    }
+    private fun onItemsChanged() = onItemsChanged?.invoke(this) ?: Unit
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val filterType: TextView = view.findViewById(R.id.filter_type)
@@ -100,36 +72,31 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
         super.onDetachedFromRecyclerView(recyclerView)
     }
 
-    override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(viewGroup.context)
-            .inflate(R.layout.item_peq_band_list, viewGroup, false)
-        return ViewHolder(view)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
+        ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_peq_band_list, parent, false))
 
     @SuppressLint("SetTextI18n")
-    override fun onBindViewHolder(viewHolder: ViewHolder, position: Int) {
-        viewHolder.deleteButton.isEnabled = true
-
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.deleteButton.isEnabled = true
         val band = bands[position]
-        viewHolder.filterType.text = band.filterType.displayLabel
-        viewHolder.freq.text = "${dfFreq.format(band.frequency)}Hz"
-        viewHolder.gain.text = "${dfGain.format(band.gain)}dB"
-        viewHolder.qFactor.text = "Q${dfQ.format(band.q)}"
+        holder.filterType.text = "${band.filterType.displayLabel} · ${band.channel.displayLabel}"
+        holder.filterType.contentDescription = "Channel ${band.channel.displayLabel}; tap to change routing"
+        holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
+        holder.gain.text = "${dfGain.format(band.gain)}dB"
+        holder.qFactor.text = "Q${dfQ.format(band.q)}"
 
-        viewHolder.deleteButton.setOnClickListener {
-            viewHolder.bindingAdapterPosition.let { pos ->
-                if (pos >= 0) {
-                    bands.removeAt(pos)
-                }
+        holder.filterType.setOnClickListener {
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
+                bands.getOrNull(pos)?.let { onChannelClicked?.invoke(it, pos) }
             }
-            viewHolder.deleteButton.isEnabled = false
         }
-
-        viewHolder.itemView.setOnClickListener {
-            viewHolder.bindingAdapterPosition.let { pos ->
-                bands.getOrNull(pos)?.let {
-                    onItemClicked?.invoke(it, pos)
-                }
+        holder.deleteButton.setOnClickListener {
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { bands.removeAt(it) }
+            holder.deleteButton.isEnabled = false
+        }
+        holder.itemView.setOnClickListener {
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
+                bands.getOrNull(pos)?.let { onItemClicked?.invoke(it, pos) }
             }
         }
     }
