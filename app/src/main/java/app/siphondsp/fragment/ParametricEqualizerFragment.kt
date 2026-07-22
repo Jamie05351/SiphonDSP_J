@@ -167,7 +167,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.gainInput.setOnValueChangedListener { editorApply() }
         binding.qInput.setOnValueChangedListener { editorApply() }
         binding.filterTypeGroup.addOnButtonCheckedListener { _, _, checked -> if (checked) editorApply() }
-        binding.channelGroup.addOnButtonCheckedListener { _, _, checked -> if (checked) editorApply() }
+        binding.channelGroup?.addOnButtonCheckedListener { _, _, checked -> if (checked) editorApply() }
 
         binding.freqInput.customStepScale = { value, _ ->
             when (value) {
@@ -249,14 +249,14 @@ class ParametricEqualizerFragment : Fragment() {
         )
     }
 
-    private fun getSelectedChannel() = when (binding.channelGroup.checkedButtonId) {
+    private fun getSelectedChannel() = when (binding.channelGroup?.checkedButtonId) {
         R.id.channel_left -> ParametricEqChannel.LEFT
         R.id.channel_right -> ParametricEqChannel.RIGHT
         else -> ParametricEqChannel.LEFT_RIGHT
     }
 
     private fun setChannelSelection(channel: ParametricEqChannel) {
-        binding.channelGroup.check(
+        binding.channelGroup?.check(
             when (channel) {
                 ParametricEqChannel.LEFT_RIGHT -> R.id.channel_both
                 ParametricEqChannel.LEFT -> R.id.channel_left
