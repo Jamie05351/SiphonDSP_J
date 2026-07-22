@@ -95,8 +95,11 @@ open class EelNumberRangeProperty<T:Number>(
             }
         }
 
+        // LiveProg intentionally uses //-prefixed declarations for visual-only
+        // controls such as sp0/sp1 section separators. Keep the declaration
+        // anchored to the whole line, but accept that established syntax.
         override val definitionRegex =
-            """^\s*(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[^\n]+)\s*$""".toRegex()
+            """^\s*(?://\s*)?(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[^\n]+)\s*$""".toRegex()
 
         override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val matchRange = definitionRegex.find(line)
