@@ -2,21 +2,33 @@ package app.siphondsp.interop
 
 import android.content.Context
 import android.content.Intent
+import app.siphondsp.R
 import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
+import kotlin.math.max
+import kotlin.math.min
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
+    private val parametricEq = ParametricBiquadProcessor()
 
     @Volatile
     private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
 
     override var sampleRate: Float
         set(value) {
-            super.sampleRate = value
-            withHandle { JamesDspWrapper.setSamplingRate(it, value, false) }
+            synchronized(nativeLock) {
+                super.sampleRate = value
+                val current = handle
+                if (current != 0L) {
+                    JamesDspWrapper.setSamplingRate(current, value, false)
+                    refreshEqualizersLocked()
+                } else {
+                    parametricEq.configure(false, "", 0f, value)
+                }
+            }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
         get() = super.sampleRate
@@ -47,12 +59,39 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         synchronized(nativeLock) {
             val oldHandle = handle
             handle = 0L
+            parametricEq.configure(false, "", 0f, sampleRate)
 
             if(oldHandle != 0L) {
                 JamesDspWrapper.free(oldHandle)
                 Timber.d("Handle $oldHandle has been freed")
             }
         }
+    }
+
+    private fun processedSampleCount(inputSize: Int, outputSize: Int, offset: Int, length: Int): Int {
+        val safeOffset = max(offset, 0)
+        if (safeOffset >= inputSize) return 0
+        val available = inputSize - safeOffset
+        val requested = if (length < 0) available else length
+        return min(outputSize, min(available, requested)).coerceAtLeast(0) and -2
+    }
+
+    private fun copyBypass(input: ShortArray, output: ShortArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
+    }
+
+    private fun copyBypass(input: IntArray, output: IntArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
+    }
+
+    private fun copyBypass(input: FloatArray, output: FloatArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
     }
 
     // Processing
@@ -62,15 +101,11 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processInt16(current, input, output, offset, length)
+                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
             }
         }
     }
@@ -81,15 +116,11 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processInt32(current, input, output, offset, length)
+                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
             }
         }
     }
@@ -100,15 +131,11 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processFloat(current, input, output, offset, length)
+                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
             }
         }
     }
@@ -170,8 +197,45 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
+    /**
+     * The base class still builds a merged GraphicEQ string for compatibility
+     * with the rooted AudioEffect engine. The rootless engine deliberately
+     * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
+     * afterwards by the real stateful biquad cascade above.
+     */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean =
-        withHandle(false) { JamesDspWrapper.setGraphicEq(it, enable, bands) }
+        synchronized(nativeLock) { refreshEqualizersLocked() }
+
+    private fun refreshEqualizersLocked(): Boolean {
+        val current = handle
+        if (current == 0L) {
+            parametricEq.configure(false, "", 0f, sampleRate)
+            return false
+        }
+
+        val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
+        val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+
+        val geqEnabled = geqPrefs.getBoolean(context.getString(R.string.key_geq_enable), false)
+        val geqBands = geqPrefs.getString(
+            context.getString(R.string.key_geq_nodes),
+            Constants.DEFAULT_GEQ_INTERNAL,
+        ) ?: Constants.DEFAULT_GEQ_INTERNAL
+
+        val peqEnabled = peqPrefs.getBoolean(context.getString(R.string.key_peq_enable), false)
+        val peqBands = peqPrefs.getString(
+            context.getString(R.string.key_peq_bands),
+            Constants.DEFAULT_PEQ,
+        ) ?: Constants.DEFAULT_PEQ
+        val peqPreamp = peqPrefs.getFloat(context.getString(R.string.key_peq_preamp), 0f)
+
+        val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
+        val peqOk = parametricEq.configure(peqEnabled, peqBands, peqPreamp, sampleRate)
+        if (!peqOk && peqEnabled) {
+            Timber.e("Rejected invalid parametric EQ configuration; PEQ has been bypassed")
+        }
+        return geqOk && peqOk
+    }
 
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean =
         withHandle(false) { JamesDspWrapper.setLiveprog(it, enable, name, script) }
