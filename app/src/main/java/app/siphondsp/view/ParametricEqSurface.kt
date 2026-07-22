@@ -1,7 +1,12 @@
 package app.siphondsp.view
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Color
+import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Shader
 import android.os.Bundle
 import android.os.Parcelable
 import android.util.AttributeSet
@@ -10,53 +15,65 @@ import android.view.View
 import androidx.core.content.withStyledAttributes
 import androidx.core.os.bundleOf
 import app.siphondsp.model.ParametricEqBandList
+import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
 import app.siphondsp.utils.extensions.CompatExtensions.getParcelableAs
 import app.siphondsp.utils.extensions.prettyNumberFormat
-import kotlin.math.*
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.ln
 
 class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
-    private var mGridLines = Paint()
-    private var mGridThickLines = Paint()
-    private var mControlBarText = Paint()
-    private var mFrequencyResponseBg = Paint()
-    private var mFrequencyResponseHighlight = Paint()
+    private val gridLines = Paint()
+    private val gridThickLines = Paint()
+    private val controlBarText = Paint()
+    private val frequencyResponseBg = Paint()
+    private val leftResponsePaint = Paint()
+    private val rightResponsePaint = Paint()
 
-    private var mHeight = 0.0f
-    private var mWidth = 0.0f
+    private var viewHeight = 0.0f
+    private var viewWidth = 0.0f
 
-    // Sampled frequency response curve
-    private var mCurveFreqs = DoubleArray(0)
-    private var mCurveGains = DoubleArray(0)
-    private var mPreampDb = 0.0
+    private var curveFreqs = DoubleArray(0)
+    private var leftCurveGains = DoubleArray(0)
+    private var rightCurveGains = DoubleArray(0)
+    private var preampDb = 0.0
 
     private val nPts = 256
 
     init {
-        mGridLines.color = getColor(android.R.attr.colorControlHighlight)
-        mGridLines.style = Paint.Style.STROKE
-        mGridLines.strokeWidth = 4f
+        gridLines.color = getColor(android.R.attr.colorControlHighlight)
+        gridLines.style = Paint.Style.STROKE
+        gridLines.strokeWidth = 4f
 
-        mGridThickLines.color = getColor(android.R.attr.colorControlHighlight)
-        mGridThickLines.style = Paint.Style.STROKE
-        mGridThickLines.strokeWidth = 8f
+        gridThickLines.color = getColor(android.R.attr.colorControlHighlight)
+        gridThickLines.style = Paint.Style.STROKE
+        gridThickLines.strokeWidth = 8f
 
-        mControlBarText.textAlign = Paint.Align.CENTER
-        mControlBarText.textSize = TypedValue.applyDimension(
+        controlBarText.textAlign = Paint.Align.CENTER
+        controlBarText.textSize = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP,
-            11f, getContext().resources.displayMetrics
+            11f,
+            getContext().resources.displayMetrics,
         )
-        mControlBarText.color = getColor(android.R.attr.textColorPrimary)
-        mControlBarText.isAntiAlias = true
+        controlBarText.color = getColor(android.R.attr.textColorPrimary)
+        controlBarText.isAntiAlias = true
 
-        mFrequencyResponseBg.style = Paint.Style.FILL
-        mFrequencyResponseBg.alpha = 192
+        frequencyResponseBg.style = Paint.Style.FILL
+        frequencyResponseBg.alpha = 96
 
-        mFrequencyResponseHighlight.style = Paint.Style.STROKE
-        mFrequencyResponseHighlight.color = getColor(android.R.attr.colorAccent)
-        mFrequencyResponseHighlight.isAntiAlias = true
-        mFrequencyResponseHighlight.strokeWidth = 8f
+        leftResponsePaint.style = Paint.Style.STROKE
+        leftResponsePaint.color = getColor(android.R.attr.colorAccent)
+        leftResponsePaint.isAntiAlias = true
+        leftResponsePaint.strokeWidth = 8f
+
+        rightResponsePaint.style = Paint.Style.STROKE
+        rightResponsePaint.color = getColor(android.R.attr.textColorPrimary)
+        rightResponsePaint.alpha = 210
+        rightResponsePaint.isAntiAlias = true
+        rightResponsePaint.strokeWidth = 6f
+        rightResponsePaint.pathEffect = DashPathEffect(floatArrayOf(18f, 12f), 0f)
     }
 
     private fun getColor(colorAttribute: Int): Int {
@@ -68,19 +85,21 @@ class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(contex
         return color
     }
 
-    override fun onSaveInstanceState() =
-        bundleOf(
-            "super" to super.onSaveInstanceState(),
-            STATE_FREQ to mCurveFreqs,
-            STATE_GAIN to mCurveGains,
-            STATE_PREAMP to mPreampDb
-        )
+    override fun onSaveInstanceState() = bundleOf(
+        "super" to super.onSaveInstanceState(),
+        STATE_FREQ to curveFreqs,
+        STATE_LEFT_GAIN to leftCurveGains,
+        STATE_RIGHT_GAIN to rightCurveGains,
+        STATE_PREAMP to preampDb,
+    )
 
     override fun onRestoreInstanceState(state: Parcelable?) {
-        super.onRestoreInstanceState((state as Bundle).getParcelableAs("super"))
-        mCurveFreqs = state.getDoubleArray(STATE_FREQ) ?: DoubleArray(0)
-        mCurveGains = state.getDoubleArray(STATE_GAIN) ?: DoubleArray(0)
-        mPreampDb = state.getDouble(STATE_PREAMP, 0.0)
+        val bundle = state as? Bundle ?: return super.onRestoreInstanceState(state)
+        super.onRestoreInstanceState(bundle.getParcelableAs("super"))
+        curveFreqs = bundle.getDoubleArray(STATE_FREQ) ?: DoubleArray(0)
+        leftCurveGains = bundle.getDoubleArray(STATE_LEFT_GAIN) ?: DoubleArray(0)
+        rightCurveGains = bundle.getDoubleArray(STATE_RIGHT_GAIN) ?: DoubleArray(0)
+        preampDb = bundle.getDouble(STATE_PREAMP, 0.0)
         updateDbRange()
     }
 
@@ -91,93 +110,112 @@ class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(contex
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
-        mWidth = (right - left).toFloat()
-        mHeight = (bottom - top).toFloat()
+        viewWidth = (right - left).toFloat()
+        viewHeight = (bottom - top).toFloat()
 
-        val responseColors =
-            intArrayOf(getColor(android.R.attr.colorAccent), getColor(android.R.color.transparent))
+        val responseColors = intArrayOf(leftResponsePaint.color, getColor(android.R.color.transparent))
         val responsePositions = floatArrayOf(0.0f, 1f)
-        mFrequencyResponseBg.shader =
-            LinearGradient(0f, 0f, 0f, mHeight, responseColors, responsePositions, Shader.TileMode.CLAMP)
+        frequencyResponseBg.shader = LinearGradient(
+            0f,
+            0f,
+            0f,
+            viewHeight,
+            responseColors,
+            responsePositions,
+            Shader.TileMode.CLAMP,
+        )
     }
 
-    private val freqResponse = Path()
-    private val freqResponseBg = Path()
+    private val leftPath = Path()
+    private val rightPath = Path()
+    private val responseBgPath = Path()
 
-    override fun onDraw(canvas: Canvas) {
-        freqResponse.rewind()
-        freqResponseBg.rewind()
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        leftPath.rewind()
+        rightPath.rewind()
+        responseBgPath.rewind()
 
-        val zeroY = projectY(0f) * mHeight
+        buildPath(leftPath, leftCurveGains)
+        buildPath(rightPath, rightCurveGains)
 
-        if (mCurveFreqs.isNotEmpty()) {
-            // Draw smooth biquad frequency response curve (offset by preamp)
-            val preamp = mPreampDb.toFloat()
-            freqResponse.moveTo(
-                projectX(mCurveFreqs[0]) * mWidth,
-                projectY(mCurveGains[0].toFloat() + preamp) * mHeight
+        for (scale in FREQ_SCALE) {
+            val x = projectX(scale) * viewWidth
+            canvas.drawText(scale.prettyNumberFormat(), x, viewHeight - 16, controlBarText)
+        }
+
+        var db = minDb + 3
+        while (db <= maxDb - 3) {
+            val y = projectY(db.toFloat()) * viewHeight
+            canvas.drawLine(0f, y, viewWidth, y, if (db == 0) gridThickLines else gridLines)
+            db += 3
+        }
+
+        if (!leftPath.isEmpty) {
+            responseBgPath.addPath(leftPath)
+            responseBgPath.offset(0f, -4f)
+            if (curveFreqs.isNotEmpty()) {
+                responseBgPath.lineTo(projectX(curveFreqs.last()) * viewWidth, viewHeight)
+                responseBgPath.lineTo(projectX(curveFreqs.first()) * viewWidth, viewHeight)
+            } else {
+                responseBgPath.lineTo(viewWidth, viewHeight)
+                responseBgPath.lineTo(0f, viewHeight)
+            }
+            responseBgPath.close()
+            canvas.drawPath(responseBgPath, frequencyResponseBg)
+        }
+
+        canvas.drawPath(leftPath, leftResponsePaint)
+        canvas.drawPath(rightPath, rightResponsePaint)
+
+        canvas.drawText("L", 24f, 28f, controlBarText.apply { textAlign = Paint.Align.LEFT })
+        canvas.drawText("R - -", 56f, 28f, controlBarText)
+        controlBarText.textAlign = Paint.Align.CENTER
+    }
+
+    private fun buildPath(path: Path, gains: DoubleArray) {
+        if (curveFreqs.isNotEmpty() && gains.size == curveFreqs.size) {
+            path.moveTo(
+                projectX(curveFreqs[0]) * viewWidth,
+                projectY(gains[0].toFloat() + preampDb.toFloat()) * viewHeight,
             )
-            for (i in 1 until mCurveFreqs.size) {
-                freqResponse.lineTo(
-                    projectX(mCurveFreqs[i]) * mWidth,
-                    projectY(mCurveGains[i].toFloat() + preamp) * mHeight
+            for (i in 1 until curveFreqs.size) {
+                path.lineTo(
+                    projectX(curveFreqs[i]) * viewWidth,
+                    projectY(gains[i].toFloat() + preampDb.toFloat()) * viewHeight,
                 )
             }
         } else {
-            // Flat line at 0dB (or at preamp level)
-            val preampY = projectY(mPreampDb.toFloat()) * mHeight
-            freqResponse.moveTo(0f, preampY)
-            freqResponse.lineTo(mWidth, preampY)
+            val y = projectY(preampDb.toFloat()) * viewHeight
+            path.moveTo(0f, y)
+            path.lineTo(viewWidth, y)
         }
-
-        // Frequency scale labels
-        for (scale in FreqScale) {
-            val x = projectX(scale) * mWidth
-            canvas.drawText(scale.prettyNumberFormat(), x, mHeight - 16, mControlBarText)
-        }
-
-        // Draw horizontal dB grid lines
-        var dB = minDb + 3
-        while (dB <= maxDb - 3) {
-            val y = projectY(dB.toFloat()) * mHeight
-            if (dB == 0)
-                canvas.drawLine(0f, y, mWidth, y, mGridThickLines)
-            else
-                canvas.drawLine(0f, y, mWidth, y, mGridLines)
-            dB += 3
-        }
-
-        // Fill under curve
-        with(freqResponseBg) {
-            addPath(freqResponse)
-            offset(0f, -4f)
-            if (mCurveFreqs.isNotEmpty()) {
-                lineTo(projectX(mCurveFreqs.last()) * mWidth, mHeight)
-                lineTo(projectX(mCurveFreqs.first()) * mWidth, mHeight)
-            } else {
-                lineTo(mWidth, mHeight)
-                lineTo(0f, mHeight)
-            }
-            close()
-        }
-        canvas.drawPath(freqResponseBg, mFrequencyResponseBg)
-        canvas.drawPath(freqResponse, mFrequencyResponseHighlight)
     }
 
-    fun setBands(bands: ParametricEqBandList, preampDb: Double = mPreampDb) {
-        mPreampDb = preampDb
+    fun setBands(bands: ParametricEqBandList, preampDb: Double = this.preampDb) {
+        this.preampDb = preampDb
         if (bands.isEmpty()) {
-            mCurveFreqs = DoubleArray(0)
-            mCurveGains = DoubleArray(0)
+            curveFreqs = DoubleArray(0)
+            leftCurveGains = DoubleArray(0)
+            rightCurveGains = DoubleArray(0)
         } else {
-            val response = BiquadUtils.computeCombinedResponse(
+            val left = BiquadUtils.computeCombinedResponse(
                 bands,
                 numPoints = nPts,
                 minFreq = MIN_FREQ,
-                maxFreq = MAX_FREQ
+                maxFreq = MAX_FREQ,
+                channel = ParametricEqChannel.LEFT,
             )
-            mCurveFreqs = DoubleArray(response.size) { response[it].first }
-            mCurveGains = DoubleArray(response.size) { response[it].second }
+            val right = BiquadUtils.computeCombinedResponse(
+                bands,
+                numPoints = nPts,
+                minFreq = MIN_FREQ,
+                maxFreq = MAX_FREQ,
+                channel = ParametricEqChannel.RIGHT,
+            )
+            val source = if (left.isNotEmpty()) left else right
+            curveFreqs = DoubleArray(source.size) { source[it].first }
+            leftCurveGains = DoubleArray(curveFreqs.size) { left.getOrNull(it)?.second ?: 0.0 }
+            rightCurveGains = DoubleArray(curveFreqs.size) { right.getOrNull(it)?.second ?: 0.0 }
         }
 
         updateDbRange()
@@ -185,15 +223,15 @@ class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(contex
     }
 
     fun setPreampDb(preampDb: Double) {
-        mPreampDb = preampDb
+        this.preampDb = preampDb
         updateDbRange()
         postInvalidate()
     }
 
     private fun updateDbRange() {
-        val preamp = mPreampDb
-        val minGain = (mCurveGains.minOrNull() ?: 0.0) + preamp
-        val maxGain = (mCurveGains.maxOrNull() ?: 0.0) + preamp
+        val allGains = leftCurveGains.asSequence() + rightCurveGains.asSequence()
+        val minGain = (allGains.minOrNull() ?: 0.0) + preampDb
+        val maxGain = (allGains.maxOrNull() ?: 0.0) + preampDb
         minDb = floor(minOf(minGain, -15.0)).toInt()
         maxDb = ceil(maxOf(maxGain, 15.0)).toInt()
     }
@@ -205,8 +243,8 @@ class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(contex
         return ((position - minimumPosition) / (maximumPosition - minimumPosition)).toFloat()
     }
 
-    private fun projectY(dB: Float): Float {
-        val pos = (dB - minDb) / (maxDb - minDb)
+    private fun projectY(db: Float): Float {
+        val pos = (db - minDb) / (maxDb - minDb)
         return 1.0f - pos
     }
 
@@ -215,15 +253,16 @@ class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(contex
 
     companion object {
         private const val STATE_FREQ = "peq_curve_freq"
-        private const val STATE_GAIN = "peq_curve_gain"
+        private const val STATE_LEFT_GAIN = "peq_curve_left_gain"
+        private const val STATE_RIGHT_GAIN = "peq_curve_right_gain"
         private const val STATE_PREAMP = "peq_curve_preamp"
 
         private const val MIN_FREQ = 20.0
         private const val MAX_FREQ = 20000.0
 
-        private val FreqScale = doubleArrayOf(
+        private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
-            1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0
+            1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0,
         )
     }
 }
