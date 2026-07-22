@@ -2,6 +2,7 @@ package app.siphondsp.interop
 
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
+import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -20,6 +21,8 @@ internal class ParametricBiquadProcessor {
         val b2: Double,
         val a1: Double,
         val a2: Double,
+        val processLeft: Boolean,
+        val processRight: Boolean,
         var z1L: Double = 0.0,
         var z2L: Double = 0.0,
         var z1R: Double = 0.0,
@@ -32,14 +35,12 @@ internal class ParametricBiquadProcessor {
 
     fun configure(enable: Boolean, serializedBands: String, preampDb: Float, sampleRate: Float): Boolean {
         if (!enable) {
-            enabled = false
-            sections = emptyArray()
-            preampLinear = 1.0
+            disable()
             return true
         }
 
         val fs = sampleRate.toDouble()
-        if (!fs.isFinite() || fs < 8000.0 || !preampDb.isFinite()) {
+        if (!fs.isFinite() || fs < 8000.0 || !preampDb.isFinite() || preampDb !in -30f..0f) {
             disable()
             return false
         }
@@ -76,7 +77,16 @@ internal class ParametricBiquadProcessor {
                 disable()
                 return false
             }
-            rebuilt += Section(values[0], values[1], values[2], values[3], values[4])
+
+            rebuilt += Section(
+                b0 = values[0],
+                b1 = values[1],
+                b2 = values[2],
+                a1 = values[3],
+                a2 = values[4],
+                processLeft = band.channel.appliesToLeft(),
+                processRight = band.channel.appliesToRight(),
+            )
         }
 
         sections = rebuilt.toTypedArray()
@@ -92,7 +102,8 @@ internal class ParametricBiquadProcessor {
             band.frequency >= 20.0 &&
             band.frequency < sampleRate * 0.5 &&
             band.gain in -30.0..30.0 &&
-            band.q in MIN_Q..MAX_Q
+            band.q in MIN_Q..MAX_Q &&
+            band.channel in ParametricEqChannel.entries
 
     private fun disable() {
         enabled = false
@@ -103,6 +114,7 @@ internal class ParametricBiquadProcessor {
     private fun processLeft(input: Double): Double {
         var value = input * preampLinear
         for (section in sections) {
+            if (!section.processLeft) continue
             val output = section.b0 * value + section.z1L
             section.z1L = section.b1 * value - section.a1 * output + section.z2L
             section.z2L = section.b2 * value - section.a2 * output
@@ -114,6 +126,7 @@ internal class ParametricBiquadProcessor {
     private fun processRight(input: Double): Double {
         var value = input * preampLinear
         for (section in sections) {
+            if (!section.processRight) continue
             val output = section.b0 * value + section.z1R
             section.z1R = section.b1 * value - section.a1 * output + section.z2R
             section.z2R = section.b2 * value - section.a2 * output

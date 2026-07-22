@@ -14,7 +14,6 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import java.util.*
 
 class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     RecyclerView.Adapter<ParametricEqBandAdapter.ViewHolder>() {
@@ -35,7 +34,7 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     private val callback = object : ObservableList.OnListChangedCallback<ObservableArrayList<ParametricEqBand>>() {
         @SuppressLint("NotifyDataSetChanged")
         override fun onChanged(sender: ObservableArrayList<ParametricEqBand>?) {
-            this@ParametricEqBandAdapter.notifyDataSetChanged()
+            notifyDataSetChanged()
             onItemsChanged()
         }
 
@@ -44,7 +43,7 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
             positionStart: Int,
             itemCount: Int,
         ) {
-            this@ParametricEqBandAdapter.notifyItemRangeChanged(positionStart, itemCount)
+            notifyItemRangeChanged(positionStart, itemCount)
             onItemsChanged()
         }
 
@@ -53,7 +52,7 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
             positionStart: Int,
             itemCount: Int,
         ) {
-            this@ParametricEqBandAdapter.notifyItemRangeInserted(positionStart, itemCount)
+            notifyItemRangeInserted(positionStart, itemCount)
             onItemsChanged()
         }
 
@@ -64,7 +63,7 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
             toPosition: Int,
             itemCount: Int,
         ) {
-            this@ParametricEqBandAdapter.notifyDataSetChanged()
+            notifyDataSetChanged()
             onItemsChanged()
         }
 
@@ -73,13 +72,13 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
             positionStart: Int,
             itemCount: Int,
         ) {
-            this@ParametricEqBandAdapter.notifyItemRangeRemoved(positionStart, itemCount)
+            notifyItemRangeRemoved(positionStart, itemCount)
             onItemsChanged()
         }
     }
 
     private fun onItemsChanged() {
-        this.onItemsChanged?.invoke(this)
+        onItemsChanged?.invoke(this)
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -100,36 +99,26 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
         super.onDetachedFromRecyclerView(recyclerView)
     }
 
-    override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(viewGroup.context)
-            .inflate(R.layout.item_peq_band_list, viewGroup, false)
-        return ViewHolder(view)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
+        ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_peq_band_list, parent, false))
 
     @SuppressLint("SetTextI18n")
-    override fun onBindViewHolder(viewHolder: ViewHolder, position: Int) {
-        viewHolder.deleteButton.isEnabled = true
-
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.deleteButton.isEnabled = true
         val band = bands[position]
-        viewHolder.filterType.text = band.filterType.displayLabel
-        viewHolder.freq.text = "${dfFreq.format(band.frequency)}Hz"
-        viewHolder.gain.text = "${dfGain.format(band.gain)}dB"
-        viewHolder.qFactor.text = "Q${dfQ.format(band.q)}"
+        holder.filterType.text = "${band.filterType.displayLabel} · ${band.channel.displayLabel}"
+        holder.filterType.contentDescription = "${band.filterType.displayLabel}, channel ${band.channel.displayLabel}"
+        holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
+        holder.gain.text = "${dfGain.format(band.gain)}dB"
+        holder.qFactor.text = "Q${dfQ.format(band.q)}"
 
-        viewHolder.deleteButton.setOnClickListener {
-            viewHolder.bindingAdapterPosition.let { pos ->
-                if (pos >= 0) {
-                    bands.removeAt(pos)
-                }
-            }
-            viewHolder.deleteButton.isEnabled = false
+        holder.deleteButton.setOnClickListener {
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { bands.removeAt(it) }
+            holder.deleteButton.isEnabled = false
         }
-
-        viewHolder.itemView.setOnClickListener {
-            viewHolder.bindingAdapterPosition.let { pos ->
-                bands.getOrNull(pos)?.let {
-                    onItemClicked?.invoke(it, pos)
-                }
+        holder.itemView.setOnClickListener {
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
+                bands.getOrNull(pos)?.let { onItemClicked?.invoke(it, pos) }
             }
         }
     }
