@@ -75,28 +75,44 @@ open class EelNumberRangeProperty<T:Number>(
     }
 
     companion object : IPropertyCompanion {
-        private fun matchVariable(key: String, contents: String): MatchResult? {
+        private data class VariableMatch(val value: String, val valueRange: IntRange)
+
+        private fun matchVariable(key: String, contents: String): VariableMatch? {
             val escapedKey = Regex.escape(key)
-            val regex = """(?m)^\s*$escapedKey\s*=\s*(-?\d+\.?\d*)\s*;""".toRegex()
-            return regex.find(contents)
+            val assignmentRegex =
+                """(?:^|;)\s*$escapedKey\s*=\s*(-?\d+\.?\d*)\s*;""".toRegex()
+
+            var lineStart = 0
+            for(line in contents.split('\n')) {
+                // Ignore actual line comments, but allow more than one active
+                // assignment on a line (for example: a=0; slider=1; b=0;).
+                val activeCode = line.substringBefore("//")
+                val match = assignmentRegex.find(activeCode)
+                val valueGroup = match?.groups?.get(1)
+                if(valueGroup != null) {
+                    val absoluteRange =
+                        (lineStart + valueGroup.range.first)..(lineStart + valueGroup.range.last)
+                    return VariableMatch(valueGroup.value, absoluteRange)
+                }
+                lineStart += line.length + 1
+            }
+            return null
         }
 
         fun findVariable(key: String, contents: String): Float? {
-            val match = matchVariable(key, contents)
-            return match?.groups?.get(1)?.value?.toFloatOrNull()
+            return matchVariable(key, contents)?.value?.toFloatOrNull()
         }
 
         fun replaceVariable(key: String, replacement: String, contents: String): String? {
-            val match = matchVariable(key, contents)
-            match ?: return null
-
-            return match.groups[1]?.range?.let {
-                contents.replaceRange(it, replacement)
-            }
+            val match = matchVariable(key, contents) ?: return null
+            return contents.replaceRange(match.valueRange, replacement)
         }
 
+        // LiveProg intentionally uses //-prefixed declarations for visual-only
+        // controls such as sp0/sp1 section separators. Keep the declaration
+        // anchored to the whole line, but accept that established syntax.
         override val definitionRegex =
-            """^\s*(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[^\n]+)\s*$""".toRegex()
+            """^\s*(?://\s*)?(?<var>\w+):(?<def>-?\d+\.?\d*)?<(?<min>-?\d+\.?\d*),(?<max>-?\d+\.?\d*),?(?<step>-?\d+\.?\d*)?>(?<desc>[^\n]+)\s*$""".toRegex()
 
         override fun parse(line: String, contents: String, groupIndex: Int): EelBaseProperty? {
             val matchRange = definitionRegex.find(line)
