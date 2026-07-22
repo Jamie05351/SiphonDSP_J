@@ -103,7 +103,11 @@ class ParametricEqualizerFragment : Fragment() {
         super.onDestroy()
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
 
         binding.previewCard.setOnClickListener {
@@ -152,6 +156,7 @@ class ParametricEqualizerFragment : Fragment() {
             binding.gainInput.value = 0f
             binding.qInput.value = 1.41f
             setFilterTypeSelection(ParametricEqFilterType.PEAKING)
+            setChannelSelection(ParametricEqChannel.LEFT_RIGHT)
             updateViewState()
         }
 
@@ -162,6 +167,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.gainInput.setOnValueChangedListener { editorApply() }
         binding.qInput.setOnValueChangedListener { editorApply() }
         binding.filterTypeGroup.addOnButtonCheckedListener { _, _, checked -> if (checked) editorApply() }
+        binding.channelGroup.addOnButtonCheckedListener { _, _, checked -> if (checked) editorApply() }
 
         binding.freqInput.customStepScale = { value, _ ->
             when (value) {
@@ -173,6 +179,7 @@ class ParametricEqualizerFragment : Fragment() {
                 else -> 10f
             }
         }
+
         binding.qInput.customStepScale = { value, _ ->
             when (value) {
                 in 0f..1f -> 0.05f
@@ -220,22 +227,8 @@ class ParametricEqualizerFragment : Fragment() {
                 binding.gainInput.value = band.gain.toFloat()
                 binding.qInput.value = band.q.toFloat()
                 setFilterTypeSelection(band.filterType)
+                setChannelSelection(band.channel)
                 updateViewState()
-            }
-            onChannelClicked = { band, position ->
-                val next = when (band.channel) {
-                    ParametricEqChannel.LEFT_RIGHT -> ParametricEqChannel.LEFT
-                    ParametricEqChannel.LEFT -> ParametricEqChannel.RIGHT
-                    ParametricEqChannel.RIGHT -> ParametricEqChannel.LEFT_RIGHT
-                }
-                bands[position] = ParametricEqBand(
-                    band.frequency,
-                    band.gain,
-                    band.q,
-                    band.filterType,
-                    next,
-                    band.uuid,
-                )
             }
         }
     }
@@ -256,6 +249,22 @@ class ParametricEqualizerFragment : Fragment() {
         )
     }
 
+    private fun getSelectedChannel() = when (binding.channelGroup.checkedButtonId) {
+        R.id.channel_left -> ParametricEqChannel.LEFT
+        R.id.channel_right -> ParametricEqChannel.RIGHT
+        else -> ParametricEqChannel.LEFT_RIGHT
+    }
+
+    private fun setChannelSelection(channel: ParametricEqChannel) {
+        binding.channelGroup.check(
+            when (channel) {
+                ParametricEqChannel.LEFT_RIGHT -> R.id.channel_both
+                ParametricEqChannel.LEFT -> R.id.channel_left
+                ParametricEqChannel.RIGHT -> R.id.channel_right
+            }
+        )
+    }
+
     private fun updateViewState() {
         val empty = adapter.bands.isEmpty()
         binding.emptyView.isVisible = empty && !editorActive
@@ -271,13 +280,12 @@ class ParametricEqualizerFragment : Fragment() {
     private fun editorApply() {
         if (!editorCanSave()) return
         val uuid = editorBandUuid
-        val existing = uuid?.let { id -> adapter.bands.firstOrNull { it.uuid == id } }
         val band = ParametricEqBand(
             binding.freqInput.value.toDouble(),
             binding.gainInput.value.toDouble(),
             binding.qInput.value.toDouble(),
             getSelectedFilterType(),
-            existing?.channel ?: ParametricEqChannel.LEFT_RIGHT,
+            getSelectedChannel(),
             uuid ?: UUID.randomUUID(),
         )
 
