@@ -48,6 +48,15 @@ static const char* safeNseelCodeError(void* vm)
 #undef to_string
 #undef LiveProgEnable
 
+// EEL exposes C-style min/max macros; remove them before using the C++
+// standard-library functions in the hardened JNI replacements below.
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 static void destroyPartialWrapper(JNIEnv* env, JamesDspWrapper* wrapper)
 {
     if(wrapper == nullptr)
