@@ -19,9 +19,16 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     override var sampleRate: Float
         set(value) {
-            super.sampleRate = value
-            withHandle { JamesDspWrapper.setSamplingRate(it, value, false) }
-            synchronized(nativeLock) { refreshEqualizersLocked() }
+            synchronized(nativeLock) {
+                super.sampleRate = value
+                val current = handle
+                if (current != 0L) {
+                    JamesDspWrapper.setSamplingRate(current, value, false)
+                    refreshEqualizersLocked()
+                } else {
+                    parametricEq.configure(false, "", 0f, value)
+                }
+            }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
         get() = super.sampleRate
@@ -52,6 +59,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         synchronized(nativeLock) {
             val oldHandle = handle
             handle = 0L
+            parametricEq.configure(false, "", 0f, sampleRate)
 
             if(oldHandle != 0L) {
                 JamesDspWrapper.free(oldHandle)
@@ -68,6 +76,24 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return min(outputSize, min(available, requested)).coerceAtLeast(0) and -2
     }
 
+    private fun copyBypass(input: ShortArray, output: ShortArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
+    }
+
+    private fun copyBypass(input: IntArray, output: IntArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
+    }
+
+    private fun copyBypass(input: FloatArray, output: FloatArray, offset: Int, length: Int) {
+        val safeOffset = max(offset, 0)
+        val count = processedSampleCount(input.size, output.size, offset, length)
+        if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
+    }
+
     // Processing
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
@@ -75,12 +101,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processInt16(current, input, output, offset, length)
@@ -95,12 +116,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processInt32(current, input, output, offset, length)
@@ -115,12 +131,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val current = handle
             if(!enabled || current == 0L)
             {
-                if(offset < 0 && length < 0) {
-                    input.copyInto(output)
-                }
-                else {
-                    input.copyInto(output, 0, offset, offset + length)
-                }
+                copyBypass(input, output, offset, length)
             }
             else {
                 JamesDspWrapper.processFloat(current, input, output, offset, length)
@@ -197,7 +208,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     private fun refreshEqualizersLocked(): Boolean {
         val current = handle
-        if (current == 0L) return false
+        if (current == 0L) {
+            parametricEq.configure(false, "", 0f, sampleRate)
+            return false
+        }
 
         val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
         val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
@@ -218,7 +232,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
         val peqOk = parametricEq.configure(peqEnabled, peqBands, peqPreamp, sampleRate)
         if (!peqOk && peqEnabled) {
-            Timber.e("Rejected invalid parametric EQ configuration")
+            Timber.e("Rejected invalid parametric EQ configuration; PEQ has been bypassed")
         }
         return geqOk && peqOk
     }
