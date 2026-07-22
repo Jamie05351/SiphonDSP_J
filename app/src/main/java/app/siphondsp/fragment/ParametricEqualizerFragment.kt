@@ -112,6 +112,7 @@ class ParametricEqualizerFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
+        binding.qInput.min = 0.1f
 
         binding.previewCard.setOnClickListener {
             if (resources.configuration.orientation != ORIENTATION_LANDSCAPE) {
@@ -228,7 +229,7 @@ class ParametricEqualizerFragment : Fragment() {
     private fun installLiveEqResultListener() {
         childFragmentManager.setFragmentResultListener(
             LiveEqBottomSheet.REQUEST_KEY,
-            viewLifecycleOwner,
+            this,
         ) { _, result ->
             val serialized = result.getString(LiveEqBottomSheet.RESULT_BANDS) ?: return@setFragmentResultListener
             adapter.bands.deserialize(serialized)
