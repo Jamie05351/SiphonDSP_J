@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:layout_marginTop="4dp"
     android:animateLayoutChanges="true">
 
@@ -13,7 +12,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbarDefaultDelayBeforeFade="0"
-        app:layout_constraintBottom_toTopOf="@id/edit_card"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -70,11 +68,8 @@
         android:id="@+id/edit_card"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
         android:layout_marginHorizontal="16dp"
-        app:layout_constrainedHeight="true"
-        app:layout_constraintVertical_weight="0"
-        app:layout_constraintHeight_default="spread"
+        android:layout_marginTop="8dp"
         app:layout_constraintBottom_toTopOf="@id/preview_card"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -88,16 +83,17 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="2dp"
-                android:orientation="horizontal">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="2dp">
+
                 <TextView
                     android:id="@+id/edit_card_title"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:gravity="center_vertical"
                     android:ellipsize="end"
+                    android:gravity="center_vertical"
                     android:maxLines="1"
                     android:text="@string/peq_band_list"
                     android:textAppearance="?attr/textAppearanceTitleMedium" />
@@ -111,32 +107,31 @@
                     android:id="@+id/band_detail_context_buttons"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:visibility="visible"
                     android:orientation="horizontal">
+
                     <Button
-                        style="?attr/materialIconButtonFilledTonalStyle"
                         android:id="@+id/cancel"
+                        style="?attr/materialIconButtonFilledTonalStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/peq_cancel_spaced"
                         android:contentDescription="@string/peq_cancel"
+                        android:text="@string/peq_cancel_spaced"
                         android:tooltipText="@string/peq_cancel"
                         app:icon="@drawable/ic_close_24dp" />
 
                     <Button
-                        style="?attr/materialIconButtonFilledStyle"
                         android:id="@+id/confirm"
+                        style="?attr/materialIconButtonFilledStyle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/peq_done_spaced"
                         android:contentDescription="@string/peq_done"
+                        android:text="@string/peq_done_spaced"
                         android:tooltipText="@string/peq_done"
                         app:icon="@drawable/ic_twotone_check_24dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <View
-                android:id="@+id/divider"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:background="?android:attr/listDivider" />
@@ -149,16 +144,14 @@
                     android:id="@+id/empty_view"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_gravity="center"
-                    android:visibility="gone"
-                    android:gravity="center">
+                    android:gravity="center"
+                    android:visibility="gone">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:gravity="center"
                         android:alpha="0.8"
+                        android:gravity="center"
                         android:text="@string/peq_no_bands_defined"
                         android:textAppearance="?attr/textAppearanceTitleMedium"
                         app:drawableTint="?attr/colorOnBackground"
@@ -169,8 +162,8 @@
                     android:id="@+id/band_list"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:visibility="gone"
-                    android:scrollbars="vertical"/>
+                    android:scrollbars="vertical"
+                    android:visibility="gone" />
 
                 <androidx.core.widget.NestedScrollView
                     android:id="@+id/band_edit"
@@ -180,51 +173,52 @@
 
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="wrap_content"
                         android:layout_marginHorizontal="16dp"
                         android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp"
                         android:orientation="vertical">
 
                         <app.siphondsp.view.NumberInputBox
                             android:id="@+id/freqInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:max="20000"
+                            android:min="20"
+                            app:floatPrecision="1"
                             app:helperText="@string/peq_frequency_range"
                             app:helperTextEnabled="true"
                             app:hintText="@string/peq_frequency"
                             app:step="10"
                             app:suffixText="Hz"
-                            app:value="1000"
-                            app:floatPrecision="1"
-                            android:min="20"
-                            android:max="20000" />
+                            app:value="1000" />
 
                         <app.siphondsp.view.NumberInputBox
                             android:id="@+id/gainInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:max="30"
+                            android:min="-30"
+                            app:floatPrecision="2"
                             app:helperText="@string/peq_gain_range"
                             app:helperTextEnabled="true"
                             app:hintText="@string/peq_gain"
-                            app:floatPrecision="2"
                             app:step="0.5"
                             app:suffixText="dB"
-                            app:value="0"
-                            android:min="-30"
-                            android:max="30"/>
+                            app:value="0" />
 
                         <app.siphondsp.view.NumberInputBox
                             android:id="@+id/qInput"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:max="30"
+                            android:min="0"
+                            app:floatPrecision="2"
                             app:helperText="@string/peq_q_range"
                             app:helperTextEnabled="true"
                             app:hintText="@string/peq_q_factor"
-                            app:floatPrecision="2"
                             app:step="0.1"
-                            app:value="1.41"
-                            android:min="0"
-                            android:max="30" />
+                            app:value="1.41" />
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -238,9 +232,8 @@
                             android:id="@+id/filter_type_group"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="16dp"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/filter_peaking"
@@ -266,8 +259,52 @@
                                 android:layout_weight="1"
                                 android:text="@string/peq_filter_type_high_shelf" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
-                    </LinearLayout>
 
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:layout_marginBottom="4dp"
+                            android:text="Channel"
+                            android:textAppearance="?attr/textAppearanceLabelLarge"
+                            tools:ignore="HardcodedText" />
+
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/channel_group"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="8dp"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/channel_both"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Both"
+                                tools:ignore="HardcodedText" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/channel_left"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Left"
+                                tools:ignore="HardcodedText" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/channel_right"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Right"
+                                tools:ignore="HardcodedText" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
+                    </LinearLayout>
                 </androidx.core.widget.NestedScrollView>
             </FrameLayout>
         </LinearLayout>
@@ -286,8 +323,8 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:animateLayoutChanges="true">
+            android:animateLayoutChanges="true"
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/preview_title"
@@ -303,15 +340,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginBottom="8dp"
+                android:max="0"
+                android:min="-30"
+                app:floatPrecision="1"
                 app:helperText="@string/peq_preamp_range"
                 app:helperTextEnabled="true"
                 app:hintText="@string/peq_preamp"
-                app:floatPrecision="1"
                 app:step="0.5"
                 app:suffixText="dB"
-                app:value="0"
-                android:min="-30"
-                android:max="0" />
+                app:value="0" />
 
             <app.siphondsp.view.ParametricEqSurface
                 android:id="@+id/equalizer_surface"
