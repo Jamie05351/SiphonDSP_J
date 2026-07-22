@@ -13,6 +13,21 @@ class ParametricBiquadProcessorTest {
     }
 
     @Test
+    fun invalidReconfigurationBypassesPreviousFilter() {
+        val processor = ParametricBiquadProcessor()
+        assertTrue(processor.configure(true, "PEQ: 1000 6 1.0 0;", 0f, 48000f))
+        assertFalse(processor.configure(true, "PEQ: 1000 6 0 0;", 0f, 48000f))
+
+        val buffer = floatArrayOf(0.25f, -0.25f, 0.5f, -0.5f)
+        val original = buffer.copyOf()
+        processor.process(buffer, buffer.size)
+
+        for (i in buffer.indices) {
+            assertTrue("stale filter remained active at sample $i", abs(buffer[i] - original[i]) < 1.0e-6f)
+        }
+    }
+
+    @Test
     fun zeroDbBandIsTransparent() {
         val processor = ParametricBiquadProcessor()
         assertTrue(processor.configure(true, "PEQ: 1000 0 1.41 0;", 0f, 48000f))
