@@ -2,6 +2,11 @@ project(jamesdsp-wrapper LANGUAGES CXX)
 
 file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/*.cpp ${CMAKE_CURRENT_LIST_DIR}/*.h)
 
+# JamesDspWrapperHardened.cpp includes JamesDspWrapper.cpp after applying the
+# narrow safety substitutions. Exclude the original translation unit so the
+# JNI symbols are emitted exactly once.
+list(FILTER SOURCE_FILES EXCLUDE REGEX ".*/JamesDspWrapper\\.cpp$")
+
 add_library( # Sets the name of the library.
         jamesdsp-wrapper
 
