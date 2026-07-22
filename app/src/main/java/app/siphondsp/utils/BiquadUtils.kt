@@ -30,12 +30,8 @@ object BiquadUtils {
             ParametricEqFilterType.PEAKING -> {
                 val alpha = sinOmega / (2.0 * q)
                 BiquadCoefficients(
-                    1.0 + alpha * a,
-                    -2.0 * cosOmega,
-                    1.0 - alpha * a,
-                    1.0 + alpha / a,
-                    -2.0 * cosOmega,
-                    1.0 - alpha / a,
+                    1.0 + alpha * a, -2.0 * cosOmega, 1.0 - alpha * a,
+                    1.0 + alpha / a, -2.0 * cosOmega, 1.0 - alpha / a,
                 )
             }
             ParametricEqFilterType.LOW_SHELF -> {
@@ -77,14 +73,12 @@ object BiquadUtils {
         val cos2W = cos(2.0 * omega)
         val sinW = sin(omega)
         val sin2W = sin(2.0 * omega)
-
         val numReal = coeffs.b0 + coeffs.b1 * cosW + coeffs.b2 * cos2W
         val numImag = -(coeffs.b1 * sinW + coeffs.b2 * sin2W)
         val denReal = coeffs.a0 + coeffs.a1 * cosW + coeffs.a2 * cos2W
         val denImag = -(coeffs.a1 * sinW + coeffs.a2 * sin2W)
         val numMagSq = numReal * numReal + numImag * numImag
         val denMagSq = denReal * denReal + denImag * denImag
-
         return if (denMagSq > 0.0) 10.0 * log10(numMagSq / denMagSq) else 0.0
     }
 
@@ -97,6 +91,14 @@ object BiquadUtils {
         channel: ParametricEqChannel? = null,
     ): List<Pair<Double, Double>> {
         require(numPoints >= 2)
+
+        // A single preview curve cannot show two independent channels. Use the
+        // arithmetic mean in dB rather than incorrectly cascading L-only and
+        // R-only filters together.
+        if (channel == null && bands.any { it.channel != ParametricEqChannel.LEFT_RIGHT }) {
+            return computeAverageStereoResponse(bands, numPoints, minFreq, maxFreq, sampleRate)
+        }
+
         val selected = when (channel) {
             ParametricEqChannel.LEFT -> bands.filter { it.channel.appliesToLeft() }
             ParametricEqChannel.RIGHT -> bands.filter { it.channel.appliesToRight() }
@@ -118,7 +120,6 @@ object BiquadUtils {
         }
     }
 
-    /** Average of left and right dB curves for a compact stereo overview. */
     fun computeAverageStereoResponse(
         bands: List<ParametricEqBand>,
         numPoints: Int = 512,
@@ -127,8 +128,12 @@ object BiquadUtils {
         sampleRate: Double = 48000.0,
     ): List<Pair<Double, Double>> {
         if (bands.isEmpty()) return emptyList()
-        val left = computeCombinedResponse(bands, numPoints, minFreq, maxFreq, sampleRate, ParametricEqChannel.LEFT)
-        val right = computeCombinedResponse(bands, numPoints, minFreq, maxFreq, sampleRate, ParametricEqChannel.RIGHT)
+        val left = computeCombinedResponse(
+            bands, numPoints, minFreq, maxFreq, sampleRate, ParametricEqChannel.LEFT
+        )
+        val right = computeCombinedResponse(
+            bands, numPoints, minFreq, maxFreq, sampleRate, ParametricEqChannel.RIGHT
+        )
         if (left.isEmpty() && right.isEmpty()) return emptyList()
 
         val frequencies = if (left.isNotEmpty()) left.map { it.first } else right.map { it.first }
