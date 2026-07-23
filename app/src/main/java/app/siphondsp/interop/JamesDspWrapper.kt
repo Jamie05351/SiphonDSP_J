@@ -1,7 +1,11 @@
 package app.siphondsp.interop
 
 import app.siphondsp.interop.structure.EelVmVariable
+import app.siphondsp.model.ParametricEqBand
+import app.siphondsp.model.ParametricEqChannel
+import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.model.ProcessorMessage
+
 
 typealias JamesDspHandle = Long
 
@@ -25,13 +29,40 @@ object JamesDspWrapper {
 
     // Engine config
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
-    external fun setParametricEq(
+
+    /**
+     * Routes editable PEQ through libjamesdsp's established Viper-DDC engine.
+     * No separate PEQ audio loop is used around LiveProg.
+     */
+    fun setParametricEq(
         self: JamesDspHandle,
         enable: Boolean,
         bands: DoubleArray,
         preampDb: Float,
         sampleRate: Float,
-    ): Boolean
+    ): Boolean {
+        if (!enable) return setVdc(self, false, "")
+        if (bands.isEmpty() || bands.size % 5 != 0) return false
+
+        val parsed = ArrayList<ParametricEqBand>(bands.size / 5)
+        for (index in bands.indices step 5) {
+            val frequency = bands[index]
+            val gain = bands[index + 1]
+            val q = bands[index + 2]
+            val typeCode = bands[index + 3].toInt()
+            val channelCode = bands[index + 4].toInt()
+            parsed += ParametricEqBand(
+                frequency = frequency,
+                gain = gain,
+                q = q,
+                filterType = ParametricEqFilterType.fromCode(typeCode),
+                channel = ParametricEqChannel.fromCode(channelCode),
+            )
+        }
+
+        val vdc = ParametricEqVdcEncoder.encode(parsed, preampDb) ?: return false
+        return setVdc(self, true, vdc)
+    }
 
     // Effect config
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
