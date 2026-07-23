@@ -184,26 +184,32 @@ float NativePeqProcessor::processRight(float input) {
     return processBank(input * preampLinear_, right_);
 }
 
-void NativePeqProcessor::process(int16_t* samples, std::size_t sampleCount) {
-    if (!active_ || samples == nullptr) return;
+const int16_t* NativePeqProcessor::process(const int16_t* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return samples;
+    auto* writable = const_cast<int16_t*>(samples);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        samples[i] = clampInteger<int16_t>(processLeft(static_cast<float>(samples[i])));
-        samples[i + 1] = clampInteger<int16_t>(processRight(static_cast<float>(samples[i + 1])));
+        writable[i] = clampInteger<int16_t>(processLeft(static_cast<float>(writable[i])));
+        writable[i + 1] = clampInteger<int16_t>(processRight(static_cast<float>(writable[i + 1])));
     }
+    return samples;
 }
 
-void NativePeqProcessor::process(int32_t* samples, std::size_t sampleCount) {
-    if (!active_ || samples == nullptr) return;
+const int32_t* NativePeqProcessor::process(const int32_t* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return samples;
+    auto* writable = const_cast<int32_t*>(samples);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        samples[i] = clampInteger<int32_t>(processLeft(static_cast<float>(samples[i])));
-        samples[i + 1] = clampInteger<int32_t>(processRight(static_cast<float>(samples[i + 1])));
+        writable[i] = clampInteger<int32_t>(processLeft(static_cast<float>(writable[i])));
+        writable[i + 1] = clampInteger<int32_t>(processRight(static_cast<float>(writable[i + 1])));
     }
+    return samples;
 }
 
-void NativePeqProcessor::process(float* samples, std::size_t sampleCount) {
-    if (!active_ || samples == nullptr) return;
+const float* NativePeqProcessor::process(const float* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return samples;
+    auto* writable = const_cast<float*>(samples);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        samples[i] = processLeft(samples[i]);
-        samples[i + 1] = processRight(samples[i + 1]);
+        writable[i] = processLeft(writable[i]);
+        writable[i + 1] = processRight(writable[i + 1]);
     }
+    return samples;
 }
