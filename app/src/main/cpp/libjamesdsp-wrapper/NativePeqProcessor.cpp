@@ -162,30 +162,30 @@ float NativePeqProcessor::processRight(float input) {
 
 const int16_t* NativePeqProcessor::process(const int16_t* input, std::size_t sampleCount) {
     if (!active_ || input == nullptr) return input;
-    scratch16_.resize(sampleCount);
+    auto* mutableInput = const_cast<int16_t*>(input);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        scratch16_[i] = clampTo<int16_t>(processLeft(static_cast<float>(input[i])));
-        scratch16_[i + 1] = clampTo<int16_t>(processRight(static_cast<float>(input[i + 1])));
+        mutableInput[i] = clampTo<int16_t>(processLeft(static_cast<float>(mutableInput[i])));
+        mutableInput[i + 1] = clampTo<int16_t>(processRight(static_cast<float>(mutableInput[i + 1])));
     }
-    return scratch16_.data();
+    return input;
 }
 
 const int32_t* NativePeqProcessor::process(const int32_t* input, std::size_t sampleCount) {
     if (!active_ || input == nullptr) return input;
-    scratch32_.resize(sampleCount);
+    auto* mutableInput = const_cast<int32_t*>(input);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        scratch32_[i] = clampTo<int32_t>(processLeft(static_cast<float>(input[i])));
-        scratch32_[i + 1] = clampTo<int32_t>(processRight(static_cast<float>(input[i + 1])));
+        mutableInput[i] = clampTo<int32_t>(processLeft(static_cast<float>(mutableInput[i])));
+        mutableInput[i + 1] = clampTo<int32_t>(processRight(static_cast<float>(mutableInput[i + 1])));
     }
-    return scratch32_.data();
+    return input;
 }
 
 const float* NativePeqProcessor::process(const float* input, std::size_t sampleCount) {
     if (!active_ || input == nullptr) return input;
-    scratchFloat_.resize(sampleCount);
+    auto* mutableInput = const_cast<float*>(input);
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        scratchFloat_[i] = std::max(-1.0f, std::min(1.0f, processLeft(input[i])));
-        scratchFloat_[i + 1] = std::max(-1.0f, std::min(1.0f, processRight(input[i + 1])));
+        mutableInput[i] = std::max(-1.0f, std::min(1.0f, processLeft(mutableInput[i])));
+        mutableInput[i + 1] = std::max(-1.0f, std::min(1.0f, processRight(mutableInput[i + 1])));
     }
-    return scratchFloat_.data();
+    return input;
 }
