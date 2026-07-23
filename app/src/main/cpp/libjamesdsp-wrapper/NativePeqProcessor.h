@@ -22,9 +22,11 @@ public:
     void disable();
     bool isActive() const { return active_; }
 
-    void process(int16_t* samples, std::size_t sampleCount);
-    void process(int32_t* samples, std::size_t sampleCount);
-    void process(float* samples, std::size_t sampleCount);
+    // Preserve the wrapper's original call shape: processing is in-place and
+    // the original input pointer is always returned.
+    const int16_t* process(const int16_t* samples, std::size_t sampleCount);
+    const int32_t* process(const int32_t* samples, std::size_t sampleCount);
+    const float* process(const float* samples, std::size_t sampleCount);
 
 private:
     struct Section {
