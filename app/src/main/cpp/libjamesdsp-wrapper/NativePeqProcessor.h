@@ -1,20 +1,30 @@
 #ifndef SIPHONDSP_NATIVE_PEQ_PROCESSOR_H
 #define SIPHONDSP_NATIVE_PEQ_PROCESSOR_H
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
+/**
+ * Fixed-size stereo PEQ.
+ *
+ * Left and right use completely separate coefficient/state banks. Configuration
+ * may copy identical coefficients into both banks for L+R bands, but z1/z2 are
+ * never shared. The audio path performs no allocation, resizing or scratch
+ * buffering.
+ */
 class NativePeqProcessor {
 public:
+    static constexpr std::size_t kMaxSectionsPerChannel = 32;
+
     bool configure(bool enable, const double* bands, std::size_t valueCount,
                    float preampDb, float sampleRate);
     void disable();
     bool isActive() const { return active_; }
 
-    const int16_t* process(const int16_t* input, std::size_t sampleCount);
-    const int32_t* process(const int32_t* input, std::size_t sampleCount);
-    const float* process(const float* input, std::size_t sampleCount);
+    void process(int16_t* samples, std::size_t sampleCount);
+    void process(int32_t* samples, std::size_t sampleCount);
+    void process(float* samples, std::size_t sampleCount);
 
 private:
     struct Section {
@@ -27,18 +37,21 @@ private:
         float z2 = 0.0f;
     };
 
+    struct ChannelBank {
+        std::array<Section, kMaxSectionsPerChannel> sections{};
+        std::size_t count = 0;
+    };
+
     static bool buildSection(double frequency, double gain, double q, int type,
                              double sampleRate, Section& section);
-    static float processCascade(float input, std::vector<Section>& sections);
+    static float processBank(float input, ChannelBank& bank);
+    static void clearBank(ChannelBank& bank);
 
     float processLeft(float input);
     float processRight(float input);
 
-    std::vector<Section> left_;
-    std::vector<Section> right_;
-    std::vector<int16_t> scratch16_;
-    std::vector<int32_t> scratch32_;
-    std::vector<float> scratchFloat_;
+    ChannelBank left_{};
+    ChannelBank right_{};
     float preampLinear_ = 1.0f;
     bool active_ = false;
 };
