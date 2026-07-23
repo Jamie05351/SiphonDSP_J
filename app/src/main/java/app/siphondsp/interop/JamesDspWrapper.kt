@@ -25,6 +25,13 @@ object JamesDspWrapper {
 
     // Engine config
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
+    external fun setParametricEq(
+        self: JamesDspHandle,
+        enable: Boolean,
+        bands: DoubleArray,
+        preampDb: Float,
+        sampleRate: Float,
+    ): Boolean
 
     // Effect config
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
