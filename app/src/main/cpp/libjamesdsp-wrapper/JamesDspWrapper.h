@@ -43,7 +43,6 @@ struct JniEnvironmentHandle
 typedef struct
 {
     void* dsp;
-    void* nativePeq;
     JniEnvironmentHandle env;
     jobject callbackInterface;
     jmethodID callbackOnLiveprogOutput;
