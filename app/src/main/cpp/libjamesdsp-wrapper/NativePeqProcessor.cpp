@@ -11,7 +11,7 @@ constexpr double kMaxQ = 30.0;
 constexpr double kUnityGainEpsilonDb = 0.0001;
 constexpr std::size_t kValuesPerBand = 5;
 
-inline bool finite(double value) {
+inline bool isFiniteValue(double value) {
     return std::isfinite(value);
 }
 
@@ -32,9 +32,10 @@ void NativePeqProcessor::disable() {
 
 bool NativePeqProcessor::buildSection(double frequency, double gain, double q, int type,
                                       double sampleRate, Section& section) {
-    if (!finite(frequency) || !finite(gain) || !finite(q) || !finite(sampleRate) ||
-        sampleRate < 8000.0 || frequency < 20.0 || frequency >= sampleRate * 0.5 ||
-        gain < -30.0 || gain > 30.0 || q < kMinQ || q > kMaxQ || type < 0 || type > 2) {
+    if (!isFiniteValue(frequency) || !isFiniteValue(gain) || !isFiniteValue(q) ||
+        !isFiniteValue(sampleRate) || sampleRate < 8000.0 || frequency < 20.0 ||
+        frequency >= sampleRate * 0.5 || gain < -30.0 || gain > 30.0 ||
+        q < kMinQ || q > kMaxQ || type < 0 || type > 2) {
         return false;
     }
 
@@ -78,7 +79,7 @@ bool NativePeqProcessor::buildSection(double frequency, double gain, double q, i
         }
     }
 
-    if (!finite(a0) || a0 == 0.0) return false;
+    if (!isFiniteValue(a0) || a0 == 0.0) return false;
     const double invA0 = 1.0 / a0;
     section.b0 = static_cast<float>(b0 * invA0);
     section.b1 = static_cast<float>(b1 * invA0);
