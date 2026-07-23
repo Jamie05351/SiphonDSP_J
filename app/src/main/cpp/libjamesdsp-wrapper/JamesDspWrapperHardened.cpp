@@ -4,6 +4,8 @@
 #include <new>
 #include <string>
 
+#include "NativePeqProcessor.h"
+
 extern "C" {
 #include <jdsp_header.h>
 }
@@ -26,6 +28,7 @@ static const char* safeNseelCodeError(void* vm)
 // Compile the legacy implementations under private names, then expose
 // validated replacements below without changing the large upstream file.
 #define Java_app_siphondsp_interop_JamesDspWrapper_alloc Java_app_siphondsp_interop_JamesDspWrapper_alloc_legacy_unsafe
+#define Java_app_siphondsp_interop_JamesDspWrapper_free Java_app_siphondsp_interop_JamesDspWrapper_free_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt16 Java_app_siphondsp_interop_JamesDspWrapper_processInt16_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt32 Java_app_siphondsp_interop_JamesDspWrapper_processInt32_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed_legacy_unsafe
@@ -39,6 +42,7 @@ static const char* safeNseelCodeError(void* vm)
 #include "JamesDspWrapper.cpp"
 
 #undef Java_app_siphondsp_interop_JamesDspWrapper_alloc
+#undef Java_app_siphondsp_interop_JamesDspWrapper_free
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt16
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt32
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed
@@ -48,8 +52,6 @@ static const char* safeNseelCodeError(void* vm)
 #undef to_string
 #undef LiveProgEnable
 
-// EEL exposes C-style min/max macros; remove them before using the C++
-// standard-library functions in the hardened JNI replacements below.
 #ifdef min
 #undef min
 #endif
@@ -61,6 +63,8 @@ static void destroyPartialWrapper(JNIEnv* env, JamesDspWrapper* wrapper)
 {
     if(wrapper == nullptr)
         return;
+    delete static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    wrapper->nativePeq = nullptr;
     if(env != nullptr && wrapper->callbackInterface != nullptr)
         env->DeleteGlobalRef(wrapper->callbackInterface);
     delete wrapper;
@@ -77,9 +81,10 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv* env, jobject, jobject c
         return 0;
 
     wrapper->dsp = nullptr;
+    wrapper->nativePeq = new(std::nothrow) NativePeqProcessor();
     wrapper->env = env;
     wrapper->callbackInterface = env->NewGlobalRef(callback);
-    if(wrapper->callbackInterface == nullptr)
+    if(wrapper->nativePeq == nullptr || wrapper->callbackInterface == nullptr)
     {
         destroyPartialWrapper(env, wrapper);
         return 0;
@@ -130,6 +135,22 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv* env, jobject, jobject c
     return reinterpret_cast<jlong>(wrapper);
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_free(JNIEnv* env, jobject, jlong self)
+{
+    DECLARE_DSP_V
+    setStdOutHandler(nullptr, nullptr);
+    JamesDSPFree(dsp);
+    std::free(dsp);
+    wrapper->dsp = nullptr;
+    delete static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    wrapper->nativePeq = nullptr;
+    JamesDSPGlobalMemoryDeallocation();
+    if(env != nullptr && wrapper->callbackInterface != nullptr)
+        env->DeleteGlobalRef(wrapper->callbackInterface);
+    delete wrapper;
+}
+
 static jsize validatedStereoSamples(jsize inputLength, jsize outputLength, jint offset, jint size)
 {
     if(offset < 0)
@@ -144,6 +165,34 @@ static jsize validatedStereoSamples(jsize inputLength, jsize outputLength, jint 
 
     jsize samples = std::min(availableInput, std::min(outputLength, requested));
     return samples & ~static_cast<jsize>(1);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_setParametricEq(JNIEnv* env, jobject, jlong self,
+                                                            jboolean enable, jdoubleArray bandsObj,
+                                                            jfloat preampDb, jfloat sampleRate)
+{
+    DECLARE_WRAPPER_B
+    auto* peq = static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    if(peq == nullptr)
+        return false;
+    if(!enable)
+    {
+        peq->disable();
+        return true;
+    }
+    if(env == nullptr || bandsObj == nullptr)
+        return false;
+
+    const jsize count = env->GetArrayLength(bandsObj);
+    if(count <= 0 || count % 5 != 0)
+        return false;
+    jdouble* values = env->GetDoubleArrayElements(bandsObj, nullptr);
+    if(values == nullptr)
+        return false;
+    const bool ok = peq->configure(true, values, static_cast<std::size_t>(count), preampDb, sampleRate);
+    env->ReleaseDoubleArrayElements(bandsObj, values, JNI_ABORT);
+    return ok;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -170,7 +219,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processInt16Multiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* peq = static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    const int16_t* processed = peq != nullptr
+        ? peq->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        : reinterpret_cast<int16_t*>(input + safeOffset);
+    dsp->processInt16Multiplexd(dsp, reinterpret_cast<const short*>(processed), output, samples / 2);
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -199,7 +252,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processInt32Multiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* peq = static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    const int32_t* processed = peq != nullptr
+        ? peq->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        : reinterpret_cast<int32_t*>(input + safeOffset);
+    dsp->processInt32Multiplexd(dsp, reinterpret_cast<const int*>(processed), output, samples / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -228,7 +285,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processFloatMultiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* peq = static_cast<NativePeqProcessor*>(wrapper->nativePeq);
+    const float* processed = peq != nullptr
+        ? peq->process(input + safeOffset, static_cast<std::size_t>(samples))
+        : input + safeOffset;
+    dsp->processFloatMultiplexd(dsp, processed, output, samples / 2);
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
@@ -259,7 +320,6 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
         return inputObj;
     }
 
-    // Packed 24-bit stereo uses six bytes per frame, not two samples per frame.
     dsp->processInt24PackedMultiplexd(dsp, input, output, byteCount / 6);
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
