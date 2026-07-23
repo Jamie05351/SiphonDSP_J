@@ -14,6 +14,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     private val nativeLock = Any()
     private val parametricEq = ParametricBiquadProcessor()
 
+    // Reused only when pre-native PEQ is active. They grow on demand and are
+    // retained so the real-time path does not allocate for every audio block.
+    private var shortPeqScratch = ShortArray(0)
+    private var intPeqScratch = IntArray(0)
+    private var floatPeqScratch = FloatArray(0)
+
     @Volatile
     private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
 
@@ -60,6 +66,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val oldHandle = handle
             handle = 0L
             parametricEq.configure(false, "", 0f, sampleRate)
+            shortPeqScratch = ShortArray(0)
+            intPeqScratch = IntArray(0)
+            floatPeqScratch = FloatArray(0)
 
             if(oldHandle != 0L) {
                 JamesDspWrapper.free(oldHandle)
@@ -94,6 +103,36 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
     }
 
+    private fun preparePeqInput(input: ShortArray, outputSize: Int, offset: Int, length: Int): Pair<ShortArray, Int> {
+        val count = processedSampleCount(input.size, outputSize, offset, length)
+        if (count <= 0) return shortPeqScratch to 0
+        if (shortPeqScratch.size < count) shortPeqScratch = ShortArray(count)
+        val safeOffset = max(offset, 0)
+        input.copyInto(shortPeqScratch, 0, safeOffset, safeOffset + count)
+        parametricEq.process(shortPeqScratch, count)
+        return shortPeqScratch to count
+    }
+
+    private fun preparePeqInput(input: IntArray, outputSize: Int, offset: Int, length: Int): Pair<IntArray, Int> {
+        val count = processedSampleCount(input.size, outputSize, offset, length)
+        if (count <= 0) return intPeqScratch to 0
+        if (intPeqScratch.size < count) intPeqScratch = IntArray(count)
+        val safeOffset = max(offset, 0)
+        input.copyInto(intPeqScratch, 0, safeOffset, safeOffset + count)
+        parametricEq.process(intPeqScratch, count)
+        return intPeqScratch to count
+    }
+
+    private fun preparePeqInput(input: FloatArray, outputSize: Int, offset: Int, length: Int): Pair<FloatArray, Int> {
+        val count = processedSampleCount(input.size, outputSize, offset, length)
+        if (count <= 0) return floatPeqScratch to 0
+        if (floatPeqScratch.size < count) floatPeqScratch = FloatArray(count)
+        val safeOffset = max(offset, 0)
+        input.copyInto(floatPeqScratch, 0, safeOffset, safeOffset + count)
+        parametricEq.process(floatPeqScratch, count)
+        return floatPeqScratch to count
+    }
+
     // Processing
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
@@ -103,9 +142,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             {
                 copyBypass(input, output, offset, length)
             }
-            else {
+            else if (!parametricEq.isActive) {
+                // Preserve the original JamesDSP/LiveProg path exactly when PEQ
+                // is disabled or contributes no processing.
                 JamesDspWrapper.processInt16(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
+            }
+            else {
+                val (peqInput, count) = preparePeqInput(input, output.size, offset, length)
+                if (count > 0) JamesDspWrapper.processInt16(current, peqInput, output, 0, count)
             }
         }
     }
@@ -118,9 +162,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             {
                 copyBypass(input, output, offset, length)
             }
-            else {
+            else if (!parametricEq.isActive) {
                 JamesDspWrapper.processInt32(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
+            }
+            else {
+                val (peqInput, count) = preparePeqInput(input, output.size, offset, length)
+                if (count > 0) JamesDspWrapper.processInt32(current, peqInput, output, 0, count)
             }
         }
     }
@@ -133,9 +180,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             {
                 copyBypass(input, output, offset, length)
             }
-            else {
+            else if (!parametricEq.isActive) {
                 JamesDspWrapper.processFloat(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
+            }
+            else {
+                val (peqInput, count) = preparePeqInput(input, output.size, offset, length)
+                if (count > 0) JamesDspWrapper.processFloat(current, peqInput, output, 0, count)
             }
         }
     }
@@ -199,9 +249,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     /**
      * The base class still builds a merged GraphicEQ string for compatibility
-     * with the rooted AudioEffect engine. The rootless engine deliberately
-     * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
-     * afterwards by the real stateful biquad cascade above.
+     * with the rooted AudioEffect engine. In the rootless engine GEQ remains in
+     * libjamesdsp, while real PEQ is applied to the input before native modules
+     * and LiveProg so their detectors see the equalized signal.
      */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean =
         synchronized(nativeLock) { refreshEqualizersLocked() }
