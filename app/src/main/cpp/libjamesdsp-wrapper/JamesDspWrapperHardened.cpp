@@ -223,7 +223,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     const int16_t* processed = peq != nullptr
         ? peq->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples))
         : reinterpret_cast<int16_t*>(input + safeOffset);
-    dsp->processInt16Multiplexd(dsp, reinterpret_cast<const short*>(processed), output, samples / 2);
+    dsp->processInt16Multiplexd(dsp, const_cast<int16_t*>(processed), output, samples / 2);
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -256,7 +256,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     const int32_t* processed = peq != nullptr
         ? peq->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples))
         : reinterpret_cast<int32_t*>(input + safeOffset);
-    dsp->processInt32Multiplexd(dsp, reinterpret_cast<const int*>(processed), output, samples / 2);
+    dsp->processInt32Multiplexd(dsp, const_cast<int32_t*>(processed), output, samples / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -289,7 +289,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     const float* processed = peq != nullptr
         ? peq->process(input + safeOffset, static_cast<std::size_t>(samples))
         : input + safeOffset;
-    dsp->processFloatMultiplexd(dsp, processed, output, samples / 2);
+    dsp->processFloatMultiplexd(dsp, const_cast<float*>(processed), output, samples / 2);
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
