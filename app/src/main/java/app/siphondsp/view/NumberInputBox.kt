@@ -10,7 +10,7 @@ import app.siphondsp.R
 import app.siphondsp.databinding.ViewNumberInputBoxBinding
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import java.util.*
+import java.util.Locale
 
 class NumberInputBox @JvmOverloads constructor(
     context: Context,
@@ -22,59 +22,60 @@ class NumberInputBox @JvmOverloads constructor(
     private var onValueChangedListener: ((Float) -> Unit)? = null
     private val binding: ViewNumberInputBoxBinding
     private val df = DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
+    private var suppressTextWatcher = false
 
     init {
         df.maximumFractionDigits = 4
     }
 
-    var customStepScale: ((Float /* current value */, Boolean /* increasing */) -> Float)? = null
+    var customStepScale: ((Float, Boolean) -> Float)? = null
 
     var precision: Int
         get() = df.maximumFractionDigits
         set(value) {
             df.maximumFractionDigits = value
-            binding.input.setText(df.format(this.value))
+            setFormattedValue(this.value, notify = false)
         }
-    var min: Float = Float.MIN_VALUE
+
+    var min: Float = -Float.MAX_VALUE
         set(value) {
             field = value
-            validateValue()
+            normalizeCurrentValue(notify = false)
         }
+
     var max: Float = Float.MAX_VALUE
         set(value) {
             field = value
-            validateValue()
+            normalizeCurrentValue(notify = false)
         }
+
     var step: Float = 1f
+
     var value: Float
         set(newValue) {
-            // Preview bug fix
-            if(this.isInEditMode) {
-                return
-            }
+            if (isInEditMode) return
+            setFormattedValue(newValue.coerceIn(min, max), notify = true)
+        }
+        get() = binding.input.text?.toString()?.toFloatOrNull() ?: 0f
 
-            val str = df.format(newValue)
-            binding.input.setText(str)
-            onValueChangedListener?.invoke(newValue)
-        }
-        get() {
-            return binding.input.text.toString().toFloatOrNull() ?: 0f
-        }
     var suffixText: String = ""
         set(value) {
             field = value
             binding.inputLayout.suffixText = value
         }
+
     var helperText: String = ""
         set(value) {
             field = value
             binding.inputLayout.helperText = value
         }
+
     var helperTextEnabled: Boolean = false
         set(value) {
             field = value
             binding.inputLayout.isHelperTextEnabled = value
         }
+
     var hintText: String = ""
         set(value) {
             field = value
@@ -82,38 +83,16 @@ class NumberInputBox @JvmOverloads constructor(
         }
 
     private val textWatcher = object : TextWatcher {
-        override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {}
-        override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {}
-        override fun afterTextChanged(s: Editable) {
-            if (s.toString().isNotEmpty()) {
-                val input = s.toString().toFloatOrNull() ?: 0f
-                val validated = validateNumber(input)
-                if(validated != null)
-                    value = validated
+        override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) = Unit
+        override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) = Unit
 
-                onValueChangedListener?.invoke(value)
+        override fun afterTextChanged(s: Editable) {
+            if (suppressTextWatcher) return
+            val parsed = s.toString().toFloatOrNull() ?: return
+            if (parsed.isFinite() && parsed in min..max) {
+                onValueChangedListener?.invoke(parsed)
             }
         }
-    }
-
-    fun isCurrentValueValid(): Boolean {
-        return (binding.input.text?.isNotBlank() ?: false) && validateNumber(value) == null
-    }
-
-    private fun validateValue(input: Float = value) {
-        val validNumber = validateNumber(input)
-        validNumber ?: return
-        value = validNumber
-    }
-
-    private fun validateNumber(input: Float): Float? {
-        if(input > max) {
-            return max
-        }
-        else if(input < min) {
-             return min
-        }
-        return null
     }
 
     init {
@@ -122,30 +101,50 @@ class NumberInputBox @JvmOverloads constructor(
 
         precision = a.getInteger(R.styleable.NumberInputBox_floatPrecision, precision)
         step = a.getFloat(R.styleable.NumberInputBox_step, 1f)
-        value = a.getFloat(R.styleable.NumberInputBox_value, 0f)
         min = a.getFloat(R.styleable.NumberInputBox_android_min, min)
         max = a.getFloat(R.styleable.NumberInputBox_android_max, max)
+        setFormattedValue(a.getFloat(R.styleable.NumberInputBox_value, 0f).coerceIn(min, max), notify = false)
         suffixText = a.getString(R.styleable.NumberInputBox_suffixText) ?: suffixText
         helperText = a.getString(R.styleable.NumberInputBox_helperText) ?: helperText
         helperTextEnabled = a.getBoolean(R.styleable.NumberInputBox_helperTextEnabled, helperTextEnabled)
         hintText = a.getString(R.styleable.NumberInputBox_hintText) ?: hintText
-
         a.recycle()
 
+        binding.input.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) normalizeCurrentValue(notify = true)
+        }
+
         binding.plus.setOnClickListener {
-            val finalStep = if(customStepScale == null) step
-                else customStepScale?.invoke(value, true) ?: value
-            val newValue = (value + finalStep)
-
-            value = validateNumber(newValue) ?: newValue
+            val finalStep = customStepScale?.invoke(value, true) ?: step
+            value = (value + finalStep).coerceIn(min, max)
         }
+
         binding.minus.setOnClickListener {
-            val finalStep = if(customStepScale == null) step
-                else customStepScale?.invoke(value, true) ?: value
-            val newValue = (value - finalStep)
-
-            value = validateNumber(newValue) ?: newValue
+            val finalStep = customStepScale?.invoke(value, false) ?: step
+            value = (value - finalStep).coerceIn(min, max)
         }
+    }
+
+    private fun setFormattedValue(newValue: Float, notify: Boolean) {
+        val formatted = df.format(newValue)
+        if (binding.input.text?.toString() != formatted) {
+            suppressTextWatcher = true
+            binding.input.setText(formatted)
+            binding.input.setSelection(formatted.length)
+            suppressTextWatcher = false
+        }
+        if (notify) onValueChangedListener?.invoke(newValue)
+    }
+
+    private fun normalizeCurrentValue(notify: Boolean) {
+        val parsed = binding.input.text?.toString()?.toFloatOrNull() ?: return
+        if (!parsed.isFinite()) return
+        setFormattedValue(parsed.coerceIn(min, max), notify)
+    }
+
+    fun isCurrentValueValid(): Boolean {
+        val parsed = binding.input.text?.toString()?.toFloatOrNull() ?: return false
+        return parsed.isFinite() && parsed in min..max
     }
 
     override fun onAttachedToWindow() {

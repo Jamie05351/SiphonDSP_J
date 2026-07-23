@@ -30,12 +30,14 @@ import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import com.google.android.material.chip.Chip
 import timber.log.Timber
 import java.util.UUID
 
 class ParametricEqualizerFragment : Fragment() {
     private lateinit var binding: FragmentParametricEqBinding
     private val adapter get() = binding.bandList.adapter as ParametricEqBandAdapter
+    private var liveEqChip: Chip? = null
 
     private var editorBandBackup: ParametricEqBand? = null
     private var editorBandUuid: UUID? = null
@@ -47,6 +49,7 @@ class ParametricEqualizerFragment : Fragment() {
             binding.importFile.isEnabled = !value
             binding.exportFile.isEnabled = !value
             binding.editString.isEnabled = !value
+            liveEqChip?.isEnabled = !value
         }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -109,6 +112,7 @@ class ParametricEqualizerFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
+        binding.qInput.min = 0.1f
 
         binding.previewCard.setOnClickListener {
             if (resources.configuration.orientation != ORIENTATION_LANDSCAPE) {
@@ -199,8 +203,39 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         loadBands(savedInstanceState)
+        installLiveEqChip()
+        installLiveEqResultListener()
         updateViewState()
         return binding.root
+    }
+
+    private fun installLiveEqChip() {
+        val parent = binding.add.parent as? ViewGroup ?: return
+        liveEqChip = Chip(requireContext()).apply {
+            text = "Live EQ"
+            isCheckable = false
+            setOnClickListener {
+                if (!editorActive) {
+                    LiveEqBottomSheet.newInstance(
+                        adapter.bands,
+                        binding.preampInput.value.toDouble(),
+                    ).show(childFragmentManager, "live_eq")
+                }
+            }
+        }
+        parent.addView(liveEqChip, 1)
+    }
+
+    private fun installLiveEqResultListener() {
+        childFragmentManager.setFragmentResultListener(
+            LiveEqBottomSheet.REQUEST_KEY,
+            this,
+        ) { _, result ->
+            val serialized = result.getString(LiveEqBottomSheet.RESULT_BANDS) ?: return@setFragmentResultListener
+            adapter.bands.deserialize(serialized)
+            binding.equalizerSurface.setBands(adapter.bands, binding.preampInput.value.toDouble())
+            save()
+        }
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
