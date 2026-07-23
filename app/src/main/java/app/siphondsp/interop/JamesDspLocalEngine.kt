@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import app.siphondsp.R
 import app.siphondsp.interop.structure.EelVmVariable
+import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
@@ -12,7 +13,6 @@ import kotlin.math.min
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
-    private val parametricEq = ParametricBiquadProcessor()
 
     @Volatile
     private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
@@ -25,8 +25,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 if (current != 0L) {
                     JamesDspWrapper.setSamplingRate(current, value, false)
                     refreshEqualizersLocked()
-                } else {
-                    parametricEq.configure(false, "", 0f, value)
                 }
             }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
@@ -59,7 +57,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         synchronized(nativeLock) {
             val oldHandle = handle
             handle = 0L
-            parametricEq.configure(false, "", 0f, sampleRate)
 
             if(oldHandle != 0L) {
                 JamesDspWrapper.free(oldHandle)
@@ -94,19 +91,16 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
     }
 
-    // Processing
+    // Processing. Native PEQ is applied inside the JNI wrapper before
+    // libjamesdsp, so LiveProg and all native detectors see the equalized input.
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
         synchronized(nativeLock) {
             val current = handle
             if(!enabled || current == 0L)
-            {
                 copyBypass(input, output, offset, length)
-            }
-            else {
+            else
                 JamesDspWrapper.processInt16(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
-            }
         }
     }
 
@@ -115,13 +109,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         synchronized(nativeLock) {
             val current = handle
             if(!enabled || current == 0L)
-            {
                 copyBypass(input, output, offset, length)
-            }
-            else {
+            else
                 JamesDspWrapper.processInt32(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
-            }
         }
     }
 
@@ -130,13 +120,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         synchronized(nativeLock) {
             val current = handle
             if(!enabled || current == 0L)
-            {
                 copyBypass(input, output, offset, length)
-            }
-            else {
+            else
                 JamesDspWrapper.processFloat(current, input, output, offset, length)
-                parametricEq.process(output, processedSampleCount(input.size, output.size, offset, length))
-            }
         }
     }
 
@@ -197,21 +183,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    /**
-     * The base class still builds a merged GraphicEQ string for compatibility
-     * with the rooted AudioEffect engine. The rootless engine deliberately
-     * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
-     * afterwards by the real stateful biquad cascade above.
-     */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean =
         synchronized(nativeLock) { refreshEqualizersLocked() }
 
     private fun refreshEqualizersLocked(): Boolean {
         val current = handle
-        if (current == 0L) {
-            parametricEq.configure(false, "", 0f, sampleRate)
-            return false
-        }
+        if (current == 0L) return false
 
         val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
         val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
@@ -223,17 +200,38 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         ) ?: Constants.DEFAULT_GEQ_INTERNAL
 
         val peqEnabled = peqPrefs.getBoolean(context.getString(R.string.key_peq_enable), false)
-        val peqBands = peqPrefs.getString(
+        val peqSerialized = peqPrefs.getString(
             context.getString(R.string.key_peq_bands),
             Constants.DEFAULT_PEQ,
         ) ?: Constants.DEFAULT_PEQ
         val peqPreamp = peqPrefs.getFloat(context.getString(R.string.key_peq_preamp), 0f)
 
-        val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
-        val peqOk = parametricEq.configure(peqEnabled, peqBands, peqPreamp, sampleRate)
-        if (!peqOk && peqEnabled) {
-            Timber.e("Rejected invalid parametric EQ configuration; PEQ has been bypassed")
+        val flattenedBands = if (peqEnabled) {
+            val parsed = ParametricEqBandList().apply { deserialize(peqSerialized) }
+            DoubleArray(parsed.size * 5).also { values ->
+                parsed.forEachIndexed { index, band ->
+                    val base = index * 5
+                    values[base] = band.frequency
+                    values[base + 1] = band.gain
+                    values[base + 2] = band.q
+                    values[base + 3] = band.filterType.code.toDouble()
+                    values[base + 4] = band.channel.code.toDouble()
+                }
+            }
+        } else {
+            DoubleArray(0)
         }
+
+        val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
+        val peqOk = JamesDspWrapper.setParametricEq(
+            current,
+            peqEnabled,
+            flattenedBands,
+            peqPreamp,
+            sampleRate,
+        )
+        if (!peqOk && peqEnabled)
+            Timber.e("Rejected invalid native parametric EQ configuration; PEQ has been bypassed")
         return geqOk && peqOk
     }
 
