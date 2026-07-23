@@ -15,19 +15,32 @@ inline bool isFiniteValue(double value) {
     return std::isfinite(value);
 }
 
-template <typename T>
-inline T clampTo(float value) {
-    const float lo = static_cast<float>(std::numeric_limits<T>::lowest());
-    const float hi = static_cast<float>(std::numeric_limits<T>::max());
-    return static_cast<T>(std::lrintf(std::max(lo, std::min(hi, value))));
+inline float flushTiny(float value) {
+    return (!std::isfinite(value) || std::abs(value) < 1.0e-20f) ? 0.0f : value;
 }
+
+template <typename T>
+inline T clampInteger(float value) {
+    const double lo = static_cast<double>(std::numeric_limits<T>::lowest());
+    const double hi = static_cast<double>(std::numeric_limits<T>::max());
+    const double bounded = std::max(lo, std::min(hi, static_cast<double>(value)));
+    return static_cast<T>(std::llround(bounded));
+}
+}
+
+void NativePeqProcessor::clearBank(ChannelBank& bank) {
+    for(std::size_t i = 0; i < bank.count; ++i) {
+        bank.sections[i].z1 = 0.0f;
+        bank.sections[i].z2 = 0.0f;
+    }
+    bank.count = 0;
 }
 
 void NativePeqProcessor::disable() {
     active_ = false;
     preampLinear_ = 1.0f;
-    left_.clear();
-    right_.clear();
+    clearBank(left_);
+    clearBank(right_);
 }
 
 bool NativePeqProcessor::buildSection(double frequency, double gain, double q, int type,
@@ -107,11 +120,8 @@ bool NativePeqProcessor::configure(bool enable, const double* bands, std::size_t
         return false;
     }
 
-    std::vector<Section> newLeft;
-    std::vector<Section> newRight;
-    const std::size_t bandCount = valueCount / kValuesPerBand;
-    newLeft.reserve(bandCount);
-    newRight.reserve(bandCount);
+    ChannelBank newLeft{};
+    ChannelBank newRight{};
 
     for (std::size_t i = 0; i < valueCount; i += kValuesPerBand) {
         const double frequency = bands[i];
@@ -130,62 +140,70 @@ bool NativePeqProcessor::configure(bool enable, const double* bands, std::size_t
             disable();
             return false;
         }
-        if (channel != 2) newLeft.push_back(section);
-        if (channel != 1) newRight.push_back(section);
+
+        if (channel != 2) {
+            if (newLeft.count >= kMaxSectionsPerChannel) {
+                disable();
+                return false;
+            }
+            newLeft.sections[newLeft.count++] = section;
+        }
+        if (channel != 1) {
+            if (newRight.count >= kMaxSectionsPerChannel) {
+                disable();
+                return false;
+            }
+            newRight.sections[newRight.count++] = section;
+        }
     }
 
-    left_ = std::move(newLeft);
-    right_ = std::move(newRight);
+    left_ = newLeft;
+    right_ = newRight;
     preampLinear_ = std::pow(10.0f, preampDb / 20.0f);
-    active_ = !left_.empty() || !right_.empty() || preampLinear_ != 1.0f;
+    active_ = left_.count != 0 || right_.count != 0 || preampLinear_ != 1.0f;
     return true;
 }
 
-float NativePeqProcessor::processCascade(float input, std::vector<Section>& sections) {
+float NativePeqProcessor::processBank(float input, ChannelBank& bank) {
     float value = input;
-    for (Section& section : sections) {
+    for (std::size_t i = 0; i < bank.count; ++i) {
+        Section& section = bank.sections[i];
         const float output = section.b0 * value + section.z1;
-        section.z1 = section.b1 * value - section.a1 * output + section.z2;
-        section.z2 = section.b2 * value - section.a2 * output;
+        section.z1 = flushTiny(section.b1 * value - section.a1 * output + section.z2);
+        section.z2 = flushTiny(section.b2 * value - section.a2 * output);
         value = output;
     }
     return std::isfinite(value) ? value : 0.0f;
 }
 
 float NativePeqProcessor::processLeft(float input) {
-    return processCascade(input * preampLinear_, left_);
+    return processBank(input * preampLinear_, left_);
 }
 
 float NativePeqProcessor::processRight(float input) {
-    return processCascade(input * preampLinear_, right_);
+    return processBank(input * preampLinear_, right_);
 }
 
-const int16_t* NativePeqProcessor::process(const int16_t* input, std::size_t sampleCount) {
-    if (!active_ || input == nullptr) return input;
-    auto* mutableInput = const_cast<int16_t*>(input);
+void NativePeqProcessor::process(int16_t* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return;
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        mutableInput[i] = clampTo<int16_t>(processLeft(static_cast<float>(mutableInput[i])));
-        mutableInput[i + 1] = clampTo<int16_t>(processRight(static_cast<float>(mutableInput[i + 1])));
+        samples[i] = clampInteger<int16_t>(processLeft(static_cast<float>(samples[i])));
+        samples[i + 1] = clampInteger<int16_t>(processRight(static_cast<float>(samples[i + 1])));
     }
-    return input;
 }
 
-const int32_t* NativePeqProcessor::process(const int32_t* input, std::size_t sampleCount) {
-    if (!active_ || input == nullptr) return input;
-    auto* mutableInput = const_cast<int32_t*>(input);
+void NativePeqProcessor::process(int32_t* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return;
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        mutableInput[i] = clampTo<int32_t>(processLeft(static_cast<float>(mutableInput[i])));
-        mutableInput[i + 1] = clampTo<int32_t>(processRight(static_cast<float>(mutableInput[i + 1])));
+        samples[i] = clampInteger<int32_t>(processLeft(static_cast<float>(samples[i])));
+        samples[i + 1] = clampInteger<int32_t>(processRight(static_cast<float>(samples[i + 1])));
     }
-    return input;
 }
 
-const float* NativePeqProcessor::process(const float* input, std::size_t sampleCount) {
-    if (!active_ || input == nullptr) return input;
-    auto* mutableInput = const_cast<float*>(input);
+void NativePeqProcessor::process(float* samples, std::size_t sampleCount) {
+    if (!active_ || samples == nullptr) return;
     for (std::size_t i = 0; i + 1 < sampleCount; i += 2) {
-        mutableInput[i] = std::max(-1.0f, std::min(1.0f, processLeft(mutableInput[i])));
-        mutableInput[i + 1] = std::max(-1.0f, std::min(1.0f, processRight(mutableInput[i + 1])));
+        samples[i] = processLeft(samples[i]);
+        samples[i + 1] = processRight(samples[i + 1]);
     }
-    return input;
 }
