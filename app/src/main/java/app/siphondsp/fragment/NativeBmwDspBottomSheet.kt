@@ -23,6 +23,7 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 import kotlin.math.roundToInt
 
+// Spacious Material control surface for the native BMW DSP chain.
 class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     private lateinit var values: FloatArray
     private lateinit var root: LinearLayout
