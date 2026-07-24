@@ -51,11 +51,8 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         if (bands.isEmpty()) bands.add(defaultBand())
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View = inflater.inflate(R.layout.fragment_live_eq, container, false)
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        inflater.inflate(R.layout.fragment_live_eq, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -71,23 +68,28 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         channelGroup = view.findViewById(R.id.live_eq_channel_group)
 
         view.findViewById<MaterialButton>(R.id.live_eq_close).setOnClickListener { dismiss() }
-        view.findViewById<MaterialButton>(R.id.live_eq_add).setOnClickListener {
+        val addButton = view.findViewById<MaterialButton>(R.id.live_eq_add)
+        addButton.setOnClickListener {
             bands.add(defaultBand())
             selectedIndex = bands.lastIndex
             rebuildBandChips()
             loadSelectedBand()
             publishChanges()
         }
+        (addButton.parent as? ViewGroup)?.let { parent ->
+            parent.addView(MaterialButton(requireContext()).apply {
+                text = "BMW DSP"
+                setOnClickListener {
+                    NativeBmwDspBottomSheet().show(parentFragmentManager, NativeBmwDspBottomSheet.TAG)
+                }
+            }, parent.indexOfChild(addButton) + 1)
+        }
 
         frequency.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
         gain.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
         q.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
-        filterGroup.addOnButtonCheckedListener { _, _, checked ->
-            if (checked && !loadingControls) updateSelectedBand()
-        }
-        channelGroup.addOnButtonCheckedListener { _, _, checked ->
-            if (checked && !loadingControls) updateSelectedBand()
-        }
+        filterGroup.addOnButtonCheckedListener { _, _, checked -> if (checked && !loadingControls) updateSelectedBand() }
+        channelGroup.addOnButtonCheckedListener { _, _, checked -> if (checked && !loadingControls) updateSelectedBand() }
 
         rebuildBandChips()
         loadSelectedBand()
@@ -109,10 +111,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
                 isCheckable = true
                 isCheckedIconVisible = false
                 text = "${index + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
-                setOnClickListener {
-                    selectedIndex = index
-                    loadSelectedBand()
-                }
+                setOnClickListener { selectedIndex = index; loadSelectedBand() }
                 setOnLongClickListener {
                     if (bands.size > 1) {
                         bands.removeAt(index)
@@ -135,20 +134,16 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         frequency.progress = frequencyToProgress(band.frequency)
         gain.progress = ((band.gain + 30.0) * 10.0).roundToInt().coerceIn(0, 600)
         q.progress = qToProgress(band.q)
-        filterGroup.check(
-            when (band.filterType) {
-                ParametricEqFilterType.PEAKING -> R.id.live_eq_filter_peaking
-                ParametricEqFilterType.LOW_SHELF -> R.id.live_eq_filter_low_shelf
-                ParametricEqFilterType.HIGH_SHELF -> R.id.live_eq_filter_high_shelf
-            }
-        )
-        channelGroup.check(
-            when (band.channel) {
-                ParametricEqChannel.LEFT_RIGHT -> R.id.live_eq_channel_both
-                ParametricEqChannel.LEFT -> R.id.live_eq_channel_left
-                ParametricEqChannel.RIGHT -> R.id.live_eq_channel_right
-            }
-        )
+        filterGroup.check(when (band.filterType) {
+            ParametricEqFilterType.PEAKING -> R.id.live_eq_filter_peaking
+            ParametricEqFilterType.LOW_SHELF -> R.id.live_eq_filter_low_shelf
+            ParametricEqFilterType.HIGH_SHELF -> R.id.live_eq_filter_high_shelf
+        })
+        channelGroup.check(when (band.channel) {
+            ParametricEqChannel.LEFT_RIGHT -> R.id.live_eq_channel_both
+            ParametricEqChannel.LEFT -> R.id.live_eq_channel_left
+            ParametricEqChannel.RIGHT -> R.id.live_eq_channel_right
+        })
         loadingControls = false
         updateValueLabels(band)
         surface.setBands(bands, preampDb)
@@ -174,14 +169,10 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         )
         bands[selectedIndex] = updated
         updateValueLabels(updated)
-        updateSelectedChip(updated)
+        (bandGroup.getChildAt(selectedIndex) as? Chip)?.text =
+            "${selectedIndex + 1} · ${updated.filterType.displayLabel} · ${updated.channel.displayLabel}"
         surface.setBands(bands, preampDb)
         publishChanges()
-    }
-
-    private fun updateSelectedChip(band: ParametricEqBand) {
-        val chip = bandGroup.getChildAt(selectedIndex) as? Chip ?: return
-        chip.text = "${selectedIndex + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
     }
 
     private fun updateValueLabels(band: ParametricEqBand) {
@@ -191,27 +182,16 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun publishChanges() {
-        parentFragmentManager.setFragmentResult(
-            REQUEST_KEY,
-            bundleOf(RESULT_BANDS to bands.serialize()),
-        )
+        parentFragmentManager.setFragmentResult(REQUEST_KEY, bundleOf(RESULT_BANDS to bands.serialize()))
     }
 
     private fun defaultBand() = ParametricEqBand(1000.0, 0.0, 1.41)
-
-    private fun frequencyToProgress(value: Double): Int {
-        val normalized = ln(value.coerceIn(MIN_FREQ, MAX_FREQ) / MIN_FREQ) / ln(MAX_FREQ / MIN_FREQ)
-        return (normalized * 1000.0).roundToInt().coerceIn(0, 1000)
-    }
-
+    private fun frequencyToProgress(value: Double): Int =
+        (ln(value.coerceIn(MIN_FREQ, MAX_FREQ) / MIN_FREQ) / ln(MAX_FREQ / MIN_FREQ) * 1000.0).roundToInt().coerceIn(0, 1000)
     private fun progressToFrequency(progress: Int): Double =
         MIN_FREQ * exp(progress.coerceIn(0, 1000) / 1000.0 * ln(MAX_FREQ / MIN_FREQ))
-
-    private fun qToProgress(value: Double): Int {
-        val normalized = ln(value.coerceIn(MIN_Q, MAX_Q) / MIN_Q) / ln(MAX_Q / MIN_Q)
-        return (normalized * 1000.0).roundToInt().coerceIn(0, 1000)
-    }
-
+    private fun qToProgress(value: Double): Int =
+        (ln(value.coerceIn(MIN_Q, MAX_Q) / MIN_Q) / ln(MAX_Q / MIN_Q) * 1000.0).roundToInt().coerceIn(0, 1000)
     private fun progressToQ(progress: Int): Double =
         MIN_Q * exp(progress.coerceIn(0, 1000) / 1000.0 * ln(MAX_Q / MIN_Q))
 
@@ -226,10 +206,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         private const val MAX_Q = 30.0
 
         fun newInstance(bands: ParametricEqBandList, preampDb: Double) = LiveEqBottomSheet().apply {
-            arguments = bundleOf(
-                ARG_BANDS to bands.serialize(),
-                ARG_PREAMP to preampDb,
-            )
+            arguments = bundleOf(ARG_BANDS to bands.serialize(), ARG_PREAMP to preampDb)
         }
     }
 }

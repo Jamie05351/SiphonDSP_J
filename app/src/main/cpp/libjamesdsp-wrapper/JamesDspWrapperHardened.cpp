@@ -4,6 +4,8 @@
 #include <new>
 #include <string>
 
+#include "NativeBmwDspProcessor.h"
+
 extern "C" {
 #include <jdsp_header.h>
 }
@@ -23,9 +25,8 @@ static const char* safeNseelCodeError(void* vm)
     return error != nullptr ? error : "";
 }
 
-// Compile the legacy implementations under private names, then expose
-// validated replacements below without changing the large upstream file.
 #define Java_app_siphondsp_interop_JamesDspWrapper_alloc Java_app_siphondsp_interop_JamesDspWrapper_alloc_legacy_unsafe
+#define Java_app_siphondsp_interop_JamesDspWrapper_free Java_app_siphondsp_interop_JamesDspWrapper_free_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt16 Java_app_siphondsp_interop_JamesDspWrapper_processInt16_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt32 Java_app_siphondsp_interop_JamesDspWrapper_processInt32_legacy_unsafe
 #define Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed_legacy_unsafe
@@ -39,6 +40,7 @@ static const char* safeNseelCodeError(void* vm)
 #include "JamesDspWrapper.cpp"
 
 #undef Java_app_siphondsp_interop_JamesDspWrapper_alloc
+#undef Java_app_siphondsp_interop_JamesDspWrapper_free
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt16
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt32
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed
@@ -48,8 +50,6 @@ static const char* safeNseelCodeError(void* vm)
 #undef to_string
 #undef LiveProgEnable
 
-// EEL exposes C-style min/max macros; remove them before using the C++
-// standard-library functions in the hardened JNI replacements below.
 #ifdef min
 #undef min
 #endif
@@ -61,6 +61,8 @@ static void destroyPartialWrapper(JNIEnv* env, JamesDspWrapper* wrapper)
 {
     if(wrapper == nullptr)
         return;
+    delete static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    wrapper->nativeBmwDsp = nullptr;
     if(env != nullptr && wrapper->callbackInterface != nullptr)
         env->DeleteGlobalRef(wrapper->callbackInterface);
     delete wrapper;
@@ -77,9 +79,10 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv* env, jobject, jobject c
         return 0;
 
     wrapper->dsp = nullptr;
+    wrapper->nativeBmwDsp = new(std::nothrow) NativeBmwDspProcessor();
     wrapper->env = env;
     wrapper->callbackInterface = env->NewGlobalRef(callback);
-    if(wrapper->callbackInterface == nullptr)
+    if(wrapper->nativeBmwDsp == nullptr || wrapper->callbackInterface == nullptr)
     {
         destroyPartialWrapper(env, wrapper);
         return 0;
@@ -130,6 +133,22 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv* env, jobject, jobject c
     return reinterpret_cast<jlong>(wrapper);
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_free(JNIEnv* env, jobject, jlong self)
+{
+    DECLARE_DSP_V
+    setStdOutHandler(nullptr, nullptr);
+    JamesDSPFree(dsp);
+    std::free(dsp);
+    wrapper->dsp = nullptr;
+    delete static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    wrapper->nativeBmwDsp = nullptr;
+    JamesDSPGlobalMemoryDeallocation();
+    if(env != nullptr && wrapper->callbackInterface != nullptr)
+        env->DeleteGlobalRef(wrapper->callbackInterface);
+    delete wrapper;
+}
+
 static jsize validatedStereoSamples(jsize inputLength, jsize outputLength, jint offset, jint size)
 {
     if(offset < 0)
@@ -170,7 +189,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processInt16Multiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    const int16_t* processed = bmw != nullptr
+        ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        : reinterpret_cast<int16_t*>(input + safeOffset);
+    dsp->processInt16Multiplexd(dsp, const_cast<int16_t*>(processed), output, samples / 2);
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -199,7 +222,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processInt32Multiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    const int32_t* processed = bmw != nullptr
+        ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        : reinterpret_cast<int32_t*>(input + safeOffset);
+    dsp->processInt32Multiplexd(dsp, const_cast<int32_t*>(processed), output, samples / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -228,7 +255,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    dsp->processFloatMultiplexd(dsp, input + safeOffset, output, samples / 2);
+    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    const float* processed = bmw != nullptr
+        ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples))
+        : input + safeOffset;
+    dsp->processFloatMultiplexd(dsp, const_cast<float*>(processed), output, samples / 2);
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
@@ -259,7 +290,6 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
         return inputObj;
     }
 
-    // Packed 24-bit stereo uses six bytes per frame, not two samples per frame.
     dsp->processInt24PackedMultiplexd(dsp, input, output, byteCount / 6);
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
