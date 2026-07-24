@@ -18,6 +18,19 @@ public:
     const float* process(const float* samples, std::size_t sampleCount);
 
 private:
+    enum Dirty : uint32_t {
+        DirtyNone       = 0,
+        DirtyGains      = 1u << 0,
+        DirtySubsonic   = 1u << 1,
+        DirtyLowXo      = 1u << 2,
+        DirtyMidXo      = 1u << 3,
+        DirtyDelays     = 1u << 4,
+        DirtyTilt       = 1u << 5,
+        DirtyCompTiming = 1u << 6,
+        DirtyCompState  = 1u << 7,
+        DirtyAll        = 0xffffffffu,
+    };
+
     struct Biquad { float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0; float run(float x); void clear(); };
     struct OnePole { float a0=1,a1=0,b1=0,x1=0,y1=0; float run(float x); void clear(); };
     struct Delay {
@@ -51,7 +64,15 @@ private:
     static void makeOnePoleLow(OnePole& p,float fc,float sr);
     float processChannelInput(float x, Channel& c);
     void processFrame(float& l,float& r);
-    void rebuild();
+    void rebuildAll();
+    void applyDirty(uint32_t dirty);
+    void rebuildGains();
+    void rebuildSubsonic();
+    void rebuildLowCrossover();
+    void rebuildMidCrossover();
+    void updateDelays();
+    void rebuildTilt();
+    void rebuildCompressorTiming();
     void resetDynamics();
 
     Channel left_,right_;
