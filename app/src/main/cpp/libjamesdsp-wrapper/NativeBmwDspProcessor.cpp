@@ -6,7 +6,7 @@
 namespace {
 constexpr float PI=3.14159265358979323846f,BW=0.7071067812f,BW4Q1=0.5411961f,BW4Q2=1.3065630f;
 inline float ftz(float x){return(!std::isfinite(x)||std::fabs(x)<1e-20f)?0.f:x;}
-template<class T>T clampInt(float x){return static_cast<T>(std::lrintf(std::clamp(x,static_cast<float>(std::numeric_limits<T>::min()),static_cast<float>(std::numeric_limits<T>::max()))));}
+template<class T>T clampInt(float x){const float lo=static_cast<float>(std::numeric_limits<T>::min()),hi=static_cast<float>(std::numeric_limits<T>::max());return static_cast<T>(std::lrintf(std::max(lo,std::min(hi,x))));}
 inline float clampf(float x,float lo,float hi){return std::max(lo,std::min(hi,x));}
 inline bool changed(float a,float b){return std::fabs(a-b)>1e-6f;}
 }
