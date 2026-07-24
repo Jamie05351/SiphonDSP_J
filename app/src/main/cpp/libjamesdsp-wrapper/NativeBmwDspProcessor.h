@@ -7,7 +7,7 @@
 
 class NativeBmwDspProcessor {
 public:
-    static constexpr std::size_t kConfigSize = 31;
+    static constexpr std::size_t kConfigSize = 35;
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
