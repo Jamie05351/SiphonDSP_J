@@ -289,7 +289,6 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
                 valueTo = max
                 stepSize = step
                 value = values[index].coerceIn(min, max)
-                labelBehavior = Slider.LABEL_GONE
                 addOnChangeListener { _, newValue, fromUser ->
                     if (fromUser && !loading) {
                         values[index] = newValue
