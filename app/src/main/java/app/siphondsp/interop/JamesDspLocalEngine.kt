@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import app.siphondsp.R
 import app.siphondsp.interop.structure.EelVmVariable
+import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
@@ -43,6 +44,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         val restored = loadNativeBmwDspValues()
         if (!configureNativeBmwDsp(restored)) {
             Timber.e("Failed to restore saved native BMW DSP configuration")
+        }
+        if (!configureNativeBmwBandPeq()) {
+            Timber.e("Failed to restore saved native BMW band PEQ configuration")
         }
     }
 
@@ -100,7 +104,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
     }
 
-    // Processing
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
         synchronized(nativeLock) {
@@ -146,7 +149,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
-    // Effect config
     override fun setOutputControl(threshold: Float, release: Float, postGain: Float): Boolean =
         withHandle(false) {
             JamesDspWrapper.setLimiter(it, threshold, release) and
@@ -203,12 +205,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    /**
-     * The base class still builds a merged GraphicEQ string for compatibility
-     * with the rooted AudioEffect engine. The rootless engine deliberately
-     * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
-     * afterwards by the real stateful biquad cascade above.
-     */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean =
         synchronized(nativeLock) { refreshEqualizersLocked() }
 
@@ -240,17 +236,19 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (!peqOk && peqEnabled) {
             Timber.e("Rejected invalid parametric EQ configuration; PEQ has been bypassed")
         }
-        return geqOk && peqOk
+        val bandPeqOk = configureNativeBmwBandPeqLocked(current)
+        if (!bandPeqOk) {
+            Timber.e("Rejected invalid native BMW band PEQ configuration")
+        }
+        return geqOk && peqOk && bandPeqOk
     }
 
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean =
         withHandle(false) { JamesDspWrapper.setLiveprog(it, enable, name, script) }
 
-    // Feature support
     override fun supportsEelVmAccess(): Boolean = true
     override fun supportsCustomCrossfeed(): Boolean = true
 
-    // EEL VM utilities
     override fun enumerateEelVariables(): ArrayList<EelVmVariable> =
         withHandle(arrayListOf<EelVmVariable>()) { JamesDspWrapper.enumerateEelVariables(it) }
 
@@ -276,9 +274,38 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return withHandle(false) { JamesDspWrapper.configureNativeBmwDsp(it, values) }
     }
 
+    private fun flattenBands(serialized: String): DoubleArray {
+        val bands = ParametricEqBandList().apply { deserialize(serialized) }
+        return DoubleArray(bands.size * PEQ_VALUES_PER_BAND).also { values ->
+            bands.forEachIndexed { index, band ->
+                val offset = index * PEQ_VALUES_PER_BAND
+                values[offset] = band.frequency
+                values[offset + 1] = band.gain
+                values[offset + 2] = band.q
+                values[offset + 3] = band.filterType.code.toDouble()
+                values[offset + 4] = band.channel.code.toDouble()
+            }
+        }
+    }
+
+    private fun configureNativeBmwBandPeqLocked(current: JamesDspHandle): Boolean {
+        val prefs = context.getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
+        val low = flattenBands(prefs.getString(KEY_LOW_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+        val mid = flattenBands(prefs.getString(KEY_MID_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+        return JamesDspWrapper.configureNativeBmwBandPeq(current, low, mid)
+    }
+
+    fun configureNativeBmwBandPeq(): Boolean =
+        withHandle(false) { configureNativeBmwBandPeqLocked(it) }
+
     companion object {
         private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
         private const val NATIVE_BMW_KEY = "values"
+        private const val BAND_PEQ_PREFS = "native_bmw_band_peq"
+        private const val KEY_LOW_BANDS = "low_bands"
+        private const val KEY_MID_BANDS = "mid_bands"
+        private const val EMPTY_PEQ = "PEQ: "
+        private const val PEQ_VALUES_PER_BAND = 5
         private val NATIVE_BMW_DEFAULTS = floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
             -6f, 0f, 0f, -1f, -1f, 0f, 0f,
