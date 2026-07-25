@@ -4,8 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
+import androidx.preference.children
+import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
@@ -28,6 +32,7 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         writeValuesToMenu(values)
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
         configureFractionalSteps()
+        configureSectionStyling(preferenceScreen)
         updateResponseVisualiser(values)
     }
 
@@ -37,6 +42,17 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         }
         STEP_HUNDREDTH_KEYS.forEach { key ->
             findPreference<MaterialSeekbarPreference>(key)?.setSeekBarIncrement(.01f)
+        }
+    }
+
+    private fun configureSectionStyling(group: PreferenceGroup) {
+        group.children.forEach { preference ->
+            if (preference is PreferenceCategory) {
+                preference.layoutResource = R.layout.preference_bmw_section_header
+            }
+            if (preference is PreferenceGroup) {
+                configureSectionStyling(preference)
+            }
         }
     }
 
@@ -102,6 +118,7 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     ): RecyclerView = super.onCreateRecyclerView(inflater, parent, savedInstanceState).apply {
         itemAnimator = null
         isNestedScrollingEnabled = false
+        addItemDecoration(DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL))
     }
 
     override fun onCreateAdapter(preferenceScreen: PreferenceScreen): RecyclerView.Adapter<*> =
