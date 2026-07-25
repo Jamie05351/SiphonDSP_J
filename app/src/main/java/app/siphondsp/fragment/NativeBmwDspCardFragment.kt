@@ -9,6 +9,7 @@ import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
+import app.siphondsp.preference.MaterialSeekbarPreference
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 
@@ -24,6 +25,16 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         menuPreferences = requireContext().getSharedPreferences(MENU_PREFS, Context.MODE_PRIVATE)
         writeValuesToMenu(loadValues())
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
+        configureFractionalSteps()
+    }
+
+    private fun configureFractionalSteps() {
+        STEP_TENTH_KEYS.forEach { key ->
+            findPreference<MaterialSeekbarPreference>(key)?.setSeekBarIncrement(.1f)
+        }
+        STEP_HUNDREDTH_KEYS.forEach { key ->
+            findPreference<MaterialSeekbarPreference>(key)?.setSeekBarIncrement(.01f)
+        }
     }
 
     override fun onStart() {
@@ -95,6 +106,23 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
         private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25, 28)
         private val LIST_INDEXES = setOf(3, 4, 16)
+        private val STEP_TENTH_KEYS = setOf(
+            "bmw_low_gain_l",
+            "bmw_low_gain_r",
+            "bmw_mid_gain_l",
+            "bmw_mid_gain_r",
+            "bmw_post_gain_l",
+            "bmw_post_gain_r",
+            "bmw_tilt_amount",
+            "bmw_comp_ratio",
+            "bmw_comp_makeup",
+        )
+        private val STEP_HUNDREDTH_KEYS = setOf(
+            "bmw_mid_delay_l",
+            "bmw_mid_delay_r",
+            "bmw_low_delay_l",
+            "bmw_low_delay_r",
+        )
         private val KEY_TO_INDEX = linkedMapOf(
             "native_bmw_dsp_enable" to 0,
             "bmw_lpf_passthrough" to 1,
