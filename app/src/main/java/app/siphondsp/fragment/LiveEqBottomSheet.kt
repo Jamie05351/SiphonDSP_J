@@ -61,8 +61,17 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        fullRangeBands.deserialize(requireArguments().getString(ARG_BANDS).orEmpty())
-        preampDb = requireArguments().getDouble(ARG_PREAMP, 0.0)
+        val peqPrefs = requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+        fullRangeBands.deserialize(
+            peqPrefs.getString(
+                getString(R.string.key_peq_bands),
+                requireArguments().getString(ARG_BANDS).orEmpty(),
+            ).orEmpty()
+        )
+        preampDb = peqPrefs.getFloat(
+            getString(R.string.key_peq_preamp),
+            requireArguments().getDouble(ARG_PREAMP, 0.0).toFloat(),
+        ).toDouble()
 
         val bandPrefs = requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
         lowBandBands.deserialize(bandPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ).orEmpty())
@@ -176,7 +185,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         })
         loadingControls = false
         updateValueLabels(band)
-        surface.setBands(bands, if (selectedScope == Scope.FULL_RANGE) preampDb else 0.0)
+        updateSurface()
     }
 
     private fun updateSelectedBand() {
@@ -201,8 +210,26 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         updateValueLabels(updated)
         (bandGroup.getChildAt(selectedIndex) as? Chip)?.text =
             "${selectedIndex + 1} · ${updated.filterType.displayLabel} · ${updated.channel.displayLabel}"
-        surface.setBands(bands, if (selectedScope == Scope.FULL_RANGE) preampDb else 0.0)
+        updateSurface()
         publishChanges()
+    }
+
+    private fun updateSurface() {
+        val saved = requireContext().getSharedPreferences(NATIVE_BMW_PREFS, Context.MODE_PRIVATE)
+            .getString(NATIVE_BMW_KEY, null)
+        val values = saved?.split(',')?.mapNotNull(String::toDoubleOrNull)
+        val lowPassHz = values?.getOrNull(15) ?: 150.0
+        val lowLr4 = (values?.getOrNull(16) ?: 0.0) >= 0.5
+        val highPassHz = values?.getOrNull(18) ?: 125.0
+        surface.setBmwSystemResponse(
+            fullRangeBands,
+            lowBandBands,
+            midBandBands,
+            preampDb,
+            lowPassHz,
+            lowLr4,
+            highPassHz,
+        )
     }
 
     private fun updateValueLabels(band: ParametricEqBand) {
@@ -212,19 +239,20 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun publishChanges() {
-        if (selectedScope == Scope.FULL_RANGE) {
-            parentFragmentManager.setFragmentResult(
-                REQUEST_KEY,
-                bundleOf(RESULT_BANDS to fullRangeBands.serialize()),
-            )
-            return
-        }
-
+        requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+            .edit()
+            .putString(getString(R.string.key_peq_bands), fullRangeBands.serialize())
+            .putFloat(getString(R.string.key_peq_preamp), preampDb.toFloat())
+            .apply()
         requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LOW_BANDS, lowBandBands.serialize())
             .putString(KEY_MID_BANDS, midBandBands.serialize())
             .apply()
+        parentFragmentManager.setFragmentResult(
+            REQUEST_KEY,
+            bundleOf(RESULT_BANDS to fullRangeBands.serialize()),
+        )
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
     }
 
@@ -253,6 +281,8 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         private const val MAX_FREQ = 20000.0
         private const val MIN_Q = 0.1
         private const val MAX_Q = 30.0
+        private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
+        private const val NATIVE_BMW_KEY = "values"
         const val BAND_PEQ_PREFS = "native_bmw_band_peq"
         const val KEY_LOW_BANDS = "low_bands"
         const val KEY_MID_BANDS = "mid_bands"
