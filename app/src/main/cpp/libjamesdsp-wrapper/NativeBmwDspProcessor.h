@@ -7,11 +7,16 @@
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kConfigSize = 35 };
+    enum : std::size_t { kConfigSize = 35, kPeqValuesPerBand = 5, kMaxPeqSectionsPerChannel = 16 };
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
     bool configure(const float* values, std::size_t count);
+    bool configureBandPeq(
+        const double* lowValues,
+        std::size_t lowValueCount,
+        const double* midValues,
+        std::size_t midValueCount);
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
@@ -31,6 +36,12 @@ private:
     };
 
     struct Biquad { float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0; float run(float x); void clear(); };
+    struct PeqBank {
+        std::array<Biquad,kMaxPeqSectionsPerChannel> sections{};
+        std::size_t count=0;
+        float run(float x);
+        void clear();
+    };
     struct OnePole { float a0=1,a1=0,b1=0,x1=0,y1=0; float run(float x); void clear(); };
     struct Delay {
         std::array<float,256> data{};
@@ -41,6 +52,7 @@ private:
     };
     struct Channel {
         Biquad sub1,sub2,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
+        PeqBank lowPeq,midPeq;
         OnePole lowPole;
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;
@@ -60,6 +72,8 @@ private:
     static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
     static void makeOnePoleLow(OnePole& p,float fc,float sr);
+    static bool makePeq(Biquad& q,double frequency,double gain,double quality,int type,float sampleRate);
+    bool buildPeqBanks(const double* values,std::size_t valueCount,PeqBank& left,PeqBank& right) const;
     float processChannelInput(float x, Channel& c);
     void processFrame(float& l,float& r);
     void rebuildAll();
@@ -74,6 +88,9 @@ private:
     void resetDynamics();
 
     Channel left_,right_;
+    std::array<double,kMaxPeqSectionsPerChannel*2*kPeqValuesPerBand> lowPeqConfig_{};
+    std::array<double,kMaxPeqSectionsPerChannel*2*kPeqValuesPerBand> midPeqConfig_{};
+    std::size_t lowPeqValueCount_=0,midPeqValueCount_=0;
     float sampleRate_=48000.0f,dcR_=0.0f;
     float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1,makeup_=1;
     float compGain_=1,rmsPower_=0,peakEnv_=0,rmsMix_=0,peakRelease_=0,attackMix_=0,releaseMix_=0;
