@@ -24,6 +24,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 val current = handle
                 if (current != 0L) {
                     JamesDspWrapper.setSamplingRate(current, value, false)
+                    JamesDspWrapper.setNativeBmwDspSampleRate(current, value)
                     refreshEqualizersLocked()
                 } else {
                     parametricEq.configure(false, "", 0f, value)
@@ -38,6 +39,11 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     init {
         if(BenchmarkManager.hasBenchmarksCached())
             BenchmarkManager.loadBenchmarksFromCache()
+
+        val restored = loadNativeBmwDspValues()
+        if (!configureNativeBmwDsp(restored)) {
+            Timber.e("Failed to restore saved native BMW DSP configuration")
+        }
     }
 
     private inline fun <T> withHandle(default: T, block: (JamesDspHandle) -> T): T = synchronized(nativeLock) {
@@ -253,5 +259,36 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     override fun freezeLiveprogExecution(freeze: Boolean) {
         withHandle { JamesDspWrapper.freezeLiveprogExecution(it, freeze) }
+    }
+
+    private fun loadNativeBmwDspValues(): FloatArray {
+        val saved = context.getSharedPreferences(NATIVE_BMW_PREFS, Context.MODE_PRIVATE)
+            .getString(NATIVE_BMW_KEY, null)
+        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
+        return if (parsed?.size == NATIVE_BMW_DEFAULTS.size) parsed else NATIVE_BMW_DEFAULTS.copyOf()
+    }
+
+    fun configureNativeBmwDsp(values: FloatArray): Boolean {
+        if (values.size != NATIVE_BMW_DEFAULTS.size) {
+            Timber.e("Rejected native BMW DSP configuration with ${values.size} values")
+            return false
+        }
+        return withHandle(false) { JamesDspWrapper.configureNativeBmwDsp(it, values) }
+    }
+
+    companion object {
+        private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
+        private const val NATIVE_BMW_KEY = "values"
+        private val NATIVE_BMW_DEFAULTS = floatArrayOf(
+            1f, 0f, 0f, 0f, 0f,
+            -6f, 0f, 0f, -1f, -1f, 0f, 0f,
+            1f, 32f,
+            0f, 150f, 0f,
+            0f, 125f,
+            0f, 0f,
+            0f, 0f, 0f, 0f,
+            1f, 3f, 550f,
+            1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        )
     }
 }

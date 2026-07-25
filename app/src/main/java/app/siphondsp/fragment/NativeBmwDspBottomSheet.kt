@@ -1,6 +1,7 @@
 package app.siphondsp.fragment
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -13,7 +14,8 @@ import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.setPadding
-import app.siphondsp.interop.JamesDspWrapper
+import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -344,7 +346,10 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun applyConfiguration() {
-        runCatching { JamesDspWrapper.configureNativeBmwDsp(values) }
+        requireContext().sendLocalBroadcast(
+            Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
+                .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
+        )
     }
 
     private fun loadValues(): FloatArray {
