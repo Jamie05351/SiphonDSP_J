@@ -7,7 +7,6 @@ import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
-import com.google.android.material.R as MaterialR
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -46,10 +45,10 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     private var values = NativeBmwDspBottomSheet.DEFAULTS.copyOf()
 
     init {
-        gridPaint.color = resolveColor(MaterialR.attr.colorOutline)
-        lowPaint.color = resolveColor(MaterialR.attr.colorPrimary)
-        midPaint.color = resolveColor(MaterialR.attr.colorSecondary)
-        sumPaint.color = resolveColor(android.R.attr.colorAccent)
+        gridPaint.color = resolveColor(android.R.attr.textColorSecondary)
+        lowPaint.color = resolveColor(android.R.attr.colorAccent)
+        midPaint.color = resolveColor(android.R.attr.textColorLink)
+        sumPaint.color = resolveColor(android.R.attr.textColorPrimary)
         labelPaint.color = resolveColor(android.R.attr.textColorPrimary)
     }
 
