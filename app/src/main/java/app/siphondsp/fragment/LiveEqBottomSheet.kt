@@ -1,5 +1,7 @@
 package app.siphondsp.fragment
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -12,6 +14,8 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.ParametricEqSurface
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
@@ -26,10 +30,20 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 class LiveEqBottomSheet : BottomSheetDialogFragment() {
-    private val bands = ParametricEqBandList()
+    private val fullRangeBands = ParametricEqBandList()
+    private val lowBandBands = ParametricEqBandList()
+    private val midBandBands = ParametricEqBandList()
+    private var selectedScope = Scope.FULL_RANGE
     private var selectedIndex = 0
     private var loadingControls = false
     private var preampDb = 0.0
+
+    private val bands: ParametricEqBandList
+        get() = when (selectedScope) {
+            Scope.FULL_RANGE -> fullRangeBands
+            Scope.LOW_BAND -> lowBandBands
+            Scope.MID_BAND -> midBandBands
+        }
 
     private lateinit var bandGroup: ChipGroup
     private lateinit var surface: ParametricEqSurface
@@ -41,14 +55,22 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     private lateinit var qValue: TextView
     private lateinit var filterGroup: MaterialButtonToggleGroup
     private lateinit var channelGroup: MaterialButtonToggleGroup
+    private lateinit var scopeGroup: MaterialButtonToggleGroup
 
     private val numberFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        bands.deserialize(requireArguments().getString(ARG_BANDS).orEmpty())
+        fullRangeBands.deserialize(requireArguments().getString(ARG_BANDS).orEmpty())
         preampDb = requireArguments().getDouble(ARG_PREAMP, 0.0)
-        if (bands.isEmpty()) bands.add(defaultBand())
+
+        val bandPrefs = requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
+        lowBandBands.deserialize(bandPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ).orEmpty())
+        midBandBands.deserialize(bandPrefs.getString(KEY_MID_BANDS, EMPTY_PEQ).orEmpty())
+
+        ensureBandExists(fullRangeBands)
+        ensureBandExists(lowBandBands)
+        ensureBandExists(midBandBands)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
@@ -66,10 +88,10 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         qValue = view.findViewById(R.id.live_eq_q_value)
         filterGroup = view.findViewById(R.id.live_eq_filter_group)
         channelGroup = view.findViewById(R.id.live_eq_channel_group)
+        scopeGroup = view.findViewById(R.id.live_eq_scope_group)
 
         view.findViewById<MaterialButton>(R.id.live_eq_close).setOnClickListener { dismiss() }
-        val addButton = view.findViewById<MaterialButton>(R.id.live_eq_add)
-        addButton.setOnClickListener {
+        view.findViewById<MaterialButton>(R.id.live_eq_add).setOnClickListener {
             bands.add(defaultBand())
             selectedIndex = bands.lastIndex
             rebuildBandChips()
@@ -82,7 +104,23 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         q.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
         filterGroup.addOnButtonCheckedListener { _, _, checked -> if (checked && !loadingControls) updateSelectedBand() }
         channelGroup.addOnButtonCheckedListener { _, _, checked -> if (checked && !loadingControls) updateSelectedBand() }
+        scopeGroup.addOnButtonCheckedListener { _, checkedId, checked ->
+            if (checked && !loadingControls) {
+                selectedScope = when (checkedId) {
+                    R.id.live_eq_scope_low -> Scope.LOW_BAND
+                    R.id.live_eq_scope_mid -> Scope.MID_BAND
+                    else -> Scope.FULL_RANGE
+                }
+                selectedIndex = 0
+                ensureBandExists(bands)
+                rebuildBandChips()
+                loadSelectedBand()
+            }
+        }
 
+        loadingControls = true
+        scopeGroup.check(R.id.live_eq_scope_full)
+        loadingControls = false
         rebuildBandChips()
         loadSelectedBand()
     }
@@ -138,7 +176,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         })
         loadingControls = false
         updateValueLabels(band)
-        surface.setBands(bands, preampDb)
+        surface.setBands(bands, if (selectedScope == Scope.FULL_RANGE) preampDb else 0.0)
     }
 
     private fun updateSelectedBand() {
@@ -163,7 +201,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         updateValueLabels(updated)
         (bandGroup.getChildAt(selectedIndex) as? Chip)?.text =
             "${selectedIndex + 1} · ${updated.filterType.displayLabel} · ${updated.channel.displayLabel}"
-        surface.setBands(bands, preampDb)
+        surface.setBands(bands, if (selectedScope == Scope.FULL_RANGE) preampDb else 0.0)
         publishChanges()
     }
 
@@ -174,7 +212,24 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun publishChanges() {
-        parentFragmentManager.setFragmentResult(REQUEST_KEY, bundleOf(RESULT_BANDS to bands.serialize()))
+        if (selectedScope == Scope.FULL_RANGE) {
+            parentFragmentManager.setFragmentResult(
+                REQUEST_KEY,
+                bundleOf(RESULT_BANDS to fullRangeBands.serialize()),
+            )
+            return
+        }
+
+        requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LOW_BANDS, lowBandBands.serialize())
+            .putString(KEY_MID_BANDS, midBandBands.serialize())
+            .apply()
+        requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
+    }
+
+    private fun ensureBandExists(target: ParametricEqBandList) {
+        if (target.isEmpty()) target.add(defaultBand())
     }
 
     private fun defaultBand() = ParametricEqBand(1000.0, 0.0, 1.41)
@@ -187,6 +242,8 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     private fun progressToQ(progress: Int): Double =
         MIN_Q * exp(progress.coerceIn(0, 1000) / 1000.0 * ln(MAX_Q / MIN_Q))
 
+    private enum class Scope { FULL_RANGE, LOW_BAND, MID_BAND }
+
     companion object {
         const val REQUEST_KEY = "live_eq_result"
         const val RESULT_BANDS = "live_eq_bands"
@@ -196,6 +253,10 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         private const val MAX_FREQ = 20000.0
         private const val MIN_Q = 0.1
         private const val MAX_Q = 30.0
+        const val BAND_PEQ_PREFS = "native_bmw_band_peq"
+        const val KEY_LOW_BANDS = "low_bands"
+        const val KEY_MID_BANDS = "mid_bands"
+        const val EMPTY_PEQ = "PEQ: "
 
         fun newInstance(bands: ParametricEqBandList, preampDb: Double) = LiveEqBottomSheet().apply {
             arguments = bundleOf(ARG_BANDS to bands.serialize(), ARG_PREAMP to preampDb)
