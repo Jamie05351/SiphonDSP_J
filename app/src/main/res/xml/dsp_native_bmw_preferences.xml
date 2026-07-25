@@ -1,52 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-<app.siphondsp.preference.SwitchPreferenceGroup android:key="native_bmw_dsp_enable" android:title="BMW DSP" android:icon="@drawable/ic_baseline_equalizer_24dp" android:defaultValue="true" app:iconSpaceReserved="false">
+<app.siphondsp.preference.SwitchPreferenceGroup android:key="native_bmw_dsp_enable" android:title="🟪 BMW DSP" android:icon="@drawable/ic_baseline_equalizer_24dp" android:defaultValue="true" app:iconSpaceReserved="false">
 <app.siphondsp.preference.NativeBmwDspResponsePreference android:key="bmw_live_response" app:iconSpaceReserved="false"/>
-<PreferenceCategory android:title="Measurements / routing">
-<SwitchPreferenceCompat android:key="bmw_lpf_passthrough" android:title="LPF passthrough" app:iconSpaceReserved="false"/>
-<SwitchPreferenceCompat android:key="bmw_hpf_passthrough" android:title="HPF passthrough" app:iconSpaceReserved="false"/>
-<ListPreference android:key="bmw_channel_isolation" android:title="Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
-<ListPreference android:key="bmw_measurement_mute" android:title="Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟪 Measurements / routing">
+<SwitchPreferenceCompat android:key="bmw_lpf_passthrough" android:title="🟪 LPF passthrough" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_hpf_passthrough" android:title="🟪 HPF passthrough" app:iconSpaceReserved="false"/>
+<ListPreference android:key="bmw_channel_isolation" android:title="🟪 Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<ListPreference android:key="bmw_measurement_mute" android:title="🟪 Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Gain structure">
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_headroom" android:title="Headroom" app:minValue="-12" app:maxValue="0" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_gain_l" android:title="Low gain L" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_gain_r" android:title="Low gain R" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_gain_l" android:title="Mid gain L" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_gain_r" android:title="Mid gain R" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_post_gain_l" android:title="Post gain L" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_post_gain_r" android:title="Post gain R" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟪 Gain structure">
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_headroom" android:title="🟪 Headroom" app:minValue="-12" app:maxValue="0" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_gain_l" android:title="🟦 Low gain L" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_gain_r" android:title="🟦 Low gain R" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_gain_l" android:title="🟧 Mid gain L" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_gain_r" android:title="🟧 Mid gain R" app:minValue="-6" app:maxValue="0" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_post_gain_l" android:title="🟩 Post gain L" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_post_gain_r" android:title="🟩 Post gain R" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Subsonic / crossovers">
-<SwitchPreferenceCompat android:key="bmw_subsonic_enable" android:title="Subsonic BW4" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_subsonic_freq" android:title="Subsonic frequency" app:minValue="20" app:maxValue="60" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<SwitchPreferenceCompat android:key="bmw_mute_low" android:title="Mute low band" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_lpf" android:title="Low LPF frequency" app:minValue="80" app:maxValue="200" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<ListPreference android:key="bmw_low_topology" android:title="Low topology" android:entries="@array/bmw_low_topology_entries" android:entryValues="@array/bmw_two_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
-<SwitchPreferenceCompat android:key="bmw_mute_mid" android:title="Mute mid band" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_hpf" android:title="Mid HPF frequency" app:minValue="80" app:maxValue="200" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟫 Subsonic / crossovers">
+<SwitchPreferenceCompat android:key="bmw_subsonic_enable" android:title="🟫 Subsonic BW4" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_subsonic_freq" android:title="🟫 Subsonic frequency" app:minValue="20" app:maxValue="60" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_mute_low" android:title="🟦 Mute low band" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_lpf" android:title="🟦 Low LPF frequency" app:minValue="80" app:maxValue="200" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<ListPreference android:key="bmw_low_topology" android:title="🟦 Low topology" android:entries="@array/bmw_low_topology_entries" android:entryValues="@array/bmw_two_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_mute_mid" android:title="🟧 Mute mid band" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_hpf" android:title="🟧 Mid HPF frequency" app:minValue="80" app:maxValue="200" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Delay / polarity">
-<SwitchPreferenceCompat android:key="bmw_invert_low" android:title="Invert low polarity" app:iconSpaceReserved="false"/>
-<SwitchPreferenceCompat android:key="bmw_invert_mid" android:title="Invert mid polarity" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_delay_l" android:title="Mid delay L" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_delay_r" android:title="Mid delay R" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_delay_l" android:title="Low delay L" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_delay_r" android:title="Low delay R" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟥 Delay / polarity">
+<SwitchPreferenceCompat android:key="bmw_invert_low" android:title="🟥 Invert low polarity" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_invert_mid" android:title="🟥 Invert mid polarity" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_delay_l" android:title="🟥 Mid delay L" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_mid_delay_r" android:title="🟥 Mid delay R" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_delay_l" android:title="🟥 Low delay L" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_delay_r" android:title="🟥 Low delay R" app:minValue="0" app:maxValue="2.8" app:seekBarIncrement="0" app:precision="2" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Post-sum tonality tilt">
-<SwitchPreferenceCompat android:key="bmw_tilt_enable" android:title="Tilt active" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_tilt_amount" android:title="Tilt amount" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_tilt_pivot" android:title="Tilt pivot" app:minValue="200" app:maxValue="2000" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟩 Post-sum tonality tilt">
+<SwitchPreferenceCompat android:key="bmw_tilt_enable" android:title="🟩 Tilt active" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_tilt_amount" android:title="🟩 Tilt amount" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_tilt_pivot" android:title="🟩 Tilt pivot" app:minValue="200" app:maxValue="2000" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Low-band compressor">
-<SwitchPreferenceCompat android:key="bmw_comp_enable" android:title="Compressor active" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_threshold" android:title="Threshold" app:minValue="-18" app:maxValue="0" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_ratio" android:title="Ratio" app:minValue="1" app:maxValue="10" app:seekBarIncrement="0" app:precision="1" app:unit=":1" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_knee" android:title="Soft knee" app:minValue="0" app:maxValue="12" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_attack" android:title="Attack" app:minValue="1" app:maxValue="50" app:seekBarIncrement="1" app:precision="0" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_release" android:title="Release" app:minValue="20" app:maxValue="400" app:seekBarIncrement="1" app:precision="0" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
-<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_makeup" android:title="Makeup gain" app:minValue="0" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="🟥 Low-band compressor">
+<SwitchPreferenceCompat android:key="bmw_comp_enable" android:title="🟥 Compressor active" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_threshold" android:title="🟥 Threshold" app:minValue="-18" app:maxValue="0" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_ratio" android:title="🟥 Ratio" app:minValue="1" app:maxValue="10" app:seekBarIncrement="0" app:precision="1" app:unit=":1" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_knee" android:title="🟥 Soft knee" app:minValue="0" app:maxValue="12" app:seekBarIncrement="1" app:precision="0" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_attack" android:title="🟥 Attack" app:minValue="1" app:maxValue="50" app:seekBarIncrement="1" app:precision="0" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_release" android:title="🟥 Release" app:minValue="20" app:maxValue="400" app:seekBarIncrement="1" app:precision="0" app:unit="ms" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_comp_makeup" android:title="🟥 Makeup gain" app:minValue="0" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
 </app.siphondsp.preference.SwitchPreferenceGroup>
 </PreferenceScreen>
