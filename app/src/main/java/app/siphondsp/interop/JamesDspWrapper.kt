@@ -21,7 +21,8 @@ object JamesDspWrapper {
     external fun processFloat(self: JamesDspHandle, input: FloatArray, output: FloatArray, offset: Int = -1, length: Int = -1)
 
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
-    external fun configureNativeBmwDsp(values: FloatArray): Boolean
+    external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray): Boolean
+    external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
     external fun setPostGain(self: JamesDspHandle, postGain: Float): Boolean

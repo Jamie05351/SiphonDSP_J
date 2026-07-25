@@ -42,6 +42,7 @@ import app.siphondsp.session.rootless.RootlessSessionDatabase
 import app.siphondsp.session.rootless.RootlessSessionManager
 import app.siphondsp.session.rootless.SessionRecordingPolicyManager
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.Constants.ACTION_NATIVE_BMW_DSP_UPDATED
 import app.siphondsp.utils.Constants.ACTION_PREFERENCES_UPDATED
 import app.siphondsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
 import app.siphondsp.utils.Constants.ACTION_SERVICE_HARD_REBOOT_CORE
@@ -143,6 +144,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_RELOAD_LIVEPROG)
         filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
+        filter.addAction(ACTION_NATIVE_BMW_DSP_UPDATED)
         registerLocalReceiver(broadcastReceiver, filter)
 
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
@@ -256,6 +258,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_RELOAD_LIVEPROG -> engine.syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG))
                 ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
+                ACTION_NATIVE_BMW_DSP_UPDATED -> {
+                    intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
+                        engine.configureNativeBmwDsp(it)
+                    }
+                }
             }
         }
     }

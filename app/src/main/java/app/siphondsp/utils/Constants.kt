@@ -45,6 +45,8 @@ object Constants {
     const val ACTION_DISCARD_AUTHORIZATION = BuildConfig.APPLICATION_ID + ".action.service.DISCARD_AUTHORIZATION"
     const val ACTION_REPORT_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".action.service.REPORT_SAMPLE_RATE"
     const val ACTION_BACKUP_RESTORED = BuildConfig.APPLICATION_ID + ".action.backup.RESTORED"
+    const val ACTION_NATIVE_BMW_DSP_UPDATED = BuildConfig.APPLICATION_ID + ".action.native_bmw_dsp.UPDATED"
+    const val EXTRA_NATIVE_BMW_DSP_VALUES = "native_bmw_dsp_values"
 
     // Intent extras
     const val EXTRA_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".extra.service.SAMPLE_RATE"

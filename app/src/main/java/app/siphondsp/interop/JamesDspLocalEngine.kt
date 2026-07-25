@@ -24,6 +24,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 val current = handle
                 if (current != 0L) {
                     JamesDspWrapper.setSamplingRate(current, value, false)
+                    JamesDspWrapper.setNativeBmwDspSampleRate(current, value)
                     refreshEqualizersLocked()
                 } else {
                     parametricEq.configure(false, "", 0f, value)
@@ -254,4 +255,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     override fun freezeLiveprogExecution(freeze: Boolean) {
         withHandle { JamesDspWrapper.freezeLiveprogExecution(it, freeze) }
     }
+
+    fun configureNativeBmwDsp(values: FloatArray): Boolean =
+        withHandle(false) { JamesDspWrapper.configureNativeBmwDsp(it, values) }
 }

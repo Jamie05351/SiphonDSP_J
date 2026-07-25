@@ -12,7 +12,6 @@ public:
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
     bool configure(const float* values, std::size_t count);
-    static NativeBmwDspProcessor* latest();
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
@@ -55,7 +54,6 @@ private:
         float tiltAmount=3,tiltFreq=550,threshold=-12,ratio=2,knee=8,attack=40,release=250,makeup=1.5f;
     } p_;
 
-    static NativeBmwDspProcessor* latest_;
     static float dbToLin(float db);
     static void makeLowPass(Biquad& q,float fc,float Q,float sr);
     static void makeHighPass(Biquad& q,float fc,float Q,float sr);

@@ -11,8 +11,6 @@ inline float clampf(float x,float lo,float hi){return std::max(lo,std::min(hi,x)
 inline bool changed(float a,float b){return std::fabs(a-b)>1e-6f;}
 }
 
-NativeBmwDspProcessor* NativeBmwDspProcessor::latest_=nullptr;
-NativeBmwDspProcessor* NativeBmwDspProcessor::latest(){return latest_;}
 float NativeBmwDspProcessor::Biquad::run(float x){float y=b0*x+z1;z1=ftz(b1*x-a1*y+z2);z2=ftz(b2*x-a2*y);return ftz(y);}
 void NativeBmwDspProcessor::Biquad::clear(){z1=z2=0;}
 float NativeBmwDspProcessor::OnePole::run(float x){float y=a0*x+a1*x1-b1*y1;x1=x;y1=ftz(y);return y1;}
@@ -21,8 +19,8 @@ float NativeBmwDspProcessor::Delay::run(float x){if(delay<=0)return x;data[write
 void NativeBmwDspProcessor::Delay::clear(){data.fill(0);write=0;}
 float NativeBmwDspProcessor::dbToLin(float db){return std::pow(10.f,db/20.f);}
 
-NativeBmwDspProcessor::NativeBmwDspProcessor(){latest_=this;rebuildAll();}
-NativeBmwDspProcessor::~NativeBmwDspProcessor(){if(latest_==this)latest_=nullptr;}
+NativeBmwDspProcessor::NativeBmwDspProcessor(){rebuildAll();}
+NativeBmwDspProcessor::~NativeBmwDspProcessor()=default;
 void NativeBmwDspProcessor::setSampleRate(float sr){if(sr>=8000&&std::fabs(sr-sampleRate_)>.5f){sampleRate_=sr;rebuildAll();}}
 
 bool NativeBmwDspProcessor::configure(const float* v,std::size_t n){
