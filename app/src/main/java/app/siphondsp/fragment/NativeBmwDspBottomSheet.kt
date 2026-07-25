@@ -28,6 +28,8 @@ import kotlin.math.roundToInt
 class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     private lateinit var values: FloatArray
     private lateinit var root: LinearLayout
+    private lateinit var responseView: NativeBmwDspResponseView
+    private lateinit var signalPathText: TextView
     private var loading = true
     private val format = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 
@@ -61,8 +63,8 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         addHeader()
-
         switchCard("Native BMW DSP", "Enable the complete native BMW processing chain", 0)
+        addVisualOverview()
 
         sectionCard("Measurements / routing") {
             addSwitchRow("LPF passthrough", "Bypass the low-pass crossover", 1)
@@ -82,11 +84,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
         sectionCard("Subsonic protection") {
-            addSwitchRow(
-                "Subsonic BW4",
-                "Protect the under-seat woofers from very low frequencies",
-                12,
-            )
+            addSwitchRow("Subsonic BW4", "Protect the under-seat woofers from very low frequencies", 12)
             addSliderRow("Subsonic frequency", 13, 20f, 60f, 1f, "Hz")
         }
 
@@ -108,21 +106,13 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
         sectionCard("Post-sum tonality tilt") {
-            addSwitchRow(
-                "Tilt active",
-                "Broad tonal balance adjustment after the bands rejoin",
-                25,
-            )
+            addSwitchRow("Tilt active", "Broad tonal balance adjustment after the bands rejoin", 25)
             addSliderRow("Tilt amount", 26, -6f, 6f, .1f, "dB")
             addSliderRow("Tilt pivot", 27, 200f, 2000f, 1f, "Hz")
         }
 
         sectionCard("Low-band compressor") {
-            addSwitchRow(
-                "Compressor active",
-                "Stereo-linked protection and level control for the low band",
-                28,
-            )
+            addSwitchRow("Compressor active", "Stereo-linked protection and level control for the low band", 28)
             addSliderRow("Threshold", 29, -18f, 0f, 1f, "dB")
             addSliderRow("Ratio", 30, 1f, 10f, .1f, ":1")
             addSliderRow("Soft knee", 31, 0f, 12f, 1f, "dB")
@@ -132,6 +122,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
         loading = false
+        updateVisualOverview()
         applyConfiguration()
     }
 
@@ -141,13 +132,10 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(16))
         }
-        row.addView(
-            TextView(requireContext()).apply {
-                text = "BMW DSP 6.3"
-                textSize = 24f
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        row.addView(TextView(requireContext()).apply {
+            text = "BMW DSP 6.3"
+            textSize = 24f
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(MaterialButton(requireContext()).apply {
             text = "Reset"
             setOnClickListener {
@@ -158,14 +146,45 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
                 NativeBmwDspBottomSheet().show(parentFragmentManager, TAG)
             }
         })
-        row.addView(
-            MaterialButton(requireContext()).apply {
-                text = "Close"
-                setOnClickListener { dismiss() }
-            },
-            marginStartParams(dp(8)),
-        )
+        row.addView(MaterialButton(requireContext()).apply {
+            text = "Close"
+            setOnClickListener { dismiss() }
+        }, marginStartParams(dp(8)))
         root.addView(row)
+    }
+
+    private fun addVisualOverview() {
+        root.addView(TextView(requireContext()).apply {
+            text = "Live response overview"
+            textSize = 18f
+            setPadding(dp(6), dp(8), dp(6), dp(10))
+        })
+        val card = createCard()
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(14))
+        }
+        signalPathText = TextView(requireContext()).apply {
+            textSize = 13f
+            setPadding(dp(8), dp(4), dp(8), dp(6))
+        }
+        responseView = NativeBmwDspResponseView(requireContext()).apply {
+            setPadding(0, dp(2), 0, 0)
+            setValues(values)
+        }
+        content.addView(signalPathText)
+        content.addView(responseView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(220)))
+        card.addView(content)
+        root.addView(card, cardParams(dp(12)))
+    }
+
+    private fun updateVisualOverview() {
+        if (!::responseView.isInitialized) return
+        responseView.setValues(values)
+        val topology = if (values[16] >= .5f) "LR4" else "BW3"
+        val compressor = if (values[28] >= .5f) "compressor on" else "compressor bypassed"
+        val tilt = if (values[25] >= .5f) "tilt ${format.format(values[26])} dB" else "tilt off"
+        signalPathText.text = "Subsonic ${format.format(values[13])} Hz  →  Low ${format.format(values[15])} Hz $topology  +  Mid ${format.format(values[18])} Hz LR4  →  $compressor  →  $tilt  →  L/R corrected"
     }
 
     private fun switchCard(title: String, subtitle: String?, index: Int) {
@@ -175,10 +194,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(20))
         }
-        content.addView(
-            labelBlock(title, subtitle),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        content.addView(labelBlock(title, subtitle), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         content.addView(createSwitch(index))
         card.addView(content)
         root.addView(card, cardParams(dp(12)))
@@ -206,10 +222,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(10), 0, dp(10))
         }
-        row.addView(
-            labelBlock(title, subtitle),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        row.addView(labelBlock(title, subtitle), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(createSwitch(index))
         addView(row)
     }
@@ -219,90 +232,41 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(12), 0, dp(12))
         }
-        row.addView(TextView(requireContext()).apply {
-            text = label
-            textSize = 16f
-        })
-        row.addView(
-            Spinner(requireContext()).apply {
-                adapter = ArrayAdapter(
-                    requireContext(),
-                    android.R.layout.simple_spinner_dropdown_item,
-                    options,
-                )
-                setSelection(values[index].roundToInt().coerceIn(0, options.lastIndex))
-                onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(
-                        parent: android.widget.AdapterView<*>?,
-                        view: View?,
-                        position: Int,
-                        id: Long,
-                    ) {
-                        if (!loading) {
-                            values[index] = position.toFloat()
-                            changed()
-                        }
-                    }
-
-                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        row.addView(TextView(requireContext()).apply { text = label; textSize = 16f })
+        row.addView(Spinner(requireContext()).apply {
+            adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, options)
+            setSelection(values[index].roundToInt().coerceIn(0, options.lastIndex))
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    if (!loading) { values[index] = position.toFloat(); changed() }
                 }
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply {
-                topMargin = dp(6)
-            },
-        )
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(6) })
         addView(row)
     }
 
-    private fun LinearLayout.addSliderRow(
-        label: String,
-        index: Int,
-        min: Float,
-        max: Float,
-        step: Float,
-        suffix: String,
-    ) {
+    private fun LinearLayout.addSliderRow(label: String, index: Int, min: Float, max: Float, step: Float, suffix: String) {
         val block = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(14), 0, dp(16))
         }
-        val labelRow = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        labelRow.addView(
-            TextView(requireContext()).apply {
-                text = label
-                textSize = 16f
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        val labelRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        labelRow.addView(TextView(requireContext()).apply { text = label; textSize = 16f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val valueText = TextView(requireContext()).apply { textSize = 16f }
-        fun updateValue() {
-            valueText.text = "${format.format(values[index])}$suffix"
-        }
+        fun updateValue() { valueText.text = "${format.format(values[index])}$suffix" }
         updateValue()
         labelRow.addView(valueText)
         block.addView(labelRow)
-
-        block.addView(
-            Slider(requireContext()).apply {
-                valueFrom = min
-                valueTo = max
-                stepSize = step
-                value = values[index].coerceIn(min, max)
-                addOnChangeListener { _, newValue, fromUser ->
-                    if (fromUser && !loading) {
-                        values[index] = newValue
-                        updateValue()
-                        changed()
-                    }
-                }
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)).apply {
-                topMargin = dp(4)
-            },
-        )
+        block.addView(Slider(requireContext()).apply {
+            valueFrom = min
+            valueTo = max
+            stepSize = step
+            value = values[index].coerceIn(min, max)
+            addOnChangeListener { _, newValue, fromUser ->
+                if (fromUser && !loading) { values[index] = newValue; updateValue(); changed() }
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)).apply { topMargin = dp(4) })
         addView(block)
     }
 
@@ -316,79 +280,50 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     private fun createSwitch(index: Int) = SwitchCompat(requireContext()).apply {
         isChecked = values[index] >= .5f
         setOnCheckedChangeListener { _, checked ->
-            if (!loading) {
-                values[index] = if (checked) 1f else 0f
-                changed()
-            }
+            if (!loading) { values[index] = if (checked) 1f else 0f; changed() }
         }
     }
 
-    private fun labelBlock(title: String, subtitle: String?): LinearLayout =
-        LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(TextView(requireContext()).apply {
-                text = title
-                textSize = 17f
-            })
-            if (!subtitle.isNullOrBlank()) {
-                addView(TextView(requireContext()).apply {
-                    text = subtitle
-                    textSize = 13f
-                    setTextColor(resolveColor(android.R.attr.textColorSecondary))
-                    setPadding(0, dp(3), dp(12), 0)
-                })
-            }
-        }
+    private fun labelBlock(title: String, subtitle: String?) = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(TextView(requireContext()).apply { text = title; textSize = 17f })
+        if (!subtitle.isNullOrBlank()) addView(TextView(requireContext()).apply {
+            text = subtitle
+            textSize = 13f
+            setTextColor(resolveColor(android.R.attr.textColorSecondary))
+            setPadding(0, dp(3), dp(12), 0)
+        })
+    }
 
     private fun changed() {
         saveValues()
+        updateVisualOverview()
         applyConfiguration()
     }
 
     private fun applyConfiguration() {
-        requireContext().sendLocalBroadcast(
-            Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
-                .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
-        )
+        requireContext().sendLocalBroadcast(Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values))
     }
 
     private fun loadValues(): FloatArray {
-        val saved = requireContext()
-            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY, null)
+        val saved = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
         val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
         return if (parsed?.size == DEFAULTS.size) parsed else DEFAULTS.copyOf()
     }
 
     private fun saveValues() {
-        requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY, values.joinToString(","))
-            .apply()
+        requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, values.joinToString(",")).apply()
     }
 
-    private fun cardParams(bottomMargin: Int) = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { this.bottomMargin = bottomMargin }
-
-    private fun marginStartParams(margin: Int) = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { marginStart = margin }
-
-    private fun resolveColor(attribute: Int): Int {
-        val value = TypedValue()
-        requireContext().theme.resolveAttribute(attribute, value, true)
-        return value.data
-    }
-
+    private fun cardParams(bottomMargin: Int) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { this.bottomMargin = bottomMargin }
+    private fun marginStartParams(margin: Int) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = margin }
+    private fun resolveColor(attribute: Int): Int { val value = TypedValue(); requireContext().theme.resolveAttribute(attribute, value, true); return value.data }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 
     companion object {
         const val TAG = "native_bmw_dsp"
         private const val PREFS = "native_bmw_dsp"
         private const val KEY = "values"
-
         val DEFAULTS = floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
             -6f, 0f, 0f, -1f, -1f, 0f, 0f,
