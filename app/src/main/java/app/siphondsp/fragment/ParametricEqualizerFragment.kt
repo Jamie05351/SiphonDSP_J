@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -30,6 +31,8 @@ import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.Chip
 import timber.log.Timber
 import java.util.UUID
@@ -43,7 +46,8 @@ class ParametricEqualizerFragment : Fragment() {
     private lateinit var midBandBands: ParametricEqBandList
     private var currentScope = SignalScope.FULL_RANGE
     private var liveEqChip: Chip? = null
-    private val scopeChips = linkedMapOf<SignalScope, Chip>()
+    private var scopeGroup: MaterialButtonToggleGroup? = null
+    private val scopeButtonIds = linkedMapOf<SignalScope, Int>()
 
     private val adapter get() = binding.bandList.adapter as ParametricEqBandAdapter
     private val activeBands: ParametricEqBandList
@@ -66,7 +70,10 @@ class ParametricEqualizerFragment : Fragment() {
             binding.exportFile.isEnabled = !value
             binding.editString.isEnabled = !value
             liveEqChip?.isEnabled = !value
-            scopeChips.values.forEach { it.isEnabled = !value }
+            scopeGroup?.isEnabled = !value
+            scopeGroup?.let { group ->
+                for (index in 0 until group.childCount) group.getChildAt(index).isEnabled = !value
+            }
         }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -75,9 +82,7 @@ class ParametricEqualizerFragment : Fragment() {
             val text = requireContext().contentResolver.openInputStream(uri)
                 ?.bufferedReader()?.use { it.readText() } ?: return@registerForActivityResult
             val result = activeBands.fromApoString(text)
-            if (currentScope == SignalScope.FULL_RANGE) {
-                binding.preampInput.value = result.preampDb.toFloat()
-            }
+            if (currentScope == SignalScope.FULL_RANGE) binding.preampInput.value = result.preampDb.toFloat()
             binding.equalizerSurface.setBands(activeBands, activePreamp)
             save()
             updateViewState()
@@ -163,9 +168,7 @@ class ParametricEqualizerFragment : Fragment() {
             ) { text ->
                 text?.let {
                     val result = activeBands.fromApoString(it)
-                    if (currentScope == SignalScope.FULL_RANGE) {
-                        binding.preampInput.value = result.preampDb.toFloat()
-                    }
+                    if (currentScope == SignalScope.FULL_RANGE) binding.preampInput.value = result.preampDb.toFloat()
                     binding.equalizerSurface.setBands(activeBands, activePreamp)
                     save()
                     updateViewState()
@@ -234,7 +237,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         loadBands(savedInstanceState)
         installLiveEqChip()
-        installScopeChips()
+        installScopeSelectorInEditor()
         installLiveEqResultListener()
         bindActiveScope()
         return binding.root
@@ -246,33 +249,50 @@ class ParametricEqualizerFragment : Fragment() {
             text = "Live EQ"
             isCheckable = false
             setOnClickListener {
-                if (!editorActive) {
-                    LiveEqBottomSheet.newInstance(activeBands, activePreamp)
-                        .show(childFragmentManager, "live_eq")
-                }
+                if (!editorActive) LiveEqBottomSheet.newInstance(activeBands, activePreamp)
+                    .show(childFragmentManager, "live_eq")
             }
         }
         parent.addView(liveEqChip, 1)
     }
 
-    private fun installScopeChips() {
-        val parent = binding.add.parent as? ViewGroup ?: return
+    private fun installScopeSelectorInEditor() {
+        val header = binding.editCardTitle.parent as? View ?: return
+        val editorColumn = header.parent as? LinearLayout ?: return
+        val group = MaterialButtonToggleGroup(requireContext()).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(dp(16), dp(12), dp(16), dp(12))
+            }
+        }
         listOf(
             SignalScope.FULL_RANGE to "Full Range",
             SignalScope.LOW_BAND to "Low Band",
             SignalScope.MID_BAND to "Mid Band",
         ).forEach { (scope, label) ->
-            val chip = Chip(requireContext()).apply {
+            val id = View.generateViewId()
+            scopeButtonIds[scope] = id
+            group.addView(MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                this.id = id
                 text = label
-                isCheckable = true
-                isCheckedIconVisible = false
-                setOnClickListener { switchScope(scope) }
-            }
-            scopeChips[scope] = chip
-            parent.addView(chip, parent.childCount)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
         }
+        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            scopeButtonIds.entries.firstOrNull { it.value == checkedId }?.key?.let(::switchScope)
+        }
+        scopeGroup = group
+        editorColumn.addView(group, 2)
         updateScopeChecks()
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun switchScope(scope: SignalScope) {
         if (scope == currentScope || editorActive) return
@@ -282,7 +302,8 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun updateScopeChecks() {
-        scopeChips.forEach { (scope, chip) -> chip.isChecked = scope == currentScope }
+        val id = scopeButtonIds[currentScope] ?: return
+        if (scopeGroup?.checkedButtonId != id) scopeGroup?.check(id)
     }
 
     private fun installLiveEqResultListener() {
@@ -298,7 +319,6 @@ class ParametricEqualizerFragment : Fragment() {
     private fun loadBands(savedInstanceState: Bundle?) {
         val peqPrefs = requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
         val bandPrefs = requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
-
         fullRangeBands = ParametricEqBandList().apply {
             savedInstanceState?.getBundle(STATE_BANDS)?.let(::fromBundle)
                 ?: deserialize(peqPrefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!)
@@ -413,9 +433,7 @@ class ParametricEqualizerFragment : Fragment() {
         if (editorBandBackup != null && uuid != null) {
             val index = activeBands.indexOfFirst { it.uuid == uuid }
             if (index >= 0) activeBands[index] = editorBandBackup
-        } else if (uuid != null) {
-            activeBands.removeAll { it.uuid == uuid }
-        }
+        } else if (uuid != null) activeBands.removeAll { it.uuid == uuid }
         editorBandBackup = null
         editorBandUuid = null
         editorActive = false
