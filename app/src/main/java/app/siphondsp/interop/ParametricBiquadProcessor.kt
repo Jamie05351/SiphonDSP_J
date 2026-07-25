@@ -46,9 +46,18 @@ internal class ParametricBiquadProcessor {
         }
 
         val bands = ParametricEqBandList().apply { deserialize(serializedBands) }
-        if (bands.isEmpty() || bands.any { !isValid(it, fs) }) {
+        if (bands.any { !isValid(it, fs) }) {
             disable()
             return false
+        }
+
+        // An empty Full Range bank is a valid bypass state. It must not fail the
+        // overall EQ refresh, because the native Low and Mid banks are independent.
+        if (bands.isEmpty()) {
+            sections = emptyArray()
+            preampLinear = 10.0.pow(preampDb.toDouble() / 20.0)
+            enabled = preampDb != 0f
+            return true
         }
 
         val rebuilt = ArrayList<Section>(bands.size)
@@ -140,8 +149,10 @@ internal class ParametricBiquadProcessor {
         val limit = sampleCount.coerceAtMost(buffer.size) and -2
         var i = 0
         while (i < limit) {
-            buffer[i] = processLeft(buffer[i].toDouble()).coerceIn(-1.0, 1.0).toFloat()
-            buffer[i + 1] = processRight(buffer[i + 1].toDouble()).coerceIn(-1.0, 1.0).toFloat()
+            // Preserve the stream's native float scale. Clamping to ±1 here can
+            // collapse non-normalized PCM to near-silence.
+            buffer[i] = processLeft(buffer[i].toDouble()).toFloat()
+            buffer[i + 1] = processRight(buffer[i + 1].toDouble()).toFloat()
             i += 2
         }
     }
