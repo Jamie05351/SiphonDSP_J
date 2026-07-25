@@ -35,9 +35,25 @@ import timber.log.Timber
 import java.util.UUID
 
 class ParametricEqualizerFragment : Fragment() {
+    private enum class SignalScope { FULL_RANGE, LOW_BAND, MID_BAND }
+
     private lateinit var binding: FragmentParametricEqBinding
-    private val adapter get() = binding.bandList.adapter as ParametricEqBandAdapter
+    private lateinit var fullRangeBands: ParametricEqBandList
+    private lateinit var lowBandBands: ParametricEqBandList
+    private lateinit var midBandBands: ParametricEqBandList
+    private var currentScope = SignalScope.FULL_RANGE
     private var liveEqChip: Chip? = null
+    private val scopeChips = linkedMapOf<SignalScope, Chip>()
+
+    private val adapter get() = binding.bandList.adapter as ParametricEqBandAdapter
+    private val activeBands: ParametricEqBandList
+        get() = when (currentScope) {
+            SignalScope.FULL_RANGE -> fullRangeBands
+            SignalScope.LOW_BAND -> lowBandBands
+            SignalScope.MID_BAND -> midBandBands
+        }
+    private val activePreamp: Double
+        get() = if (currentScope == SignalScope.FULL_RANGE) binding.preampInput.value.toDouble() else 0.0
 
     private var editorBandBackup: ParametricEqBand? = null
     private var editorBandUuid: UUID? = null
@@ -50,6 +66,7 @@ class ParametricEqualizerFragment : Fragment() {
             binding.exportFile.isEnabled = !value
             binding.editString.isEnabled = !value
             liveEqChip?.isEnabled = !value
+            scopeChips.values.forEach { it.isEnabled = !value }
         }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -57,12 +74,14 @@ class ParametricEqualizerFragment : Fragment() {
         try {
             val text = requireContext().contentResolver.openInputStream(uri)
                 ?.bufferedReader()?.use { it.readText() } ?: return@registerForActivityResult
-            val result = adapter.bands.fromApoString(text)
-            binding.preampInput.value = result.preampDb.toFloat()
-            binding.equalizerSurface.setPreampDb(result.preampDb)
+            val result = activeBands.fromApoString(text)
+            if (currentScope == SignalScope.FULL_RANGE) {
+                binding.preampInput.value = result.preampDb.toFloat()
+            }
+            binding.equalizerSurface.setBands(activeBands, activePreamp)
             save()
             updateViewState()
-            val message = getString(R.string.peq_import_success, adapter.bands.size)
+            val message = getString(R.string.peq_import_success, activeBands.size)
             requireContext().toast(
                 if (result.skippedFilters > 0) "$message (${result.skippedFilters} malformed or unsupported lines skipped)"
                 else message
@@ -76,7 +95,7 @@ class ParametricEqualizerFragment : Fragment() {
     private val exportFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         uri ?: return@registerForActivityResult
         try {
-            val apoString = adapter.bands.toApoString(binding.preampInput.value.toDouble())
+            val apoString = activeBands.toApoString(activePreamp)
             requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(apoString) }
             requireContext().toast(R.string.peq_export_success)
         } catch (error: Exception) {
@@ -106,11 +125,7 @@ class ParametricEqualizerFragment : Fragment() {
         super.onDestroy()
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
         binding.qInput.min = 0.1f
 
@@ -123,9 +138,13 @@ class ParametricEqualizerFragment : Fragment() {
         binding.reset.setOnClickListener {
             requireContext().showYesNoAlert(R.string.peq_reset_confirm_title, R.string.peq_reset_confirm) { confirmed ->
                 if (confirmed) {
-                    adapter.bands.deserialize(Constants.DEFAULT_PEQ)
-                    binding.preampInput.value = 0f
-                    binding.equalizerSurface.setPreampDb(0.0)
+                    if (currentScope == SignalScope.FULL_RANGE) {
+                        activeBands.deserialize(Constants.DEFAULT_PEQ)
+                        binding.preampInput.value = 0f
+                    } else {
+                        activeBands.clear()
+                    }
+                    binding.equalizerSurface.setBands(activeBands, activePreamp)
                     editorDiscard()
                     updateViewState()
                     save()
@@ -138,15 +157,18 @@ class ParametricEqualizerFragment : Fragment() {
                 layoutInflater,
                 R.string.peq_edit_as_string,
                 R.string.peq_edit_hint,
-                adapter.bands.toApoString(binding.preampInput.value.toDouble()),
+                activeBands.toApoString(activePreamp),
                 false,
                 null,
             ) { text ->
                 text?.let {
-                    val result = adapter.bands.fromApoString(it)
-                    binding.preampInput.value = result.preampDb.toFloat()
-                    binding.equalizerSurface.setPreampDb(result.preampDb)
+                    val result = activeBands.fromApoString(it)
+                    if (currentScope == SignalScope.FULL_RANGE) {
+                        binding.preampInput.value = result.preampDb.toFloat()
+                    }
+                    binding.equalizerSurface.setBands(activeBands, activePreamp)
                     save()
+                    updateViewState()
                 }
             }
         }
@@ -165,7 +187,14 @@ class ParametricEqualizerFragment : Fragment() {
         }
 
         binding.importFile.setOnClickListener { importFileLauncher.launch(arrayOf("text/plain", "text/*")) }
-        binding.exportFile.setOnClickListener { exportFileLauncher.launch("parametric_eq.txt") }
+        binding.exportFile.setOnClickListener {
+            val name = when (currentScope) {
+                SignalScope.FULL_RANGE -> "parametric_eq.txt"
+                SignalScope.LOW_BAND -> "low_band_parametric_eq.txt"
+                SignalScope.MID_BAND -> "mid_band_parametric_eq.txt"
+            }
+            exportFileLauncher.launch(name)
+        }
 
         binding.freqInput.setOnValueChangedListener { editorApply() }
         binding.gainInput.setOnValueChangedListener { editorApply() }
@@ -183,7 +212,6 @@ class ParametricEqualizerFragment : Fragment() {
                 else -> 10f
             }
         }
-
         binding.qInput.customStepScale = { value, _ ->
             when (value) {
                 in 0f..1f -> 0.05f
@@ -197,15 +225,18 @@ class ParametricEqualizerFragment : Fragment() {
         binding.confirm.setOnClickListener { editorSave() }
         binding.cancel.setOnClickListener { editorDiscard() }
         binding.preampInput.setOnValueChangedListener {
-            binding.equalizerSurface.setPreampDb(binding.preampInput.value.toDouble())
-            savePreamp()
+            if (currentScope == SignalScope.FULL_RANGE) {
+                binding.equalizerSurface.setPreampDb(binding.preampInput.value.toDouble())
+                savePreamp()
+            }
         }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         loadBands(savedInstanceState)
         installLiveEqChip()
+        installScopeChips()
         installLiveEqResultListener()
-        updateViewState()
+        bindActiveScope()
         return binding.root
     }
 
@@ -216,41 +247,85 @@ class ParametricEqualizerFragment : Fragment() {
             isCheckable = false
             setOnClickListener {
                 if (!editorActive) {
-                    LiveEqBottomSheet.newInstance(
-                        adapter.bands,
-                        binding.preampInput.value.toDouble(),
-                    ).show(childFragmentManager, "live_eq")
+                    LiveEqBottomSheet.newInstance(activeBands, activePreamp)
+                        .show(childFragmentManager, "live_eq")
                 }
             }
         }
         parent.addView(liveEqChip, 1)
     }
 
+    private fun installScopeChips() {
+        val parent = binding.add.parent as? ViewGroup ?: return
+        listOf(
+            SignalScope.FULL_RANGE to "Full Range",
+            SignalScope.LOW_BAND to "Low Band",
+            SignalScope.MID_BAND to "Mid Band",
+        ).forEach { (scope, label) ->
+            val chip = Chip(requireContext()).apply {
+                text = label
+                isCheckable = true
+                isCheckedIconVisible = false
+                setOnClickListener { switchScope(scope) }
+            }
+            scopeChips[scope] = chip
+            parent.addView(chip, parent.childCount)
+        }
+        updateScopeChecks()
+    }
+
+    private fun switchScope(scope: SignalScope) {
+        if (scope == currentScope || editorActive) return
+        currentScope = scope
+        updateScopeChecks()
+        bindActiveScope()
+    }
+
+    private fun updateScopeChecks() {
+        scopeChips.forEach { (scope, chip) -> chip.isChecked = scope == currentScope }
+    }
+
     private fun installLiveEqResultListener() {
-        childFragmentManager.setFragmentResultListener(
-            LiveEqBottomSheet.REQUEST_KEY,
-            this,
-        ) { _, result ->
+        childFragmentManager.setFragmentResultListener(LiveEqBottomSheet.REQUEST_KEY, this) { _, result ->
             val serialized = result.getString(LiveEqBottomSheet.RESULT_BANDS) ?: return@setFragmentResultListener
-            adapter.bands.deserialize(serialized)
-            binding.equalizerSurface.setBands(adapter.bands, binding.preampInput.value.toDouble())
+            activeBands.deserialize(serialized)
+            binding.equalizerSurface.setBands(activeBands, activePreamp)
+            bindAdapter(activeBands)
             save()
         }
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
-        val bands = ParametricEqBandList()
-        val prefs = requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
-        savedInstanceState?.getBundle(STATE_BANDS)?.let(bands::fromBundle)
-            ?: bands.deserialize(prefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!)
+        val peqPrefs = requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+        val bandPrefs = requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
 
-        val preampDb = prefs.getFloat(getString(R.string.key_peq_preamp), 0f)
-        binding.preampInput.value = preampDb
-        binding.equalizerSurface.setBands(bands, preampDb.toDouble())
+        fullRangeBands = ParametricEqBandList().apply {
+            savedInstanceState?.getBundle(STATE_BANDS)?.let(::fromBundle)
+                ?: deserialize(peqPrefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!)
+        }
+        lowBandBands = ParametricEqBandList().apply {
+            deserialize(bandPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+        }
+        midBandBands = ParametricEqBandList().apply {
+            deserialize(bandPrefs.getString(KEY_MID_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+        }
+        binding.preampInput.value = peqPrefs.getFloat(getString(R.string.key_peq_preamp), 0f)
+    }
 
+    private fun bindActiveScope() {
+        editorBandBackup = null
+        editorBandUuid = null
+        editorActive = false
+        binding.preampInput.isEnabled = currentScope == SignalScope.FULL_RANGE
+        binding.equalizerSurface.setBands(activeBands, activePreamp)
+        bindAdapter(activeBands)
+        updateViewState()
+    }
+
+    private fun bindAdapter(bands: ParametricEqBandList) {
         binding.bandList.adapter = ParametricEqBandAdapter(bands).apply {
             onItemsChanged = {
-                binding.equalizerSurface.setBands(it.bands, binding.preampInput.value.toDouble())
+                binding.equalizerSurface.setBands(it.bands, activePreamp)
                 updateViewState()
                 save()
             }
@@ -275,13 +350,11 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun setFilterTypeSelection(type: ParametricEqFilterType) {
-        binding.filterTypeGroup.check(
-            when (type) {
-                ParametricEqFilterType.PEAKING -> R.id.filter_peaking
-                ParametricEqFilterType.LOW_SHELF -> R.id.filter_low_shelf
-                ParametricEqFilterType.HIGH_SHELF -> R.id.filter_high_shelf
-            }
-        )
+        binding.filterTypeGroup.check(when (type) {
+            ParametricEqFilterType.PEAKING -> R.id.filter_peaking
+            ParametricEqFilterType.LOW_SHELF -> R.id.filter_low_shelf
+            ParametricEqFilterType.HIGH_SHELF -> R.id.filter_high_shelf
+        })
     }
 
     private fun getSelectedChannel() = when (binding.channelGroup?.checkedButtonId) {
@@ -291,22 +364,25 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun setChannelSelection(channel: ParametricEqChannel) {
-        binding.channelGroup?.check(
-            when (channel) {
-                ParametricEqChannel.LEFT_RIGHT -> R.id.channel_both
-                ParametricEqChannel.LEFT -> R.id.channel_left
-                ParametricEqChannel.RIGHT -> R.id.channel_right
-            }
-        )
+        binding.channelGroup?.check(when (channel) {
+            ParametricEqChannel.LEFT_RIGHT -> R.id.channel_both
+            ParametricEqChannel.LEFT -> R.id.channel_left
+            ParametricEqChannel.RIGHT -> R.id.channel_right
+        })
     }
 
     private fun updateViewState() {
-        val empty = adapter.bands.isEmpty()
+        val empty = activeBands.isEmpty()
         binding.emptyView.isVisible = empty && !editorActive
         binding.bandList.isVisible = !empty && !editorActive
         binding.bandEdit.isVisible = editorActive
         binding.bandDetailContextButtons.visibility = if (editorActive) View.VISIBLE else View.INVISIBLE
-        binding.editCardTitle.text = getString(if (editorActive) R.string.peq_band_editor else R.string.peq_band_list)
+        val scopeLabel = when (currentScope) {
+            SignalScope.FULL_RANGE -> "Full Range"
+            SignalScope.LOW_BAND -> "Low Band"
+            SignalScope.MID_BAND -> "Mid Band"
+        }
+        binding.editCardTitle.text = if (editorActive) "$scopeLabel Band Editor" else "$scopeLabel Bands"
     }
 
     private fun editorCanSave() = binding.freqInput.isCurrentValueValid() &&
@@ -323,24 +399,22 @@ class ParametricEqualizerFragment : Fragment() {
             getSelectedChannel(),
             uuid ?: UUID.randomUUID(),
         )
-
         if (uuid == null) {
-            adapter.bands.add(band)
+            activeBands.add(band)
             editorBandUuid = band.uuid
         } else {
-            val index = adapter.bands.indexOfFirst { it.uuid == uuid }
-            if (index >= 0) adapter.bands[index] = band
-            else Timber.e("editorApply: failed to find matching band UUID")
+            val index = activeBands.indexOfFirst { it.uuid == uuid }
+            if (index >= 0) activeBands[index] = band else Timber.e("editorApply: failed to find matching band UUID")
         }
     }
 
     private fun editorDiscard() {
         val uuid = editorBandUuid
         if (editorBandBackup != null && uuid != null) {
-            val index = adapter.bands.indexOfFirst { it.uuid == uuid }
-            if (index >= 0) adapter.bands[index] = editorBandBackup
+            val index = activeBands.indexOfFirst { it.uuid == uuid }
+            if (index >= 0) activeBands[index] = editorBandBackup
         } else if (uuid != null) {
-            adapter.bands.removeAll { it.uuid == uuid }
+            activeBands.removeAll { it.uuid == uuid }
         }
         editorBandBackup = null
         editorBandUuid = null
@@ -380,10 +454,17 @@ class ParametricEqualizerFragment : Fragment() {
 
     @SuppressLint("ApplySharedPref")
     private fun save() {
-        requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE).edit()
-            .putString(getString(R.string.key_peq_bands), adapter.bands.serialize())
-            .putFloat(getString(R.string.key_peq_preamp), binding.preampInput.value)
-            .commit()
+        if (currentScope == SignalScope.FULL_RANGE) {
+            requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE).edit()
+                .putString(getString(R.string.key_peq_bands), fullRangeBands.serialize())
+                .putFloat(getString(R.string.key_peq_preamp), binding.preampInput.value)
+                .commit()
+        } else {
+            val key = if (currentScope == SignalScope.LOW_BAND) KEY_LOW_BANDS else KEY_MID_BANDS
+            requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE).edit()
+                .putString(key, activeBands.serialize())
+                .commit()
+        }
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
     }
 
@@ -397,12 +478,16 @@ class ParametricEqualizerFragment : Fragment() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         if (editorActive) editorDiscard()
-        outState.putBundle(STATE_BANDS, adapter.bands.toBundle())
+        outState.putBundle(STATE_BANDS, fullRangeBands.toBundle())
         super.onSaveInstanceState(outState)
     }
 
     companion object {
         const val STATE_BANDS = "bands"
+        private const val BAND_PEQ_PREFS = "native_bmw_band_peq"
+        private const val KEY_LOW_BANDS = "low_bands"
+        private const val KEY_MID_BANDS = "mid_bands"
+        private const val EMPTY_PEQ = "PEQ: "
         fun newInstance() = ParametricEqualizerFragment()
     }
 }
