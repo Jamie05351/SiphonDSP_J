@@ -76,14 +76,6 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             loadSelectedBand()
             publishChanges()
         }
-        (addButton.parent as? ViewGroup)?.let { parent ->
-            parent.addView(MaterialButton(requireContext()).apply {
-                text = "BMW DSP"
-                setOnClickListener {
-                    NativeBmwDspBottomSheet().show(parentFragmentManager, NativeBmwDspBottomSheet.TAG)
-                }
-            }, parent.indexOfChild(addButton) + 1)
-        }
 
         frequency.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
         gain.setOnSeekBarChangeListener(changeListener { updateSelectedBand() })
