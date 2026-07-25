@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <app.siphondsp.preference.SwitchPreferenceGroup
+        android:defaultValue="true"
+        android:key="native_bmw_dsp_enable"
+        android:title="BMW DSP"
+        android:icon="@drawable/ic_baseline_equalizer_24dp"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="open_native_bmw_dsp"
+            android:title="BMW DSP controls"
+            android:summary="Crossovers, routing, delay, dynamics and live response"
+            app:iconSpaceReserved="false" />
+
+    </app.siphondsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>
