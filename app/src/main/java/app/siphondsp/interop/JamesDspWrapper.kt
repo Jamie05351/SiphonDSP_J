@@ -22,6 +22,11 @@ object JamesDspWrapper {
 
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
     external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray): Boolean
+    external fun configureNativeBmwBandPeq(
+        self: JamesDspHandle,
+        lowBands: DoubleArray,
+        midBands: DoubleArray,
+    ): Boolean
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
@@ -39,8 +44,8 @@ object JamesDspWrapper {
     external fun setLiveprog(self: JamesDspHandle, enable: Boolean, id: String, liveprogContent: String): Boolean
 
     external fun enumerateEelVariables(self: JamesDspHandle): ArrayList<EelVmVariable>
-    external fun manipulateEelVariable(self: JamesDspHandle, name: String, value: Float): Boolean
-    external fun freezeLiveprogExecution(self: JamesDspHandle, freeze: Boolean)
+    external fun manipulateEelVariable(name: String, value: Float): Boolean
+    external fun freezeLiveprogExecution(freeze: Boolean)
     external fun eelErrorCodeToString(errorCode: Int): String
 
     interface JamesDspCallbacks {
