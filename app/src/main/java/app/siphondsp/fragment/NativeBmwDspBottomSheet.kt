@@ -16,6 +16,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.setPadding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.view.NativeBmwResponseView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -28,6 +29,7 @@ import kotlin.math.roundToInt
 class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     private lateinit var values: FloatArray
     private lateinit var root: LinearLayout
+    private lateinit var responseView: NativeBmwResponseView
     private var loading = true
     private val format = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 
@@ -61,6 +63,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         addHeader()
+        addVisualOverview()
 
         switchCard("Native BMW DSP", "Enable the complete native BMW processing chain", 0)
 
@@ -132,7 +135,42 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
         loading = false
+        responseView.setConfiguration(values)
         applyConfiguration()
+    }
+
+    private fun addVisualOverview() {
+        val card = createCard()
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+        }
+        content.addView(TextView(requireContext()).apply {
+            text = "Live response overview"
+            textSize = 18f
+        })
+        content.addView(TextView(requireContext()).apply {
+            text = "Blue: low band   Red: mid/high band   White: combined response"
+            textSize = 12f
+            setTextColor(resolveColor(android.R.attr.textColorSecondary))
+            setPadding(0, dp(3), 0, dp(8))
+        })
+        responseView = NativeBmwResponseView(requireContext()).apply {
+            setPadding(dp(4))
+            setConfiguration(values)
+        }
+        content.addView(
+            responseView,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(210)),
+        )
+        content.addView(TextView(requireContext()).apply {
+            text = "Input → subsonic → crossover → delay/polarity → low compressor → sum/tilt → L/R corrected output"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, 0)
+        })
+        card.addView(content)
+        root.addView(card, cardParams(dp(12)))
     }
 
     private fun addHeader() {
@@ -341,6 +379,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
     private fun changed() {
+        responseView.setConfiguration(values)
         saveValues()
         applyConfiguration()
     }
