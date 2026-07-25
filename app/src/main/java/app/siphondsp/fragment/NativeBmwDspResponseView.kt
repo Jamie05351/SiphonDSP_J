@@ -15,6 +15,7 @@ import kotlin.math.sqrt
 /**
  * Lightweight, read-only visualisation of the native BMW DSP crossover and tilt.
  * It performs no audio processing and redraws only when UI values change.
+ * Kept deliberately isolated from the native audio path.
  */
 class NativeBmwDspResponseView @JvmOverloads constructor(
     context: Context,
