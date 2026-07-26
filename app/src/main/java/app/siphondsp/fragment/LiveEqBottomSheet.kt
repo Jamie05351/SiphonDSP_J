@@ -34,7 +34,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
     private val lowBandBands = ParametricEqBandList()
     private val midBandBands = ParametricEqBandList()
     private var selectedScope = Scope.FULL_RANGE
-    private var selectedIndex = 0
+    private var selectedIndex = -1
     private var loadingControls = false
     private var preampDb = 0.0
 
@@ -76,10 +76,6 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         val bandPrefs = requireContext().getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
         lowBandBands.deserialize(bandPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ).orEmpty())
         midBandBands.deserialize(bandPrefs.getString(KEY_MID_BANDS, EMPTY_PEQ).orEmpty())
-
-        ensureBandExists(fullRangeBands)
-        ensureBandExists(lowBandBands)
-        ensureBandExists(midBandBands)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
@@ -120,8 +116,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
                     R.id.live_eq_scope_mid -> Scope.MID_BAND
                     else -> Scope.FULL_RANGE
                 }
-                selectedIndex = 0
-                ensureBandExists(bands)
+                selectedIndex = if (bands.isEmpty()) -1 else 0
                 rebuildBandChips()
                 loadSelectedBand()
             }
@@ -169,6 +164,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         loadingControls = true
         scopeGroup.check(R.id.live_eq_scope_full)
         loadingControls = false
+        selectedIndex = if (bands.isEmpty()) -1 else 0
         rebuildBandChips()
         loadSelectedBand()
     }
@@ -191,13 +187,15 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
                 text = chipLabel(index, band)
                 setOnClickListener { selectedIndex = index; loadSelectedBand() }
                 setOnLongClickListener {
-                    if (bands.size > 1) {
-                        bands.removeAt(index)
-                        selectedIndex = selectedIndex.coerceAtMost(bands.lastIndex)
-                        rebuildBandChips()
-                        loadSelectedBand()
-                        publishChanges()
+                    bands.removeAt(index)
+                    selectedIndex = when {
+                        bands.isEmpty() -> -1
+                        selectedIndex >= bands.size -> bands.lastIndex
+                        else -> selectedIndex
                     }
+                    rebuildBandChips()
+                    loadSelectedBand()
+                    publishChanges()
                     true
                 }
             }
@@ -214,8 +212,29 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         (bandGroup.getChildAt(index) as? Chip)?.text = chipLabel(index, band)
     }
 
+    private fun setEditorControlsEnabled(enabled: Boolean) {
+        frequency.isEnabled = enabled
+        gain.isEnabled = enabled
+        q.isEnabled = enabled
+        filterGroup.isEnabled = enabled
+        channelGroup.isEnabled = enabled
+        for (index in 0 until filterGroup.childCount) filterGroup.getChildAt(index).isEnabled = enabled
+        for (index in 0 until channelGroup.childCount) channelGroup.getChildAt(index).isEnabled = enabled
+    }
+
     private fun loadSelectedBand() {
-        val band = bands.getOrNull(selectedIndex) ?: return
+        val band = bands.getOrNull(selectedIndex)
+        if (band == null) {
+            selectedIndex = -1
+            setEditorControlsEnabled(false)
+            frequencyValue.text = "Frequency: —"
+            gainValue.text = "Gain: —"
+            qValue.text = "Q: —"
+            updateSurface()
+            return
+        }
+
+        setEditorControlsEnabled(true)
         loadingControls = true
         frequency.progress = frequencyToProgress(band.frequency)
         gain.progress = ((band.gain + 30.0) * 10.0).roundToInt().coerceIn(0, 600)
@@ -233,7 +252,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         loadingControls = false
         updateValueLabels(band)
         updateSurface()
-        if (selectedIndex < bandGroup.childCount) bandGroup.check(bandGroup.getChildAt(selectedIndex).id)
+        if (selectedIndex in 0 until bandGroup.childCount) bandGroup.check(bandGroup.getChildAt(selectedIndex).id)
     }
 
     private fun updateSelectedBand() {
@@ -302,10 +321,6 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             bundleOf(RESULT_BANDS to fullRangeBands.serialize()),
         )
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
-    }
-
-    private fun ensureBandExists(target: ParametricEqBandList) {
-        if (target.isEmpty()) target.add(defaultBand())
     }
 
     private fun defaultBand() = ParametricEqBand(1000.0, 0.0, 1.41)
