@@ -30,6 +30,7 @@ import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.interop.JamesDspLocalEngine
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.interop.ProcessorMessageHandler
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.preference.AudioEncoding
@@ -124,6 +125,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
 
         audioManager = getSystemService<AudioManager>()!!
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
@@ -207,6 +209,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     override fun onDestroy() {
+        if (activeInstance === this) activeInstance = null
         isServiceDisposing = true
         stopRecording()
         engine.close()
@@ -760,6 +763,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     companion object {
+        @Volatile private var activeInstance: RootlessAudioProcessorService? = null
         private const val CHANNEL_COUNT = 2
         const val SESSION_LOSS_MAX_RETRIES = 1
 
@@ -768,6 +772,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         const val EXTRA_MEDIA_PROJECTION_DATA = "mediaProjectionData"
         const val EXTRA_APP_UID = "uid"
         const val EXTRA_APP_COMPAT_INTERNAL_CALL = "appCompatInternalCall"
+
+        fun applyNativeBmwPeq(state: BmwPeqState): Boolean {
+            val service = activeInstance ?: return false
+            return service.engine.configureNativeBmwPeq(state)
+        }
 
         fun start(context: Context, data: Intent?) {
             try {

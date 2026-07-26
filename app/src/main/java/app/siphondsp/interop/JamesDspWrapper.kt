@@ -22,6 +22,14 @@ object JamesDspWrapper {
 
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
     external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray): Boolean
+    external fun configureNativeBmwPeq(
+        self: JamesDspHandle,
+        enabled: Boolean,
+        preampDb: Float,
+        fullRangeBands: DoubleArray,
+        lowBandBands: DoubleArray,
+        midBandBands: DoubleArray,
+    ): Boolean
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
