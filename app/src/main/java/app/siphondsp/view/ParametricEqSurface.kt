@@ -1,265 +1,377 @@
 package app.siphondsp.view
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Shader
-import android.os.Bundle
-import android.os.Parcelable
 import android.util.AttributeSet
 import android.util.TypedValue
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import androidx.core.content.withStyledAttributes
-import androidx.core.os.bundleOf
+import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
-import app.siphondsp.utils.extensions.CompatExtensions.getParcelableAs
 import app.siphondsp.utils.extensions.prettyNumberFormat
-import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.ln
+import java.util.UUID
+import kotlin.math.hypot
+import kotlin.math.min
 
-class ParametricEqSurface(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
+/**
+ * Intent-only PEQ graph. Committed bands are supplied by the fragment; the view
+ * owns only a single visual drag draft and never persists or configures audio.
+ */
+class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context, attrs) {
+    enum class ChannelDisplay { BOTH, LEFT, RIGHT }
 
-    private val gridLines = Paint()
-    private val gridThickLines = Paint()
-    private val controlBarText = Paint()
-    private val frequencyResponseBg = Paint()
-    private val leftResponsePaint = Paint()
-    private val rightResponsePaint = Paint()
+    var onPointSelected: ((UUID) -> Unit)? = null
+    var onDragCommitted: ((ParametricEqBand) -> Unit)? = null
 
-    private var viewHeight = 0.0f
-    private var viewWidth = 0.0f
-
-    private var curveFreqs = DoubleArray(0)
-    private var leftCurveGains = DoubleArray(0)
-    private var rightCurveGains = DoubleArray(0)
-    private var preampDb = 0.0
-
-    private val nPts = 256
-
-    init {
-        gridLines.color = getColor(android.R.attr.colorControlHighlight)
-        gridLines.style = Paint.Style.STROKE
-        gridLines.strokeWidth = 4f
-
-        gridThickLines.color = getColor(android.R.attr.colorControlHighlight)
-        gridThickLines.style = Paint.Style.STROKE
-        gridThickLines.strokeWidth = 8f
-
-        controlBarText.textAlign = Paint.Align.CENTER
-        controlBarText.textSize = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_SP,
-            11f,
-            getContext().resources.displayMetrics,
+    private val density = resources.displayMetrics.density
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.colorControlHighlight)
+        style = Paint.Style.STROKE
+        strokeWidth = density
+    }
+    private val zeroPaint = Paint(gridPaint).apply { strokeWidth = 2f * density }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorPrimary)
+        textAlign = Paint.Align.CENTER
+        textSize = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP, 10f, resources.displayMetrics
         )
-        controlBarText.color = getColor(android.R.attr.textColorPrimary)
-        controlBarText.isAntiAlias = true
-
-        frequencyResponseBg.style = Paint.Style.FILL
-        frequencyResponseBg.alpha = 96
-
-        leftResponsePaint.style = Paint.Style.STROKE
-        leftResponsePaint.color = getColor(android.R.attr.colorAccent)
-        leftResponsePaint.isAntiAlias = true
-        leftResponsePaint.strokeWidth = 8f
-
-        rightResponsePaint.style = Paint.Style.STROKE
-        rightResponsePaint.color = getColor(android.R.attr.textColorPrimary)
-        rightResponsePaint.alpha = 210
-        rightResponsePaint.isAntiAlias = true
-        rightResponsePaint.strokeWidth = 6f
-        rightResponsePaint.pathEffect = DashPathEffect(floatArrayOf(18f, 12f), 0f)
     }
-
-    private fun getColor(colorAttribute: Int): Int {
-        if (isInEditMode) return Color.BLACK
-        var color = 0
-        context.withStyledAttributes(TypedValue().data, intArrayOf(colorAttribute)) {
-            color = getColor(0, 0)
-        }
-        return color
+    private val leftPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.colorAccent)
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * density
     }
-
-    override fun onSaveInstanceState() = bundleOf(
-        "super" to super.onSaveInstanceState(),
-        STATE_FREQ to curveFreqs,
-        STATE_LEFT_GAIN to leftCurveGains,
-        STATE_RIGHT_GAIN to rightCurveGains,
-        STATE_PREAMP to preampDb,
-    )
-
-    override fun onRestoreInstanceState(state: Parcelable?) {
-        val bundle = state as? Bundle ?: return super.onRestoreInstanceState(state)
-        super.onRestoreInstanceState(bundle.getParcelableAs("super"))
-        curveFreqs = bundle.getDoubleArray(STATE_FREQ) ?: DoubleArray(0)
-        leftCurveGains = bundle.getDoubleArray(STATE_LEFT_GAIN) ?: DoubleArray(0)
-        rightCurveGains = bundle.getDoubleArray(STATE_RIGHT_GAIN) ?: DoubleArray(0)
-        preampDb = bundle.getDouble(STATE_PREAMP, 0.0)
-        updateDbRange()
+    private val rightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorPrimary)
+        alpha = 190
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+        pathEffect = DashPathEffect(floatArrayOf(8f * density, 5f * density), 0f)
     }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        setLayerType(LAYER_TYPE_HARDWARE, null)
+    private val overlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorSecondary)
+        alpha = 80
+        style = Paint.Style.STROKE
+        strokeWidth = density
     }
-
-    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        super.onLayout(changed, left, top, right, bottom)
-        viewWidth = (right - left).toFloat()
-        viewHeight = (bottom - top).toFloat()
-
-        val responseColors = intArrayOf(leftResponsePaint.color, getColor(android.R.color.transparent))
-        val responsePositions = floatArrayOf(0.0f, 1f)
-        frequencyResponseBg.shader = LinearGradient(
-            0f,
-            0f,
-            0f,
-            viewHeight,
-            responseColors,
-            responsePositions,
-            Shader.TileMode.CLAMP,
-        )
+    private val selectedOverlayPaint = Paint(leftPaint).apply { strokeWidth = 2f * density }
+    private val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.colorAccent)
+        style = Paint.Style.FILL
+    }
+    private val selectedPointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.colorAccent)
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * density
+    }
+    private val pointTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        textSize = 10f * density
     }
 
     private val leftPath = Path()
     private val rightPath = Path()
-    private val responseBgPath = Path()
+    private val overlayPaths = mutableListOf<Path>()
+    private var committedBands: List<ParametricEqBand> = emptyList()
+    private var renderBands: List<ParametricEqBand> = emptyList()
+    private var selectedId: UUID? = null
+    private var draft: ParametricEqBand? = null
+    private var activePointerId = MotionEvent.INVALID_POINTER_ID
+    private var downX = 0f
+    private var downY = 0f
+    private var dragging = false
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var sampleRate = 48_000.0
+    private var maximumFrequency = PeqGraphMath.MAX_FREQUENCY
+    private var preampDb = 0.0
+    private var leftGains = DoubleArray(0)
+    private var rightGains = DoubleArray(0)
+    private var overlayGains: List<DoubleArray> = emptyList()
+    private var frequencies = DoubleArray(0)
 
-    override fun onDraw(canvas: android.graphics.Canvas) {
-        leftPath.rewind()
-        rightPath.rewind()
-        responseBgPath.rewind()
-
-        buildPath(leftPath, leftCurveGains)
-        buildPath(rightPath, rightCurveGains)
-
-        for (scale in FREQ_SCALE) {
-            val x = projectX(scale) * viewWidth
-            canvas.drawText(scale.prettyNumberFormat(), x, viewHeight - 16, controlBarText)
+    var showIndividualFilters = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+    var channelDisplay = ChannelDisplay.BOTH
+        set(value) {
+            field = value
+            invalidate()
         }
 
-        var db = minDb + 3
-        while (db <= maxDb - 3) {
-            val y = projectY(db.toFloat()) * viewHeight
-            canvas.drawLine(0f, y, viewWidth, y, if (db == 0) gridThickLines else gridLines)
-            db += 3
-        }
-
-        if (!leftPath.isEmpty) {
-            responseBgPath.addPath(leftPath)
-            responseBgPath.offset(0f, -4f)
-            if (curveFreqs.isNotEmpty()) {
-                responseBgPath.lineTo(projectX(curveFreqs.last()) * viewWidth, viewHeight)
-                responseBgPath.lineTo(projectX(curveFreqs.first()) * viewWidth, viewHeight)
-            } else {
-                responseBgPath.lineTo(viewWidth, viewHeight)
-                responseBgPath.lineTo(0f, viewHeight)
-            }
-            responseBgPath.close()
-            canvas.drawPath(responseBgPath, frequencyResponseBg)
-        }
-
-        canvas.drawPath(leftPath, leftResponsePaint)
-        canvas.drawPath(rightPath, rightResponsePaint)
-
-        canvas.drawText("L", 24f, 28f, controlBarText.apply { textAlign = Paint.Align.LEFT })
-        canvas.drawText("R - -", 56f, 28f, controlBarText)
-        controlBarText.textAlign = Paint.Align.CENTER
+    init {
+        isFocusable = true
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = "Interactive parametric equalizer graph"
     }
 
-    private fun buildPath(path: Path, gains: DoubleArray) {
-        if (curveFreqs.isNotEmpty() && gains.size == curveFreqs.size) {
-            path.moveTo(
-                projectX(curveFreqs[0]) * viewWidth,
-                projectY(gains[0].toFloat() + preampDb.toFloat()) * viewHeight,
-            )
-            for (i in 1 until curveFreqs.size) {
-                path.lineTo(
-                    projectX(curveFreqs[i]) * viewWidth,
-                    projectY(gains[i].toFloat() + preampDb.toFloat()) * viewHeight,
+    fun setBands(
+        bands: ParametricEqBandList,
+        preampDb: Double = this.preampDb,
+        selectedId: UUID? = this.selectedId,
+        sampleRate: Double = this.sampleRate,
+    ) {
+        committedBands = bands.toList()
+        renderBands = committedBands
+        draft = null
+        dragging = false
+        this.preampDb = preampDb
+        this.selectedId = selectedId?.takeIf { id -> committedBands.any { it.uuid == id } }
+        this.sampleRate = sampleRate
+        maximumFrequency = min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
+        recomputeResponses()
+        updateContentDescription()
+    }
+
+    fun selectBand(id: UUID?) {
+        selectedId = id?.takeIf { candidate -> committedBands.any { it.uuid == candidate } }
+        updateContentDescription()
+        invalidate()
+    }
+
+    fun cancelDraft() {
+        draft = null
+        renderBands = committedBands
+        dragging = false
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        parent?.requestDisallowInterceptTouchEvent(false)
+        recomputeResponses()
+    }
+
+    fun hasActiveDraft(): Boolean = draft != null
+
+    override fun onDetachedFromWindow() {
+        cancelDraft()
+        super.onDetachedFromWindow()
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.pointerCount > 1) {
+            cancelDraft()
+            return true
+        }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                val hit = hitTest(event.x, event.y) ?: return false
+                selectedId = hit.uuid
+                draft = hit
+                activePointerId = event.getPointerId(0)
+                downX = event.x
+                downY = event.y
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(true)
+                onPointSelected?.invoke(hit.uuid)
+                updateContentDescription()
+                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (draft == null || event.findPointerIndex(activePointerId) < 0) return false
+                val pointerIndex = event.findPointerIndex(activePointerId)
+                val x = event.getX(pointerIndex)
+                val y = event.getY(pointerIndex)
+                if (!dragging && hypot(x - downX, y - downY) >= touchSlop) dragging = true
+                if (dragging) {
+                    val original = committedBands.firstOrNull { it.uuid == selectedId } ?: return true
+                    draft = PeqGraphMath.draggedBand(
+                        original,
+                        (x / width.coerceAtLeast(1)).coerceIn(0f, 1f),
+                        (y / height.coerceAtLeast(1)).coerceIn(0f, 1f),
+                        maximumFrequency,
+                    )
+                    renderBands = committedBands.map { if (it.uuid == selectedId) draft!! else it }
+                    recomputeResponses()
+                    updateContentDescription()
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (draft == null) return false
+                val committedDraft = draft
+                val shouldCommit = dragging
+                parent?.requestDisallowInterceptTouchEvent(false)
+                activePointerId = MotionEvent.INVALID_POINTER_ID
+                dragging = false
+                if (shouldCommit && committedDraft != null) {
+                    onDragCommitted?.invoke(committedDraft)
+                } else {
+                    draft = null
+                    renderBands = committedBands
+                    recomputeResponses()
+                }
+                performClick()
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                cancelDraft()
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        drawGrid(canvas)
+        buildPath(leftPath, leftGains)
+        buildPath(rightPath, rightGains)
+
+        if (showIndividualFilters) {
+            overlayGains.forEachIndexed { index, gains ->
+                while (overlayPaths.size <= index) overlayPaths.add(Path())
+                val path = overlayPaths[index]
+                buildPath(path, gains, includePreamp = false)
+                canvas.drawPath(
+                    path,
+                    if (renderBands.getOrNull(index)?.uuid == selectedId) selectedOverlayPaint else overlayPaint,
                 )
             }
-        } else {
-            val y = projectY(preampDb.toFloat()) * viewHeight
+        }
+        if (channelDisplay != ChannelDisplay.RIGHT) canvas.drawPath(leftPath, leftPaint)
+        if (channelDisplay != ChannelDisplay.LEFT) canvas.drawPath(rightPath, rightPaint)
+        drawPoints(canvas)
+        drawChannelLabels(canvas)
+    }
+
+    private fun drawGrid(canvas: Canvas) {
+        FREQ_SCALE.forEach { frequency ->
+            val x = PeqGraphMath.frequencyToFraction(frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency) * width
+            canvas.drawText(frequency.prettyNumberFormat(), x, height - 4f * density, textPaint)
+        }
+        var gain = PeqGraphMath.MIN_GAIN.toInt() + 3
+        while (gain < PeqGraphMath.MAX_GAIN) {
+            val y = PeqGraphMath.gainToFraction(gain.toDouble()) * height
+            canvas.drawLine(0f, y, width.toFloat(), y, if (gain == 0) zeroPaint else gridPaint)
+            gain += 3
+        }
+    }
+
+    private fun drawPoints(canvas: Canvas) {
+        renderBands.forEachIndexed { index, band ->
+            val x = PeqGraphMath.frequencyToFraction(
+                band.frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency
+            ) * width
+            val y = PeqGraphMath.gainToFraction(band.gain) * height
+            val selected = band.uuid == selectedId
+            val radius = (if (selected) 10f else 8f) * density
+            canvas.drawCircle(x, y, radius, pointPaint)
+            if (selected) canvas.drawCircle(x, y, radius + 4f * density, selectedPointPaint)
+            val baseline = y - (pointTextPaint.ascent() + pointTextPaint.descent()) / 2
+            canvas.drawText((index + 1).toString(), x, baseline, pointTextPaint)
+        }
+    }
+
+    private fun drawChannelLabels(canvas: Canvas) {
+        textPaint.textAlign = Paint.Align.LEFT
+        val label = when (channelDisplay) {
+            ChannelDisplay.BOTH -> "L solid   R dashed"
+            ChannelDisplay.LEFT -> "Left"
+            ChannelDisplay.RIGHT -> "Right"
+        }
+        canvas.drawText(label, 8f * density, 14f * density, textPaint)
+        textPaint.textAlign = Paint.Align.CENTER
+    }
+
+    private fun hitTest(x: Float, y: Float): ParametricEqBand? {
+        val radius = 24f * density
+        return renderBands.map { band ->
+            val pointX = PeqGraphMath.frequencyToFraction(
+                band.frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency
+            ) * width
+            val pointY = PeqGraphMath.gainToFraction(band.gain) * height
+            band to hypot(x - pointX, y - pointY)
+        }.filter { it.second <= radius }.minByOrNull { it.second }?.first
+    }
+
+    private fun recomputeResponses() {
+        fun response(channel: ParametricEqChannel) = BiquadUtils.computeCombinedResponse(
+            renderBands,
+            numPoints = POINT_COUNT,
+            minFreq = PeqGraphMath.MIN_FREQUENCY,
+            maxFreq = maximumFrequency,
+            sampleRate = sampleRate,
+            channel = channel,
+        )
+        val left = response(ParametricEqChannel.LEFT)
+        val right = response(ParametricEqChannel.RIGHT)
+        val source = if (left.isNotEmpty()) left else right
+        frequencies = DoubleArray(source.size) { source[it].first }
+        leftGains = DoubleArray(frequencies.size) { left.getOrNull(it)?.second ?: 0.0 }
+        rightGains = DoubleArray(frequencies.size) { right.getOrNull(it)?.second ?: 0.0 }
+        overlayGains = renderBands.map { band ->
+            val channel = when {
+                channelDisplay == ChannelDisplay.LEFT -> ParametricEqChannel.LEFT
+                channelDisplay == ChannelDisplay.RIGHT -> ParametricEqChannel.RIGHT
+                band.channel == ParametricEqChannel.RIGHT -> ParametricEqChannel.RIGHT
+                else -> ParametricEqChannel.LEFT
+            }
+            val result = BiquadUtils.computeCombinedResponse(
+                listOf(band), POINT_COUNT, PeqGraphMath.MIN_FREQUENCY,
+                maximumFrequency, sampleRate, channel,
+            )
+            DoubleArray(frequencies.size) { result.getOrNull(it)?.second ?: 0.0 }
+        }
+        invalidate()
+    }
+
+    private fun buildPath(path: Path, gains: DoubleArray, includePreamp: Boolean = true) {
+        path.rewind()
+        if (frequencies.isEmpty() || gains.size != frequencies.size) {
+            val y = PeqGraphMath.gainToFraction(if (includePreamp) preampDb else 0.0) * height
             path.moveTo(0f, y)
-            path.lineTo(viewWidth, y)
+            path.lineTo(width.toFloat(), y)
+            return
+        }
+        gains.indices.forEach { index ->
+            val x = PeqGraphMath.frequencyToFraction(
+                frequencies[index], PeqGraphMath.MIN_FREQUENCY, maximumFrequency
+            ) * width
+            val y = PeqGraphMath.gainToFraction(
+                gains[index] + if (includePreamp) preampDb else 0.0
+            ) * height
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
     }
 
-    fun setBands(bands: ParametricEqBandList, preampDb: Double = this.preampDb) {
-        this.preampDb = preampDb
-        if (bands.isEmpty()) {
-            curveFreqs = DoubleArray(0)
-            leftCurveGains = DoubleArray(0)
-            rightCurveGains = DoubleArray(0)
+    private fun updateContentDescription() {
+        val band = renderBands.firstOrNull { it.uuid == selectedId }
+        contentDescription = if (band == null) {
+            "Interactive parametric equalizer graph, ${renderBands.size} filters"
         } else {
-            val left = BiquadUtils.computeCombinedResponse(
-                bands,
-                numPoints = nPts,
-                minFreq = MIN_FREQ,
-                maxFreq = MAX_FREQ,
-                channel = ParametricEqChannel.LEFT,
-            )
-            val right = BiquadUtils.computeCombinedResponse(
-                bands,
-                numPoints = nPts,
-                minFreq = MIN_FREQ,
-                maxFreq = MAX_FREQ,
-                channel = ParametricEqChannel.RIGHT,
-            )
-            val source = if (left.isNotEmpty()) left else right
-            curveFreqs = DoubleArray(source.size) { source[it].first }
-            leftCurveGains = DoubleArray(curveFreqs.size) { left.getOrNull(it)?.second ?: 0.0 }
-            rightCurveGains = DoubleArray(curveFreqs.size) { right.getOrNull(it)?.second ?: 0.0 }
+            val number = renderBands.indexOfFirst { it.uuid == band.uuid } + 1
+            "Selected filter $number, ${band.filterType.displayLabel}, " +
+                "${band.frequency.toInt()} hertz, ${"%.1f".format(band.gain)} decibels, " +
+                "Q ${"%.2f".format(band.q)}, ${band.channel.displayLabel}"
         }
-
-        updateDbRange()
-        postInvalidate()
     }
 
-    fun setPreampDb(preampDb: Double) {
-        this.preampDb = preampDb
-        updateDbRange()
-        postInvalidate()
+    private fun themeColor(attribute: Int): Int {
+        if (isInEditMode) return Color.BLACK
+        var color = Color.BLACK
+        context.withStyledAttributes(TypedValue().data, intArrayOf(attribute)) {
+            color = getColor(0, Color.BLACK)
+        }
+        return color
     }
-
-    private fun updateDbRange() {
-        val allGains = leftCurveGains.asSequence() + rightCurveGains.asSequence()
-        val minGain = (allGains.minOrNull() ?: 0.0) + preampDb
-        val maxGain = (allGains.maxOrNull() ?: 0.0) + preampDb
-        minDb = floor(minOf(minGain, -15.0)).toInt()
-        maxDb = ceil(maxOf(maxGain, 15.0)).toInt()
-    }
-
-    private fun projectX(frequency: Double): Float {
-        val position = ln(frequency)
-        val minimumPosition = ln(MIN_FREQ)
-        val maximumPosition = ln(MAX_FREQ)
-        return ((position - minimumPosition) / (maximumPosition - minimumPosition)).toFloat()
-    }
-
-    private fun projectY(db: Float): Float {
-        val pos = (db - minDb) / (maxDb - minDb)
-        return 1.0f - pos
-    }
-
-    private var minDb = -15
-    private var maxDb = 15
 
     companion object {
-        private const val STATE_FREQ = "peq_curve_freq"
-        private const val STATE_LEFT_GAIN = "peq_curve_left_gain"
-        private const val STATE_RIGHT_GAIN = "peq_curve_right_gain"
-        private const val STATE_PREAMP = "peq_curve_preamp"
-
-        private const val MIN_FREQ = 20.0
-        private const val MAX_FREQ = 20000.0
-
+        private const val POINT_COUNT = 256
         private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
             1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0,

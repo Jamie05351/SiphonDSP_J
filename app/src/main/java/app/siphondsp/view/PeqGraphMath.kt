@@ -1,0 +1,50 @@
+package app.siphondsp.view
+
+import app.siphondsp.model.ParametricEqBand
+import kotlin.math.exp
+import kotlin.math.ln
+
+object PeqGraphMath {
+    const val MIN_FREQUENCY = 20.0
+    const val MAX_FREQUENCY = 20_000.0
+    const val MIN_GAIN = -18.0
+    const val MAX_GAIN = 18.0
+
+    fun frequencyToFraction(
+        frequency: Double,
+        minFrequency: Double = MIN_FREQUENCY,
+        maxFrequency: Double = MAX_FREQUENCY,
+    ): Float {
+        val clamped = frequency.coerceIn(minFrequency, maxFrequency)
+        return ((ln(clamped) - ln(minFrequency)) / (ln(maxFrequency) - ln(minFrequency))).toFloat()
+    }
+
+    fun fractionToFrequency(
+        fraction: Float,
+        minFrequency: Double = MIN_FREQUENCY,
+        maxFrequency: Double = MAX_FREQUENCY,
+    ): Double {
+        val position = fraction.coerceIn(0f, 1f)
+        return exp(ln(minFrequency) + position * (ln(maxFrequency) - ln(minFrequency)))
+    }
+
+    fun gainToFraction(gain: Double, minGain: Double = MIN_GAIN, maxGain: Double = MAX_GAIN): Float =
+        (1.0 - (gain.coerceIn(minGain, maxGain) - minGain) / (maxGain - minGain)).toFloat()
+
+    fun fractionToGain(fraction: Float, minGain: Double = MIN_GAIN, maxGain: Double = MAX_GAIN): Double =
+        maxGain - fraction.coerceIn(0f, 1f) * (maxGain - minGain)
+
+    fun draggedBand(
+        original: ParametricEqBand,
+        xFraction: Float,
+        yFraction: Float,
+        maximumFrequency: Double = MAX_FREQUENCY,
+    ) = ParametricEqBand(
+        fractionToFrequency(xFraction, MIN_FREQUENCY, maximumFrequency),
+        fractionToGain(yFraction),
+        original.q,
+        original.filterType,
+        original.channel,
+        original.uuid,
+    )
+}

@@ -87,6 +87,14 @@
                 android:layout_height="wrap_content"
                 android:text="@string/peq_edit_as_string"
                 app:chipIcon="@drawable/ic_twotone_edit_24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/graph_options"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Graph display options"
+                android:text="Graph options" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
