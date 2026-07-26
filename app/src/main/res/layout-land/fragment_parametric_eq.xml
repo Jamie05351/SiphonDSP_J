@@ -18,10 +18,35 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <com.google.android.material.chip.ChipGroup
+            android:id="@+id/peq_scope_group"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:paddingHorizontal="16dp"
+            app:selectionRequired="true"
+            app:singleSelection="true"
             app:singleLine="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_full"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Full Range" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_low"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Low Band" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_mid"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mid Band" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/add"

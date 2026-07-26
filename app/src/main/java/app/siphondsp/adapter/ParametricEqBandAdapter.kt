@@ -30,6 +30,7 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
 
     var onItemsChanged: ((ParametricEqBandAdapter) -> Unit)? = null
     var onItemClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onDeleteClicked: ((ParametricEqBand, Int) -> Unit)? = null
 
     private val callback = object : ObservableList.OnListChangedCallback<ObservableArrayList<ParametricEqBand>>() {
         @SuppressLint("NotifyDataSetChanged")
@@ -106,15 +107,16 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.deleteButton.isEnabled = true
         val band = bands[position]
-        holder.filterType.text = "${band.filterType.displayLabel} · ${band.channel.displayLabel}"
+        holder.filterType.text = "${position + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
         holder.filterType.contentDescription = "${band.filterType.displayLabel}, channel ${band.channel.displayLabel}"
         holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
         holder.gain.text = "${dfGain.format(band.gain)}dB"
         holder.qFactor.text = "Q${dfQ.format(band.q)}"
 
         holder.deleteButton.setOnClickListener {
-            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { bands.removeAt(it) }
-            holder.deleteButton.isEnabled = false
+            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
+                bands.getOrNull(pos)?.let { onDeleteClicked?.invoke(it, pos) }
+            }
         }
         holder.itemView.setOnClickListener {
             holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->

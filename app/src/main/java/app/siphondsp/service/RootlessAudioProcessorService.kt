@@ -778,6 +778,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             return service.engine.configureNativeBmwPeq(state)
         }
 
+        fun nativeBmwPeqSampleRate(): Float? = activeInstance?.engine?.sampleRate
+
         fun start(context: Context, data: Intent?) {
             try {
                 context.startForegroundService(ServiceNotificationHelper.createStartIntent(context, data))

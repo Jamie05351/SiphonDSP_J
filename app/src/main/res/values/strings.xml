@@ -130,7 +130,7 @@
     <string name="peq_reset_confirm">Do you want to reset your parametric EQ settings?</string>
     <string name="peq_band_editor">Band editor</string>
     <string name="peq_band_list">Band list</string>
-    <string name="peq_no_bands_defined">No bands defined</string>
+    <string name="peq_no_bands_defined">No filters in this scope</string>
     <string name="peq_delete_band">Delete band</string>
     <string name="peq_done_spaced">&#160;&#160;Done&#160;</string>
     <string name="peq_done">Done</string>
