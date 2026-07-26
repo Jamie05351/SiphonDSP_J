@@ -2,7 +2,6 @@ package app.siphondsp.interop
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import app.siphondsp.R
 import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.model.ParametricEqBandList
@@ -16,16 +15,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     private val nativeLock = Any()
     private val parametricEq = ParametricBiquadProcessor()
     private val bandPeqPrefs = context.getSharedPreferences(BAND_PEQ_PREFS, Context.MODE_PRIVATE)
-    private val bandPeqPreferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == KEY_LOW_BANDS || key == KEY_MID_BANDS) {
-            synchronized(nativeLock) {
-                val current = handle
-                if (current != 0L && !configureNativeBmwBandPeqLocked(current)) {
-                    Timber.e("Rejected updated native BMW band PEQ configuration")
-                }
-            }
-        }
-    }
 
     @Volatile
     private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
@@ -50,11 +39,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     override var enabled: Boolean = true
 
     init {
-        bandPeqPrefs.registerOnSharedPreferenceChangeListener(bandPeqPreferenceListener)
         if (BenchmarkManager.hasBenchmarksCached()) BenchmarkManager.loadBenchmarksFromCache()
         val restored = loadNativeBmwDspValues()
         if (!configureNativeBmwDsp(restored)) Timber.e("Failed to restore saved native BMW DSP configuration")
-        if (!configureNativeBmwBandPeq()) Timber.e("Failed to restore saved native BMW band PEQ configuration")
+        synchronized(nativeLock) {
+            if (!refreshEqualizersLocked()) Timber.e("Failed to restore equalizer configuration")
+        }
     }
 
     private inline fun <T> withHandle(default: T, block: (JamesDspHandle) -> T): T = synchronized(nativeLock) {
@@ -70,7 +60,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     }
 
     override fun close() {
-        bandPeqPrefs.unregisterOnSharedPreferenceChangeListener(bandPeqPreferenceListener)
         super.close()
         synchronized(nativeLock) {
             val oldHandle = handle
@@ -165,6 +154,13 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean = synchronized(nativeLock) { refreshEqualizersLocked() }
 
+    /**
+     * The only runtime equalizer update path.
+     *
+     * Full Range, Low and Mid are read after their synchronous preference
+     * transaction has completed, then configured under the same native lock.
+     * No preference listener is allowed to race this method.
+     */
     private fun refreshEqualizersLocked(): Boolean {
         val current = handle
         if (current == 0L) {
@@ -178,11 +174,16 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         val peqEnabled = peqPrefs.getBoolean(context.getString(R.string.key_peq_enable), false)
         val peqBands = peqPrefs.getString(context.getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ) ?: Constants.DEFAULT_PEQ
         val peqPreamp = peqPrefs.getFloat(context.getString(R.string.key_peq_preamp), 0f)
+
+        val low = flattenBands(bandPeqPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+        val mid = flattenBands(bandPeqPrefs.getString(KEY_MID_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
+
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
         val peqOk = parametricEq.configure(peqEnabled, peqBands, peqPreamp, sampleRate)
-        if (!peqOk && peqEnabled) Timber.e("Rejected invalid parametric EQ configuration; PEQ has been bypassed")
-        val bandPeqOk = configureNativeBmwBandPeqLocked(current)
-        if (!bandPeqOk) Timber.e("Rejected invalid native BMW band PEQ configuration")
+        val bandPeqOk = JamesDspWrapper.configureNativeBmwBandPeq(current, low, mid)
+
+        if (!peqOk && peqEnabled) Timber.e("Rejected invalid Full Range PEQ configuration; Full Range PEQ has been bypassed")
+        if (!bandPeqOk) Timber.e("Rejected invalid native BMW Low/Mid PEQ configuration")
         return geqOk && peqOk && bandPeqOk
     }
 
@@ -221,13 +222,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
-    private fun configureNativeBmwBandPeqLocked(current: JamesDspHandle): Boolean {
-        val low = flattenBands(bandPeqPrefs.getString(KEY_LOW_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
-        val mid = flattenBands(bandPeqPrefs.getString(KEY_MID_BANDS, EMPTY_PEQ) ?: EMPTY_PEQ)
-        return JamesDspWrapper.configureNativeBmwBandPeq(current, low, mid)
-    }
-
-    fun configureNativeBmwBandPeq(): Boolean = withHandle(false) { configureNativeBmwBandPeqLocked(it) }
+    fun configureNativeBmwBandPeq(): Boolean = synchronized(nativeLock) { refreshEqualizersLocked() }
 
     companion object {
         private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
