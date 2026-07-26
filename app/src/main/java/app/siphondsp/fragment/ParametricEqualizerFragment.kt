@@ -39,6 +39,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.ParametricEqSurface
 import timber.log.Timber
@@ -1007,6 +1008,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.preampInput.value = peqState.preampDb
         suppressPreampCallback = false
         bindScope()
+        requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         updateHistoryControls()
         return true
     }
