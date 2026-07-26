@@ -127,6 +127,45 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
+        surface.onBandSelected = { index ->
+            selectedIndex = index
+            loadSelectedBand()
+        }
+        surface.onBandChanged = { index, newFrequency, newGain ->
+            val old = bands.getOrNull(index) ?: return@onBandChanged
+            selectedIndex = index
+            bands[index] = ParametricEqBand(
+                newFrequency,
+                newGain,
+                old.q,
+                old.filterType,
+                old.channel,
+                old.uuid,
+            )
+            loadingControls = true
+            frequency.progress = frequencyToProgress(newFrequency)
+            gain.progress = ((newGain + 30.0) * 10.0).roundToInt().coerceIn(0, 600)
+            loadingControls = false
+            updateValueLabels(bands[index])
+            updateChipLabel(index)
+            updateSurface()
+        }
+        surface.onBandChangeFinished = { publishChanges() }
+        surface.onBandGainReset = { index ->
+            val old = bands.getOrNull(index) ?: return@onBandGainReset
+            bands[index] = ParametricEqBand(old.frequency, 0.0, old.q, old.filterType, old.channel, old.uuid)
+            selectedIndex = index
+            loadSelectedBand()
+            publishChanges()
+        }
+        surface.onEmptyLongPress = { newFrequency, newGain ->
+            bands.add(ParametricEqBand(newFrequency, newGain.coerceIn(-30.0, 30.0), 1.41))
+            selectedIndex = bands.lastIndex
+            rebuildBandChips()
+            loadSelectedBand()
+            publishChanges()
+        }
+
         loadingControls = true
         scopeGroup.check(R.id.live_eq_scope_full)
         loadingControls = false
@@ -149,7 +188,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
                 id = View.generateViewId()
                 isCheckable = true
                 isCheckedIconVisible = false
-                text = "${index + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
+                text = chipLabel(index, band)
                 setOnClickListener { selectedIndex = index; loadSelectedBand() }
                 setOnLongClickListener {
                     if (bands.size > 1) {
@@ -165,6 +204,14 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             bandGroup.addView(chip)
             if (index == selectedIndex) bandGroup.check(chip.id)
         }
+    }
+
+    private fun chipLabel(index: Int, band: ParametricEqBand) =
+        "${index + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
+
+    private fun updateChipLabel(index: Int) {
+        val band = bands.getOrNull(index) ?: return
+        (bandGroup.getChildAt(index) as? Chip)?.text = chipLabel(index, band)
     }
 
     private fun loadSelectedBand() {
@@ -186,6 +233,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         loadingControls = false
         updateValueLabels(band)
         updateSurface()
+        if (selectedIndex < bandGroup.childCount) bandGroup.check(bandGroup.getChildAt(selectedIndex).id)
     }
 
     private fun updateSelectedBand() {
@@ -208,8 +256,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         )
         bands[selectedIndex] = updated
         updateValueLabels(updated)
-        (bandGroup.getChildAt(selectedIndex) as? Chip)?.text =
-            "${selectedIndex + 1} · ${updated.filterType.displayLabel} · ${updated.channel.displayLabel}"
+        updateChipLabel(selectedIndex)
         updateSurface()
         publishChanges()
     }
@@ -221,6 +268,7 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
         val lowPassHz = values?.getOrNull(15) ?: 150.0
         val lowLr4 = (values?.getOrNull(16) ?: 0.0) >= 0.5
         val highPassHz = values?.getOrNull(18) ?: 125.0
+        surface.setInteractiveBands(bands, selectedIndex)
         surface.setBmwSystemResponse(
             fullRangeBands,
             lowBandBands,
