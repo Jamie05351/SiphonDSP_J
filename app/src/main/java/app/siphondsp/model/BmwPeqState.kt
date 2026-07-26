@@ -10,6 +10,14 @@ data class BmwPeqState(
     val lowBandBands: ParametricEqBandList,
     val midBandBands: ParametricEqBandList,
 ) {
+    fun deepCopy() = BmwPeqState(
+        enabled,
+        preampDb,
+        fullRangeBands.deepCopy(),
+        lowBandBands.deepCopy(),
+        midBandBands.deepCopy(),
+    )
+
     fun validate(sampleRate: Float): String? {
         if (!preampDb.isFinite() || preampDb !in -30f..12f) return "preamp is outside -30..12 dB"
         if (!sampleRate.isFinite() || sampleRate < 8000f) return "invalid sample rate"
@@ -26,6 +34,7 @@ data class BmwPeqState(
                             "$name contains a non-finite value"
                         band.frequency < 20.0 || band.frequency >= sampleRate / 2.0 ->
                             "$name frequency is outside 20 Hz..<Nyquist"
+                        band.gain !in -30.0..30.0 -> "$name gain is outside -30..30 dB"
                         band.q !in MIN_Q..MAX_Q -> "$name Q is outside $MIN_Q..$MAX_Q"
                         else -> null
                     }
@@ -91,4 +100,8 @@ data class BmwPeqState(
             )
         }
     }
+}
+
+fun ParametricEqBandList.deepCopy() = ParametricEqBandList().also { copy ->
+    copy.addAll(this)
 }

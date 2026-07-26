@@ -258,9 +258,11 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         persistOnSuccess: Boolean = true,
         source: String = "editor",
     ): Boolean = synchronized(nativeLock) {
+        val previous = bmwPeqState
         val result = configureNativeBmwPeqLocked(state, source)
         if (result && persistOnSuccess && !state.persist(context)) {
             Timber.e("$source native BMW PEQ applied but persistence commit failed")
+            configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
             return@synchronized false
         }
         result
