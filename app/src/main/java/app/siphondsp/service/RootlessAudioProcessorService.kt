@@ -782,6 +782,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         fun nativeBmwPeqHandleReady(): Boolean? = activeInstance?.engine?.isNativeHandleReady()
 
+        fun nativeBmwCompressorMeter(): FloatArray? =
+            activeInstance?.engine?.nativeBmwCompressorMeter()
+
         fun start(context: Context, data: Intent?) {
             try {
                 context.startForegroundService(ServiceNotificationHelper.createStartIntent(context, data))

@@ -332,6 +332,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return withHandle(false) { JamesDspWrapper.configureNativeBmwDsp(it, values) }
     }
 
+    fun nativeBmwCompressorMeter(): FloatArray? =
+        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
+
     companion object {
         private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
         private const val NATIVE_BMW_KEY = "values"

@@ -68,3 +68,23 @@ Java_app_siphondsp_interop_JamesDspWrapper_setNativeBmwDspSampleRate(
     if(processor != nullptr)
         processor->setSampleRate(sampleRate);
 }
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCompressorMeter(
+    JNIEnv* env,
+    jobject,
+    jlong self)
+{
+    if(env == nullptr || self == 0)
+        return nullptr;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor == nullptr)
+        return nullptr;
+    float values[3];
+    processor->readCompressorMeter(values, 3);
+    jfloatArray result = env->NewFloatArray(3);
+    if(result != nullptr)
+        env->SetFloatArrayRegion(result, 0, 3, values);
+    return result;
+}

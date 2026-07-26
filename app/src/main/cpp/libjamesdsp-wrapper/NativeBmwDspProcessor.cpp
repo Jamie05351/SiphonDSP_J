@@ -93,7 +93,12 @@ bool NativeBmwDspProcessor::configurePeq(bool enabled,float preampDb,
  fullPeq_=nextFull;lowPeq_=nextLow;midPeq_=nextMid;peqEnabled_=enabled;peqPreampDb_=preampDb;peqPreamp_=dbToLin(preampDb);return true;
 }
 
-void NativeBmwDspProcessor::resetDynamics(){compGain_=1;rmsPower_=peakEnv_=0;}
+void NativeBmwDspProcessor::resetDynamics(){
+ compGain_=1;rmsPower_=peakEnv_=0;compressorMeterCounter_=0;
+ compressorInputDb_.store(-60.f,std::memory_order_relaxed);
+ compressorOutputDb_.store(-60.f,std::memory_order_relaxed);
+ compressorGainReductionDb_.store(0.f,std::memory_order_relaxed);
+}
 void NativeBmwDspProcessor::rebuildGains(){headroom_=dbToLin(p_.headroom);lowGainL_=dbToLin(p_.lowGainL);lowGainR_=dbToLin(p_.lowGainR);midGainL_=dbToLin(p_.midGainL);midGainR_=dbToLin(p_.midGainR);postGainL_=dbToLin(p_.postGainL);postGainR_=dbToLin(p_.postGainR);makeup_=dbToLin(p_.makeup);}
 void NativeBmwDspProcessor::rebuildSubsonic(){for(Channel*c:{&left_,&right_}){makeHighPass(c->sub1,p_.subFreq,BW4Q1,sampleRate_);makeHighPass(c->sub2,p_.subFreq,BW4Q2,sampleRate_);}}
 void NativeBmwDspProcessor::rebuildLowCrossover(){for(Channel*c:{&left_,&right_}){makeLowPass(c->lowA,p_.lpf,p_.lowLr4?BW:1.f,sampleRate_);makeLowPass(c->lowB,p_.lpf,BW,sampleRate_);makeOnePoleLow(c->lowPole,p_.lpf,sampleRate_);}}
@@ -113,10 +118,52 @@ float NativeBmwDspProcessor::processChannelInput(float x,Channel&c){float y=x-c.
 void NativeBmwDspProcessor::processFrame(float&l,float&r){if(!p_.enabled)return;float sL=processChannelInput(l,left_),sR=processChannelInput(r,right_);if(peqEnabled_){sL=fullPeq_.processLeft(sL*peqPreamp_);sR=fullPeq_.processRight(sR*peqPreamp_);}sL*=headroom_;sR*=headroom_;float lowL=sL,lowR=sR,midL=sL,midR=sR;
  if(p_.subsonic){lowL=left_.sub2.run(left_.sub1.run(lowL));lowR=right_.sub2.run(right_.sub1.run(lowR));}
  if(!p_.lpfPass){lowL=left_.lowA.run(lowL);lowR=right_.lowA.run(lowR);if(p_.lowLr4){lowL=left_.lowB.run(lowL);lowR=right_.lowB.run(lowR);}else{lowL=left_.lowPole.run(lowL);lowR=right_.lowPole.run(lowR);}if(peqEnabled_){lowL=lowPeq_.processLeft(lowL);lowR=lowPeq_.processRight(lowR);}lowL=left_.lowDelay.run(lowL);lowR=right_.lowDelay.run(lowR);
-  if(p_.compressor&&!p_.lowMute&&p_.measurementMute!=1){float pk=std::max(std::fabs(lowL),std::fabs(lowR));rmsPower_=ftz(rmsPower_+(pk*pk-rmsPower_)*rmsMix_);peakEnv_=pk>peakEnv_?pk:ftz(peakEnv_*peakRelease_);float det=std::max(std::sqrt(std::max(0.f,rmsPower_)),peakEnv_*.5f),db=20*std::log10(std::max(det,1e-12f)),over=db-p_.threshold,slope=1-1/std::max(1.001f,p_.ratio),gr=0,kh=p_.knee*.5f;if(p_.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p_.knee);}}else if(over>0)gr=-over*slope;float t=dbToLin(gr),mix=t<compGain_?attackMix_:releaseMix_;compGain_=std::min(1.f,ftz(compGain_+(t-compGain_)*mix));lowL*=compGain_*makeup_;lowR*=compGain_*makeup_;}lowL*=lowGainL_;lowR*=lowGainR_;}
+  if(!p_.lowMute&&p_.measurementMute!=1){
+   const float pk=std::max(std::fabs(lowL),std::fabs(lowR));
+   const bool publishMeter=(++compressorMeterCounter_&255u)==0u;
+   float detectorDb=-60.f;
+   if(p_.compressor){
+    rmsPower_=ftz(rmsPower_+(pk*pk-rmsPower_)*rmsMix_);
+    peakEnv_=pk>peakEnv_?pk:ftz(peakEnv_*peakRelease_);
+    const float det=std::max(std::sqrt(std::max(0.f,rmsPower_)),peakEnv_*.5f);
+    detectorDb=20.f*std::log10(std::max(det,1e-12f));
+    const float over=detectorDb-p_.threshold,slope=1-1/std::max(1.001f,p_.ratio),kh=p_.knee*.5f;
+    float gr=0;
+    if(p_.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){const float x=over+kh;gr=-slope*x*x/(2*p_.knee);}}
+    else if(over>0)gr=-over*slope;
+    const float target=dbToLin(gr),mix=target<compGain_?attackMix_:releaseMix_;
+    compGain_=std::min(1.f,ftz(compGain_+(target-compGain_)*mix));
+    lowL*=compGain_*makeup_;lowR*=compGain_*makeup_;
+   }
+   else if(publishMeter)detectorDb=20.f*std::log10(std::max(pk,1e-12f));
+   if(publishMeter){
+    const float gainReduction=-20.f*std::log10(std::max(compGain_,1e-12f));
+    const float appliedMakeup=p_.compressor?p_.makeup:0.f;
+    compressorInputDb_.store(clampf(detectorDb,-60.f,6.f),std::memory_order_relaxed);
+    compressorOutputDb_.store(clampf(detectorDb-gainReduction+appliedMakeup,-60.f,6.f),std::memory_order_relaxed);
+    compressorGainReductionDb_.store(clampf(gainReduction,0.f,60.f),std::memory_order_relaxed);
+   }
+  }
+  else if((++compressorMeterCounter_&255u)==0u){
+   compressorInputDb_.store(-60.f,std::memory_order_relaxed);
+   compressorOutputDb_.store(-60.f,std::memory_order_relaxed);
+   compressorGainReductionDb_.store(0.f,std::memory_order_relaxed);
+  }
+  lowL*=lowGainL_;lowR*=lowGainR_;}
+ else if((++compressorMeterCounter_&255u)==0u){
+  compressorInputDb_.store(-60.f,std::memory_order_relaxed);
+  compressorOutputDb_.store(-60.f,std::memory_order_relaxed);
+  compressorGainReductionDb_.store(0.f,std::memory_order_relaxed);
+ }
  if(!p_.hpfPass){midL=left_.mid2.run(left_.mid1.run(midL));midR=right_.mid2.run(right_.mid1.run(midR));if(peqEnabled_){midL=midPeq_.processLeft(midL);midR=midPeq_.processRight(midR);}midL=left_.midDelay.run(midL)*midGainL_;midR=right_.midDelay.run(midR)*midGainR_;}
  if(p_.lowInvert){lowL=-lowL;lowR=-lowR;}if(p_.midInvert){midL=-midL;midR=-midR;}if(p_.lowMute||p_.measurementMute==1)lowL=lowR=0;if(p_.midMute||p_.measurementMute==2)midL=midR=0;
  float oL=(p_.lpfPass&&p_.hpfPass)?sL:lowL+midL,oR=(p_.lpfPass&&p_.hpfPass)?sR:lowR+midR;if(p_.tilt){oL=left_.tiltHi2.run(left_.tiltHi1.run(left_.tiltLo2.run(left_.tiltLo1.run(oL))));oR=right_.tiltHi2.run(right_.tiltHi1.run(right_.tiltLo2.run(right_.tiltLo1.run(oR))));}oL*=postGainL_;oR*=postGainR_;if(p_.channelMute==1)oL=0;if(p_.channelMute==2)oR=0;l=oR;r=oL;}
 const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)return s;auto*w=const_cast<float*>(s);for(std::size_t i=0;i+1<n;i+=2)processFrame(w[i],w[i+1]);return s;}
 const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s)return s;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=w[i],r=w[i+1];processFrame(l,r);w[i]=clampInt<int16_t>(l);w[i+1]=clampInt<int16_t>(r);}return s;}
 const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s)return s;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=w[i],r=w[i+1];processFrame(l,r);w[i]=clampInt<int32_t>(l);w[i+1]=clampInt<int32_t>(r);}return s;}
+void NativeBmwDspProcessor::readCompressorMeter(float* values,std::size_t count)const{
+ if(values==nullptr||count<3)return;
+ values[0]=compressorInputDb_.load(std::memory_order_relaxed);
+ values[1]=compressorOutputDb_.load(std::memory_order_relaxed);
+ values[2]=compressorGainReductionDb_.load(std::memory_order_relaxed);
+}
