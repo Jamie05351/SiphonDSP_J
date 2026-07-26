@@ -131,8 +131,8 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             selectedIndex = index
             loadSelectedBand()
         }
-        surface.onBandChanged = { index, newFrequency, newGain ->
-            val old = bands.getOrNull(index) ?: return@onBandChanged
+        surface.onBandChanged = bandChanged@ { index, newFrequency, newGain ->
+            val old = bands.getOrNull(index) ?: return@bandChanged
             selectedIndex = index
             bands[index] = ParametricEqBand(
                 newFrequency,
@@ -151,8 +151,8 @@ class LiveEqBottomSheet : BottomSheetDialogFragment() {
             updateSurface()
         }
         surface.onBandChangeFinished = { publishChanges() }
-        surface.onBandGainReset = { index ->
-            val old = bands.getOrNull(index) ?: return@onBandGainReset
+        surface.onBandGainReset = gainReset@ { index ->
+            val old = bands.getOrNull(index) ?: return@gainReset
             bands[index] = ParametricEqBand(old.frequency, 0.0, old.q, old.filterType, old.channel, old.uuid)
             selectedIndex = index
             loadSelectedBand()
