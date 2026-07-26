@@ -13,6 +13,9 @@ inline bool changed(float a,float b){return std::fabs(a-b)>1e-6f;}
 
 float NativeBmwDspProcessor::Biquad::run(float x){float y=b0*x+z1;z1=ftz(b1*x-a1*y+z2);z2=ftz(b2*x-a2*y);return ftz(y);}
 void NativeBmwDspProcessor::Biquad::clear(){z1=z2=0;}
+float NativeBmwDspProcessor::PeqBank::processLeft(float sample){for(std::size_t i=0;i<leftCount;++i)sample=left[i].run(sample);return sample;}
+float NativeBmwDspProcessor::PeqBank::processRight(float sample){for(std::size_t i=0;i<rightCount;++i)sample=right[i].run(sample);return sample;}
+void NativeBmwDspProcessor::PeqBank::clear(){for(auto& section:left)section.clear();for(auto& section:right)section.clear();}
 float NativeBmwDspProcessor::OnePole::run(float x){float y=a0*x+a1*x1-b1*y1;x1=x;y1=ftz(y);return y1;}
 void NativeBmwDspProcessor::OnePole::clear(){x1=y1=0;}
 float NativeBmwDspProcessor::Delay::run(float x){if(delay<=0)return x;data[write]=x;float read=static_cast<float>(write)-delay;while(read<0)read+=data.size();unsigned i0=static_cast<unsigned>(read)%data.size(),i1=(i0+1)%data.size();float f=read-std::floor(read),y=data[i0]+(data[i1]-data[i0])*f;write=(write+1)%data.size();return y;}
@@ -52,6 +55,44 @@ void NativeBmwDspProcessor::makeOnePoleLow(OnePole&p,float fc,float sr){float K=
 void NativeBmwDspProcessor::makeLowShelf(Biquad&q,float fc,float g,float sr){float A=std::pow(10.f,g/40.f),w=2*PI*fc/sr,c=std::cos(w),s=std::sin(w),a=s/(2*BW),r=std::sqrt(A),iv=1/((A+1)+(A-1)*c+2*r*a);q.b0=A*((A+1)-(A-1)*c+2*r*a)*iv;q.b1=2*A*((A-1)-(A+1)*c)*iv;q.b2=A*((A+1)-(A-1)*c-2*r*a)*iv;q.a1=-2*((A-1)+(A+1)*c)*iv;q.a2=((A+1)+(A-1)*c-2*r*a)*iv;q.clear();}
 void NativeBmwDspProcessor::makeHighShelf(Biquad&q,float fc,float g,float sr){float A=std::pow(10.f,g/40.f),w=2*PI*fc/sr,c=std::cos(w),s=std::sin(w),a=s/(2*BW),r=std::sqrt(A),iv=1/((A+1)-(A-1)*c+2*r*a);q.b0=A*((A+1)+(A-1)*c+2*r*a)*iv;q.b1=-2*A*((A-1)+(A+1)*c)*iv;q.b2=A*((A+1)+(A-1)*c-2*r*a)*iv;q.a1=2*((A-1)-(A+1)*c)*iv;q.a2=((A+1)-(A-1)*c-2*r*a)*iv;q.clear();}
 
+bool NativeBmwDspProcessor::makePeq(Biquad&q,double frequency,double gain,double Q,int type,float sr){
+ if(!std::isfinite(frequency)||!std::isfinite(gain)||!std::isfinite(Q)||frequency<20.0||frequency>=sr*.5||Q<0.1||Q>30.0||type<0||type>2)return false;
+ const double A=std::pow(10.0,gain/40.0),w=2.0*PI*frequency/sr,c=std::cos(w),s=std::sin(w);
+ double b0,b1,b2,a0,a1,a2;
+ if(type==0){const double alpha=s/(2.0*Q);b0=1+alpha*A;b1=-2*c;b2=1-alpha*A;a0=1+alpha/A;a1=-2*c;a2=1-alpha/A;}
+ else {const double alpha=s/(2.0*Q),rootA=std::sqrt(A),two=2.0*rootA*alpha;
+  if(type==1){b0=A*((A+1)-(A-1)*c+two);b1=2*A*((A-1)-(A+1)*c);b2=A*((A+1)-(A-1)*c-two);a0=(A+1)+(A-1)*c+two;a1=-2*((A-1)+(A+1)*c);a2=(A+1)+(A-1)*c-two;}
+  else{b0=A*((A+1)+(A-1)*c+two);b1=-2*A*((A-1)+(A+1)*c);b2=A*((A+1)+(A-1)*c-two);a0=(A+1)-(A-1)*c+two;a1=2*((A-1)-(A+1)*c);a2=(A+1)-(A-1)*c-two;}}
+ if(!std::isfinite(a0)||std::fabs(a0)<1e-15)return false;
+ q.b0=static_cast<float>(b0/a0);q.b1=static_cast<float>(b1/a0);q.b2=static_cast<float>(b2/a0);q.a1=static_cast<float>(a1/a0);q.a2=static_cast<float>(a2/a0);q.clear();
+ return std::isfinite(q.b0)&&std::isfinite(q.b1)&&std::isfinite(q.b2)&&std::isfinite(q.a1)&&std::isfinite(q.a2);
+}
+
+bool NativeBmwDspProcessor::configurePeq(bool enabled,float preampDb,
+ const double* full,std::size_t fullCount,const double* low,std::size_t lowCount,const double* mid,std::size_t midCount){
+ if(!std::isfinite(preampDb)||preampDb<-30.f||preampDb>12.f)return false;
+ auto build=[this](const double* values,std::size_t count,PeqBank& bank)->bool{
+  if(count%kPeqBandWidth!=0||count/kPeqBandWidth>kMaxPeqSectionsPerChannel||(count>0&&values==nullptr))return false;
+  PeqBank next;
+  for(std::size_t i=0;i<count;i+=kPeqBandWidth){
+   const double f=values[i],g=values[i+1],q=values[i+2],typeValue=values[i+3],channelValue=values[i+4];
+   if(!std::isfinite(typeValue)||!std::isfinite(channelValue)||typeValue!=std::floor(typeValue)||channelValue!=std::floor(channelValue))return false;
+   const int type=static_cast<int>(typeValue),channel=static_cast<int>(channelValue);
+   if(channel<0||channel>2)return false;
+   Biquad section;if(!makePeq(section,f,g,q,type,sampleRate_))return false;
+   if(std::fabs(g)<1e-9)continue;
+   if(channel!=2){if(next.leftCount>=kMaxPeqSectionsPerChannel)return false;next.left[next.leftCount++]=section;}
+   if(channel!=1){if(next.rightCount>=kMaxPeqSectionsPerChannel)return false;next.right[next.rightCount++]=section;}
+  }
+  bank=next;return true;
+ };
+ PeqBank nextFull,nextLow,nextMid;
+ if(!build(full,fullCount,nextFull)||!build(low,lowCount,nextLow)||!build(mid,midCount,nextMid))return false;
+ auto save=[](auto& target,std::size_t& targetCount,const double* source,std::size_t sourceCount){target.fill(0);if(sourceCount>0)std::copy_n(source,sourceCount,target.begin());targetCount=sourceCount;};
+ save(fullPeqValues_,fullPeqValueCount_,full,fullCount);save(lowPeqValues_,lowPeqValueCount_,low,lowCount);save(midPeqValues_,midPeqValueCount_,mid,midCount);
+ fullPeq_=nextFull;lowPeq_=nextLow;midPeq_=nextMid;peqEnabled_=enabled;peqPreampDb_=preampDb;peqPreamp_=dbToLin(preampDb);return true;
+}
+
 void NativeBmwDspProcessor::resetDynamics(){compGain_=1;rmsPower_=peakEnv_=0;}
 void NativeBmwDspProcessor::rebuildGains(){headroom_=dbToLin(p_.headroom);lowGainL_=dbToLin(p_.lowGainL);lowGainR_=dbToLin(p_.lowGainR);midGainL_=dbToLin(p_.midGainL);midGainR_=dbToLin(p_.midGainR);postGainL_=dbToLin(p_.postGainL);postGainR_=dbToLin(p_.postGainR);makeup_=dbToLin(p_.makeup);}
 void NativeBmwDspProcessor::rebuildSubsonic(){for(Channel*c:{&left_,&right_}){makeHighPass(c->sub1,p_.subFreq,BW4Q1,sampleRate_);makeHighPass(c->sub2,p_.subFreq,BW4Q2,sampleRate_);}}
@@ -65,14 +106,15 @@ void NativeBmwDspProcessor::rebuildAll(){
  dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();
  for(Channel*c:{&left_,&right_}){c->dcX=c->dcY=0;c->lowDelay.clear();c->midDelay.clear();}
  updateDelays();resetDynamics();
+ configurePeq(peqEnabled_,peqPreampDb_,fullPeqValues_.data(),fullPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);
 }
 
-float NativeBmwDspProcessor::processChannelInput(float x,Channel&c){float y=x-c.dcX+dcR_*c.dcY;c.dcX=x;c.dcY=ftz(y);return c.dcY*headroom_;}
-void NativeBmwDspProcessor::processFrame(float&l,float&r){if(!p_.enabled)return;float sL=processChannelInput(l,left_),sR=processChannelInput(r,right_),lowL=sL,lowR=sR,midL=sL,midR=sR;
+float NativeBmwDspProcessor::processChannelInput(float x,Channel&c){float y=x-c.dcX+dcR_*c.dcY;c.dcX=x;c.dcY=ftz(y);return c.dcY;}
+void NativeBmwDspProcessor::processFrame(float&l,float&r){if(!p_.enabled)return;float sL=processChannelInput(l,left_),sR=processChannelInput(r,right_);if(peqEnabled_){sL=fullPeq_.processLeft(sL*peqPreamp_);sR=fullPeq_.processRight(sR*peqPreamp_);}sL*=headroom_;sR*=headroom_;float lowL=sL,lowR=sR,midL=sL,midR=sR;
  if(p_.subsonic){lowL=left_.sub2.run(left_.sub1.run(lowL));lowR=right_.sub2.run(right_.sub1.run(lowR));}
- if(!p_.lpfPass){lowL=left_.lowA.run(lowL);lowR=right_.lowA.run(lowR);if(p_.lowLr4){lowL=left_.lowB.run(lowL);lowR=right_.lowB.run(lowR);}else{lowL=left_.lowPole.run(lowL);lowR=right_.lowPole.run(lowR);}lowL=left_.lowDelay.run(lowL);lowR=right_.lowDelay.run(lowR);
+ if(!p_.lpfPass){lowL=left_.lowA.run(lowL);lowR=right_.lowA.run(lowR);if(p_.lowLr4){lowL=left_.lowB.run(lowL);lowR=right_.lowB.run(lowR);}else{lowL=left_.lowPole.run(lowL);lowR=right_.lowPole.run(lowR);}if(peqEnabled_){lowL=lowPeq_.processLeft(lowL);lowR=lowPeq_.processRight(lowR);}lowL=left_.lowDelay.run(lowL);lowR=right_.lowDelay.run(lowR);
   if(p_.compressor&&!p_.lowMute&&p_.measurementMute!=1){float pk=std::max(std::fabs(lowL),std::fabs(lowR));rmsPower_=ftz(rmsPower_+(pk*pk-rmsPower_)*rmsMix_);peakEnv_=pk>peakEnv_?pk:ftz(peakEnv_*peakRelease_);float det=std::max(std::sqrt(std::max(0.f,rmsPower_)),peakEnv_*.5f),db=20*std::log10(std::max(det,1e-12f)),over=db-p_.threshold,slope=1-1/std::max(1.001f,p_.ratio),gr=0,kh=p_.knee*.5f;if(p_.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p_.knee);}}else if(over>0)gr=-over*slope;float t=dbToLin(gr),mix=t<compGain_?attackMix_:releaseMix_;compGain_=std::min(1.f,ftz(compGain_+(t-compGain_)*mix));lowL*=compGain_*makeup_;lowR*=compGain_*makeup_;}lowL*=lowGainL_;lowR*=lowGainR_;}
- if(!p_.hpfPass){midL=left_.midDelay.run(left_.mid2.run(left_.mid1.run(midL)))*midGainL_;midR=right_.midDelay.run(right_.mid2.run(right_.mid1.run(midR)))*midGainR_;}
+ if(!p_.hpfPass){midL=left_.mid2.run(left_.mid1.run(midL));midR=right_.mid2.run(right_.mid1.run(midR));if(peqEnabled_){midL=midPeq_.processLeft(midL);midR=midPeq_.processRight(midR);}midL=left_.midDelay.run(midL)*midGainL_;midR=right_.midDelay.run(midR)*midGainR_;}
  if(p_.lowInvert){lowL=-lowL;lowR=-lowR;}if(p_.midInvert){midL=-midL;midR=-midR;}if(p_.lowMute||p_.measurementMute==1)lowL=lowR=0;if(p_.midMute||p_.measurementMute==2)midL=midR=0;
  float oL=(p_.lpfPass&&p_.hpfPass)?sL:lowL+midL,oR=(p_.lpfPass&&p_.hpfPass)?sR:lowR+midR;if(p_.tilt){oL=left_.tiltHi2.run(left_.tiltHi1.run(left_.tiltLo2.run(left_.tiltLo1.run(oL))));oR=right_.tiltHi2.run(right_.tiltHi1.run(right_.tiltLo2.run(right_.tiltLo1.run(oR))));}oL*=postGainL_;oR*=postGainR_;if(p_.channelMute==1)oL=0;if(p_.channelMute==2)oR=0;l=oR;r=oL;}
 const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)return s;auto*w=const_cast<float*>(s);for(std::size_t i=0;i+1<n;i+=2)processFrame(w[i],w[i+1]);return s;}
