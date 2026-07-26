@@ -11,6 +11,7 @@ import androidx.preference.PreferenceViewHolder
 import app.siphondsp.R
 import app.siphondsp.databinding.PreferenceParametricEqualizerBinding
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
@@ -75,11 +76,13 @@ class ParametricEqualizerPreference : Preference {
     }
 
     private fun setEqualizerViewValues(state: BmwPeqState) {
-        // Only Full Range is a truthful standalone preview. Low and Mid are
-        // post-crossover branch filters and must not be drawn as full-system
-        // responses on this compact card.
+        val combinedBands = ParametricEqBandList().apply {
+            addAll(state.fullRangeBands)
+            addAll(state.lowBandBands)
+            addAll(state.midBandBands)
+        }
         binding?.layoutEqualizer?.setBands(
-            state.fullRangeBands,
+            combinedBands,
             state.preampDb.toDouble(),
         )
         binding?.bandCount?.text = buildString {
