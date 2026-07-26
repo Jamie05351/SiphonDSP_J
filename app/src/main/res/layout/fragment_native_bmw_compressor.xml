@@ -71,31 +71,25 @@
         <com.google.android.material.slider.Slider
             android:id="@+id/compressor_threshold"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:valueFrom="-18"
-            app:valueTo="0"
-            app:stepSize="0.5" />
+            android:layout_height="wrap_content" />
 
         <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" app:valueFrom="1" app:valueTo="10" app:stepSize="0.1" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" />
 
         <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" app:valueFrom="0" app:valueTo="12" app:stepSize="1" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" />
 
         <TextView android:id="@+id/compressor_attack_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="match_parent" android:layout_height="wrap_content" app:valueFrom="1" app:valueTo="50" app:stepSize="1" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="match_parent" android:layout_height="wrap_content" />
 
         <TextView android:id="@+id/compressor_release_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="match_parent" android:layout_height="wrap_content" app:valueFrom="20" app:valueTo="400" app:stepSize="1" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="match_parent" android:layout_height="wrap_content" />
 
         <TextView android:id="@+id/compressor_makeup_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
         <com.google.android.material.slider.Slider
             android:id="@+id/compressor_makeup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            app:valueFrom="0"
-            app:valueTo="6"
-            app:stepSize="0.1" />
+            android:layout_marginBottom="24dp" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

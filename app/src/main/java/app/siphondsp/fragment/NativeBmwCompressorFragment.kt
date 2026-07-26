@@ -65,6 +65,12 @@ class NativeBmwCompressorFragment : Fragment() {
         attack = view.findViewById(R.id.compressor_attack)
         release = view.findViewById(R.id.compressor_release)
         makeup = view.findViewById(R.id.compressor_makeup)
+        configureSlider(threshold, -18f, 0f, 0.5f)
+        configureSlider(ratio, 1f, 10f, 0.1f)
+        configureSlider(knee, 0f, 12f, 1f)
+        configureSlider(attack, 1f, 50f, 1f)
+        configureSlider(release, 20f, 400f, 1f)
+        configureSlider(makeup, 0f, 6f, 0.1f)
         thresholdLabel = view.findViewById(R.id.compressor_threshold_label)
         ratioLabel = view.findViewById(R.id.compressor_ratio_label)
         kneeLabel = view.findViewById(R.id.compressor_knee_label)
@@ -73,6 +79,12 @@ class NativeBmwCompressorFragment : Fragment() {
         makeupLabel = view.findViewById(R.id.compressor_makeup_label)
         bindState(NativeBmwCompressorState.load(requireContext()))
         configureListeners()
+    }
+
+    private fun configureSlider(slider: Slider, from: Float, to: Float, step: Float) {
+        slider.valueFrom = from
+        slider.valueTo = to
+        slider.stepSize = step
     }
 
     override fun onStart() {
