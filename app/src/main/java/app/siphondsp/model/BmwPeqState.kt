@@ -21,6 +21,10 @@ data class BmwPeqState(
     fun validate(sampleRate: Float): String? {
         if (!preampDb.isFinite() || preampDb !in -30f..12f) return "preamp is outside -30..12 dB"
         if (!sampleRate.isFinite() || sampleRate < 8000f) return "invalid sample rate"
+        val allIds = (fullRangeBands.asSequence() + lowBandBands.asSequence() + midBandBands.asSequence())
+            .map { it.uuid }
+            .toList()
+        if (allIds.size != allIds.toSet().size) return "PEQ contains duplicate filter identities"
         return listOf(
             "Full Range" to fullRangeBands,
             "Low Band" to lowBandBands,

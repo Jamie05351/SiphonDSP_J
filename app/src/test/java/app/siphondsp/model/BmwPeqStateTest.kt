@@ -5,8 +5,24 @@ import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.UUID
 
 class BmwPeqStateTest {
+    @Test
+    fun rejectsDuplicateUuidsAcrossScopes() {
+        val id = UUID.randomUUID()
+        val state = BmwPeqState.empty().copy(
+            fullRangeBands = ParametricEqBandList().apply {
+                add(ParametricEqBand(1000.0, 0.0, 1.0, uuid = id))
+            },
+            lowBandBands = ParametricEqBandList().apply {
+                add(ParametricEqBand(80.0, 0.0, 1.0, uuid = id))
+            },
+        )
+
+        assertEquals("PEQ contains duplicate filter identities", state.validate(48_000f))
+    }
+
     @Test
     fun emptyBanksAreValidAndIndependent() {
         val state = BmwPeqState.empty()

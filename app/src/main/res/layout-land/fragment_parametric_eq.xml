@@ -95,6 +95,44 @@
                 android:layout_height="wrap_content"
                 android:contentDescription="Graph display options"
                 android:text="Graph options" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/undo"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Undo last committed PEQ change"
+                android:text="Undo" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/redo"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Redo last undone PEQ change"
+                android:text="Redo" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/filter_tools"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Copy and reorder selected filter"
+                android:text="Filter tools" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/preset_export"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Export preset" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/preset_import"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Import preset" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
