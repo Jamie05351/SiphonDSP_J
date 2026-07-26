@@ -13,6 +13,7 @@ import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -24,6 +25,8 @@ import app.siphondsp.databinding.FragmentParametricEqBinding
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.BmwPeqPreset
+import app.siphondsp.model.PeqStateHistory
 import app.siphondsp.model.deepCopy
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
@@ -45,6 +48,7 @@ class ParametricEqualizerFragment : Fragment() {
     private var selectedScope = PeqScope.FULL
     private var suppressPreampCallback = false
     private val selectedBandByScope = mutableMapOf<PeqScope, UUID?>()
+    private val history = PeqStateHistory(HISTORY_LIMIT)
 
     private var editorBandUuid: UUID? = null
     private var editorActive = false
@@ -55,6 +59,15 @@ class ParametricEqualizerFragment : Fragment() {
             binding.importFile.isEnabled = !value
             binding.exportFile.isEnabled = !value
             binding.editString.isEnabled = !value
+            binding.filterTools.isEnabled = !value
+            binding.presetImport.isEnabled = !value
+            binding.presetExport.isEnabled = !value
+            if (value) {
+                binding.undo.isEnabled = false
+                binding.redo.isEnabled = false
+            } else {
+                updateHistoryControls()
+            }
         }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -64,19 +77,22 @@ class ParametricEqualizerFragment : Fragment() {
                 ?.bufferedReader()?.use { it.readText() } ?: return@registerForActivityResult
             val imported = ParametricEqBandList()
             val result = imported.fromApoString(text)
-            val candidate = peqState.deepCopy()
-            replaceScopeBands(candidate, imported)
-            val applied = if (selectedScope == PeqScope.FULL) {
-                applyCandidate(candidate.copy(preampDb = result.preampDb.toFloat()), "import")
+            val detail = if (result.skippedFilters > 0) {
+                "${result.skippedFilters} malformed or unsupported lines will be skipped."
             } else {
-                applyCandidate(candidate, "import")
+                "All ${imported.size} parsed filters are supported."
             }
-            if (!applied) return@registerForActivityResult
-            val message = getString(R.string.peq_import_success, imported.size)
-            requireContext().toast(
-                if (result.skippedFilters > 0) "$message (${result.skippedFilters} malformed or unsupported lines skipped)"
-                else message
-            )
+            AlertDialog.Builder(requireContext())
+                .setTitle("Import into ${selectedScope.label}")
+                .setMessage("$detail Choose how to apply the previewed filters.")
+                .setPositiveButton("Replace") { _, _ ->
+                    applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
+                }
+                .setNeutralButton("Append") { _, _ ->
+                    applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
         } catch (error: Exception) {
             Timber.e(error, "Failed to import PEQ file")
             requireContext().toast(R.string.peq_import_error)
@@ -95,6 +111,79 @@ class ParametricEqualizerFragment : Fragment() {
             requireContext().toast("Export failed: ${error.message}")
         }
     }
+
+    private fun applyScopeImport(
+        imported: ParametricEqBandList,
+        importedPreamp: Float,
+        append: Boolean,
+        skippedFilters: Int,
+    ) {
+        val candidate = peqState.deepCopy()
+        val destination = bandsForScope(candidate)
+        if (!append) destination.clear()
+        if (destination.size + imported.size > BmwPeqState.MAX_BANDS) {
+            requireContext().toast(
+                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+            )
+            return
+        }
+        imported.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
+        val completeCandidate = if (selectedScope == PeqScope.FULL && !append) {
+            candidate.copy(preampDb = importedPreamp)
+        } else {
+            candidate
+        }
+        if (applyCandidate(completeCandidate, if (append) "import-append" else "import-replace")) {
+            val message = getString(R.string.peq_import_success, imported.size)
+            requireContext().toast(
+                if (skippedFilters > 0) "$message ($skippedFilters malformed or unsupported lines skipped)"
+                else message
+            )
+        }
+    }
+
+    private val presetExportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri ?: return@registerForActivityResult
+            try {
+                val preset = BmwPeqPreset.fromState(
+                    peqState,
+                    name = "Three-bank PEQ",
+                    createdAtEpochMs = System.currentTimeMillis(),
+                )
+                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(BmwPeqPreset.encode(preset))
+                }
+                requireContext().toast("Complete three-bank PEQ preset exported")
+            } catch (error: Exception) {
+                Timber.e(error, "Failed to export complete PEQ preset")
+                requireContext().toast("Preset export failed")
+            }
+        }
+
+    private val presetImportLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            try {
+                val text = requireContext().contentResolver.openInputStream(uri)
+                    ?.bufferedReader()?.use { it.readText() }
+                    ?: throw IllegalArgumentException("The preset file is empty")
+                val preset = BmwPeqPreset.decode(text)
+                val candidate = preset.toState()
+                val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
+                candidate.validate(sampleRate)?.let { throw IllegalArgumentException(it) }
+                requireContext().showYesNoAlert(
+                    "Load complete PEQ preset?",
+                    "Replace Full Range, Low Band, Mid Band and preamp with " +
+                        "\"${preset.name ?: "Imported preset"}\"? This can be undone.",
+                ) { confirmed ->
+                    if (confirmed) applyCandidate(candidate, "preset-load")
+                }
+            } catch (error: Exception) {
+                Timber.e(error, "Failed to import complete PEQ preset")
+                requireContext().toast(error.message ?: "Preset import failed; previous PEQ was kept")
+            }
+        }
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -226,6 +315,7 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
+        configureProductionTools()
         loadBands(savedInstanceState)
         binding.peqScopeGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
             val next = when (checkedIds.firstOrNull()) {
@@ -263,6 +353,8 @@ class ParametricEqualizerFragment : Fragment() {
                 ParametricEqBandList(),
             )
         } else restored.copy(enabled = prefs.getBoolean(getString(R.string.key_peq_enable), restored.enabled))
+        history.reset(peqState)
+        updateHistoryControls()
         suppressPreampCallback = true
         binding.preampInput.value = peqState.preampDb
         suppressPreampCallback = false
@@ -275,7 +367,7 @@ class ParametricEqualizerFragment : Fragment() {
         PeqScope.MID -> peqState.midBandBands
     }
 
-    private fun bandsForScope(state: BmwPeqState) = when (selectedScope) {
+    private fun bandsForScope(state: BmwPeqState, scope: PeqScope = selectedScope) = when (scope) {
         PeqScope.FULL -> state.fullRangeBands
         PeqScope.LOW -> state.lowBandBands
         PeqScope.MID -> state.midBandBands
@@ -411,6 +503,211 @@ class ParametricEqualizerFragment : Fragment() {
         updateViewState()
     }
 
+    private fun configureProductionTools() {
+        binding.undo.setOnClickListener {
+            val candidate = history.peekUndo() ?: return@setOnClickListener
+            if (applyCandidate(candidate, "undo", recordHistory = false)) {
+                history.confirmUndo()
+                updateHistoryControls()
+            }
+        }
+        binding.redo.setOnClickListener {
+            val candidate = history.peekRedo() ?: return@setOnClickListener
+            if (applyCandidate(candidate, "redo", recordHistory = false)) {
+                history.confirmRedo()
+                updateHistoryControls()
+            }
+        }
+        binding.presetExport.setOnClickListener {
+            presetExportLauncher.launch("three_bank_peq.json")
+        }
+        binding.presetImport.setOnClickListener {
+            presetImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+        }
+        binding.filterTools.setOnClickListener { anchor -> showFilterTools(anchor) }
+    }
+
+    private fun updateHistoryControls() {
+        if (!::binding.isInitialized) return
+        binding.undo.isEnabled = history.canUndo
+        binding.redo.isEnabled = history.canRedo
+    }
+
+    private fun showFilterTools(anchor: View) {
+        val selectedId = selectedBandByScope[selectedScope]
+        val selectedBands = bandsForScope()
+        val selectedIndex = selectedBands.indexOfFirst { it.uuid == selectedId }
+        val popup = PopupMenu(requireContext(), anchor)
+        popup.menu.add(Menu.NONE, FILTER_DUPLICATE, Menu.NONE, "Duplicate selected filter")
+            .isEnabled = selectedIndex >= 0
+        popup.menu.add(Menu.NONE, FILTER_MOVE_UP, Menu.NONE, "Move up").isEnabled = selectedIndex > 0
+        popup.menu.add(Menu.NONE, FILTER_MOVE_DOWN, Menu.NONE, "Move down")
+            .isEnabled = selectedIndex >= 0 && selectedIndex < selectedBands.lastIndex
+        PeqScope.entries.filter { it != selectedScope }.forEach { target ->
+            popup.menu.add(
+                Menu.NONE,
+                FILTER_COPY_SCOPE_BASE + target.ordinal,
+                Menu.NONE,
+                "Copy selected to ${target.label}",
+            ).isEnabled = selectedIndex >= 0
+            popup.menu.add(
+                Menu.NONE,
+                FILTER_COPY_ALL_SCOPE_BASE + target.ordinal,
+                Menu.NONE,
+                "Copy all to ${target.label}…",
+            )
+        }
+        popup.menu.add(Menu.NONE, FILTER_COPY_LEFT_TO_RIGHT, Menu.NONE, "Copy all Left filters to Right")
+        popup.menu.add(Menu.NONE, FILTER_COPY_RIGHT_TO_LEFT, Menu.NONE, "Copy all Right filters to Left")
+        popup.menu.add(Menu.NONE, FILTER_SPLIT_BOTH, Menu.NONE, "Split Both filters into Left + Right")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                FILTER_DUPLICATE -> duplicateSelectedFilter(selectedIndex)
+                FILTER_MOVE_UP -> moveSelectedFilter(selectedIndex, selectedIndex - 1)
+                FILTER_MOVE_DOWN -> moveSelectedFilter(selectedIndex, selectedIndex + 1)
+                in FILTER_COPY_SCOPE_BASE until FILTER_COPY_SCOPE_BASE + PeqScope.entries.size -> {
+                    val target = PeqScope.entries[item.itemId - FILTER_COPY_SCOPE_BASE]
+                    copySelectedFilter(selectedIndex, target)
+                }
+                in FILTER_COPY_ALL_SCOPE_BASE until FILTER_COPY_ALL_SCOPE_BASE + PeqScope.entries.size -> {
+                    val target = PeqScope.entries[item.itemId - FILTER_COPY_ALL_SCOPE_BASE]
+                    confirmCopyWholeScope(target)
+                }
+                FILTER_COPY_LEFT_TO_RIGHT ->
+                    copyChannelFilters(ParametricEqChannel.LEFT, ParametricEqChannel.RIGHT, replaceBoth = false)
+                FILTER_COPY_RIGHT_TO_LEFT ->
+                    copyChannelFilters(ParametricEqChannel.RIGHT, ParametricEqChannel.LEFT, replaceBoth = false)
+                FILTER_SPLIT_BOTH ->
+                    copyChannelFilters(ParametricEqChannel.LEFT_RIGHT, ParametricEqChannel.LEFT, replaceBoth = true)
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun confirmCopyWholeScope(target: PeqScope): Boolean {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Copy ${selectedScope.label} to ${target.label}")
+            .setMessage("Append keeps destination filters. Replace removes them first. The operation commits once and can be undone.")
+            .setPositiveButton("Replace") { _, _ -> copyWholeScope(target, append = false) }
+            .setNeutralButton("Append") { _, _ -> copyWholeScope(target, append = true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        return true
+    }
+
+    private fun copyWholeScope(target: PeqScope, append: Boolean) {
+        val candidate = peqState.deepCopy()
+        val source = bandsForScope(candidate).toList()
+        val destination = bandsForScope(candidate, target)
+        val resultingSize = (if (append) destination.size else 0) + source.size
+        if (resultingSize > BmwPeqState.MAX_BANDS) {
+            requireContext().toast(
+                "${target.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+            )
+            return
+        }
+        if (!append) destination.clear()
+        source.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
+        applyCandidate(candidate, if (append) "copy-scope-append" else "copy-scope-replace")
+    }
+
+    private fun duplicateSelectedFilter(index: Int): Boolean {
+        val candidate = peqState.deepCopy()
+        val bands = bandsForScope(candidate)
+        if (bands.size >= BmwPeqState.MAX_BANDS) {
+            requireContext().toast("${selectedScope.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
+            return true
+        }
+        val source = bands[index]
+        val duplicate = source.copyWithUuid(UUID.randomUUID())
+        bands.add(index + 1, duplicate)
+        selectedBandByScope[selectedScope] = duplicate.uuid
+        applyCandidate(candidate, "duplicate")
+        return true
+    }
+
+    private fun copySelectedFilter(index: Int, target: PeqScope): Boolean {
+        val candidate = peqState.deepCopy()
+        val destination = bandsForScope(candidate, target)
+        if (destination.size >= BmwPeqState.MAX_BANDS) {
+            requireContext().toast("${target.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
+            return true
+        }
+        val copied = bandsForScope(candidate)[index].copyWithUuid(UUID.randomUUID())
+        destination.add(copied)
+        if (applyCandidate(candidate, "copy-filter")) {
+            selectedBandByScope[target] = copied.uuid
+        }
+        return true
+    }
+
+    private fun moveSelectedFilter(from: Int, to: Int): Boolean {
+        val candidate = peqState.deepCopy()
+        val bands = bandsForScope(candidate)
+        if (from !in bands.indices || to !in bands.indices) return true
+        val band = bands.removeAt(from)
+        bands.add(to, band)
+        selectedBandByScope[selectedScope] = band.uuid
+        applyCandidate(candidate, "reorder")
+        return true
+    }
+
+    private fun copyChannelFilters(
+        sourceChannel: ParametricEqChannel,
+        destinationChannel: ParametricEqChannel,
+        replaceBoth: Boolean,
+    ): Boolean {
+        val candidate = peqState.deepCopy()
+        val bands = bandsForScope(candidate)
+        val source = bands.filter { it.channel == sourceChannel }
+        val resultingSize = bands.size + source.size
+        if (resultingSize > BmwPeqState.MAX_BANDS) {
+            requireContext().toast(
+                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+            )
+            return true
+        }
+        if (replaceBoth) {
+            val sourceIds = source.mapTo(mutableSetOf()) { it.uuid }
+            bands.removeAll { it.uuid in sourceIds }
+        }
+        source.forEach { band ->
+            bands.add(
+                ParametricEqBand(
+                    band.frequency,
+                    band.gain,
+                    band.q,
+                    band.filterType,
+                    destinationChannel,
+                    UUID.randomUUID(),
+                )
+            )
+            if (replaceBoth) {
+                bands.add(
+                    ParametricEqBand(
+                        band.frequency,
+                        band.gain,
+                        band.q,
+                        band.filterType,
+                        ParametricEqChannel.RIGHT,
+                        UUID.randomUUID(),
+                    )
+                )
+            }
+        }
+        if (source.isEmpty()) {
+            requireContext().toast("No ${sourceChannel.displayLabel} filters to copy")
+            return true
+        }
+        applyCandidate(candidate, "copy-channel")
+        return true
+    }
+
+    private fun ParametricEqBand.copyWithUuid(uuid: UUID) = ParametricEqBand(
+        frequency, gain, q, filterType, channel, uuid,
+    )
+
     private fun getSelectedFilterType() = when (binding.filterTypeGroup.checkedButtonId) {
         R.id.filter_low_shelf -> ParametricEqFilterType.LOW_SHELF
         R.id.filter_high_shelf -> ParametricEqFilterType.HIGH_SHELF
@@ -510,7 +807,11 @@ class ParametricEqualizerFragment : Fragment() {
         binding.previewTitle.text = getString(if (collapsed) R.string.peq_preview else R.string.peq_preview_collapsed)
     }
 
-    private fun applyCandidate(candidate: BmwPeqState, source: String): Boolean {
+    private fun applyCandidate(
+        candidate: BmwPeqState,
+        source: String,
+        recordHistory: Boolean = true,
+    ): Boolean {
         val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
         val validation = candidate.validate(sampleRate)
         if (validation != null) {
@@ -528,10 +829,12 @@ class ParametricEqualizerFragment : Fragment() {
             return false
         }
         peqState = candidate
+        if (recordHistory) history.commit(candidate)
         suppressPreampCallback = true
         binding.preampInput.value = peqState.preampDb
         suppressPreampCallback = false
         bindScope()
+        updateHistoryControls()
         return true
     }
 
@@ -549,6 +852,15 @@ class ParametricEqualizerFragment : Fragment() {
         private const val GRAPH_MENU_BOTH = 2
         private const val GRAPH_MENU_LEFT = 3
         private const val GRAPH_MENU_RIGHT = 4
+        private const val FILTER_DUPLICATE = 10
+        private const val FILTER_MOVE_UP = 11
+        private const val FILTER_MOVE_DOWN = 12
+        private const val FILTER_COPY_SCOPE_BASE = 20
+        private const val FILTER_COPY_ALL_SCOPE_BASE = 40
+        private const val FILTER_COPY_LEFT_TO_RIGHT = 30
+        private const val FILTER_COPY_RIGHT_TO_LEFT = 31
+        private const val FILTER_SPLIT_BOTH = 32
+        private const val HISTORY_LIMIT = 20
         fun newInstance() = ParametricEqualizerFragment()
     }
 

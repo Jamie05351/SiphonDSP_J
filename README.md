@@ -90,6 +90,12 @@ Generated APKs are written under:
 app/build/outputs/apk/
 ```
 
+## BMW three-bank PEQ
+
+See [Three-bank parametric EQ](docs/THREE_BANK_PEQ.md) for signal flow, graph
+editing, undo/redo, copy tools, presets, import/export, limits, migration, and
+troubleshooting.
+
 ## Using Root
 
 The main focus of this fork is the rootless build. A rooted/Magisk-compatible flavor still exists, but it follows the upstream SiphonDSP behavior and may not receive the same testing. See [BUILD_ROOT.md](BUILD_ROOT.md) for details.
