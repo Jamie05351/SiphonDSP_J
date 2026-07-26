@@ -9,8 +9,10 @@ import android.content.res.Configuration
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.widget.PopupMenu
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -32,6 +34,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.ParametricEqSurface
 import timber.log.Timber
 import java.util.UUID
 
@@ -222,6 +225,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
+        configureGraph()
         loadBands(savedInstanceState)
         binding.peqScopeGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
             val next = when (checkedIds.firstOrNull()) {
@@ -230,7 +234,7 @@ class ParametricEqualizerFragment : Fragment() {
                 else -> PeqScope.FULL
             }
             if (next != selectedScope) {
-                if (editorActive) {
+                if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
                     requireContext().toast("Confirm or cancel the active filter edit before switching scope")
                     binding.peqScopeGroup?.check(selectedScope.chipId)
                 } else {
@@ -287,9 +291,15 @@ class ParametricEqualizerFragment : Fragment() {
     private fun bindScope() {
         val bands = bandsForScope()
         val preamp = if (selectedScope == PeqScope.FULL) binding.preampInput.value.toDouble() else 0.0
+        val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
         binding.preampInput.isEnabled = selectedScope == PeqScope.FULL
         binding.preampInput.isVisible = selectedScope == PeqScope.FULL
-        binding.equalizerSurface.setBands(bands, preamp)
+        binding.equalizerSurface.setBands(
+            bands,
+            preamp,
+            selectedBandByScope[selectedScope],
+            sampleRate,
+        )
         binding.previewTitle.text = when (selectedScope) {
             PeqScope.FULL -> "Full Range PEQ response"
             PeqScope.LOW -> "Low Band PEQ response · inside low crossover branch"
@@ -297,15 +307,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
         binding.bandList.adapter = ParametricEqBandAdapter(bands).apply {
             onItemClicked = { band, _ ->
-                editorBandUuid = band.uuid
-                selectedBandByScope[selectedScope] = band.uuid
-                editorActive = true
-                binding.freqInput.value = band.frequency.toFloat()
-                binding.gainInput.value = band.gain.toFloat()
-                binding.qInput.value = band.q.toFloat()
-                setFilterTypeSelection(band.filterType)
-                setChannelSelection(band.channel)
-                updateViewState()
+                selectBandForEditing(band)
             }
             onDeleteClicked = { _, index ->
                 val candidate = peqState.deepCopy()
@@ -316,6 +318,96 @@ class ParametricEqualizerFragment : Fragment() {
         selectedBandByScope[selectedScope]?.let { uuid ->
             bands.indexOfFirst { it.uuid == uuid }.takeIf { it >= 0 }?.let(binding.bandList::scrollToPosition)
         }
+        updateViewState()
+    }
+
+    private fun configureGraph() {
+        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+        binding.equalizerSurface.showIndividualFilters =
+            graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true)
+        binding.equalizerSurface.channelDisplay = runCatching {
+            ParametricEqSurface.ChannelDisplay.valueOf(
+                graphPrefs.getString(GRAPH_CHANNEL, ParametricEqSurface.ChannelDisplay.BOTH.name)!!
+            )
+        }.getOrDefault(ParametricEqSurface.ChannelDisplay.BOTH)
+
+        binding.equalizerSurface.onPointSelected = { uuid ->
+            bandsForScope().firstOrNull { it.uuid == uuid }?.let(::selectBandForEditing)
+        }
+        binding.equalizerSurface.onDragCommitted = { draggedBand ->
+            val candidate = peqState.deepCopy()
+            val candidateBands = bandsForScope(candidate)
+            val index = candidateBands.indexOfFirst { it.uuid == draggedBand.uuid }
+            if (index < 0) {
+                binding.equalizerSurface.cancelDraft()
+                requireContext().toast("The selected filter no longer exists; graph edit cancelled")
+            } else {
+                candidateBands[index] = draggedBand
+                selectedBandByScope[selectedScope] = draggedBand.uuid
+                if (applyCandidate(candidate, "graph-drag")) {
+                    editorBandUuid = draggedBand.uuid
+                    binding.freqInput.value = draggedBand.frequency.toFloat()
+                    binding.gainInput.value = draggedBand.gain.toFloat()
+                } else {
+                    binding.equalizerSurface.cancelDraft()
+                }
+            }
+        }
+        binding.graphOptions.setOnClickListener { anchor ->
+            val popup = PopupMenu(requireContext(), anchor)
+            popup.menu.add(Menu.NONE, GRAPH_MENU_OVERLAYS, Menu.NONE, "Show individual filters")
+                .setCheckable(true)
+                .setChecked(binding.equalizerSurface.showIndividualFilters)
+            popup.menu.addSubMenu("Display channel").apply {
+                add(Menu.NONE, GRAPH_MENU_BOTH, Menu.NONE, "Both")
+                add(Menu.NONE, GRAPH_MENU_LEFT, Menu.NONE, "Left")
+                add(Menu.NONE, GRAPH_MENU_RIGHT, Menu.NONE, "Right")
+                setGroupCheckable(Menu.NONE, true, true)
+                val checked = when (binding.equalizerSurface.channelDisplay) {
+                    ParametricEqSurface.ChannelDisplay.BOTH -> GRAPH_MENU_BOTH
+                    ParametricEqSurface.ChannelDisplay.LEFT -> GRAPH_MENU_LEFT
+                    ParametricEqSurface.ChannelDisplay.RIGHT -> GRAPH_MENU_RIGHT
+                }
+                findItem(checked)?.isChecked = true
+            }
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    GRAPH_MENU_OVERLAYS -> {
+                        binding.equalizerSurface.showIndividualFilters = !item.isChecked
+                        graphPrefs.edit()
+                            .putBoolean(GRAPH_SHOW_OVERLAYS, binding.equalizerSurface.showIndividualFilters)
+                            .apply()
+                        true
+                    }
+                    GRAPH_MENU_BOTH, GRAPH_MENU_LEFT, GRAPH_MENU_RIGHT -> {
+                        binding.equalizerSurface.channelDisplay = when (item.itemId) {
+                            GRAPH_MENU_LEFT -> ParametricEqSurface.ChannelDisplay.LEFT
+                            GRAPH_MENU_RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
+                            else -> ParametricEqSurface.ChannelDisplay.BOTH
+                        }
+                        graphPrefs.edit()
+                            .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
+                            .apply()
+                        bindScope()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+        }
+    }
+
+    private fun selectBandForEditing(band: ParametricEqBand) {
+        editorBandUuid = band.uuid
+        selectedBandByScope[selectedScope] = band.uuid
+        binding.equalizerSurface.selectBand(band.uuid)
+        editorActive = true
+        binding.freqInput.value = band.frequency.toFloat()
+        binding.gainInput.value = band.gain.toFloat()
+        binding.qInput.value = band.q.toFloat()
+        setFilterTypeSelection(band.filterType)
+        setChannelSelection(band.channel)
         updateViewState()
     }
 
@@ -403,6 +495,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     override fun onStop() {
+        binding.equalizerSurface.cancelDraft()
         if (editorActive) editorDiscard()
         super.onStop()
     }
@@ -449,6 +542,13 @@ class ParametricEqualizerFragment : Fragment() {
 
     companion object {
         const val STATE_BANDS = "bands"
+        private const val GRAPH_PREFS = "peq_graph_display"
+        private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
+        private const val GRAPH_CHANNEL = "channel_display"
+        private const val GRAPH_MENU_OVERLAYS = 1
+        private const val GRAPH_MENU_BOTH = 2
+        private const val GRAPH_MENU_LEFT = 3
+        private const val GRAPH_MENU_RIGHT = 4
         fun newInstance() = ParametricEqualizerFragment()
     }
 
