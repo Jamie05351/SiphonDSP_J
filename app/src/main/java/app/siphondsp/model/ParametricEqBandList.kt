@@ -32,17 +32,18 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
 
     /**
      * Internal serialization format for SharedPreferences.
-     * Format: "PEQ: freq gain q type channel; ..."
+     * Format: "PEQ: freq gain q type channel uuid; ..."
      *
-     * The channel field is optional when reading, so legacy four-field presets
-     * remain compatible and default to LEFT_RIGHT.
+     * Channel and UUID are optional when reading, so legacy four/five-field
+     * states remain compatible. New writes preserve stable graph/list identity
+     * across process and service restarts.
      */
     fun serialize(): String {
         val sb = StringBuilder("PEQ: ")
         for (band in this) {
             sb.append(
                 "${dfFreq.format(band.frequency)} ${dfGain.format(band.gain)} " +
-                    "${dfQ.format(band.q)} ${band.filterType.code} ${band.channel.code}; "
+                    "${dfQ.format(band.q)} ${band.filterType.code} ${band.channel.code} ${band.uuid}; "
             )
         }
         return sb.toString()
@@ -63,6 +64,8 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
                 val q = parts.getOrNull(2)?.toDoubleOrNull()
                 val type = parts.getOrNull(3)?.toIntOrNull()
                 val channel = parts.getOrNull(4)?.toIntOrNull() ?: ParametricEqChannel.LEFT_RIGHT.code
+                val uuid = parts.getOrNull(5)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                    ?: UUID.randomUUID()
 
                 if (freq != null && gain != null && q != null && type != null) {
                     add(
@@ -72,6 +75,7 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
                             q,
                             ParametricEqFilterType.fromCode(type),
                             ParametricEqChannel.fromCode(channel),
+                            uuid,
                         )
                     )
                 }

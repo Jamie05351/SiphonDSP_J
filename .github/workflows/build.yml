@@ -92,11 +92,44 @@ jobs:
       - name: Build APKs
         run: ./gradlew "${{ env.GRADLE_TASK }}"
 
+      - name: Run Android unit tests and lint
+        if: github.event_name == 'pull_request'
+        run: ./gradlew :app:test${{ matrix.gradle_variant }}PreviewUnitTest :app:lint${{ matrix.gradle_variant }}Preview
+
+      - name: Verify native libraries are packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find "${{ env.OUTPUT_DIR }}" -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          unzip -l "$APK" | grep -E 'lib/[^/]+/.*\.so$'
+
+      - name: Prepare clearly labelled canary APK
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p canary
+          APK="$(find "${{ env.OUTPUT_DIR }}" -maxdepth 1 -name '*.apk' -print -quit)"
+          cp "$APK" "canary/SiphonDSP-three-bank-peq-canary-${GITHUB_SHA:0:7}.apk"
+
       - name: Upload APKs
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ matrix.name }}JamesDSP-${{ env.OUTPUT_TYPE }}-apks
           path: ${{ env.OUTPUT_DIR }}/*.apk
+          if-no-files-found: error
+
+      - name: Upload canary APK and reports
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: SiphonDSP-three-bank-peq-canary-${{ github.sha }}
+          path: |
+            canary/*.apk
+            app/build/reports/tests/
+            app/build/reports/lint-results-*.html
           if-no-files-found: error
 
   release:

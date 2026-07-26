@@ -44,9 +44,38 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (!configureNativeBmwDsp(restored)) {
             Timber.e("Failed to restore saved native BMW DSP configuration")
         }
-        val peqRestored = BmwPeqState.load(context)
-        val restoreOk = configureNativeBmwPeq(peqRestored, persistOnSuccess = false, source = "cold-start")
-        Timber.d("Native BMW PEQ restore result=$restoreOk")
+        restoreNativeBmwPeq()
+    }
+
+    private fun restoreNativeBmwPeq() {
+        val persisted = BmwPeqState.load(context)
+        if (configureNativeBmwPeq(persisted, persistOnSuccess = false, source = "cold-start")) {
+            BmwPeqState.recordRestoreResult(context, "persisted-state")
+            return
+        }
+        val persistedError = persisted.validate(sampleRate) ?: "native configuration rejected"
+        val lastKnownGood = BmwPeqState.loadLastKnownGood(context)
+        if (lastKnownGood != null &&
+            configureNativeBmwPeq(lastKnownGood, persistOnSuccess = true, source = "cold-start-lkg")
+        ) {
+            Timber.w("Native BMW PEQ recovered from last-known-good state")
+            BmwPeqState.recordRestoreResult(
+                context, "last-known-good", persistedError, fallbackUsed = true
+            )
+            return
+        }
+        val safe = BmwPeqState.empty()
+        if (!BmwPeqState.backupRejectedPersistedState(context)) {
+            Timber.e("Failed to preserve rejected BMW PEQ state before safe fallback")
+        }
+        val safeOk = configureNativeBmwPeq(safe, persistOnSuccess = true, source = "cold-start-safe")
+        Timber.e("Native BMW PEQ used safe fallback result=$safeOk reason=$persistedError")
+        BmwPeqState.recordRestoreResult(
+            context,
+            if (safeOk) "safe-empty" else "recovery-failed",
+            persistedError,
+            fallbackUsed = true,
+        )
     }
 
     private inline fun <T> withHandle(default: T, block: (JamesDspHandle) -> T): T = synchronized(nativeLock) {
