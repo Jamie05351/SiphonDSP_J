@@ -17,13 +17,17 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PersistableBundle
 import android.view.HapticFeedbackConstants
+import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
@@ -163,6 +167,7 @@ class MainActivity : BaseActivity() {
 
         // Setup views
         setContentView(binding.root)
+        applyBottomBarInsets()
         setSupportActionBar(binding.toolbar)
 
         actionBar?.setDisplayHomeAsUpEnabled(true)
@@ -401,6 +406,25 @@ class MainActivity : BaseActivity() {
         }
 
         super.onSharedPreferenceChanged(sharedPreferences, key)
+    }
+
+    private fun applyBottomBarInsets() {
+        val initialLeftPadding = binding.bar.paddingLeft
+        val initialRightPadding = binding.bar.paddingRight
+        ViewCompat.setOnApplyWindowInsetsListener(binding.bar) { bar, windowInsets ->
+            val navigationInsets = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            bar.updatePadding(
+                left = initialLeftPadding + navigationInsets.left,
+                right = initialRightPadding + navigationInsets.right,
+            )
+            val layoutParams = bar.layoutParams as ViewGroup.MarginLayoutParams
+            if (layoutParams.bottomMargin != navigationInsets.bottom) {
+                layoutParams.bottomMargin = navigationInsets.bottom
+                bar.layoutParams = layoutParams
+            }
+            windowInsets
+        }
+        ViewCompat.requestApplyInsets(binding.bar)
     }
 
     override fun onSaveInstanceState(outState: Bundle, outPersistentState: PersistableBundle) {

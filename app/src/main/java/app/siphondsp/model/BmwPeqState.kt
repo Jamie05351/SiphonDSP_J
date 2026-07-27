@@ -1,6 +1,8 @@
 package app.siphondsp.model
 
 import android.content.Context
+import app.siphondsp.R
+import app.siphondsp.utils.Constants
 import timber.log.Timber
 
 data class BmwPeqState(
@@ -58,29 +60,18 @@ data class BmwPeqState(
             )
         }.toDoubleArray()
 
-    /**
-     * Primary and last-known-good snapshots are committed together. Call only
-     * after validation and native apply succeed.
-     */
-    fun persist(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putInt(KEY_VERSION, VERSION)
-            .putBoolean(KEY_ENABLED, enabled)
-            .putFloat(KEY_PREAMP, preampDb)
-            .putString(KEY_FULL, fullRangeBands.serialize())
-            .putString(KEY_LOW, lowBandBands.serialize())
-            .putString(KEY_MID, midBandBands.serialize())
-            .putInt(KEY_LKG_VERSION, VERSION)
-            .putBoolean(KEY_LKG_ENABLED, enabled)
-            .putFloat(KEY_LKG_PREAMP, preampDb)
-            .putString(KEY_LKG_FULL, fullRangeBands.serialize())
-            .putString(KEY_LKG_LOW, lowBandBands.serialize())
-            .putString(KEY_LKG_MID, midBandBands.serialize())
-            .putLong(KEY_LKG_TIMESTAMP, System.currentTimeMillis())
-            .commit()
+    fun persist(context: Context): Boolean {
+        val success = store(context).save(this)
+        if (success) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putLong(KEY_LKG_TIMESTAMP, System.currentTimeMillis())
+                .apply()
+        }
+        return success
+    }
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = BmwPeqStore.VERSION
         const val MAX_BANDS = 16
         const val MIN_Q = 0.1
         const val MAX_Q = 30.0
@@ -118,8 +109,63 @@ data class BmwPeqState(
         fun empty() = BmwPeqState(false, 0f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
 
         fun load(context: Context): BmwPeqState {
+            val result = store(context).load()
+            result.state?.let { restored ->
+                if (result.source == BmwPeqStore.Source.LEGACY_V1_PRIMARY ||
+                    result.source == BmwPeqStore.Source.LEGACY_V1_RECOVERY
+                ) {
+                    val upgraded = restored.persist(context)
+                    Timber.i("BMW PEQ legacy file migration version=$VERSION success=$upgraded")
+                }
+                return restored
+            }
+
+            loadPreferenceFallback(context)?.let { fallback ->
+                val migrated = fallback.persist(context)
+                Timber.i(
+                    "BMW PEQ restore source=preference-migration version=$VERSION " +
+                        "enabled=${fallback.enabled} full=${fallback.fullRangeBands.size} " +
+                        "low=${fallback.lowBandBands.size} mid=${fallback.midBandBands.size} success=$migrated"
+                )
+                if (migrated) clearObsoleteStatePreferences(context)
+                return fallback
+            }
+
+            loadLegacyPeqFallback(context)?.let { fallback ->
+                val migrated = fallback.persist(context)
+                Timber.i(
+                    "BMW PEQ restore source=legacy-pref-migration version=$VERSION " +
+                        "enabled=${fallback.enabled} full=${fallback.fullRangeBands.size} " +
+                        "low=0 mid=0 success=$migrated"
+                )
+                return fallback
+            }
+
+            Timber.w("BMW PEQ restore selected empty default because no persistent state exists")
+            return empty()
+        }
+
+        fun loadLastKnownGood(context: Context): BmwPeqState? {
+            store(context).loadRecovery()?.let { return it }
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (prefs.getInt(KEY_VERSION, 0) != VERSION) return empty()
+            if (prefs.getInt(KEY_LKG_VERSION, 0) != 1) return null
+            fun bands(key: String) = ParametricEqBandList().apply {
+                deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
+            }
+            return BmwPeqState(
+                prefs.getBoolean(KEY_LKG_ENABLED, false),
+                prefs.getFloat(KEY_LKG_PREAMP, 0f),
+                bands(KEY_LKG_FULL),
+                bands(KEY_LKG_LOW),
+                bands(KEY_LKG_MID),
+            )
+        }
+
+        private fun store(context: Context) = BmwPeqStore(context.noBackupFilesDir)
+
+        private fun loadPreferenceFallback(context: Context): BmwPeqState? {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            if (prefs.getInt(KEY_VERSION, 0) != 1) return null
             fun bands(key: String) = ParametricEqBandList().apply {
                 deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
             }
@@ -132,19 +178,37 @@ data class BmwPeqState(
             )
         }
 
-        fun loadLastKnownGood(context: Context): BmwPeqState? {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (prefs.getInt(KEY_LKG_VERSION, 0) != VERSION) return null
-            fun bands(key: String) = ParametricEqBandList().apply {
-                deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
+        private fun loadLegacyPeqFallback(context: Context): BmwPeqState? {
+            val prefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+            val bandsKey = context.getString(R.string.key_peq_bands)
+            if (!prefs.contains(bandsKey)) return null
+            val bands = ParametricEqBandList().apply {
+                deserialize(prefs.getString(bandsKey, "PEQ: ") ?: "PEQ: ")
             }
             return BmwPeqState(
-                prefs.getBoolean(KEY_LKG_ENABLED, false),
-                prefs.getFloat(KEY_LKG_PREAMP, 0f),
-                bands(KEY_LKG_FULL),
-                bands(KEY_LKG_LOW),
-                bands(KEY_LKG_MID),
+                prefs.getBoolean(context.getString(R.string.key_peq_enable), false),
+                prefs.getFloat(context.getString(R.string.key_peq_preamp), 0f),
+                bands,
+                ParametricEqBandList(),
+                ParametricEqBandList(),
             )
+        }
+
+        private fun clearObsoleteStatePreferences(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .remove(KEY_VERSION)
+                .remove(KEY_ENABLED)
+                .remove(KEY_PREAMP)
+                .remove(KEY_FULL)
+                .remove(KEY_LOW)
+                .remove(KEY_MID)
+                .remove(KEY_LKG_VERSION)
+                .remove(KEY_LKG_ENABLED)
+                .remove(KEY_LKG_PREAMP)
+                .remove(KEY_LKG_FULL)
+                .remove(KEY_LKG_LOW)
+                .remove(KEY_LKG_MID)
+                .apply()
         }
 
         fun recordRestoreResult(
@@ -195,14 +259,15 @@ data class BmwPeqState(
         }
 
         fun backupRejectedPersistedState(context: Context): Boolean {
+            val rejected = load(context)
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return prefs.edit()
-                .putInt(KEY_REJECTED_VERSION, prefs.getInt(KEY_VERSION, 0))
-                .putBoolean(KEY_REJECTED_ENABLED, prefs.getBoolean(KEY_ENABLED, false))
-                .putFloat(KEY_REJECTED_PREAMP, prefs.getFloat(KEY_PREAMP, 0f))
-                .putString(KEY_REJECTED_FULL, prefs.getString(KEY_FULL, "PEQ: "))
-                .putString(KEY_REJECTED_LOW, prefs.getString(KEY_LOW, "PEQ: "))
-                .putString(KEY_REJECTED_MID, prefs.getString(KEY_MID, "PEQ: "))
+                .putInt(KEY_REJECTED_VERSION, VERSION)
+                .putBoolean(KEY_REJECTED_ENABLED, rejected.enabled)
+                .putFloat(KEY_REJECTED_PREAMP, rejected.preampDb)
+                .putString(KEY_REJECTED_FULL, rejected.fullRangeBands.serialize())
+                .putString(KEY_REJECTED_LOW, rejected.lowBandBands.serialize())
+                .putString(KEY_REJECTED_MID, rejected.midBandBands.serialize())
                 .putLong(KEY_REJECTED_TIMESTAMP, System.currentTimeMillis())
                 .commit()
         }

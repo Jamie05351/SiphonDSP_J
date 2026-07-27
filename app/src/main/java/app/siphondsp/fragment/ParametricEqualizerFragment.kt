@@ -465,32 +465,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
-        val prefs = requireContext().getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
-        val restored = BmwPeqState.load(requireContext())
-        val legacyFull = ParametricEqBandList().apply {
-            deserialize(prefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!)
-        }
-        peqState = if (restored == BmwPeqState.empty() && legacyFull.isNotEmpty()) {
-            val legacySerialized =
-                prefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!
-            if (!BmwPeqState.backupLegacyOnce(
-                    requireContext(),
-                    prefs.getBoolean(getString(R.string.key_peq_enable), false),
-                    prefs.getFloat(getString(R.string.key_peq_preamp), 0f),
-                    legacySerialized,
-                )
-            ) {
-                Timber.e("Failed to create one-time legacy PEQ migration backup")
-                requireContext().toast("PEQ migration backup failed; legacy data was kept")
-            }
-            BmwPeqState(
-                prefs.getBoolean(getString(R.string.key_peq_enable), false),
-                prefs.getFloat(getString(R.string.key_peq_preamp), 0f),
-                legacyFull,
-                ParametricEqBandList(),
-                ParametricEqBandList(),
-            )
-        } else restored.copy(enabled = prefs.getBoolean(getString(R.string.key_peq_enable), restored.enabled))
+        peqState = BmwPeqState.load(requireContext())
         history.reset(peqState)
         updateHistoryControls()
         suppressPreampCallback = true

@@ -141,8 +141,7 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
 
         if (values[1] < .5f) {
             if (values[12] >= .5f) {
-                low *= highPass(frequency, values[13].toDouble(), BW4_Q1)
-                low *= highPass(frequency, values[13].toDouble(), BW4_Q2)
+                low *= highPass(frequency, values[13].toDouble(), BUTTERWORTH_Q)
             }
 
             if (values[16] >= .5f) {
@@ -339,7 +338,5 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     companion object {
         private const val SAMPLE_RATE = 48_000.0
         private const val BUTTERWORTH_Q = .7071067812
-        private const val BW4_Q1 = .5411961
-        private const val BW4_Q2 = 1.3065630
     }
 }

@@ -13,25 +13,28 @@ import kotlin.math.min
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
-    @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.empty()
+    @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.load(context)
+    @Volatile private var peqRestorePending = true
 
     @Volatile
     private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
 
     override var sampleRate: Float
         set(value) {
-            var pendingPersist: BmwPeqState? = null
             synchronized(nativeLock) {
                 super.sampleRate = value
                 val current = handle
                 if (current != 0L) {
                     JamesDspWrapper.setSamplingRate(current, value, false)
                     JamesDspWrapper.setNativeBmwDspSampleRate(current, value)
-                    pendingPersist = refreshEqualizersLocked().pendingPersist
-                    configureNativeBmwPeqLocked(bmwPeqState, "sample-rate")
                 }
             }
-            persistPendingEqualizerState(pendingPersist)
+            if (value >= MIN_VALID_SAMPLE_RATE && peqRestorePending) {
+                restoreNativeBmwPeq()
+            }
+            synchronized(nativeLock) {
+                if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
+            }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
         get() = super.sampleRate
@@ -50,8 +53,17 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     }
 
     private fun restoreNativeBmwPeq() {
+        if (sampleRate < MIN_VALID_SAMPLE_RATE) {
+            Timber.i(
+                "BMW PEQ cold-start restore deferred sampleRate=$sampleRate " +
+                    "enabled=${bmwPeqState.enabled} full=${bmwPeqState.fullRangeBands.size} " +
+                    "low=${bmwPeqState.lowBandBands.size} mid=${bmwPeqState.midBandBands.size}"
+            )
+            return
+        }
         val persisted = BmwPeqState.load(context)
         if (configureNativeBmwPeq(persisted, persistOnSuccess = false, source = "cold-start")) {
+            peqRestorePending = false
             BmwPeqState.recordRestoreResult(context, "persisted-state")
             return
         }
@@ -60,6 +72,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (lastKnownGood != null &&
             configureNativeBmwPeq(lastKnownGood, persistOnSuccess = true, source = "cold-start-lkg")
         ) {
+            peqRestorePending = false
             Timber.w("Native BMW PEQ recovered from last-known-good state")
             BmwPeqState.recordRestoreResult(
                 context, "last-known-good", persistedError, fallbackUsed = true
@@ -71,6 +84,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             Timber.e("Failed to preserve rejected BMW PEQ state before safe fallback")
         }
         val safeOk = configureNativeBmwPeq(safe, persistOnSuccess = true, source = "cold-start-safe")
+        if (safeOk) peqRestorePending = false
         Timber.e("Native BMW PEQ used safe fallback result=$safeOk reason=$persistedError")
         BmwPeqState.recordRestoreResult(
             context,
@@ -241,20 +255,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
      * afterwards by the real stateful biquad cascade above.
      */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
-        val result = synchronized(nativeLock) { refreshEqualizersLocked() }
-        persistPendingEqualizerState(result.pendingPersist)
-        return result.ok
+        return synchronized(nativeLock) { refreshEqualizersLocked() }
     }
 
-    private class EqualizerRefreshResult(val ok: Boolean, val pendingPersist: BmwPeqState?)
-
-    // Never persist (disk I/O) while holding nativeLock: the real-time audio thread takes that
-    // same lock on every buffer in processInt16/processInt32/processFloat and would stall behind
-    // the write. Callers must run the returned pendingPersist through persistPendingEqualizerState
-    // after leaving the synchronized(nativeLock) block.
-    private fun refreshEqualizersLocked(): EqualizerRefreshResult {
+    private fun refreshEqualizersLocked(): Boolean {
         val current = handle
-        if (current == 0L) return EqualizerRefreshResult(false, null)
+        if (current == 0L) return false
 
         val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
 
@@ -265,20 +271,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         ) ?: Constants.DEFAULT_GEQ_INTERNAL
 
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
-        val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
-        val requestedEnabled = peqPrefs.getBoolean(context.getString(R.string.key_peq_enable), bmwPeqState.enabled)
-        if (requestedEnabled == bmwPeqState.enabled)
-            return EqualizerRefreshResult(geqOk, null)
-
-        val snapshot = bmwPeqState.copy(enabled = requestedEnabled)
-        val peqOk = configureNativeBmwPeqLocked(snapshot, "preference-toggle")
-        return EqualizerRefreshResult(geqOk && peqOk, if (peqOk) snapshot else null)
-    }
-
-    private fun persistPendingEqualizerState(pending: BmwPeqState?) {
-        if (pending != null && !pending.persist(context)) {
-            Timber.e("preference-toggle native BMW PEQ applied but persistence commit failed")
-        }
+        val peqOk = if (peqRestorePending) true
+        else configureNativeBmwPeqLocked(bmwPeqState, "preference-sync")
+        return geqOk && peqOk
     }
 
     private fun configureNativeBmwPeqLocked(state: BmwPeqState, source: String): Boolean {
@@ -363,6 +358,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
     companion object {
+        private const val MIN_VALID_SAMPLE_RATE = 8000f
         private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
         private const val NATIVE_BMW_KEY = "values"
         private val NATIVE_BMW_DEFAULTS = floatArrayOf(
