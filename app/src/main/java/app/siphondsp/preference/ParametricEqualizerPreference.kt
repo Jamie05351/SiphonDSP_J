@@ -76,13 +76,15 @@ class ParametricEqualizerPreference : Preference {
     }
 
     private fun setEqualizerViewValues(state: BmwPeqState) {
-        val combinedBands = ParametricEqBandList().apply {
-            addAll(state.fullRangeBands)
+        // Low and Mid are the two crossover-branch PEQ banks represented by this
+        // preview. Full Range performs a separate job and must not be summed into
+        // their displayed response.
+        val branchBands = ParametricEqBandList().apply {
             addAll(state.lowBandBands)
             addAll(state.midBandBands)
         }
         binding?.layoutEqualizer?.setBands(
-            combinedBands,
+            branchBands,
             state.preampDb.toDouble(),
         )
         binding?.bandCount?.text = buildString {
