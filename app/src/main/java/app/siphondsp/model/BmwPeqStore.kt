@@ -51,7 +51,11 @@ internal class BmwPeqStore(private val directory: File) {
         val primary = read(primaryFile)
         if (primary.state != null) {
             logRestore(primary.source, primaryFile, primary.state)
-            return primary
+            return LoadResult(
+                primary.state,
+                primary.source,
+                primaryError = primary.error,
+            )
         }
 
         val recovery = read(recoveryFile)
