@@ -6,7 +6,9 @@
 namespace {
 constexpr float PI=3.14159265358979323846f,BW=0.7071067812f,BW4Q1=0.5411961f,BW4Q2=1.3065630f;
 inline float ftz(float x){return(!std::isfinite(x)||std::fabs(x)<1e-20f)?0.f:x;}
-template<class T>T clampInt(float x){const float lo=static_cast<float>(std::numeric_limits<T>::min()),hi=static_cast<float>(std::numeric_limits<T>::max());return static_cast<T>(std::lrintf(std::max(lo,std::min(hi,x))));}
+// Bounds are computed in double (exact for int32_t's range, unlike float's 24-bit mantissa) so a
+// full-scale input clamps to the true min/max instead of rounding past it and wrapping sign.
+template<class T>T clampInt(float x){const double lo=static_cast<double>(std::numeric_limits<T>::min()),hi=static_cast<double>(std::numeric_limits<T>::max());return static_cast<T>(std::llrint(std::max(lo,std::min(hi,static_cast<double>(x)))));}
 inline float clampf(float x,float lo,float hi){return std::max(lo,std::min(hi,x));}
 inline bool changed(float a,float b){return std::fabs(a-b)>1e-6f;}
 }

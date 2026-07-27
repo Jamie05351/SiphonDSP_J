@@ -586,14 +586,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             isProcessorDisposing = true
         }
 
+        // Only stop() here to unblock the worker's blocking read()/write() calls; release() is
+        // deliberately left to the worker's own finally block so the objects are never released
+        // while that thread may still be using them (concurrent release+read/write is UB).
         safeStop(activeRecorder)
         safeStop(activeTrack)
-        safeRelease(activeRecorder)
-        safeRelease(activeTrack)
         worker.interrupt()
 
         if(worker !== Thread.currentThread()) {
-            while(worker.isAlive) {
+            val deadline = System.currentTimeMillis() + STOP_JOIN_TIMEOUT_MS
+            while(worker.isAlive && System.currentTimeMillis() < deadline) {
                 try {
                     worker.join(250)
                 }
@@ -602,6 +604,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     break
                 }
             }
+            if(worker.isAlive)
+                Timber.e("stopRecording: recorder worker did not terminate within ${STOP_JOIN_TIMEOUT_MS}ms")
         }
 
         synchronized(recorderLifecycleLock) {
@@ -765,6 +769,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     companion object {
         @Volatile private var activeInstance: RootlessAudioProcessorService? = null
         private const val CHANNEL_COUNT = 2
+        private const val STOP_JOIN_TIMEOUT_MS = 2000L
         const val SESSION_LOSS_MAX_RETRIES = 1
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"

@@ -20,16 +20,18 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     override var sampleRate: Float
         set(value) {
+            var pendingPersist: BmwPeqState? = null
             synchronized(nativeLock) {
                 super.sampleRate = value
                 val current = handle
                 if (current != 0L) {
                     JamesDspWrapper.setSamplingRate(current, value, false)
                     JamesDspWrapper.setNativeBmwDspSampleRate(current, value)
-                    refreshEqualizersLocked()
+                    pendingPersist = refreshEqualizersLocked().pendingPersist
                     configureNativeBmwPeqLocked(bmwPeqState, "sample-rate")
                 }
             }
+            persistPendingEqualizerState(pendingPersist)
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
         get() = super.sampleRate
@@ -238,12 +240,21 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
      * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
      * afterwards by the real stateful biquad cascade above.
      */
-    override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean =
-        synchronized(nativeLock) { refreshEqualizersLocked() }
+    override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
+        val result = synchronized(nativeLock) { refreshEqualizersLocked() }
+        persistPendingEqualizerState(result.pendingPersist)
+        return result.ok
+    }
 
-    private fun refreshEqualizersLocked(): Boolean {
+    private class EqualizerRefreshResult(val ok: Boolean, val pendingPersist: BmwPeqState?)
+
+    // Never persist (disk I/O) while holding nativeLock: the real-time audio thread takes that
+    // same lock on every buffer in processInt16/processInt32/processFloat and would stall behind
+    // the write. Callers must run the returned pendingPersist through persistPendingEqualizerState
+    // after leaving the synchronized(nativeLock) block.
+    private fun refreshEqualizersLocked(): EqualizerRefreshResult {
         val current = handle
-        if (current == 0L) return false
+        if (current == 0L) return EqualizerRefreshResult(false, null)
 
         val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
 
@@ -256,11 +267,18 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
         val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
         val requestedEnabled = peqPrefs.getBoolean(context.getString(R.string.key_peq_enable), bmwPeqState.enabled)
-        val peqOk = if (requestedEnabled != bmwPeqState.enabled) {
-            val snapshot = bmwPeqState.copy(enabled = requestedEnabled)
-            configureNativeBmwPeqLocked(snapshot, "preference-toggle") && snapshot.persist(context)
-        } else true
-        return geqOk && peqOk
+        if (requestedEnabled == bmwPeqState.enabled)
+            return EqualizerRefreshResult(geqOk, null)
+
+        val snapshot = bmwPeqState.copy(enabled = requestedEnabled)
+        val peqOk = configureNativeBmwPeqLocked(snapshot, "preference-toggle")
+        return EqualizerRefreshResult(geqOk && peqOk, if (peqOk) snapshot else null)
+    }
+
+    private fun persistPendingEqualizerState(pending: BmwPeqState?) {
+        if (pending != null && !pending.persist(context)) {
+            Timber.e("preference-toggle native BMW PEQ applied but persistence commit failed")
+        }
     }
 
     private fun configureNativeBmwPeqLocked(state: BmwPeqState, source: String): Boolean {
@@ -288,15 +306,24 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         state: BmwPeqState,
         persistOnSuccess: Boolean = true,
         source: String = "editor",
-    ): Boolean = synchronized(nativeLock) {
-        val previous = bmwPeqState
-        val result = configureNativeBmwPeqLocked(state, source)
+    ): Boolean {
+        // state.persist() does a synchronous SharedPreferences.commit() (disk I/O). It must not
+        // run while holding nativeLock, since the real-time audio thread takes that same lock on
+        // every buffer in processInt16/processInt32/processFloat and would stall behind the write.
+        val previous: BmwPeqState
+        val result: Boolean
+        synchronized(nativeLock) {
+            previous = bmwPeqState
+            result = configureNativeBmwPeqLocked(state, source)
+        }
         if (result && persistOnSuccess && !state.persist(context)) {
             Timber.e("$source native BMW PEQ applied but persistence commit failed")
-            configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
-            return@synchronized false
+            synchronized(nativeLock) {
+                configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
+            }
+            return false
         }
-        result
+        return result
     }
 
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean =
