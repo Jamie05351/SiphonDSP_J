@@ -43,6 +43,12 @@
                     android:layout_height="300dp"
                     android:contentDescription="Interactive compressor transfer curve and live gain reduction" />
 
+                <app.siphondsp.view.CompressorGrTraceView
+                    android:id="@+id/compressor_gr_trace"
+                    android:layout_width="match_parent"
+                    android:layout_height="120dp"
+                    android:contentDescription="Scrolling input level and gain reduction history" />
+
                 <TextView
                     android:id="@+id/compressor_meter_text"
                     android:layout_width="match_parent"

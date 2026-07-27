@@ -28,6 +28,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
+import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.interop.JamesDspLocalEngine
 import app.siphondsp.model.BmwPeqState
@@ -460,6 +461,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             val floatOutBuffer = FloatArray(bufferSamples)
             val shortBuffer = ShortArray(bufferSamples)
             val shortOutBuffer = ShortArray(bufferSamples)
+            val spectrumScratch = FloatArray(bufferSamples)
 
             while (!isProcessorDisposing) {
                 if(recreateRecorderRequested) {
@@ -518,10 +520,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 if(encoding == AudioEncoding.PcmShort) {
                     engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
+                    if(SpectrumEngine.isActive) {
+                        for(i in 0 until processCount) spectrumScratch[i] = shortOutBuffer[i] / 32768f
+                        SpectrumEngine.publish(spectrumScratch, processCount, sampleRate)
+                    }
                     writeFully(track, shortOutBuffer, processCount)
                 }
                 else {
                     engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
+                    if(SpectrumEngine.isActive) SpectrumEngine.publish(floatOutBuffer, processCount, sampleRate)
                     writeFully(track, floatOutBuffer, processCount)
                 }
             }

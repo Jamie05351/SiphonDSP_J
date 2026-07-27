@@ -6,12 +6,15 @@ import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.core.content.withStyledAttributes
+import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
@@ -78,6 +81,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         textAlign = Paint.Align.CENTER
         textSize = 10f * density
     }
+    private val spectrumFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorSecondary)
+        style = Paint.Style.FILL
+        alpha = 30
+    }
+    private val spectrumStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorSecondary)
+        style = Paint.Style.STROKE
+        strokeWidth = density
+        alpha = 90
+    }
+    private val spectrumStrokePath = Path()
+    private val spectrumFillPath = Path()
 
     private val leftPath = Path()
     private val rightPath = Path()
@@ -110,10 +126,47 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             invalidate()
         }
 
+    /** Opt-in live spectrum trace behind the curve; off by default (e.g. small preview thumbnails). */
+    var showSpectrum = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (isAttachedToWindow) {
+                if (value) startSpectrum() else stopSpectrum()
+            }
+        }
+    private val spectrumHandler = Handler(Looper.getMainLooper())
+    private var spectrumActive = false
+    private val spectrumTick = object : Runnable {
+        override fun run() {
+            invalidate()
+            spectrumHandler.postDelayed(this, 33L)
+        }
+    }
+
+    private fun startSpectrum() {
+        if (spectrumActive) return
+        spectrumActive = true
+        SpectrumEngine.acquire()
+        spectrumHandler.post(spectrumTick)
+    }
+
+    private fun stopSpectrum() {
+        if (!spectrumActive) return
+        spectrumActive = false
+        spectrumHandler.removeCallbacks(spectrumTick)
+        SpectrumEngine.release()
+    }
+
     init {
         isFocusable = true
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         contentDescription = "Interactive parametric equalizer graph"
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (showSpectrum) startSpectrum()
     }
 
     fun setBands(
@@ -153,6 +206,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onDetachedFromWindow() {
         cancelDraft()
+        stopSpectrum()
         super.onDetachedFromWindow()
     }
 
@@ -229,6 +283,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         drawGrid(canvas)
+        if (showSpectrum && spectrumActive) drawSpectrum(canvas)
         buildPath(leftPath, leftGains)
         buildPath(rightPath, rightGains)
 
@@ -260,6 +315,30 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             canvas.drawLine(0f, y, width.toFloat(), y, if (gain == 0) zeroPaint else gridPaint)
             gain += 3
         }
+    }
+
+    private fun drawSpectrum(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        spectrumStrokePath.rewind()
+        spectrumFillPath.rewind()
+        spectrumFillPath.moveTo(0f, h)
+        val dbSpan = SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB
+        for (i in 0..SPECTRUM_STEPS) {
+            val fraction = i / SPECTRUM_STEPS.toFloat()
+            val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
+            val db = SpectrumEngine.magnitudeDbAt(freq)
+            val x = fraction * w
+            val y = h * (SpectrumEngine.CEILING_DB - db) / dbSpan
+            if (i == 0) spectrumStrokePath.moveTo(x, y) else spectrumStrokePath.lineTo(x, y)
+            spectrumFillPath.lineTo(x, y)
+        }
+        spectrumFillPath.lineTo(w, h)
+        spectrumFillPath.close()
+        canvas.drawPath(spectrumFillPath, spectrumFillPaint)
+        canvas.drawPath(spectrumStrokePath, spectrumStrokePaint)
     }
 
     private fun drawPoints(canvas: Canvas) {
@@ -372,6 +451,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     companion object {
         private const val POINT_COUNT = 256
+        private const val SPECTRUM_STEPS = 160
         private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
             1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0,

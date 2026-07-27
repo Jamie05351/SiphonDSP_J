@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.CompressorGrTraceView
 import app.siphondsp.view.NativeBmwCompressorView
 import com.google.android.material.slider.Slider
 import java.util.Locale
@@ -19,6 +20,7 @@ import java.util.Locale
 class NativeBmwCompressorFragment : Fragment() {
     private lateinit var state: NativeBmwCompressorState
     private lateinit var visualizer: NativeBmwCompressorView
+    private lateinit var grTrace: CompressorGrTraceView
     private lateinit var meterText: TextView
     private lateinit var enabledSwitch: SwitchCompat
     private lateinit var threshold: Slider
@@ -40,6 +42,7 @@ class NativeBmwCompressorFragment : Fragment() {
             val meter = RootlessAudioProcessorService.nativeBmwCompressorMeter()
             if (meter != null && meter.size >= 3) {
                 visualizer.setMeter(meter[0], meter[1], meter[2])
+                grTrace.pushFrame(meter[0], meter[2])
                 meterText.text = String.format(
                     Locale.ENGLISH,
                     "Input %.1f dBFS   Output %.1f dBFS   Gain reduction %.1f dB",
@@ -48,7 +51,7 @@ class NativeBmwCompressorFragment : Fragment() {
             } else {
                 meterText.text = "Native engine is not running"
             }
-            handler.postDelayed(this, 50L)
+            handler.postDelayed(this, 33L)
         }
     }
 
@@ -57,6 +60,7 @@ class NativeBmwCompressorFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         visualizer = view.findViewById(R.id.compressor_visualizer)
+        grTrace = view.findViewById(R.id.compressor_gr_trace)
         meterText = view.findViewById(R.id.compressor_meter_text)
         enabledSwitch = view.findViewById(R.id.compressor_enable)
         threshold = view.findViewById(R.id.compressor_threshold)
@@ -90,6 +94,7 @@ class NativeBmwCompressorFragment : Fragment() {
     override fun onStart() {
         super.onStart()
         bindState(NativeBmwCompressorState.load(requireContext()))
+        grTrace.reset()
         handler.post(meterTick)
     }
 
@@ -147,6 +152,7 @@ class NativeBmwCompressorFragment : Fragment() {
         visualizer.ratio = state.ratio
         visualizer.kneeDb = state.kneeDb
         visualizer.makeupDb = state.makeupDb
+        grTrace.thresholdDb = state.thresholdDb
         thresholdLabel.text = String.format(Locale.ENGLISH, "Threshold   %.1f dB", state.thresholdDb)
         ratioLabel.text = String.format(Locale.ENGLISH, "Ratio   %.1f:1", state.ratio)
         kneeLabel.text = String.format(Locale.ENGLISH, "Soft knee   %.0f dB", state.kneeDb)
