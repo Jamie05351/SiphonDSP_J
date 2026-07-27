@@ -19,6 +19,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.siphondsp.R
+import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.adapter.ParametricEqBandAdapter
 import app.siphondsp.databinding.FragmentParametricEqBinding
@@ -27,6 +28,8 @@ import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.BmwPeqPreset
 import app.siphondsp.model.PeqStateHistory
+import app.siphondsp.model.PeqDiagnosticReport
+import app.siphondsp.model.PrivatePeqBackup
 import app.siphondsp.model.deepCopy
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
@@ -36,10 +39,12 @@ import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.ParametricEqSurface
 import timber.log.Timber
 import java.util.UUID
+import java.io.InputStream
 
 class ParametricEqualizerFragment : Fragment() {
     private lateinit var binding: FragmentParametricEqBinding
@@ -49,6 +54,7 @@ class ParametricEqualizerFragment : Fragment() {
     private var suppressPreampCallback = false
     private val selectedBandByScope = mutableMapOf<PeqScope, UUID?>()
     private val history = PeqStateHistory(HISTORY_LIMIT)
+    private var pendingDiagnosticReport: String? = null
 
     private var editorBandUuid: UUID? = null
     private var editorActive = false
@@ -62,6 +68,8 @@ class ParametricEqualizerFragment : Fragment() {
             binding.filterTools.isEnabled = !value
             binding.presetImport.isEnabled = !value
             binding.presetExport.isEnabled = !value
+            binding.backupImport.isEnabled = !value
+            binding.backupExport.isEnabled = !value
             if (value) {
                 binding.undo.isEnabled = false
                 binding.redo.isEnabled = false
@@ -74,7 +82,7 @@ class ParametricEqualizerFragment : Fragment() {
         uri ?: return@registerForActivityResult
         try {
             val text = requireContext().contentResolver.openInputStream(uri)
-                ?.bufferedReader()?.use { it.readText() } ?: return@registerForActivityResult
+                ?.use(::readImportText) ?: return@registerForActivityResult
             val imported = ParametricEqBandList()
             val result = imported.fromApoString(text)
             val detail = if (result.skippedFilters > 0) {
@@ -142,6 +150,21 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
+    private fun readImportText(input: InputStream): String {
+        val reader = input.bufferedReader()
+        val output = StringBuilder()
+        val buffer = CharArray(8192)
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) break
+            if (output.length + count > MAX_IMPORT_CHARS) {
+                throw IllegalArgumentException("The import file is larger than the 1 MB safety limit")
+            }
+            output.append(buffer, 0, count)
+        }
+        return output.toString()
+    }
+
     private val presetExportLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             uri ?: return@registerForActivityResult
@@ -166,7 +189,7 @@ class ParametricEqualizerFragment : Fragment() {
             uri ?: return@registerForActivityResult
             try {
                 val text = requireContext().contentResolver.openInputStream(uri)
-                    ?.bufferedReader()?.use { it.readText() }
+                    ?.use(::readImportText)
                     ?: throw IllegalArgumentException("The preset file is empty")
                 val preset = BmwPeqPreset.decode(text)
                 val candidate = preset.toState()
@@ -182,6 +205,108 @@ class ParametricEqualizerFragment : Fragment() {
             } catch (error: Exception) {
                 Timber.e(error, "Failed to import complete PEQ preset")
                 requireContext().toast(error.message ?: "Preset import failed; previous PEQ was kept")
+            }
+        }
+
+    private val diagnosticExportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+            uri ?: return@registerForActivityResult
+            val report = pendingDiagnosticReport ?: return@registerForActivityResult
+            try {
+                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(report)
+                }
+                requireContext().toast("Sanitised PEQ diagnostic report exported")
+            } catch (error: Exception) {
+                Timber.e(error, "Failed to export PEQ diagnostic report")
+                requireContext().toast("Diagnostic report export failed")
+            } finally {
+                pendingDiagnosticReport = null
+            }
+        }
+
+    private val privateBackupExportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri ?: return@registerForActivityResult
+            try {
+                val graphPrefs =
+                    requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+                val backup = PrivatePeqBackup(
+                    createdAtEpochMs = System.currentTimeMillis(),
+                    state = BmwPeqPreset.fromState(peqState, name = "Jamie private PEQ backup"),
+                    graphDisplay = PrivatePeqBackup.GraphDisplay(
+                        graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true),
+                        graphPrefs.getString(
+                            GRAPH_CHANNEL,
+                            ParametricEqSurface.ChannelDisplay.BOTH.name,
+                        ) ?: ParametricEqSurface.ChannelDisplay.BOTH.name,
+                    ),
+                )
+                requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(PrivatePeqBackup.encode(backup))
+                }
+                Timber.i("Private PEQ backup exported format=${PrivatePeqBackup.CURRENT_VERSION}")
+                requireContext().toast("Complete private PEQ backup exported")
+            } catch (error: Exception) {
+                Timber.e(error, "Private PEQ backup export failed")
+                requireContext().toast("Backup export failed")
+            }
+        }
+
+    private val privateBackupImportLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            try {
+                val text = requireContext().contentResolver.openInputStream(uri)
+                    ?.use(::readImportText)
+                    ?: throw IllegalArgumentException("The backup file is empty")
+                val backup = PrivatePeqBackup.decode(text)
+                val candidate = backup.validatedState()
+                val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
+                candidate.validate(sampleRate)?.let { throw IllegalArgumentException(it) }
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Restore complete private PEQ backup?")
+                    .setMessage(
+                        "Full Range ${candidate.fullRangeBands.size}, " +
+                            "Low ${candidate.lowBandBands.size}, Mid ${candidate.midBandBands.size}, " +
+                            "preamp ${candidate.preampDb} dB. This replaces all PEQ banks only after " +
+                            "the complete state validates and applies successfully."
+                    )
+                    .setPositiveButton("Restore") { _, _ ->
+                        if (applyCandidate(candidate, "private-backup-restore")) {
+                            val graphPrefs = requireContext()
+                                .getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+                            graphPrefs.edit()
+                                .putBoolean(
+                                    GRAPH_SHOW_OVERLAYS,
+                                    backup.graphDisplay.showIndividualFilters,
+                                )
+                                .putString(GRAPH_CHANNEL, backup.graphDisplay.channelDisplay)
+                                .apply()
+                            binding.equalizerSurface.showIndividualFilters =
+                                backup.graphDisplay.showIndividualFilters
+                            binding.equalizerSurface.channelDisplay =
+                                ParametricEqSurface.ChannelDisplay.valueOf(
+                                    backup.graphDisplay.channelDisplay
+                                )
+                            BmwPeqState.recordBackupRestoreResult(
+                                requireContext(), "success-v${backup.version}"
+                            )
+                            Timber.i("Private PEQ backup restore succeeded version=${backup.version}")
+                        } else {
+                            BmwPeqState.recordBackupRestoreResult(
+                                requireContext(), "native-apply-rejected"
+                            )
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } catch (error: Exception) {
+                BmwPeqState.recordBackupRestoreResult(
+                    requireContext(), "rejected: ${error.message ?: "invalid backup"}"
+                )
+                Timber.e(error, "Private PEQ backup import rejected")
+                requireContext().toast(error.message ?: "Invalid backup; previous PEQ was kept")
             }
         }
 
@@ -345,6 +470,18 @@ class ParametricEqualizerFragment : Fragment() {
             deserialize(prefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!)
         }
         peqState = if (restored == BmwPeqState.empty() && legacyFull.isNotEmpty()) {
+            val legacySerialized =
+                prefs.getString(getString(R.string.key_peq_bands), Constants.DEFAULT_PEQ)!!
+            if (!BmwPeqState.backupLegacyOnce(
+                    requireContext(),
+                    prefs.getBoolean(getString(R.string.key_peq_enable), false),
+                    prefs.getFloat(getString(R.string.key_peq_preamp), 0f),
+                    legacySerialized,
+                )
+            ) {
+                Timber.e("Failed to create one-time legacy PEQ migration backup")
+                requireContext().toast("PEQ migration backup failed; legacy data was kept")
+            }
             BmwPeqState(
                 prefs.getBoolean(getString(R.string.key_peq_enable), false),
                 prefs.getFloat(getString(R.string.key_peq_preamp), 0f),
@@ -525,6 +662,43 @@ class ParametricEqualizerFragment : Fragment() {
             presetImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
         }
         binding.filterTools.setOnClickListener { anchor -> showFilterTools(anchor) }
+        binding.diagnostics.setOnClickListener { showDiagnosticReport() }
+        binding.backupExport.setOnClickListener {
+            privateBackupExportLauncher.launch("SiphonDSP-private-peq-backup.json")
+        }
+        binding.backupImport.setOnClickListener {
+            privateBackupImportLauncher.launch(arrayOf("application/json", "text/plain"))
+        }
+    }
+
+    private fun showDiagnosticReport() {
+        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
+        val report = PeqDiagnosticReport.create(
+            requireContext(),
+            peqState,
+            sampleRate,
+            serviceActive = sampleRate != null,
+            nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
+        )
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("PEQ diagnostic report")
+            .setMessage(report)
+            .setPositiveButton("Export") { _, _ ->
+                pendingDiagnosticReport = report
+                diagnosticExportLauncher.launch("siphondsp-peq-diagnostic.txt")
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (BuildConfig.DEBUG) {
+            dialog.setNeutralButton("Restore last known good") { _, _ ->
+                val candidate = BmwPeqState.loadLastKnownGood(requireContext())
+                if (candidate == null) {
+                    requireContext().toast("No last-known-good PEQ state is available")
+                } else {
+                    applyCandidate(candidate, "developer-lkg-restore")
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun updateHistoryControls() {
@@ -834,6 +1008,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.preampInput.value = peqState.preampDb
         suppressPreampCallback = false
         bindScope()
+        requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         updateHistoryControls()
         return true
     }
@@ -861,6 +1036,7 @@ class ParametricEqualizerFragment : Fragment() {
         private const val FILTER_COPY_RIGHT_TO_LEFT = 31
         private const val FILTER_SPLIT_BOTH = 32
         private const val HISTORY_LIMIT = 20
+        private const val MAX_IMPORT_CHARS = 1_000_000
         fun newInstance() = ParametricEqualizerFragment()
     }
 

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Native low-band dynamics"
+            android:textAppearance="?android:attr/textAppearanceLarge" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Drag the red threshold point horizontally. Drag the curve above it to change ratio."
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <app.siphondsp.view.NativeBmwCompressorView
+                    android:id="@+id/compressor_visualizer"
+                    android:layout_width="match_parent"
+                    android:layout_height="300dp"
+                    android:contentDescription="Interactive compressor transfer curve and live gain reduction" />
+
+                <TextView
+                    android:id="@+id/compressor_meter_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="14dp"
+                    android:text="Waiting for native audio…"
+                    android:textAlignment="center"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/compressor_enable"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:text="Compressor active" />
+
+        <TextView
+            android:id="@+id/compressor_threshold_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider
+            android:id="@+id/compressor_threshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_attack_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_release_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_makeup_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider
+            android:id="@+id/compressor_makeup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -31,6 +31,7 @@ object JamesDspWrapper {
         midBandBands: DoubleArray,
     ): Boolean
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
+    external fun getNativeBmwCompressorMeter(self: JamesDspHandle): FloatArray?
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
     external fun setPostGain(self: JamesDspHandle, postGain: Float): Boolean

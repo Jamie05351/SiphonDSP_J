@@ -183,6 +183,16 @@
         </activity>
 
         <activity
+            android:name=".activity.NativeBmwCompressorActivity"
+            android:exported="false"
+            android:label="Low-band compressor"
+            android:theme="@style/Theme.SiphonDSP">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".activity.MainActivity" />
+        </activity>
+
+        <activity
             android:name=".activity.GraphicEqualizerActivity"
             android:exported="false"
             android:label="@string/title_activity_geq"

@@ -111,16 +111,6 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
             addSliderRow("Tilt pivot", 27, 200f, 2000f, 1f, "Hz")
         }
 
-        sectionCard("Low-band compressor") {
-            addSwitchRow("Compressor active", "Stereo-linked protection and level control for the low band", 28)
-            addSliderRow("Threshold", 29, -18f, 0f, 1f, "dB")
-            addSliderRow("Ratio", 30, 1f, 10f, .1f, ":1")
-            addSliderRow("Soft knee", 31, 0f, 12f, 1f, "dB")
-            addSliderRow("Attack", 32, 1f, 50f, 1f, "ms")
-            addSliderRow("Release", 33, 20f, 400f, 1f, "ms")
-            addSliderRow("Makeup gain", 34, 0f, 6f, .1f, "dB")
-        }
-
         loading = false
         updateVisualOverview()
         applyConfiguration()

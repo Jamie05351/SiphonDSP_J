@@ -133,6 +133,30 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Import preset" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/diagnostics"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Review and export a sanitised PEQ diagnostic report"
+                android:text="Diagnostics" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/backup_export"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Export complete private PEQ backup"
+                android:text="Backup" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/backup_import"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Preview and restore complete private PEQ backup"
+                android:text="Restore backup" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 

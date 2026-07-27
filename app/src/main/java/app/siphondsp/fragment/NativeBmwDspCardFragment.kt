@@ -130,7 +130,7 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         private const val NATIVE_VALUES_KEY = "values"
         private const val KEY_LIVE_RESPONSE = "bmw_live_response"
 
-        private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25, 28)
+        private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25)
         private val LIST_INDEXES = setOf(3, 4, 16)
         private val STEP_TENTH_KEYS = setOf(
             "bmw_low_gain_l",
@@ -140,8 +140,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             "bmw_post_gain_l",
             "bmw_post_gain_r",
             "bmw_tilt_amount",
-            "bmw_comp_ratio",
-            "bmw_comp_makeup",
         )
         private val STEP_HUNDREDTH_KEYS = setOf(
             "bmw_mid_delay_l",
@@ -178,13 +176,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             "bmw_tilt_enable" to 25,
             "bmw_tilt_amount" to 26,
             "bmw_tilt_pivot" to 27,
-            "bmw_comp_enable" to 28,
-            "bmw_comp_threshold" to 29,
-            "bmw_comp_ratio" to 30,
-            "bmw_comp_knee" to 31,
-            "bmw_comp_attack" to 32,
-            "bmw_comp_release" to 33,
-            "bmw_comp_makeup" to 34,
         )
 
         fun newInstance() = NativeBmwDspCardFragment()

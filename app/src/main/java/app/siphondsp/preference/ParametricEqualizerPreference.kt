@@ -10,18 +10,15 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
 import app.siphondsp.R
 import app.siphondsp.databinding.PreferenceParametricEqualizerBinding
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
-import timber.log.Timber
-import java.util.MissingFormatArgumentException
 
 class ParametricEqualizerPreference : Preference {
 
     private var binding: PreferenceParametricEqualizerBinding? = null
-    private var initialValue: String = ""
-
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateFromPreferences()
@@ -59,7 +56,8 @@ class ParametricEqualizerPreference : Preference {
     }
 
     override fun onSetInitialValue(defaultValue: Any?) {
-        initialValue = getPersistedString(defaultValue as? String ?: "")
+        // The legacy preference value is intentionally ignored. BmwPeqState is
+        // the only authoritative source for the main-card preview.
     }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any {
@@ -70,30 +68,28 @@ class ParametricEqualizerPreference : Preference {
         super.onBindViewHolder(holder)
 
         binding = PreferenceParametricEqualizerBinding.bind(holder.itemView)
-        setEqualizerViewValues(initialValue)
+        updateFromPreferences()
     }
 
     fun updateFromPreferences() {
-        initialValue = getPersistedString(initialValue)
-        setEqualizerViewValues(initialValue)
+        setEqualizerViewValues(BmwPeqState.load(context))
     }
 
-    private fun setEqualizerViewValues(value: String) {
-        val bands = ParametricEqBandList()
-        bands.deserialize(value)
-
-        // Read preamp from SharedPreferences so the main screen preview reflects it
-        val preampDb = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
-            .getFloat(context.getString(R.string.key_peq_preamp), 0f)
-            .toDouble()
-
-        binding?.layoutEqualizer?.setBands(bands, preampDb)
-        try {
-            binding?.bandCount?.text =
-                context.resources.getQuantityString(R.plurals.peq_bands_count, bands.size, bands.size)
-        } catch (ex: MissingFormatArgumentException) {
-            Timber.e(ex)
-            binding?.bandCount?.text = context.getString(R.string.peq_bands)
+    private fun setEqualizerViewValues(state: BmwPeqState) {
+        val combinedBands = ParametricEqBandList().apply {
+            addAll(state.fullRangeBands)
+            addAll(state.lowBandBands)
+            addAll(state.midBandBands)
+        }
+        binding?.layoutEqualizer?.setBands(
+            combinedBands,
+            state.preampDb.toDouble(),
+        )
+        binding?.bandCount?.text = buildString {
+            append("${state.fullRangeBands.size} Full")
+            append(" · ${state.lowBandBands.size} Low")
+            append(" · ${state.midBandBands.size} Mid")
+            if (state.preampDb != 0f) append(" · ${state.preampDb} dB preamp")
         }
     }
 }

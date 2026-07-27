@@ -2,6 +2,7 @@
 #define SIPHONDSP_NATIVE_BMW_DSP_PROCESSOR_H
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -20,6 +21,7 @@ public:
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
+    void readCompressorMeter(float* values, std::size_t count) const;
 
 private:
     enum Dirty : uint32_t {
@@ -99,6 +101,10 @@ private:
     float sampleRate_=48000.0f,dcR_=0.0f;
     float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1,makeup_=1;
     float compGain_=1,rmsPower_=0,peakEnv_=0,rmsMix_=0,peakRelease_=0,attackMix_=0,releaseMix_=0;
+    std::atomic<float> compressorInputDb_{-60.0f};
+    std::atomic<float> compressorOutputDb_{-60.0f};
+    std::atomic<float> compressorGainReductionDb_{0.0f};
+    uint32_t compressorMeterCounter_=0;
 };
 
 #endif

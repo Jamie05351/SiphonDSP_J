@@ -42,6 +42,19 @@ class BmwPeqStateTest {
     }
 
     @Test
+    fun serializedBandsPreserveUuidAndAcceptLegacyEntries() {
+        val id = UUID.randomUUID()
+        val bands = ParametricEqBandList().apply {
+            add(ParametricEqBand(1000.0, -3.0, 1.2, uuid = id))
+        }
+        val restored = ParametricEqBandList().apply { deserialize(bands.serialize()) }
+        val legacy = ParametricEqBandList().apply { deserialize("PEQ: 80 -6 1 0 2;") }
+
+        assertEquals(id, restored.single().uuid)
+        assertEquals(ParametricEqChannel.RIGHT, legacy.single().channel)
+    }
+
+    @Test
     fun validationRejectsNyquistAndGainViolations() {
         val nyquist = BmwPeqState.empty().deepCopy().also {
             it.fullRangeBands += ParametricEqBand(24_000.0, 0.0, 1.0)
