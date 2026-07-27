@@ -338,6 +338,7 @@ class ParametricEqualizerFragment : Fragment() {
     ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
         binding.qInput.min = 0.1f
+        binding.equalizerSurface.showSpectrum = true
 
         binding.previewCard.setOnClickListener {
             if (resources.configuration.orientation != ORIENTATION_LANDSCAPE) {
