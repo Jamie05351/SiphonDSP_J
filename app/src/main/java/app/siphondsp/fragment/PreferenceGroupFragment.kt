@@ -21,11 +21,13 @@ import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.liveprog.EelParser
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.preference.CompanderPreference
 import app.siphondsp.preference.EqualizerPreference
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.preference.MaterialSeekbarPreference
 import app.siphondsp.preference.SwitchPreferenceGroup
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
@@ -186,6 +188,19 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 }
             }
             R.xml.dsp_parametriceq_preferences -> {
+                findPreference<SwitchPreferenceGroup>(getString(R.string.key_peq_enable))
+                    ?.setOnPreferenceChangeListener { _, newValue ->
+                        val current = BmwPeqState.load(requireContext())
+                        val candidate = current.copy(enabled = newValue as Boolean)
+                        val applied = RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
+                        val saved = applied || candidate.persist(requireContext())
+                        Timber.i(
+                            "PEQ enabled change enabled=${candidate.enabled} " +
+                                "full=${candidate.fullRangeBands.size} low=${candidate.lowBandBands.size} " +
+                                "mid=${candidate.midBandBands.size} nativeApply=$applied saved=$saved"
+                        )
+                        saved
+                    }
                 findPreference<Preference>(getString(R.string.key_peq_bands))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), ParametricEqualizerActivity::class.java)
                     startActivity(intent)
