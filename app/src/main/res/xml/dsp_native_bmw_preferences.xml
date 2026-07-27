@@ -18,7 +18,7 @@
 <app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_post_gain_r" android:title="🟩 Post gain R" app:minValue="-6" app:maxValue="6" app:seekBarIncrement="0" app:precision="1" app:unit="dB" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
 <PreferenceCategory android:title="🟫 Subsonic / crossovers">
-<SwitchPreferenceCompat android:key="bmw_subsonic_enable" android:title="🟫 Subsonic BW4" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_subsonic_enable" android:title="🟫 Subsonic BW2 (12 dB/oct)" app:iconSpaceReserved="false"/>
 <app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_subsonic_freq" android:title="🟫 Subsonic frequency" app:minValue="20" app:maxValue="60" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 <SwitchPreferenceCompat android:key="bmw_mute_low" android:title="🟦 Mute low band" app:iconSpaceReserved="false"/>
 <app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_low_lpf" android:title="🟦 Low LPF frequency" app:minValue="80" app:maxValue="200" app:seekBarIncrement="1" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>

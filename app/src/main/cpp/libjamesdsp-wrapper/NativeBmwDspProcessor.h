@@ -47,7 +47,7 @@ private:
         void clear();
     };
     struct Channel {
-        Biquad sub1,sub2,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
+        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
         OnePole lowPole;
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;

@@ -4,7 +4,7 @@
 #include <limits>
 
 namespace {
-constexpr float PI=3.14159265358979323846f,BW=0.7071067812f,BW4Q1=0.5411961f,BW4Q2=1.3065630f;
+constexpr float PI=3.14159265358979323846f,BW=0.7071067812f;
 inline float ftz(float x){return(!std::isfinite(x)||std::fabs(x)<1e-20f)?0.f:x;}
 // Bounds are computed in double (exact for int32_t's range, unlike float's 24-bit mantissa) so a
 // full-scale input clamps to the true min/max instead of rounding past it and wrapping sign.
@@ -102,7 +102,7 @@ void NativeBmwDspProcessor::resetDynamics(){
  compressorGainReductionDb_.store(0.f,std::memory_order_relaxed);
 }
 void NativeBmwDspProcessor::rebuildGains(){headroom_=dbToLin(p_.headroom);lowGainL_=dbToLin(p_.lowGainL);lowGainR_=dbToLin(p_.lowGainR);midGainL_=dbToLin(p_.midGainL);midGainR_=dbToLin(p_.midGainR);postGainL_=dbToLin(p_.postGainL);postGainR_=dbToLin(p_.postGainR);makeup_=dbToLin(p_.makeup);}
-void NativeBmwDspProcessor::rebuildSubsonic(){for(Channel*c:{&left_,&right_}){makeHighPass(c->sub1,p_.subFreq,BW4Q1,sampleRate_);makeHighPass(c->sub2,p_.subFreq,BW4Q2,sampleRate_);}}
+void NativeBmwDspProcessor::rebuildSubsonic(){for(Channel*c:{&left_,&right_})makeHighPass(c->sub1,p_.subFreq,BW,sampleRate_);}
 void NativeBmwDspProcessor::rebuildLowCrossover(){for(Channel*c:{&left_,&right_}){makeLowPass(c->lowA,p_.lpf,p_.lowLr4?BW:1.f,sampleRate_);makeLowPass(c->lowB,p_.lpf,BW,sampleRate_);makeOnePoleLow(c->lowPole,p_.lpf,sampleRate_);}}
 void NativeBmwDspProcessor::rebuildMidCrossover(){for(Channel*c:{&left_,&right_}){makeHighPass(c->mid1,p_.hpf,BW,sampleRate_);makeHighPass(c->mid2,p_.hpf,BW,sampleRate_);}}
 void NativeBmwDspProcessor::updateDelays(){left_.lowDelay.delay=p_.lowDelayL*sampleRate_*.001f;right_.lowDelay.delay=p_.lowDelayR*sampleRate_*.001f;left_.midDelay.delay=p_.midDelayL*sampleRate_*.001f;right_.midDelay.delay=p_.midDelayR*sampleRate_*.001f;}
@@ -118,7 +118,7 @@ void NativeBmwDspProcessor::rebuildAll(){
 
 float NativeBmwDspProcessor::processChannelInput(float x,Channel&c){float y=x-c.dcX+dcR_*c.dcY;c.dcX=x;c.dcY=ftz(y);return c.dcY;}
 void NativeBmwDspProcessor::processFrame(float&l,float&r){if(!p_.enabled)return;float sL=processChannelInput(l,left_),sR=processChannelInput(r,right_);if(peqEnabled_){sL=fullPeq_.processLeft(sL*peqPreamp_);sR=fullPeq_.processRight(sR*peqPreamp_);}sL*=headroom_;sR*=headroom_;float lowL=sL,lowR=sR,midL=sL,midR=sR;
- if(p_.subsonic){lowL=left_.sub2.run(left_.sub1.run(lowL));lowR=right_.sub2.run(right_.sub1.run(lowR));}
+ if(p_.subsonic){lowL=left_.sub1.run(lowL);lowR=right_.sub1.run(lowR);}
  if(!p_.lpfPass){lowL=left_.lowA.run(lowL);lowR=right_.lowA.run(lowR);if(p_.lowLr4){lowL=left_.lowB.run(lowL);lowR=right_.lowB.run(lowR);}else{lowL=left_.lowPole.run(lowL);lowR=right_.lowPole.run(lowR);}if(peqEnabled_){lowL=lowPeq_.processLeft(lowL);lowR=lowPeq_.processRight(lowR);}lowL=left_.lowDelay.run(lowL);lowR=right_.lowDelay.run(lowR);
   if(!p_.lowMute&&p_.measurementMute!=1){
    const float pk=std::max(std::fabs(lowL),std::fabs(lowR));

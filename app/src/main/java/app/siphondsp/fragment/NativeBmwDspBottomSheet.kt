@@ -84,7 +84,7 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
         }
 
         sectionCard("Subsonic protection") {
-            addSwitchRow("Subsonic BW4", "Protect the under-seat woofers from very low frequencies", 12)
+            addSwitchRow("Subsonic BW2", "12 dB/oct Butterworth protection for the under-seat woofers", 12)
             addSliderRow("Subsonic frequency", 13, 20f, 60f, 1f, "Hz")
         }
 
