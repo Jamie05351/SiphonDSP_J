@@ -2,6 +2,7 @@ package app.siphondsp.model
 
 import android.content.Context
 import timber.log.Timber
+import java.io.File
 
 data class BmwPeqState(
     val enabled: Boolean,
@@ -59,11 +60,12 @@ data class BmwPeqState(
         }.toDoubleArray()
 
     /**
-     * Primary and last-known-good snapshots are committed together. Call only
-     * after validation and native apply succeed.
+     * Primary and last-known-good snapshots are committed together. The
+     * additional no-backup file is persistent app data, not cache, so Android's
+     * Clear cache action cannot remove the authoritative PEQ configuration.
      */
-    fun persist(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+    fun persist(context: Context): Boolean {
+        val prefsOk = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt(KEY_VERSION, VERSION)
             .putBoolean(KEY_ENABLED, enabled)
             .putFloat(KEY_PREAMP, preampDb)
@@ -78,6 +80,10 @@ data class BmwPeqState(
             .putString(KEY_LKG_MID, midBandBands.serialize())
             .putLong(KEY_LKG_TIMESTAMP, System.currentTimeMillis())
             .commit()
+        val snapshotOk = writePersistentSnapshot(context, this)
+        if (!snapshotOk) Timber.e("Failed to write persistent BMW PEQ snapshot")
+        return prefsOk && snapshotOk
+    }
 
     companion object {
         const val VERSION = 1
@@ -85,6 +91,8 @@ data class BmwPeqState(
         const val MIN_Q = 0.1
         const val MAX_Q = 30.0
         private const val PREFS = "native_bmw_peq"
+        private const val SNAPSHOT_FILE = "native_bmw_peq_state.txt"
+        private const val SNAPSHOT_HEADER = "BMW_PEQ_STATE_V1"
         private const val KEY_VERSION = "version"
         private const val KEY_ENABLED = "enabled"
         private const val KEY_PREAMP = "preamp"
@@ -119,22 +127,28 @@ data class BmwPeqState(
 
         fun load(context: Context): BmwPeqState {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (prefs.getInt(KEY_VERSION, 0) != VERSION) return empty()
-            fun bands(key: String) = ParametricEqBandList().apply {
-                deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
+            if (prefs.getInt(KEY_VERSION, 0) == VERSION) {
+                fun bands(key: String) = ParametricEqBandList().apply {
+                    deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
+                }
+                return BmwPeqState(
+                    prefs.getBoolean(KEY_ENABLED, false),
+                    prefs.getFloat(KEY_PREAMP, 0f),
+                    bands(KEY_FULL),
+                    bands(KEY_LOW),
+                    bands(KEY_MID),
+                )
             }
-            return BmwPeqState(
-                prefs.getBoolean(KEY_ENABLED, false),
-                prefs.getFloat(KEY_PREAMP, 0f),
-                bands(KEY_FULL),
-                bands(KEY_LOW),
-                bands(KEY_MID),
-            )
+
+            val recovered = readPersistentSnapshot(context) ?: return empty()
+            Timber.w("Recovered BMW PEQ from persistent no-backup snapshot")
+            recovered.persist(context)
+            return recovered
         }
 
         fun loadLastKnownGood(context: Context): BmwPeqState? {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (prefs.getInt(KEY_LKG_VERSION, 0) != VERSION) return null
+            if (prefs.getInt(KEY_LKG_VERSION, 0) != VERSION) return readPersistentSnapshot(context)
             fun bands(key: String) = ParametricEqBandList().apply {
                 deserialize(prefs.getString(key, "PEQ: ") ?: "PEQ: ")
             }
@@ -145,6 +159,47 @@ data class BmwPeqState(
                 bands(KEY_LKG_LOW),
                 bands(KEY_LKG_MID),
             )
+        }
+
+        private fun snapshotFile(context: Context): File = File(context.noBackupFilesDir, SNAPSHOT_FILE)
+
+        private fun writePersistentSnapshot(context: Context, state: BmwPeqState): Boolean = runCatching {
+            val target = snapshotFile(context)
+            val temp = File(target.parentFile, "${target.name}.tmp")
+            temp.writeText(
+                listOf(
+                    SNAPSHOT_HEADER,
+                    state.enabled.toString(),
+                    state.preampDb.toString(),
+                    state.fullRangeBands.serialize(),
+                    state.lowBandBands.serialize(),
+                    state.midBandBands.serialize(),
+                ).joinToString("\n")
+            )
+            if (!temp.renameTo(target)) {
+                target.writeText(temp.readText())
+                temp.delete()
+            }
+            true
+        }.getOrElse {
+            Timber.e(it, "Unable to persist BMW PEQ snapshot")
+            false
+        }
+
+        private fun readPersistentSnapshot(context: Context): BmwPeqState? = runCatching {
+            val lines = snapshotFile(context).takeIf(File::isFile)?.readLines() ?: return null
+            if (lines.size < 6 || lines[0] != SNAPSHOT_HEADER) return null
+            fun bands(value: String) = ParametricEqBandList().apply { deserialize(value) }
+            BmwPeqState(
+                enabled = lines[1].toBooleanStrict(),
+                preampDb = lines[2].toFloat(),
+                fullRangeBands = bands(lines[3]),
+                lowBandBands = bands(lines[4]),
+                midBandBands = bands(lines[5]),
+            )
+        }.getOrElse {
+            Timber.e(it, "Unable to restore BMW PEQ snapshot")
+            null
         }
 
         fun recordRestoreResult(
