@@ -969,13 +969,25 @@ class ParametricEqualizerFragment : Fragment() {
             requireContext().toast("$validation; previous PEQ remains active")
             return false
         }
-        val result = RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
+        val serviceAvailable = RootlessAudioProcessorService.nativeBmwPeqHandleReady() != null
+        val result = if (serviceAvailable) {
+            RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
+        } else {
+            candidate.persist(requireContext())
+        }
         Timber.d(
             "$source scope=${selectedScope.label} full=${candidate.fullRangeBands.size} " +
-                "low=${candidate.lowBandBands.size} mid=${candidate.midBandBands.size} result=$result"
+                "low=${candidate.lowBandBands.size} mid=${candidate.midBandBands.size} " +
+                "serviceAvailable=$serviceAvailable result=$result"
         )
         if (!result) {
-            requireContext().toast("BMW PEQ configuration rejected; previous state remains active")
+            requireContext().toast(
+                if (serviceAvailable) {
+                    "BMW PEQ configuration rejected; previous state remains active"
+                } else {
+                    "BMW PEQ could not be saved; previous state remains active"
+                }
+            )
             return false
         }
         peqState = candidate
