@@ -23,6 +23,8 @@ import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.adapter.ParametricEqBandAdapter
 import app.siphondsp.databinding.FragmentParametricEqBinding
+import app.siphondsp.dsp.BmwPeqBank
+import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.BmwPeqState
@@ -50,6 +52,7 @@ class ParametricEqualizerFragment : Fragment() {
     private lateinit var binding: FragmentParametricEqBinding
     private val adapter get() = binding.bandList.adapter as ParametricEqBandAdapter
     private lateinit var peqState: BmwPeqState
+    private lateinit var nativeDspValues: FloatArray
     private var selectedScope = PeqScope.FULL
     private var suppressPreampCallback = false
     private val selectedBandByScope = mutableMapOf<PeqScope, UUID?>()
@@ -312,17 +315,34 @@ class ParametricEqualizerFragment : Fragment() {
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Constants.ACTION_PRESET_LOADED) {
-                activity?.finish()
-                startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
-                })
+            when (intent?.action) {
+                Constants.ACTION_PRESET_LOADED -> {
+                    activity?.finish()
+                    startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    })
+                }
+                Constants.ACTION_NATIVE_BMW_DSP_UPDATED -> {
+                    val values = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES) ?: return
+                    if (values.size != BmwSignalChain.VALUE_COUNT) return
+                    nativeDspValues = values.copyOf()
+                    // Don't clobber an in-flight drag on this surface; setSystemValues() will
+                    // run again once the drag resolves via bindScope()/cancelDraft().
+                    if (!binding.equalizerSurface.hasActiveDraft()) {
+                        binding.equalizerSurface.setSystemValues(nativeDspValues)
+                    }
+                }
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        requireContext().registerLocalReceiver(broadcastReceiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
+        requireContext().registerLocalReceiver(
+            broadcastReceiver,
+            IntentFilter(Constants.ACTION_PRESET_LOADED).apply {
+                addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
+            },
+        )
         super.onCreate(savedInstanceState)
     }
 
@@ -466,12 +486,27 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun loadBands(savedInstanceState: Bundle?) {
         peqState = BmwPeqState.load(requireContext())
+        nativeDspValues = loadNativeDspValues()
         history.reset(peqState)
         updateHistoryControls()
         suppressPreampCallback = true
         binding.preampInput.value = peqState.preampDb
         suppressPreampCallback = false
         bindScope()
+    }
+
+    /**
+     * Reads the 35-float native BMW DSP config array (headroom/crossover/tilt/gains/etc,
+     * separate from BmwPeqState) so the unified surface can model the complete signal
+     * chain, not just the PEQ banks. Mirrors NativeBmwDspBottomSheet's private loadValues()
+     * -- this duplication is intentionally temporary; a later pass extracts a shared
+     * NativeBmwDspValues store both call sites delegate to.
+     */
+    private fun loadNativeDspValues(): FloatArray {
+        val prefs = requireContext().getSharedPreferences(NATIVE_DSP_PREFS, Context.MODE_PRIVATE)
+        val saved = prefs.getString(NATIVE_DSP_KEY, null)
+        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
+        return if (parsed?.size == BmwSignalChain.VALUE_COUNT) parsed else NativeBmwDspBottomSheet.DEFAULTS.copyOf()
     }
 
     private fun bandsForScope() = when (selectedScope) {
@@ -495,13 +530,13 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun bindScope() {
         val bands = bandsForScope()
-        val preamp = if (selectedScope == PeqScope.FULL) binding.preampInput.value.toDouble() else 0.0
         val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
         binding.preampInput.isEnabled = selectedScope == PeqScope.FULL
         binding.preampInput.isVisible = selectedScope == PeqScope.FULL
-        binding.equalizerSurface.setBands(
-            bands,
-            preamp,
+        binding.equalizerSurface.setSystemState(
+            nativeDspValues,
+            peqState,
+            selectedScope.bank,
             selectedBandByScope[selectedScope],
             sampleRate,
         )
@@ -527,6 +562,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun configureGraph() {
+        binding.equalizerSurface.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         binding.equalizerSurface.showIndividualFilters =
             graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true)
@@ -1019,6 +1055,9 @@ class ParametricEqualizerFragment : Fragment() {
         const val STATE_BANDS = "bands"
         // Lowest sample rate RootlessAudioProcessorService ever opens the recorder at.
         private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
+        // Mirrors NativeBmwDspBottomSheet.PREFS/KEY -- see loadNativeDspValues() doc comment.
+        private const val NATIVE_DSP_PREFS = "native_bmw_dsp"
+        private const val NATIVE_DSP_KEY = "values"
         private const val GRAPH_PREFS = "peq_graph_display"
         private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
         private const val GRAPH_CHANNEL = "channel_display"
@@ -1039,9 +1078,9 @@ class ParametricEqualizerFragment : Fragment() {
         fun newInstance() = ParametricEqualizerFragment()
     }
 
-    private enum class PeqScope(val label: String, val fileName: String, val chipId: Int) {
-        FULL("Full Range", "full_range_parametric_eq.txt", R.id.peq_scope_full),
-        LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low),
-        MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid),
+    private enum class PeqScope(val label: String, val fileName: String, val chipId: Int, val bank: BmwPeqBank) {
+        FULL("Full Range", "full_range_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
+        LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low, BmwPeqBank.LOW),
+        MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid, BmwPeqBank.MID),
     }
 }

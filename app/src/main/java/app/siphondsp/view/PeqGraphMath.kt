@@ -31,6 +31,24 @@ object PeqGraphMath {
     fun gainToFraction(gain: Double, minGain: Double = MIN_GAIN, maxGain: Double = MAX_GAIN): Float =
         (1.0 - (gain.coerceIn(minGain, maxGain) - minGain) / (maxGain - minGain)).toFloat()
 
+    /**
+     * Maps a live spectrum magnitude (dB, on its own [floorDb]..[ceilingDb] scale) onto the
+     * response graph's own gain axis, so the spectrum overlay sits at the correct visual
+     * height relative to the response curves instead of using an unrelated full-view scale.
+     */
+    fun spectrumDbToGraphGain(
+        spectrumDb: Float,
+        floorDb: Float,
+        ceilingDb: Float,
+        minGain: Double = MIN_GAIN,
+        maxGain: Double = MAX_GAIN,
+    ): Double {
+        val span = ceilingDb - floorDb
+        if (span <= 0f) return minGain
+        val normalized = ((spectrumDb - floorDb) / span).coerceIn(0f, 1f)
+        return minGain + normalized * (maxGain - minGain)
+    }
+
     fun fractionToGain(fraction: Float, minGain: Double = MIN_GAIN, maxGain: Double = MAX_GAIN): Double =
         maxGain - fraction.coerceIn(0f, 1f) * (maxGain - minGain)
 
