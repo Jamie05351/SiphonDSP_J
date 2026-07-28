@@ -217,6 +217,14 @@ class MainActivity : BaseActivity() {
 
         binding.bar.setOnMenuItemClickListener { arg0 ->
             when (arg0.itemId) {
+                R.id.action_parametric_eq -> {
+                    startActivity(Intent(this, ParametricEqualizerActivity::class.java))
+                    true
+                }
+                R.id.action_compressor -> {
+                    startActivity(Intent(this, NativeBmwCompressorActivity::class.java))
+                    true
+                }
                 R.id.action_blocklist -> {
                     if(!app.isEnhancedProcessing && isRoot()) {
                         showAlert(
