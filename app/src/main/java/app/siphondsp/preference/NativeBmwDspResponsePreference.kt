@@ -30,11 +30,6 @@ class NativeBmwDspResponsePreference : Preference {
         notifyChanged()
     }
 
-    fun refreshPeqState() {
-        responseView?.refreshPeqState()
-        notifyChanged()
-    }
-
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
         responseView = holder.findViewById(R.id.native_bmw_response_view) as? NativeBmwDspResponseView
@@ -49,6 +44,6 @@ class NativeBmwDspResponsePreference : Preference {
         val compressor = if (values[28] >= .5f) "compressor on" else "compressor bypassed"
         val tilt = if (values[25] >= .5f) "tilt ${format.format(values[26])} dB" else "tilt off"
         signalPathView?.text =
-            "Full PEQ + ${format.format(values[5])} dB headroom  →  Low ${format.format(values[15])} Hz $topology + Mid ${format.format(values[18])} Hz LR4  →  branch PEQ/gains  →  $compressor  →  $tilt  →  post gain/L-R correction"
+            "Subsonic ${format.format(values[13])} Hz  →  Low ${format.format(values[15])} Hz $topology  +  Mid ${format.format(values[18])} Hz LR4  →  $compressor  →  $tilt  →  L/R corrected"
     }
 }
