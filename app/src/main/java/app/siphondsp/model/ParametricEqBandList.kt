@@ -25,9 +25,9 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
     private val dfQ = DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 
     init {
-        dfFreq.maximumFractionDigits = 2
+        dfFreq.maximumFractionDigits = 6
         dfGain.maximumFractionDigits = 6
-        dfQ.maximumFractionDigits = 4
+        dfQ.maximumFractionDigits = 6
     }
 
     /**

@@ -105,7 +105,12 @@ void NativeBmwDspProcessor::rebuildGains(){headroom_=dbToLin(p_.headroom);lowGai
 void NativeBmwDspProcessor::rebuildSubsonic(){for(Channel*c:{&left_,&right_})makeHighPass(c->sub1,p_.subFreq,BW,sampleRate_);}
 void NativeBmwDspProcessor::rebuildLowCrossover(){for(Channel*c:{&left_,&right_}){makeLowPass(c->lowA,p_.lpf,p_.lowLr4?BW:1.f,sampleRate_);makeLowPass(c->lowB,p_.lpf,BW,sampleRate_);makeOnePoleLow(c->lowPole,p_.lpf,sampleRate_);}}
 void NativeBmwDspProcessor::rebuildMidCrossover(){for(Channel*c:{&left_,&right_}){makeHighPass(c->mid1,p_.hpf,BW,sampleRate_);makeHighPass(c->mid2,p_.hpf,BW,sampleRate_);}}
-void NativeBmwDspProcessor::updateDelays(){left_.lowDelay.delay=p_.lowDelayL*sampleRate_*.001f;right_.lowDelay.delay=p_.lowDelayR*sampleRate_*.001f;left_.midDelay.delay=p_.midDelayL*sampleRate_*.001f;right_.midDelay.delay=p_.midDelayR*sampleRate_*.001f;}
+namespace {
+// Leave one sample of margin below the buffer capacity for the linear-interpolation read
+// (Delay::run reads index i0 and i0+1), so a clamped delay can never alias into unwritten data.
+inline float clampDelaySamples(float ms,float sampleRate){return clampf(ms*sampleRate*.001f,0.f,static_cast<float>(NativeBmwDspProcessor::kDelayLineCapacity-1));}
+}
+void NativeBmwDspProcessor::updateDelays(){left_.lowDelay.delay=clampDelaySamples(p_.lowDelayL,sampleRate_);right_.lowDelay.delay=clampDelaySamples(p_.lowDelayR,sampleRate_);left_.midDelay.delay=clampDelaySamples(p_.midDelayL,sampleRate_);right_.midDelay.delay=clampDelaySamples(p_.midDelayR,sampleRate_);}
 void NativeBmwDspProcessor::rebuildTilt(){float tg=p_.tiltAmount*.75f;for(Channel*c:{&left_,&right_}){makeLowShelf(c->tiltLo1,p_.tiltFreq,tg,sampleRate_);makeLowShelf(c->tiltLo2,p_.tiltFreq,tg,sampleRate_);makeHighShelf(c->tiltHi1,p_.tiltFreq,-tg,sampleRate_);makeHighShelf(c->tiltHi2,p_.tiltFreq,-tg,sampleRate_);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));attackMix_=1-std::exp(-1/(p_.attack*.001f*sampleRate_));releaseMix_=1-std::exp(-1/(p_.release*.001f*sampleRate_));}
 void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();}

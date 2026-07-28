@@ -10,6 +10,12 @@ class NativeBmwDspProcessor {
 public:
     enum : std::size_t { kConfigSize = 35 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
+    // Sized for the 2.8ms max delay clamped in configure() at the highest sample rate the
+    // service actually opens AudioRecord/AudioTrack at (48kHz -> 134.4 samples), with headroom.
+    // updateDelays() must clamp requested delay samples to below this capacity so a caller that
+    // ever raises sampleRate_ beyond ~91kHz can't silently alias the delay line instead of
+    // producing the requested delay.
+    enum : unsigned { kDelayLineCapacity = 256 };
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -40,7 +46,7 @@ private:
     struct Biquad { float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0; float run(float x); void clear(); };
     struct OnePole { float a0=1,a1=0,b1=0,x1=0,y1=0; float run(float x); void clear(); };
     struct Delay {
-        std::array<float,256> data{};
+        std::array<float,kDelayLineCapacity> data{};
         unsigned write=0;
         float delay=0;
         float run(float x);
