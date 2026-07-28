@@ -962,14 +962,23 @@ class ParametricEqualizerFragment : Fragment() {
         source: String,
         recordHistory: Boolean = true,
     ): Boolean {
-        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
+        // When the service isn't running, validate against the lowest sample rate it can ever
+        // open the recorder at (RootlessAudioProcessorService clamps to 44100-48000Hz), not the
+        // usual 48kHz assumption. Otherwise a near-Nyquist band can pass validation here, get
+        // persisted, and then silently fail validation -- and get dropped in favor of
+        // last-known-good/empty -- the next time the service actually starts at a lower rate.
+        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: MIN_ASSUMED_SAMPLE_RATE
         val validation = candidate.validate(sampleRate)
         if (validation != null) {
             Timber.e("$source ${selectedScope.label} validation failed: $validation")
             requireContext().toast("$validation; previous PEQ remains active")
             return false
         }
-        val serviceAvailable = RootlessAudioProcessorService.nativeBmwPeqHandleReady() != null
+        // nativeBmwPeqHandleReady() is a Boolean?: null means the service isn't running, but
+        // `false` means it IS running with the handle not yet ready -- != null would wrongly
+        // treat that as available and route into applyNativeBmwPeq(), which fails without ever
+        // persisting the edit, silently discarding it.
+        val serviceAvailable = RootlessAudioProcessorService.nativeBmwPeqHandleReady() == true
         val result = if (serviceAvailable) {
             RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
         } else {
@@ -1008,6 +1017,8 @@ class ParametricEqualizerFragment : Fragment() {
 
     companion object {
         const val STATE_BANDS = "bands"
+        // Lowest sample rate RootlessAudioProcessorService ever opens the recorder at.
+        private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
         private const val GRAPH_PREFS = "peq_graph_display"
         private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
         private const val GRAPH_CHANNEL = "channel_display"
