@@ -3,8 +3,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:fitsSystemWindows="true"
     tools:context=".activity.ParametricEqualizerActivity">
+    <!-- fitsSystemWindows intentionally NOT set here: it padded the whole content area
+         (including the PEQ editor's left control column) for whatever system insets the
+         window reported on any edge, not just the top status bar the AppBarLayout below
+         actually needs to avoid. On a landscape head-unit profile this showed up as a
+         large wasted gutter on the left of the whole screen. The AppBarLayout keeps its
+         own fitsSystemWindows so the toolbar still clears the top inset by itself. -->
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
