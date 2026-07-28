@@ -253,26 +253,6 @@
                     android:layout_height="1dp"
                     android:background="?android:attr/listDivider" />
 
-                <!-- Full-Range-only preamp control. Lives here (not in the visualiser card)
-                     so it doesn't eat into graph space; bindScope() already toggles its
-                     visibility to GONE for Low/Mid scope, so it costs nothing there. -->
-                <app.siphondsp.view.NumberInputBox
-                    android:id="@+id/preampInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="16dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginBottom="4dp"
-                    app:helperText="@string/peq_preamp_range"
-                    app:helperTextEnabled="true"
-                    app:hintText="@string/peq_preamp"
-                    app:floatPrecision="1"
-                    app:step="0.5"
-                    app:suffixText="dB"
-                    app:value="0"
-                    android:min="-30"
-                    android:max="0" />
-
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"

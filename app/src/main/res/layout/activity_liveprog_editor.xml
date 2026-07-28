@@ -17,7 +17,7 @@
             android:id="@+id/toolbar"
             style="@style/Theme.SiphonDSP.Toolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize" />
+            android:layout_height="@dimen/header_toolbar_height" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
