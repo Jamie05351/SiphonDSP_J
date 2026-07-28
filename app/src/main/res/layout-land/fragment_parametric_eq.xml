@@ -171,17 +171,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/horizontalScrollView">
 
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/peq_split_guideline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.40" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/edit_card"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_marginStart="16dp"
-            android:layout_marginEnd="4dp"
-            app:layout_constrainedWidth="true"
+            android:layout_marginEnd="6dp"
             app:layout_constrainedHeight="true"
-            app:layout_constraintHorizontal_weight="0.5"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/preview_card"
+            app:layout_constraintEnd_toStartOf="@id/peq_split_guideline"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -248,9 +253,30 @@
                     android:layout_height="1dp"
                     android:background="?android:attr/listDivider" />
 
+                <!-- Full-Range-only preamp control. Lives here (not in the visualiser card)
+                     so it doesn't eat into graph space; bindScope() already toggles its
+                     visibility to GONE for Low/Mid scope, so it costs nothing there. -->
+                <app.siphondsp.view.NumberInputBox
+                    android:id="@+id/preampInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="4dp"
+                    app:helperText="@string/peq_preamp_range"
+                    app:helperTextEnabled="true"
+                    app:hintText="@string/peq_preamp"
+                    app:floatPrecision="1"
+                    app:step="0.5"
+                    app:suffixText="dB"
+                    app:value="0"
+                    android:min="-30"
+                    android:max="0" />
+
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
 
                     <LinearLayout
                         android:id="@+id/empty_view"
@@ -356,6 +382,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="@string/peq_filter_type_peaking" />
 
                                 <com.google.android.material.button.MaterialButton
@@ -364,6 +393,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="@string/peq_filter_type_low_shelf" />
 
                                 <com.google.android.material.button.MaterialButton
@@ -372,6 +404,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="@string/peq_filter_type_high_shelf" />
                             </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -398,6 +433,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="Both" />
 
                                 <com.google.android.material.button.MaterialButton
@@ -406,6 +444,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="Left" />
 
                                 <com.google.android.material.button.MaterialButton
@@ -414,6 +455,9 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
+                                    android:textSize="11sp"
+                                    android:paddingStart="4dp"
+                                    android:paddingEnd="4dp"
                                     android:text="Right" />
                             </com.google.android.material.button.MaterialButtonToggleGroup>
                         </LinearLayout>
@@ -426,52 +470,46 @@
             android:id="@+id/preview_card"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginStart="4dp"
+            android:layout_marginStart="6dp"
             android:layout_marginEnd="16dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
             app:layout_constrainedHeight="true"
-            app:layout_constrainedWidth="true"
-            app:layout_constraintHorizontal_weight="0.5"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/edit_card"
+            app:layout_constraintStart_toEndOf="@id/peq_split_guideline"
             app:layout_constraintTop_toTopOf="parent">
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="vertical"
                 android:animateLayoutChanges="true">
 
                 <TextView
                     android:id="@+id/preview_title"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_margin="16dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:text="@string/peq_preview"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-                <app.siphondsp.view.NumberInputBox
-                    android:id="@+id/preampInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="16dp"
-                    android:layout_marginBottom="8dp"
-                    app:helperText="@string/peq_preamp_range"
-                    app:helperTextEnabled="true"
-                    app:hintText="@string/peq_preamp"
-                    app:floatPrecision="1"
-                    app:step="0.5"
-                    app:suffixText="dB"
-                    app:value="0"
-                    android:min="-30"
-                    android:max="0" />
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
                 <app.siphondsp.view.ParametricEqSurface
                     android:id="@+id/equalizer_surface"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:layout_weight="1" />
-            </LinearLayout>
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/preview_title" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

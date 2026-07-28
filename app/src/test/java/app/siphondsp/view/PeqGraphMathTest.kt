@@ -46,4 +46,22 @@ class PeqGraphMathTest {
         assertEquals(18_000.0, dragged.frequency, 0.001)
         assertEquals(18.0, dragged.gain, 0.001)
     }
+
+    @Test
+    fun spectrumDbToGraphGainMapsFloorAndCeilingToAxisEnds() {
+        val floorGain = PeqGraphMath.spectrumDbToGraphGain(-80f, floorDb = -80f, ceilingDb = 0f)
+        val ceilingGain = PeqGraphMath.spectrumDbToGraphGain(0f, floorDb = -80f, ceilingDb = 0f)
+
+        assertEquals(PeqGraphMath.MIN_GAIN, floorGain, 1e-6)
+        assertEquals(PeqGraphMath.MAX_GAIN, ceilingGain, 1e-6)
+    }
+
+    @Test
+    fun spectrumDbToGraphGainClampsOutOfRangeInput() {
+        val belowFloor = PeqGraphMath.spectrumDbToGraphGain(-120f, floorDb = -80f, ceilingDb = 0f)
+        val aboveCeiling = PeqGraphMath.spectrumDbToGraphGain(10f, floorDb = -80f, ceilingDb = 0f)
+
+        assertEquals(PeqGraphMath.MIN_GAIN, belowFloor, 1e-6)
+        assertEquals(PeqGraphMath.MAX_GAIN, aboveCeiling, 1e-6)
+    }
 }
