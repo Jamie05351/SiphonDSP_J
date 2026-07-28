@@ -468,10 +468,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     recreateRecorderRequested = false
                     Timber.d("Recreating recorder without replacing worker thread...")
 
-                    safeStop(recorder)
-                    safeStop(track)
-                    safeRelease(recorder)
-                    activeRecorder = null
+                    // Stop and release under recorderLifecycleLock so a concurrent
+                    // stopRecording() call on another thread can't call stop() on
+                    // this AudioRecord while it's being release()'d here (concurrent
+                    // stop+release is UB, same hazard as the final-stop path below).
+                    synchronized(recorderLifecycleLock) {
+                        safeStop(recorder)
+                        safeStop(track)
+                        safeRelease(recorder)
+                        activeRecorder = null
+                    }
 
                     if (mediaProjection == null || isProcessorDisposing) {
                         Timber.e("Media projection handle is null, stopping recorder worker")
@@ -546,8 +552,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
         }
         finally {
-            activeRecorder = null
-            activeTrack = null
+            // Null the shared references under the lock before releasing so an
+            // overlapping stopRecording() call on another thread either sees null
+            // (and no-ops) or has already finished its stop() call before we
+            // release() below — the two can never run concurrently on the same object.
+            synchronized(recorderLifecycleLock) {
+                activeRecorder = null
+                activeTrack = null
+            }
             safeStop(recorder)
             safeStop(track)
             safeRelease(recorder)
@@ -591,13 +603,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             if(worker == null)
                 return
             isProcessorDisposing = true
-        }
 
-        // Only stop() here to unblock the worker's blocking read()/write() calls; release() is
-        // deliberately left to the worker's own finally block so the objects are never released
-        // while that thread may still be using them (concurrent release+read/write is UB).
-        safeStop(activeRecorder)
-        safeStop(activeTrack)
+            // Only stop() here to unblock the worker's blocking read()/write() calls; release() is
+            // deliberately left to the worker's own finally block so the objects are never released
+            // while that thread may still be using them (concurrent release+read/write is UB).
+            // Done under the same lock the recreate-recorder path uses to release(), so this
+            // stop() can never race that release() on the same AudioRecord.
+            safeStop(activeRecorder)
+            safeStop(activeTrack)
+        }
         worker.interrupt()
 
         if(worker !== Thread.currentThread()) {

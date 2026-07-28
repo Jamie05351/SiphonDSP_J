@@ -35,16 +35,24 @@ internal class BmwPeqStore(private val directory: File) {
     private val primaryFile = File(directory, FILE_NAME)
     private val recoveryFile = File(directory, RECOVERY_FILE_NAME)
 
-    fun save(state: BmwPeqState): Boolean {
+    fun save(state: BmwPeqState): Boolean = synchronized(writeLock) {
         val encoded = encode(state)
-        val recoveryOk = atomicWrite(recoveryFile, encoded)
+        // Promote whatever is currently in primary (the last successfully-saved
+        // state) into recovery before overwriting primary, so recovery is a true
+        // rollback target rather than a duplicate of the state being written now.
+        // On the very first save there's no previous state yet, so seed recovery
+        // with the same content for redundancy against single-file corruption.
+        val previous = runCatching {
+            primaryFile.takeIf { it.isFile }?.readText(StandardCharsets.UTF_8)
+        }.getOrNull()
+        val recoveryOk = atomicWrite(recoveryFile, previous ?: encoded)
         val primaryOk = recoveryOk && atomicWrite(primaryFile, encoded)
         val success = recoveryOk && primaryOk
         Timber.i(
             "BMW PEQ save target=${primaryFile.absolutePath} version=$VERSION " +
                 "${summary(state)} success=$success recovery=$recoveryOk primary=$primaryOk"
         )
-        return success
+        success
     }
 
     fun load(): LoadResult {
@@ -209,5 +217,11 @@ internal class BmwPeqStore(private val directory: File) {
         const val RECOVERY_FILE_NAME = "native_bmw_peq_state.recovery"
         private const val HEADER_V2 = "BMW_PEQ_STATE_V2"
         private const val HEADER_V1 = "BMW_PEQ_STATE_V1"
+
+        // store(context) constructs a new BmwPeqStore per call, so this lock must be shared
+        // at the class level (not an instance field) to actually serialize concurrent save()
+        // calls — e.g. a UI-thread PEQ edit racing a cold-start restore, both of which write
+        // through the same "${target.name}.tmp" temp file path.
+        private val writeLock = Any()
     }
 }
