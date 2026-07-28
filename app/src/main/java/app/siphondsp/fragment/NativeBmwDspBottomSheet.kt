@@ -1,7 +1,5 @@
 package app.siphondsp.fragment
 
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -14,8 +12,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.setPadding
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.model.NativeBmwDspValues
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -292,17 +289,13 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun applyConfiguration() {
-        requireContext().sendLocalBroadcast(Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values))
+        NativeBmwDspValues.broadcast(requireContext(), values)
     }
 
-    private fun loadValues(): FloatArray {
-        val saved = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
-        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return if (parsed?.size == DEFAULTS.size) parsed else DEFAULTS.copyOf()
-    }
+    private fun loadValues(): FloatArray = NativeBmwDspValues.load(requireContext())
 
     private fun saveValues() {
-        requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, values.joinToString(",")).apply()
+        NativeBmwDspValues.save(requireContext(), values)
     }
 
     private fun cardParams(bottomMargin: Int) = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { this.bottomMargin = bottomMargin }
@@ -312,18 +305,6 @@ class NativeBmwDspBottomSheet : BottomSheetDialogFragment() {
 
     companion object {
         const val TAG = "native_bmw_dsp"
-        private const val PREFS = "native_bmw_dsp"
-        private const val KEY = "values"
-        val DEFAULTS = floatArrayOf(
-            1f, 0f, 0f, 0f, 0f,
-            -6f, 0f, 0f, -1f, -1f, 0f, 0f,
-            1f, 32f,
-            0f, 150f, 0f,
-            0f, 125f,
-            0f, 0f,
-            0f, 0f, 0f, 0f,
-            1f, 3f, 550f,
-            1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        )
+        val DEFAULTS: FloatArray get() = NativeBmwDspValues.DEFAULTS
     }
 }

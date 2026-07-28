@@ -23,6 +23,7 @@ import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
@@ -183,11 +184,22 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         }
     private val spectrumHandler = Handler(Looper.getMainLooper())
     private var spectrumActive = false
+    private val levelScratch = FloatArray(4)
+    private val leftMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
+    private val rightMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
     private val spectrumTick = object : Runnable {
         override fun run() {
+            if (showGainMeters) updateGainMeters()
             invalidate()
             spectrumHandler.postDelayed(this, 33L)
         }
+    }
+
+    private fun updateGainMeters() {
+        SpectrumEngine.channelLevelsInto(levelScratch)
+        val now = System.currentTimeMillis()
+        leftMeter.update(levelScratch[0], levelScratch[1], now)
+        rightMeter.update(levelScratch[2], levelScratch[3], now)
     }
 
     private fun startSpectrum() {
@@ -202,6 +214,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         spectrumActive = false
         spectrumHandler.removeCallbacks(spectrumTick)
         SpectrumEngine.release()
+        leftMeter.reset()
+        rightMeter.reset()
     }
 
     // --- UNIFIED_SYSTEM state -----------------------------------------------------------
@@ -304,10 +318,32 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         textAlign = Paint.Align.LEFT
         textSize = 9.5f * density
     }
+    private val meterTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = unifiedGridColor
+    }
+    private val meterRmsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = bankColorLow
+    }
+    private val meterPeakPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.4f * density
+        color = sumColor
+    }
+    private val meterHoldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = sumColor
+    }
+    private val meterLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = unifiedTextColor
+        textAlign = Paint.Align.CENTER
+        textSize = 8.5f * density
+    }
 
     private val padLeft = 34f * density
     private val padTop = 16f * density
-    private val padRight = 30f * density
+    private val padRight = 44f * density
     private val padBottom = 22f * density
 
     init {
@@ -443,8 +479,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun valuesForDisplay(): FloatArray {
         val draft = tiltDraft ?: return systemValues
         val copy = systemValues.copyOf()
-        copy[INDEX_TILT_AMOUNT] = draft.amountDb
-        copy[INDEX_TILT_FREQ] = draft.frequencyHz
+        copy[NativeBmwDspValues.INDEX_TILT_AMOUNT] = draft.amountDb
+        copy[NativeBmwDspValues.INDEX_TILT_FREQ] = draft.frequencyHz
         return copy
     }
 
@@ -456,7 +492,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun currentTiltValues(): BmwGraphGestureMath.TiltValues =
-        BmwGraphGestureMath.TiltValues(systemValues[INDEX_TILT_FREQ], systemValues[INDEX_TILT_AMOUNT])
+        BmwGraphGestureMath.TiltValues(systemValues[NativeBmwDspValues.INDEX_TILT_FREQ], systemValues[NativeBmwDspValues.INDEX_TILT_AMOUNT])
 
     // --- Shared touch handling -----------------------------------------------------------
 
@@ -494,7 +530,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             invalidate()
             return true
         }
-        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM && showTiltHandles && systemValues[INDEX_TILT_ENABLED] >= .5f) {
+        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM && showTiltHandles && systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
             val handle = hitTestTiltHandle(event.x, event.y)
             if (handle != null) {
                 tiltDragHandle = handle
@@ -669,7 +705,32 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         drawSumCurve(canvas, left, right, top, bottom)
         if (showTiltHandles) drawTiltHandles(canvas)
         drawMultiBankNodes(canvas)
+        if (showGainMeters) drawGainMeters(canvas, right, top, bottom)
         drawUnifiedLegend(canvas, left, top)
+    }
+
+    private fun drawGainMeters(canvas: Canvas, plotRight: Float, top: Float, bottom: Float) {
+        val barWidth = 8f * density
+        val gap = 4f * density
+        val leftBarX = plotRight + 5f * density
+        val rightBarX = leftBarX + barWidth + gap
+        drawMeterBar(canvas, leftBarX, top, bottom, barWidth, leftMeter)
+        drawMeterBar(canvas, rightBarX, top, bottom, barWidth, rightMeter)
+        canvas.drawText("L", leftBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
+        canvas.drawText("R", rightBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
+    }
+
+    private fun drawMeterBar(canvas: Canvas, x: Float, top: Float, bottom: Float, width: Float, meter: PeakHoldMeter) {
+        canvas.drawRect(x, top, x + width, bottom, meterTrackPaint)
+        val rmsFraction = PeakHoldMeter.fractionFor(meter.rmsDb, METER_FLOOR_DB, METER_CEILING_DB)
+        val rmsY = bottom - rmsFraction * (bottom - top)
+        canvas.drawRect(x, rmsY, x + width, bottom, meterRmsPaint)
+        val peakFraction = PeakHoldMeter.fractionFor(meter.peakDb, METER_FLOOR_DB, METER_CEILING_DB)
+        val peakY = bottom - peakFraction * (bottom - top)
+        canvas.drawLine(x, peakY, x + width, peakY, meterPeakPaint)
+        val holdFraction = PeakHoldMeter.fractionFor(meter.holdDb, METER_FLOOR_DB, METER_CEILING_DB)
+        val holdY = (bottom - holdFraction * (bottom - top)).coerceIn(top, bottom - 1.5f * density)
+        canvas.drawRect(x, holdY - 1.5f * density, x + width, holdY + 1.5f * density, meterHoldPaint)
     }
 
     private fun drawUnifiedGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -809,7 +870,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private fun drawTiltHandles(canvas: Canvas) {
         val tilt = tiltDraft ?: currentTiltValues()
-        val enabled = systemValues[INDEX_TILT_ENABLED] >= .5f
+        val enabled = systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f
         val pivotX = xForFrequency(tilt.frequencyHz.toDouble())
         val pivotY = yForGain(0.0)
         val amountX = pivotX + 22f * density
@@ -1022,10 +1083,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val TILT_HANDLE_RADIUS_DP = 20f
         private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
 
-        // BMW DSP config array indices (see NativeBmwDspProcessor::configure / NativeBmwDspBottomSheet).
-        private const val INDEX_TILT_ENABLED = 25
-        private const val INDEX_TILT_AMOUNT = 26
-        private const val INDEX_TILT_FREQ = 27
+        private const val METER_FLOOR_DB = -50f
+        private const val METER_CEILING_DB = 0f
 
         private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,

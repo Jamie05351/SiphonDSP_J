@@ -35,6 +35,7 @@ import app.siphondsp.model.PrivatePeqBackup
 import app.siphondsp.model.deepCopy
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
@@ -486,7 +487,7 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun loadBands(savedInstanceState: Bundle?) {
         peqState = BmwPeqState.load(requireContext())
-        nativeDspValues = loadNativeDspValues()
+        nativeDspValues = NativeBmwDspValues.load(requireContext())
         history.reset(peqState)
         updateHistoryControls()
         suppressPreampCallback = true
@@ -496,17 +497,29 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     /**
-     * Reads the 35-float native BMW DSP config array (headroom/crossover/tilt/gains/etc,
-     * separate from BmwPeqState) so the unified surface can model the complete signal
-     * chain, not just the PEQ banks. Mirrors NativeBmwDspBottomSheet's private loadValues()
-     * -- this duplication is intentionally temporary; a later pass extracts a shared
-     * NativeBmwDspValues store both call sites delegate to.
+     * Tilt is not part of BmwPeqState -- it lives in the separate 35-float native BMW DSP
+     * config array -- so this is deliberately a sibling of applyCandidate(), not routed
+     * through it or PeqStateHistory: folding tilt into PEQ undo/redo would make PEQ undo
+     * silently revert tilt changes too. Same transaction discipline as applyCandidate()
+     * though -- the surface only calls this once, on ACTION_UP of an actual drag.
      */
-    private fun loadNativeDspValues(): FloatArray {
-        val prefs = requireContext().getSharedPreferences(NATIVE_DSP_PREFS, Context.MODE_PRIVATE)
-        val saved = prefs.getString(NATIVE_DSP_KEY, null)
-        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return if (parsed?.size == BmwSignalChain.VALUE_COUNT) parsed else NativeBmwDspBottomSheet.DEFAULTS.copyOf()
+    private fun applyTiltCandidate(frequencyHz: Float, amountDb: Float): Boolean {
+        return try {
+            val clampedFreq = frequencyHz.coerceIn(200f, 2000f)
+            val clampedAmount = amountDb.coerceIn(-6f, 6f)
+            val applied = NativeBmwDspValues.update(requireContext()) { values ->
+                values[NativeBmwDspValues.INDEX_TILT_FREQ] = clampedFreq
+                values[NativeBmwDspValues.INDEX_TILT_AMOUNT] = clampedAmount
+            }
+            nativeDspValues = applied
+            binding.equalizerSurface.setSystemValues(applied)
+            Timber.d("tilt-drag committed frequency=$clampedFreq amount=$clampedAmount")
+            true
+        } catch (error: Exception) {
+            Timber.e(error, "tilt-drag commit failed")
+            requireContext().toast("Tilt change could not be saved; previous value kept")
+            false
+        }
     }
 
     private fun bandsForScope() = when (selectedScope) {
@@ -563,6 +576,8 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun configureGraph() {
         binding.equalizerSurface.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
+        binding.equalizerSurface.showTiltHandles = true
+        binding.equalizerSurface.showGainMeters = true
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         binding.equalizerSurface.showIndividualFilters =
             graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true)
@@ -592,6 +607,11 @@ class ParametricEqualizerFragment : Fragment() {
                 } else {
                     binding.equalizerSurface.cancelDraft()
                 }
+            }
+        }
+        binding.equalizerSurface.onTiltDragCommitted = { frequencyHz, amountDb ->
+            if (!applyTiltCandidate(frequencyHz, amountDb)) {
+                binding.equalizerSurface.cancelDraft()
             }
         }
         binding.graphOptions.setOnClickListener { anchor ->
@@ -1055,9 +1075,6 @@ class ParametricEqualizerFragment : Fragment() {
         const val STATE_BANDS = "bands"
         // Lowest sample rate RootlessAudioProcessorService ever opens the recorder at.
         private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
-        // Mirrors NativeBmwDspBottomSheet.PREFS/KEY -- see loadNativeDspValues() doc comment.
-        private const val NATIVE_DSP_PREFS = "native_bmw_dsp"
-        private const val NATIVE_DSP_KEY = "values"
         private const val GRAPH_PREFS = "peq_graph_display"
         private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
         private const val GRAPH_CHANNEL = "channel_display"
