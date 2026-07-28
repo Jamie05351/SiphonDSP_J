@@ -14,7 +14,6 @@ import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.preference.MaterialSeekbarPreference
-import app.siphondsp.preference.NativeBmwDspResponsePreference
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 
@@ -33,7 +32,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
         configureFractionalSteps()
         configureSectionStyling(preferenceScreen)
-        updateResponseVisualiser(values)
     }
 
     private fun configureFractionalSteps() {
@@ -54,10 +52,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
                 configureSectionStyling(preference)
             }
         }
-    }
-
-    private fun updateResponseVisualiser(values: FloatArray) {
-        findPreference<NativeBmwDspResponsePreference>(KEY_LIVE_RESPONSE)?.setValues(values)
     }
 
     override fun onStart() {
@@ -96,7 +90,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     private fun saveAndApply(values: FloatArray) {
         requireContext().getSharedPreferences(NATIVE_PREFS, Context.MODE_PRIVATE)
             .edit().putString(NATIVE_VALUES_KEY, values.joinToString(",")).apply()
-        updateResponseVisualiser(values)
         requireContext().sendLocalBroadcast(
             Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
                 .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
@@ -128,7 +121,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         private const val MENU_PREFS = "native_bmw_dsp_menu"
         private const val NATIVE_PREFS = "native_bmw_dsp"
         private const val NATIVE_VALUES_KEY = "values"
-        private const val KEY_LIVE_RESPONSE = "bmw_live_response"
 
         private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25)
         private val LIST_INDEXES = setOf(3, 4, 16)

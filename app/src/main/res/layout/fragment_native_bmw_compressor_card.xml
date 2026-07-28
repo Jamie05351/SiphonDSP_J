@@ -50,12 +50,4 @@
             android:contentDescription="Enable low-band compressor" />
     </LinearLayout>
 
-    <app.siphondsp.view.NativeBmwCompressorView
-        android:id="@+id/compressor_card_visualizer"
-        android:layout_width="match_parent"
-        android:layout_height="210dp"
-        android:clickable="true"
-        android:contentDescription="Open low-band compressor controls"
-        android:focusable="true" />
-
 </LinearLayout>
