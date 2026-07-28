@@ -1,7 +1,9 @@
 package app.siphondsp.fragment
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.preference.PreferenceCategory
@@ -16,11 +18,18 @@ import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.preference.MaterialSeekbarPreference
 import app.siphondsp.preference.NativeBmwDspResponsePreference
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 
 /** Inline, expandable controls for the native BMW processor. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
     private lateinit var menuPreferences: SharedPreferences
+    private val peqReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            findPreference<NativeBmwDspResponsePreference>(KEY_LIVE_RESPONSE)?.refreshPeqState()
+        }
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = MENU_PREFS
@@ -47,12 +56,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     private fun configureSectionStyling(group: PreferenceGroup) {
         group.children.forEach { preference ->
-            if (preference is PreferenceCategory) {
-                preference.layoutResource = R.layout.preference_bmw_section_header
-            }
-            if (preference is PreferenceGroup) {
-                configureSectionStyling(preference)
-            }
+            if (preference is PreferenceCategory) preference.layoutResource = R.layout.preference_bmw_section_header
+            if (preference is PreferenceGroup) configureSectionStyling(preference)
         }
     }
 
@@ -63,9 +68,14 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     override fun onStart() {
         super.onStart()
         menuPreferences.registerOnSharedPreferenceChangeListener(this)
+        requireContext().registerLocalReceiver(
+            peqReceiver,
+            IntentFilter(Constants.ACTION_PARAMETRIC_EQ_CHANGED),
+        )
     }
 
     override fun onStop() {
+        requireContext().unregisterLocalReceiver(peqReceiver)
         menuPreferences.unregisterOnSharedPreferenceChangeListener(this)
         super.onStop()
     }
@@ -133,19 +143,11 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25)
         private val LIST_INDEXES = setOf(3, 4, 16)
         private val STEP_TENTH_KEYS = setOf(
-            "bmw_low_gain_l",
-            "bmw_low_gain_r",
-            "bmw_mid_gain_l",
-            "bmw_mid_gain_r",
-            "bmw_post_gain_l",
-            "bmw_post_gain_r",
-            "bmw_tilt_amount",
+            "bmw_low_gain_l", "bmw_low_gain_r", "bmw_mid_gain_l", "bmw_mid_gain_r",
+            "bmw_post_gain_l", "bmw_post_gain_r", "bmw_tilt_amount",
         )
         private val STEP_HUNDREDTH_KEYS = setOf(
-            "bmw_mid_delay_l",
-            "bmw_mid_delay_r",
-            "bmw_low_delay_l",
-            "bmw_low_delay_r",
+            "bmw_mid_delay_l", "bmw_mid_delay_r", "bmw_low_delay_l", "bmw_low_delay_r",
         )
         private val KEY_TO_INDEX = linkedMapOf(
             "native_bmw_dsp_enable" to 0,
