@@ -1,6 +1,7 @@
 package app.siphondsp.activity
 
 import android.os.Bundle
+import androidx.activity.addCallback
 import androidx.core.view.WindowCompat
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
@@ -19,6 +20,8 @@ class OnboardingActivity : BaseActivity(){
     {
         WindowCompat.setDecorFitsSystemWindows(window,false)
         super.onCreate(savedInstanceState)
+
+        onBackPressedDispatcher.addCallback(this) { navigateUp() }
 
         fragment = if (savedInstanceState != null) {
             supportFragmentManager.getFragment(savedInstanceState, "onboarding") as OnboardingFragment
@@ -58,10 +61,6 @@ class OnboardingActivity : BaseActivity(){
         if(finished)
             finish()
         return finished
-    }
-
-    override fun onBackPressed() {
-        navigateUp()
     }
 
     override fun onSupportNavigateUp(): Boolean

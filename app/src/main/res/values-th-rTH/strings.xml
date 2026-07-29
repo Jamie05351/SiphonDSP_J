@@ -464,7 +464,7 @@
     <string name="geq_gain">ได้รับ</string>
     <string name="geq_frequency">ความถี่</string>
     <!-- AutoEQ GraphicEQ selector -->
-    <string name="geq_api_network_error">ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์</string>
+    <string name="geq_api_network_error">ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ %1$s</string>
     <string name="geq_api_network_error_details_code">เซิร์ฟเวอร์ตอบกลับด้วยรหัสข้อผิดพลาด: %1$d</string>
     <string name="autoeq_search">ค้นหา AutoEQ</string>
     <string name="autoeq_enter_model">ใส่รุ่นหูฟังของคุณ…</string>
