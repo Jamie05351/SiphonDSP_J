@@ -10,7 +10,6 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
@@ -18,7 +17,9 @@ import kotlin.math.roundToInt
  *
  * The interaction follows Equalizer314's useful convention: drag the threshold
  * point horizontally and drag the compressed part of the curve vertically to
- * adjust ratio. The glowing trace is native detector/output telemetry.
+ * adjust ratio. The knee handle -- where the soft-knee curve meets the straight
+ * ratio segment -- drags horizontally to widen/narrow the knee. The glowing
+ * trace is native detector/output telemetry.
  */
 class NativeBmwCompressorView @JvmOverloads constructor(
     context: Context,
@@ -38,6 +39,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
 
     var onThresholdChanged: ((Float) -> Unit)? = null
     var onRatioChanged: ((Float) -> Unit)? = null
+    var onKneeChanged: ((Float) -> Unit)? = null
 
     private val density = resources.displayMetrics.density
     private val minDb = -60f
@@ -46,11 +48,13 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private val padTop = 14f * density
     private val padRight = 25f * density
     private val padBottom = 24f * density
+    private val thresholdHitRadiusPx = 34f * density
+    private val kneeHitRadiusPx = 26f * density
     private var meterInputDb = -60f
     private var meterOutputDb = -60f
     private var gainReductionDb = 0f
     private val history = ArrayDeque<Pair<Float, Float>>()
-    private var dragMode = 0
+    private var dragMode: CompressorGraphMath.DragMode? = null
 
     private val backgroundPaint = Paint().apply { color = Color.rgb(24, 24, 26) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -67,6 +71,13 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private val thresholdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(244, 76, 92); strokeWidth = 1.5f * density
         pathEffect = DashPathEffect(floatArrayOf(5f * density, 4f * density), 0f)
+    }
+    private val kneeHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 183, 77); style = Paint.Style.FILL
+    }
+    private val kneeHandleStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 183, 77); style = Paint.Style.STROKE
+        strokeWidth = 1.5f * density; alpha = 160
     }
     private val liveTracePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(67, 137, 255); strokeWidth = 2.5f * density
@@ -108,20 +119,17 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private fun dbAtX(value: Float) = minDb + (value - padLeft) / graphWidth() * (maxDb - minDb)
     private fun dbAtY(value: Float) = maxDb - (value - padTop) / graphHeight() * (maxDb - minDb)
 
-    private fun outputFor(inputDb: Float): Float {
-        if (!compressorEnabled) return inputDb
-        val halfKnee = kneeDb * .5f
-        val compressed = when {
-            kneeDb <= 0f && inputDb <= thresholdDb -> inputDb
-            kneeDb <= 0f -> thresholdDb + (inputDb - thresholdDb) / ratio
-            inputDb < thresholdDb - halfKnee -> inputDb
-            inputDb > thresholdDb + halfKnee -> thresholdDb + (inputDb - thresholdDb) / ratio
-            else -> {
-                val distance = inputDb - thresholdDb + halfKnee
-                inputDb + (1f / ratio - 1f) * distance * distance / (2f * kneeDb)
-            }
-        }
-        return compressed + makeupDb
+    private fun outputFor(inputDb: Float): Float =
+        CompressorGraphMath.outputFor(inputDb, thresholdDb, ratio, kneeDb, makeupDb, compressorEnabled)
+
+    private fun kneeHandleX(): Float {
+        val (inputDb, _) = CompressorGraphMath.kneeHandlePoint(thresholdDb, ratio, kneeDb, makeupDb, compressorEnabled)
+        return x(inputDb)
+    }
+
+    private fun kneeHandleY(): Float {
+        val (_, outputDb) = CompressorGraphMath.kneeHandlePoint(thresholdDb, ratio, kneeDb, makeupDb, compressorEnabled)
+        return y(outputDb.coerceIn(minDb, maxDb))
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -148,6 +156,13 @@ class NativeBmwCompressorView @JvmOverloads constructor(
         val thresholdY = y(outputFor(thresholdDb).coerceIn(minDb, maxDb))
         canvas.drawLine(thresholdX, padTop, thresholdX, height - padBottom, thresholdPaint)
         canvas.drawCircle(thresholdX, thresholdY, 8f * density, liveDotPaint)
+
+        if (kneeDb > 0f) {
+            val kneeX = kneeHandleX()
+            val kneeY = kneeHandleY()
+            canvas.drawCircle(kneeX, kneeY, 7f * density, kneeHandlePaint)
+            canvas.drawCircle(kneeX, kneeY, 7f * density, kneeHandleStrokePaint)
+        }
 
         if (history.size > 1) {
             val trace = Path()
@@ -179,30 +194,44 @@ class NativeBmwCompressorView @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
-                dragMode = if (hypot(event.x - thresholdX, event.y - thresholdY) < 34f * density) 1 else 2
+                dragMode = CompressorGraphMath.pickDragMode(
+                    event.x, event.y,
+                    thresholdX, thresholdY,
+                    kneeHandleX(), kneeHandleY(),
+                    thresholdHitRadiusPx, kneeHitRadiusPx,
+                )
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                if (dragMode == 1) {
-                    val value = (dbAtX(event.x).coerceIn(-18f, 0f) * 2f).roundToInt() / 2f
-                    thresholdDb = value
-                    onThresholdChanged?.invoke(value)
-                } else {
-                    val input = dbAtX(event.x).coerceIn(thresholdDb + 1f, maxDb)
-                    val output = (dbAtY(event.y) - makeupDb).coerceAtLeast(thresholdDb + .05f)
-                    val next = ((input - thresholdDb) / (output - thresholdDb))
-                        .coerceIn(1f, 10f)
-                    val snapped = (next * 10f).roundToInt() / 10f
-                    if (abs(snapped - ratio) >= .05f) {
-                        ratio = snapped
-                        onRatioChanged?.invoke(snapped)
+                when (dragMode) {
+                    CompressorGraphMath.DragMode.THRESHOLD -> {
+                        val value = (dbAtX(event.x).coerceIn(-18f, 0f) * 2f).roundToInt() / 2f
+                        thresholdDb = value
+                        onThresholdChanged?.invoke(value)
+                    }
+                    CompressorGraphMath.DragMode.KNEE -> {
+                        val draggedInput = dbAtX(event.x)
+                        val value = CompressorGraphMath.kneeFromDrag(draggedInput, thresholdDb)
+                        if (value != kneeDb) {
+                            kneeDb = value
+                            onKneeChanged?.invoke(value)
+                        }
+                    }
+                    CompressorGraphMath.DragMode.RATIO, null -> {
+                        val input = dbAtX(event.x).coerceIn(thresholdDb + 1f, maxDb)
+                        val output = (dbAtY(event.y) - makeupDb).coerceAtLeast(thresholdDb + .05f)
+                        val snapped = CompressorGraphMath.ratioFromDrag(input, output, thresholdDb)
+                        if (abs(snapped - ratio) >= .05f) {
+                            ratio = snapped
+                            onRatioChanged?.invoke(snapped)
+                        }
                     }
                 }
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                dragMode = 0
+                dragMode = null
                 performClick()
                 return true
             }
