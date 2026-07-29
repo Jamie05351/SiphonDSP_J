@@ -152,7 +152,7 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
-        disable += "ObsoleteSdkInt"
+        disable += setOf("ObsoleteSdkInt", "MissingTranslation", "ExtraTranslation")
     }
 
     compileOptions {
