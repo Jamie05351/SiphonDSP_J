@@ -43,9 +43,14 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     }
 
     private fun configureSectionCards(group: PreferenceGroup) {
+        val sectionSpacing = resources.getDimensionPixelSize(R.dimen.bmw_dsp_section_spacing)
         group.children.forEach { preference ->
             if (preference is PreferenceCategory) {
                 preference.layoutResource = R.layout.preference_bmw_section_header
+                preference.extras.putInt(
+                    RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_TOP_MARGIN_PX,
+                    sectionSpacing,
+                )
 
                 val rows = buildList {
                     add(preference)
