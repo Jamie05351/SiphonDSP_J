@@ -38,6 +38,7 @@
         app:backgroundTint="?attr/colorSurface"
         app:fabAlignmentMode="center"
         app:fabAnchorMode="cradle"
+        app:fabCradleMargin="16dp"
         app:menuAlignmentMode="auto"
         android:contentInsetStart="0.0dip"
         android:contentInsetLeft="0dp"

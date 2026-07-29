@@ -4,9 +4,17 @@
     tools:context="app.siphondsp.activity.MainActivity">
     <item
         android:id="@+id/action_settings"
-        android:orderInCategory="100"
+        android:orderInCategory="10"
         android:title="@string/action_settings"
         android:iconTint="?attr/actionMenuTextColor"
         android:icon="@drawable/ic_twotone_settings_24dp"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_parametric_eq"
+        android:orderInCategory="20"
+        android:title="@string/action_parametric_eq"
+        android:iconTint="?attr/actionMenuTextColor"
+        android:icon="@drawable/ic_baseline_equalizer_24dp"
         app:showAsAction="always" />
 </menu>
