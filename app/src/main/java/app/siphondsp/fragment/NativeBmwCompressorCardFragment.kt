@@ -20,11 +20,9 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
-import app.siphondsp.view.NativeBmwCompressorView
 import java.util.Locale
 
 class NativeBmwCompressorCardFragment : Fragment() {
-    private lateinit var visualizer: NativeBmwCompressorView
     private lateinit var enabledSwitch: SwitchCompat
     private lateinit var summary: TextView
     private val handler = Handler(Looper.getMainLooper())
@@ -32,7 +30,6 @@ class NativeBmwCompressorCardFragment : Fragment() {
     private val meterTick = object : Runnable {
         override fun run() {
             RootlessAudioProcessorService.nativeBmwCompressorMeter()?.takeIf { it.size >= 3 }?.let {
-                visualizer.setMeter(it[0], it[1], it[2])
                 updateSummary(NativeBmwCompressorState.load(requireContext()), it[2])
             }
             handler.postDelayed(this, 80L)
@@ -46,15 +43,11 @@ class NativeBmwCompressorCardFragment : Fragment() {
         inflater.inflate(R.layout.fragment_native_bmw_compressor_card, container, false)
 
     override fun onViewCreated(view: View, state: Bundle?) {
-        visualizer = view.findViewById(R.id.compressor_card_visualizer)
         enabledSwitch = view.findViewById(R.id.compressor_card_switch)
         summary = view.findViewById(R.id.compressor_card_summary)
-        visualizer.interactive = false
-        val openEditor = View.OnClickListener {
+        view.findViewById<View>(R.id.compressor_card_header).setOnClickListener {
             startActivity(Intent(requireContext(), NativeBmwCompressorActivity::class.java))
         }
-        view.findViewById<View>(R.id.compressor_card_header).setOnClickListener(openEditor)
-        visualizer.setOnClickListener(openEditor)
         enabledSwitch.setOnCheckedChangeListener { _, checked ->
             if (!bindingState) NativeBmwCompressorState.load(requireContext())
                 .copy(enabled = checked).persistAndApply(requireContext())
@@ -78,15 +71,10 @@ class NativeBmwCompressorCardFragment : Fragment() {
     }
 
     private fun bindState() {
-        if (!::visualizer.isInitialized) return
+        if (!::enabledSwitch.isInitialized) return
         val state = NativeBmwCompressorState.load(requireContext())
         bindingState = true
         enabledSwitch.isChecked = state.enabled
-        visualizer.compressorEnabled = state.enabled
-        visualizer.thresholdDb = state.thresholdDb
-        visualizer.ratio = state.ratio
-        visualizer.kneeDb = state.kneeDb
-        visualizer.makeupDb = state.makeupDb
         updateSummary(
             state,
             RootlessAudioProcessorService.nativeBmwCompressorMeter()?.getOrNull(2) ?: 0f,

@@ -201,12 +201,17 @@ class MainActivity : BaseActivity() {
         // Inflate bottom left menu
         menuInflater.inflate(R.menu.menu_main_bottom_left, binding.leftMenu.menu)
         binding.leftMenu.setOnMenuItemClickListener { arg0 ->
-            if (arg0.itemId == R.id.action_settings) {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
+            when (arg0.itemId) {
+                R.id.action_settings -> {
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                    true
+                }
+                R.id.action_parametric_eq -> {
+                    startActivity(Intent(this, ParametricEqualizerActivity::class.java))
+                    true
+                }
+                else -> false
             }
-            else
-                false
         }
 
         // Inflate bottom right menu
@@ -217,6 +222,10 @@ class MainActivity : BaseActivity() {
 
         binding.bar.setOnMenuItemClickListener { arg0 ->
             when (arg0.itemId) {
+                R.id.action_compressor -> {
+                    startActivity(Intent(this, NativeBmwCompressorActivity::class.java))
+                    true
+                }
                 R.id.action_blocklist -> {
                     if(!app.isEnhancedProcessing && isRoot()) {
                         showAlert(

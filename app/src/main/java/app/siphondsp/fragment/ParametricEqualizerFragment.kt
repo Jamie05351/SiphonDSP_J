@@ -55,7 +55,6 @@ class ParametricEqualizerFragment : Fragment() {
     private lateinit var peqState: BmwPeqState
     private lateinit var nativeDspValues: FloatArray
     private var selectedScope = PeqScope.FULL
-    private var suppressPreampCallback = false
     private val selectedBandByScope = mutableMapOf<PeqScope, UUID?>()
     private val history = PeqStateHistory(HISTORY_LIMIT)
     private var pendingDiagnosticReport: String? = null
@@ -394,7 +393,7 @@ class ParametricEqualizerFragment : Fragment() {
                 layoutInflater,
                 R.string.peq_edit_as_string,
                 R.string.peq_edit_hint,
-                adapter.bands.toApoString(binding.preampInput.value.toDouble()),
+                adapter.bands.toApoString(peqState.preampDb.toDouble()),
                 false,
                 null,
             ) { text ->
@@ -449,16 +448,6 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.confirm.setOnClickListener { editorSave() }
         binding.cancel.setOnClickListener { editorDiscard() }
-        binding.preampInput.setOnValueChangedListener {
-            if (!suppressPreampCallback && selectedScope == PeqScope.FULL) {
-                val previous = peqState.preampDb
-                if (!applyCandidate(peqState.deepCopy().copy(preampDb = binding.preampInput.value), "preamp")) {
-                    suppressPreampCallback = true
-                    binding.preampInput.value = previous
-                    suppressPreampCallback = false
-                }
-            }
-        }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
@@ -490,9 +479,6 @@ class ParametricEqualizerFragment : Fragment() {
         nativeDspValues = NativeBmwDspValues.load(requireContext())
         history.reset(peqState)
         updateHistoryControls()
-        suppressPreampCallback = true
-        binding.preampInput.value = peqState.preampDb
-        suppressPreampCallback = false
         bindScope()
     }
 
@@ -544,8 +530,6 @@ class ParametricEqualizerFragment : Fragment() {
     private fun bindScope() {
         val bands = bandsForScope()
         val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
-        binding.preampInput.isEnabled = selectedScope == PeqScope.FULL
-        binding.preampInput.isVisible = selectedScope == PeqScope.FULL
         binding.equalizerSurface.setSystemState(
             nativeDspValues,
             peqState,
@@ -1057,9 +1041,6 @@ class ParametricEqualizerFragment : Fragment() {
         }
         peqState = candidate
         if (recordHistory) history.commit(candidate)
-        suppressPreampCallback = true
-        binding.preampInput.value = peqState.preampDb
-        suppressPreampCallback = false
         bindScope()
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         updateHistoryControls()

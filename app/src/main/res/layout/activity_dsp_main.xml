@@ -22,7 +22,7 @@
             android:id="@+id/toolbar"
             style="@style/Theme.SiphonDSP.Toolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
+            android:layout_height="@dimen/header_toolbar_height"
             android:background="@android:color/transparent"
             app:titleCentered="true" />
 
@@ -38,6 +38,7 @@
         app:backgroundTint="?attr/colorSurface"
         app:fabAlignmentMode="center"
         app:fabAnchorMode="cradle"
+        app:fabCradleMargin="16dp"
         app:menuAlignmentMode="auto"
         android:contentInsetStart="0.0dip"
         android:contentInsetLeft="0dp"

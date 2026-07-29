@@ -429,22 +429,6 @@
                 android:text="@string/peq_preview"
                 android:textAppearance="?attr/textAppearanceTitleMedium" />
 
-            <app.siphondsp.view.NumberInputBox
-                android:id="@+id/preampInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginBottom="8dp"
-                android:max="0"
-                android:min="-30"
-                app:floatPrecision="1"
-                app:helperText="@string/peq_preamp_range"
-                app:helperTextEnabled="true"
-                app:hintText="@string/peq_preamp"
-                app:step="0.5"
-                app:suffixText="dB"
-                app:value="0" />
-
             <app.siphondsp.view.ParametricEqSurface
                 android:id="@+id/equalizer_surface"
                 android:layout_width="match_parent"
