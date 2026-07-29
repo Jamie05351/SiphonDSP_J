@@ -24,8 +24,10 @@ class RoundedRipplePreferenceGroupAdapter(preferenceGroup: PreferenceGroup) : Pr
 
             val isGroupStart = groupBackgroundRes == R.drawable.ripple_group_top ||
                 groupBackgroundRes == R.drawable.ripple_group_single
+            val defaultSpacing = holder.itemView.resources.getDimensionPixelSize(R.dimen.liveprog_group_spacing)
+            val requestedSpacing = preference.extras.getInt(EXTRA_GROUP_TOP_MARGIN_PX, defaultSpacing)
             (holder.itemView.layoutParams as? RecyclerView.LayoutParams)?.topMargin = if (isGroupStart) {
-                holder.itemView.resources.getDimensionPixelSize(R.dimen.liveprog_group_spacing)
+                requestedSpacing
             } else {
                 0
             }
@@ -47,5 +49,8 @@ class RoundedRipplePreferenceGroupAdapter(preferenceGroup: PreferenceGroup) : Pr
          * used by LiveprogParamsFragment to render grouped-card borders around each section.
          */
         const val EXTRA_GROUP_BACKGROUND_RES = "grouped_card_background_res"
+
+        /** Optional top margin in pixels for the first row of a grouped card. */
+        const val EXTRA_GROUP_TOP_MARGIN_PX = "grouped_card_top_margin_px"
     }
 }
