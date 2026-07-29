@@ -3,6 +3,7 @@ package app.siphondsp.fragment
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -37,12 +38,15 @@ class NativeBmwCompressorFragment : Fragment() {
     private lateinit var makeupLabel: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var bindingState = false
+    private var pendingPersist = false
+    private var lastPersistMs = 0L
+    private val flushPersist = Runnable { persistNow() }
     private val meterTick = object : Runnable {
         override fun run() {
             val meter = RootlessAudioProcessorService.nativeBmwCompressorMeter()
             if (meter != null && meter.size >= 3) {
                 visualizer.setMeter(meter[0], meter[1], meter[2])
-                grTrace.pushFrame(meter[0], meter[2])
+                grTrace.pushFrame(meter[0], meter[1], meter[2])
                 meterText.text = String.format(
                     Locale.ENGLISH,
                     "Input %.1f dBFS   Output %.1f dBFS   Gain reduction %.1f dB",
@@ -100,6 +104,10 @@ class NativeBmwCompressorFragment : Fragment() {
 
     override fun onStop() {
         handler.removeCallbacks(meterTick)
+        if (pendingPersist) {
+            handler.removeCallbacks(flushPersist)
+            persistNow()
+        }
         super.onStop()
     }
 
@@ -127,12 +135,32 @@ class NativeBmwCompressorFragment : Fragment() {
         }
         visualizer.onThresholdChanged = { commit(state.copy(thresholdDb = it)) }
         visualizer.onRatioChanged = { commit(state.copy(ratio = it)) }
+        visualizer.onKneeChanged = { commit(state.copy(kneeDb = it)) }
     }
 
+    /**
+     * Visual feedback (sliders, transfer curve) updates every call; persistence -- SharedPreferences
+     * writes, a broadcast, and a native reconfigure -- is throttled to PERSIST_THROTTLE_MS so a
+     * continuous graph drag doesn't fire that work at touch-event rate. A trailing postDelayed
+     * flush guarantees the final dragged value is never lost, and onStop() flushes immediately if
+     * the fragment goes away before that timer fires.
+     */
     private fun commit(next: NativeBmwCompressorState) {
         state = next
-        state.persistAndApply(requireContext())
         bindState(state)
+        pendingPersist = true
+        handler.removeCallbacks(flushPersist)
+        if (SystemClock.uptimeMillis() - lastPersistMs >= PERSIST_THROTTLE_MS) {
+            persistNow()
+        } else {
+            handler.postDelayed(flushPersist, PERSIST_THROTTLE_MS)
+        }
+    }
+
+    private fun persistNow() {
+        lastPersistMs = SystemClock.uptimeMillis()
+        pendingPersist = false
+        state.persistAndApply(requireContext())
     }
 
     private fun bindState(next: NativeBmwCompressorState) {
@@ -160,5 +188,9 @@ class NativeBmwCompressorFragment : Fragment() {
         releaseLabel.text = String.format(Locale.ENGLISH, "Release   %.0f ms", state.releaseMs)
         makeupLabel.text = String.format(Locale.ENGLISH, "Makeup gain   %.1f dB", state.makeupDb)
         bindingState = false
+    }
+
+    companion object {
+        private const val PERSIST_THROTTLE_MS = 50L
     }
 }

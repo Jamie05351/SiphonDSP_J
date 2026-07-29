@@ -10,7 +10,9 @@ import android.view.View
 
 /**
  * Scrolling time-domain trace of the low-band compressor: input level fills from the
- * bottom, gain-reduction dips from the top and never crosses the threshold line.
+ * bottom, gain-reduction dips from the top and never crosses the threshold line, and
+ * output level draws as a third line so the compression's effect on level is visible
+ * directly rather than only inferred from the GR dip.
  * Modeled on Equalizer314's LimiterWaveformView (GPLv3), adapted to a single band and
  * fed directly from the native meter (already attack/release-smoothed in
  * NativeBmwDspProcessor::processFrame) instead of re-smoothing here.
@@ -32,8 +34,15 @@ class CompressorGrTraceView @JvmOverloads constructor(
     private val bufferSize = 300
     private var writeIdx = 0
     private val inputHistory = FloatArray(bufferSize) { dbMin }
+    private val outputHistory = FloatArray(bufferSize) { dbMin }
     private val grHistory = FloatArray(bufferSize)
     private var hasData = false
+
+    private val inputFillPath = Path()
+    private val inputStrokePath = Path()
+    private val outputStrokePath = Path()
+    private val grLinePath = Path()
+    private val grFillPath = Path()
 
     var thresholdDb = -12f
         set(value) { field = value; invalidate() }
@@ -52,6 +61,10 @@ class CompressorGrTraceView @JvmOverloads constructor(
         color = Color.rgb(230, 232, 240); style = Paint.Style.STROKE
         strokeWidth = density; alpha = 70
     }
+    private val outputStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(67, 137, 255); style = Paint.Style.STROKE
+        strokeWidth = 1.8f * density
+    }
     private val grTracePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(244, 76, 92); style = Paint.Style.STROKE
         strokeWidth = 2.2f * density
@@ -64,9 +77,10 @@ class CompressorGrTraceView @JvmOverloads constructor(
     }
 
     /** Called once per meter poll (see NativeBmwCompressorFragment's meterTick). */
-    fun pushFrame(inputDb: Float, gainReductionDb: Float) {
+    fun pushFrame(inputDb: Float, outputDb: Float, gainReductionDb: Float) {
         val idx = writeIdx % bufferSize
         inputHistory[idx] = inputDb.coerceIn(dbMin, dbMax)
+        outputHistory[idx] = outputDb.coerceIn(dbMin, dbMax)
         grHistory[idx] = gainReductionDb.coerceIn(0f, grMax)
         writeIdx++
         hasData = true
@@ -75,6 +89,7 @@ class CompressorGrTraceView @JvmOverloads constructor(
 
     fun reset() {
         inputHistory.fill(dbMin)
+        outputHistory.fill(dbMin)
         grHistory.fill(0f)
         writeIdx = 0
         hasData = false
@@ -103,22 +118,27 @@ class CompressorGrTraceView @JvmOverloads constructor(
         if (!hasData) return
         val pxPerSample = w / bufferSize
 
-        val inputFillPath = Path().apply { moveTo(0f, h) }
-        val inputStrokePath = Path()
+        inputFillPath.rewind(); inputFillPath.moveTo(0f, h)
+        inputStrokePath.rewind()
+        outputStrokePath.rewind()
         for (s in 0 until bufferSize) {
             val idx = ringIdx(s)
-            val y = levelDbToY(inputHistory[idx], h)
             val x = s * pxPerSample
-            inputFillPath.lineTo(x, y)
-            if (s == 0) inputStrokePath.moveTo(x, y) else inputStrokePath.lineTo(x, y)
+            val inputY = levelDbToY(inputHistory[idx], h)
+            inputFillPath.lineTo(x, inputY)
+            if (s == 0) inputStrokePath.moveTo(x, inputY) else inputStrokePath.lineTo(x, inputY)
+
+            val outputY = levelDbToY(outputHistory[idx], h)
+            if (s == 0) outputStrokePath.moveTo(x, outputY) else outputStrokePath.lineTo(x, outputY)
         }
         inputFillPath.lineTo(w, h)
         inputFillPath.close()
         canvas.drawPath(inputFillPath, inputFillPaint)
         canvas.drawPath(inputStrokePath, inputStrokePaint)
+        canvas.drawPath(outputStrokePath, outputStrokePaint)
 
-        val grLinePath = Path()
-        val grFillPath = Path().apply { moveTo(0f, 0f) }
+        grLinePath.rewind()
+        grFillPath.rewind(); grFillPath.moveTo(0f, 0f)
         for (s in 0 until bufferSize) {
             val idx = ringIdx(s)
             val x = s * pxPerSample
