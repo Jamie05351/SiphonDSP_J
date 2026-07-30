@@ -8,13 +8,8 @@
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kConfigSize = 35 };
+    enum : std::size_t { kConfigSize = 42 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
-    // Sized for the 2.8ms max delay clamped in configure() at the highest sample rate the
-    // service actually opens AudioRecord/AudioTrack at (48kHz -> 134.4 samples), with headroom.
-    // updateDelays() must clamp requested delay samples to below this capacity so a caller that
-    // ever raises sampleRate_ beyond ~91kHz can't silently alias the delay line instead of
-    // producing the requested delay.
     enum : unsigned { kDelayLineCapacity = 256 };
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
@@ -66,13 +61,26 @@ private:
         float processRight(float sample);
         void clear();
     };
+    struct CompressorParams {
+        bool enabled=false;
+        float threshold=-12,ratio=2,knee=8,attack=40,release=250,makeup=0;
+    };
+    struct CompressorState {
+        float gain=1,rmsPower=0,peakEnv=0,attackMix=0,releaseMix=0,makeupLin=1;
+        std::atomic<float> inputDb{-60.0f};
+        std::atomic<float> outputDb{-60.0f};
+        std::atomic<float> gainReductionDb{0.0f};
+        uint32_t meterCounter=0;
+    };
     struct Params {
         bool enabled=true,lpfPass=false,hpfPass=false,subsonic=true,lowMute=false,midMute=false;
-        bool lowLr4=false,lowInvert=false,midInvert=false,tilt=true,compressor=true;
+        bool lowLr4=false,lowInvert=false,midInvert=false,tilt=true;
         int channelMute=0,measurementMute=0;
         float headroom=-6,lowGainL=0,lowGainR=0,midGainL=-1,midGainR=-1,postGainL=0,postGainR=0;
         float subFreq=32,lpf=150,hpf=125,lowDelayL=0,lowDelayR=0,midDelayL=0,midDelayR=0;
-        float tiltAmount=3,tiltFreq=550,threshold=-12,ratio=2,knee=8,attack=40,release=250,makeup=1.5f;
+        float tiltAmount=3,tiltFreq=550;
+        CompressorParams lowComp{true,-12,2,8,40,250,1.5f};
+        CompressorParams midComp{false,-10,1.5f,6,10,180,0};
     } p_;
 
     static float dbToLin(float db);
@@ -80,11 +88,12 @@ private:
     static void makeHighPass(Biquad& q,float fc,float Q,float sr);
     static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
-    static bool makePeq(Biquad& q, double frequency, double gain, double Q,
-                        int type, float sampleRate);
+    static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
     static void makeOnePoleLow(OnePole& p,float fc,float sr);
     float processChannelInput(float x, Channel& c);
     void processFrame(float& l,float& r);
+    void processCompressor(float& left,float& right,const CompressorParams& params,CompressorState& state);
+    void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
     void rebuildGains();
@@ -105,12 +114,9 @@ private:
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> midPeqValues_{};
     std::size_t fullPeqValueCount_=0,lowPeqValueCount_=0,midPeqValueCount_=0;
     float sampleRate_=48000.0f,dcR_=0.0f;
-    float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1,makeup_=1;
-    float compGain_=1,rmsPower_=0,peakEnv_=0,rmsMix_=0,peakRelease_=0,attackMix_=0,releaseMix_=0;
-    std::atomic<float> compressorInputDb_{-60.0f};
-    std::atomic<float> compressorOutputDb_{-60.0f};
-    std::atomic<float> compressorGainReductionDb_{0.0f};
-    uint32_t compressorMeterCounter_=0;
+    float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1;
+    float rmsMix_=0,peakRelease_=0;
+    CompressorState lowDynamics_,midDynamics_;
 };
 
 #endif

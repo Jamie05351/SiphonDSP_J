@@ -1,7 +1,6 @@
 package app.siphondsp.fragment
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.preference.PreferenceCategory
@@ -12,9 +11,8 @@ import androidx.preference.children
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.preference.MaterialSeekbarPreference
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 
 /** Inline, expandable controls for the native BMW processor. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
@@ -24,9 +22,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         preferenceManager.sharedPreferencesName = MENU_PREFS
         @Suppress("DEPRECATION")
         preferenceManager.sharedPreferencesMode = Context.MODE_PRIVATE
-
         menuPreferences = requireContext().getSharedPreferences(MENU_PREFS, Context.MODE_PRIVATE)
-        val values = loadValues()
+        val values = NativeBmwDspValues.load(requireContext())
         writeValuesToMenu(values)
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
         configureFractionalSteps()
@@ -34,12 +31,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     }
 
     private fun configureFractionalSteps() {
-        STEP_TENTH_KEYS.forEach { key ->
-            findPreference<MaterialSeekbarPreference>(key)?.setSeekBarIncrement(.1f)
-        }
-        STEP_HUNDREDTH_KEYS.forEach { key ->
-            findPreference<MaterialSeekbarPreference>(key)?.setSeekBarIncrement(.01f)
-        }
+        STEP_TENTH_KEYS.forEach { findPreference<MaterialSeekbarPreference>(it)?.setSeekBarIncrement(.1f) }
+        STEP_HUNDREDTH_KEYS.forEach { findPreference<MaterialSeekbarPreference>(it)?.setSeekBarIncrement(.01f) }
     }
 
     private fun configureSectionCards(group: PreferenceGroup) {
@@ -47,15 +40,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         group.children.forEach { preference ->
             if (preference is PreferenceCategory) {
                 preference.layoutResource = R.layout.preference_bmw_section_header
-                preference.extras.putInt(
-                    RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_TOP_MARGIN_PX,
-                    sectionSpacing,
-                )
-
-                val rows = buildList {
-                    add(preference)
-                    addAll(preference.children.toList())
-                }
+                preference.extras.putInt(RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_TOP_MARGIN_PX, sectionSpacing)
+                val rows = buildList { add(preference); addAll(preference.children.toList()) }
                 rows.forEachIndexed { index, row ->
                     val background = when {
                         rows.size == 1 -> R.drawable.ripple_group_single
@@ -63,15 +49,10 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
                         index == rows.lastIndex -> R.drawable.ripple_group_bottom
                         else -> R.drawable.ripple_group_middle
                     }
-                    row.extras.putInt(
-                        RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_BACKGROUND_RES,
-                        background,
-                    )
+                    row.extras.putInt(RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_BACKGROUND_RES, background)
                 }
             }
-            if (preference is PreferenceGroup) {
-                configureSectionCards(preference)
-            }
+            if (preference is PreferenceGroup) configureSectionCards(preference)
         }
     }
 
@@ -87,13 +68,14 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         val index = KEY_TO_INDEX[key] ?: return
-        val values = loadValues()
+        val values = NativeBmwDspValues.load(requireContext())
         values[index] = when {
             index in BOOLEAN_INDEXES -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
             index in LIST_INDEXES -> menuPreferences.getString(key, "0")?.toFloatOrNull() ?: 0f
             else -> menuPreferences.getFloat(key, values[index])
         }
-        saveAndApply(values)
+        NativeBmwDspValues.save(requireContext(), values)
+        NativeBmwDspValues.broadcast(requireContext(), values)
     }
 
     private fun writeValuesToMenu(values: FloatArray) {
@@ -106,23 +88,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             }
         }
         editor.apply()
-    }
-
-    private fun saveAndApply(values: FloatArray) {
-        requireContext().getSharedPreferences(NATIVE_PREFS, Context.MODE_PRIVATE)
-            .edit().putString(NATIVE_VALUES_KEY, values.joinToString(",")).apply()
-        requireContext().sendLocalBroadcast(
-            Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
-                .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
-        )
-    }
-
-    private fun loadValues(): FloatArray {
-        val saved = requireContext().getSharedPreferences(NATIVE_PREFS, Context.MODE_PRIVATE)
-            .getString(NATIVE_VALUES_KEY, null)
-        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return if (parsed?.size == NativeBmwDspBottomSheet.DEFAULTS.size) parsed
-        else NativeBmwDspBottomSheet.DEFAULTS.copyOf()
     }
 
     override fun onCreateRecyclerView(
@@ -144,25 +109,14 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     companion object {
         private const val MENU_PREFS = "native_bmw_dsp_menu"
-        private const val NATIVE_PREFS = "native_bmw_dsp"
-        private const val NATIVE_VALUES_KEY = "values"
-
         private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25)
         private val LIST_INDEXES = setOf(3, 4, 16)
         private val STEP_TENTH_KEYS = setOf(
-            "bmw_low_gain_l",
-            "bmw_low_gain_r",
-            "bmw_mid_gain_l",
-            "bmw_mid_gain_r",
-            "bmw_post_gain_l",
-            "bmw_post_gain_r",
-            "bmw_tilt_amount",
+            "bmw_low_gain_l", "bmw_low_gain_r", "bmw_mid_gain_l", "bmw_mid_gain_r",
+            "bmw_post_gain_l", "bmw_post_gain_r", "bmw_tilt_amount",
         )
         private val STEP_HUNDREDTH_KEYS = setOf(
-            "bmw_mid_delay_l",
-            "bmw_mid_delay_r",
-            "bmw_low_delay_l",
-            "bmw_low_delay_r",
+            "bmw_mid_delay_l", "bmw_mid_delay_r", "bmw_low_delay_l", "bmw_low_delay_r",
         )
         private val KEY_TO_INDEX = linkedMapOf(
             "native_bmw_dsp_enable" to 0,

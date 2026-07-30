@@ -10,51 +10,39 @@ data class NativeBmwCompressorState(
     val attackMs: Float,
     val releaseMs: Float,
     val makeupDb: Float,
+    val midEnabled: Boolean,
+    val midThresholdDb: Float,
+    val midRatio: Float,
+    val midKneeDb: Float,
+    val midAttackMs: Float,
+    val midReleaseMs: Float,
+    val midMakeupDb: Float,
 ) {
     fun persistAndApply(context: Context) {
-        val values = NativeBmwDspValues.update(context) { values ->
-            values[INDEX_ENABLED] = if (enabled) 1f else 0f
-            values[INDEX_THRESHOLD] = thresholdDb.coerceIn(-18f, 0f)
-            values[INDEX_RATIO] = ratio.coerceIn(1f, 10f)
-            values[INDEX_KNEE] = kneeDb.coerceIn(0f, 12f)
-            values[INDEX_ATTACK] = attackMs.coerceIn(1f, 50f)
-            values[INDEX_RELEASE] = releaseMs.coerceIn(20f, 400f)
-            values[INDEX_MAKEUP] = makeupDb.coerceIn(0f, 6f)
+        NativeBmwDspValues.update(context) { v ->
+            v[28] = if (enabled) 1f else 0f
+            v[29] = thresholdDb.coerceIn(-24f, 0f)
+            v[30] = ratio.coerceIn(1f, 10f)
+            v[31] = kneeDb.coerceIn(0f, 12f)
+            v[32] = attackMs.coerceIn(1f, 100f)
+            v[33] = releaseMs.coerceIn(20f, 800f)
+            v[34] = makeupDb.coerceIn(0f, 6f)
+            v[35] = if (midEnabled) 1f else 0f
+            v[36] = midThresholdDb.coerceIn(-24f, 0f)
+            v[37] = midRatio.coerceIn(1f, 10f)
+            v[38] = midKneeDb.coerceIn(0f, 12f)
+            v[39] = midAttackMs.coerceIn(1f, 100f)
+            v[40] = midReleaseMs.coerceIn(20f, 800f)
+            v[41] = midMakeupDb.coerceIn(0f, 6f)
         }
-        // Separate mirror kept for whatever else reads the "menu" prefs directly -- unrelated
-        // to the shared load/save/broadcast trio, so it stays local rather than moving into
-        // NativeBmwDspValues.
-        context.getSharedPreferences(MENU_PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean("bmw_comp_enable", enabled)
-            .putFloat("bmw_comp_threshold", values[INDEX_THRESHOLD])
-            .putFloat("bmw_comp_ratio", values[INDEX_RATIO])
-            .putFloat("bmw_comp_knee", values[INDEX_KNEE])
-            .putFloat("bmw_comp_attack", values[INDEX_ATTACK])
-            .putFloat("bmw_comp_release", values[INDEX_RELEASE])
-            .putFloat("bmw_comp_makeup", values[INDEX_MAKEUP])
-            .apply()
     }
 
     companion object {
-        private const val MENU_PREFS = "native_bmw_dsp_menu"
-        private const val INDEX_ENABLED = NativeBmwDspValues.INDEX_COMPRESSOR_ENABLED
-        private const val INDEX_THRESHOLD = NativeBmwDspValues.INDEX_COMPRESSOR_THRESHOLD
-        private const val INDEX_RATIO = NativeBmwDspValues.INDEX_COMPRESSOR_RATIO
-        private const val INDEX_KNEE = NativeBmwDspValues.INDEX_COMPRESSOR_KNEE
-        private const val INDEX_ATTACK = NativeBmwDspValues.INDEX_COMPRESSOR_ATTACK
-        private const val INDEX_RELEASE = NativeBmwDspValues.INDEX_COMPRESSOR_RELEASE
-        private const val INDEX_MAKEUP = NativeBmwDspValues.INDEX_COMPRESSOR_MAKEUP
-
         fun load(context: Context): NativeBmwCompressorState {
-            val values = NativeBmwDspValues.load(context)
+            val v = NativeBmwDspValues.load(context)
             return NativeBmwCompressorState(
-                enabled = values[INDEX_ENABLED] >= .5f,
-                thresholdDb = values[INDEX_THRESHOLD],
-                ratio = values[INDEX_RATIO],
-                kneeDb = values[INDEX_KNEE],
-                attackMs = values[INDEX_ATTACK],
-                releaseMs = values[INDEX_RELEASE],
-                makeupDb = values[INDEX_MAKEUP],
+                v[28] >= .5f, v[29], v[30], v[31], v[32], v[33], v[34],
+                v[35] >= .5f, v[36], v[37], v[38], v[39], v[40], v[41],
             )
         }
     }

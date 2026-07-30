@@ -5,20 +5,10 @@ import android.content.Intent
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 
-/**
- * Canonical load/save/broadcast for the 35-float native BMW DSP config array (headroom,
- * crossover, tilt, compressor, gains -- everything except the PEQ banks, which live in
- * [BmwPeqState]/`BmwPeqStore`). Single source of truth for the
- * `SharedPreferences("native_bmw_dsp")` "values" contract and the
- * `ACTION_NATIVE_BMW_DSP_UPDATED` broadcast, replacing what were independent copies of the
- * same load/save/broadcast trio in `NativeBmwDspBottomSheet` and `NativeBmwCompressorState`
- * (both now delegate here) -- a third copy would otherwise have been needed for the new
- * interactive tilt-handle commit path.
- */
 object NativeBmwDspValues {
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
-    const val SIZE = 35
+    const val SIZE = 42
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -48,13 +38,30 @@ object NativeBmwDspValues {
     const val INDEX_TILT_ENABLED = 25
     const val INDEX_TILT_AMOUNT = 26
     const val INDEX_TILT_FREQ = 27
-    const val INDEX_COMPRESSOR_ENABLED = 28
-    const val INDEX_COMPRESSOR_THRESHOLD = 29
-    const val INDEX_COMPRESSOR_RATIO = 30
-    const val INDEX_COMPRESSOR_KNEE = 31
-    const val INDEX_COMPRESSOR_ATTACK = 32
-    const val INDEX_COMPRESSOR_RELEASE = 33
-    const val INDEX_COMPRESSOR_MAKEUP = 34
+
+    const val INDEX_LOW_COMPRESSOR_ENABLED = 28
+    const val INDEX_LOW_COMPRESSOR_THRESHOLD = 29
+    const val INDEX_LOW_COMPRESSOR_RATIO = 30
+    const val INDEX_LOW_COMPRESSOR_KNEE = 31
+    const val INDEX_LOW_COMPRESSOR_ATTACK = 32
+    const val INDEX_LOW_COMPRESSOR_RELEASE = 33
+    const val INDEX_LOW_COMPRESSOR_MAKEUP = 34
+
+    const val INDEX_MID_COMPRESSOR_ENABLED = 35
+    const val INDEX_MID_COMPRESSOR_THRESHOLD = 36
+    const val INDEX_MID_COMPRESSOR_RATIO = 37
+    const val INDEX_MID_COMPRESSOR_KNEE = 38
+    const val INDEX_MID_COMPRESSOR_ATTACK = 39
+    const val INDEX_MID_COMPRESSOR_RELEASE = 40
+    const val INDEX_MID_COMPRESSOR_MAKEUP = 41
+
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_ENABLED") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_THRESHOLD") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_RATIO") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_KNEE") const val INDEX_COMPRESSOR_KNEE = INDEX_LOW_COMPRESSOR_KNEE
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_ATTACK") const val INDEX_COMPRESSOR_ATTACK = INDEX_LOW_COMPRESSOR_ATTACK
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_RELEASE") const val INDEX_COMPRESSOR_RELEASE = INDEX_LOW_COMPRESSOR_RELEASE
+    @Deprecated("Use INDEX_LOW_COMPRESSOR_MAKEUP") const val INDEX_COMPRESSOR_MAKEUP = INDEX_LOW_COMPRESSOR_MAKEUP
 
     val DEFAULTS = floatArrayOf(
         1f, 0f, 0f, 0f, 0f,
@@ -66,15 +73,21 @@ object NativeBmwDspValues {
         0f, 0f, 0f, 0f,
         1f, 3f, 550f,
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
     )
 
     fun load(context: Context): FloatArray {
         val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
         val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return if (parsed?.size == SIZE) parsed else DEFAULTS.copyOf()
+        return when (parsed?.size) {
+            SIZE -> parsed
+            35 -> DEFAULTS.copyOf().also { migrated -> parsed.copyInto(migrated, endIndex = parsed.size) }
+            else -> DEFAULTS.copyOf()
+        }
     }
 
     fun save(context: Context, values: FloatArray) {
+        require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY, values.joinToString(","))
             .apply()
@@ -86,7 +99,6 @@ object NativeBmwDspValues {
         )
     }
 
-    /** load -> mutate a private copy -> save -> broadcast. Returns the applied snapshot. */
     fun update(context: Context, mutate: (FloatArray) -> Unit): FloatArray {
         val values = load(context)
         mutate(values)
