@@ -1,5 +1,6 @@
 package app.siphondsp.dsp
 
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 
@@ -16,7 +17,14 @@ enum class BmwPeqBank { FULL, LOW, MID }
 enum class BmwOutputChannel { LEFT, RIGHT }
 
 object BmwSignalChain {
-    const val VALUE_COUNT = 35
+    /**
+     * Keep every graph and response-model entry point on the same canonical native BMW
+     * configuration contract as the engine and UI. The dual-band compressor extension grew
+     * this array from 35 to 42 values; leaving the response model at 35 caused setSystemState()
+     * and BMW update broadcasts to reject otherwise valid configurations, leaving the PEQ
+     * graph on its empty, flat 0 dB state.
+     */
+    const val VALUE_COUNT = NativeBmwDspValues.SIZE
 
     /**
      * True when [output] is fed by native's internal "left" processing chain (the one
