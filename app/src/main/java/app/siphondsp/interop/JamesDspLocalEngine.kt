@@ -5,6 +5,7 @@ import android.content.Intent
 import app.siphondsp.R
 import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
@@ -148,7 +149,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if (count > 0) input.copyInto(output, 0, safeOffset, safeOffset + count)
     }
 
-    // Processing
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
         synchronized(nativeLock) {
@@ -191,7 +191,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
-    // Effect config
     override fun setOutputControl(threshold: Float, release: Float, postGain: Float): Boolean =
         withHandle(false) {
             JamesDspWrapper.setLimiter(it, threshold, release) and
@@ -248,12 +247,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    /**
-     * The base class still builds a merged GraphicEQ string for compatibility
-     * with the rooted AudioEffect engine. The rootless engine deliberately
-     * ignores that approximation: GEQ remains in libjamesdsp and PEQ is applied
-     * afterwards by the real stateful biquad cascade above.
-     */
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
         return synchronized(nativeLock) { refreshEqualizersLocked() }
     }
@@ -302,9 +295,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         persistOnSuccess: Boolean = true,
         source: String = "editor",
     ): Boolean {
-        // state.persist() does a synchronous SharedPreferences.commit() (disk I/O). It must not
-        // run while holding nativeLock, since the real-time audio thread takes that same lock on
-        // every buffer in processInt16/processInt32/processFloat and would stall behind the write.
         val previous: BmwPeqState
         val result: Boolean
         synchronized(nativeLock) {
@@ -324,11 +314,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean =
         withHandle(false) { JamesDspWrapper.setLiveprog(it, enable, name, script) }
 
-    // Feature support
     override fun supportsEelVmAccess(): Boolean = true
     override fun supportsCustomCrossfeed(): Boolean = true
 
-    // EEL VM utilities
     override fun enumerateEelVariables(): ArrayList<EelVmVariable> =
         withHandle(arrayListOf<EelVmVariable>()) { JamesDspWrapper.enumerateEelVariables(it) }
 
@@ -339,15 +327,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         withHandle { JamesDspWrapper.freezeLiveprogExecution(it, freeze) }
     }
 
-    private fun loadNativeBmwDspValues(): FloatArray {
-        val saved = context.getSharedPreferences(NATIVE_BMW_PREFS, Context.MODE_PRIVATE)
-            .getString(NATIVE_BMW_KEY, null)
-        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return if (parsed?.size == NATIVE_BMW_DEFAULTS.size) parsed else NATIVE_BMW_DEFAULTS.copyOf()
-    }
+    private fun loadNativeBmwDspValues(): FloatArray = NativeBmwDspValues.load(context)
 
     fun configureNativeBmwDsp(values: FloatArray): Boolean {
-        if (values.size != NATIVE_BMW_DEFAULTS.size) {
+        if (values.size != NativeBmwDspValues.SIZE) {
             Timber.e("Rejected native BMW DSP configuration with ${values.size} values")
             return false
         }
@@ -359,18 +342,5 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     companion object {
         private const val MIN_VALID_SAMPLE_RATE = 8000f
-        private const val NATIVE_BMW_PREFS = "native_bmw_dsp"
-        private const val NATIVE_BMW_KEY = "values"
-        private val NATIVE_BMW_DEFAULTS = floatArrayOf(
-            1f, 0f, 0f, 0f, 0f,
-            -6f, 0f, 0f, -1f, -1f, 0f, 0f,
-            1f, 32f,
-            0f, 150f, 0f,
-            0f, 125f,
-            0f, 0f,
-            0f, 0f, 0f, 0f,
-            1f, 3f, 550f,
-            1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        )
     }
 }
