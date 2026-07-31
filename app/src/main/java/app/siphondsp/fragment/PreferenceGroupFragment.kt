@@ -58,10 +58,22 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if(intent?.action == Constants.ACTION_PRESET_LOADED) {
-                val id = this@PreferenceGroupFragment.id
-                Timber.d("Reloading group fragment for ${this@PreferenceGroupFragment.preferenceManager.sharedPreferencesName}")
-                (requireParentFragment() as DspFragment).restartFragment(id, cloneInstance(this@PreferenceGroupFragment))
+            when (intent?.action) {
+                Constants.ACTION_PRESET_LOADED -> {
+                    val id = this@PreferenceGroupFragment.id
+                    Timber.d("Reloading group fragment for ${this@PreferenceGroupFragment.preferenceManager.sharedPreferencesName}")
+                    (requireParentFragment() as DspFragment).restartFragment(id, cloneInstance(this@PreferenceGroupFragment))
+                }
+                // BmwPeqState is the only authoritative source for PEQ enabled state (see
+                // ParametricEqualizerPreference). Preset import and backup restore both write
+                // straight to BmwPeqState without touching this screen's SharedPreferences, so
+                // the switch's own persisted/displayed value goes stale until resynced here.
+                Constants.ACTION_PARAMETRIC_EQ_CHANGED -> {
+                    if (requireArguments().getInt(BUNDLE_XML_RES) == R.xml.dsp_parametriceq_preferences) {
+                        (preferenceScreen.takeIf { it.preferenceCount > 0 }?.getPreference(0) as? SwitchPreferenceGroup)
+                            ?.setValue(BmwPeqState.load(requireContext()).enabled)
+                    }
+                }
             }
         }
     }
@@ -80,7 +92,12 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         preferenceManager.sharedPreferencesMode = Context.MODE_MULTI_PROCESS
         addPreferencesFromResource(args.getInt(BUNDLE_XML_RES))
 
-        requireContext().registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
+        requireContext().registerLocalReceiver(
+            receiver,
+            IntentFilter(Constants.ACTION_PRESET_LOADED).apply {
+                addAction(Constants.ACTION_PARAMETRIC_EQ_CHANGED)
+            },
+        )
 
         when(args.getInt(BUNDLE_XML_RES)) {
             R.xml.dsp_compander_preferences -> {
@@ -189,6 +206,14 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             }
             R.xml.dsp_parametriceq_preferences -> {
                 findPreference<SwitchPreferenceGroup>(getString(R.string.key_peq_enable))
+                    ?.apply {
+                        // The legacy persisted boolean this switch would otherwise restore from
+                        // is not authoritative -- BmwPeqState is (see ParametricEqualizerPreference).
+                        // Preset import / backup restore write straight to BmwPeqState and never
+                        // touch this screen's SharedPreferences, so without this the switch can
+                        // show/persist a stale value until manually toggled.
+                        setValue(BmwPeqState.load(requireContext()).enabled)
+                    }
                     ?.setOnPreferenceChangeListener { _, newValue ->
                         val current = BmwPeqState.load(requireContext())
                         val candidate = current.copy(enabled = newValue as Boolean)
