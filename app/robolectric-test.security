@@ -1,0 +1,1 @@
+jdk.jar.disabledAlgorithms=MD2, MD5, RSA keySize < 1024, DSA, SHA1 denyAfter 2019-01-01

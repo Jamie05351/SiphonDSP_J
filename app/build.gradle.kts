@@ -155,6 +155,12 @@ android {
         disable += setOf("ObsoleteSdkInt", "MissingTranslation", "ExtraTranslation")
     }
 
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -277,6 +283,19 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.test:core:1.6.1")
+    // Robolectric 4.16.1 transitively pulls conscrypt-openjdk-uber:2.5.2, whose signing
+    // certificate has since expired with no trusted timestamp -- the JVM's class-load-time
+    // jar verifier rejects it (SecurityException at ManifestEntryVerifier), even though it's
+    // otherwise a valid jar. 2.6.1 ships unsigned entirely, so no verification is ever
+    // triggered when Robolectric loads classes from it. Declared directly so Gradle's default
+    // "highest version wins" conflict resolution picks it over Robolectric's transitive 2.5.2.
+    testImplementation("org.conscrypt:conscrypt-openjdk-uber:2.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgs("-Djava.security.properties=${projectDir}/robolectric-test.security")
 }
