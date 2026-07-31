@@ -288,3 +288,18 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
+
+// mockito-core >=5.0 defaults to the inline mock maker, which self-attaches a ByteBuddy
+// agent to the JVM dynamically at test runtime. That late, dynamic self-attach conflicts
+// with Robolectric's sandboxed classloader when it verifies classes from signed jars
+// (BouncyCastle), throwing a SecurityException at ManifestEntryVerifier. Loading the same
+// agent explicitly at JVM startup instead avoids the dynamic-attach code path entirely.
+val mockitoAgent = configurations.create("mockitoAgent")
+
+dependencies {
+    mockitoAgent("org.mockito:mockito-core:5.14.2") { isTransitive = false }
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgs("-javaagent:${mockitoAgent.asPath}")
+}
