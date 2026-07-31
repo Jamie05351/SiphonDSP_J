@@ -244,7 +244,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         irFrames: Int,
         irCrc: Int
     ): Boolean = withHandle(false) {
-        JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames, irCrc)
+        JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
