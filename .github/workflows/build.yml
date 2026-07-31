@@ -41,7 +41,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@f9c9c575b8b21b6485636a91ffecd10e558c62f6
+        uses: gradle/wrapper-validation-action@f9c9c575b8b21b64856381ad16ebd13914f8d5
 
       - name: Set up JDK 17
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
@@ -64,6 +64,49 @@ jobs:
           echo "GRADLE_TASK=:app:assemble${{ matrix.gradle_variant }}${BUILD_TYPE}" >> "$GITHUB_ENV"
           echo "OUTPUT_DIR=app/build/outputs/apk/${{ matrix.output_flavor }}/${OUTPUT_TYPE}" >> "$GITHUB_ENV"
           echo "OUTPUT_TYPE=${OUTPUT_TYPE}" >> "$GITHUB_ENV"
+
+      - name: Stamp unique CI build version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          config_path = Path("buildSrc/src/main/kotlin/AndroidConfig.kt")
+          text = config_path.read_text(encoding="utf-8")
+
+          run_number = int(os.environ["GITHUB_RUN_NUMBER"])
+          version_code = 100000 + run_number
+
+          version_match = re.search(r'const val versionName = "([^"]+)"', text)
+          if not version_match:
+              raise SystemExit("Could not find versionName in AndroidConfig.kt")
+
+          base_version = version_match.group(1).split("-build.", 1)[0]
+          version_name = f"{base_version}-build.{run_number}"
+
+          text, code_replacements = re.subn(
+              r'const val versionCode = \d+',
+              f'const val versionCode = {version_code}',
+              text,
+              count=1,
+          )
+          text, name_replacements = re.subn(
+              r'const val versionName = "[^"]+"',
+              f'const val versionName = "{version_name}"',
+              text,
+              count=1,
+          )
+
+          if code_replacements != 1 or name_replacements != 1:
+              raise SystemExit("Could not stamp Android version information")
+
+          config_path.write_text(text, encoding="utf-8")
+          print(f"Stamped versionName={version_name}")
+          print(f"Stamped versionCode={version_code}")
+          PY
 
       - name: Configure release signing
         if: github.event_name != 'pull_request'
@@ -142,7 +185,7 @@ jobs:
 
     steps:
       - name: Download APK artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093a
         with:
           path: release-apks
           merge-multiple: true
