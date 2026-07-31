@@ -285,21 +285,17 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core:1.6.1")
+    // Robolectric 4.16.1 transitively pulls conscrypt-openjdk-uber:2.5.2, whose signing
+    // certificate has since expired with no trusted timestamp -- the JVM's class-load-time
+    // jar verifier rejects it (SecurityException at ManifestEntryVerifier), even though it's
+    // otherwise a valid jar. 2.6.1 ships unsigned entirely, so no verification is ever
+    // triggered when Robolectric loads classes from it. Declared directly so Gradle's default
+    // "highest version wins" conflict resolution picks it over Robolectric's transitive 2.5.2.
+    testImplementation("org.conscrypt:conscrypt-openjdk-uber:2.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
 
-// mockito-core >=5.0 defaults to the inline mock maker, which self-attaches a ByteBuddy
-// agent to the JVM dynamically at test runtime. That late, dynamic self-attach conflicts
-// with Robolectric's sandboxed classloader when it verifies classes from signed jars
-// (BouncyCastle), throwing a SecurityException at ManifestEntryVerifier. Loading the same
-// agent explicitly at JVM startup instead avoids the dynamic-attach code path entirely.
-val mockitoAgent = configurations.create("mockitoAgent")
-
-dependencies {
-    mockitoAgent("org.mockito:mockito-core:5.14.2") { isTransitive = false }
-}
-
 tasks.withType<Test>().configureEach {
-    jvmArgs("-javaagent:${mockitoAgent.asPath}")
+    jvmArgs("-Djava.security.properties=${projectDir}/robolectric-test.security")
 }
