@@ -63,7 +63,15 @@ class SwitchPreferenceGroup(context: Context, attrs: AttributeSet) : PreferenceG
             isChecked = state
             isVisible = isSelectable
 
-            setOnCheckedChangeListener { _, isChecked ->
+            setOnCheckedChangeListener { buttonView, isChecked ->
+                // Preference framework's own onPreferenceChangeListener (e.g. the BMW PEQ
+                // enable handler in PreferenceGroupFragment) must get a chance to validate,
+                // apply natively, and persist to its own store before we accept the toggle --
+                // otherwise it's silently skipped and the real backing state never updates.
+                if (!callChangeListener(isChecked)) {
+                    buttonView.isChecked = state
+                    return@setOnCheckedChangeListener
+                }
                 setValueInternal(isChecked, false)
             }
         }
