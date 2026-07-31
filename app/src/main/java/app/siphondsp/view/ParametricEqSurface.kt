@@ -16,6 +16,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.core.content.withStyledAttributes
+import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwPeqBank
@@ -300,9 +301,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         strokeWidth = density
         alpha = 90
     }
+    private val unifiedOverlayDashEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
     private val nodeHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val nodeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val nodeDimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; alpha = 90 }
+    private val nodeRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.4f * density
+        color = bgBottomColor
+    }
     private val nodeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
         textAlign = Paint.Align.CENTER
@@ -817,7 +824,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private fun drawActiveBankOverlays(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         if (!showIndividualFilters) return
-        unifiedOverlayPaint.color = colorForBank(activeBank)
         renderBands.forEach { band ->
             val response = BiquadUtils.computeCombinedResponse(
                 listOf(band), OVERLAY_POINT_COUNT, PeqGraphMath.MIN_FREQUENCY, maximumFrequency, sampleRate, band.channel,
@@ -829,7 +835,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 val y = yForGain(gain)
                 if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
+            unifiedOverlayPaint.color = colorForBand(band, activeBank)
             unifiedOverlayPaint.alpha = if (band.uuid == selectedId) 200 else 70
+            unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) unifiedOverlayDashEffect else null
             canvas.drawPath(path, unifiedOverlayPaint)
         }
     }
@@ -842,19 +850,22 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawInactiveBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank) {
-        nodeDimPaint.color = colorForBank(bank)
         bands.forEach { band ->
+            nodeDimPaint.color = colorForBand(band, bank)
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             canvas.drawCircle(x, y, INACTIVE_NODE_RADIUS_DP * density, nodeDimPaint)
+            if (band.channel == ParametricEqChannel.RIGHT) {
+                canvas.drawCircle(x, y, INACTIVE_NODE_RADIUS_DP * density, nodeRingPaint)
+            }
         }
     }
 
     private fun drawActiveBankNodes(canvas: Canvas) {
-        val color = colorForBank(activeBank)
-        nodeFillPaint.color = color
-        nodeHaloPaint.color = color
         renderBands.forEachIndexed { index, band ->
+            val color = colorForBand(band, activeBank)
+            nodeFillPaint.color = color
+            nodeHaloPaint.color = color
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             val selected = band.uuid == selectedId
@@ -862,7 +873,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 nodeHaloPaint.alpha = 60
                 canvas.drawCircle(x, y, ACTIVE_NODE_RADIUS_DP * density + 8f * density, nodeHaloPaint)
             }
-            canvas.drawCircle(x, y, (if (selected) ACTIVE_NODE_RADIUS_DP + 1.5f else ACTIVE_NODE_RADIUS_DP) * density, nodeFillPaint)
+            val radius = (if (selected) ACTIVE_NODE_RADIUS_DP + 1.5f else ACTIVE_NODE_RADIUS_DP) * density
+            canvas.drawCircle(x, y, radius, nodeFillPaint)
+            // Right-only bands get a dark ring on top of the fill -- same solid(L)/marked(R)
+            // convention as the dashed R sum curve -- since color alone is hard to read at
+            // this size for colorblind users and small screens.
+            if (band.channel == ParametricEqChannel.RIGHT) {
+                canvas.drawCircle(x, y, radius, nodeRingPaint)
+            }
             val baseline = y - (nodeTextPaint.ascent() + nodeTextPaint.descent()) / 2
             canvas.drawText((index + 1).toString(), x, baseline, nodeTextPaint)
         }
@@ -919,6 +937,22 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         BmwPeqBank.FULL -> bankColorFull
         BmwPeqBank.LOW -> bankColorLow
         BmwPeqBank.MID -> bankColorMid
+    }
+
+    /**
+     * Bank color alone doesn't distinguish a band's channel, so a Left and a Right filter in
+     * the same bank used to render identically -- unreadable once a bank has independent L/R
+     * bands. Right-only bands get a lightened tint of the bank color (plus a dashed overlay
+     * line / dark ring on their node, applied by the callers) so channel is visible even
+     * without color vision; Left-only and Left+Right bands keep the plain bank color.
+     */
+    private fun colorForBand(band: ParametricEqBand, bank: BmwPeqBank): Int {
+        val base = colorForBank(bank)
+        return if (band.channel == ParametricEqChannel.RIGHT) {
+            ColorUtils.blendARGB(base, Color.WHITE, 0.4f)
+        } else {
+            base
+        }
     }
 
     // --- PEQ_ONLY drawing helpers (unchanged) --------------------------------------------
