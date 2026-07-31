@@ -265,7 +265,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
         val peqOk = if (peqRestorePending) true
-        else configureNativeBmwPeqLocked(bmwPeqState, "preference-sync")
+        else configureNativeBmwPeqLocked(BmwPeqState.load(context), "preference-sync")
         return geqOk && peqOk
     }
 
