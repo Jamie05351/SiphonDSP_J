@@ -10,11 +10,14 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
 import app.siphondsp.R
 import app.siphondsp.databinding.PreferenceParametricEqualizerBinding
+import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.ParametricEqBandList
+import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.view.ParametricEqSurface
 
 class ParametricEqualizerPreference : Preference {
 
@@ -68,25 +71,22 @@ class ParametricEqualizerPreference : Preference {
         super.onBindViewHolder(holder)
 
         binding = PreferenceParametricEqualizerBinding.bind(holder.itemView)
+        binding?.layoutEqualizer?.apply {
+            surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
+            showTiltHandles = false
+            showGainMeters = false
+            interactive = false
+        }
         updateFromPreferences()
     }
 
     fun updateFromPreferences() {
-        setEqualizerViewValues(BmwPeqState.load(context))
+        setEqualizerViewValues(BmwPeqState.load(context), NativeBmwDspValues.load(context))
     }
 
-    private fun setEqualizerViewValues(state: BmwPeqState) {
-        // Low and Mid are the two crossover-branch PEQ banks represented by this
-        // preview. Full Range performs a separate job and must not be summed into
-        // their displayed response.
-        val branchBands = ParametricEqBandList().apply {
-            addAll(state.lowBandBands)
-            addAll(state.midBandBands)
-        }
-        binding?.layoutEqualizer?.setBands(
-            branchBands,
-            state.preampDb.toDouble(),
-        )
+    private fun setEqualizerViewValues(state: BmwPeqState, dspValues: FloatArray) {
+        val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
+        binding?.layoutEqualizer?.setSystemState(dspValues, state, BmwPeqBank.FULL, null, sampleRate)
         binding?.bandCount?.text = buildString {
             append("${state.fullRangeBands.size} Full")
             append(" · ${state.lowBandBands.size} Low")

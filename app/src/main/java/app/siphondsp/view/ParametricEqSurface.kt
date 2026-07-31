@@ -75,6 +75,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             field = value
             invalidate()
         }
+    // Static/read-only consumers (e.g. the Settings preview row) set this false so the view
+    // never starts a drag -- onTouchEvent then declines every event, letting it bubble up to
+    // whatever click handling the parent (e.g. a Preference row) wants to do instead.
+    var interactive = true
 
     private val density = resources.displayMetrics.density
 
@@ -504,6 +508,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     // --- Shared touch handling -----------------------------------------------------------
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!interactive) return false
         if (event.pointerCount > 1) {
             cancelDraft()
             return true
