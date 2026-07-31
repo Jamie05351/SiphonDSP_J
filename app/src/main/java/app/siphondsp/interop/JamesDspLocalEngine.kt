@@ -244,7 +244,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         irFrames: Int,
         irCrc: Int
     ): Boolean = withHandle(false) {
-        JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
+        JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames, irCrc)
     }
 
     override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
@@ -265,7 +265,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
         val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
         val peqOk = if (peqRestorePending) true
-        else configureNativeBmwPeqLocked(bmwPeqState, "preference-sync")
+        else configureNativeBmwPeqLocked(BmwPeqState.load(context), "preference-sync")
         return geqOk && peqOk
     }
 
