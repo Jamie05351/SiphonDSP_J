@@ -77,6 +77,21 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
                     ?.filter { it.extension == "xml" }
                     ?.forEach(c::add)
 
+                // The BMW-specific DSP config (crossover/gains/delays/compressor/tilt) and PEQ
+                // metadata live in their own SharedPreferences files, outside the dsp_* naming
+                // convention above -- without this, presets silently dropped every BMW setting.
+                currentPath(ctx)
+                    .listFiles()
+                    ?.filter { it.name in BMW_SHARED_PREFS_FILES }
+                    ?.forEach(c::add)
+
+                // The actual three-bank PEQ state (Full/Low/Mid bands) isn't in SharedPreferences
+                // at all -- BmwPeqStore persists it as its own file pair in no-backup storage.
+                ctx.noBackupFilesDir
+                    .listFiles()
+                    ?.filter { it.name in BMW_PEQ_STATE_FILES }
+                    ?.forEach(c::add)
+
                 findLiveprogScriptPath(ctx)?.let { path ->
                     val liveprogFile = File(path)
                     if (liveprogFile.exists()) {
@@ -106,10 +121,19 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
 
     companion object {
         /* Update constants as needed */
-        const val PRESET_VERSION = "3"
+        const val PRESET_VERSION = "4"
         const val MIN_VERSION_CODE = "26"
 
         const val FILE_LIVEPROG = "liveprog"
+
+        // SharedPreferences files (BmwPeqState.kt / NativeBmwDspValues.kt) that hold the BMW
+        // crossover/gain/delay/compressor/tilt config and PEQ migration metadata -- named
+        // outside the legacy "dsp_*" convention, so they were previously excluded entirely.
+        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml")
+
+        // The authoritative three-bank PEQ state (BmwPeqStore.kt), stored outside
+        // SharedPreferences entirely in no-backup app storage.
+        private val BMW_PEQ_STATE_FILES = setOf("native_bmw_peq_state.txt", "native_bmw_peq_state.recovery")
 
         const val META_VERSION = "version"
         const val META_APP_VERSION = "app_version"
@@ -118,7 +142,11 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
         const val META_MIN_VERSION_CODE = "min_version_code" /* version 3+ */
 
         private fun currentPath(ctx: Context) = File(ctx.applicationInfo.dataDir + "/shared_prefs")
-        private fun isKnownEntry(n: String) = (n.startsWith("dsp_") && n.endsWith("xml")) || n == FILE_LIVEPROG
+        private fun isKnownEntry(n: String) =
+            (n.startsWith("dsp_") && n.endsWith("xml")) ||
+                n == FILE_LIVEPROG ||
+                n in BMW_SHARED_PREFS_FILES ||
+                n in BMW_PEQ_STATE_FILES
 
         fun validate(inputStream: InputStream) = Tar.Reader(inputStream, ::isKnownEntry).validate()
 
@@ -159,7 +187,8 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
                 if(!isKnownEntry(f.name))
                     return@next
 
-                val target = File(currentPath(ctx), f.name)
+                val destinationDir = if (f.name in BMW_PEQ_STATE_FILES) ctx.noBackupFilesDir else currentPath(ctx)
+                val target = File(destinationDir, f.name)
                 f.copyTo(target, overwrite = true)
                 Timber.d("Copying to ${target.absolutePath}")
             }
