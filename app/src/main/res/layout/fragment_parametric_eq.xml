@@ -46,116 +46,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Mid Band" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/add"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/peq_add_band"
-                app:chipIcon="@drawable/ic_baseline_add_24dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/reset"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/peq_reset"
-                app:chipIcon="@drawable/ic_twotone_delete_forever_24dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/import_file"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/peq_import"
-                app:chipIcon="@drawable/ic_twotone_download_24" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/export_file"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/peq_export"
-                app:chipIcon="@drawable/ic_twotone_save_24dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/edit_string"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/peq_edit_as_string"
-                app:chipIcon="@drawable/ic_twotone_edit_24dp" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/graph_options"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Graph display options"
-                android:text="Graph options" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/undo"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Undo last committed PEQ change"
-                android:text="Undo" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/redo"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Redo last undone PEQ change"
-                android:text="Redo" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/filter_tools"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Copy and reorder selected filter"
-                android:text="Filter tools" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/preset_export"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Export preset" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/preset_import"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Import preset" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/diagnostics"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Review and export a sanitised PEQ diagnostic report"
-                android:text="Diagnostics" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/backup_export"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Export complete private PEQ backup"
-                android:text="Backup" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/backup_import"
-                style="@style/Widget.Material3.Chip.Assist.Elevated"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Preview and restore complete private PEQ backup"
-                android:text="Restore backup" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
@@ -253,12 +143,24 @@
                         app:drawableTopCompat="@drawable/ic_twotone_nodes_24dp" />
                 </LinearLayout>
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/band_list"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:scrollbars="vertical"
-                    android:visibility="gone" />
+                    android:orientation="vertical">
+
+                    <include
+                        android:id="@+id/band_list_header"
+                        layout="@layout/item_peq_band_list_header"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/band_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:scrollbars="vertical"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <androidx.core.widget.NestedScrollView
                     android:id="@+id/band_edit"

@@ -210,6 +210,10 @@ class MainActivity : BaseActivity() {
                     startActivity(Intent(this, ParametricEqualizerActivity::class.java))
                     true
                 }
+                R.id.action_gain_limiter -> {
+                    startActivity(Intent(this, GainLimiterActivity::class.java))
+                    true
+                }
                 else -> false
             }
         }
@@ -224,6 +228,10 @@ class MainActivity : BaseActivity() {
             when (arg0.itemId) {
                 R.id.action_compressor -> {
                     startActivity(Intent(this, NativeBmwCompressorActivity::class.java))
+                    true
+                }
+                R.id.action_delay_polarity -> {
+                    startActivity(Intent(this, DelayPolarityActivity::class.java))
                     true
                 }
                 R.id.action_blocklist -> {

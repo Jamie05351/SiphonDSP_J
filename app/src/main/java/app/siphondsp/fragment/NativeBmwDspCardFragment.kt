@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.preference.MaterialSeekbarPreference
 
 /** Inline, expandable controls for the native BMW processor. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
@@ -26,13 +25,7 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         val values = NativeBmwDspValues.load(requireContext())
         writeValuesToMenu(values)
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
-        configureFractionalSteps()
         configureSectionCards(preferenceScreen)
-    }
-
-    private fun configureFractionalSteps() {
-        STEP_TENTH_KEYS.forEach { findPreference<MaterialSeekbarPreference>(it)?.setSeekBarIncrement(.1f) }
-        STEP_HUNDREDTH_KEYS.forEach { findPreference<MaterialSeekbarPreference>(it)?.setSeekBarIncrement(.01f) }
     }
 
     private fun configureSectionCards(group: PreferenceGroup) {
@@ -109,44 +102,18 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     companion object {
         private const val MENU_PREFS = "native_bmw_dsp_menu"
-        private val BOOLEAN_INDEXES = setOf(0, 1, 2, 12, 14, 17, 19, 20, 25)
-        private val LIST_INDEXES = setOf(3, 4, 16)
-        private val STEP_TENTH_KEYS = setOf(
-            "bmw_low_gain_l", "bmw_low_gain_r", "bmw_mid_gain_l", "bmw_mid_gain_r",
-            "bmw_post_gain_l", "bmw_post_gain_r", "bmw_tilt_amount",
-        )
-        private val STEP_HUNDREDTH_KEYS = setOf(
-            "bmw_mid_delay_l", "bmw_mid_delay_r", "bmw_low_delay_l", "bmw_low_delay_r",
-        )
+        // Gain structure, Subsonic/crossovers, Delay/polarity and Tilt have all
+        // relocated to dedicated screens (GainLimiterFragment, the Parametric EQ
+        // graph's Crossovers/Tilt tabs, and DelayPolarityFragment) -- only the
+        // "Measurements / routing" category (indices 0-4) still renders inline here.
+        private val BOOLEAN_INDEXES = setOf(0, 1, 2)
+        private val LIST_INDEXES = setOf(3, 4)
         private val KEY_TO_INDEX = linkedMapOf(
             "native_bmw_dsp_enable" to 0,
             "bmw_lpf_passthrough" to 1,
             "bmw_hpf_passthrough" to 2,
             "bmw_channel_isolation" to 3,
             "bmw_measurement_mute" to 4,
-            "bmw_headroom" to 5,
-            "bmw_low_gain_l" to 6,
-            "bmw_low_gain_r" to 7,
-            "bmw_mid_gain_l" to 8,
-            "bmw_mid_gain_r" to 9,
-            "bmw_post_gain_l" to 10,
-            "bmw_post_gain_r" to 11,
-            "bmw_subsonic_enable" to 12,
-            "bmw_subsonic_freq" to 13,
-            "bmw_mute_low" to 14,
-            "bmw_low_lpf" to 15,
-            "bmw_low_topology" to 16,
-            "bmw_mute_mid" to 17,
-            "bmw_mid_hpf" to 18,
-            "bmw_invert_low" to 19,
-            "bmw_invert_mid" to 20,
-            "bmw_mid_delay_l" to 21,
-            "bmw_mid_delay_r" to 22,
-            "bmw_low_delay_l" to 23,
-            "bmw_low_delay_r" to 24,
-            "bmw_tilt_enable" to 25,
-            "bmw_tilt_amount" to 26,
-            "bmw_tilt_pivot" to 27,
         )
 
         fun newInstance() = NativeBmwDspCardFragment()

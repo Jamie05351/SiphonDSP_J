@@ -9,9 +9,10 @@ import app.siphondsp.R
 import kotlin.math.roundToInt
 
 /**
- * Bottom app bar that keeps the four landscape quick actions away from the
- * display edges. Their centres are positioned at 15%, 30%, 70% and 85% of
- * the complete bar width, while the power FAB remains centred by BottomAppBar.
+ * Bottom app bar that keeps the six landscape quick actions away from the
+ * display edges. Their centres are positioned at 10%, 22%, 34%, 66%, 78% and
+ * 90% of the complete bar width, while the power FAB remains centred by
+ * BottomAppBar in the cradle gap between the two groups.
  */
 class PositionedBottomAppBar @JvmOverloads constructor(
     context: Context,
@@ -19,8 +20,8 @@ class PositionedBottomAppBar @JvmOverloads constructor(
     defStyleAttr: Int = com.google.android.material.R.attr.bottomAppBarStyle,
 ) : BottomAppBar(context, attrs, defStyleAttr) {
 
-    private val leftPositions = floatArrayOf(0.15f, 0.30f)
-    private val rightPositions = floatArrayOf(0.70f, 0.85f)
+    private val leftPositions = floatArrayOf(0.10f, 0.22f, 0.34f)
+    private val rightPositions = floatArrayOf(0.66f, 0.78f, 0.90f)
 
     init {
         clipChildren = false

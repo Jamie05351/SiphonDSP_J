@@ -15,6 +15,7 @@ import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.NativeBmwDspValues
 import kotlin.math.log10
 import kotlin.math.pow
 
@@ -71,7 +72,7 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
         textSize = 11f * resources.displayMetrics.scaledDensity
     }
 
-    private var values = NativeBmwDspBottomSheet.DEFAULTS.copyOf()
+    private var values = NativeBmwDspValues.DEFAULTS.copyOf()
     private var peqState = BmwPeqState.load(context)
     private val calculator = BmwResponseCalculator(pointCount = POINT_COUNT)
     private val curves = BmwResponseCurves(POINT_COUNT)

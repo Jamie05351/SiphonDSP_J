@@ -32,6 +32,14 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     var onItemClicked: ((ParametricEqBand, Int) -> Unit)? = null
     var onDeleteClicked: ((ParametricEqBand, Int) -> Unit)? = null
 
+    /** UUID of the band currently open in the editor, so its row can show a selection outline. */
+    var selectedUuid: java.util.UUID? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyItemRangeChanged(0, itemCount)
+        }
+
     private val callback = object : ObservableList.OnListChangedCallback<ObservableArrayList<ParametricEqBand>>() {
         @SuppressLint("NotifyDataSetChanged")
         override fun onChanged(sender: ObservableArrayList<ParametricEqBand>?) {
@@ -83,11 +91,14 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val filterType: TextView = view.findViewById(R.id.filter_type)
+        val index: TextView = view.findViewById(R.id.index)
+        val type: TextView = view.findViewById(R.id.type)
+        val channel: TextView = view.findViewById(R.id.channel)
         val freq: TextView = view.findViewById(R.id.freq)
         val gain: TextView = view.findViewById(R.id.gain)
         val qFactor: TextView = view.findViewById(R.id.q_factor)
         val deleteButton: Button = view.findViewById(R.id.delete)
+        val selectionOutline: View = view.findViewById(R.id.selection_outline)
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
@@ -107,11 +118,14 @@ class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.deleteButton.isEnabled = true
         val band = bands[position]
-        holder.filterType.text = "${position + 1} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}"
-        holder.filterType.contentDescription = "${band.filterType.displayLabel}, channel ${band.channel.displayLabel}"
+        holder.index.text = "${position + 1}"
+        holder.type.text = band.filterType.displayLabel
+        holder.channel.text = band.channel.displayLabel
+        holder.itemView.contentDescription = "Filter ${position + 1}, ${band.filterType.displayLabel}, channel ${band.channel.displayLabel}"
         holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
         holder.gain.text = "${dfGain.format(band.gain)}dB"
         holder.qFactor.text = "Q${dfQ.format(band.q)}"
+        holder.selectionOutline.visibility = if (band.uuid == selectedUuid) View.VISIBLE else View.INVISIBLE
 
         holder.deleteButton.setOnClickListener {
             holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
