@@ -53,6 +53,18 @@ private:
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;
     };
+    // Fixed-lookahead brickwall safety limiter, applied last, after the low/mid bands are
+    // summed. The peak detector runs on the live (undelayed) signal so gain reduction is
+    // already ramped in by the time the corresponding sample exits delayL/delayR, catching
+    // hard discontinuities (e.g. a manual seek) that a reactive-only compressor would let
+    // through for the first few ms. Not user-configurable: this is a safety net, not a tone
+    // control, so lookahead/ceiling/timing are fixed constants (see rebuildLimiter()).
+    struct Limiter {
+        Delay delayL,delayR;
+        float gain=1;
+        float attackMix=1,releaseMix=1;
+        void clear();
+    };
     struct PeqBank {
         std::array<Biquad, kMaxPeqSectionsPerChannel> left{};
         std::array<Biquad, kMaxPeqSectionsPerChannel> right{};
@@ -93,6 +105,7 @@ private:
     float processChannelInput(float x, Channel& c);
     void processFrame(float& l,float& r);
     void processCompressor(float& left,float& right,const CompressorParams& params,CompressorState& state);
+    void processLimiter(float& left,float& right);
     void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
@@ -103,6 +116,7 @@ private:
     void updateDelays();
     void rebuildTilt();
     void rebuildCompressorTiming();
+    void rebuildLimiter();
     void resetDynamics();
 
     Channel left_,right_;
@@ -117,6 +131,9 @@ private:
     float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1;
     float rmsMix_=0,peakRelease_=0;
     CompressorState lowDynamics_,midDynamics_;
+    Limiter limiter_;
+    static constexpr float kLimiterLookaheadMs = 5.f;
+    static constexpr float kLimiterCeilingLin = 0.891251f; // -1 dBFS
 };
 
 #endif
