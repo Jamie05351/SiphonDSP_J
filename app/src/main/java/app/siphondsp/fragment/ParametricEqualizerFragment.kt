@@ -23,6 +23,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
@@ -697,10 +698,23 @@ class ParametricEqualizerFragment : Fragment() {
     /** Sets up the toolbar overflow menu that replaced the old 14-chip action row. */
     private fun configureProductionTools() {
         val menuHost = requireActivity() as MenuHost
+        var bindingEnableSwitch = false
         menuHost.addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
                     menuInflater.inflate(R.menu.menu_parametric_eq, menu)
+                    val enableSwitch = menu.findItem(R.id.menu_peq_enable)?.actionView as? MaterialSwitch
+                    enableSwitch?.setOnCheckedChangeListener { _, checked ->
+                        if (bindingEnableSwitch) return@setOnCheckedChangeListener
+                        val current = BmwPeqState.load(requireContext())
+                        val candidate = current.copy(enabled = checked)
+                        val applied = RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
+                        val saved = applied || candidate.persist(requireContext())
+                        Timber.i(
+                            "PEQ enabled change (toolbar) enabled=${candidate.enabled} " +
+                                "nativeApply=$applied saved=$saved"
+                        )
+                    }
                 }
 
                 override fun onPrepareMenu(menu: Menu) {
@@ -709,6 +723,14 @@ class ParametricEqualizerFragment : Fragment() {
                     menu.findItem(R.id.menu_edit_group)?.isEnabled = !editorActive
                     menu.findItem(R.id.menu_import_export_group)?.isEnabled = !editorActive
                     menu.findItem(R.id.menu_filter_tools)?.isEnabled = !editorActive
+
+                    val enableSwitch = menu.findItem(R.id.menu_peq_enable)?.actionView as? MaterialSwitch
+                    val currentlyEnabled = BmwPeqState.load(requireContext()).enabled
+                    if (enableSwitch != null && enableSwitch.isChecked != currentlyEnabled) {
+                        bindingEnableSwitch = true
+                        enableSwitch.isChecked = currentlyEnabled
+                        bindingEnableSwitch = false
+                    }
                 }
 
                 override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {

@@ -15,7 +15,7 @@
         android:orderInCategory="20"
         android:title="@string/action_parametric_eq"
         android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_baseline_equalizer_24dp"
+        android:icon="@drawable/ic_twotone_peq_sliders_28dp"
         app:showAsAction="always" />
 
     <item
@@ -23,6 +23,6 @@
         android:orderInCategory="30"
         android:title="@string/action_gain_limiter"
         android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_twotone_gain_limiter_24dp"
+        android:icon="@drawable/ic_twotone_gain_knob_28dp"
         app:showAsAction="always" />
 </menu>

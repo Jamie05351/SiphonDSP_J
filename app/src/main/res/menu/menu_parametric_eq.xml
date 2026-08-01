@@ -3,6 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/menu_peq_enable"
+        android:title="@string/action_parametric_eq"
+        app:showAsAction="always"
+        app:actionLayout="@layout/toolbar_switch_action" />
+
+    <item
         android:id="@+id/menu_undo"
         android:title="Undo"
         app:showAsAction="never" />

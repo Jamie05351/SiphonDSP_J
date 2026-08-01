@@ -80,11 +80,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                 R.id.card_eq, PreferenceGroupFragment.newInstance(Constants.PREF_EQ,
                     R.xml.dsp_equalizer_preferences
                 ))
-            .replace(
-                R.id.card_peq, PreferenceGroupFragment.newInstance(Constants.PREF_PEQ,
-                    R.xml.dsp_parametriceq_preferences
-                ))
-            .replace(R.id.card_bmw_compressor, NativeBmwCompressorCardFragment.newInstance())
             .replace(R.id.card_bmw_dsp, NativeBmwDspCardFragment.newInstance())
             .replace(
                 R.id.card_ddc, PreferenceGroupFragment.newInstance(Constants.PREF_DDC,

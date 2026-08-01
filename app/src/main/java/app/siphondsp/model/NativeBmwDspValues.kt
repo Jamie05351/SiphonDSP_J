@@ -79,11 +79,16 @@ object NativeBmwDspValues {
     fun load(context: Context): FloatArray {
         val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
         val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        return when (parsed?.size) {
+        val values = when (parsed?.size) {
             SIZE -> parsed
             35 -> DEFAULTS.copyOf().also { migrated -> parsed.copyInto(migrated, endIndex = parsed.size) }
             else -> DEFAULTS.copyOf()
         }
+        // The master enable switch was removed from the UI (redundant with the app-level
+        // on/off, which already achieves the same thing) - force it on so anyone who had
+        // it persisted off from before can't end up silently stuck with no way to re-enable it.
+        values[INDEX_ENABLED] = 1f
+        return values
     }
 
     fun save(context: Context, values: FloatArray) {

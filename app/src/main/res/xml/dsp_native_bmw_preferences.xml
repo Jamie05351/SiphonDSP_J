@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-<app.siphondsp.preference.SwitchPreferenceGroup android:key="native_bmw_dsp_enable" android:title="🟪 BMW DSP" android:icon="@drawable/ic_baseline_equalizer_24dp" android:defaultValue="true" app:iconSpaceReserved="false">
-<PreferenceCategory android:title="🟫 Measurements / routing">
-<SwitchPreferenceCompat android:key="bmw_lpf_passthrough" android:title="🟫 LPF passthrough" app:iconSpaceReserved="false"/>
-<SwitchPreferenceCompat android:key="bmw_hpf_passthrough" android:title="🟫 HPF passthrough" app:iconSpaceReserved="false"/>
-<ListPreference android:key="bmw_channel_isolation" android:title="🟫 Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
-<ListPreference android:key="bmw_measurement_mute" android:title="🟫 Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<PreferenceCategory android:title="Measurements / routing" app:iconSpaceReserved="false">
+<SwitchPreferenceCompat android:key="bmw_lpf_passthrough" android:title="LPF passthrough" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_hpf_passthrough" android:title="HPF passthrough" app:iconSpaceReserved="false"/>
+<ListPreference android:key="bmw_channel_isolation" android:title="Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<ListPreference android:key="bmw_measurement_mute" android:title="Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-</app.siphondsp.preference.SwitchPreferenceGroup>
 </PreferenceScreen>
