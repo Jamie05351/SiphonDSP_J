@@ -100,6 +100,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var isProcessorIdle = false
 
     @Volatile
+    private var idleSinceMillis = 0L
+
+    @Volatile
     private var suspendOnIdle = false
 
     @Volatile
@@ -298,8 +301,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val onSessionChangeListener = object : OnRootlessSessionChangeListener {
         override fun onSessionChanged(sessionList: HashMap<Int, IEffectSession>) {
             isProcessorIdle = sessionList.isEmpty()
-            if(!isProcessorIdle)
+            if(!isProcessorIdle) {
                 sessionLossRetryCount = 0
+                idleSinceMillis = 0L
+            }
+            else if(idleSinceMillis == 0L) {
+                idleSinceMillis = System.currentTimeMillis()
+            }
 
             Timber.d("onSessionChanged: isProcessorIdle=$isProcessorIdle")
             ServiceNotificationHelper.pushServiceNotification(
@@ -490,7 +498,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     Timber.d("Recorder recreated")
                 }
 
-                if(isProcessorIdle && suspendOnIdle) {
+                if(isProcessorIdle && suspendOnIdle &&
+                    idleSinceMillis != 0L && System.currentTimeMillis() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
                     safeStop(recorder)
                     safeStop(track)
                     track.flush()
@@ -793,6 +802,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         @Volatile private var activeInstance: RootlessAudioProcessorService? = null
         private const val CHANNEL_COUNT = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
+        private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
         const val SESSION_LOSS_MAX_RETRIES = 1
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
