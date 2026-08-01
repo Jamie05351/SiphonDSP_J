@@ -105,11 +105,13 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         // Gain structure, Subsonic/crossovers, Delay/polarity and Tilt have all
         // relocated to dedicated screens (GainLimiterFragment, the Parametric EQ
         // graph's Crossovers/Tilt tabs, and DelayPolarityFragment) -- only the
-        // "Measurements / routing" category (indices 0-4) still renders inline here.
-        private val BOOLEAN_INDEXES = setOf(0, 1, 2)
+        // "Measurements / routing" category (indices 1-4) still renders inline here.
+        // The master enable switch (index 0) was removed from this screen entirely --
+        // it was redundant with the app-level on/off, and NativeBmwDspValues.load()
+        // now forces index 0 on unconditionally, so there's nothing left to bind here.
+        private val BOOLEAN_INDEXES = setOf(1, 2)
         private val LIST_INDEXES = setOf(3, 4)
         private val KEY_TO_INDEX = linkedMapOf(
-            "native_bmw_dsp_enable" to 0,
             "bmw_lpf_passthrough" to 1,
             "bmw_hpf_passthrough" to 2,
             "bmw_channel_isolation" to 3,

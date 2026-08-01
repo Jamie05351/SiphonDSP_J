@@ -17,17 +17,14 @@ import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.activity.GraphicEqualizerActivity
 import app.siphondsp.activity.LiveprogEditorActivity
-import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.liveprog.EelParser
-import app.siphondsp.model.BmwPeqState
 import app.siphondsp.preference.CompanderPreference
 import app.siphondsp.preference.EqualizerPreference
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.preference.MaterialSeekbarPreference
 import app.siphondsp.preference.SwitchPreferenceGroup
-import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
@@ -64,16 +61,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                     Timber.d("Reloading group fragment for ${this@PreferenceGroupFragment.preferenceManager.sharedPreferencesName}")
                     (requireParentFragment() as DspFragment).restartFragment(id, cloneInstance(this@PreferenceGroupFragment))
                 }
-                // BmwPeqState is the only authoritative source for PEQ enabled state (see
-                // ParametricEqualizerPreference). Preset import and backup restore both write
-                // straight to BmwPeqState without touching this screen's SharedPreferences, so
-                // the switch's own persisted/displayed value goes stale until resynced here.
-                Constants.ACTION_PARAMETRIC_EQ_CHANGED -> {
-                    if (requireArguments().getInt(BUNDLE_XML_RES) == R.xml.dsp_parametriceq_preferences) {
-                        (preferenceScreen.takeIf { it.preferenceCount > 0 }?.getPreference(0) as? SwitchPreferenceGroup)
-                            ?.setValue(BmwPeqState.load(requireContext()).enabled)
-                    }
-                }
             }
         }
     }
@@ -92,12 +79,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         preferenceManager.sharedPreferencesMode = Context.MODE_MULTI_PROCESS
         addPreferencesFromResource(args.getInt(BUNDLE_XML_RES))
 
-        requireContext().registerLocalReceiver(
-            receiver,
-            IntentFilter(Constants.ACTION_PRESET_LOADED).apply {
-                addAction(Constants.ACTION_PARAMETRIC_EQ_CHANGED)
-            },
-        )
+        requireContext().registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
 
         when(args.getInt(BUNDLE_XML_RES)) {
             R.xml.dsp_compander_preferences -> {
@@ -200,34 +182,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             R.xml.dsp_graphiceq_preferences -> {
                 findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
-                    startActivity(intent)
-                    true
-                }
-            }
-            R.xml.dsp_parametriceq_preferences -> {
-                findPreference<SwitchPreferenceGroup>(getString(R.string.key_peq_enable))
-                    ?.apply {
-                        // The legacy persisted boolean this switch would otherwise restore from
-                        // is not authoritative -- BmwPeqState is (see ParametricEqualizerPreference).
-                        // Preset import / backup restore write straight to BmwPeqState and never
-                        // touch this screen's SharedPreferences, so without this the switch can
-                        // show/persist a stale value until manually toggled.
-                        setValue(BmwPeqState.load(requireContext()).enabled)
-                    }
-                    ?.setOnPreferenceChangeListener { _, newValue ->
-                        val current = BmwPeqState.load(requireContext())
-                        val candidate = current.copy(enabled = newValue as Boolean)
-                        val applied = RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
-                        val saved = applied || candidate.persist(requireContext())
-                        Timber.i(
-                            "PEQ enabled change enabled=${candidate.enabled} " +
-                                "full=${candidate.fullRangeBands.size} low=${candidate.lowBandBands.size} " +
-                                "mid=${candidate.midBandBands.size} nativeApply=$applied saved=$saved"
-                        )
-                        saved
-                    }
-                findPreference<Preference>(getString(R.string.key_peq_bands))?.setOnPreferenceClickListener {
-                    val intent = Intent(requireContext(), ParametricEqualizerActivity::class.java)
                     startActivity(intent)
                     true
                 }

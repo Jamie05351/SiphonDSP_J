@@ -13,7 +13,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Low-band compressor transfer curve and live native meter.
+ * Per-band compressor transfer curve and live native meter.
  *
  * The interaction follows Equalizer314's useful convention: drag the threshold
  * point horizontally and drag the compressed part of the curve vertically to
