@@ -16,6 +16,40 @@
         <item name="alertDialogTheme">@style/AppTheme.AlertDialogTheme</item>
         <item name="materialCardViewStyle">@style/Theme.SiphonDSP.CardView</item>
         <item name="cardCornerRadius">@dimen/corner_radius</item>
+        <item name="sliderStyle">@style/Widget.SiphonDSP.Slider</item>
+
+        <!-- "Carbon" palette: the app's default look (see colors_siphon.xml). -->
+        <item name="colorPrimary">@color/siphon_primary</item>
+        <item name="colorOnPrimary">@color/siphon_onPrimary</item>
+        <item name="colorPrimaryContainer">@color/siphon_primaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/siphon_onPrimaryContainer</item>
+        <item name="colorSecondary">@color/siphon_secondary</item>
+        <item name="colorOnSecondary">@color/siphon_onSecondary</item>
+        <item name="colorSecondaryContainer">@color/siphon_secondaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/siphon_onSecondaryContainer</item>
+        <item name="colorTertiary">@color/siphon_tertiary</item>
+        <item name="colorOnTertiary">@color/siphon_onTertiary</item>
+        <item name="colorTertiaryContainer">@color/siphon_tertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/siphon_onTertiaryContainer</item>
+        <item name="colorError">@color/siphon_error</item>
+        <item name="colorErrorContainer">@color/siphon_errorContainer</item>
+        <item name="colorOnError">@color/siphon_onError</item>
+        <item name="colorOnErrorContainer">@color/siphon_onErrorContainer</item>
+        <item name="android:colorBackground">@color/siphon_background</item>
+        <item name="colorOnBackground">@color/siphon_onBackground</item>
+        <item name="colorSurface">@color/siphon_surface</item>
+        <item name="colorOnSurface">@color/siphon_onSurface</item>
+        <item name="colorSurfaceVariant">@color/siphon_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/siphon_onSurfaceVariant</item>
+        <item name="colorSurfaceContainerLow">@color/siphon_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/siphon_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/siphon_surfaceContainerHigh</item>
+        <item name="colorOutline">@color/siphon_outline</item>
+        <item name="colorOutlineVariant">@color/siphon_outlineVariant</item>
+        <item name="colorOnSurfaceInverse">@color/siphon_inverseOnSurface</item>
+        <item name="colorSurfaceInverse">@color/siphon_inverseSurface</item>
+        <item name="colorPrimaryInverse">@color/siphon_primaryInverse</item>
+        <item name="android:windowBackground">@color/siphon_background</item>
     </style>
 
     <style name="Theme.Transparent" parent="Theme.AppCompat">
@@ -82,11 +116,29 @@
         <item name="cardBackgroundColor">?attr/colorSurface</item>
         <item name="strokeColor">?attr/colorOutline</item>
         <item name="strokeWidth">1dp</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.SiphonDSP.Card</item>
     </style>
 
     <style name="Theme.SiphonDSP.MaterialSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
         <item name="thumbTint">@color/selector_material_switch_thumb_tint</item>
         <item name="trackTint">@color/selector_material_switch_track_tint</item>
+    </style>
+
+    <!-- Uniform look for every Slider in the app: a plain solid rail (no tick dots), a solid
+         accent fill, and a round ball thumb: matching the on/off toggle's own colors
+         (colorPrimary for the filled/active side, the same tone switches use when checked). -->
+    <style name="Widget.SiphonDSP.Slider" parent="Widget.Material3.Slider">
+        <item name="tickVisible">false</item>
+        <item name="labelBehavior">gone</item>
+        <item name="trackHeight">4dp</item>
+        <item name="trackColorActive">?attr/colorPrimary</item>
+        <item name="trackColorInactive">?attr/colorSurfaceVariant</item>
+        <item name="thumbColor">?attr/colorPrimary</item>
+        <item name="thumbRadius">8dp</item>
+        <item name="thumbWidth">16dp</item>
+        <item name="thumbHeight">16dp</item>
+        <item name="thumbTrackGapSize">2dp</item>
+        <item name="trackInsideCornerSize">2dp</item>
     </style>
 
     <!-- === Custom themes taken from Tachiyomi: https://github.com/tachiyomiorg/tachiyomi === -->

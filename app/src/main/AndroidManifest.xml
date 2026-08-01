@@ -193,6 +193,26 @@
         </activity>
 
         <activity
+            android:name=".activity.GainLimiterActivity"
+            android:exported="false"
+            android:label="@string/title_activity_gain_limiter"
+            android:theme="@style/Theme.SiphonDSP">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".activity.MainActivity" />
+        </activity>
+
+        <activity
+            android:name=".activity.DelayPolarityActivity"
+            android:exported="false"
+            android:label="@string/title_activity_delay_polarity"
+            android:theme="@style/Theme.SiphonDSP">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".activity.MainActivity" />
+        </activity>
+
+        <activity
             android:name=".activity.GraphicEqualizerActivity"
             android:exported="false"
             android:label="@string/title_activity_geq"

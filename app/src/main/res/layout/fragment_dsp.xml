@@ -75,28 +75,6 @@
             android:layout_marginHorizontal="1dp">
 
             <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_compressor"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_bass"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
                 android:id="@+id/card_eq"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
@@ -141,17 +119,6 @@
             android:layout_marginHorizontal="1dp">
 
             <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_geq"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
                 android:id="@+id/card_ddc"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
@@ -182,44 +149,11 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_tube"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_stereowide"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp">
-
-            <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_crossfeed"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:layout_marginHorizontal="1dp"
             android:layout_marginBottom="?attr/actionBarSize">
 
             <androidx.fragment.app.FragmentContainerView
-                android:id="@+id/card_reverb"
+                android:id="@+id/card_stereowide"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
         </com.google.android.material.card.MaterialCardView>

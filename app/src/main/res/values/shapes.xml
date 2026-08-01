@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Asymmetric rounding (top corners more rounded than bottom): the
+         "modern EQ app" look referenced from Equalizer314's shape tokens. -->
+    <style name="ShapeAppearanceOverlay.SiphonDSP.Card" parent="">
+        <item name="cornerSizeTopLeft">20dp</item>
+        <item name="cornerSizeTopRight">20dp</item>
+        <item name="cornerSizeBottomLeft">8dp</item>
+        <item name="cornerSizeBottomRight">8dp</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.SiphonDSP.Button" parent="">
+        <item name="cornerSize">14dp</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.SiphonDSP.ButtonToggleGroup" parent="">
+        <item name="cornerSize">10dp</item>
+    </style>
+</resources>

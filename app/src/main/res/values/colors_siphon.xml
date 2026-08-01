@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ "Carbon": the default SiphonDSP palette for the BMW head unit build.
+  ~ Fixed dark, professional-tool aesthetic (Equalizer314 / Helix DSP inspired),
+  ~ deliberately not day/night varying: same convention as the other presets
+  ~ that hardcode one flat palette, except this one IS the base theme rather
+  ~ than an opt-in preset (see Base.Theme.SiphonDSP in themes.xml).
+-->
+<resources>
+    <color name="siphon_primary">#4FC3F7</color>
+    <color name="siphon_onPrimary">#00304A</color>
+    <color name="siphon_primaryContainer">#004964</color>
+    <color name="siphon_onPrimaryContainer">#C6E7FF</color>
+    <color name="siphon_secondary">#8BD3C7</color>
+    <color name="siphon_onSecondary">#003731</color>
+    <color name="siphon_secondaryContainer">#004F47</color>
+    <color name="siphon_onSecondaryContainer">#A6F2E4</color>
+    <color name="siphon_tertiary">#FFB74D</color>
+    <color name="siphon_onTertiary">#4A2800</color>
+    <color name="siphon_tertiaryContainer">#6A3C00</color>
+    <color name="siphon_onTertiaryContainer">#FFDDB3</color>
+    <color name="siphon_error">#FFB4AB</color>
+    <color name="siphon_errorContainer">#93000A</color>
+    <color name="siphon_onError">#690005</color>
+    <color name="siphon_onErrorContainer">#FFDAD6</color>
+    <color name="siphon_background">#101014</color>
+    <color name="siphon_onBackground">#E3E2E6</color>
+    <color name="siphon_surface">#141418</color>
+    <color name="siphon_onSurface">#E3E2E6</color>
+    <color name="siphon_surfaceVariant">#26262E</color>
+    <color name="siphon_onSurfaceVariant">#C6C5CE</color>
+    <color name="siphon_surfaceContainerLow">#1A1A20</color>
+    <color name="siphon_surfaceContainer">#1F1F26</color>
+    <color name="siphon_surfaceContainerHigh">#26262E</color>
+    <color name="siphon_outline">#3A3A42</color>
+    <color name="siphon_outlineVariant">#2A2A30</color>
+    <color name="siphon_inverseOnSurface">#101014</color>
+    <color name="siphon_inverseSurface">#E3E2E6</color>
+    <color name="siphon_primaryInverse">#0288D1</color>
+    <color name="siphon_shadow">#000000</color>
+    <color name="siphon_surfaceTint">#4FC3F7</color>
+</resources>

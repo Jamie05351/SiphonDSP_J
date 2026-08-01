@@ -17,4 +17,12 @@
         android:iconTint="?attr/actionMenuTextColor"
         android:icon="@drawable/ic_baseline_equalizer_24dp"
         app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_gain_limiter"
+        android:orderInCategory="30"
+        android:title="@string/action_gain_limiter"
+        android:iconTint="?attr/actionMenuTextColor"
+        android:icon="@drawable/ic_twotone_gain_limiter_24dp"
+        app:showAsAction="always" />
 </menu>

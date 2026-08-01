@@ -77,14 +77,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_output_control_preferences
                 ))
             .replace(
-                R.id.card_compressor, PreferenceGroupFragment.newInstance(Constants.PREF_COMPANDER,
-                    R.xml.dsp_compander_preferences
-                ))
-            .replace(
-                R.id.card_bass, PreferenceGroupFragment.newInstance(Constants.PREF_BASS,
-                    R.xml.dsp_bass_preferences
-                ))
-            .replace(
                 R.id.card_eq, PreferenceGroupFragment.newInstance(Constants.PREF_EQ,
                     R.xml.dsp_equalizer_preferences
                 ))
@@ -94,10 +86,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                 ))
             .replace(R.id.card_bmw_compressor, NativeBmwCompressorCardFragment.newInstance())
             .replace(R.id.card_bmw_dsp, NativeBmwDspCardFragment.newInstance())
-            .replace(
-                R.id.card_geq, PreferenceGroupFragment.newInstance(Constants.PREF_GEQ,
-                    R.xml.dsp_graphiceq_preferences
-                ))
             .replace(
                 R.id.card_ddc, PreferenceGroupFragment.newInstance(Constants.PREF_DDC,
                     R.xml.dsp_ddc_preferences
@@ -111,20 +99,8 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_liveprog_preferences
                 ))
             .replace(
-                R.id.card_tube, PreferenceGroupFragment.newInstance(Constants.PREF_TUBE,
-                    R.xml.dsp_tube_preferences
-                ))
-            .replace(
                 R.id.card_stereowide, PreferenceGroupFragment.newInstance(Constants.PREF_STEREOWIDE,
                     R.xml.dsp_stereowide_preferences
-                ))
-            .replace(
-                R.id.card_crossfeed, PreferenceGroupFragment.newInstance(Constants.PREF_CROSSFEED,
-                    R.xml.dsp_crossfeed_preferences
-                ))
-            .replace(
-                R.id.card_reverb, PreferenceGroupFragment.newInstance(Constants.PREF_REVERB,
-                    R.xml.dsp_reverb_preferences
                 ))
             .commit()
 

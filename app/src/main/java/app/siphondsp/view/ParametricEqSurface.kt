@@ -289,16 +289,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         alpha = 200
         pathEffect = DashPathEffect(floatArrayOf(9f * density, 6f * density), 0f)
     }
+    // Light blue (matches the app's accent colour) -- the grey used everywhere else in this
+    // unified view reads as barely-visible background noise for a live spectrum trace.
+    private val spectrumAccentColor = Color.rgb(79, 195, 247)
     private val unifiedSpectrumFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = unifiedTextColor
-        alpha = 26
+        color = spectrumAccentColor
+        alpha = 40
     }
     private val unifiedSpectrumStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.1f * density
-        color = unifiedTextColor
-        alpha = 100
+        strokeWidth = 1.4f * density
+        color = spectrumAccentColor
+        alpha = 190
     }
     private val unifiedOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE

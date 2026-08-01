@@ -10,13 +10,18 @@ import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.MenuHost
+import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import app.siphondsp.R
 import app.siphondsp.BuildConfig
@@ -44,6 +49,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.BmwControlBuilder
 import app.siphondsp.view.ParametricEqSurface
 import timber.log.Timber
 import java.util.UUID
@@ -58,28 +64,19 @@ class ParametricEqualizerFragment : Fragment() {
     private val selectedBandByScope = mutableMapOf<PeqScope, UUID?>()
     private val history = PeqStateHistory(HISTORY_LIMIT)
     private var pendingDiagnosticReport: String? = null
+    private var peqDisplayMode = PeqDisplayMode.GRAPH
+    private var graphTab = GraphTab.EQ
 
     private var editorBandUuid: UUID? = null
     private var editorActive = false
         set(value) {
             field = value
-            binding.add.isEnabled = !value
-            binding.reset.isEnabled = !value
-            binding.importFile.isEnabled = !value
-            binding.exportFile.isEnabled = !value
-            binding.editString.isEnabled = !value
-            binding.filterTools.isEnabled = !value
-            binding.presetImport.isEnabled = !value
-            binding.presetExport.isEnabled = !value
-            binding.backupImport.isEnabled = !value
-            binding.backupExport.isEnabled = !value
-            if (value) {
-                binding.undo.isEnabled = false
-                binding.redo.isEnabled = false
-            } else {
-                updateHistoryControls()
-            }
+            invalidateOverflowMenu()
         }
+
+    private fun invalidateOverflowMenu() {
+        if (isAdded) activity?.invalidateMenu()
+    }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
@@ -366,65 +363,6 @@ class ParametricEqualizerFragment : Fragment() {
             }
         }
 
-        binding.reset.setOnClickListener {
-            requireContext().showYesNoAlert(
-                "Reset ${selectedScope.label}?",
-                if (selectedScope == PeqScope.FULL) {
-                    "Restore the Full Range default filters and reset its preamp to 0 dB?"
-                } else {
-                    "Clear every filter from ${selectedScope.label}?"
-                },
-            ) { confirmed ->
-                if (confirmed) {
-                    val candidate = peqState.deepCopy()
-                    val resetBands = ParametricEqBandList()
-                    if (selectedScope == PeqScope.FULL) resetBands.deserialize(Constants.DEFAULT_PEQ)
-                    replaceScopeBands(candidate, resetBands)
-                    applyCandidate(
-                        if (selectedScope == PeqScope.FULL) candidate.copy(preampDb = 0f) else candidate,
-                        "reset",
-                    )
-                }
-            }
-        }
-
-        binding.editString.setOnClickListener {
-            requireContext().showInputAlert(
-                layoutInflater,
-                R.string.peq_edit_as_string,
-                R.string.peq_edit_hint,
-                adapter.bands.toApoString(peqState.preampDb.toDouble()),
-                false,
-                null,
-            ) { text ->
-                text?.let {
-                    val parsed = ParametricEqBandList()
-                    val result = parsed.fromApoString(it)
-                    val candidate = peqState.deepCopy()
-                    replaceScopeBands(candidate, parsed)
-                    applyCandidate(
-                        if (selectedScope == PeqScope.FULL) candidate.copy(preampDb = result.preampDb.toFloat()) else candidate,
-                        "text-import",
-                    )
-                }
-            }
-        }
-
-        binding.add.setOnClickListener {
-            if (editorActive) return@setOnClickListener
-            editorBandUuid = null
-            editorActive = true
-            binding.freqInput.value = 1000f
-            binding.gainInput.value = 0f
-            binding.qInput.value = 1.41f
-            setFilterTypeSelection(ParametricEqFilterType.PEAKING)
-            setChannelSelection(ParametricEqChannel.LEFT_RIGHT)
-            updateViewState()
-        }
-
-        binding.importFile.setOnClickListener { importFileLauncher.launch(arrayOf("text/plain", "text/*")) }
-        binding.exportFile.setOnClickListener { exportFileLauncher.launch(selectedScope.fileName) }
-
         binding.freqInput.customStepScale = { value, _ ->
             when (value) {
                 in 0f..400f -> 10f
@@ -448,6 +386,7 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.confirm.setOnClickListener { editorSave() }
         binding.cancel.setOnClickListener { editorDiscard() }
+        binding.addBand?.setOnClickListener { performAdd() }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
@@ -470,8 +409,100 @@ class ParametricEqualizerFragment : Fragment() {
                 }
             }
         }
+        configureModeTabs()
         updateViewState()
         return binding.root
+    }
+
+    /** Left-edge Graph/List tab strip and the graph's own EQ/Crossovers/Tilt tab strip (landscape only). */
+    private fun configureModeTabs() {
+        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+        peqDisplayMode = runCatching {
+            PeqDisplayMode.valueOf(graphPrefs.getString(GRAPH_DISPLAY_MODE, PeqDisplayMode.GRAPH.name)!!)
+        }.getOrDefault(PeqDisplayMode.GRAPH)
+
+        binding.graphModeTab?.setOnClickListener {
+            peqDisplayMode = PeqDisplayMode.GRAPH
+            graphPrefs.edit().putString(GRAPH_DISPLAY_MODE, peqDisplayMode.name).apply()
+            applyDisplayMode()
+        }
+        binding.listModeTab?.setOnClickListener {
+            peqDisplayMode = PeqDisplayMode.LIST
+            graphPrefs.edit().putString(GRAPH_DISPLAY_MODE, peqDisplayMode.name).apply()
+            applyDisplayMode()
+        }
+        binding.graphTabStrip?.setOnCheckedStateChangeListener { _, checkedIds ->
+            graphTab = when (checkedIds.firstOrNull()) {
+                R.id.graph_tab_crossovers -> GraphTab.CROSSOVERS
+                R.id.graph_tab_tilt -> GraphTab.TILT
+                else -> GraphTab.EQ
+            }
+            applyGraphTab()
+        }
+        applyDisplayMode()
+        applyGraphTab()
+    }
+
+    /** GRAPH: only the live visualizer is shown. LIST: only the band editor is shown -- the two
+     *  are mutually exclusive, List mode is dedicated entirely to the filter list, not sharing
+     *  space with the visualizer. Portrait has none of these views -- no-op there. */
+    private fun applyDisplayMode() {
+        binding.modeTabStrip ?: return
+        binding.graphModeTab?.isEnabled = peqDisplayMode != PeqDisplayMode.GRAPH
+        binding.listModeTab?.isEnabled = peqDisplayMode != PeqDisplayMode.LIST
+        binding.editCard.isVisible = peqDisplayMode == PeqDisplayMode.LIST
+        binding.previewCard.isVisible = peqDisplayMode == PeqDisplayMode.GRAPH
+    }
+
+    /** EQ: plain graph. CROSSOVERS/TILT: a side panel with the relevant BMW controls, built on demand. */
+    private fun applyGraphTab() {
+        val panel = binding.graphSidePanel ?: return // portrait: no graph tabs
+        val panelContent = binding.graphSidePanelContent ?: return
+        when (graphTab) {
+            GraphTab.EQ -> {
+                panel.isVisible = false
+                binding.equalizerSurface.showTiltHandles = false
+            }
+            GraphTab.CROSSOVERS -> {
+                binding.equalizerSurface.showTiltHandles = false
+                panel.isVisible = true
+                panelContent.removeAllViews()
+                val builder = bmwControlBuilder(panelContent) { updated -> binding.equalizerSurface.setSystemValues(updated) }
+                builder.sectionCard("Crossovers") {
+                    addSwitchRow("Subsonic BW2", "12 dB/oct Butterworth protection", NativeBmwDspValues.INDEX_SUBSONIC_ENABLED)
+                    addSliderRow("Subsonic freq", NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
+                    addSwitchRow("Mute low band", null, NativeBmwDspValues.INDEX_LOW_MUTE)
+                    addSliderRow("Low LPF freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
+                    addChoiceRow("Low topology", NativeBmwDspValues.INDEX_LOW_LR4, listOf("BW3", "LR4"))
+                    addSwitchRow("Mute mid band", null, NativeBmwDspValues.INDEX_MID_MUTE)
+                    addSliderRow("Mid HPF freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
+                }
+            }
+            GraphTab.TILT -> {
+                binding.equalizerSurface.showTiltHandles = true
+                panel.isVisible = true
+                panelContent.removeAllViews()
+                val builder = bmwControlBuilder(panelContent) { updated -> binding.equalizerSurface.setSystemValues(updated) }
+                builder.sectionCard("Post-sum tonality tilt") {
+                    addSwitchRow("Tilt active", "Broad tonal balance after the bands rejoin", NativeBmwDspValues.INDEX_TILT_ENABLED)
+                    addSliderRow("Tilt amount", NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f, 6f, .1f, "dB")
+                    addSliderRow("Tilt pivot", NativeBmwDspValues.INDEX_TILT_FREQ, 200f, 2000f, 1f, "Hz")
+                }
+            }
+        }
+    }
+
+    /** Shared setup for a BmwControlBuilder bound to the live nativeDspValues array. */
+    private fun bmwControlBuilder(
+        container: android.widget.LinearLayout,
+        onSurfaceUpdate: (FloatArray) -> Unit,
+    ): BmwControlBuilder {
+        val builder = BmwControlBuilder(requireContext(), container, nativeDspValues) { updated ->
+            NativeBmwDspValues.save(requireContext(), updated)
+            NativeBmwDspValues.broadcast(requireContext(), updated)
+            onSurfaceUpdate(updated)
+        }
+        return builder
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
@@ -499,6 +530,8 @@ class ParametricEqualizerFragment : Fragment() {
             }
             nativeDspValues = applied
             binding.equalizerSurface.setSystemValues(applied)
+            // Keep the Tilt panel's sliders (if open) in sync with a drag on the graph handles.
+            if (graphTab == GraphTab.TILT) applyGraphTab()
             Timber.d("tilt-drag committed frequency=$clampedFreq amount=$clampedAmount")
             true
         } catch (error: Exception) {
@@ -543,6 +576,7 @@ class ParametricEqualizerFragment : Fragment() {
             PeqScope.MID -> "Mid Band PEQ response · inside mid crossover branch"
         }
         binding.bandList.adapter = ParametricEqBandAdapter(bands).apply {
+            selectedUuid = selectedBandByScope[selectedScope]
             onItemClicked = { band, _ ->
                 selectBandForEditing(band)
             }
@@ -560,7 +594,9 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun configureGraph() {
         binding.equalizerSurface.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
-        binding.equalizerSurface.showTiltHandles = true
+        // Tilt handles are gated by the Crossovers/Tilt graph tab strip now (see applyGraphTab()),
+        // not always-on -- the EQ tab (the default) starts with them off.
+        binding.equalizerSurface.showTiltHandles = false
         binding.equalizerSurface.showGainMeters = true
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         binding.equalizerSurface.showIndividualFilters =
@@ -598,49 +634,51 @@ class ParametricEqualizerFragment : Fragment() {
                 binding.equalizerSurface.cancelDraft()
             }
         }
-        binding.graphOptions.setOnClickListener { anchor ->
-            val popup = PopupMenu(requireContext(), anchor)
-            popup.menu.add(Menu.NONE, GRAPH_MENU_OVERLAYS, Menu.NONE, "Show individual filters")
-                .setCheckable(true)
-                .setChecked(binding.equalizerSurface.showIndividualFilters)
-            popup.menu.addSubMenu("Display channel").apply {
-                add(Menu.NONE, GRAPH_MENU_BOTH, Menu.NONE, "Both")
-                add(Menu.NONE, GRAPH_MENU_LEFT, Menu.NONE, "Left")
-                add(Menu.NONE, GRAPH_MENU_RIGHT, Menu.NONE, "Right")
-                setGroupCheckable(Menu.NONE, true, true)
-                val checked = when (binding.equalizerSurface.channelDisplay) {
-                    ParametricEqSurface.ChannelDisplay.BOTH -> GRAPH_MENU_BOTH
-                    ParametricEqSurface.ChannelDisplay.LEFT -> GRAPH_MENU_LEFT
-                    ParametricEqSurface.ChannelDisplay.RIGHT -> GRAPH_MENU_RIGHT
-                }
-                findItem(checked)?.isChecked = true
+    }
+
+    private fun showGraphOptionsPopup(anchor: View) {
+        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+        val popup = PopupMenu(requireContext(), anchor)
+        popup.menu.add(Menu.NONE, GRAPH_MENU_OVERLAYS, Menu.NONE, "Show individual filters")
+            .setCheckable(true)
+            .setChecked(binding.equalizerSurface.showIndividualFilters)
+        popup.menu.addSubMenu("Display channel").apply {
+            add(Menu.NONE, GRAPH_MENU_BOTH, Menu.NONE, "Both")
+            add(Menu.NONE, GRAPH_MENU_LEFT, Menu.NONE, "Left")
+            add(Menu.NONE, GRAPH_MENU_RIGHT, Menu.NONE, "Right")
+            setGroupCheckable(Menu.NONE, true, true)
+            val checked = when (binding.equalizerSurface.channelDisplay) {
+                ParametricEqSurface.ChannelDisplay.BOTH -> GRAPH_MENU_BOTH
+                ParametricEqSurface.ChannelDisplay.LEFT -> GRAPH_MENU_LEFT
+                ParametricEqSurface.ChannelDisplay.RIGHT -> GRAPH_MENU_RIGHT
             }
-            popup.setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    GRAPH_MENU_OVERLAYS -> {
-                        binding.equalizerSurface.showIndividualFilters = !item.isChecked
-                        graphPrefs.edit()
-                            .putBoolean(GRAPH_SHOW_OVERLAYS, binding.equalizerSurface.showIndividualFilters)
-                            .apply()
-                        true
-                    }
-                    GRAPH_MENU_BOTH, GRAPH_MENU_LEFT, GRAPH_MENU_RIGHT -> {
-                        binding.equalizerSurface.channelDisplay = when (item.itemId) {
-                            GRAPH_MENU_LEFT -> ParametricEqSurface.ChannelDisplay.LEFT
-                            GRAPH_MENU_RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
-                            else -> ParametricEqSurface.ChannelDisplay.BOTH
-                        }
-                        graphPrefs.edit()
-                            .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
-                            .apply()
-                        bindScope()
-                        true
-                    }
-                    else -> false
-                }
-            }
-            popup.show()
+            findItem(checked)?.isChecked = true
         }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                GRAPH_MENU_OVERLAYS -> {
+                    binding.equalizerSurface.showIndividualFilters = !item.isChecked
+                    graphPrefs.edit()
+                        .putBoolean(GRAPH_SHOW_OVERLAYS, binding.equalizerSurface.showIndividualFilters)
+                        .apply()
+                    true
+                }
+                GRAPH_MENU_BOTH, GRAPH_MENU_LEFT, GRAPH_MENU_RIGHT -> {
+                    binding.equalizerSurface.channelDisplay = when (item.itemId) {
+                        GRAPH_MENU_LEFT -> ParametricEqSurface.ChannelDisplay.LEFT
+                        GRAPH_MENU_RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
+                        else -> ParametricEqSurface.ChannelDisplay.BOTH
+                    }
+                    graphPrefs.edit()
+                        .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
+                        .apply()
+                    bindScope()
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
     }
 
     private fun selectBandForEditing(band: ParametricEqBand) {
@@ -656,36 +694,130 @@ class ParametricEqualizerFragment : Fragment() {
         updateViewState()
     }
 
+    /** Sets up the toolbar overflow menu that replaced the old 14-chip action row. */
     private fun configureProductionTools() {
-        binding.undo.setOnClickListener {
-            val candidate = history.peekUndo() ?: return@setOnClickListener
-            if (applyCandidate(candidate, "undo", recordHistory = false)) {
-                history.confirmUndo()
-                updateHistoryControls()
+        val menuHost = requireActivity() as MenuHost
+        menuHost.addMenuProvider(
+            object : MenuProvider {
+                override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+                    menuInflater.inflate(R.menu.menu_parametric_eq, menu)
+                }
+
+                override fun onPrepareMenu(menu: Menu) {
+                    menu.findItem(R.id.menu_undo)?.isEnabled = !editorActive && history.canUndo
+                    menu.findItem(R.id.menu_redo)?.isEnabled = !editorActive && history.canRedo
+                    menu.findItem(R.id.menu_edit_group)?.isEnabled = !editorActive
+                    menu.findItem(R.id.menu_import_export_group)?.isEnabled = !editorActive
+                    menu.findItem(R.id.menu_filter_tools)?.isEnabled = !editorActive
+                }
+
+                override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
+                    R.id.menu_undo -> { performUndo(); true }
+                    R.id.menu_redo -> { performRedo(); true }
+                    R.id.menu_add -> { performAdd(); true }
+                    R.id.menu_reset -> { performReset(); true }
+                    R.id.menu_edit_string -> { performEditAsString(); true }
+                    R.id.menu_import_file -> { performImport(); true }
+                    R.id.menu_export_file -> { performExport(); true }
+                    R.id.menu_preset_import -> { performPresetImport(); true }
+                    R.id.menu_preset_export -> { performPresetExport(); true }
+                    R.id.menu_backup_import -> { performBackupImport(); true }
+                    R.id.menu_backup_export -> { performBackupExport(); true }
+                    R.id.menu_filter_tools -> { showFilterTools(toolbarAnchor()); true }
+                    R.id.menu_diagnostics -> { showDiagnosticReport(); true }
+                    R.id.menu_graph_options -> { showGraphOptionsPopup(toolbarAnchor()); true }
+                    else -> false
+                }
+            },
+            viewLifecycleOwner,
+            Lifecycle.State.RESUMED,
+        )
+    }
+
+    private fun toolbarAnchor(): View = requireActivity().findViewById(R.id.toolbar)
+
+    private fun performReset() {
+        requireContext().showYesNoAlert(
+            "Reset ${selectedScope.label}?",
+            if (selectedScope == PeqScope.FULL) {
+                "Restore the Full Range default filters and reset its preamp to 0 dB?"
+            } else {
+                "Clear every filter from ${selectedScope.label}?"
+            },
+        ) { confirmed ->
+            if (confirmed) {
+                val candidate = peqState.deepCopy()
+                val resetBands = ParametricEqBandList()
+                if (selectedScope == PeqScope.FULL) resetBands.deserialize(Constants.DEFAULT_PEQ)
+                replaceScopeBands(candidate, resetBands)
+                applyCandidate(
+                    if (selectedScope == PeqScope.FULL) candidate.copy(preampDb = 0f) else candidate,
+                    "reset",
+                )
             }
-        }
-        binding.redo.setOnClickListener {
-            val candidate = history.peekRedo() ?: return@setOnClickListener
-            if (applyCandidate(candidate, "redo", recordHistory = false)) {
-                history.confirmRedo()
-                updateHistoryControls()
-            }
-        }
-        binding.presetExport.setOnClickListener {
-            presetExportLauncher.launch("three_bank_peq.json")
-        }
-        binding.presetImport.setOnClickListener {
-            presetImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
-        }
-        binding.filterTools.setOnClickListener { anchor -> showFilterTools(anchor) }
-        binding.diagnostics.setOnClickListener { showDiagnosticReport() }
-        binding.backupExport.setOnClickListener {
-            privateBackupExportLauncher.launch("SiphonDSP-private-peq-backup.json")
-        }
-        binding.backupImport.setOnClickListener {
-            privateBackupImportLauncher.launch(arrayOf("application/json", "text/plain"))
         }
     }
+
+    private fun performEditAsString() {
+        requireContext().showInputAlert(
+            layoutInflater,
+            R.string.peq_edit_as_string,
+            R.string.peq_edit_hint,
+            adapter.bands.toApoString(peqState.preampDb.toDouble()),
+            false,
+            null,
+        ) { text ->
+            text?.let {
+                val parsed = ParametricEqBandList()
+                val result = parsed.fromApoString(it)
+                val candidate = peqState.deepCopy()
+                replaceScopeBands(candidate, parsed)
+                applyCandidate(
+                    if (selectedScope == PeqScope.FULL) candidate.copy(preampDb = result.preampDb.toFloat()) else candidate,
+                    "text-import",
+                )
+            }
+        }
+    }
+
+    private fun performAdd() {
+        if (editorActive) return
+        editorBandUuid = null
+        editorActive = true
+        binding.freqInput.value = 1000f
+        binding.gainInput.value = 0f
+        binding.qInput.value = 1.41f
+        setFilterTypeSelection(ParametricEqFilterType.PEAKING)
+        setChannelSelection(ParametricEqChannel.LEFT_RIGHT)
+        updateViewState()
+    }
+
+    private fun performImport() = importFileLauncher.launch(arrayOf("text/plain", "text/*"))
+    private fun performExport() = exportFileLauncher.launch(selectedScope.fileName)
+
+    private fun performUndo() {
+        val candidate = history.peekUndo() ?: return
+        if (applyCandidate(candidate, "undo", recordHistory = false)) {
+            history.confirmUndo()
+            updateHistoryControls()
+        }
+    }
+
+    private fun performRedo() {
+        val candidate = history.peekRedo() ?: return
+        if (applyCandidate(candidate, "redo", recordHistory = false)) {
+            history.confirmRedo()
+            updateHistoryControls()
+        }
+    }
+
+    private fun performPresetExport() = presetExportLauncher.launch("three_bank_peq.json")
+    private fun performPresetImport() =
+        presetImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+    private fun performBackupExport() =
+        privateBackupExportLauncher.launch("SiphonDSP-private-peq-backup.json")
+    private fun performBackupImport() =
+        privateBackupImportLauncher.launch(arrayOf("application/json", "text/plain"))
 
     private fun showDiagnosticReport() {
         val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
@@ -718,9 +850,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun updateHistoryControls() {
-        if (!::binding.isInitialized) return
-        binding.undo.isEnabled = history.canUndo
-        binding.redo.isEnabled = history.canRedo
+        invalidateOverflowMenu()
     }
 
     private fun showFilterTools(anchor: View) {
@@ -934,9 +1064,12 @@ class ParametricEqualizerFragment : Fragment() {
         val empty = adapter.bands.isEmpty()
         binding.emptyView.isVisible = empty && !editorActive
         binding.bandList.isVisible = !empty && !editorActive
+        binding.bandListHeader?.root?.isVisible = !empty && !editorActive
         binding.bandEdit.isVisible = editorActive
-        binding.bandDetailContextButtons.visibility = if (editorActive) View.VISIBLE else View.INVISIBLE
+        binding.bandDetailContextButtons.visibility = if (editorActive) View.VISIBLE else View.GONE
+        binding.addBand?.visibility = if (editorActive) View.GONE else View.VISIBLE
         binding.editCardTitle.text = getString(if (editorActive) R.string.peq_band_editor else R.string.peq_band_list)
+        adapter.selectedUuid = selectedBandByScope[selectedScope]
     }
 
     private fun editorCanSave() = binding.freqInput.isCurrentValueValid() &&
@@ -985,6 +1118,17 @@ class ParametricEqualizerFragment : Fragment() {
         binding.equalizerSurface.cancelDraft()
         if (editorActive) editorDiscard()
         super.onStop()
+    }
+
+    override fun onDestroyView() {
+        // ParametricEqBandAdapter registers an ObservableList callback on peqState's bands
+        // (which JamesDspLocalEngine's own long-lived bmwPeqState.fullRangeBands can end up
+        // sharing after applyCandidate() hands the same object to the engine) in
+        // onAttachedToRecyclerView, removed again in onDetachedFromRecyclerView -- which only
+        // fires if the adapter is actually cleared, not just left attached when the view dies.
+        // Without this, LeakCanary traces the whole Activity retained through that callback.
+        binding.bandList.adapter = null
+        super.onDestroyView()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -1059,6 +1203,7 @@ class ParametricEqualizerFragment : Fragment() {
         private const val GRAPH_PREFS = "peq_graph_display"
         private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
         private const val GRAPH_CHANNEL = "channel_display"
+        private const val GRAPH_DISPLAY_MODE = "peq_display_mode"
         private const val GRAPH_MENU_OVERLAYS = 1
         private const val GRAPH_MENU_BOTH = 2
         private const val GRAPH_MENU_LEFT = 3
@@ -1081,4 +1226,10 @@ class ParametricEqualizerFragment : Fragment() {
         LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low, BmwPeqBank.LOW),
         MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid, BmwPeqBank.MID),
     }
+
+    /** Landscape-only: which of edit_card/preview_card dominates the cards row. */
+    private enum class PeqDisplayMode { GRAPH, LIST }
+
+    /** Landscape-only: which content the graph's own tab strip + side panel currently show. */
+    private enum class GraphTab { EQ, CROSSOVERS, TILT }
 }
