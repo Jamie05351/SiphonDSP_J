@@ -475,6 +475,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     synchronized(recorderLifecycleLock) {
                         safeStop(recorder)
                         safeStop(track)
+                        track.flush()
                         safeRelease(recorder)
                         activeRecorder = null
                     }
@@ -492,6 +493,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if(isProcessorIdle && suspendOnIdle) {
                     safeStop(recorder)
                     safeStop(track)
+                    track.flush()
                     try {
                         Thread.sleep(50)
                     }
