@@ -77,19 +77,20 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
                     ?.filter { it.extension == "xml" }
                     ?.forEach(c::add)
 
-                // The BMW-specific DSP config (crossover/gains/delays/compressor/tilt) and PEQ
-                // metadata live in their own SharedPreferences files, outside the dsp_* naming
-                // convention above -- without this, presets silently dropped every BMW setting.
+                // PEQ metadata lives in its own SharedPreferences file, outside the dsp_* naming
+                // convention above -- without this, presets silently dropped it.
                 currentPath(ctx)
                     .listFiles()
                     ?.filter { it.name in BMW_SHARED_PREFS_FILES }
                     ?.forEach(c::add)
 
-                // The actual three-bank PEQ state (Full/Low/Mid bands) isn't in SharedPreferences
-                // at all -- BmwPeqStore persists it as its own file pair in no-backup storage.
+                // The three-bank PEQ state (Full/Low/Mid bands) and the BMW-specific DSP config
+                // (crossover/gains/delays/compressor/tilt) aren't in SharedPreferences at all --
+                // BmwPeqStore and NativeBmwDspStore each persist their own file pair in
+                // no-backup storage.
                 ctx.noBackupFilesDir
                     .listFiles()
-                    ?.filter { it.name in BMW_PEQ_STATE_FILES }
+                    ?.filter { it.name in BMW_NO_BACKUP_STATE_FILES }
                     ?.forEach(c::add)
 
                 findLiveprogScriptPath(ctx)?.let { path ->
@@ -126,14 +127,19 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
 
         const val FILE_LIVEPROG = "liveprog"
 
-        // SharedPreferences files (BmwPeqState.kt / NativeBmwDspValues.kt) that hold the BMW
-        // crossover/gain/delay/compressor/tilt config and PEQ migration metadata -- named
+        // SharedPreferences files (BmwPeqState.kt) that hold PEQ migration metadata -- named
         // outside the legacy "dsp_*" convention, so they were previously excluded entirely.
+        // native_bmw_dsp.xml is kept here read-only so presets saved before NativeBmwDspStore
+        // existed still restore correctly (NativeBmwDspValues.load() migrates it from there).
         private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml")
 
-        // The authoritative three-bank PEQ state (BmwPeqStore.kt), stored outside
-        // SharedPreferences entirely in no-backup app storage.
-        private val BMW_PEQ_STATE_FILES = setOf("native_bmw_peq_state.txt", "native_bmw_peq_state.recovery")
+        // The authoritative BMW PEQ state (BmwPeqStore.kt) and DSP config array
+        // (NativeBmwDspStore.kt), both stored outside SharedPreferences entirely in
+        // no-backup app storage.
+        private val BMW_NO_BACKUP_STATE_FILES = setOf(
+            "native_bmw_peq_state.txt", "native_bmw_peq_state.recovery",
+            "native_bmw_dsp_state.txt", "native_bmw_dsp_state.recovery",
+        )
 
         const val META_VERSION = "version"
         const val META_APP_VERSION = "app_version"
@@ -146,7 +152,7 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
             (n.startsWith("dsp_") && n.endsWith("xml")) ||
                 n == FILE_LIVEPROG ||
                 n in BMW_SHARED_PREFS_FILES ||
-                n in BMW_PEQ_STATE_FILES
+                n in BMW_NO_BACKUP_STATE_FILES
 
         fun validate(inputStream: InputStream) = Tar.Reader(inputStream, ::isKnownEntry).validate()
 
@@ -187,7 +193,7 @@ class Preset(val name: String, externalPath: File? = null): KoinComponent {
                 if(!isKnownEntry(f.name))
                     return@next
 
-                val destinationDir = if (f.name in BMW_PEQ_STATE_FILES) ctx.noBackupFilesDir else currentPath(ctx)
+                val destinationDir = if (f.name in BMW_NO_BACKUP_STATE_FILES) ctx.noBackupFilesDir else currentPath(ctx)
                 val target = File(destinationDir, f.name)
                 f.copyTo(target, overwrite = true)
                 Timber.d("Copying to ${target.absolutePath}")
