@@ -4,8 +4,11 @@ import android.content.Context
 import android.content.Intent
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import timber.log.Timber
 
 object NativeBmwDspValues {
+    // No longer written to -- kept so load() can migrate anyone still on the old
+    // SharedPreferences blob (pre-NativeBmwDspStore) onto the new atomic file store.
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
     const val SIZE = 42
@@ -77,13 +80,8 @@ object NativeBmwDspValues {
     )
 
     fun load(context: Context): FloatArray {
-        val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
-        val parsed = saved?.split(',')?.mapNotNull(String::toFloatOrNull)?.toFloatArray()
-        val values = when (parsed?.size) {
-            SIZE -> parsed
-            35 -> DEFAULTS.copyOf().also { migrated -> parsed.copyInto(migrated, endIndex = parsed.size) }
-            else -> DEFAULTS.copyOf()
-        }
+        val store = store(context)
+        val values = store.load() ?: migrateLegacy(context, store) ?: DEFAULTS.copyOf()
         // The master enable switch was removed from the UI (redundant with the app-level
         // on/off, which already achieves the same thing) - force it on so anyone who had
         // it persisted off from before can't end up silently stuck with no way to re-enable it.
@@ -93,9 +91,24 @@ object NativeBmwDspValues {
 
     fun save(context: Context, values: FloatArray) {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY, values.joinToString(","))
-            .apply()
+        store(context).save(values)
+    }
+
+    private fun store(context: Context) = NativeBmwDspStore(context.noBackupFilesDir)
+
+    /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob, tolerant of any
+     *  saved length (not just the old hardcoded 35->42 case) since it pads/truncates against
+     *  [DEFAULTS] by position instead of rejecting the whole array on a size mismatch. */
+    private fun migrateLegacy(context: Context, store: NativeBmwDspStore): FloatArray? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val saved = prefs.getString(KEY, null) ?: return null
+        val parsed = saved.split(',').mapNotNull(String::toFloatOrNull).toFloatArray()
+        val values = DEFAULTS.copyOf()
+        parsed.copyInto(values, endIndex = minOf(parsed.size, values.size))
+        val migrated = store.save(values)
+        Timber.i("BMW DSP migrated legacy SharedPreferences blob size=${parsed.size} success=$migrated")
+        if (migrated) prefs.edit().remove(KEY).apply()
+        return values
     }
 
     fun broadcast(context: Context, values: FloatArray) {

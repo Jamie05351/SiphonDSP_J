@@ -75,9 +75,21 @@ class BackupManager(private val context: Context): KoinComponent {
 
                 File(context.applicationInfo.dataDir + "/shared_prefs")
                     .listFiles()
-                    ?.filter { it.name.startsWith("dsp_") }
+                    ?.filter { it.name.startsWith("dsp_") || it.name in BMW_SHARED_PREFS_FILES }
                     ?.filter { it.extension == "xml" }
                     ?.forEach { c.add(it, "shared_prefs/${it.name}") }
+
+                // BMW PEQ state (BmwPeqStore.kt) and the BMW DSP config array
+                // (NativeBmwDspStore.kt) aren't in SharedPreferences at all -- each persists
+                // its own file pair in no-backup storage. Without this, a "full" backup
+                // silently dropped every BMW-specific setting (crossover/gains/delays/
+                // compressor/tilt/PEQ), while the generic Output Control prefs above
+                // (in the default dsp_* files) came through fine -- see Preset.kt, which
+                // already had to fix the same gap for the separate presets feature.
+                context.noBackupFilesDir
+                    .listFiles()
+                    ?.filter { it.name in BMW_NO_BACKUP_STATE_FILES }
+                    ?.forEach { c.add(it, "no_backup/${it.name}") }
 
                 if(preferences.get<Boolean>(R.string.key_device_profiles_enable)) {
                     c.metadata[META_HAS_DEVICE_PROFILES] = true.toString()
@@ -128,7 +140,11 @@ class BackupManager(private val context: Context): KoinComponent {
 
                 // Remove shared dsp prefs
                 File(context.applicationInfo.dataDir + "/shared_prefs").listFiles { file: File ->
-                    file.name.startsWith("dsp_") && file.extension == "xml"
+                    (file.name.startsWith("dsp_") || file.name in BMW_SHARED_PREFS_FILES) && file.extension == "xml"
+                }?.forEach { it.delete() }
+                // Remove BMW PEQ / DSP config no-backup state
+                context.noBackupFilesDir.listFiles { file: File ->
+                    file.name in BMW_NO_BACKUP_STATE_FILES
                 }?.forEach { it.delete() }
                 // Remove external files
                 context.getExternalFilesDir(null)
@@ -141,6 +157,8 @@ class BackupManager(private val context: Context): KoinComponent {
             targetFolder.listFiles()?.forEach { file ->
                 if(file.isDirectory && file.name == "shared_prefs")
                     file.copyRecursively(File(context.applicationInfo.dataDir + "/shared_prefs"), true)
+                else if(file.isDirectory && file.name == "no_backup")
+                    file.copyRecursively(context.noBackupFilesDir, true)
                 else if(file.isDirectory && file.name == "profiles") {
                     enableDeviceProfiles = true
                     file.copyRecursively(
@@ -169,9 +187,19 @@ class BackupManager(private val context: Context): KoinComponent {
         private const val META_HAS_DEVICE_PROFILES = "has_device_profiles"
         const val META_IS_BACKUP = "is_backup"
 
+        // Kept in sync with Preset.kt's constants of the same purpose -- both features back up
+        // the same BMW-specific state that lives outside the generic dsp_* convention.
+        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml")
+        private val BMW_NO_BACKUP_STATE_FILES = setOf(
+            "native_bmw_peq_state.txt", "native_bmw_peq_state.recovery",
+            "native_bmw_dsp_state.txt", "native_bmw_dsp_state.recovery",
+        )
+
         private fun isKnownFile(name: String): Boolean {
             return (name.contains("dsp_") && name.endsWith(".xml")) ||
                     name.startsWith("profiles/") ||
+                    name.startsWith("no_backup/") ||
+                    BMW_SHARED_PREFS_FILES.any { name.endsWith(it) } ||
                     FileLibraryPreference.types.any { name.contains(it.key) && it.value.any { ext -> name.endsWith(ext) } }
         }
 
