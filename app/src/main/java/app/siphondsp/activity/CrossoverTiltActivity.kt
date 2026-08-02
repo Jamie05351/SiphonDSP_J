@@ -3,9 +3,9 @@ package app.siphondsp.activity
 import android.os.Bundle
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
-import app.siphondsp.fragment.DelayPolarityFragment
+import app.siphondsp.fragment.CrossoverTiltFragment
 
-class DelayPolarityActivity : BaseActivity() {
+class CrossoverTiltActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parametric_eq)
@@ -15,7 +15,7 @@ class DelayPolarityActivity : BaseActivity() {
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.params, DelayPolarityFragment())
+                .replace(R.id.params, CrossoverTiltFragment())
                 .commit()
         }
     }

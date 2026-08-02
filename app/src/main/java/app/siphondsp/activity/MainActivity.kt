@@ -230,8 +230,8 @@ class MainActivity : BaseActivity() {
                     startActivity(Intent(this, NativeBmwCompressorActivity::class.java))
                     true
                 }
-                R.id.action_delay_polarity -> {
-                    startActivity(Intent(this, DelayPolarityActivity::class.java))
+                R.id.action_crossover_tilt -> {
+                    startActivity(Intent(this, CrossoverTiltActivity::class.java))
                     true
                 }
                 R.id.action_blocklist -> {

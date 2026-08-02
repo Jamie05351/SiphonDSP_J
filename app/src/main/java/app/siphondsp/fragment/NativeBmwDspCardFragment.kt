@@ -102,10 +102,9 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     companion object {
         private const val MENU_PREFS = "native_bmw_dsp_menu"
-        // Gain structure, Subsonic/crossovers, Delay/polarity and Tilt have all
-        // relocated to dedicated screens (GainLimiterFragment, the Parametric EQ
-        // graph's Crossovers/Tilt tabs, and DelayPolarityFragment) -- only the
-        // "Measurements / routing" category (indices 1-4) still renders inline here.
+        // Gain structure, Delay/polarity, Subsonic/crossovers and Tilt have all
+        // relocated to dedicated screens (GainLimiterFragment and CrossoverTiltFragment)
+        // -- only the "Measurements / routing" category (indices 1-4) still renders inline here.
         // The master enable switch (index 0) was removed from this screen entirely --
         // it was redundant with the app-level on/off, and NativeBmwDspValues.load()
         // now forces index 0 on unconditionally, so there's nothing left to bind here.

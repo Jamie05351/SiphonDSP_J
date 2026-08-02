@@ -4,7 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:animateLayoutChanges="true">
 
     <HorizontalScrollView
         android:id="@+id/horizontalScrollView"
@@ -16,79 +17,139 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <LinearLayout
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/peq_scope_group"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="16dp"
+            app:selectionRequired="true"
+            app:singleSelection="true"
+            app:singleLine="true">
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/peq_scope_group"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_full"
+                style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:selectionRequired="true"
-                app:singleSelection="true"
-                app:singleLine="true">
+                android:checked="true"
+                android:text="Full Range" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/peq_scope_full"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Full Range" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/peq_scope_low"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Low Band" />
-
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/peq_scope_mid"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Mid Band" />
-            </com.google.android.material.chip.ChipGroup>
-
-            <View
-                android:layout_width="24dp"
-                android:layout_height="1dp" />
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/graph_tab_strip"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_low"
+                style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:selectionRequired="true"
-                app:singleSelection="true"
-                app:singleLine="true">
+                android:text="Low Band" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/graph_tab_eq"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="EQ" />
+            <com.google.android.material.chip.Chip
+                android:id="@+id/peq_scope_mid"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mid Band" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/graph_tab_crossovers"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Crossovers" />
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_reset"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/peq_reset"
+                app:chipIcon="@drawable/ic_twotone_delete_forever_24dp" />
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/graph_tab_tilt"
-                    style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Tilt" />
-            </com.google.android.material.chip.ChipGroup>
-        </LinearLayout>
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_import_file"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/peq_import"
+                app:chipIcon="@drawable/ic_twotone_download_24" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_export_file"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/peq_export"
+                app:chipIcon="@drawable/ic_twotone_save_24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_edit_string"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/peq_edit_as_string"
+                app:chipIcon="@drawable/ic_twotone_edit_24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_graph_options"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Graph display options"
+                android:text="Graph options" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_undo"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Undo last committed PEQ change"
+                android:text="Undo" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_redo"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Redo last undone PEQ change"
+                android:text="Redo" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_filter_tools"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Copy and reorder selected filter"
+                android:text="Filter tools" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_preset_export"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Export preset" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_preset_import"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Import preset" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_diagnostics"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Review and export a sanitised PEQ diagnostic report"
+                android:text="Diagnostics" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_backup_export"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Export complete private PEQ backup"
+                android:text="Backup" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_backup_import"
+                style="@style/Widget.Material3.Chip.Assist.Elevated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Preview and restore complete private PEQ backup"
+                android:text="Restore backup" />
+        </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -102,39 +163,47 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/horizontalScrollView">
 
-        <!-- Graph/List mode tab strip: pinned to the left edge, always visible. -->
-        <LinearLayout
+        <!-- Graph/List mode toggle: pinned to the left edge, always visible. Using a real
+             MaterialButtonToggleGroup (like filter_type_group/channel_group below) means the
+             "lit" button always matches the checked state, with no separate isEnabled
+             bookkeeping that can drift out of sync with peqDisplayMode. -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/mode_tab_strip"
             android:layout_width="52dp"
             android:layout_height="0dp"
             android:layout_marginStart="8dp"
             android:orientation="vertical"
             android:gravity="center_horizontal"
+            app:singleSelection="true"
+            app:selectionRequired="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/graph_mode_tab"
-                style="?attr/materialIconButtonFilledStyle"
+                style="?attr/materialIconButtonOutlinedStyle"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginBottom="8dp"
+                android:checkable="true"
                 android:contentDescription="Show the live graph"
                 app:icon="@drawable/ic_baseline_equalizer_24dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/list_mode_tab"
-                style="?attr/materialIconButtonStyle"
+                style="?attr/materialIconButtonOutlinedStyle"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
+                android:checkable="true"
                 android:contentDescription="Show the band list"
                 app:icon="@drawable/ic_twotone_nodes_24dp" />
-        </LinearLayout>
+        </com.google.android.material.button.MaterialButtonToggleGroup>
 
         <!-- Only one of edit_card/preview_card is visible at a time (see applyDisplayMode()):
              both span the same full region so List mode is dedicated to the filter list, not
-             sharing space with the live visualizer. -->
+             sharing space with the live visualizer. Inside edit_card, the editor and the list
+             are a permanent side-by-side split; see the horizontal LinearLayout below. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/edit_card"
             android:layout_width="0dp"
@@ -220,54 +289,17 @@
                     android:layout_height="1dp"
                     android:background="?android:attr/listDivider" />
 
-                <FrameLayout
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
-                    android:layout_weight="1">
-
-                    <LinearLayout
-                        android:id="@+id/empty_view"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:layout_gravity="center"
-                        android:visibility="gone"
-                        android:gravity="center">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:gravity="center"
-                            android:alpha="0.8"
-                            android:text="@string/peq_no_bands_defined"
-                            android:textAppearance="?attr/textAppearanceTitleMedium"
-                            app:drawableTint="?attr/colorOnBackground"
-                            app:drawableTopCompat="@drawable/ic_twotone_nodes_24dp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical">
-
-                        <include
-                            android:id="@+id/band_list_header"
-                            layout="@layout/item_peq_band_list_header"
-                            android:visibility="gone" />
-
-                        <androidx.recyclerview.widget.RecyclerView
-                            android:id="@+id/band_list"
-                            android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="1"
-                            android:visibility="gone"
-                            android:scrollbars="vertical" />
-                    </LinearLayout>
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
 
                     <androidx.core.widget.NestedScrollView
                         android:id="@+id/band_edit"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="match_parent"
+                        android:layout_weight="1"
                         tools:ignore="SpeakableTextPresentCheck">
 
                         <LinearLayout
@@ -421,7 +453,57 @@
                             </com.google.android.material.button.MaterialButtonToggleGroup>
                         </LinearLayout>
                     </androidx.core.widget.NestedScrollView>
-                </FrameLayout>
+
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="match_parent"
+                        android:background="?android:attr/listDivider" />
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1">
+
+                        <LinearLayout
+                            android:id="@+id/empty_view"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:visibility="gone"
+                            android:gravity="center">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:gravity="center"
+                                android:alpha="0.8"
+                                android:text="@string/peq_no_bands_defined"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                app:drawableTint="?attr/colorOnBackground"
+                                app:drawableTopCompat="@drawable/ic_twotone_nodes_24dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical">
+
+                            <include
+                                android:id="@+id/band_list_header"
+                                layout="@layout/item_peq_band_list_header"
+                                android:visibility="gone" />
+
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/band_list"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:visibility="gone"
+                                android:scrollbars="vertical" />
+                        </LinearLayout>
+                    </FrameLayout>
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -468,32 +550,6 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@id/preview_title" />
-
-                <FrameLayout
-                    android:id="@+id/graph_side_panel"
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:visibility="gone"
-                    android:elevation="4dp"
-                    android:background="?attr/colorSurfaceContainer"
-                    app:layout_constraintWidth_percent="0.45"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/preview_title">
-
-                    <androidx.core.widget.NestedScrollView
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent">
-
-                        <LinearLayout
-                            android:id="@+id/graph_side_panel_content"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="12dp"
-                            android:paddingBottom="12dp" />
-                    </androidx.core.widget.NestedScrollView>
-                </FrameLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>
     </androidx.constraintlayout.widget.ConstraintLayout>

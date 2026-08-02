@@ -203,9 +203,9 @@
         </activity>
 
         <activity
-            android:name=".activity.DelayPolarityActivity"
+            android:name=".activity.CrossoverTiltActivity"
             android:exported="false"
-            android:label="@string/title_activity_delay_polarity"
+            android:label="@string/title_activity_crossover_tilt"
             android:theme="@style/Theme.SiphonDSP">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
