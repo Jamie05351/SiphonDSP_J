@@ -66,17 +66,27 @@ class ParametricEqualizerFragment : Fragment() {
     private val history = PeqStateHistory(HISTORY_LIMIT)
     private var pendingDiagnosticReport: String? = null
     private var peqDisplayMode = PeqDisplayMode.GRAPH
-    private var graphTab = GraphTab.EQ
 
     private var editorBandUuid: UUID? = null
     private var editorActive = false
         set(value) {
             field = value
-            invalidateOverflowMenu()
+            refreshActionChips()
         }
 
-    private fun invalidateOverflowMenu() {
-        if (isAdded) activity?.invalidateMenu()
+    private fun refreshActionChips() {
+        if (isAdded) activity?.invalidateMenu() // keeps the toolbar enable switch synced, see onPrepareMenu()
+        binding.chipUndo?.isEnabled = !editorActive && history.canUndo
+        binding.chipRedo?.isEnabled = !editorActive && history.canRedo
+        binding.chipReset?.isEnabled = !editorActive
+        binding.chipEditString?.isEnabled = !editorActive
+        binding.chipImportFile?.isEnabled = !editorActive
+        binding.chipExportFile?.isEnabled = !editorActive
+        binding.chipPresetImport?.isEnabled = !editorActive
+        binding.chipPresetExport?.isEnabled = !editorActive
+        binding.chipBackupImport?.isEnabled = !editorActive
+        binding.chipBackupExport?.isEnabled = !editorActive
+        binding.chipFilterTools?.isEnabled = !editorActive
     }
 
     private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -392,6 +402,7 @@ class ParametricEqualizerFragment : Fragment() {
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
         configureProductionTools()
+        configureActionChips()
         loadBands(savedInstanceState)
         binding.peqScopeGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
             val next = when (checkedIds.firstOrNull()) {
@@ -415,33 +426,21 @@ class ParametricEqualizerFragment : Fragment() {
         return binding.root
     }
 
-    /** Left-edge Graph/List tab strip and the graph's own EQ/Crossovers/Tilt tab strip (landscape only). */
+    /** Left-edge Graph/List tab strip (landscape only). A real MaterialButtonToggleGroup now
+     *  drives which icon looks "lit", instead of manually-managed isEnabled/style bookkeeping. */
     private fun configureModeTabs() {
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         peqDisplayMode = runCatching {
             PeqDisplayMode.valueOf(graphPrefs.getString(GRAPH_DISPLAY_MODE, PeqDisplayMode.GRAPH.name)!!)
         }.getOrDefault(PeqDisplayMode.GRAPH)
 
-        binding.graphModeTab?.setOnClickListener {
-            peqDisplayMode = PeqDisplayMode.GRAPH
+        binding.modeTabStrip?.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            peqDisplayMode = if (checkedId == R.id.list_mode_tab) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH
             graphPrefs.edit().putString(GRAPH_DISPLAY_MODE, peqDisplayMode.name).apply()
             applyDisplayMode()
-        }
-        binding.listModeTab?.setOnClickListener {
-            peqDisplayMode = PeqDisplayMode.LIST
-            graphPrefs.edit().putString(GRAPH_DISPLAY_MODE, peqDisplayMode.name).apply()
-            applyDisplayMode()
-        }
-        binding.graphTabStrip?.setOnCheckedStateChangeListener { _, checkedIds ->
-            graphTab = when (checkedIds.firstOrNull()) {
-                R.id.graph_tab_crossovers -> GraphTab.CROSSOVERS
-                R.id.graph_tab_tilt -> GraphTab.TILT
-                else -> GraphTab.EQ
-            }
-            applyGraphTab()
         }
         applyDisplayMode()
-        applyGraphTab()
     }
 
     /** GRAPH: only the live visualizer is shown. LIST: only the band editor is shown -- the two
@@ -449,61 +448,11 @@ class ParametricEqualizerFragment : Fragment() {
      *  space with the visualizer. Portrait has none of these views -- no-op there. */
     private fun applyDisplayMode() {
         binding.modeTabStrip ?: return
-        binding.graphModeTab?.isEnabled = peqDisplayMode != PeqDisplayMode.GRAPH
-        binding.listModeTab?.isEnabled = peqDisplayMode != PeqDisplayMode.LIST
+        binding.modeTabStrip?.check(
+            if (peqDisplayMode == PeqDisplayMode.LIST) R.id.list_mode_tab else R.id.graph_mode_tab
+        )
         binding.editCard.isVisible = peqDisplayMode == PeqDisplayMode.LIST
         binding.previewCard.isVisible = peqDisplayMode == PeqDisplayMode.GRAPH
-    }
-
-    /** EQ: plain graph. CROSSOVERS/TILT: a side panel with the relevant BMW controls, built on demand. */
-    private fun applyGraphTab() {
-        val panel = binding.graphSidePanel ?: return // portrait: no graph tabs
-        val panelContent = binding.graphSidePanelContent ?: return
-        when (graphTab) {
-            GraphTab.EQ -> {
-                panel.isVisible = false
-                binding.equalizerSurface.showTiltHandles = false
-            }
-            GraphTab.CROSSOVERS -> {
-                binding.equalizerSurface.showTiltHandles = false
-                panel.isVisible = true
-                panelContent.removeAllViews()
-                val builder = bmwControlBuilder(panelContent) { updated -> binding.equalizerSurface.setSystemValues(updated) }
-                builder.sectionCard("Crossovers") {
-                    addSwitchRow("Subsonic BW2", "12 dB/oct Butterworth protection", NativeBmwDspValues.INDEX_SUBSONIC_ENABLED)
-                    addSliderRow("Subsonic freq", NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
-                    addSwitchRow("Mute low band", null, NativeBmwDspValues.INDEX_LOW_MUTE)
-                    addSliderRow("Low LPF freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
-                    addChoiceRow("Low topology", NativeBmwDspValues.INDEX_LOW_LR4, listOf("BW3", "LR4"))
-                    addSwitchRow("Mute mid band", null, NativeBmwDspValues.INDEX_MID_MUTE)
-                    addSliderRow("Mid HPF freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
-                }
-            }
-            GraphTab.TILT -> {
-                binding.equalizerSurface.showTiltHandles = true
-                panel.isVisible = true
-                panelContent.removeAllViews()
-                val builder = bmwControlBuilder(panelContent) { updated -> binding.equalizerSurface.setSystemValues(updated) }
-                builder.sectionCard("Post-sum tonality tilt") {
-                    addSwitchRow("Tilt active", "Broad tonal balance after the bands rejoin", NativeBmwDspValues.INDEX_TILT_ENABLED)
-                    addSliderRow("Tilt amount", NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f, 6f, .1f, "dB")
-                    addSliderRow("Tilt pivot", NativeBmwDspValues.INDEX_TILT_FREQ, 200f, 2000f, 1f, "Hz")
-                }
-            }
-        }
-    }
-
-    /** Shared setup for a BmwControlBuilder bound to the live nativeDspValues array. */
-    private fun bmwControlBuilder(
-        container: android.widget.LinearLayout,
-        onSurfaceUpdate: (FloatArray) -> Unit,
-    ): BmwControlBuilder {
-        val builder = BmwControlBuilder(requireContext(), container, nativeDspValues) { updated ->
-            NativeBmwDspValues.save(requireContext(), updated)
-            NativeBmwDspValues.broadcast(requireContext(), updated)
-            onSurfaceUpdate(updated)
-        }
-        return builder
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
@@ -531,8 +480,6 @@ class ParametricEqualizerFragment : Fragment() {
             }
             nativeDspValues = applied
             binding.equalizerSurface.setSystemValues(applied)
-            // Keep the Tilt panel's sliders (if open) in sync with a drag on the graph handles.
-            if (graphTab == GraphTab.TILT) applyGraphTab()
             Timber.d("tilt-drag committed frequency=$clampedFreq amount=$clampedAmount")
             true
         } catch (error: Exception) {
@@ -595,9 +542,9 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun configureGraph() {
         binding.equalizerSurface.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
-        // Tilt handles are gated by the Crossovers/Tilt graph tab strip now (see applyGraphTab()),
-        // not always-on -- the EQ tab (the default) starts with them off.
-        binding.equalizerSurface.showTiltHandles = false
+        // Tilt now has its own dedicated page (CrossoverTiltFragment) for precise numeric
+        // editing, but the drag-to-adjust handles stay directly on this graph too.
+        binding.equalizerSurface.showTiltHandles = true
         binding.equalizerSurface.showGainMeters = true
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         binding.equalizerSurface.showIndividualFilters =
@@ -695,7 +642,8 @@ class ParametricEqualizerFragment : Fragment() {
         updateViewState()
     }
 
-    /** Sets up the toolbar overflow menu that replaced the old 14-chip action row. */
+    /** Sets up the toolbar's enable switch -- the only remaining toolbar menu item, everything
+     *  else lives in the horizontally-scrolling action-chip row (see configureActionChips()). */
     private fun configureProductionTools() {
         val menuHost = requireActivity() as MenuHost
         var bindingEnableSwitch = false
@@ -718,12 +666,6 @@ class ParametricEqualizerFragment : Fragment() {
                 }
 
                 override fun onPrepareMenu(menu: Menu) {
-                    menu.findItem(R.id.menu_undo)?.isEnabled = !editorActive && history.canUndo
-                    menu.findItem(R.id.menu_redo)?.isEnabled = !editorActive && history.canRedo
-                    menu.findItem(R.id.menu_edit_group)?.isEnabled = !editorActive
-                    menu.findItem(R.id.menu_import_export_group)?.isEnabled = !editorActive
-                    menu.findItem(R.id.menu_filter_tools)?.isEnabled = !editorActive
-
                     val enableSwitch = menu.findItem(R.id.menu_peq_enable)?.actionView as? MaterialSwitch
                     val currentlyEnabled = BmwPeqState.load(requireContext()).enabled
                     if (enableSwitch != null && enableSwitch.isChecked != currentlyEnabled) {
@@ -733,30 +675,32 @@ class ParametricEqualizerFragment : Fragment() {
                     }
                 }
 
-                override fun onMenuItemSelected(menuItem: MenuItem): Boolean = when (menuItem.itemId) {
-                    R.id.menu_undo -> { performUndo(); true }
-                    R.id.menu_redo -> { performRedo(); true }
-                    R.id.menu_add -> { performAdd(); true }
-                    R.id.menu_reset -> { performReset(); true }
-                    R.id.menu_edit_string -> { performEditAsString(); true }
-                    R.id.menu_import_file -> { performImport(); true }
-                    R.id.menu_export_file -> { performExport(); true }
-                    R.id.menu_preset_import -> { performPresetImport(); true }
-                    R.id.menu_preset_export -> { performPresetExport(); true }
-                    R.id.menu_backup_import -> { performBackupImport(); true }
-                    R.id.menu_backup_export -> { performBackupExport(); true }
-                    R.id.menu_filter_tools -> { showFilterTools(toolbarAnchor()); true }
-                    R.id.menu_diagnostics -> { showDiagnosticReport(); true }
-                    R.id.menu_graph_options -> { showGraphOptionsPopup(toolbarAnchor()); true }
-                    else -> false
-                }
+                override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
             },
             viewLifecycleOwner,
             Lifecycle.State.RESUMED,
         )
     }
 
-    private fun toolbarAnchor(): View = requireActivity().findViewById(R.id.toolbar)
+    /** Restores the pre-redesign horizontally-scrolling action-chip row (same row as the
+     *  Full/Low/Mid scope chips) in place of the toolbar's 3-dot overflow menu -- same
+     *  underlying functions as before, just triggered from chips instead of menu items. */
+    private fun configureActionChips() {
+        binding.chipUndo?.setOnClickListener { performUndo() }
+        binding.chipRedo?.setOnClickListener { performRedo() }
+        binding.chipReset?.setOnClickListener { performReset() }
+        binding.chipEditString?.setOnClickListener { performEditAsString() }
+        binding.chipImportFile?.setOnClickListener { performImport() }
+        binding.chipExportFile?.setOnClickListener { performExport() }
+        binding.chipPresetImport?.setOnClickListener { performPresetImport() }
+        binding.chipPresetExport?.setOnClickListener { performPresetExport() }
+        binding.chipBackupImport?.setOnClickListener { performBackupImport() }
+        binding.chipBackupExport?.setOnClickListener { performBackupExport() }
+        binding.chipFilterTools?.setOnClickListener { showFilterTools(it) }
+        binding.chipDiagnostics?.setOnClickListener { showDiagnosticReport() }
+        binding.chipGraphOptions?.setOnClickListener { showGraphOptionsPopup(it) }
+        refreshActionChips()
+    }
 
     private fun performReset() {
         requireContext().showYesNoAlert(
@@ -872,7 +816,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun updateHistoryControls() {
-        invalidateOverflowMenu()
+        refreshActionChips()
     }
 
     private fun showFilterTools(anchor: View) {
@@ -1084,9 +1028,11 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun updateViewState() {
         val empty = adapter.bands.isEmpty()
-        binding.emptyView.isVisible = empty && !editorActive
-        binding.bandList.isVisible = !empty && !editorActive
-        binding.bandListHeader?.root?.isVisible = !empty && !editorActive
+        // List pane stays visible regardless of edit state (see the split edit_card layout);
+        // only the editor pane's own visibility is gated by editorActive.
+        binding.emptyView.isVisible = empty
+        binding.bandList.isVisible = !empty
+        binding.bandListHeader?.root?.isVisible = !empty
         binding.bandEdit.isVisible = editorActive
         binding.bandDetailContextButtons.visibility = if (editorActive) View.VISIBLE else View.GONE
         binding.addBand?.visibility = if (editorActive) View.GONE else View.VISIBLE
@@ -1251,7 +1197,4 @@ class ParametricEqualizerFragment : Fragment() {
 
     /** Landscape-only: which of edit_card/preview_card dominates the cards row. */
     private enum class PeqDisplayMode { GRAPH, LIST }
-
-    /** Landscape-only: which content the graph's own tab strip + side panel currently show. */
-    private enum class GraphTab { EQ, CROSSOVERS, TILT }
 }

@@ -11,11 +11,11 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/action_delay_polarity"
+        android:id="@+id/action_crossover_tilt"
         android:orderInCategory="25"
-        android:title="@string/action_delay_polarity"
+        android:title="@string/action_crossover_tilt"
         android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_twotone_delay_gauge_28dp"
+        android:icon="@drawable/ic_twotone_crossover_tilt_28dp"
         app:showAsAction="always" />
 
     <item
