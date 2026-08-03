@@ -12,6 +12,12 @@ data class PrivatePeqBackup(
     val state: BmwPeqPreset,
     val graphDisplay: GraphDisplay = GraphDisplay(),
     val savedPresets: List<BmwPeqPreset> = emptyList(),
+    // Added in version 2: the full 42-float BMW DSP array backing Gains & Delay, Compressor,
+    // and Crossovers & Tilt (see NativeBmwDspValues) -- null on older backups, which only ever
+    // captured PEQ bands via [state]. Kept separate from [state]/[BmwPeqPreset] rather than
+    // folding it in there, since BmwPeqPreset is also used standalone for the unrelated
+    // PEQ-only preset import/export flow that shouldn't suddenly carry gain/crossover data too.
+    val nativeDspValues: List<Float>? = null,
 ) {
     @Serializable
     data class GraphDisplay(
@@ -42,11 +48,16 @@ data class PrivatePeqBackup(
         require(graphDisplay.channelDisplay in setOf("BOTH", "LEFT", "RIGHT")) {
             "Backup contains an invalid graph channel display"
         }
+        nativeDspValues?.let { values ->
+            require(values.size == NativeBmwDspValues.SIZE) {
+                "Backup's BMW DSP array has ${values.size} values, expected ${NativeBmwDspValues.SIZE}"
+            }
+        }
         return state.toState()
     }
 
     companion object {
-        const val CURRENT_VERSION = 1
+        const val CURRENT_VERSION = 2
         const val MAX_SAVED_PRESETS = 50
         const val MAX_NAME_LENGTH = 200
         const val MAX_DESCRIPTION_LENGTH = 2_000

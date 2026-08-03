@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
+import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwControlBuilder
 import kotlin.math.roundToInt
@@ -34,19 +35,19 @@ class CrossoverTiltFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        builder.sectionCard("Crossovers") {
-            addSwitchRow("Subsonic BW2", "12 dB/oct Butterworth protection", NativeBmwDspValues.INDEX_SUBSONIC_ENABLED)
-            addSliderRow("Subsonic freq", NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
-            addSwitchRow("Mute low band", null, NativeBmwDspValues.INDEX_LOW_MUTE)
-            addSliderRow("Low LPF freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
-            addSwitchRow("LR4 topology", "Off uses BW3 (3rd-order) instead of LR4 (4th-order)", NativeBmwDspValues.INDEX_LOW_LR4)
-            addSwitchRow("Mute mid band", null, NativeBmwDspValues.INDEX_MID_MUTE)
-            addSliderRow("Mid HPF freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
+        builder.sectionCard(getString(R.string.bmw_dsp_crossovers)) {
+            addSwitchRow(getString(R.string.bmw_dsp_subsonic_bw2), getString(R.string.bmw_dsp_subsonic_bw2_subtitle), NativeBmwDspValues.INDEX_SUBSONIC_ENABLED)
+            addSliderRow(getString(R.string.bmw_dsp_subsonic_freq), NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
+            addSwitchRow(getString(R.string.bmw_dsp_mute_low_band), null, NativeBmwDspValues.INDEX_LOW_MUTE)
+            addSliderRow(getString(R.string.bmw_dsp_low_lpf_freq), NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
+            addSwitchRow(getString(R.string.bmw_dsp_lr4_topology), getString(R.string.bmw_dsp_lr4_topology_subtitle), NativeBmwDspValues.INDEX_LOW_LR4)
+            addSwitchRow(getString(R.string.bmw_dsp_mute_mid_band), null, NativeBmwDspValues.INDEX_MID_MUTE)
+            addSliderRow(getString(R.string.bmw_dsp_mid_hpf_freq), NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
         }
-        builder.sectionCard("Post-sum tonality tilt") {
-            addSwitchRow("Tilt active", "Broad tonal balance after the bands rejoin", NativeBmwDspValues.INDEX_TILT_ENABLED)
-            addSliderRow("Tilt amount", NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f, 6f, .1f, "dB")
-            addSliderRow("Tilt pivot", NativeBmwDspValues.INDEX_TILT_FREQ, 200f, 2000f, 1f, "Hz")
+        builder.sectionCard(getString(R.string.bmw_dsp_tilt_section)) {
+            addSwitchRow(getString(R.string.bmw_dsp_tilt_active), getString(R.string.bmw_dsp_tilt_active_subtitle), NativeBmwDspValues.INDEX_TILT_ENABLED)
+            addSliderRow(getString(R.string.bmw_dsp_tilt_amount), NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f, 6f, .1f, "dB")
+            addSliderRow(getString(R.string.bmw_dsp_tilt_pivot), NativeBmwDspValues.INDEX_TILT_FREQ, 200f, 2000f, 1f, "Hz")
         }
 
         return scroll

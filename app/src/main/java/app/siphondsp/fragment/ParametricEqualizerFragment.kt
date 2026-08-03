@@ -253,12 +253,15 @@ class ParametricEqualizerFragment : Fragment() {
                             ParametricEqSurface.ChannelDisplay.BOTH.name,
                         ) ?: ParametricEqSurface.ChannelDisplay.BOTH.name,
                     ),
+                    // Full BMW DSP state (Gains & Delay, Compressor, Crossovers & Tilt), not
+                    // just PEQ bands -- see PrivatePeqBackup.nativeDspValues.
+                    nativeDspValues = NativeBmwDspValues.load(requireContext()).toList(),
                 )
                 requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
                     it.write(PrivatePeqBackup.encode(backup))
                 }
-                Timber.i("Private PEQ backup exported format=${PrivatePeqBackup.CURRENT_VERSION}")
-                requireContext().toast("Complete private PEQ backup exported")
+                Timber.i("Private BMW DSP backup exported format=${PrivatePeqBackup.CURRENT_VERSION}")
+                requireContext().toast("Complete private BMW DSP backup exported")
             } catch (error: Exception) {
                 Timber.e(error, "Private PEQ backup export failed")
                 requireContext().toast("Backup export failed")
@@ -276,16 +279,26 @@ class ParametricEqualizerFragment : Fragment() {
                 val candidate = backup.validatedState()
                 val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f
                 candidate.validate(sampleRate)?.let { throw IllegalArgumentException(it) }
+                val restoresFullState = backup.nativeDspValues != null
                 AlertDialog.Builder(requireContext())
-                    .setTitle("Restore complete private PEQ backup?")
+                    .setTitle("Restore complete private BMW DSP backup?")
                     .setMessage(
                         "Full Range ${candidate.fullRangeBands.size}, " +
                             "Low ${candidate.lowBandBands.size}, Mid ${candidate.midBandBands.size}, " +
-                            "preamp ${candidate.preampDb} dB. This replaces all PEQ banks only after " +
-                            "the complete state validates and applies successfully."
+                            "preamp ${candidate.preampDb} dB" +
+                            (if (restoresFullState) ", plus Gains & Delay, Compressor, and Crossovers & Tilt" else "") +
+                            ". This replaces all PEQ banks" +
+                            (if (restoresFullState) " and the rest of the BMW DSP setup" else "") +
+                            " only after the complete state validates and applies successfully." +
+                            (if (!restoresFullState) " (This is an older backup file that only contains PEQ bands.)" else "")
                     )
                     .setPositiveButton("Restore") { _, _ ->
                         if (applyCandidate(candidate, "private-backup-restore")) {
+                            backup.nativeDspValues?.let { values ->
+                                val restored = values.toFloatArray()
+                                NativeBmwDspValues.save(requireContext(), restored)
+                                NativeBmwDspValues.broadcast(requireContext(), restored)
+                            }
                             val graphPrefs = requireContext()
                                 .getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
                             graphPrefs.edit()

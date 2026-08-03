@@ -5,6 +5,7 @@ import android.content.Intent
 import android.view.View
 import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -18,17 +19,17 @@ import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 /** The 4 main DSP screens reachable from the bottom nav, and their cross-navigation icon --
- *  reusing the exact drawables already used on the bottom nav (menu_main_bottom*.xml) so the
- *  iconography stays consistent app-wide. */
+ *  reusing the exact drawables and @string labels already used on the bottom nav
+ *  (menu_main_bottom*.xml) so both the iconography and the text stay consistent app-wide. */
 enum class DspDestination(
-    val label: String,
+    @StringRes val labelRes: Int,
     @DrawableRes val icon: Int,
     val activityClass: KClass<out AppCompatActivity>,
 ) {
-    PARAMETRIC_EQ("Parametric EQ", R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
-    GAINS_DELAY("Gains & Delay", R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    COMPRESSOR("Compressor", R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT("Crossovers & Tilt", R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
+    GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
+    COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class),
 }
 
 /** Builds a vertical column of icon-only buttons -- one per [DspDestination] other than
@@ -51,7 +52,7 @@ object DspCrossNavBar {
             container.addView(
                 MaterialButton(activity, null, outlinedIconButtonStyleAttr).apply {
                     icon = ContextCompat.getDrawable(activity, destination.icon)
-                    contentDescription = destination.label
+                    contentDescription = activity.getString(destination.labelRes)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         activity.startActivity(Intent(activity, destination.activityClass.java))

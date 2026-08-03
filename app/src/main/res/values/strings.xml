@@ -164,6 +164,35 @@
     <string name="peq_preamp">Preamp</string>
     <string name="peq_preamp_range">Value between -30dB and 0dB</string>
 
+    <string name="bmw_dsp_gain_structure">Gain structure</string>
+    <string name="bmw_dsp_headroom">Headroom</string>
+    <string name="bmw_dsp_low_gain_l">Low gain L</string>
+    <string name="bmw_dsp_low_gain_r">Low gain R</string>
+    <string name="bmw_dsp_mid_gain_l">Mid gain L</string>
+    <string name="bmw_dsp_mid_gain_r">Mid gain R</string>
+    <string name="bmw_dsp_delay_polarity">Delay / polarity</string>
+    <string name="bmw_dsp_invert_low_polarity">Invert low polarity</string>
+    <string name="bmw_dsp_invert_mid_polarity">Invert mid polarity</string>
+    <string name="bmw_dsp_mid_delay_l">Mid delay L</string>
+    <string name="bmw_dsp_mid_delay_r">Mid delay R</string>
+    <string name="bmw_dsp_low_delay_l">Low delay L</string>
+    <string name="bmw_dsp_low_delay_r">Low delay R</string>
+    <string name="bmw_dsp_crossovers">Crossovers</string>
+    <string name="bmw_dsp_subsonic_bw2">Subsonic BW2</string>
+    <string name="bmw_dsp_subsonic_bw2_subtitle">12 dB/oct Butterworth protection</string>
+    <string name="bmw_dsp_subsonic_freq">Subsonic freq</string>
+    <string name="bmw_dsp_mute_low_band">Mute low band</string>
+    <string name="bmw_dsp_low_lpf_freq">Low LPF freq</string>
+    <string name="bmw_dsp_lr4_topology">LR4 topology</string>
+    <string name="bmw_dsp_lr4_topology_subtitle">Off uses BW3 (3rd-order) instead of LR4 (4th-order)</string>
+    <string name="bmw_dsp_mute_mid_band">Mute mid band</string>
+    <string name="bmw_dsp_mid_hpf_freq">Mid HPF freq</string>
+    <string name="bmw_dsp_tilt_section">Post-sum tonality tilt</string>
+    <string name="bmw_dsp_tilt_active">Tilt active</string>
+    <string name="bmw_dsp_tilt_active_subtitle">Broad tonal balance after the bands rejoin</string>
+    <string name="bmw_dsp_tilt_amount">Tilt amount</string>
+    <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
+
     <string name="geq_enable">Arbitrary response equalizer</string>
     <string name="geq_nodes">Magnitude response</string>
 
