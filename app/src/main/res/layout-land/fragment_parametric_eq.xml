@@ -170,13 +170,12 @@
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/mode_tab_strip"
             android:layout_width="52dp"
-            android:layout_height="0dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:orientation="vertical"
             android:gravity="center_horizontal"
             app:singleSelection="true"
             app:selectionRequired="true"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -199,6 +198,21 @@
                 android:contentDescription="Show the band list"
                 app:icon="@drawable/ic_twotone_nodes_24dp" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <!-- Cross-navigation to the other 3 DSP screens: one-shot navigation actions, kept
+             as a separate plain column (not merged into mode_tab_strip's toggle group above)
+             since a nav tap isn't a persistent view-mode selection. Stacks directly below the
+             Graph/List toggle so both read as one continuous sidebar. -->
+        <LinearLayout
+            android:id="@+id/peq_cross_nav"
+            android:layout_width="52dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/mode_tab_strip" />
 
         <!-- Only one of edit_card/preview_card is visible at a time (see applyDisplayMode()):
              both span the same full region so List mode is dedicated to the filter list, not
