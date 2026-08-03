@@ -39,7 +39,7 @@ class CrossoverTiltFragment : Fragment() {
             addSliderRow("Subsonic freq", NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
             addSwitchRow("Mute low band", null, NativeBmwDspValues.INDEX_LOW_MUTE)
             addSliderRow("Low LPF freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
-            addChoiceRow("Low topology", NativeBmwDspValues.INDEX_LOW_LR4, listOf("BW3", "LR4"))
+            addSwitchRow("LR4 topology", "Off uses BW3 (3rd-order) instead of LR4 (4th-order)", NativeBmwDspValues.INDEX_LOW_LR4)
             addSwitchRow("Mute mid band", null, NativeBmwDspValues.INDEX_MID_MUTE)
             addSliderRow("Mid HPF freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
         }

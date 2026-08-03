@@ -5,10 +5,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
@@ -27,8 +24,8 @@ import kotlin.math.roundToInt
  * instead of duplicating it.
  *
  * [sectionCard]'s builder lambda has [BmwControlBuilder] itself as receiver
- * (not the section's LinearLayout) so addSwitchRow/addChoiceRow/addSliderRow
- * calls read the same as before with no explicit receiver at call sites --
+ * (not the section's LinearLayout) so addSwitchRow/addSliderRow calls read
+ * the same as before with no explicit receiver at call sites --
  * the currently-open section's container is tracked internally instead.
  *
  * [addSliderRow] renders a full-width fader row (label + tappable numeric value
@@ -76,31 +73,6 @@ class BmwControlBuilder(
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         row.addView(createSwitch(index))
-        currentContent.addView(row)
-    }
-
-    fun addChoiceRow(label: String, index: Int, options: List<String>) {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, dp(8))
-        }
-        row.addView(TextView(context).apply { text = label; textSize = 13f })
-        row.addView(
-            Spinner(context).apply {
-                adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, options)
-                setSelection(values[index].roundToInt().coerceIn(0, options.lastIndex))
-                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                        if (!loading) {
-                            values[index] = position.toFloat()
-                            onChanged(values)
-                        }
-                    }
-                    override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-                }
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(4) },
-        )
         currentContent.addView(row)
     }
 
