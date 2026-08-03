@@ -2,11 +2,14 @@ package app.siphondsp.activity
 
 import android.os.Bundle
 import android.view.Menu
+import android.widget.LinearLayout
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.fragment.NativeBmwCompressorFragment
 import app.siphondsp.model.NativeBmwCompressorState
+import app.siphondsp.view.DspCrossNavBar
+import app.siphondsp.view.DspDestination
 
 class NativeBmwCompressorActivity : BaseActivity() {
     private var bindingEnableSwitch = false
@@ -18,6 +21,7 @@ class NativeBmwCompressorActivity : BaseActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.COMPRESSOR)
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())

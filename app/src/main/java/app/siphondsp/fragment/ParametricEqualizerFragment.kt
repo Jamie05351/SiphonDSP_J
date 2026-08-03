@@ -50,7 +50,8 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.view.BmwControlBuilder
+import app.siphondsp.view.DspCrossNavBar
+import app.siphondsp.view.DspDestination
 import app.siphondsp.view.ParametricEqSurface
 import timber.log.Timber
 import java.util.UUID
@@ -422,8 +423,25 @@ class ParametricEqualizerFragment : Fragment() {
             }
         }
         configureModeTabs()
+        configureCrossNav()
         updateViewState()
         return binding.root
+    }
+
+    /** The other 3 DSP screens, stacked directly below the Graph/List toggle so both read as
+     *  one sidebar (landscape only, same as mode_tab_strip -- see DspCrossNavBar). Blocked
+     *  while there's an unsaved filter edit or an in-flight graph drag, same guard as switching
+     *  Full/Low/Mid scope. */
+    private fun configureCrossNav() {
+        val container = binding.peqCrossNav ?: return
+        DspCrossNavBar.populate(requireActivity(), container, DspDestination.PARAMETRIC_EQ) {
+            if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
+                requireContext().toast("Confirm or cancel the active filter edit before switching screens")
+                false
+            } else {
+                true
+            }
+        }
     }
 
     /** Left-edge Graph/List tab strip (landscape only). A real MaterialButtonToggleGroup now
