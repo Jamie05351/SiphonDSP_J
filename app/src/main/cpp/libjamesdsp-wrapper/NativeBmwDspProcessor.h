@@ -49,17 +49,12 @@ private:
         void clear();
     };
     struct Channel {
-        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2,monoBassHpf;
+        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
+        Biquad monoBassHpf1,monoBassHpf2;
         OnePole lowPole;
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;
     };
-    // Fixed-lookahead brickwall safety limiter, applied last, after the low/mid bands are
-    // summed. The peak detector runs on the live (undelayed) signal so gain reduction is
-    // already ramped in by the time the corresponding sample exits delayL/delayR, catching
-    // hard discontinuities (e.g. a manual seek) that a reactive-only compressor would let
-    // through for the first few ms. Not user-configurable: this is a safety net, not a tone
-    // control, so lookahead/ceiling/timing are fixed constants (see rebuildLimiter()).
     struct Limiter {
         Delay delayL,delayR;
         float gain=1;
@@ -94,10 +89,6 @@ private:
         float tiltAmount=3,tiltFreq=550;
         CompressorParams lowComp{true,-12,2,8,40,250,1.5f};
         CompressorParams midComp{false,-10,1.5f,6,10,180,0};
-        // Frequency-dependent mono/stereo blend for the low (door woofer) band: sums L+R below
-        // monoBassFreq to stabilise deep bass against near-door pull, leaves upper-bass/midbass
-        // in stereo above it. Complementary LPF/HPF pair, not a naive hard switch -- see
-        // rebuildMonoBass(). monoBassBlend is 0..100 (%), divided by 100 at use.
         bool monoBass=false;
         float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
     } p_;
@@ -140,14 +131,10 @@ private:
     float rmsMix_=0,peakRelease_=0;
     CompressorState lowDynamics_,midDynamics_;
     Limiter limiter_;
-    // Mono-bass mono-sum path: a single shared filter, not per-channel -- its input is already
-    // the L+R mono sum, so one instance is both sufficient and correct (the per-channel HPF
-    // half of the complementary pair lives in Channel::monoBassHpf, since L and R need
-    // independent state there).
-    Biquad monoBassLpf_;
+    Biquad monoBassLpf1_,monoBassLpf2_;
     float monoBassMakeupLin_=1;
     static constexpr float kLimiterLookaheadMs = 5.f;
-    static constexpr float kLimiterCeilingLin = 0.891251f; // -1 dBFS
+    static constexpr float kLimiterCeilingLin = 0.891251f;
 };
 
 #endif
