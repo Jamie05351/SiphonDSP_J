@@ -60,6 +60,15 @@ object BiquadUtils {
                     (a + 1.0) - (a - 1.0) * cosOmega - twoSqrtAAlpha,
                 )
             }
+            // Gain-independent (matches the native makePeq() notch branch): a full null at
+            // frequency, depth/width controlled by Q alone, never by the (unused) gain field.
+            ParametricEqFilterType.NOTCH -> {
+                val alpha = sinOmega / (2.0 * q)
+                BiquadCoefficients(
+                    1.0, -2.0 * cosOmega, 1.0,
+                    1.0 + alpha, -2.0 * cosOmega, 1.0 - alpha,
+                )
+            }
         }
     }
 
