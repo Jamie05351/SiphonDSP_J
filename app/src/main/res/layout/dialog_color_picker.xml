@@ -32,6 +32,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="textCapCharacters|textNoSuggestions"
+            android:imeOptions="flagNoExtractUi"
             android:maxLength="9" />
     </com.google.android.material.textfield.TextInputLayout>
 
