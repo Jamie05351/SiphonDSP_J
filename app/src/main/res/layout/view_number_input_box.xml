@@ -20,7 +20,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="end"
             android:textAlignment="textEnd"
-            android:inputType="numberDecimal|numberSigned"/>
+            android:inputType="numberDecimal|numberSigned"
+            android:imeOptions="flagNoExtractUi"/>
     </com.google.android.material.textfield.TextInputLayout>
 
     <Button
