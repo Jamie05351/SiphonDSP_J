@@ -49,6 +49,12 @@ class CrossoverTiltFragment : Fragment() {
             addSliderRow(getString(R.string.bmw_dsp_tilt_amount), NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f, 6f, .1f, "dB")
             addSliderRow(getString(R.string.bmw_dsp_tilt_pivot), NativeBmwDspValues.INDEX_TILT_FREQ, 200f, 2000f, 1f, "Hz")
         }
+        builder.sectionCard(getString(R.string.bmw_dsp_mono_bass)) {
+            addSwitchRow(getString(R.string.bmw_dsp_mono_bass), getString(R.string.bmw_dsp_mono_bass_subtitle), NativeBmwDspValues.INDEX_MONO_BASS_ENABLED)
+            addSliderRow(getString(R.string.bmw_dsp_mono_bass_freq), NativeBmwDspValues.INDEX_MONO_BASS_FREQ, 40f, 120f, 1f, "Hz")
+            addSliderRow(getString(R.string.bmw_dsp_mono_bass_blend), NativeBmwDspValues.INDEX_MONO_BASS_BLEND, 0f, 100f, 1f, "%")
+            addSliderRow(getString(R.string.bmw_dsp_mono_bass_makeup), NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP, -6f, 6f, .1f, "dB")
+        }
 
         return scroll
     }

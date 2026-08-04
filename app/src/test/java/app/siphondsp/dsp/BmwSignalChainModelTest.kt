@@ -227,6 +227,7 @@ class BmwSignalChainModelTest {
         1f, 3f, 550f,
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        0f, 80f, 100f, 0f,
     )
 
     companion object {
