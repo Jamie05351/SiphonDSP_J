@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
+import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwControlBuilder
 import kotlin.math.roundToInt
@@ -36,20 +37,20 @@ class GainLimiterFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        builder.sectionCard("Gain structure") {
-            addSliderRow("Headroom", NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB")
-            addSliderRow("Low gain L", NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .1f, "dB")
-            addSliderRow("Low gain R", NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .1f, "dB")
-            addSliderRow("Mid gain L", NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .1f, "dB")
-            addSliderRow("Mid gain R", NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .1f, "dB")
+        builder.sectionCard(getString(R.string.bmw_dsp_gain_structure)) {
+            addSliderRow(getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB")
+            addSliderRow(getString(R.string.bmw_dsp_low_gain_l), NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .1f, "dB")
+            addSliderRow(getString(R.string.bmw_dsp_low_gain_r), NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .1f, "dB")
+            addSliderRow(getString(R.string.bmw_dsp_mid_gain_l), NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .1f, "dB")
+            addSliderRow(getString(R.string.bmw_dsp_mid_gain_r), NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .1f, "dB")
         }
-        builder.sectionCard("Delay / polarity") {
-            addSwitchRow("Invert low polarity", null, NativeBmwDspValues.INDEX_LOW_INVERT)
-            addSwitchRow("Invert mid polarity", null, NativeBmwDspValues.INDEX_MID_INVERT)
-            addSliderRow("Mid delay L", NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")
-            addSliderRow("Mid delay R", NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
-            addSliderRow("Low delay L", NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
-            addSliderRow("Low delay R", NativeBmwDspValues.INDEX_LOW_DELAY_R, 0f, 2.8f, .01f, "ms")
+        builder.sectionCard(getString(R.string.bmw_dsp_delay_polarity)) {
+            addSwitchRow(getString(R.string.bmw_dsp_invert_low_polarity), null, NativeBmwDspValues.INDEX_LOW_INVERT)
+            addSwitchRow(getString(R.string.bmw_dsp_invert_mid_polarity), null, NativeBmwDspValues.INDEX_MID_INVERT)
+            addSliderRow(getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")
+            addSliderRow(getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
+            addSliderRow(getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
+            addSliderRow(getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R, 0f, 2.8f, .01f, "ms")
         }
 
         return scroll

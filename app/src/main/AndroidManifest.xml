@@ -185,7 +185,7 @@
         <activity
             android:name=".activity.NativeBmwCompressorActivity"
             android:exported="false"
-            android:label="Multi-band compressor"
+            android:label="@string/action_compressor"
             android:theme="@style/Theme.SiphonDSP">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
