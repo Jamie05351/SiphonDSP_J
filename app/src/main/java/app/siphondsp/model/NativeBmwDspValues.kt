@@ -11,7 +11,7 @@ object NativeBmwDspValues {
     // SharedPreferences blob (pre-NativeBmwDspStore) onto the new atomic file store.
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
-    const val SIZE = 42
+    const val SIZE = 46
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -58,6 +58,13 @@ object NativeBmwDspValues {
     const val INDEX_MID_COMPRESSOR_RELEASE = 40
     const val INDEX_MID_COMPRESSOR_MAKEUP = 41
 
+    // Frequency-dependent mono/stereo blend for the low (door woofer) band -- see
+    // NativeBmwDspProcessor::rebuildMonoBass()/processFrame() for the native side.
+    const val INDEX_MONO_BASS_ENABLED = 42
+    const val INDEX_MONO_BASS_FREQ = 43
+    const val INDEX_MONO_BASS_BLEND = 44
+    const val INDEX_MONO_BASS_MAKEUP = 45
+
     @Deprecated("Use INDEX_LOW_COMPRESSOR_ENABLED") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use INDEX_LOW_COMPRESSOR_THRESHOLD") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use INDEX_LOW_COMPRESSOR_RATIO") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -77,6 +84,7 @@ object NativeBmwDspValues {
         1f, 3f, 550f,
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        0f, 80f, 100f, 0f,
     )
 
     fun load(context: Context): FloatArray {

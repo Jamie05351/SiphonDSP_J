@@ -8,7 +8,7 @@
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kConfigSize = 42 };
+    enum : std::size_t { kConfigSize = 46 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     NativeBmwDspProcessor();
@@ -35,6 +35,7 @@ private:
         DirtyTilt       = 1u << 5,
         DirtyCompTiming = 1u << 6,
         DirtyCompState  = 1u << 7,
+        DirtyMonoBass   = 1u << 8,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -48,7 +49,7 @@ private:
         void clear();
     };
     struct Channel {
-        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
+        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2,monoBassHpf;
         OnePole lowPole;
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;
@@ -93,6 +94,12 @@ private:
         float tiltAmount=3,tiltFreq=550;
         CompressorParams lowComp{true,-12,2,8,40,250,1.5f};
         CompressorParams midComp{false,-10,1.5f,6,10,180,0};
+        // Frequency-dependent mono/stereo blend for the low (door woofer) band: sums L+R below
+        // monoBassFreq to stabilise deep bass against near-door pull, leaves upper-bass/midbass
+        // in stereo above it. Complementary LPF/HPF pair, not a naive hard switch -- see
+        // rebuildMonoBass(). monoBassBlend is 0..100 (%), divided by 100 at use.
+        bool monoBass=false;
+        float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
     } p_;
 
     static float dbToLin(float db);
@@ -117,6 +124,7 @@ private:
     void rebuildTilt();
     void rebuildCompressorTiming();
     void rebuildLimiter();
+    void rebuildMonoBass();
     void resetDynamics();
 
     Channel left_,right_;
@@ -132,6 +140,12 @@ private:
     float rmsMix_=0,peakRelease_=0;
     CompressorState lowDynamics_,midDynamics_;
     Limiter limiter_;
+    // Mono-bass mono-sum path: a single shared filter, not per-channel -- its input is already
+    // the L+R mono sum, so one instance is both sufficient and correct (the per-channel HPF
+    // half of the complementary pair lives in Channel::monoBassHpf, since L and R need
+    // independent state there).
+    Biquad monoBassLpf_;
+    float monoBassMakeupLin_=1;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f; // -1 dBFS
 };
