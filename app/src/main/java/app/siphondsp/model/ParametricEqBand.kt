@@ -6,7 +6,8 @@ import java.util.*
 enum class ParametricEqFilterType(val code: Int, val apoLabel: String, val displayLabel: String) {
     PEAKING(0, "PK", "PK"),
     LOW_SHELF(1, "LSC", "LS"),
-    HIGH_SHELF(2, "HSC", "HS");
+    HIGH_SHELF(2, "HSC", "HS"),
+    NOTCH(3, "NO", "NO");
 
     companion object {
         fun fromCode(code: Int) = entries.firstOrNull { it.code == code } ?: PEAKING
@@ -14,6 +15,7 @@ enum class ParametricEqFilterType(val code: Int, val apoLabel: String, val displ
             "PK" -> PEAKING
             "LSC", "LS" -> LOW_SHELF
             "HSC", "HS" -> HIGH_SHELF
+            "NO" -> NOTCH
             else -> null
         }
     }

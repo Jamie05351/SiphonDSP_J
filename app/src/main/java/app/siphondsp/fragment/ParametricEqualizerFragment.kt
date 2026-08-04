@@ -412,6 +412,11 @@ class ParametricEqualizerFragment : Fragment() {
         binding.confirm.setOnClickListener { editorSave() }
         binding.cancel.setOnClickListener { editorDiscard() }
         binding.addBand?.setOnClickListener { performAdd() }
+        // Notch has no gain parameter (the graph shows a full null, depth is Q-only) -- hide
+        // the field rather than leave a control visible that silently does nothing.
+        binding.filterTypeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) binding.gainInput.isVisible = checkedId != R.id.filter_notch
+        }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
@@ -1028,6 +1033,7 @@ class ParametricEqualizerFragment : Fragment() {
     private fun getSelectedFilterType() = when (binding.filterTypeGroup.checkedButtonId) {
         R.id.filter_low_shelf -> ParametricEqFilterType.LOW_SHELF
         R.id.filter_high_shelf -> ParametricEqFilterType.HIGH_SHELF
+        R.id.filter_notch -> ParametricEqFilterType.NOTCH
         else -> ParametricEqFilterType.PEAKING
     }
 
@@ -1037,6 +1043,7 @@ class ParametricEqualizerFragment : Fragment() {
                 ParametricEqFilterType.PEAKING -> R.id.filter_peaking
                 ParametricEqFilterType.LOW_SHELF -> R.id.filter_low_shelf
                 ParametricEqFilterType.HIGH_SHELF -> R.id.filter_high_shelf
+                ParametricEqFilterType.NOTCH -> R.id.filter_notch
             }
         )
     }
