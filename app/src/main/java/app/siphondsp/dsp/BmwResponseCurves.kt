@@ -13,6 +13,8 @@ class BmwResponseCurves(val pointCount: Int) {
     val lowBranchDb = Array(2) { DoubleArray(pointCount) }
     val midBranchDb = Array(2) { DoubleArray(pointCount) }
     val preSplitDb = Array(2) { DoubleArray(pointCount) }
+    /** Wrapped electrical phase of the complete summed output path, degrees in [-180, 180]. */
+    val sumPhaseDegrees = Array(2) { DoubleArray(pointCount) }
 
     var processorEnabled = true
     var lowBranchActive = true
@@ -23,4 +25,5 @@ class BmwResponseCurves(val pointCount: Int) {
     fun lowBranchDbFor(channel: BmwOutputChannel): DoubleArray = lowBranchDb[channel.ordinal]
     fun midBranchDbFor(channel: BmwOutputChannel): DoubleArray = midBranchDb[channel.ordinal]
     fun preSplitDbFor(channel: BmwOutputChannel): DoubleArray = preSplitDb[channel.ordinal]
+    fun sumPhaseDegreesFor(channel: BmwOutputChannel): DoubleArray = sumPhaseDegrees[channel.ordinal]
 }
