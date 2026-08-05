@@ -75,5 +75,17 @@ class NativeBmwDspStoreTest {
             it[15] = 175.0f
         }
         assertArrayEquals(expected, loaded, 0f)
+        assertArrayEquals(
+            floatArrayOf(1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f),
+            loaded!!.copyOfRange(
+                NativeBmwDspValues.INDEX_ROUTING,
+                NativeBmwDspValues.INDEX_ROUTING + NativeBmwDspValues.ROUTING_VALUE_COUNT,
+            ),
+            0f,
+        )
+        for (output in 0 until 4) for (section in 0 until 2) {
+            val base = NativeBmwDspValues.INDEX_ALL_PASS + (output * 2 + section) * 4
+            assertTrue("migrated all-pass must be disabled", loaded[base] == 0f)
+        }
     }
 }
