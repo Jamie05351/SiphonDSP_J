@@ -1228,7 +1228,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private enum class PeqScope(val label: String, val fileName: String, val chipId: Int, val bank: BmwPeqBank) {
-        FULL("Input Correction", "input_correction_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
+        FULL("Full Range", "full_range_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
         LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low, BmwPeqBank.LOW),
         MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid, BmwPeqBank.MID),
     }

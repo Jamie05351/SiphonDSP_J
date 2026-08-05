@@ -11,7 +11,7 @@ object NativeBmwDspValues {
     // SharedPreferences blob (pre-NativeBmwDspStore) onto the new atomic file store.
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
-    const val SIZE = 86
+    const val SIZE = 46
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -65,12 +65,6 @@ object NativeBmwDspValues {
     const val INDEX_MONO_BASS_BLEND = 44
     const val INDEX_MONO_BASS_MAKEUP = 45
 
-    const val INDEX_ROUTING = 46
-    const val ROUTING_VALUE_COUNT = 8
-    const val INDEX_ALL_PASS = 54
-    const val ALL_PASS_SECTIONS_PER_OUTPUT = 2
-    const val ALL_PASS_SECTION_WIDTH = 4
-
     @Deprecated("Use INDEX_LOW_COMPRESSOR_ENABLED") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use INDEX_LOW_COMPRESSOR_THRESHOLD") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use INDEX_LOW_COMPRESSOR_RATIO") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -91,13 +85,6 @@ object NativeBmwDspValues {
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         0f, 80f, 100f, 0f,
-        // Low L, Low R, Mid L, Mid R: [Front L, Front R].
-        1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
-        // Two disabled second-order all-pass sections per output: enabled, order, Hz, Q.
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
     )
 
     fun load(context: Context): FloatArray {

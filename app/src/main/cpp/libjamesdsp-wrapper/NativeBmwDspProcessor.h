@@ -5,11 +5,10 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include "NativeBmwRouting.h"
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kLegacyConfigSize = 46, kConfigSize = 86 };
+    enum : std::size_t { kConfigSize = 46 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     NativeBmwDspProcessor();
@@ -56,22 +55,6 @@ private:
         Delay lowDelay,midDelay;
         float dcX=0,dcY=0;
     };
-    struct OutputRuntime {
-        NativeBmwRouting::OutputId id=NativeBmwRouting::OutputId::LowLeft;
-        bool enabled=true,polarity=false;
-        float gain=1.0f;
-        Delay delay;
-        std::array<Biquad,2> allPass{};
-        std::array<bool,2> allPassEnabled{};
-        std::array<bool,2> allPassSecondOrder{{true,true}};
-        std::array<float,2> allPassFrequency{{150.f,150.f}};
-        std::array<float,2> allPassQ{{.70710678f,.70710678f}};
-        float processAllPass(float sample) {
-            for(std::size_t i=0;i<allPass.size();++i) if(allPassEnabled[i]) sample=allPass[i].run(sample);
-            return sample;
-        }
-        void clear(){delay.clear();for(auto& section:allPass)section.clear();}
-    };
     struct Limiter {
         Delay delayL,delayR;
         float gain=1;
@@ -116,7 +99,6 @@ private:
     static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
-    static bool makeAllPass(Biquad& q,bool secondOrder,float frequency,float Q,float sampleRate);
     static void makeOnePoleLow(OnePole& p,float fc,float sr);
     float processChannelInput(float x, Channel& c);
     void processFrame(float& l,float& r);
@@ -137,8 +119,6 @@ private:
     void resetDynamics();
 
     Channel left_,right_;
-    NativeBmwRouting::RoutingMatrix routing_{};
-    std::array<OutputRuntime,NativeBmwRouting::kOutputCount> outputs_{};
     PeqBank fullPeq_,lowPeq_,midPeq_;
     bool peqEnabled_=false;
     float peqPreampDb_=0,peqPreamp_=1;

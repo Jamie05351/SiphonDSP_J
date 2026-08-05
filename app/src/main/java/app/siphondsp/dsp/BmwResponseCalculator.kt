@@ -1,13 +1,11 @@
 package app.siphondsp.dsp
 
 import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.NativeBmwDspValues
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sin
-import kotlin.math.atan2
 
 /**
  * Incremental, allocation-free-after-warm-up evaluator of the complete native BMW signal
@@ -134,7 +132,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             if (peq.enabled) {
                 for (band in peq.lowBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
             }
-            addAllPassSections(cascade, values, if (BmwSignalChain.internalIsLeftChainFor(channel)) 0 else 1)
         }
     }
 
@@ -146,20 +143,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             cascade.addHighPass(values[18].toDouble(), BUTTERWORTH_Q, sampleRate)
             if (peq.enabled) {
                 for (band in peq.midBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
-            }
-            addAllPassSections(cascade, values, if (BmwSignalChain.internalIsLeftChainFor(channel)) 2 else 3)
-        }
-    }
-
-    private fun addAllPassSections(cascade: BiquadCascade, values: FloatArray, output: Int) {
-        repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
-            val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-            if (values[base] >= .5f) {
-                val frequency = values[base + 2].toDouble()
-                val q = values[base + 3].toDouble()
-                if (frequency in 20.0..<(sampleRate * .5) && q in .1..30.0)
-                    cascade.addAllPass(values[base + 1] >= 1.5f, frequency, q, sampleRate)
             }
         }
     }
@@ -177,12 +160,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     }
 
     /** Recomputes only dirty stages' coefficients, then recombines every point into [out]. */
-    fun compute(inputValues: FloatArray, peq: BmwPeqState, out: BmwResponseCurves) {
-        require(inputValues.size == BmwSignalChain.VALUE_COUNT || inputValues.size == 46) {
-            "expected ${BmwSignalChain.VALUE_COUNT} or legacy 46 values, got ${inputValues.size}"
-        }
-        val values = if (inputValues.size == BmwSignalChain.VALUE_COUNT) inputValues else
-            NativeBmwDspValues.DEFAULTS.copyOf().also { inputValues.copyInto(it) }
+    fun compute(values: FloatArray, peq: BmwPeqState, out: BmwResponseCurves) {
+        require(values.size == BmwSignalChain.VALUE_COUNT) { "expected ${BmwSignalChain.VALUE_COUNT} values, got ${values.size}" }
         rebuildAxisIfNeeded()
 
         val processorEnabled = values[0] >= .5f
@@ -225,7 +204,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                     out.lowBranchDb[ch][i] = 0.0
                     out.midBranchDb[ch][i] = 0.0
                     out.sumDb[ch][i] = 0.0
-                    out.sumPhaseDegrees[ch][i] = 0.0
                     continue
                 }
 
@@ -273,7 +251,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 sumAcc.scale(dbToLinear(postGainDb.toDouble()))
                 if (muteThisOutput) sumAcc.setZero()
                 out.sumDb[ch][i] = sumAcc.magnitudeDb()
-                out.sumPhaseDegrees[ch][i] = atan2(sumAcc.im, sumAcc.re) * 180.0 / PI
             }
         }
 

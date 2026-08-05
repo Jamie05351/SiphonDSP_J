@@ -120,20 +120,6 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(1.0, -1.0, 0.0, -dcR, 0.0)
     }
 
-    /** NativeBmwDspProcessor::makeAllPass. Invalid sections are rejected by the state/UI layer. */
-    fun addAllPass(secondOrder: Boolean, frequencyHz: Double, q: Double, sampleRate: Double) {
-        val w = 2.0 * PI * frequencyHz / sampleRate
-        if (!secondOrder) {
-            val a = (tan(w * .5) - 1.0) / (tan(w * .5) + 1.0)
-            addNormalised(a, 1.0, 0.0, a, 0.0)
-            return
-        }
-        val c = cos(w)
-        val alpha = sin(w) / (2.0 * q)
-        val d = 1.0 + alpha
-        addNormalised((1.0 - alpha) / d, (-2.0 * c) / d, 1.0, (-2.0 * c) / d, (1.0 - alpha) / d)
-    }
-
     /**
      * Multiplies [acc] by this cascade's H(e^jw) at the point described by [cosW]/[sinW]
      * (angle w = 2*pi*f/sr) and [cos2W]/[sin2W] (double angle, for z^-2). z^-1 = cos(w) -
