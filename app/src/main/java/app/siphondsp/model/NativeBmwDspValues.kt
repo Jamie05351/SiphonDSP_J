@@ -11,7 +11,7 @@ object NativeBmwDspValues {
     // SharedPreferences blob (pre-NativeBmwDspStore) onto the new atomic file store.
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
-    const val SIZE = 46
+    const val SIZE = 86
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -65,6 +65,28 @@ object NativeBmwDspValues {
     const val INDEX_MONO_BASS_BLEND = 44
     const val INDEX_MONO_BASS_MAKEUP = 45
 
+    // Explicit stereo routing matrix: four outputs (Low L, Low R, Mid L, Mid R) x two
+    // virtual inputs (Front L, Front R), stored as linear coefficients. Defaults reproduce
+    // the previous fixed L->Low L/Mid L, R->Low R/Mid R topology with zero crossfeed -- see
+    // NativeBmwRouting.h / NativeBmwDspProcessor::configure() for the native side.
+    const val INDEX_ROUTING = 46
+    const val ROUTING_VALUE_COUNT = 8
+    const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = 46
+    const val INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT = 47
+    const val INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT = 48
+    const val INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT = 49
+    const val INDEX_ROUTE_MID_LEFT_FRONT_LEFT = 50
+    const val INDEX_ROUTE_MID_LEFT_FRONT_RIGHT = 51
+    const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = 52
+    const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = 53
+
+    // Two configurable all-pass sections per output (Low L, Low R, Mid L, Mid R), each
+    // [enabled, order(1|2), frequencyHz, Q]. Defaults are disabled/identity.
+    const val INDEX_ALL_PASS = 54
+    const val ALL_PASS_SECTIONS_PER_OUTPUT = 2
+    const val ALL_PASS_SECTION_WIDTH = 4
+    const val ALL_PASS_VALUE_COUNT = 32
+
     @Deprecated("Use INDEX_LOW_COMPRESSOR_ENABLED") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use INDEX_LOW_COMPRESSOR_THRESHOLD") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use INDEX_LOW_COMPRESSOR_RATIO") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -85,6 +107,13 @@ object NativeBmwDspValues {
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         0f, 80f, 100f, 0f,
+        // Low L, Low R, Mid L, Mid R: [Front L, Front R] -- unity same-side, zero crossfeed.
+        1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
+        // Two disabled second-order all-pass sections per output: enabled, order, Hz, Q.
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
     )
 
     fun load(context: Context): FloatArray {
@@ -117,6 +146,11 @@ object NativeBmwDspValues {
         Timber.i("BMW DSP migrated legacy SharedPreferences blob size=${parsed.size} success=$migrated")
         if (migrated) prefs.edit().remove(KEY).apply()
         return values
+    }
+
+    /** Same-side unity routing, zero crossfeed -- the pre-routing-matrix topology. */
+    fun resetRoutingToDefaults(values: FloatArray) {
+        DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
 
     fun broadcast(context: Context, values: FloatArray) {

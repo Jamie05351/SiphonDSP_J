@@ -112,6 +112,36 @@ internal class BiquadCascade(maxSections: Int) {
     }
 
     /**
+     * NativeBmwRouting::AllPassSection::rebuild. `enabled = false` (or invalid frequency/Q)
+     * adds nothing -- an all-pass section that isn't enabled contributes unity gain/zero
+     * phase, which omitting it from the cascade already achieves.
+     */
+    fun addAllPass(enabled: Boolean, secondOrder: Boolean, frequencyHz: Double, q: Double, sampleRate: Double) {
+        if (!enabled || !frequencyHz.isFinite() || frequencyHz < 20.0 || frequencyHz >= sampleRate * .5 ||
+            !q.isFinite() || q < .1 || q > 30.0
+        ) return
+        val w = 2.0 * PI * frequencyHz / sampleRate
+        if (!secondOrder) {
+            val t = tan(w * .5)
+            val denom = t + 1.0
+            if (denom == 0.0) return
+            val a = (t - 1.0) / denom
+            if (!a.isFinite()) return
+            addNormalised(a, 1.0, 0.0, a, 0.0)
+            return
+        }
+        val c = cos(w)
+        val s = sin(w)
+        val alpha = s / (2.0 * q)
+        val a0 = 1.0 + alpha
+        if (a0 == 0.0) return
+        val b0 = (1.0 - alpha) / a0
+        val b1 = (-2.0 * c) / a0
+        if (!b0.isFinite() || !b1.isFinite()) return
+        addNormalised(b0, b1, 1.0, b1, b0)
+    }
+
+    /**
      * NativeBmwDspProcessor::processChannelInput's 10Hz DC blocker:
      * H(z) = (1 - z^-1) / (1 - dcR*z^-1), dcR = exp(-2*pi*cutoffHz/sampleRate).
      */

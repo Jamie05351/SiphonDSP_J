@@ -1,5 +1,6 @@
 package app.siphondsp.dsp
 
+import kotlin.math.atan2
 import kotlin.math.log10
 import kotlin.math.sqrt
 
@@ -60,6 +61,9 @@ internal class ComplexAcc {
     }
 
     fun magnitude(): Double = sqrt(re * re + im * im)
+
+    /** Wrapped phase in radians, (-pi, pi]. Zero re/im (fully muted point) reads as 0. */
+    fun phase(): Double = if (re == 0.0 && im == 0.0) 0.0 else atan2(im, re)
 
     fun magnitudeDb(floorDb: Double = -120.0): Double {
         val amplitude = magnitude()

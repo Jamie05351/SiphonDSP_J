@@ -34,6 +34,15 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
+    /** Selectable graph modes -- see class doc for what each combines. */
+    enum class DisplayMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
+
+    var displayMode: DisplayMode = DisplayMode.MAGNITUDE
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
     private val density = resources.displayMetrics.density
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -62,6 +71,11 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     private val sumPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 3.1f * density
+    }
+    private val phasePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.6f * density
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -93,6 +107,7 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
         lowPaint.color = resolveColor(android.R.attr.colorAccent)
         midPaint.color = resolveColor(android.R.attr.textColorLink)
         sumPaint.color = resolveColor(android.R.attr.textColorPrimary)
+        phasePaint.color = resolveColor(android.R.attr.textColorPrimary)
         labelPaint.color = resolveColor(android.R.attr.textColorSecondary)
         legendPaint.color = resolveColor(android.R.attr.textColorPrimary)
         contentDescription = "Unified live BMW DSP response, PEQ, crossover, tilt and spectrum"
@@ -144,22 +159,55 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
         val bottom = height - paddingBottom - 28f * density
         if (right <= left || bottom <= top) return
         drawLegend(canvas, left, top - 10f * density)
-        drawGrid(canvas, left, right, top, bottom)
-        drawSpectrum(canvas, left, right, top, bottom)
+        when (displayMode) {
+            DisplayMode.MAGNITUDE -> {
+                drawGrid(canvas, left, right, top, bottom, dbGridLines(), "dB") { db -> dbToY(db, top, bottom) }
+                drawSpectrum(canvas, left, right, top, bottom)
+            }
+            DisplayMode.PHASE -> drawGrid(canvas, left, right, top, bottom, phaseGridLines(), "deg") { deg -> valueToY(deg, -180f, 180f, top, bottom) }
+            DisplayMode.MAGNITUDE_PHASE -> {
+                drawGrid(canvas, left, right, top, bottom, dbGridLines(), "dB") { db -> dbToY(db, top, bottom) }
+                drawSpectrum(canvas, left, right, top, bottom)
+            }
+            DisplayMode.GROUP_DELAY -> drawGrid(canvas, left, right, top, bottom, groupDelayGridLines(), "ms") { ms -> valueToY(ms, -2f, 10f, top, bottom) }
+        }
         drawResponse(canvas, left, right, top, bottom)
     }
 
+    private fun dbGridLines() = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
+    private fun phaseGridLines() = floatArrayOf(180f, 90f, 0f, -90f, -180f)
+    private fun groupDelayGridLines() = floatArrayOf(10f, 6f, 2f, 0f, -2f)
+
     private fun drawLegend(canvas: Canvas, left: Float, baseline: Float) {
-        canvas.drawText("LOW", left, baseline, lowPaint)
-        canvas.drawText("MID", left + 42f * density, baseline, midPaint)
-        canvas.drawText("FINAL SUM · PEQ · TILT · GAINS", left + 88f * density, baseline, legendPaint)
+        when (displayMode) {
+            DisplayMode.GROUP_DELAY -> canvas.drawText("GROUP DELAY · FINAL SUM", left, baseline, legendPaint)
+            else -> {
+                canvas.drawText("LOW", left, baseline, lowPaint)
+                canvas.drawText("MID", left + 42f * density, baseline, midPaint)
+                val label = when (displayMode) {
+                    DisplayMode.PHASE -> "PHASE · FINAL SUM · PEQ · TILT · GAINS"
+                    DisplayMode.MAGNITUDE_PHASE -> "SOLID = MAGNITUDE, DASHED = PHASE"
+                    else -> "FINAL SUM · PEQ · TILT · GAINS"
+                }
+                canvas.drawText(label, left + 88f * density, baseline, legendPaint)
+            }
+        }
     }
 
-    private fun drawGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f).forEach { db ->
-            val y = dbToY(db, top, bottom)
+    private fun drawGrid(
+        canvas: Canvas,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        lines: FloatArray,
+        @Suppress("UNUSED_PARAMETER") unit: String,
+        valueToY: (Float) -> Float,
+    ) {
+        lines.forEach { value ->
+            val y = valueToY(value)
             canvas.drawLine(left, y, right, y, gridPaint)
-            canvas.drawText("${db.toInt()}", 5f * density, y + 4f * density, labelPaint)
+            canvas.drawText("${value.toInt()}", 5f * density, y + 4f * density, labelPaint)
         }
         floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f).forEach { frequency ->
             val x = frequencyToX(frequency, left, right)
@@ -194,37 +242,52 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     private fun drawResponse(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
         calculator.compute(values, peqState, curves)
-
-        val lowPath = Path()
-        val midPath = Path()
-        val sumPath = Path()
         val lastIndex = POINT_COUNT - 1
-        for (i in 0 until POINT_COUNT) {
-            val lowDb = averageDb(curves.lowBranchDbFor(BmwOutputChannel.LEFT)[i], curves.lowBranchDbFor(BmwOutputChannel.RIGHT)[i])
-            val midDb = averageDb(curves.midBranchDbFor(BmwOutputChannel.LEFT)[i], curves.midBranchDbFor(BmwOutputChannel.RIGHT)[i])
-            val sumDb = averageDb(curves.sumDbFor(BmwOutputChannel.LEFT)[i], curves.sumDbFor(BmwOutputChannel.RIGHT)[i])
-            val x = left + (i.toFloat() / lastIndex) * (right - left)
-            if (i == 0) {
-                lowPath.moveTo(x, dbToY(lowDb, top, bottom))
-                midPath.moveTo(x, dbToY(midDb, top, bottom))
-                sumPath.moveTo(x, dbToY(sumDb, top, bottom))
-            } else {
-                lowPath.lineTo(x, dbToY(lowDb, top, bottom))
-                midPath.lineTo(x, dbToY(midDb, top, bottom))
-                sumPath.lineTo(x, dbToY(sumDb, top, bottom))
+
+        fun pathFor(sample: (Int) -> Float): Path = Path().apply {
+            for (i in 0 until POINT_COUNT) {
+                val x = left + (i.toFloat() / lastIndex) * (right - left)
+                val y = sample(i)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
             }
         }
-        canvas.drawPath(lowPath, lowPaint)
-        canvas.drawPath(midPath, midPaint)
-        canvas.drawPath(sumPath, sumPaint)
+
+        when (displayMode) {
+            DisplayMode.MAGNITUDE -> {
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(BmwOutputChannel.LEFT)[i], curves.lowBranchDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, lowPaint)
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(BmwOutputChannel.LEFT)[i], curves.midBranchDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, midPaint)
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.sumDbFor(BmwOutputChannel.LEFT)[i], curves.sumDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, sumPaint)
+            }
+            DisplayMode.PHASE -> {
+                canvas.drawPath(pathFor { i -> valueToY(averageDeg(curves.lowBranchPhaseFor(BmwOutputChannel.LEFT)[i], curves.lowBranchPhaseFor(BmwOutputChannel.RIGHT)[i]), -180f, 180f, top, bottom) }, lowPaint)
+                canvas.drawPath(pathFor { i -> valueToY(averageDeg(curves.midBranchPhaseFor(BmwOutputChannel.LEFT)[i], curves.midBranchPhaseFor(BmwOutputChannel.RIGHT)[i]), -180f, 180f, top, bottom) }, midPaint)
+                canvas.drawPath(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(BmwOutputChannel.LEFT)[i], curves.sumPhaseFor(BmwOutputChannel.RIGHT)[i]), -180f, 180f, top, bottom) }, sumPaint)
+            }
+            DisplayMode.MAGNITUDE_PHASE -> {
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(BmwOutputChannel.LEFT)[i], curves.lowBranchDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, lowPaint)
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(BmwOutputChannel.LEFT)[i], curves.midBranchDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, midPaint)
+                canvas.drawPath(pathFor { i -> dbToY(averageDb(curves.sumDbFor(BmwOutputChannel.LEFT)[i], curves.sumDbFor(BmwOutputChannel.RIGHT)[i]), top, bottom) }, sumPaint)
+                canvas.drawPath(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(BmwOutputChannel.LEFT)[i], curves.sumPhaseFor(BmwOutputChannel.RIGHT)[i]), -180f, 180f, top, bottom) }, phasePaint)
+            }
+            DisplayMode.GROUP_DELAY -> {
+                val leftDelay = curves.groupDelayMsFor(BmwOutputChannel.LEFT)
+                val rightDelay = curves.groupDelayMsFor(BmwOutputChannel.RIGHT)
+                canvas.drawPath(pathFor { i -> valueToY((((leftDelay[i] + rightDelay[i]) * 0.5).toFloat()).coerceIn(-2f, 10f), -2f, 10f, top, bottom) }, sumPaint)
+            }
+        }
     }
 
     private fun averageDb(left: Double, right: Double): Float =
         ((left + right) * 0.5).toFloat().coerceIn(-24f, 12f)
 
-    private fun dbToY(db: Float, top: Float, bottom: Float): Float {
-        val clamped = db.coerceIn(-24f, 12f)
-        return top + (12f - clamped) / 36f * (bottom - top)
+    private fun averageDeg(left: Double, right: Double): Float =
+        Math.toDegrees((left + right) * 0.5).toFloat().coerceIn(-180f, 180f)
+
+    private fun dbToY(db: Float, top: Float, bottom: Float): Float = valueToY(db, -24f, 12f, top, bottom)
+
+    private fun valueToY(value: Float, min: Float, max: Float, top: Float, bottom: Float): Float {
+        val clamped = value.coerceIn(min, max)
+        return top + (max - clamped) / (max - min) * (bottom - top)
     }
 
     private fun frequencyToX(frequency: Float, left: Float, right: Float): Float {

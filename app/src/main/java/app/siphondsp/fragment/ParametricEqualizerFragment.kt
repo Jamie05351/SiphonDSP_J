@@ -555,7 +555,7 @@ class ParametricEqualizerFragment : Fragment() {
             sampleRate,
         )
         binding.previewTitle.text = when (selectedScope) {
-            PeqScope.FULL -> "Full Range PEQ response"
+            PeqScope.FULL -> "Input Correction PEQ response"
             PeqScope.LOW -> "Low Band PEQ response · inside low crossover branch"
             PeqScope.MID -> "Mid Band PEQ response · inside mid crossover branch"
         }
@@ -1228,7 +1228,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private enum class PeqScope(val label: String, val fileName: String, val chipId: Int, val bank: BmwPeqBank) {
-        FULL("Full Range", "full_range_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
+        FULL("Input Correction", "input_correction_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
         LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low, BmwPeqBank.LOW),
         MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid, BmwPeqBank.MID),
     }
