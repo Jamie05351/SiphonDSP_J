@@ -7,6 +7,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
 import app.siphondsp.R
 import app.siphondsp.fragment.NativeBmwDspResponseView
+import com.google.android.material.button.MaterialButtonToggleGroup
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -34,6 +35,15 @@ class NativeBmwDspResponsePreference : Preference {
         super.onBindViewHolder(holder)
         responseView = holder.findViewById(R.id.native_bmw_response_view) as? NativeBmwDspResponseView
         signalPathView = holder.findViewById(R.id.native_bmw_signal_path) as? TextView
+        (holder.findViewById(R.id.native_bmw_response_mode) as? MaterialButtonToggleGroup)?.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            responseView?.displayMode = when (checkedId) {
+                R.id.native_bmw_response_mode_phase -> NativeBmwDspResponseView.DisplayMode.PHASE
+                R.id.native_bmw_response_mode_both -> NativeBmwDspResponseView.DisplayMode.MAGNITUDE_PHASE
+                R.id.native_bmw_response_mode_group_delay -> NativeBmwDspResponseView.DisplayMode.GROUP_DELAY
+                else -> NativeBmwDspResponseView.DisplayMode.MAGNITUDE
+            }
+        }
         updateViews()
     }
 
