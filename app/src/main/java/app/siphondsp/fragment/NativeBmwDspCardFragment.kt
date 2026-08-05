@@ -16,6 +16,7 @@ import app.siphondsp.model.NativeBmwDspValues
 /** Inline, expandable controls for the native BMW processor. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
     private lateinit var menuPreferences: SharedPreferences
+    private var updatingMenu = false
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = MENU_PREFS
@@ -25,6 +26,15 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         val values = NativeBmwDspValues.load(requireContext())
         writeValuesToMenu(values)
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
+        findPreference<androidx.preference.Preference>("route_reset_stereo")?.setOnPreferenceClickListener {
+            val values = NativeBmwDspValues.load(requireContext())
+            NativeBmwDspValues.DEFAULTS.copyInto(values, NativeBmwDspValues.INDEX_ROUTING,
+                NativeBmwDspValues.INDEX_ROUTING, NativeBmwDspValues.INDEX_ROUTING + NativeBmwDspValues.ROUTING_VALUE_COUNT)
+            NativeBmwDspValues.save(requireContext(), values)
+            NativeBmwDspValues.broadcast(requireContext(), values)
+            writeValuesToMenu(values)
+            true
+        }
         configureSectionCards(preferenceScreen)
     }
 
@@ -60,11 +70,38 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        if (updatingMenu) return
+        if (key == "allpass_output") {
+            writeAllPassToMenu(NativeBmwDspValues.load(requireContext()))
+            return
+        }
+        if (key in ALL_PASS_KEYS) {
+            val values = NativeBmwDspValues.load(requireContext())
+            val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
+            val section = if (key!!.startsWith("allpass_1")) 0 else 1
+            val base = NativeBmwDspValues.INDEX_ALL_PASS +
+                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+            values[base + when {
+                key.endsWith("enabled") -> 0
+                key.endsWith("order") -> 1
+                key.endsWith("frequency") -> 2
+                else -> 3
+            }] = when {
+                key.endsWith("enabled") -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
+                key.endsWith("order") -> menuPreferences.getString(key, "2")?.toFloatOrNull() ?: 2f
+                key.endsWith("frequency") -> menuPreferences.getInt(key, 150).toFloat()
+                else -> menuPreferences.getInt(key, 71) / 100f
+            }
+            NativeBmwDspValues.save(requireContext(), values)
+            NativeBmwDspValues.broadcast(requireContext(), values)
+            return
+        }
         val index = KEY_TO_INDEX[key] ?: return
         val values = NativeBmwDspValues.load(requireContext())
         values[index] = when {
             index in BOOLEAN_INDEXES -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
             index in LIST_INDEXES -> menuPreferences.getString(key, "0")?.toFloatOrNull() ?: 0f
+            index in ROUTING_INDEXES -> menuPreferences.getInt(key, (values[index] * 100f).toInt()) / 100f
             else -> menuPreferences.getFloat(key, values[index])
         }
         NativeBmwDspValues.save(requireContext(), values)
@@ -72,15 +109,36 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
     }
 
     private fun writeValuesToMenu(values: FloatArray) {
+        updatingMenu = true
         val editor = menuPreferences.edit()
         KEY_TO_INDEX.forEach { (key, index) ->
             when {
                 index in BOOLEAN_INDEXES -> editor.putBoolean(key, values[index] >= .5f)
                 index in LIST_INDEXES -> editor.putString(key, values[index].toInt().toString())
+                index in ROUTING_INDEXES -> editor.putInt(key, (values[index] * 100f).toInt())
                 else -> editor.putFloat(key, values[index])
             }
         }
         editor.apply()
+        writeAllPassToMenu(values)
+        updatingMenu = false
+    }
+
+    private fun writeAllPassToMenu(values: FloatArray) {
+        updatingMenu = true
+        val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
+        val editor = menuPreferences.edit()
+        repeat(2) { section ->
+            val base = NativeBmwDspValues.INDEX_ALL_PASS +
+                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+            val prefix = "allpass_${section + 1}_"
+            editor.putBoolean(prefix + "enabled", values[base] >= .5f)
+            editor.putString(prefix + "order", values[base + 1].toInt().toString())
+            editor.putInt(prefix + "frequency", values[base + 2].toInt())
+            editor.putInt(prefix + "q", (values[base + 3] * 100f).toInt())
+        }
+        editor.apply()
+        updatingMenu = false
     }
 
     override fun onCreateRecyclerView(
@@ -110,11 +168,21 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         // now forces index 0 on unconditionally, so there's nothing left to bind here.
         private val BOOLEAN_INDEXES = setOf(1, 2)
         private val LIST_INDEXES = setOf(3, 4)
+        private val ROUTING_INDEXES = (NativeBmwDspValues.INDEX_ROUTING until
+            NativeBmwDspValues.INDEX_ROUTING + NativeBmwDspValues.ROUTING_VALUE_COUNT).toSet()
         private val KEY_TO_INDEX = linkedMapOf(
             "bmw_lpf_passthrough" to 1,
             "bmw_hpf_passthrough" to 2,
             "bmw_channel_isolation" to 3,
             "bmw_measurement_mute" to 4,
+            "route_low_left_fl" to 46, "route_low_left_fr" to 47,
+            "route_low_right_fl" to 48, "route_low_right_fr" to 49,
+            "route_mid_left_fl" to 50, "route_mid_left_fr" to 51,
+            "route_mid_right_fl" to 52, "route_mid_right_fr" to 53,
+        )
+        private val ALL_PASS_KEYS = setOf(
+            "allpass_1_enabled", "allpass_1_order", "allpass_1_frequency", "allpass_1_q",
+            "allpass_2_enabled", "allpass_2_order", "allpass_2_frequency", "allpass_2_q",
         )
 
         fun newInstance() = NativeBmwDspCardFragment()

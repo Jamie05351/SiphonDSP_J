@@ -417,4 +417,16 @@
         <item>spl0</item>
         <item>spl1</item>
     </string-array>
+    <string-array name="bmw_output_channel_entries">
+        <item>Low Left</item><item>Low Right</item><item>Mid Left</item><item>Mid Right</item>
+    </string-array>
+    <string-array name="bmw_output_channel_values">
+        <item>0</item><item>1</item><item>2</item><item>3</item>
+    </string-array>
+    <string-array name="bmw_allpass_type_entries">
+        <item>First order</item><item>Second order</item>
+    </string-array>
+    <string-array name="bmw_allpass_type_values">
+        <item>1</item><item>2</item>
+    </string-array>
 </resources>
