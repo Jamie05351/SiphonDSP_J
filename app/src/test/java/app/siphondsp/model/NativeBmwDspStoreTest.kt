@@ -1,6 +1,7 @@
 package app.siphondsp.model
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -54,6 +55,27 @@ class NativeBmwDspStoreTest {
     fun neitherFilePresentReturnsNull() {
         val store = NativeBmwDspStore(temporaryFolder.newFolder("nothing-saved"))
         assertNull(store.load())
+    }
+
+    @Test
+    fun anOldSavedFileWithoutRoutingOrAllPassIndicesMigratesToIdentityRoutingAndDisabledAllPass() {
+        // Simulates a pre-routing-matrix save (only indices 0-45 present): every new routing
+        // and all-pass index must come back at its safe default -- unity same-side routing,
+        // zero crossfeed, all-pass disabled -- never zeroed/silent and never left uninitialized.
+        val directory = temporaryFolder.newFolder("pre-routing-save")
+        val payload = (0..45).joinToString("\n") { index -> "$index=${NativeBmwDspValues.DEFAULTS[index]}" }
+        val header = "BMW_DSP_STATE_V1"
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(payload.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        File(directory, NativeBmwDspStore.FILE_NAME).writeText("$header\n$digest\n$payload")
+
+        val loaded = NativeBmwDspStore(directory).load()!!
+
+        assertArrayEquals(NativeBmwDspValues.DEFAULTS, loaded, 0f)
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT])
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT])
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_ALL_PASS])
     }
 
     @Test

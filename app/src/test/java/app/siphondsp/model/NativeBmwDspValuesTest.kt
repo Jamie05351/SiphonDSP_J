@@ -66,6 +66,20 @@ class NativeBmwDspValuesTest {
         assertArrayEquals(values, loaded, 0f)
     }
 
+    @Test
+    fun resetRoutingToDefaultsRestoresIdentityRoutingWithoutTouchingOtherIndices() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        // Simulate a user having dialled in a crossfeed routing and an unrelated tilt tweak.
+        values[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT] = 0.5f
+        values[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT] = 0.5f
+        values[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f
+
+        NativeBmwDspValues.resetRoutingToDefaults(values)
+
+        val expected = NativeBmwDspValues.DEFAULTS.copyOf().also { it[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f }
+        assertArrayEquals(expected, values, 0f)
+    }
+
     // update() also broadcasts via LocalBroadcastManager, which needs a real main Looper --
     // not available in a plain JVM unit test (confirmed empirically: throws RuntimeException
     // here). Its mutate-only-requested-indices and broadcast-exactly-once behavior is covered
