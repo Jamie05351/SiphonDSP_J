@@ -5,12 +5,18 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include "NativeBmwRouting.h"
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kConfigSize = 46 };
+    enum : std::size_t { kLegacyConfigSize = 46, kConfigSize = 86 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
+    enum : std::size_t {
+        kRoutingValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kInputCount,
+        kAllPassValueWidth = 4, // enabled, order, frequency, Q
+        kAllPassValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
+    };
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -36,10 +42,11 @@ private:
         DirtyCompTiming = 1u << 6,
         DirtyCompState  = 1u << 7,
         DirtyMonoBass   = 1u << 8,
+        DirtyPolarity   = 1u << 9,
         DirtyAll        = 0xffffffffu,
     };
 
-    struct Biquad { float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0; float run(float x); void clear(); };
+    struct Biquad { float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0; float run(float x); void clear(); void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c); };
     struct OnePole { float a0=1,a1=0,b1=0,x1=0,y1=0; float run(float x); void clear(); };
     struct Delay {
         std::array<float,kDelayLineCapacity> data{};
@@ -48,25 +55,55 @@ private:
         float run(float x);
         void clear();
     };
-    struct Channel {
-        Biquad sub1,lowA,lowB,mid1,mid2,tiltLo1,tiltLo2,tiltHi1,tiltHi2;
-        Biquad monoBassHpf1,monoBassHpf2;
-        OnePole lowPole;
-        Delay lowDelay,midDelay;
-        float dcX=0,dcY=0;
-    };
-    struct Limiter {
-        Delay delayL,delayR;
-        float gain=1;
-        float attackMix=1,releaseMix=1;
-        void clear();
-    };
     struct PeqBank {
         std::array<Biquad, kMaxPeqSectionsPerChannel> left{};
         std::array<Biquad, kMaxPeqSectionsPerChannel> right{};
         std::size_t leftCount=0,rightCount=0;
         float processLeft(float sample);
         float processRight(float sample);
+        void clear();
+    };
+    /**
+     * One of the four stable logical outputs (Low Left/Right, Mid Left/Right).
+     * Owns everything the spec calls out as per-output state: the crossover
+     * section that gives the output its band (low outputs run the existing
+     * LPF/one-pole pair, mid outputs run the existing HPF pair), the output's
+     * own delay line, gain, polarity and mute -- driven today from the shared
+     * per-band Params fields, since the UI still exposes one Low/Mid control
+     * each -- and two configurable all-pass sections. PEQ stays in the shared
+     * per-band PeqBank (lowPeq_/midPeq_) since the editor is still per-band;
+     * each output just picks that bank's left or right chain.
+     */
+    struct OutputRuntime {
+        NativeBmwRouting::OutputId id = NativeBmwRouting::OutputId::LowLeft;
+        bool isLeftSide = true;
+        bool muted = false;
+        bool polarityInverted = false;
+        float gain = 1.0f;
+        Biquad subsonic;                 // low outputs only
+        Biquad crossover1, crossover2;    // LPF pair (low) or HPF pair (mid)
+        OnePole crossoverPole;             // low outputs only, 2nd-order-off path
+        Biquad monoBassHpf1, monoBassHpf2; // low outputs only
+        Delay delay;
+        std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
+        std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
+
+        float processAllPass(float sample) {
+            for (std::size_t i = 0; i < allPass.size(); ++i) {
+                if (allPass[i].enabled) sample = allPassState[i].run(sample);
+            }
+            return sample;
+        }
+        void clearState() {
+            subsonic.clear(); crossover1.clear(); crossover2.clear(); crossoverPole.clear();
+            monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
+            for (auto& section : allPassState) section.clear();
+        }
+    };
+    struct Limiter {
+        Delay delayL,delayR;
+        float gain=1;
+        float attackMix=1,releaseMix=1;
         void clear();
     };
     struct CompressorParams {
@@ -100,7 +137,9 @@ private:
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
     static void makeOnePoleLow(OnePole& p,float fc,float sr);
-    float processChannelInput(float x, Channel& c);
+    float processChannelInput(float x, float& dcX, float& dcY);
+    float processLowCrossover(OutputRuntime& out, float sample);
+    float processMidCrossover(OutputRuntime& out, float sample);
     void processFrame(float& l,float& r);
     void processCompressor(float& left,float& right,const CompressorParams& params,CompressorState& state);
     void processLimiter(float& left,float& right);
@@ -116,23 +155,30 @@ private:
     void rebuildCompressorTiming();
     void rebuildLimiter();
     void rebuildMonoBass();
+    void rebuildPolarityAndMute();
+    void rebuildAllPass();
     void resetDynamics();
+    OutputRuntime& output(NativeBmwRouting::OutputId id) { return outputs_[static_cast<std::size_t>(id)]; }
 
-    Channel left_,right_;
-    PeqBank fullPeq_,lowPeq_,midPeq_;
+    std::array<OutputRuntime, NativeBmwRouting::kOutputCount> outputs_{};
+    NativeBmwRouting::RoutingMatrix routing_{};
+    float leftDcX_=0,leftDcY_=0,rightDcX_=0,rightDcY_=0;
+    PeqBank inputPeq_,lowPeq_,midPeq_;
     bool peqEnabled_=false;
     float peqPreampDb_=0,peqPreamp_=1;
-    std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> fullPeqValues_{};
+    std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> inputPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> lowPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> midPeqValues_{};
-    std::size_t fullPeqValueCount_=0,lowPeqValueCount_=0,midPeqValueCount_=0;
+    std::size_t inputPeqValueCount_=0,lowPeqValueCount_=0,midPeqValueCount_=0;
     float sampleRate_=48000.0f,dcR_=0.0f;
-    float headroom_=1,lowGainL_=1,lowGainR_=1,midGainL_=1,midGainR_=1,postGainL_=1,postGainR_=1;
+    float headroom_=1,postGainL_=1,postGainR_=1;
     float rmsMix_=0,peakRelease_=0;
     CompressorState lowDynamics_,midDynamics_;
     Limiter limiter_;
     Biquad monoBassLpf1_,monoBassLpf2_;
     float monoBassMakeupLin_=1;
+    Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
+    Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
 };
