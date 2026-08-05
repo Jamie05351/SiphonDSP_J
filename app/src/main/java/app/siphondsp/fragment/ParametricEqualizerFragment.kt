@@ -590,6 +590,11 @@ class ParametricEqualizerFragment : Fragment() {
                 graphPrefs.getString(GRAPH_CHANNEL, ParametricEqSurface.ChannelDisplay.BOTH.name)!!
             )
         }.getOrDefault(ParametricEqSurface.ChannelDisplay.BOTH)
+        binding.equalizerSurface.displayMode = runCatching {
+            ParametricEqSurface.DisplayMode.valueOf(
+                graphPrefs.getString(GRAPH_RESPONSE_MODE, ParametricEqSurface.DisplayMode.MAGNITUDE.name)!!
+            )
+        }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
 
         binding.equalizerSurface.onPointSelected = { uuid ->
             bandsForScope().firstOrNull { it.uuid == uuid }?.let(::selectBandForEditing)
@@ -638,6 +643,20 @@ class ParametricEqualizerFragment : Fragment() {
             }
             findItem(checked)?.isChecked = true
         }
+        popup.menu.addSubMenu("Response mode").apply {
+            add(Menu.NONE, GRAPH_MENU_MODE_MAGNITUDE, Menu.NONE, "Magnitude")
+            add(Menu.NONE, GRAPH_MENU_MODE_PHASE, Menu.NONE, "Phase")
+            add(Menu.NONE, GRAPH_MENU_MODE_MAGNITUDE_PHASE, Menu.NONE, "Magnitude + Phase")
+            add(Menu.NONE, GRAPH_MENU_MODE_GROUP_DELAY, Menu.NONE, "Group Delay")
+            setGroupCheckable(Menu.NONE, true, true)
+            val checked = when (binding.equalizerSurface.displayMode) {
+                ParametricEqSurface.DisplayMode.MAGNITUDE -> GRAPH_MENU_MODE_MAGNITUDE
+                ParametricEqSurface.DisplayMode.PHASE -> GRAPH_MENU_MODE_PHASE
+                ParametricEqSurface.DisplayMode.MAGNITUDE_PHASE -> GRAPH_MENU_MODE_MAGNITUDE_PHASE
+                ParametricEqSurface.DisplayMode.GROUP_DELAY -> GRAPH_MENU_MODE_GROUP_DELAY
+            }
+            findItem(checked)?.isChecked = true
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 GRAPH_MENU_OVERLAYS -> {
@@ -657,6 +676,18 @@ class ParametricEqualizerFragment : Fragment() {
                         .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
                         .apply()
                     bindScope()
+                    true
+                }
+                GRAPH_MENU_MODE_MAGNITUDE, GRAPH_MENU_MODE_PHASE, GRAPH_MENU_MODE_MAGNITUDE_PHASE, GRAPH_MENU_MODE_GROUP_DELAY -> {
+                    binding.equalizerSurface.displayMode = when (item.itemId) {
+                        GRAPH_MENU_MODE_PHASE -> ParametricEqSurface.DisplayMode.PHASE
+                        GRAPH_MENU_MODE_MAGNITUDE_PHASE -> ParametricEqSurface.DisplayMode.MAGNITUDE_PHASE
+                        GRAPH_MENU_MODE_GROUP_DELAY -> ParametricEqSurface.DisplayMode.GROUP_DELAY
+                        else -> ParametricEqSurface.DisplayMode.MAGNITUDE
+                    }
+                    graphPrefs.edit()
+                        .putString(GRAPH_RESPONSE_MODE, binding.equalizerSurface.displayMode.name)
+                        .apply()
                     true
                 }
                 else -> false
@@ -1210,10 +1241,17 @@ class ParametricEqualizerFragment : Fragment() {
         private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
         private const val GRAPH_CHANNEL = "channel_display"
         private const val GRAPH_DISPLAY_MODE = "peq_display_mode"
+        // Unrelated to GRAPH_DISPLAY_MODE above (that's the Graph/List PeqDisplayMode toggle) --
+        // this persists ParametricEqSurface.DisplayMode (Magnitude/Phase/Group Delay).
+        private const val GRAPH_RESPONSE_MODE = "response_display_mode"
         private const val GRAPH_MENU_OVERLAYS = 1
         private const val GRAPH_MENU_BOTH = 2
         private const val GRAPH_MENU_LEFT = 3
         private const val GRAPH_MENU_RIGHT = 4
+        private const val GRAPH_MENU_MODE_MAGNITUDE = 5
+        private const val GRAPH_MENU_MODE_PHASE = 6
+        private const val GRAPH_MENU_MODE_MAGNITUDE_PHASE = 7
+        private const val GRAPH_MENU_MODE_GROUP_DELAY = 8
         private const val FILTER_DUPLICATE = 10
         private const val FILTER_MOVE_UP = 11
         private const val FILTER_MOVE_DOWN = 12

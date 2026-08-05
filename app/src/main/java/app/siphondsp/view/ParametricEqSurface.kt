@@ -52,6 +52,8 @@ import kotlin.math.min
 class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     enum class ChannelDisplay { BOTH, LEFT, RIGHT }
     enum class SurfaceMode { PEQ_ONLY, UNIFIED_SYSTEM }
+    /** UNIFIED_SYSTEM only -- PEQ_ONLY always renders magnitude regardless of this value. */
+    enum class DisplayMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
     private enum class TiltHandle { PIVOT, AMOUNT }
 
     var onPointSelected: ((UUID) -> Unit)? = null
@@ -72,6 +74,16 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         }
     var showGainMeters = false
         set(value) {
+            field = value
+            invalidate()
+        }
+    // UNIFIED_SYSTEM only. Node dragging and tilt handles are only meaningful against the
+    // magnitude curve they were positioned on, so non-magnitude modes are read-only --
+    // enforced in onTouchEvent, independent of [interactive] below (which callers use for a
+    // different reason: a wholly static preview instance).
+    var displayMode: DisplayMode = DisplayMode.MAGNITUDE
+        set(value) {
+            if (field == value) return
             field = value
             invalidate()
         }
@@ -288,6 +300,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val sumPaintDashed = Paint(sumPaintSolid).apply {
         alpha = 200
         pathEffect = DashPathEffect(floatArrayOf(9f * density, 6f * density), 0f)
+    }
+    // MAGNITUDE_PHASE overlay: same colour family as the sum curve it accompanies, thinner and
+    // dashed so it reads as an annotation on its own implicit degree scale, not a second sum.
+    private val sumPhaseOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.6f * density
+        color = sumColor
+        alpha = 170
+        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
     }
     // Light blue (matches the app's accent colour) -- the grey used everywhere else in this
     // unified view reads as barely-visible background noise for a live spectrum trace.
@@ -512,6 +533,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!interactive) return false
+        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM && displayMode != DisplayMode.MAGNITUDE) return false
         if (event.pointerCount > 1) {
             cancelDraft()
             return true
@@ -659,6 +681,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         return plotTop() + fraction * (plotBottom() - plotTop())
     }
 
+    private fun yForRange(value: Double, min: Double, max: Double): Float {
+        val clamped = value.coerceIn(min, max)
+        val fraction = (max - clamped) / (max - min)
+        return plotTop() + fraction.toFloat() * (plotBottom() - plotTop())
+    }
+
+    private fun yForPhaseDeg(deg: Double): Float = yForRange(deg, PHASE_MIN_DEG, PHASE_MAX_DEG)
+    private fun yForGroupDelayMs(ms: Double): Float = yForRange(ms, GROUP_DELAY_MIN_MS, GROUP_DELAY_MAX_MS)
+
     private fun hitTestTiltHandle(x: Float, y: Float): TiltHandle? {
         val tilt = currentTiltValues()
         val pivotX = xForFrequency(tilt.frequencyHz.toDouble())
@@ -712,15 +743,37 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
         if (right <= left || bottom <= top) return
 
-        drawUnifiedGrid(canvas, left, right, top, bottom)
-        drawCrossoverShading(canvas, left, right, top, bottom)
-        if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
-        drawBranchCurves(canvas, left, right, top, bottom)
-        drawActiveBankOverlays(canvas, left, right, top, bottom)
-        drawSumCurve(canvas, left, right, top, bottom)
-        if (showTiltHandles) drawTiltHandles(canvas)
-        drawMultiBankNodes(canvas)
-        if (showGainMeters) drawGainMeters(canvas, right, top, bottom)
+        when (displayMode) {
+            DisplayMode.MAGNITUDE -> {
+                drawUnifiedGrid(canvas, left, right, top, bottom)
+                drawCrossoverShading(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                drawBranchCurves(canvas, left, right, top, bottom)
+                drawActiveBankOverlays(canvas, left, right, top, bottom)
+                drawSumCurve(canvas, left, right, top, bottom)
+                if (showTiltHandles) drawTiltHandles(canvas)
+                drawMultiBankNodes(canvas)
+                if (showGainMeters) drawGainMeters(canvas, right, top, bottom)
+            }
+            DisplayMode.MAGNITUDE_PHASE -> {
+                drawUnifiedGrid(canvas, left, right, top, bottom)
+                drawCrossoverShading(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                drawBranchCurves(canvas, left, right, top, bottom)
+                drawSumCurve(canvas, left, right, top, bottom)
+                drawSumPhaseOverlay(canvas, left, right)
+            }
+            DisplayMode.PHASE -> {
+                drawPhaseGrid(canvas, left, right, top, bottom)
+                drawCrossoverShading(canvas, left, right, top, bottom)
+                drawPhaseCurves(canvas, left, right)
+            }
+            DisplayMode.GROUP_DELAY -> {
+                drawGroupDelayGrid(canvas, left, right, top, bottom)
+                drawCrossoverShading(canvas, left, right, top, bottom)
+                drawGroupDelayCurve(canvas, left, right)
+            }
+        }
         drawUnifiedLegend(canvas, left, top)
     }
 
@@ -749,10 +802,31 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawUnifiedGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f).forEach { db ->
-            val y = yForGain(db.toDouble())
-            canvas.drawLine(left, y, right, y, if (db == 0f) unifiedZeroPaint else unifiedGridPaint)
-            canvas.drawText("${db.toInt()}", 4f * density, y + 3f * density, unifiedLabelPaint)
+        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f), zeroLine = 0f, toY = ::yForGain)
+    }
+
+    private fun drawPhaseGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(180f, 90f, 0f, -90f, -180f), zeroLine = 0f) { yForPhaseDeg(it) }
+    }
+
+    private fun drawGroupDelayGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(10f, 6f, 2f, 0f, -2f), zeroLine = 0f) { yForGroupDelayMs(it) }
+    }
+
+    private fun drawUnifiedGridLines(
+        canvas: Canvas,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        lines: FloatArray,
+        zeroLine: Float,
+        toY: (Double) -> Float,
+    ) {
+        lines.forEach { value ->
+            val y = toY(value.toDouble())
+            canvas.drawLine(left, y, right, y, if (value == zeroLine) unifiedZeroPaint else unifiedGridPaint)
+            canvas.drawText("${value.toInt()}", 4f * density, y + 3f * density, unifiedLabelPaint)
         }
         FREQ_SCALE.forEach { frequency ->
             val x = xForFrequency(frequency)
@@ -792,39 +866,68 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawBranchCurves(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawSystemCurve(canvas, curves.lowBranchDb, left, right, lowBranchPaint)
-        drawSystemCurve(canvas, curves.midBranchDb, left, right, midBranchPaint)
+        drawSystemCurve(canvas, curves.lowBranchDb, left, right, lowBranchPaint, ::yForGain)
+        drawSystemCurve(canvas, curves.midBranchDb, left, right, midBranchPaint, ::yForGain)
     }
 
     private fun drawSumCurve(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid)
+        drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid, ::yForGain)
         if (channelDisplay != ChannelDisplay.LEFT) {
-            drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed)
+            drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed, ::yForGain)
         }
     }
 
-    private fun drawSystemCurve(canvas: Canvas, perChannelDb: Array<DoubleArray>, left: Float, right: Float, paint: Paint) {
+    /** Sum phase overlaid on the magnitude graph in MAGNITUDE_PHASE mode -- its own implicit
+     *  -180..180 degree scale sharing the plot area, not the dB gridlines shown alongside it. */
+    private fun drawSumPhaseOverlay(canvas: Canvas, left: Float, right: Float) {
+        drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPhaseOverlayPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+    }
+
+    private fun drawPhaseCurves(canvas: Canvas, left: Float, right: Float) {
+        drawSystemCurve(canvas, curves.lowBranchPhase, left, right, lowBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+        drawSystemCurve(canvas, curves.midBranchPhase, left, right, midBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+        drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid) { yForPhaseDeg(Math.toDegrees(it)) }
+        if (channelDisplay != ChannelDisplay.LEFT) {
+            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed) { yForPhaseDeg(Math.toDegrees(it)) }
+        }
+    }
+
+    private fun drawGroupDelayCurve(canvas: Canvas, left: Float, right: Float) {
+        val leftDelay = curves.groupDelayMsFor(BmwOutputChannel.LEFT)
+        val rightDelay = curves.groupDelayMsFor(BmwOutputChannel.RIGHT)
+        if (leftDelay.isEmpty()) return
+        val path = Path()
+        for (i in leftDelay.indices) {
+            val avg = (leftDelay[i] + rightDelay[i]) * 0.5
+            val x = left + (i.toFloat() / (leftDelay.size - 1).coerceAtLeast(1)) * (right - left)
+            val y = yForGroupDelayMs(avg)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        canvas.drawPath(path, sumPaintSolid)
+    }
+
+    private fun drawSystemCurve(canvas: Canvas, perChannelValues: Array<DoubleArray>, left: Float, right: Float, paint: Paint, toY: (Double) -> Float) {
         // Branch curves show the arithmetic mean of L/R (they are context, not the primary
         // per-channel readout -- the dominant sum curve below shows true L/R separation).
-        val leftDb = perChannelDb[BmwOutputChannel.LEFT.ordinal]
-        val rightDb = perChannelDb[BmwOutputChannel.RIGHT.ordinal]
-        if (leftDb.isEmpty()) return
+        val leftValues = perChannelValues[BmwOutputChannel.LEFT.ordinal]
+        val rightValues = perChannelValues[BmwOutputChannel.RIGHT.ordinal]
+        if (leftValues.isEmpty()) return
         val path = Path()
-        for (i in leftDb.indices) {
-            val avg = (leftDb[i] + rightDb[i]) * 0.5
-            val x = left + (i.toFloat() / (leftDb.size - 1).coerceAtLeast(1)) * (right - left)
-            val y = yForGain(avg)
+        for (i in leftValues.indices) {
+            val avg = (leftValues[i] + rightValues[i]) * 0.5
+            val x = left + (i.toFloat() / (leftValues.size - 1).coerceAtLeast(1)) * (right - left)
+            val y = toY(avg)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         canvas.drawPath(path, paint)
     }
 
-    private fun drawSystemCurveForChannel(canvas: Canvas, db: DoubleArray, left: Float, right: Float, paint: Paint) {
-        if (db.isEmpty()) return
+    private fun drawSystemCurveForChannel(canvas: Canvas, values: DoubleArray, left: Float, right: Float, paint: Paint, toY: (Double) -> Float) {
+        if (values.isEmpty()) return
         val path = Path()
-        for (i in db.indices) {
-            val x = left + (i.toFloat() / (db.size - 1).coerceAtLeast(1)) * (right - left)
-            val y = yForGain(db[i])
+        for (i in values.indices) {
+            val x = left + (i.toFloat() / (values.size - 1).coerceAtLeast(1)) * (right - left)
+            val y = toY(values[i])
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         canvas.drawPath(path, paint)
@@ -927,6 +1030,46 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private fun drawUnifiedLegend(canvas: Canvas, left: Float, top: Float) {
         val baseline = top - 6f * density
+        when (displayMode) {
+            DisplayMode.GROUP_DELAY -> {
+                canvas.drawText(
+                    "FINAL SUM GROUP DELAY (L/R averaged) · compressor not shown (nonlinear)",
+                    left,
+                    baseline,
+                    unifiedLegendPaint,
+                )
+                return
+            }
+            DisplayMode.PHASE -> {
+                val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
+                val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
+                canvas.drawText("LOW", left, baseline, lowPaint)
+                canvas.drawText("MID", left + 38f * density, baseline, midPaint)
+                canvas.drawText(
+                    "FINAL SUM PHASE (L solid / R dashed) · compressor not shown (nonlinear)",
+                    left + 76f * density,
+                    baseline,
+                    unifiedLegendPaint,
+                )
+                return
+            }
+            DisplayMode.MAGNITUDE_PHASE -> {
+                val fullPaint = Paint(unifiedLegendPaint).apply { color = bankColorFull }
+                val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
+                val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
+                canvas.drawText("FULL", left, baseline, fullPaint)
+                canvas.drawText("LOW", left + 38f * density, baseline, lowPaint)
+                canvas.drawText("MID", left + 74f * density, baseline, midPaint)
+                canvas.drawText(
+                    "SUM SOLID = MAGNITUDE, THIN DASHED = PHASE",
+                    left + 112f * density,
+                    baseline,
+                    unifiedLegendPaint,
+                )
+                return
+            }
+            DisplayMode.MAGNITUDE -> Unit
+        }
         val fullPaint = Paint(unifiedLegendPaint).apply { color = bankColorFull }
         val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
         val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
@@ -1124,6 +1267,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val ACTIVE_NODE_RADIUS_DP = 8f
         private const val TILT_HANDLE_RADIUS_DP = 20f
         private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
+        private const val PHASE_MIN_DEG = -180.0
+        private const val PHASE_MAX_DEG = 180.0
+        private const val GROUP_DELAY_MIN_MS = -2.0
+        private const val GROUP_DELAY_MAX_MS = 10.0
 
         private const val METER_FLOOR_DB = -50f
         private const val METER_CEILING_DB = 0f
