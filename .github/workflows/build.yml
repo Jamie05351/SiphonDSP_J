@@ -133,7 +133,6 @@ jobs:
         run: ./gradlew "${{ env.GRADLE_TASK }}"
 
       - name: Run Android unit tests and lint
-        if: github.event_name == 'pull_request'
         run: ./gradlew :app:test${{ matrix.gradle_variant }}DebugUnitTest :app:lint${{ matrix.gradle_variant }}Preview
 
       - name: Verify native libraries are packaged
