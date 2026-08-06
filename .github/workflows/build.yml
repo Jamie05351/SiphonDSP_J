@@ -144,30 +144,12 @@ jobs:
           test -n "$APK"
           unzip -l "$APK" | grep -E 'lib/[^/]+/.*\.so$'
 
-      - name: Prepare private APK
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p private-apk
-          APK="$(find "${{ env.OUTPUT_DIR }}" -maxdepth 1 -name '*.apk' -print -quit)"
-          cp "$APK" "private-apk/SiphonDSP-private-${GITHUB_SHA:0:7}.apk"
-
-      - name: Upload APKs
-        if: github.event_name != 'pull_request'
+      - name: Upload APKs and reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ matrix.name }}JamesDSP-${{ env.OUTPUT_TYPE }}-apks
-          path: ${{ env.OUTPUT_DIR }}/*.apk
-          if-no-files-found: error
-
-      - name: Upload private APK and reports
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: SiphonDSP-private-${{ github.sha }}
           path: |
-            private-apk/*.apk
+            ${{ env.OUTPUT_DIR }}/*.apk
             app/build/reports/tests/
             app/build/reports/lint-results-*.html
           if-no-files-found: error
