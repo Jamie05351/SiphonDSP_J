@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string-array name="bmw_channel_isolation_entries"><item>Both</item><item>Mute L</item><item>Mute R</item></string-array>
-    <string-array name="bmw_measurement_mute_entries"><item>Off</item><item>Mute low</item><item>Mute mid</item></string-array>
-    <string-array name="bmw_three_choice_values"><item>0</item><item>1</item><item>2</item></string-array>
-    <string-array name="bmw_low_topology_entries"><item>BW3</item><item>LR4</item></string-array>
-    <string-array name="bmw_two_choice_values"><item>0</item><item>1</item></string-array>
-</resources>

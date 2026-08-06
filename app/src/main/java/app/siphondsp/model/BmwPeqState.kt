@@ -138,6 +138,12 @@ data class BmwPeqState(
                         "enabled=${fallback.enabled} full=${fallback.fullRangeBands.size} " +
                         "low=0 mid=0 success=$migrated"
                 )
+                // The main engine's legacy Graphic EQ merge (JamesDspBaseEngine.setGraphicEqCombined)
+                // still reads this same dsp_parametriceq namespace on every engine start (PreferenceCache
+                // treats every namespace as "changed" on a cold cache), so if we don't clear it here, the
+                // Full Range band we just migrated into BmwPeqStore keeps getting merged into the main
+                // engine's Graphic EQ a second time -- forever, since nothing writes this namespace anymore.
+                if (migrated) clearLegacyPeqPreferences(context)
                 return fallback
             }
 
@@ -192,6 +198,17 @@ data class BmwPeqState(
                 ParametricEqBandList(),
                 ParametricEqBandList(),
             )
+        }
+
+        /** Clears the legacy dsp_parametriceq entries [loadLegacyPeqFallback] just migrated off of --
+         *  see the comment at its call site in [load] for why leaving them in place duplicates the
+         *  Full Range PEQ band into the main engine's Graphic EQ on every subsequent engine start. */
+        private fun clearLegacyPeqPreferences(context: Context) {
+            context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE).edit()
+                .remove(context.getString(R.string.key_peq_bands))
+                .remove(context.getString(R.string.key_peq_enable))
+                .remove(context.getString(R.string.key_peq_preamp))
+                .apply()
         }
 
         private fun clearObsoleteStatePreferences(context: Context) {

@@ -4,23 +4,23 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/segmented_switch"
     android:layout_width="wrap_content"
-    android:layout_height="40dp"
+    android:layout_height="32dp"
     app:selectionRequired="true"
     app:singleSelection="true">
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/segment_off"
         style="@style/Widget.SiphonDSP.SegmentedButton"
-        android:layout_width="72dp"
-        android:layout_height="40dp"
+        android:layout_width="56dp"
+        android:layout_height="32dp"
         android:checkable="true"
         android:text="OFF" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/segment_on"
         style="@style/Widget.SiphonDSP.SegmentedButton"
-        android:layout_width="72dp"
-        android:layout_height="40dp"
+        android:layout_width="56dp"
+        android:layout_height="32dp"
         android:checkable="true"
         android:text="ON" />
 

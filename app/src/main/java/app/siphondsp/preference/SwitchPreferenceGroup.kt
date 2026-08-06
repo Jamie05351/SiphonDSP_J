@@ -12,7 +12,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceViewHolder
 import androidx.preference.children
-import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.button.MaterialButtonToggleGroup
 import app.siphondsp.R
 import app.siphondsp.utils.extensions.animatedValueAs
 
@@ -23,7 +23,7 @@ class SwitchPreferenceGroup(context: Context, attrs: AttributeSet) : PreferenceG
     androidx.preference.R.style.Preference_SwitchPreferenceCompat_Material
 ) {
     private var childrenVisible = false
-    private var switch: MaterialSwitch? = null
+    private var toggleGroup: MaterialButtonToggleGroup? = null
     private var itemView: View? = null
     private var bgAnimation: ValueAnimator? = null
     private var isIconVisible: Boolean = false
@@ -58,27 +58,33 @@ class SwitchPreferenceGroup(context: Context, attrs: AttributeSet) : PreferenceG
         animateHeaderState(state)
         setIsIconVisible(isIconVisible)
 
-        switch = (holder.findViewById(R.id.switchWidget) as MaterialSwitch).apply {
-            // Apply initial state
-            isChecked = state
+        toggleGroup = (holder.findViewById(R.id.segmented_switch) as MaterialButtonToggleGroup).apply {
             isVisible = isSelectable
 
-            setOnCheckedChangeListener { buttonView, isChecked ->
+            // Views are recycled by the RecyclerView, so drop any listener from a prior bind
+            // before applying initial state, otherwise listeners stack up and fire repeatedly.
+            clearOnButtonCheckedListeners()
+            check(if (state) R.id.segment_on else R.id.segment_off)
+
+            addOnButtonCheckedListener { _, checkedId, isChecked ->
+                if (!isChecked) return@addOnButtonCheckedListener
+                val newValue = checkedId == R.id.segment_on
+
                 // Preference framework's own onPreferenceChangeListener (e.g. the BMW PEQ
                 // enable handler in PreferenceGroupFragment) must get a chance to validate,
                 // apply natively, and persist to its own store before we accept the toggle --
                 // otherwise it's silently skipped and the real backing state never updates.
-                if (!callChangeListener(isChecked)) {
-                    buttonView.isChecked = state
-                    return@setOnCheckedChangeListener
+                if (!callChangeListener(newValue)) {
+                    check(if (state) R.id.segment_on else R.id.segment_off)
+                    return@addOnButtonCheckedListener
                 }
-                setValueInternal(isChecked, false)
+                setValueInternal(newValue, false)
             }
         }
 
         holder.itemView.apply {
             setOnClickListener {
-                switch?.toggle()
+                toggleGroup?.check(if (state) R.id.segment_off else R.id.segment_on)
             }
         }
     }

@@ -40,7 +40,7 @@ class CrossoverTiltFragment : Fragment() {
             addSliderRow(getString(R.string.bmw_dsp_subsonic_freq), NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f, 60f, 1f, "Hz")
             addSwitchRow(getString(R.string.bmw_dsp_mute_low_band), null, NativeBmwDspValues.INDEX_LOW_MUTE)
             addSliderRow(getString(R.string.bmw_dsp_low_lpf_freq), NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
-            addSwitchRow(getString(R.string.bmw_dsp_lr4_topology), getString(R.string.bmw_dsp_lr4_topology_subtitle), NativeBmwDspValues.INDEX_LOW_LR4)
+            addSwitchRow(getString(R.string.bmw_dsp_lr4_topology), getString(R.string.bmw_dsp_lr4_topology_subtitle), NativeBmwDspValues.INDEX_LOW_LR4, offLabel = "BW3", onLabel = "LR4")
             addSwitchRow(getString(R.string.bmw_dsp_mute_mid_band), null, NativeBmwDspValues.INDEX_MID_MUTE)
             addSliderRow(getString(R.string.bmw_dsp_mid_hpf_freq), NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f, 200f, 1f, "Hz")
         }

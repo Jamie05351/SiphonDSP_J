@@ -1,5 +1,6 @@
 package app.siphondsp.fragment
 
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -8,7 +9,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
@@ -16,8 +16,11 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.CompressorGrTraceView
 import app.siphondsp.view.NativeBmwCompressorView
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.slider.LabelFormatter
 import com.google.android.material.slider.Slider
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class NativeBmwCompressorFragment : Fragment() {
     private enum class Band { LOW, MID }
@@ -28,7 +31,7 @@ class NativeBmwCompressorFragment : Fragment() {
     private lateinit var grTrace: CompressorGrTraceView
     private lateinit var meterText: TextView
     private lateinit var bandToggle: MaterialButtonToggleGroup
-    private lateinit var enabledSwitch: SwitchCompat
+    private lateinit var enabledToggle: MaterialButtonToggleGroup
     private lateinit var threshold: Slider
     private lateinit var ratio: Slider
     private lateinit var knee: Slider
@@ -78,7 +81,7 @@ class NativeBmwCompressorFragment : Fragment() {
         grTrace = view.findViewById(R.id.compressor_gr_trace)
         meterText = view.findViewById(R.id.compressor_meter_text)
         bandToggle = view.findViewById(R.id.compressor_band_toggle)
-        enabledSwitch = view.findViewById(R.id.compressor_enable)
+        enabledToggle = view.findViewById(R.id.compressor_enable)
         threshold = view.findViewById(R.id.compressor_threshold)
         ratio = view.findViewById(R.id.compressor_ratio)
         knee = view.findViewById(R.id.compressor_knee)
@@ -106,6 +109,25 @@ class NativeBmwCompressorFragment : Fragment() {
         slider.valueFrom = from
         slider.valueTo = to
         slider.stepSize = step
+
+        // Match Widget.SiphonDSP.DspSlider (styles_dsp_controls.xml) so compressor sliders look
+        // the same as the rest of the app's DSP screens -- applied in code since these Sliders
+        // are declared in fragment_native_bmw_compressor.xml with no style attribute.
+        val density = slider.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).roundToInt()
+        slider.isTickVisible = false
+        slider.labelBehavior = LabelFormatter.LABEL_GONE
+        slider.trackHeight = dp(10)
+        slider.trackActiveTintList = ColorStateList.valueOf(MaterialColors.getColor(slider, androidx.appcompat.R.attr.colorPrimary))
+        slider.trackInactiveTintList = ColorStateList.valueOf(MaterialColors.getColor(slider, com.google.android.material.R.attr.colorSurfaceVariant))
+        slider.thumbTintList = ColorStateList.valueOf(MaterialColors.getColor(slider, com.google.android.material.R.attr.colorSurfaceContainerHigh))
+        slider.thumbStrokeColor = ColorStateList.valueOf(MaterialColors.getColor(slider, androidx.appcompat.R.attr.colorPrimary))
+        slider.thumbStrokeWidth = dp(2).toFloat()
+        slider.thumbWidth = dp(14)
+        slider.thumbHeight = dp(30)
+        slider.thumbTrackGapSize = dp(2)
+        slider.trackInsideCornerSize = dp(3)
+        slider.haloRadius = dp(22)
     }
 
     override fun onStart() {
@@ -132,7 +154,10 @@ class NativeBmwCompressorFragment : Fragment() {
             grTrace.reset()
             bindSelectedBand()
         }
-        enabledSwitch.setOnCheckedChangeListener { _, value -> if (!bindingState) updateBand(enabled = value) }
+        enabledToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked || bindingState) return@addOnButtonCheckedListener
+            updateBand(enabled = checkedId == R.id.compressor_enable_on)
+        }
         threshold.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(thresholdDb = value) }
         ratio.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(ratioValue = value) }
         knee.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(kneeDb = value) }
@@ -205,7 +230,7 @@ class NativeBmwCompressorFragment : Fragment() {
             enabled = state.midEnabled; thresholdDb = state.midThresholdDb; ratioValue = state.midRatio
             kneeDb = state.midKneeDb; attackMs = state.midAttackMs; releaseMs = state.midReleaseMs; makeupDb = state.midMakeupDb
         }
-        enabledSwitch.isChecked = enabled
+        enabledToggle.check(if (enabled) R.id.compressor_enable_on else R.id.compressor_enable_off)
         threshold.value = thresholdDb.coerceIn(threshold.valueFrom, threshold.valueTo)
         ratio.value = ratioValue.coerceIn(ratio.valueFrom, ratio.valueTo)
         knee.value = kneeDb.coerceIn(knee.valueFrom, knee.valueTo)

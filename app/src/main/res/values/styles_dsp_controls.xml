@@ -18,11 +18,13 @@
     </style>
 
     <style name="Widget.SiphonDSP.SegmentedButton" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="android:minHeight">40dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">32dp</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
-        <item name="android:paddingLeft">12dp</item>
-        <item name="android:paddingRight">12dp</item>
+        <item name="android:paddingLeft">10dp</item>
+        <item name="android:paddingRight">10dp</item>
+        <item name="android:textSize">12sp</item>
         <item name="backgroundTint">@color/selector_segmented_button_background</item>
         <item name="android:textColor">@color/selector_segmented_button_text</item>
         <item name="strokeColor">?attr/colorOutline</item>

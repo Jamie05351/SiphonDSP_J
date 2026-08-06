@@ -23,6 +23,11 @@ object NativeBmwDspValues {
     const val INDEX_LOW_GAIN_R = 7
     const val INDEX_MID_GAIN_L = 8
     const val INDEX_MID_GAIN_R = 9
+    // Intentionally has no UI: GainLimiterFragment's doc comment explains that Output Control's
+    // single global post gain (applied after the entire main JamesDSP engine, not just the BMW
+    // chain) was kept as the one post-gain control instead of also exposing this pair -- they
+    // stay at their 0 dB DEFAULTS entry forever. Not dead code: processFrame reads it every
+    // frame, it's just always a no-op by design.
     const val INDEX_POST_GAIN_L = 10
     const val INDEX_POST_GAIN_R = 11
     const val INDEX_SUBSONIC_ENABLED = 12

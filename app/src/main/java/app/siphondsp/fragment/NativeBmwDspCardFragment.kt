@@ -1,197 +1,116 @@
 package app.siphondsp.fragment
 
-import android.content.Context
-import android.content.SharedPreferences
 import android.os.Bundle
-import androidx.preference.PreferenceCategory
-import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceScreen
-import androidx.preference.children
-import androidx.recyclerview.widget.RecyclerView
-import app.siphondsp.R
-import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import androidx.fragment.app.Fragment
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.view.BmwControlBuilder
+import app.siphondsp.view.BmwControlBuilder.ChoiceOption
+import kotlin.math.roundToInt
 
-/** Inline, expandable controls for the native BMW processor. */
-class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private lateinit var menuPreferences: SharedPreferences
-    // Guards re-entrant onSharedPreferenceChanged callbacks fired by our own editor.put*()
-    // calls below (writeValuesToMenu/writeAllPassToMenu run while onStart()'s listener is
-    // already registered) -- without this a menu refresh would immediately re-save and
-    // re-broadcast every key it just wrote.
-    private var updatingMenu = false
+/** Inline, expandable controls for the native BMW processor: measurements/routing switches,
+ *  the output routing matrix, and per-channel all-pass sections. Embedded at R.id.card_bmw_dsp,
+ *  already inside a MaterialCardView from fragment_dsp.xml (see DspFragment.kt) -- rendered with
+ *  BmwControlBuilder.flatSection so it doesn't nest a second card inside that one.
+ *
+ *  Formerly a PreferenceFragmentCompat over dsp_native_bmw_preferences.xml with a large bridging
+ *  layer translating SharedPreferences-backed widgets to/from the NativeBmwDspValues FloatArray.
+ *  Rebuilt directly on BmwControlBuilder (same as GainLimiterFragment/CrossoverTiltFragment) so
+ *  it shares their switch/slider styling and edits [values] directly with no bridging needed. */
+class NativeBmwDspCardFragment : Fragment() {
+    private var selectedAllPassChannel = 0
+    private lateinit var allPassContainer: LinearLayout
+    private lateinit var routingContainer: LinearLayout
+    private lateinit var values: FloatArray
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        preferenceManager.sharedPreferencesName = MENU_PREFS
-        @Suppress("DEPRECATION")
-        preferenceManager.sharedPreferencesMode = Context.MODE_PRIVATE
-        menuPreferences = requireContext().getSharedPreferences(MENU_PREFS, Context.MODE_PRIVATE)
-        val values = NativeBmwDspValues.load(requireContext())
-        writeValuesToMenu(values)
-        setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
-        findPreference<androidx.preference.Preference>("route_reset_stereo")?.setOnPreferenceClickListener {
-            val current = NativeBmwDspValues.load(requireContext())
-            NativeBmwDspValues.resetRoutingToDefaults(current)
-            NativeBmwDspValues.save(requireContext(), current)
-            NativeBmwDspValues.broadcast(requireContext(), current)
-            writeValuesToMenu(current)
-            true
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        val root = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(4))
         }
-        configureSectionCards(preferenceScreen)
-    }
 
-    private fun configureSectionCards(group: PreferenceGroup) {
-        val sectionSpacing = resources.getDimensionPixelSize(R.dimen.bmw_dsp_section_spacing)
-        group.children.forEach { preference ->
-            if (preference is PreferenceCategory) {
-                preference.layoutResource = R.layout.preference_bmw_section_header
-                preference.extras.putInt(RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_TOP_MARGIN_PX, sectionSpacing)
-                val rows = buildList { add(preference); addAll(preference.children.toList()) }
-                rows.forEachIndexed { index, row ->
-                    val background = when {
-                        rows.size == 1 -> R.drawable.ripple_group_single
-                        index == 0 -> R.drawable.ripple_group_top
-                        index == rows.lastIndex -> R.drawable.ripple_group_bottom
-                        else -> R.drawable.ripple_group_middle
-                    }
-                    row.extras.putInt(RoundedRipplePreferenceGroupAdapter.EXTRA_GROUP_BACKGROUND_RES, background)
-                }
-            }
-            if (preference is PreferenceGroup) configureSectionCards(preference)
+        values = NativeBmwDspValues.load(requireContext())
+        val builder = BmwControlBuilder(requireContext(), root, values) { updated ->
+            NativeBmwDspValues.save(requireContext(), updated)
+            NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-    }
 
-    override fun onStart() {
-        super.onStart()
-        menuPreferences.registerOnSharedPreferenceChangeListener(this)
-    }
-
-    override fun onStop() {
-        menuPreferences.unregisterOnSharedPreferenceChangeListener(this)
-        super.onStop()
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (updatingMenu) return
-        if (key == "allpass_output") {
-            writeAllPassToMenu(NativeBmwDspValues.load(requireContext()))
-            return
+        builder.flatSection("Measurements / routing") {
+            addSwitchRow("LPF passthrough", null, NativeBmwDspValues.INDEX_LPF_PASS)
+            addSwitchRow("HPF passthrough", null, NativeBmwDspValues.INDEX_HPF_PASS)
+            addChoiceRow(
+                "Channel isolation", null, NativeBmwDspValues.INDEX_CHANNEL_MUTE,
+                listOf(ChoiceOption("Both", 0f), ChoiceOption("Mute L", 1f), ChoiceOption("Mute R", 2f)),
+            )
+            addChoiceRow(
+                "Measurement mute", null, NativeBmwDspValues.INDEX_MEASUREMENT_MUTE,
+                listOf(ChoiceOption("Off", 0f), ChoiceOption("Mute low", 1f), ChoiceOption("Mute mid", 2f)),
+            )
         }
-        if (key in ALL_PASS_KEYS) {
-            val values = NativeBmwDspValues.load(requireContext())
-            val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
-            val section = if (key!!.startsWith("allpass_1")) 0 else 1
-            val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-            values[base + when {
-                key.endsWith("enabled") -> 0
-                key.endsWith("order") -> 1
-                key.endsWith("frequency") -> 2
-                else -> 3
-            }] = when {
-                key.endsWith("enabled") -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
-                key.endsWith("order") -> menuPreferences.getString(key, "2")?.toFloatOrNull() ?: 2f
-                key.endsWith("frequency") -> menuPreferences.getInt(key, 150).toFloat()
-                else -> menuPreferences.getInt(key, 71) / 100f
-            }
-            NativeBmwDspValues.save(requireContext(), values)
-            NativeBmwDspValues.broadcast(requireContext(), values)
-            return
-        }
-        val index = KEY_TO_INDEX[key] ?: return
-        val values = NativeBmwDspValues.load(requireContext())
-        values[index] = when {
-            index in BOOLEAN_INDEXES -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
-            index in LIST_INDEXES -> menuPreferences.getString(key, "0")?.toFloatOrNull() ?: 0f
-            index in ROUTING_INDEXES -> menuPreferences.getInt(key, (values[index] * 100f).toInt()) / 100f
-            else -> menuPreferences.getFloat(key, values[index])
-        }
-        NativeBmwDspValues.save(requireContext(), values)
-        NativeBmwDspValues.broadcast(requireContext(), values)
-    }
 
-    private fun writeValuesToMenu(values: FloatArray) {
-        updatingMenu = true
-        val editor = menuPreferences.edit()
-        KEY_TO_INDEX.forEach { (key, index) ->
-            when {
-                index in BOOLEAN_INDEXES -> editor.putBoolean(key, values[index] >= .5f)
-                index in LIST_INDEXES -> editor.putString(key, values[index].toInt().toString())
-                index in ROUTING_INDEXES -> editor.putInt(key, (values[index] * 100f).toInt())
-                else -> editor.putFloat(key, values[index])
+        builder.flatSection("Output routing") {
+            routingContainer = subContainer { renderRouting() }
+            addActionRow(
+                "Reset to stereo defaults",
+                "Unity same-side routing; cross-channel contributions zero",
+            ) {
+                NativeBmwDspValues.resetRoutingToDefaults(values)
+                NativeBmwDspValues.save(requireContext(), values)
+                NativeBmwDspValues.broadcast(requireContext(), values)
+                rebuildInto(routingContainer) { renderRouting() }
             }
         }
-        editor.apply()
-        writeAllPassToMenu(values)
-        updatingMenu = false
-    }
 
-    private fun writeAllPassToMenu(values: FloatArray) {
-        updatingMenu = true
-        val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
-        val editor = menuPreferences.edit()
-        repeat(2) { section ->
-            val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-            val prefix = "allpass_${section + 1}_"
-            editor.putBoolean(prefix + "enabled", values[base] >= .5f)
-            editor.putString(prefix + "order", values[base + 1].toInt().toString())
-            editor.putInt(prefix + "frequency", values[base + 2].toInt())
-            editor.putInt(prefix + "q", (values[base + 3] * 100f).toInt())
+        builder.flatSection("Output all-pass") {
+            addChoiceRow(
+                "Output channel", null,
+                listOf(
+                    ChoiceOption("Low Left", 0f), ChoiceOption("Low Right", 1f),
+                    ChoiceOption("Mid Left", 2f), ChoiceOption("Mid Right", 3f),
+                ),
+                current = { selectedAllPassChannel.toFloat() },
+            ) { chosen ->
+                selectedAllPassChannel = chosen.toInt()
+                rebuildInto(allPassContainer) { renderAllPass() }
+            }
+            allPassContainer = subContainer { renderAllPass() }
         }
-        editor.apply()
-        updatingMenu = false
+
+        return root
     }
 
-    override fun onCreateRecyclerView(
-        inflater: android.view.LayoutInflater,
-        parent: android.view.ViewGroup,
-        savedInstanceState: Bundle?,
-    ): RecyclerView = super.onCreateRecyclerView(inflater, parent, savedInstanceState).apply {
-        itemAnimator = null
-        isNestedScrollingEnabled = false
+    private fun BmwControlBuilder.renderRouting() {
+        addSliderRow("Low Left · Front Left", NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Low Left · Front Right", NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Low Right · Front Left", NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Low Right · Front Right", NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Mid Left · Front Left", NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Mid Left · Front Right", NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Mid Right · Front Left", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
+        addSliderRow("Mid Right · Front Right", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT, -2f, 2f, .01f, "%", 100f)
     }
 
-    override fun onViewCreated(view: android.view.View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        setDivider(null)
+    private fun BmwControlBuilder.renderAllPass() {
+        val channelBase = NativeBmwDspValues.INDEX_ALL_PASS +
+            selectedAllPassChannel * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+        for (section in 0 until NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) {
+            val base = channelBase + section * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+            addSwitchRow("Section ${section + 1}", null, base)
+            addChoiceRow(
+                "Section ${section + 1} type", null, base + 1,
+                listOf(ChoiceOption("First order", 1f), ChoiceOption("Second order", 2f)),
+            )
+            addSliderRow("Section ${section + 1} frequency (Hz)", base + 2, 20f, 20000f, 1f, "Hz")
+            addSliderRow("Section ${section + 1} Q × 100", base + 3, .10f, 30f, .01f, "", 100f)
+        }
     }
 
-    override fun onCreateAdapter(preferenceScreen: PreferenceScreen): RecyclerView.Adapter<*> =
-        RoundedRipplePreferenceGroupAdapter(preferenceScreen)
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 
     companion object {
-        private const val MENU_PREFS = "native_bmw_dsp_menu"
-        // Gain structure, Delay/polarity, Subsonic/crossovers and Tilt have all
-        // relocated to dedicated screens (GainLimiterFragment and CrossoverTiltFragment)
-        // -- only the "Measurements / routing" category (indices 1-4) still renders inline here.
-        // The master enable switch (index 0) was removed from this screen entirely --
-        // it was redundant with the app-level on/off, and NativeBmwDspValues.load()
-        // now forces index 0 on unconditionally, so there's nothing left to bind here.
-        private val BOOLEAN_INDEXES = setOf(1, 2)
-        private val LIST_INDEXES = setOf(3, 4)
-        private val ROUTING_INDEXES = (NativeBmwDspValues.INDEX_ROUTING until
-            NativeBmwDspValues.INDEX_ROUTING + NativeBmwDspValues.ROUTING_VALUE_COUNT).toSet()
-        private val KEY_TO_INDEX = linkedMapOf(
-            "bmw_lpf_passthrough" to 1,
-            "bmw_hpf_passthrough" to 2,
-            "bmw_channel_isolation" to 3,
-            "bmw_measurement_mute" to 4,
-            "route_low_left_fl" to NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT,
-            "route_low_left_fr" to NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT,
-            "route_low_right_fl" to NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT,
-            "route_low_right_fr" to NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT,
-            "route_mid_left_fl" to NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_LEFT,
-            "route_mid_left_fr" to NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT,
-            "route_mid_right_fl" to NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT,
-            "route_mid_right_fr" to NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT,
-        )
-        private val ALL_PASS_KEYS = setOf(
-            "allpass_1_enabled", "allpass_1_order", "allpass_1_frequency", "allpass_1_q",
-            "allpass_2_enabled", "allpass_2_order", "allpass_2_frequency", "allpass_2_q",
-        )
-
         fun newInstance() = NativeBmwDspCardFragment()
     }
 }
