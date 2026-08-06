@@ -12,13 +12,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwControlBuilder
 import kotlin.math.roundToInt
 
-/**
- * Dedicated "Gains & Delay" screen: BMW per-band/channel gains, plus delay and polarity
- * (merged in from the former standalone Delay & Polarity destination to free up a bottom-nav
- * slot for Crossovers & Tilt). The limiter and post gain already live in Output Control -- no
- * duplicate surface for either here (post gain L/R dropped in favor of that single existing
- * global control).
- */
+/** Dedicated Gains & Delay screen, including output routing. */
 class GainLimiterFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -51,6 +45,28 @@ class GainLimiterFragment : Fragment() {
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R, 0f, 2.8f, .01f, "ms")
+        }
+        builder.sectionCard("Output routing") {
+            addRoutingSliderRow("Low Left", "Front Left", NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT)
+            addRoutingSliderRow("Low Left", "Front Right", NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT)
+            addRoutingSliderRow("Low Right", "Front Left", NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT)
+            addRoutingSliderRow("Low Right", "Front Right", NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT)
+            addRoutingSliderRow("Mid Left", "Front Left", NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_LEFT)
+            addRoutingSliderRow("Mid Left", "Front Right", NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT)
+            addRoutingSliderRow("Mid Right", "Front Left", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT)
+            addRoutingSliderRow("Mid Right", "Front Right", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT)
+            addActionRow(
+                "Reset to stereo defaults",
+                "Unity same-side routing; cross-channel contributions zero",
+            ) {
+                NativeBmwDspValues.resetRoutingToDefaults(values)
+                NativeBmwDspValues.save(requireContext(), values)
+                NativeBmwDspValues.broadcast(requireContext(), values)
+                parentFragmentManager.beginTransaction()
+                    .detach(this@GainLimiterFragment)
+                    .attach(this@GainLimiterFragment)
+                    .commit()
+            }
         }
 
         return scroll
