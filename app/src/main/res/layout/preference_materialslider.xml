@@ -2,49 +2,67 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:gravity="start"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:baselineAligned="false"
-    android:minHeight="?android:attr/listPreferredItemHeightSmall"
+    android:gravity="start"
+    android:minHeight="56dp"
     android:paddingStart="?android:attr/listPreferredItemPaddingStart"
-    android:paddingEnd="?android:attr/listPreferredItemPaddingEnd">
+    android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
     <LinearLayout
-        android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:layout_marginBottom="2dp">
-        <TextView android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:ellipsize="marquee"
+        android:orientation="vertical">
+
+        <TextView
             android:id="@android:id/title"
             android:layout_width="wrap_content"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:singleLine="true"/>
+            android:layout_height="wrap_content"
+            android:ellipsize="marquee"
+            android:singleLine="true"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
         <LinearLayout
-            android:gravity="center_vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="-5dp">
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
             <com.google.android.material.slider.Slider
                 android:id="@+id/seekbar"
-                android:paddingVertical="0dp"
+                style="@style/Widget.SiphonDSP.DspSlider"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"/>
-            <TextView android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:ellipsize="marquee"
-                android:gravity="end"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:paddingVertical="0dp" />
+
+            <TextView
                 android:id="@+id/seekbar_value"
-                android:scrollbars="none"
-                android:fadingEdge="horizontal"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="56dp"
+                android:layout_width="88dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/background_dsp_value_box"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:minWidth="88dp"
+                android:paddingHorizontal="8dp"
                 android:singleLine="true"
-                android:paddingStart="8dp"
-                android:paddingEnd="0dp"/>
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+            <TextView
+                android:id="@+id/seekbar_channel"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="2dp"
+                android:background="@drawable/background_dsp_value_box"
+                android:gravity="center"
+                android:singleLine="true"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
