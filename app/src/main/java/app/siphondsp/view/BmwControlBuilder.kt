@@ -88,9 +88,9 @@ class BmwControlBuilder(
         labelRow.addView(valueText)
         block.addView(labelRow)
 
-        val slider = createSlider(index, min, max, step, updateValue)
+        val slider = createSlider(index, min, max, step, ::updateValue)
         block.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        configureNumericEntry(valueText, label, index, min, max, suffix, slider, updateValue)
+        configureNumericEntry(valueText, label, index, min, max, suffix, slider, ::updateValue)
         currentContent.addView(block)
     }
 
@@ -133,7 +133,7 @@ class BmwControlBuilder(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val slider = createSlider(index, -2f, 2f, .01f, updateValue).apply {
+        val slider = createSlider(index, -2f, 2f, .01f, ::updateValue).apply {
             trackHeight = dp(8)
             thumbWidth = dp(14)
             thumbHeight = dp(28)
@@ -145,7 +145,7 @@ class BmwControlBuilder(
         })
         block.addView(sliderRow)
 
-        configureNumericEntry(valueText, "$sourceLabel → $destinationLabel", index, -2f, 2f, "%", slider, updateValue, displayScale = 100f)
+        configureNumericEntry(valueText, "$sourceLabel → $destinationLabel", index, -2f, 2f, "%", slider, ::updateValue, displayScale = 100f)
         currentContent.addView(block)
     }
 
