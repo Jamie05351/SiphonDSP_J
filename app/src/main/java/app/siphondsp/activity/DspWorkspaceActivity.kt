@@ -5,8 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import androidx.appcompat.widget.Toolbar
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
 import app.siphondsp.R
@@ -23,8 +28,11 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.isPlugin
 import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
+import app.siphondsp.view.BmwDashboardSkin
+import com.google.android.material.appbar.MaterialToolbar
+import kotlin.math.roundToInt
 
-/** Shared top-right chrome for the dedicated BMW DSP workspaces. */
+/** Shared top-right chrome and BMW visual treatment for the dedicated DSP workspaces. */
 abstract class DspWorkspaceActivity : BaseActivity() {
     private var presetDialogHost: WorkspacePresetFragment? = null
 
@@ -78,11 +86,34 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         }
         registerLocalReceiver(serviceStateReceiver, filter)
         invalidateOptionsMenu()
+        installBmwChrome()
     }
 
     override fun onStop() {
         unregisterLocalReceiver(serviceStateReceiver)
         super.onStop()
+    }
+
+    private fun installBmwChrome() {
+        findViewById<View>(R.id.params)?.post {
+            findViewById<View>(R.id.params)?.let(BmwDashboardSkin::styleWorkspace)
+        }
+
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar) ?: return
+        if (toolbar.findViewWithTag<View>(M_ACCENT_TAG) != null) return
+        val accentHost = LinearLayout(this).apply {
+            tag = M_ACCENT_TAG
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            alpha = .92f
+        }
+        BmwDashboardSkin.addMAccent(accentHost)
+        toolbar.addView(
+            accentHost,
+            Toolbar.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL).apply {
+                marginStart = dp(58)
+            },
+        )
     }
 
     private fun rootlessServiceIsActive(): Boolean =
@@ -133,6 +164,8 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         dialog.show(supportFragmentManager, null)
     }
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
+
     class WorkspacePresetFragment : androidx.fragment.app.Fragment(), TargetFragment {
         val pref by lazy {
             FileLibraryPreference(requireContext(), null).apply {
@@ -147,5 +180,9 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         companion object {
             fun newInstance() = WorkspacePresetFragment()
         }
+    }
+
+    companion object {
+        private const val M_ACCENT_TAG = "bmw_m_toolbar_accent"
     }
 }
