@@ -27,10 +27,9 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        // Landscape PEQ keeps Graph/List as a local view-mode control rather than consuming
-        // the DSP navigation rail. Re-parent it into the top-right of the content area after
-        // the fragment view has been inflated, then let the DSP destination icons use the
-        // full left edge from top to bottom.
+        // Keep Graph/List as a local PEQ control in the top-right of the content area.
+        // The graph/editor cards themselves are constrained to the left DSP nav rail,
+        // never to this toggle, so moving the toggle cannot collapse their width.
         binding.root.post { movePeqModeToggleToContent() }
     }
 
@@ -38,6 +37,8 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         val cards = findViewById<ConstraintLayout>(R.id.cards) ?: return
         val modeTabs = findViewById<MaterialButtonToggleGroup>(R.id.mode_tab_strip) ?: return
         val crossNav = findViewById<LinearLayout>(R.id.peq_cross_nav)
+        val previewCard = findViewById<ViewGroup>(R.id.preview_card)
+        val editCard = findViewById<ViewGroup>(R.id.edit_card)
 
         (modeTabs.parent as? ViewGroup)?.removeView(modeTabs)
         modeTabs.orientation = LinearLayout.HORIZONTAL
@@ -71,6 +72,25 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
             params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
             params.topMargin = 0
             nav.layoutParams = params
+        }
+
+        // These used to start after mode_tab_strip. Once that control moved to the right,
+        // that constraint collapsed the content width. Anchor both content cards to the nav.
+        val contentStartId = crossNav?.id ?: ConstraintLayout.LayoutParams.PARENT_ID
+        listOf(previewCard, editCard).forEach { card ->
+            card ?: return@forEach
+            val params = card.layoutParams as? ConstraintLayout.LayoutParams ?: return@forEach
+            params.startToEnd = if (contentStartId == ConstraintLayout.LayoutParams.PARENT_ID) {
+                ConstraintLayout.LayoutParams.UNSET
+            } else {
+                contentStartId
+            }
+            params.startToStart = if (contentStartId == ConstraintLayout.LayoutParams.PARENT_ID) {
+                ConstraintLayout.LayoutParams.PARENT_ID
+            } else {
+                ConstraintLayout.LayoutParams.UNSET
+            }
+            card.layoutParams = params
         }
     }
 
