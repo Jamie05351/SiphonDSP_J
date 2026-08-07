@@ -23,9 +23,9 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Isolated BMW-style dashboard renderer for the Crossovers & Tilt prototype.
- * It intentionally does not modify BmwControlBuilder so the rest of the DSP UI
- * remains unchanged while this screen is evaluated on the head unit.
+ * 1280x480-oriented BMW dashboard renderer used by the Crossovers & Tilt prototype.
+ * The layout deliberately follows a fixed label / control / value grid instead of
+ * weighting each row independently, so every control lines up across the whole page.
  */
 class CrossoverDashboardBuilder(
     private val context: Context,
@@ -37,44 +37,86 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     private val accentBlue = Color.rgb(63, 174, 229)
-    private val inactiveTrack = Color.rgb(55, 58, 66)
-    private val thumbFill = Color.rgb(188, 195, 203)
+    private val inactiveTrack = Color.rgb(31, 35, 41)
+    private val thumbFill = Color.rgb(190, 196, 203)
     private val thumbStroke = Color.rgb(232, 236, 240)
-    private val segmentIdle = Color.rgb(29, 29, 35)
-    private val segmentStroke = Color.rgb(64, 67, 76)
+    private val segmentIdle = Color.rgb(20, 23, 28)
+    private val segmentStroke = Color.rgb(67, 73, 82)
+    private val divider = Color.rgb(47, 53, 61)
 
-    fun sectionCard(title: String, subtitle: String? = null, build: CrossoverDashboardBuilder.() -> Unit) {
+    fun dashboardPanel(
+        title: String,
+        subtitle: String? = null,
+        build: CrossoverDashboardBuilder.() -> Unit,
+    ) {
         val card = MaterialCardView(context).apply {
-            radius = dp(14).toFloat()
+            radius = dp(7).toFloat()
             cardElevation = 0f
             strokeWidth = dp(1)
-            strokeColor = resolveColor(com.google.android.material.R.attr.colorOutline)
-            setCardBackgroundColor(resolveColor(com.google.android.material.R.attr.colorSurfaceContainerLow))
+            strokeColor = Color.rgb(47, 57, 68)
+            setCardBackgroundColor(Color.rgb(18, 23, 29))
         }
+
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(16), dp(18), dp(16))
+            setPadding(dp(28), dp(18), dp(24), dp(20))
         }
+
         content.addView(TextView(context).apply {
             text = title
-            textSize = 17f
+            textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
-            setPadding(0, 0, 0, dp(10))
         })
+
         if (!subtitle.isNullOrBlank()) {
             content.addView(TextView(context).apply {
                 text = subtitle
-                textSize = 10.5f
+                textSize = 11.5f
                 setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurfaceVariant))
-                setPadding(0, 0, 0, dp(10))
+                setPadding(0, dp(2), 0, dp(12))
             })
+        } else {
+            content.addView(space(dp(10)))
         }
+
         currentContent = content
         build()
         card.addView(content)
-        root.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(12)
+        root.addView(
+            card,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(10)
+                marginEnd = dp(10)
+                topMargin = dp(8)
+                bottomMargin = dp(10)
+            },
+        )
+    }
+
+    /** Compatibility wrapper while the prototype is being migrated to one large panel. */
+    fun sectionCard(title: String, subtitle: String? = null, build: CrossoverDashboardBuilder.() -> Unit) {
+        dashboardPanel(title, subtitle, build)
+    }
+
+    fun sectionHeader(title: String) {
+        if (currentContent.childCount > 2) {
+            currentContent.addView(space(dp(8)))
+        }
+        currentContent.addView(TextView(context).apply {
+            text = title
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(accentBlue)
+            setPadding(0, dp(2), 0, dp(7))
+        })
+        currentContent.addView(View(context).apply {
+            setBackgroundColor(divider)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+            bottomMargin = dp(4)
         })
     }
 
@@ -85,25 +127,28 @@ class CrossoverDashboardBuilder(
         offLabel: String = "OFF",
         onLabel: String = "ON",
     ) {
-        val row = LinearLayout(context).apply {
+        val row = createRow()
+        row.addView(labelBlock(title, subtitle), labelParams())
+
+        val controlSlot = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(52)
-            setPadding(0, dp(5), 0, dp(5))
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
         }
-        row.addView(labelBlock(title, subtitle), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         if (offLabel == "OFF" && onLabel == "ON") {
             val toggle = MaterialSwitch(context).apply {
                 isChecked = values[index] >= .5f
                 contentDescription = title
                 showText = false
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(0, 0, 0, 0)
                 setOnCheckedChangeListener { _, checked ->
                     values[index] = if (checked) 1f else 0f
                     onChanged(values)
                 }
             }
-            row.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            controlSlot.addView(toggle)
         } else {
             val group = MaterialButtonToggleGroup(context).apply {
                 isSingleSelection = true
@@ -111,20 +156,23 @@ class CrossoverDashboardBuilder(
             }
             val off = segmentButton(offLabel)
             val on = segmentButton(onLabel)
-            group.addView(off, LinearLayout.LayoutParams(dp(54), dp(30)))
-            group.addView(on, LinearLayout.LayoutParams(dp(54), dp(30)))
-            val checked = if (values[index] >= .5f) on.id else off.id
-            group.check(checked)
+            group.addView(off, LinearLayout.LayoutParams(dp(62), dp(30)))
+            group.addView(on, LinearLayout.LayoutParams(dp(62), dp(30)))
+            group.check(if (values[index] >= .5f) on.id else off.id)
             group.addOnButtonCheckedListener { _, checkedId, isChecked ->
                 if (!isChecked) return@addOnButtonCheckedListener
                 values[index] = if (checkedId == on.id) 1f else 0f
                 onChanged(values)
             }
-            row.addView(group)
+            controlSlot.addView(group)
         }
-        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(4)
+
+        row.addView(controlSlot, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+            marginStart = dp(14)
+            marginEnd = dp(10)
         })
+        row.addView(space(VALUE_WIDTH_DP))
+        addRow(row)
     }
 
     fun addSliderRow(
@@ -136,20 +184,8 @@ class CrossoverDashboardBuilder(
         suffix: String,
         displayScale: Float = 1f,
     ) {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(62)
-            setPadding(0, dp(6), 0, dp(6))
-        }
-
-        row.addView(TextView(context).apply {
-            text = label
-            textSize = 13.5f
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.29f))
+        val row = createRow()
+        row.addView(singleLineLabel(label), labelParams())
 
         val valueText = createValueBox(values[index] * displayScale, suffix)
         val slider = Slider(context).apply {
@@ -157,12 +193,12 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = values[index].coerceIn(min, max)
-            trackHeight = dp(7)
-            thumbWidth = dp(12)
-            thumbHeight = dp(26)
+            trackHeight = dp(6)
+            thumbWidth = dp(13)
+            thumbHeight = dp(24)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
             setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
-            setHaloTintList(ColorStateList.valueOf(Color.argb(48, 63, 174, 229)))
+            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 63, 174, 229)))
             setCustomThumbDrawable(createRectangularThumb())
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
@@ -172,9 +208,10 @@ class CrossoverDashboardBuilder(
                 }
             }
         }
-        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.71f).apply {
-            marginStart = dp(10)
-            marginEnd = dp(12)
+
+        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(14)
+            marginEnd = dp(18)
         })
 
         valueText.setOnClickListener {
@@ -194,36 +231,61 @@ class CrossoverDashboardBuilder(
                 onChanged(values)
             }
         }
-        row.addView(valueText, LinearLayout.LayoutParams(dp(76), dp(38)))
-        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = dp(4)
-        })
+        row.addView(valueText, LinearLayout.LayoutParams(dp(VALUE_WIDTH_DP), dp(34)))
+        addRow(row)
     }
 
-    private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+    private fun createRow() = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(48)
+        setPadding(0, dp(2), 0, dp(2))
+    }
+
+    private fun addRow(row: LinearLayout) {
+        currentContent.addView(
+            row,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+
+    private fun labelParams() = LinearLayout.LayoutParams(dp(LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT)
+
+    private fun singleLineLabel(label: String) = TextView(context).apply {
+        text = label
+        textSize = 13f
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
+    }
+
+    private fun segmentButton(textValue: String) = MaterialButton(
+        context,
+        null,
+        com.google.android.material.R.attr.materialButtonOutlinedStyle,
+    ).apply {
         id = View.generateViewId()
         text = textValue
-        textSize = 11f
+        textSize = 10.5f
         isAllCaps = false
         minHeight = 0
         minimumHeight = 0
         insetTop = 0
         insetBottom = 0
-        cornerRadius = dp(5)
+        cornerRadius = dp(3)
         strokeWidth = dp(1)
-        setPadding(dp(4), 0, dp(4), 0)
-        backgroundTintList = checkedColorStateList(accentBlue, segmentIdle)
+        setPadding(dp(5), 0, dp(5), 0)
+        backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
-        setTextColor(checkedColorStateList(Color.WHITE, resolveColor(com.google.android.material.R.attr.colorOnSurface)))
+        setTextColor(checkedColorStateList(accentBlue, resolveColor(com.google.android.material.R.attr.colorOnSurface)))
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        addView(TextView(context).apply {
-            text = title
-            textSize = 13.5f
-            setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
-        })
+        addView(singleLineLabel(title))
         if (!subtitle.isNullOrBlank()) {
             addView(TextView(context).apply {
                 text = subtitle
@@ -237,7 +299,7 @@ class CrossoverDashboardBuilder(
 
     private fun createValueBox(value: Float, suffix: String) = TextView(context).apply {
         gravity = Gravity.CENTER
-        textSize = 12.5f
+        textSize = 12f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
@@ -250,8 +312,8 @@ class CrossoverDashboardBuilder(
         shape = GradientDrawable.RECTANGLE
         setColor(thumbFill)
         setStroke(dp(1), thumbStroke)
-        cornerRadius = dp(2).toFloat()
-        setSize(dp(12), dp(26))
+        cornerRadius = dp(1).toFloat()
+        setSize(dp(13), dp(24))
     }
 
     private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
@@ -271,5 +333,14 @@ class CrossoverDashboardBuilder(
         return if (context.theme.resolveAttribute(attribute, value, true)) value.data else Color.TRANSPARENT
     }
 
+    private fun space(widthDp: Int) = View(context).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(widthDp), dp(1))
+    }
+
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).roundToInt()
+
+    companion object {
+        private const val LABEL_WIDTH_DP = 225
+        private const val VALUE_WIDTH_DP = 88
+    }
 }
