@@ -26,8 +26,9 @@ enum class DspDestination(
     @DrawableRes val icon: Int,
     val activityClass: KClass<out AppCompatActivity>,
     val workspaceMode: String? = null,
+    val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
+    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING, false),
     GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
     CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
@@ -49,7 +50,7 @@ object DspCrossNavBar {
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
 
-        DspDestination.entries.forEach { destination ->
+        DspDestination.entries.filter { it.showInPrimaryNav }.forEach { destination ->
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
                 icon = ContextCompat.getDrawable(activity, destination.icon)
