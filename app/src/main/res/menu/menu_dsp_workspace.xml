@@ -21,6 +21,9 @@
         app:showAsAction="always">
         <menu>
             <item
+                android:id="@+id/workspace_routing"
+                android:title="@string/action_routing" />
+            <item
                 android:id="@+id/workspace_presets"
                 android:title="@string/action_presets" />
             <item
