@@ -47,9 +47,6 @@
             app:iconSrc="@drawable/ic_baseline_download_24dp"
             app:iconTint="?attr/colorOnSurfaceVariant" />
 
-        <!-- Primary BMW DSP destinations. On the 1280x480 head unit all four cards fit in a
-             single row; narrower phone layouts can scroll horizontally without compressing
-             labels or pushing the rest of the main menu off-screen. -->
         <HorizontalScrollView
             android:id="@+id/dsp_destination_scroll"
             android:layout_width="match_parent"
@@ -72,165 +69,212 @@
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_shortcut_peq"
                     android:layout_width="190dp"
-                    android:layout_height="116dp"
+                    android:layout_height="200dp"
                     android:layout_marginEnd="10dp"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#D912171D"
+                    app:cardBackgroundColor="#FF101419"
                     app:cardCornerRadius="10dp"
                     app:cardElevation="0dp"
                     app:rippleColor="#3346B5E8"
                     app:strokeColor="#FF46505A"
                     app:strokeWidth="1dp">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:layout_height="match_parent">
 
                         <ImageView
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/card_peq_e60" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_dsp_destination_overlay" />
+
+                        <ImageView
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="center"
                             android:contentDescription="@string/action_parametric_eq"
                             android:src="@drawable/ic_twotone_peq_sliders_28dp"
-                            app:tint="#FF46B5E8" />
+                            app:tint="#FFF1F4F7" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_gravity="center_horizontal|bottom"
+                            android:layout_marginBottom="16dp"
                             android:fontFamily="sans-serif-medium"
                             android:letterSpacing="0.08"
                             android:text="PEQ"
-                            android:textColor="#FFF1F4F7"
-                            android:textSize="17sp" />
-                    </LinearLayout>
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_shortcut_gains_delay"
                     android:layout_width="190dp"
-                    android:layout_height="116dp"
+                    android:layout_height="200dp"
                     android:layout_marginEnd="10dp"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#D912171D"
+                    app:cardBackgroundColor="#FF101419"
                     app:cardCornerRadius="10dp"
                     app:cardElevation="0dp"
                     app:rippleColor="#3346B5E8"
                     app:strokeColor="#FF46505A"
                     app:strokeWidth="1dp">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:layout_height="match_parent">
 
                         <ImageView
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/card_gains_delay_e60" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_dsp_destination_overlay" />
+
+                        <ImageView
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="center"
                             android:contentDescription="@string/action_gain_limiter"
                             android:src="@drawable/ic_twotone_gain_knob_28dp"
-                            app:tint="#FF46B5E8" />
+                            app:tint="#FFF1F4F7" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_gravity="center_horizontal|bottom"
+                            android:layout_marginBottom="16dp"
                             android:fontFamily="sans-serif-medium"
                             android:letterSpacing="0.05"
                             android:text="GAINS / DELAY"
-                            android:textColor="#FFF1F4F7"
-                            android:textSize="15sp" />
-                    </LinearLayout>
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_shortcut_compressor"
                     android:layout_width="190dp"
-                    android:layout_height="116dp"
+                    android:layout_height="200dp"
                     android:layout_marginEnd="10dp"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#D912171D"
+                    app:cardBackgroundColor="#FF101419"
                     app:cardCornerRadius="10dp"
                     app:cardElevation="0dp"
                     app:rippleColor="#3346B5E8"
                     app:strokeColor="#FF46505A"
                     app:strokeWidth="1dp">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:layout_height="match_parent">
 
                         <ImageView
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/card_compressor_e60" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_dsp_destination_overlay" />
+
+                        <ImageView
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="center"
                             android:contentDescription="@string/action_compressor"
                             android:src="@drawable/ic_twotone_compressor_pulse_28dp"
-                            app:tint="#FF46B5E8" />
+                            app:tint="#FFF1F4F7" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_gravity="center_horizontal|bottom"
+                            android:layout_marginBottom="16dp"
                             android:fontFamily="sans-serif-medium"
                             android:letterSpacing="0.05"
                             android:text="COMPRESSOR"
-                            android:textColor="#FFF1F4F7"
-                            android:textSize="15sp" />
-                    </LinearLayout>
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/card_shortcut_crossovers"
                     android:layout_width="190dp"
-                    android:layout_height="116dp"
+                    android:layout_height="200dp"
                     android:clickable="true"
                     android:focusable="true"
-                    app:cardBackgroundColor="#D912171D"
+                    app:cardBackgroundColor="#FF101419"
                     app:cardCornerRadius="10dp"
                     app:cardElevation="0dp"
                     app:rippleColor="#3346B5E8"
                     app:strokeColor="#FF46505A"
                     app:strokeWidth="1dp">
 
-                    <LinearLayout
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:layout_height="match_parent">
 
                         <ImageView
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/card_crossovers_e60" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_dsp_destination_overlay" />
+
+                        <ImageView
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_gravity="center"
                             android:contentDescription="@string/action_crossover_tilt"
                             android:src="@drawable/ic_twotone_crossover_tilt_28dp"
-                            app:tint="#FF46B5E8" />
+                            app:tint="#FFF1F4F7" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
+                            android:layout_gravity="center_horizontal|bottom"
+                            android:layout_marginBottom="16dp"
                             android:fontFamily="sans-serif-medium"
                             android:letterSpacing="0.05"
                             android:text="CROSSOVERS"
-                            android:textColor="#FFF1F4F7"
-                            android:textSize="15sp" />
-                    </LinearLayout>
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </FrameLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Keep output safety controls directly beneath the destination cards. -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -242,7 +286,6 @@
                 android:layout_height="wrap_content" />
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Everything else in the existing main menu continues below output control. -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
