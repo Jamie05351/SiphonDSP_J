@@ -8,7 +8,7 @@ import app.siphondsp.fragment.RoutingFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
-class RoutingActivity : BaseActivity() {
+class RoutingActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parametric_eq)
