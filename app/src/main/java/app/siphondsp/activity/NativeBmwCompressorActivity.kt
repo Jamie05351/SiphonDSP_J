@@ -11,7 +11,7 @@ import app.siphondsp.model.NativeBmwCompressorState
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
-class NativeBmwCompressorActivity : BaseActivity() {
+class NativeBmwCompressorActivity : DspWorkspaceActivity() {
     private var bindingEnableSwitch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +30,7 @@ class NativeBmwCompressorActivity : BaseActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        super.onCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.menu_native_bmw_compressor, menu)
         val enableSwitch = menu.findItem(R.id.menu_compressor_enable)?.actionView as? MaterialSwitch
         enableSwitch?.setOnCheckedChangeListener { _, checked ->
