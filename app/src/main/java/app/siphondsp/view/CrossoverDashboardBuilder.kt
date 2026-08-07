@@ -5,7 +5,6 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -80,7 +79,7 @@ class CrossoverDashboardBuilder(
                 setPadding(0, dp(2), 0, dp(12))
             })
         } else {
-            content.addView(space(dp(10)))
+            content.addView(space(10))
         }
 
         currentContent = content
@@ -105,7 +104,7 @@ class CrossoverDashboardBuilder(
     }
 
     fun sectionHeader(title: String) {
-        if (currentContent.childCount > 2) currentContent.addView(space(dp(8)))
+        if (currentContent.childCount > 2) currentContent.addView(space(8))
         currentContent.addView(TextView(context).apply {
             text = title
             textSize = 12.5f
@@ -126,6 +125,7 @@ class CrossoverDashboardBuilder(
         index: Int,
         offLabel: String = "OFF",
         onLabel: String = "ON",
+        mirrorIndices: IntArray = intArrayOf(),
     ) {
         val row = createRow()
         row.addView(labelBlock(title, subtitle), labelParams())
@@ -146,8 +146,7 @@ class CrossoverDashboardBuilder(
                 thumbTintList = checkedColorStateList(accentBlue, Color.rgb(170, 177, 184))
                 trackTintList = checkedColorStateList(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
                 setOnCheckedChangeListener { _, checked ->
-                    values[index] = if (checked) 1f else 0f
-                    onChanged(values)
+                    writeValue(index, mirrorIndices, if (checked) 1f else 0f)
                 }
             }
             controlSlot.addView(toggle)
@@ -163,8 +162,7 @@ class CrossoverDashboardBuilder(
             group.check(if (values[index] >= .5f) on.id else off.id)
             group.addOnButtonCheckedListener { _, checkedId, isChecked ->
                 if (!isChecked) return@addOnButtonCheckedListener
-                values[index] = if (checkedId == on.id) 1f else 0f
-                onChanged(values)
+                writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
             }
             controlSlot.addView(group)
         }
@@ -185,6 +183,7 @@ class CrossoverDashboardBuilder(
         step: Float,
         suffix: String,
         displayScale: Float = 1f,
+        mirrorIndices: IntArray = intArrayOf(),
     ) {
         val row = createRow()
         row.addView(singleLineLabel(label), labelParams())
@@ -205,6 +204,7 @@ class CrossoverDashboardBuilder(
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
+                    mirrorIndices.forEach { values[it] = newValue }
                     updateValueBox(valueText, newValue * displayScale, suffix)
                     onChanged(values)
                 }
@@ -228,6 +228,7 @@ class CrossoverDashboardBuilder(
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
                 val stored = (parsed / displayScale).coerceIn(min, max)
                 values[index] = stored
+                mirrorIndices.forEach { values[it] = stored }
                 slider.value = stored
                 updateValueBox(valueText, stored * displayScale, suffix)
                 onChanged(values)
@@ -235,6 +236,12 @@ class CrossoverDashboardBuilder(
         }
         row.addView(valueText, LinearLayout.LayoutParams(dp(VALUE_WIDTH_DP), dp(34)))
         addRow(row)
+    }
+
+    private fun writeValue(index: Int, mirrorIndices: IntArray, value: Float) {
+        values[index] = value
+        mirrorIndices.forEach { values[it] = value }
+        onChanged(values)
     }
 
     private fun createRow() = LinearLayout(context).apply {
