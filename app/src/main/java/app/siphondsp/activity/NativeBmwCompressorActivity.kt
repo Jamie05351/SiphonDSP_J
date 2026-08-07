@@ -8,6 +8,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.fragment.NativeBmwCompressorFragment
 import app.siphondsp.model.NativeBmwCompressorState
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
@@ -25,7 +26,13 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())
-                .commit()
+                .commitNow()
+        }
+
+        // Apply the same BMW dashboard chrome as the other DSP workspaces once the fragment
+        // view is present. This is visual-only and deliberately not tied to audio lifecycle.
+        findViewById<android.view.View>(android.R.id.content).post {
+            BmwDashboardSkin.styleWorkspace(findViewById(android.R.id.content))
         }
     }
 
