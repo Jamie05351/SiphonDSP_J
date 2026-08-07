@@ -82,23 +82,26 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         super.onStop()
     }
 
+    private fun rootlessServiceIsActive(): Boolean =
+        RootlessAudioProcessorService.nativeBmwPeqHandleReady() != null
+
     private fun workspacePowerIsOn(): Boolean = when {
-        isRootless() -> RootlessAudioProcessorService.isActive()
+        isRootless() -> rootlessServiceIsActive()
         else -> prefsApp.get<Boolean>(R.string.key_powered_on)
     }
 
     private fun toggleWorkspacePower() {
         when {
             isRootless() -> {
-                if (RootlessAudioProcessorService.isActive()) {
+                if (rootlessServiceIsActive()) {
                     RootlessAudioProcessorService.stop(this)
                 } else {
                     val projection = app.mediaProjectionStartIntent
                     if (projection != null && !(SdkCheck.isVanillaIceCream && Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)) {
                         RootlessAudioProcessorService.start(this, projection)
                     } else {
-                        // The permission launcher is owned by MainActivity. Only fall back there
-                        // when Android requires a fresh MediaProjection grant.
+                        // MainActivity owns the MediaProjection permission launcher. Only hand off
+                        // when Android requires a fresh capture grant.
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             putExtra(MainActivity.EXTRA_FORCE_SHOW_CAPTURE_PROMPT, true)
                         })
