@@ -18,7 +18,6 @@ import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.color.MaterialColors
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
@@ -44,16 +43,11 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
-        container.gravity = Gravity.TOP
+        container.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        container.background = BmwDashboardSkin.brushedPanelDrawable()
 
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
-        val activeColor = MaterialColors.getColor(activity, androidx.appcompat.R.attr.colorPrimary, Color.rgb(63, 174, 229))
-        val activeText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnPrimary, Color.WHITE)
-        val inactiveText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
-        val outlinedButtonStyle = if (compact)
-            com.google.android.material.R.attr.materialIconButtonOutlinedStyle
-        else
-            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
 
         DspDestination.entries.forEach { destination ->
             val selected = destination == current
@@ -63,27 +57,26 @@ object DspCrossNavBar {
                 tooltipText = activity.getString(destination.labelRes)
                 insetTop = 0
                 insetBottom = 0
-                cornerRadius = activity.dp(7)
-                if (compact) {
-                    text = ""
-                    iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                    setPadding(0, 0, 0, 0)
-                } else {
-                    text = activity.getString(destination.labelRes)
-                    textSize = 12f
-                    gravity = Gravity.CENTER_VERTICAL
-                    iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                    iconPadding = activity.dp(10)
-                    isAllCaps = false
-                }
+                cornerRadius = activity.dp(6)
+                text = if (compact) "" else activity.getString(destination.labelRes)
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                iconPadding = if (compact) 0 else activity.dp(10)
+                isAllCaps = false
+                if (compact) setPadding(0, 0, 0, 0)
+
                 if (selected) {
-                    backgroundTintList = ColorStateList.valueOf(activeColor)
-                    strokeColor = ColorStateList.valueOf(activeColor)
-                    setTextColor(activeText)
-                    iconTint = ColorStateList.valueOf(activeText)
+                    backgroundTintList = ColorStateList.valueOf(Color.rgb(26, 69, 103))
+                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+                    strokeWidth = activity.dp(1)
+                    setTextColor(Color.WHITE)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
                     isClickable = false
                 } else {
-                    setTextColor(inactiveText)
+                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                    strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
+                    strokeWidth = activity.dp(1)
+                    setTextColor(Color.rgb(211, 217, 223))
+                    iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -96,8 +89,8 @@ object DspCrossNavBar {
             container.addView(
                 button,
                 if (compact) {
-                    LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply {
-                        bottomMargin = activity.dp(8)
+                    LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)).apply {
+                        bottomMargin = activity.dp(7)
                     }
                 } else {
                     LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46)).apply {
