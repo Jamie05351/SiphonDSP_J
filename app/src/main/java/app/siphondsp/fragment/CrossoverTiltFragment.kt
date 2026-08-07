@@ -30,7 +30,7 @@ class CrossoverTiltFragment : Fragment() {
 
         val page = LinearLayout(requireContext()).apply {
             orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(14))
+            setPadding(dp(10), dp(8), dp(10), dp(10))
         }
 
         val leftColumn = createColumn()
@@ -40,13 +40,10 @@ class CrossoverTiltFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        leftBuilder.sectionCard(
-            getString(R.string.bmw_dsp_crossovers),
-            "Filter routing and crossover hand-off",
-        ) {
+        leftBuilder.sectionCard(getString(R.string.bmw_dsp_crossovers)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_subsonic_bw2),
-                getString(R.string.bmw_dsp_subsonic_bw2_subtitle),
+                null,
                 NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
             )
             addSliderRow(
@@ -65,9 +62,11 @@ class CrossoverTiltFragment : Fragment() {
                 80f, 200f, 1f, "Hz",
             )
             addSegmentedSwitchRow(
-                getString(R.string.bmw_dsp_lr4_topology),
-                getString(R.string.bmw_dsp_lr4_topology_subtitle),
+                "Low topology",
+                null,
                 NativeBmwDspValues.INDEX_LOW_LR4,
+                offLabel = "BW3",
+                onLabel = "LR4",
             )
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mute_mid_band),
@@ -85,13 +84,10 @@ class CrossoverTiltFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        rightBuilder.sectionCard(
-            getString(R.string.bmw_dsp_tilt_section),
-            "Post-sum tonal balance",
-        ) {
+        rightBuilder.sectionCard(getString(R.string.bmw_dsp_tilt_section)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_tilt_active),
-                getString(R.string.bmw_dsp_tilt_active_subtitle),
+                null,
                 NativeBmwDspValues.INDEX_TILT_ENABLED,
             )
             addSliderRow(
@@ -105,13 +101,10 @@ class CrossoverTiltFragment : Fragment() {
                 200f, 2000f, 1f, "Hz",
             )
         }
-        rightBuilder.sectionCard(
-            getString(R.string.bmw_dsp_mono_bass),
-            "Low-frequency stereo management",
-        ) {
+        rightBuilder.sectionCard(getString(R.string.bmw_dsp_mono_bass)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mono_bass),
-                getString(R.string.bmw_dsp_mono_bass_subtitle),
+                null,
                 NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
             )
             addSliderRow(
@@ -133,10 +126,10 @@ class CrossoverTiltFragment : Fragment() {
 
         if (landscape) {
             page.addView(leftColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.08f).apply {
-                marginEnd = dp(6)
+                marginEnd = dp(4)
             })
             page.addView(rightColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, .92f).apply {
-                marginStart = dp(6)
+                marginStart = dp(4)
             })
         } else {
             page.addView(leftColumn)
