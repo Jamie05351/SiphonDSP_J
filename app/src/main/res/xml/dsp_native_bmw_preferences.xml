@@ -6,17 +6,6 @@
 <ListPreference android:key="bmw_channel_isolation" android:title="Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 <ListPreference android:key="bmw_measurement_mute" android:title="Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
-<PreferenceCategory android:title="Output routing" app:iconSpaceReserved="false">
-<SeekBarPreference android:key="route_low_left_fl" android:title="Low Left · Front Left" app:min="-200" android:max="200" android:defaultValue="100" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_low_left_fr" android:title="Low Left · Front Right" app:min="-200" android:max="200" android:defaultValue="0" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_low_right_fl" android:title="Low Right · Front Left" app:min="-200" android:max="200" android:defaultValue="0" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_low_right_fr" android:title="Low Right · Front Right" app:min="-200" android:max="200" android:defaultValue="100" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_mid_left_fl" android:title="Mid Left · Front Left" app:min="-200" android:max="200" android:defaultValue="100" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_mid_left_fr" android:title="Mid Left · Front Right" app:min="-200" android:max="200" android:defaultValue="0" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_mid_right_fl" android:title="Mid Right · Front Left" app:min="-200" android:max="200" android:defaultValue="0" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="route_mid_right_fr" android:title="Mid Right · Front Right" app:min="-200" android:max="200" android:defaultValue="100" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<Preference android:key="route_reset_stereo" android:title="Reset to stereo defaults" android:summary="Unity same-side routing; cross-channel contributions zero" app:iconSpaceReserved="false"/>
-</PreferenceCategory>
 <PreferenceCategory android:title="Output all-pass" app:iconSpaceReserved="false">
 <ListPreference android:key="allpass_output" android:title="Output channel" android:entries="@array/bmw_output_channel_entries" android:entryValues="@array/bmw_output_channel_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 <SwitchPreferenceCompat android:key="allpass_1_enabled" android:title="Section 1" app:iconSpaceReserved="false"/>
