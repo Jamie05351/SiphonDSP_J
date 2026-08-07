@@ -12,10 +12,9 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Verifies BmwResponseCalculator mirrors NativeBmwDspProcessor::processFrame's stage order,
- * including the bugs the extraction fixed relative to the earlier settings-card-only model
- * (see dsp package KDoc): the +6dB bypass error, subsonic applying outside the lpfPass
- * guard, and the l=oR/r=oL output swap.
+ * Verifies BmwResponseCalculator mirrors NativeBmwDspProcessor::processFrame's stage order.
+ * The response model still consumes the linked front-facing band settings, while the native
+ * engine mirrors those values into independent Low L/R and Mid L/R runtime paths.
  */
 class BmwSignalChainModelTest {
     private val calculator = BmwResponseCalculator(pointCount = POINT_COUNT)
@@ -189,17 +188,10 @@ class BmwSignalChainModelTest {
 
     @Test
     fun lowInvertChangesSumButNotLowBranchMagnitude() {
-        // Bypass the mid crossover (hpfPass=1) so mid == the unfiltered pre-split signal --
-        // a generic, non-adversarial phase reference to sum the low branch against. (At the
-        // low/mid crossover itself, a matched Butterworth-style pair can legitimately land
-        // low and mid in exact phase quadrature, where |sum| is invariant to inverting
-        // either one -- that's real crossover math, not a bug, so this test avoids relying
-        // on that specific region.)
         val values = baseValues().also { it[2] = 1f }
         val notInverted = compute(values.copyOf().also { it[19] = 0f })
         val inverted = compute(values.copyOf().also { it[19] = 1f })
 
-        // Polarity flips sign, not magnitude: |-z| == |z|, at every point.
         for (i in notInverted.lowBranchDb[0].indices) {
             assertEquals("low branch magnitude at point $i", notInverted.lowBranchDb[0][i], inverted.lowBranchDb[0][i], 1e-6)
         }
@@ -210,33 +202,23 @@ class BmwSignalChainModelTest {
 
     @Test
     fun lowOutputAllPassLeavesMagnitudeUnityButShiftsPhaseOnItsOwnPhysicalSideOnly() {
-        // Physical LEFT is fed by native's internal "right" chain (see BmwSignalChain KDoc),
-        // which is NativeBmwRouting::OutputId::LowRight -- ordinal 1 -- so its all-pass lives
-        // at INDEX_ALL_PASS + (1*2+0)*4 = 62. This pins down the output-ordinal wiring, not
-        // just the underlying all-pass math (already covered in isolation elsewhere).
-        // 140Hz sits inside the crossover overlap between hpf=125Hz and lpf=150Hz, where low
-        // and mid contribute comparable levels to the sum -- the region where a phase shift
-        // on one branch actually has a visible effect on the recombined magnitude.
         val allPassBase = NativeBmwDspValues.INDEX_ALL_PASS + (1 * 2 + 0) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
         val baseline = compute(baseValues())
         val withAllPass = compute(
             baseValues().also {
-                it[allPassBase] = 1f      // enabled
-                it[allPassBase + 1] = 2f  // second order
+                it[allPassBase] = 1f
+                it[allPassBase + 1] = 2f
                 it[allPassBase + 2] = 140f
                 it[allPassBase + 3] = 0.70710677f
             },
         )
         val i = nearestIndex(140.0)
 
-        // Unity magnitude (an all-pass section changes phase, not level) on the side it was
-        // configured for...
         assertEquals(
             baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             withAllPass.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             1e-4,
         )
-        // ...and must not leak onto the opposite physical side or into the mid branch.
         assertEquals(
             baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
             withAllPass.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
@@ -247,8 +229,6 @@ class BmwSignalChainModelTest {
             withAllPass.midBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             1e-6,
         )
-        // The sum on the affected side must actually have changed (phase shift recombines
-        // differently with the mid branch) -- otherwise the all-pass wiring is a no-op.
         val delta = withAllPass.sumDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][i]
         assertTrue("expected sum to change at the crossover overlap, delta was $delta", abs(delta) > 0.05)
     }
@@ -262,26 +242,11 @@ class BmwSignalChainModelTest {
         }
     }
 
-    private fun baseValues(): FloatArray = floatArrayOf(
-        1f, 0f, 0f, 0f, 0f,
-        -6f, 0f, 0f, -1f, -1f, 0f, 0f,
-        1f, 32f,
-        0f, 150f, 0f,
-        0f, 125f,
-        0f, 0f,
-        0f, 0f, 0f, 0f,
-        1f, 3f, 550f,
-        1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        0f, 80f, 100f, 0f,
-        // Low L, Low R, Mid L, Mid R: [Front L, Front R] -- unity same-side, zero crossfeed.
-        1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
-        // Two disabled second-order all-pass sections per output: enabled, order, Hz, Q.
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-    )
+    private fun baseValues(): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
+        // The response calculator models the linked front-facing controls. Mark the independent
+        // schema as current so this fixture has the same shape as a post-migration runtime array.
+        it[NativeBmwDspValues.INDEX_OUTPUT_SCHEMA_VERSION] = NativeBmwDspValues.OUTPUT_SCHEMA_VERSION
+    }
 
     companion object {
         private const val POINT_COUNT = 192
