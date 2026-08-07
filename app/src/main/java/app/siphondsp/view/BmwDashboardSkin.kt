@@ -13,7 +13,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -41,12 +40,6 @@ object BmwDashboardSkin {
                 marginEnd = dp(context, 2)
             })
         }
-        row.addView(TextView(context).apply {
-            text = "M"
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            setPadding(dp(context, 4), 0, 0, 0)
-        })
         parent.addView(row)
     }
 
