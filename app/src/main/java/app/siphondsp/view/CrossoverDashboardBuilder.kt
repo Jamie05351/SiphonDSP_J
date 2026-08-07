@@ -22,11 +22,7 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/**
- * 1280x480-oriented BMW dashboard renderer used by the Crossovers & Tilt prototype.
- * The layout deliberately follows a fixed label / control / value grid instead of
- * weighting each row independently, so every control lines up across the whole page.
- */
+/** BMW dashboard renderer shared by Routing, Gains & Delay and Crossovers & Tilt. */
 class CrossoverDashboardBuilder(
     private val context: Context,
     private val root: LinearLayout,
@@ -36,7 +32,7 @@ class CrossoverDashboardBuilder(
     private val format = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
     private lateinit var currentContent: LinearLayout
 
-    private val accentBlue = Color.rgb(63, 174, 229)
+    private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
     private val inactiveTrack = Color.rgb(31, 35, 41)
     private val thumbFill = Color.rgb(190, 196, 203)
     private val thumbStroke = Color.rgb(232, 236, 240)
@@ -53,8 +49,9 @@ class CrossoverDashboardBuilder(
             radius = dp(7).toFloat()
             cardElevation = 0f
             strokeWidth = dp(1)
-            strokeColor = Color.rgb(47, 57, 68)
-            setCardBackgroundColor(Color.rgb(18, 23, 29))
+            strokeColor = Color.rgb(62, 72, 84)
+            setCardBackgroundColor(Color.TRANSPARENT)
+            background = BmwDashboardSkin.brushedPanelDrawable()
         }
 
         val content = LinearLayout(context).apply {
@@ -62,18 +59,24 @@ class CrossoverDashboardBuilder(
             setPadding(dp(28), dp(18), dp(24), dp(20))
         }
 
-        content.addView(TextView(context).apply {
+        val titleRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(context).apply {
             text = title
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
-        })
+            setTextColor(Color.WHITE)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        BmwDashboardSkin.addMAccent(titleRow)
+        content.addView(titleRow)
 
         if (!subtitle.isNullOrBlank()) {
             content.addView(TextView(context).apply {
                 text = subtitle
                 textSize = 11.5f
-                setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurfaceVariant))
+                setTextColor(Color.rgb(178, 187, 198))
                 setPadding(0, dp(2), 0, dp(12))
             })
         } else {
@@ -97,18 +100,15 @@ class CrossoverDashboardBuilder(
         )
     }
 
-    /** Compatibility wrapper while the prototype is being migrated to one large panel. */
     fun sectionCard(title: String, subtitle: String? = null, build: CrossoverDashboardBuilder.() -> Unit) {
         dashboardPanel(title, subtitle, build)
     }
 
     fun sectionHeader(title: String) {
-        if (currentContent.childCount > 2) {
-            currentContent.addView(space(dp(8)))
-        }
+        if (currentContent.childCount > 2) currentContent.addView(space(dp(8)))
         currentContent.addView(TextView(context).apply {
             text = title
-            textSize = 13f
+            textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentBlue)
             setPadding(0, dp(2), 0, dp(7))
@@ -143,6 +143,8 @@ class CrossoverDashboardBuilder(
                 minWidth = 0
                 minimumWidth = 0
                 setPadding(0, 0, 0, 0)
+                thumbTintList = checkedColorStateList(accentBlue, Color.rgb(170, 177, 184))
+                trackTintList = checkedColorStateList(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
                 setOnCheckedChangeListener { _, checked ->
                     values[index] = if (checked) 1f else 0f
                     onChanged(values)
@@ -198,7 +200,7 @@ class CrossoverDashboardBuilder(
             thumbHeight = dp(24)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
             setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
-            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 63, 174, 229)))
+            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(createRectangularThumb())
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
@@ -243,13 +245,7 @@ class CrossoverDashboardBuilder(
     }
 
     private fun addRow(row: LinearLayout) {
-        currentContent.addView(
-            row,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
-        )
+        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun labelParams() = LinearLayout.LayoutParams(dp(LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -259,14 +255,10 @@ class CrossoverDashboardBuilder(
         textSize = 13f
         maxLines = 1
         ellipsize = android.text.TextUtils.TruncateAt.END
-        setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
+        setTextColor(Color.rgb(231, 235, 239))
     }
 
-    private fun segmentButton(textValue: String) = MaterialButton(
-        context,
-        null,
-        com.google.android.material.R.attr.materialButtonOutlinedStyle,
-    ).apply {
+    private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
         id = View.generateViewId()
         text = textValue
         textSize = 10.5f
@@ -280,7 +272,7 @@ class CrossoverDashboardBuilder(
         setPadding(dp(5), 0, dp(5), 0)
         backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
-        setTextColor(checkedColorStateList(accentBlue, resolveColor(com.google.android.material.R.attr.colorOnSurface)))
+        setTextColor(checkedColorStateList(accentBlue, Color.rgb(225, 230, 235)))
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
@@ -292,7 +284,7 @@ class CrossoverDashboardBuilder(
                 textSize = 10f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
-                setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurfaceVariant))
+                setTextColor(Color.rgb(170, 179, 189))
             })
         }
     }
@@ -303,7 +295,7 @@ class CrossoverDashboardBuilder(
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
-        setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
+        setTextColor(Color.WHITE)
         setBackgroundResource(app.siphondsp.R.drawable.background_dsp_value_box)
         updateValueBox(this, value, suffix)
     }
@@ -317,20 +309,12 @@ class CrossoverDashboardBuilder(
     }
 
     private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
-        arrayOf(
-            intArrayOf(android.R.attr.state_checked),
-            intArrayOf(),
-        ),
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
         intArrayOf(checked, unchecked),
     )
 
     private fun updateValueBox(valueText: TextView, value: Float, suffix: String) {
         valueText.text = "${format.format(value)} $suffix".trim()
-    }
-
-    private fun resolveColor(attribute: Int): Int {
-        val value = TypedValue()
-        return if (context.theme.resolveAttribute(attribute, value, true)) value.data else Color.TRANSPARENT
     }
 
     private fun space(widthDp: Int) = View(context).apply {
