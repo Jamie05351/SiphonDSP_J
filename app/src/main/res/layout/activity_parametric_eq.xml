@@ -4,12 +4,6 @@
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
-    <!-- fitsSystemWindows intentionally NOT set here: it padded the whole content area
-         (including the PEQ editor's left control column) for whatever system insets the
-         window reported on any edge, not just the top status bar the AppBarLayout below
-         actually needs to avoid. On a landscape head-unit profile this showed up as a
-         large wasted gutter on the left of the whole screen. The AppBarLayout keeps its
-         own fitsSystemWindows so the toolbar still clears the top inset by itself. -->
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
@@ -22,6 +16,9 @@
             style="@style/Theme.SiphonDSP.Toolbar"
             android:layout_width="match_parent"
             android:layout_height="@dimen/header_toolbar_height"
+            android:paddingEnd="24dp"
+            app:contentInsetEnd="24dp"
+            app:contentInsetEndWithActions="24dp"
             app:titleCentered="true" />
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -30,32 +27,31 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-            <!-- Cross-navigation to the other DSP screens (Gains & Delay/Compressor/
-                 Crossovers & Tilt/Parametric EQ). GONE by default, collapsing to zero width
-                 so `params` fills the screen, and only populated+shown by activities that
-                 don't already build their own left-edge sidebar (see DspCrossNavBar). -->
-            <LinearLayout
-                android:id="@+id/dsp_cross_nav"
-                android:layout_width="52dp"
-                android:layout_height="0dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
-                android:visibility="gone"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent" />
+        <LinearLayout
+            android:id="@+id/dsp_cross_nav"
+            android:layout_width="164dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:gravity="top"
+            android:padding="6dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
 
-            <FrameLayout
-                android:id="@+id/params"
-                android:name="androidx.navigation.fragment.NavHostFragment"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                app:layout_constraintStart_toEndOf="@id/dsp_cross_nav"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
+        <FrameLayout
+            android:id="@+id/params"
+            android:name="androidx.navigation.fragment.NavHostFragment"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="8dp"
+            app:layout_constraintStart_toEndOf="@id/dsp_cross_nav"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
