@@ -8,7 +8,7 @@ import app.siphondsp.fragment.CrossoverTiltFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
-class CrossoverTiltActivity : BaseActivity() {
+class CrossoverTiltActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parametric_eq)
