@@ -17,7 +17,6 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
-import app.siphondsp.activity.RoutingActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import kotlin.math.roundToInt
@@ -27,11 +26,12 @@ enum class DspDestination(
     @StringRes val labelRes: Int,
     @DrawableRes val icon: Int,
     val activityClass: KClass<out AppCompatActivity>,
+    val workspaceMode: String? = null,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, RoutingActivity::class),
+    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
     GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
     PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
 }
 
@@ -86,7 +86,9 @@ object DspCrossNavBar {
                     setTextColor(inactiveText)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
-                        activity.startActivity(Intent(activity, destination.activityClass.java))
+                        val intent = Intent(activity, destination.activityClass.java)
+                        destination.workspaceMode?.let { intent.putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
+                        activity.startActivity(intent)
                         activity.finish()
                     }
                 }
