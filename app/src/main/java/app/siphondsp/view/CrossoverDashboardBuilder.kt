@@ -11,7 +11,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -112,7 +111,15 @@ class CrossoverDashboardBuilder(
         currentContent.addView(row)
     }
 
-    fun addSliderRow(label: String, index: Int, min: Float, max: Float, step: Float, suffix: String) {
+    fun addSliderRow(
+        label: String,
+        index: Int,
+        min: Float,
+        max: Float,
+        step: Float,
+        suffix: String,
+        displayScale: Float = 1f,
+    ) {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -128,7 +135,7 @@ class CrossoverDashboardBuilder(
             setTextColor(resolveColor(com.google.android.material.R.attr.colorOnSurface))
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.29f))
 
-        val valueText = createValueBox(values[index], suffix)
+        val valueText = createValueBox(values[index] * displayScale, suffix)
         val slider = Slider(context).apply {
             valueFrom = min
             valueTo = max
@@ -144,7 +151,7 @@ class CrossoverDashboardBuilder(
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
-                    updateValueBox(valueText, newValue, suffix)
+                    updateValueBox(valueText, newValue * displayScale, suffix)
                     onChanged(values)
                 }
             }
@@ -158,16 +165,16 @@ class CrossoverDashboardBuilder(
             context.showInputAlert(
                 android.view.LayoutInflater.from(context),
                 label,
-                "${format.format(min)}–${format.format(max)}",
-                format.format(values[index]),
+                "${format.format(min * displayScale)}–${format.format(max * displayScale)}",
+                format.format(values[index] * displayScale),
                 true,
                 suffix,
             ) { entered ->
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
-                val clamped = parsed.coerceIn(min, max)
-                values[index] = clamped
-                slider.value = clamped
-                updateValueBox(valueText, clamped, suffix)
+                val stored = (parsed / displayScale).coerceIn(min, max)
+                values[index] = stored
+                slider.value = stored
+                updateValueBox(valueText, stored * displayScale, suffix)
                 onChanged(values)
             }
         }
