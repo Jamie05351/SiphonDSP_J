@@ -23,7 +23,6 @@ import com.google.android.material.color.MaterialColors
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
-/** The five main BMW DSP workspaces shown permanently in the landscape side rail. */
 enum class DspDestination(
     @StringRes val labelRes: Int,
     @DrawableRes val icon: Int,
@@ -36,11 +35,6 @@ enum class DspDestination(
     PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
 }
 
-/**
- * BMW-style side rail. All destinations remain visible so the user can see where they are;
- * the current screen is highlighted and non-clickable. Labeled 48dp rows are deliberately
- * much easier to hit on the 1280x480 head unit than edge-mounted icon-only buttons.
- */
 object DspCrossNavBar {
     fun populate(
         activity: FragmentActivity,
@@ -52,43 +46,61 @@ object DspCrossNavBar {
         container.orientation = LinearLayout.VERTICAL
         container.gravity = Gravity.TOP
 
+        val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val activeColor = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorPrimary, Color.rgb(63, 174, 229))
         val activeText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnPrimary, Color.WHITE)
         val inactiveText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
-        val outlinedButtonStyle = com.google.android.material.R.attr.materialButtonOutlinedStyle
+        val outlinedButtonStyle = if (compact)
+            com.google.android.material.R.attr.materialIconButtonOutlinedStyle
+        else
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
 
-        DspDestination.entries.forEach { destination ->
+        val destinations = if (compact) DspDestination.entries.filter { it != current } else DspDestination.entries
+        destinations.forEach { destination ->
             val selected = destination == current
-            container.addView(
-                MaterialButton(activity, null, outlinedButtonStyle).apply {
-                    icon = ContextCompat.getDrawable(activity, destination.icon)
+            val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
+                icon = ContextCompat.getDrawable(activity, destination.icon)
+                contentDescription = activity.getString(destination.labelRes)
+                insetTop = 0
+                insetBottom = 0
+                cornerRadius = activity.dp(7)
+                if (compact) {
+                    text = ""
+                    iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                    setPadding(0, 0, 0, 0)
+                } else {
                     text = activity.getString(destination.labelRes)
                     textSize = 12f
                     gravity = Gravity.CENTER_VERTICAL
                     iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
                     iconPadding = activity.dp(10)
-                    insetTop = 0
-                    insetBottom = 0
-                    cornerRadius = activity.dp(7)
                     isAllCaps = false
-                    contentDescription = text
-                    if (selected) {
-                        backgroundTintList = ColorStateList.valueOf(activeColor)
-                        strokeColor = ColorStateList.valueOf(activeColor)
-                        setTextColor(activeText)
-                        iconTint = ColorStateList.valueOf(activeText)
-                        isClickable = false
-                    } else {
-                        setTextColor(inactiveText)
-                        setOnClickListener {
-                            if (!canNavigate()) return@setOnClickListener
-                            activity.startActivity(Intent(activity, destination.activityClass.java))
-                            activity.finish()
-                        }
+                }
+                if (selected) {
+                    backgroundTintList = ColorStateList.valueOf(activeColor)
+                    strokeColor = ColorStateList.valueOf(activeColor)
+                    setTextColor(activeText)
+                    iconTint = ColorStateList.valueOf(activeText)
+                    isClickable = false
+                } else {
+                    setTextColor(inactiveText)
+                    setOnClickListener {
+                        if (!canNavigate()) return@setOnClickListener
+                        activity.startActivity(Intent(activity, destination.activityClass.java))
+                        activity.finish()
                     }
-                },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46)).apply {
-                    bottomMargin = activity.dp(7)
+                }
+            }
+            container.addView(
+                button,
+                if (compact) {
+                    LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply {
+                        bottomMargin = activity.dp(8)
+                    }
+                } else {
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46)).apply {
+                        bottomMargin = activity.dp(7)
+                    }
                 },
             )
         }
