@@ -1,16 +1,23 @@
 package app.siphondsp.view
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.SwitchCompat
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
 import kotlin.math.roundToInt
 
 /** Shared visual skin for the dedicated BMW DSP workspaces. */
@@ -43,6 +50,58 @@ object BmwDashboardSkin {
         parent.addView(row)
     }
 
+    /** Apply the same automotive chrome to specialist XML-driven workspaces such as PEQ and Compressor. */
+    fun styleTree(root: View) {
+        root.background = when (root) {
+            is MaterialCardView -> root.background
+            else -> root.background ?: brushedPanelDrawable()
+        }
+
+        when (root) {
+            is MaterialCardView -> {
+                root.radius = dp(root.context, 7).toFloat()
+                root.cardElevation = 0f
+                root.strokeWidth = dp(root.context, 1)
+                root.strokeColor = Color.rgb(61, 71, 82)
+                root.setCardBackgroundColor(Color.argb(205, 18, 23, 29))
+            }
+            is Slider -> styleSlider(root)
+            is MaterialSwitch -> styleSwitch(root)
+            is SwitchCompat -> styleSwitch(root)
+        }
+
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) styleTree(root.getChildAt(index))
+        }
+    }
+
+    private fun styleSlider(slider: Slider) {
+        val context = slider.context
+        slider.trackHeight = dp(context, 6)
+        slider.thumbWidth = dp(context, 13)
+        slider.thumbHeight = dp(context, 24)
+        slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
+        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(31, 35, 41)))
+        slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
+        slider.setCustomThumbDrawable(GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(Color.rgb(190, 196, 203))
+            setStroke(dp(context, 1), Color.rgb(232, 236, 240))
+            cornerRadius = dp(context, 1).toFloat()
+            setSize(dp(context, 13), dp(context, 24))
+        })
+    }
+
+    private fun styleSwitch(toggle: SwitchCompat) {
+        toggle.thumbTintList = checkedColours(LIGHT_BLUE, Color.rgb(170, 177, 184))
+        toggle.trackTintList = checkedColours(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
+    }
+
+    private fun checkedColours(checked: Int, unchecked: Int) = ColorStateList(
+        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+        intArrayOf(checked, unchecked),
+    )
+
     private fun dp(context: Context, value: Int) =
         (value * context.resources.displayMetrics.density).roundToInt()
 
@@ -61,8 +120,6 @@ object BmwDashboardSkin {
             canvas.drawRect(b, paint)
             paint.shader = null
 
-            // Fine horizontal grain and a faint diagonal highlight produce the automotive
-            // brushed-metal impression without requiring a bitmap texture asset.
             var y = b.top
             var index = 0
             while (y < b.bottom) {
