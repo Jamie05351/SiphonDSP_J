@@ -8,7 +8,7 @@ import app.siphondsp.fragment.GainLimiterFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
-class GainLimiterActivity : BaseActivity() {
+class GainLimiterActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parametric_eq)

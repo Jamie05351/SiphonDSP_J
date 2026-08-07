@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/workspace_power"
+        android:title="@string/workspace_power"
+        android:icon="@drawable/ic_twotone_power_settings_24dp"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/workspace_settings"
+        android:title="@string/workspace_settings"
+        android:icon="@drawable/ic_twotone_settings_24dp"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/workspace_more"
+        android:title="@string/workspace_more"
+        android:icon="@drawable/ic_twotone_more_vert_24dp"
+        app:showAsAction="always">
+        <menu>
+            <item
+                android:id="@+id/workspace_routing"
+                android:title="@string/action_routing" />
+            <item
+                android:id="@+id/workspace_presets"
+                android:title="@string/action_presets" />
+            <item
+                android:id="@+id/workspace_revert"
+                android:title="@string/action_revert" />
+            <item
+                android:id="@+id/workspace_blocklist"
+                android:title="@string/action_blocked_apps" />
+        </menu>
+    </item>
+</menu>

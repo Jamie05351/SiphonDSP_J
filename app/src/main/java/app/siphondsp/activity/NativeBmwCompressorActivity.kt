@@ -8,10 +8,11 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.fragment.NativeBmwCompressorFragment
 import app.siphondsp.model.NativeBmwCompressorState
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
-class NativeBmwCompressorActivity : BaseActivity() {
+class NativeBmwCompressorActivity : DspWorkspaceActivity() {
     private var bindingEnableSwitch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,11 +26,18 @@ class NativeBmwCompressorActivity : BaseActivity() {
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())
-                .commit()
+                .commitNow()
+        }
+
+        // Apply the same BMW dashboard chrome as the other DSP workspaces once the fragment
+        // view is present. This is visual-only and deliberately not tied to audio lifecycle.
+        findViewById<android.view.View>(android.R.id.content).post {
+            BmwDashboardSkin.styleWorkspace(findViewById(android.R.id.content))
         }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        super.onCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.menu_native_bmw_compressor, menu)
         val enableSwitch = menu.findItem(R.id.menu_compressor_enable)?.actionView as? MaterialSwitch
         enableSwitch?.setOnCheckedChangeListener { _, checked ->
