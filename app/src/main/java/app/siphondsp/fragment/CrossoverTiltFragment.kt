@@ -13,6 +13,7 @@ import kotlin.math.roundToInt
 
 /**
  * Dedicated Crossovers & Tilt screen using one continuous BMW-style dashboard panel.
+ * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
  */
 class CrossoverTiltFragment : Fragment() {
     override fun onCreateView(
@@ -33,6 +34,15 @@ class CrossoverTiltFragment : Fragment() {
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
 
+        fun lowPair(field: Int) = intArrayOf(
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, field),
+        )
+        fun midPair(field: Int) = intArrayOf(
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, field),
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
+        )
+
         builder.dashboardPanel(
             title = getString(R.string.action_crossover_tilt),
             subtitle = "Configure crossover, tilt and mono-bass behaviour",
@@ -42,21 +52,25 @@ class CrossoverTiltFragment : Fragment() {
                 getString(R.string.bmw_dsp_subsonic_bw2),
                 null,
                 NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
             )
             addSliderRow(
                 getString(R.string.bmw_dsp_subsonic_freq),
                 NativeBmwDspValues.INDEX_SUBSONIC_FREQ,
                 20f, 60f, 1f, "Hz",
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
             )
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mute_low_band),
                 null,
                 NativeBmwDspValues.INDEX_LOW_MUTE,
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_MUTE),
             )
             addSliderRow(
                 getString(R.string.bmw_dsp_low_lpf_freq),
                 NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
                 80f, 200f, 1f, "Hz",
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
             )
             addSegmentedSwitchRow(
                 "Low topology",
@@ -64,16 +78,19 @@ class CrossoverTiltFragment : Fragment() {
                 NativeBmwDspValues.INDEX_LOW_LR4,
                 offLabel = "BW3",
                 onLabel = "LR4",
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_LR4),
             )
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mute_mid_band),
                 null,
                 NativeBmwDspValues.INDEX_MID_MUTE,
+                mirrorIndices = midPair(NativeBmwDspValues.FIELD_MUTE),
             )
             addSliderRow(
                 getString(R.string.bmw_dsp_mid_hpf_freq),
                 NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
                 80f, 200f, 1f, "Hz",
+                mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
             )
 
             sectionHeader(getString(R.string.bmw_dsp_tilt_section))
