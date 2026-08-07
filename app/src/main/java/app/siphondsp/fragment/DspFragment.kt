@@ -14,6 +14,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import app.siphondsp.R
+import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.activity.GainLimiterActivity
+import app.siphondsp.activity.NativeBmwCompressorActivity
+import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
@@ -57,6 +61,21 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         }
         binding.updateNotice.setOnRootClickListener {
             updateNoticeOnClick?.invoke()
+        }
+
+        // Primary BMW DSP shortcuts. These open the same activities as the existing nav/menu
+        // actions; the cards are only an additional main-menu entry point.
+        binding.cardShortcutPeq.setOnClickListener {
+            startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
+        }
+        binding.cardShortcutGainsDelay.setOnClickListener {
+            startActivity(Intent(requireContext(), GainLimiterActivity::class.java))
+        }
+        binding.cardShortcutCompressor.setOnClickListener {
+            startActivity(Intent(requireContext(), NativeBmwCompressorActivity::class.java))
+        }
+        binding.cardShortcutCrossovers.setOnClickListener {
+            startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java))
         }
 
         // Should show notice?
