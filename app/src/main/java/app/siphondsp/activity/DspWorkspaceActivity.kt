@@ -18,6 +18,7 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.SdkCheck
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.restoreDspSettings
+import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.isPlugin
 import app.siphondsp.utils.isRoot
@@ -58,7 +59,9 @@ abstract class DspWorkspaceActivity : BaseActivity() {
             true
         }
         R.id.workspace_revert -> {
-            restoreDspSettings()
+            showYesNoAlert(R.string.revert_confirmation_title, R.string.revert_confirmation) { confirmed ->
+                if (confirmed) restoreDspSettings()
+            }
             true
         }
         R.id.workspace_blocklist -> {
@@ -100,8 +103,6 @@ abstract class DspWorkspaceActivity : BaseActivity() {
                     if (projection != null && !(SdkCheck.isVanillaIceCream && Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM)) {
                         RootlessAudioProcessorService.start(this, projection)
                     } else {
-                        // MainActivity owns the MediaProjection permission launcher. Only hand off
-                        // when Android requires a fresh capture grant.
                         startActivity(Intent(this, MainActivity::class.java).apply {
                             putExtra(MainActivity.EXTRA_FORCE_SHOW_CAPTURE_PROMPT, true)
                         })
