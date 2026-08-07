@@ -50,20 +50,20 @@ object BmwDashboardSkin {
         parent.addView(row)
     }
 
-    /** Apply the same automotive chrome to specialist XML-driven workspaces such as PEQ and Compressor. */
-    fun styleTree(root: View) {
-        root.background = when (root) {
-            is MaterialCardView -> root.background
-            else -> root.background ?: brushedPanelDrawable()
-        }
+    fun styleWorkspace(root: View) {
+        root.background = brushedPanelDrawable()
+        styleTree(root)
+    }
 
+    /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
+    fun styleTree(root: View) {
         when (root) {
             is MaterialCardView -> {
                 root.radius = dp(root.context, 7).toFloat()
                 root.cardElevation = 0f
                 root.strokeWidth = dp(root.context, 1)
                 root.strokeColor = Color.rgb(61, 71, 82)
-                root.setCardBackgroundColor(Color.argb(205, 18, 23, 29))
+                root.setCardBackgroundColor(Color.argb(215, 18, 23, 29))
             }
             is Slider -> styleSlider(root)
             is MaterialSwitch -> styleSwitch(root)
