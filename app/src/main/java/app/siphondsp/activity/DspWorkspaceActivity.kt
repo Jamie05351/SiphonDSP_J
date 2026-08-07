@@ -54,6 +54,12 @@ abstract class DspWorkspaceActivity : BaseActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
             true
         }
+        R.id.workspace_routing -> {
+            startActivity(Intent(this, CrossoverTiltActivity::class.java).apply {
+                putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING)
+            })
+            true
+        }
         R.id.workspace_presets -> {
             showPresetLibrary()
             true
