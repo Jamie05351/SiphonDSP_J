@@ -29,6 +29,14 @@ class GainLimiterFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
+        fun lowPair(field: Int) = intArrayOf(
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, field),
+        )
+        fun midPair(field: Int) = intArrayOf(
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, field),
+            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
+        )
 
         builder.dashboardPanel(
             getString(R.string.action_gain_limiter),
@@ -42,8 +50,18 @@ class GainLimiterFragment : Fragment() {
             addSliderRow(getString(R.string.bmw_dsp_mid_gain_r), NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .1f, "dB")
 
             sectionHeader(getString(R.string.bmw_dsp_delay_polarity))
-            addSegmentedSwitchRow(getString(R.string.bmw_dsp_invert_low_polarity), null, NativeBmwDspValues.INDEX_LOW_INVERT)
-            addSegmentedSwitchRow(getString(R.string.bmw_dsp_invert_mid_polarity), null, NativeBmwDspValues.INDEX_MID_INVERT)
+            addSegmentedSwitchRow(
+                getString(R.string.bmw_dsp_invert_low_polarity),
+                null,
+                NativeBmwDspValues.INDEX_LOW_INVERT,
+                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_INVERT),
+            )
+            addSegmentedSwitchRow(
+                getString(R.string.bmw_dsp_invert_mid_polarity),
+                null,
+                NativeBmwDspValues.INDEX_MID_INVERT,
+                mirrorIndices = midPair(NativeBmwDspValues.FIELD_INVERT),
+            )
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
