@@ -11,7 +11,10 @@ object NativeBmwDspValues {
     // SharedPreferences blob (pre-NativeBmwDspStore) onto the new atomic file store.
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
-    const val SIZE = 86
+
+    // 0..85 are the original/native four-output config. 86 is a schema marker and
+    // 87..138 are the independent per-output settings described below.
+    const val SIZE = 139
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -25,6 +28,9 @@ object NativeBmwDspValues {
     const val INDEX_MID_GAIN_R = 9
     const val INDEX_POST_GAIN_L = 10
     const val INDEX_POST_GAIN_R = 11
+
+    // Legacy shared-band settings retained for migration/backward compatibility. The native
+    // engine now consumes the independent per-output block at INDEX_OUTPUT_CONFIG.
     const val INDEX_SUBSONIC_ENABLED = 12
     const val INDEX_SUBSONIC_FREQ = 13
     const val INDEX_LOW_MUTE = 14
@@ -34,6 +40,7 @@ object NativeBmwDspValues {
     const val INDEX_MID_CROSSOVER_FREQ = 18
     const val INDEX_LOW_INVERT = 19
     const val INDEX_MID_INVERT = 20
+
     const val INDEX_MID_DELAY_L = 21
     const val INDEX_MID_DELAY_R = 22
     const val INDEX_LOW_DELAY_L = 23
@@ -42,6 +49,7 @@ object NativeBmwDspValues {
     const val INDEX_TILT_AMOUNT = 26
     const val INDEX_TILT_FREQ = 27
 
+    // Legacy band-linked compressor settings, used as migration seeds.
     const val INDEX_LOW_COMPRESSOR_ENABLED = 28
     const val INDEX_LOW_COMPRESSOR_THRESHOLD = 29
     const val INDEX_LOW_COMPRESSOR_RATIO = 30
@@ -58,17 +66,15 @@ object NativeBmwDspValues {
     const val INDEX_MID_COMPRESSOR_RELEASE = 40
     const val INDEX_MID_COMPRESSOR_MAKEUP = 41
 
-    // Frequency-dependent mono/stereo blend for the low (door woofer) band -- see
-    // NativeBmwDspProcessor::rebuildMonoBass()/processFrame() for the native side.
+    // Frequency-dependent mono/stereo blend for the low paths. This is deliberately the only
+    // stage that can couple Low L and Low R; when disabled the four processing paths remain
+    // independent until the final stereo reconstruction.
     const val INDEX_MONO_BASS_ENABLED = 42
     const val INDEX_MONO_BASS_FREQ = 43
     const val INDEX_MONO_BASS_BLEND = 44
     const val INDEX_MONO_BASS_MAKEUP = 45
 
-    // Explicit stereo routing matrix: four outputs (Low L, Low R, Mid L, Mid R) x two
-    // virtual inputs (Front L, Front R), stored as linear coefficients. Defaults reproduce
-    // the previous fixed L->Low L/Mid L, R->Low R/Mid R topology with zero crossfeed -- see
-    // NativeBmwRouting.h / NativeBmwDspProcessor::configure() for the native side.
+    // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
     const val INDEX_ROUTING = 46
     const val ROUTING_VALUE_COUNT = 8
     const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = 46
@@ -80,20 +86,51 @@ object NativeBmwDspValues {
     const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = 52
     const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = 53
 
-    // Two configurable all-pass sections per output (Low L, Low R, Mid L, Mid R), each
-    // [enabled, order(1|2), frequencyHz, Q]. Defaults are disabled/identity.
+    // Two all-pass sections per exact output: [enabled, order(1|2), frequencyHz, Q].
     const val INDEX_ALL_PASS = 54
     const val ALL_PASS_SECTIONS_PER_OUTPUT = 2
     const val ALL_PASS_SECTION_WIDTH = 4
     const val ALL_PASS_VALUE_COUNT = 32
 
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_ENABLED") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_THRESHOLD") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_RATIO") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_KNEE") const val INDEX_COMPRESSOR_KNEE = INDEX_LOW_COMPRESSOR_KNEE
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_ATTACK") const val INDEX_COMPRESSOR_ATTACK = INDEX_LOW_COMPRESSOR_ATTACK
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_RELEASE") const val INDEX_COMPRESSOR_RELEASE = INDEX_LOW_COMPRESSOR_RELEASE
-    @Deprecated("Use INDEX_LOW_COMPRESSOR_MAKEUP") const val INDEX_COMPRESSOR_MAKEUP = INDEX_LOW_COMPRESSOR_MAKEUP
+    // Versioned independent-output block. Output order matches NativeBmwRouting::OutputId.
+    const val INDEX_OUTPUT_SCHEMA_VERSION = 86
+    const val OUTPUT_SCHEMA_VERSION = 1f
+    const val INDEX_OUTPUT_CONFIG = 87
+    const val OUTPUT_CONFIG_WIDTH = 13
+    const val OUTPUT_COUNT = 4
+
+    const val OUTPUT_LOW_LEFT = 0
+    const val OUTPUT_LOW_RIGHT = 1
+    const val OUTPUT_MID_LEFT = 2
+    const val OUTPUT_MID_RIGHT = 3
+
+    const val FIELD_CROSSOVER_FREQ = 0
+    const val FIELD_CROSSOVER_LR4 = 1
+    const val FIELD_SUBSONIC_ENABLED = 2
+    const val FIELD_SUBSONIC_FREQ = 3
+    const val FIELD_MUTE = 4
+    const val FIELD_INVERT = 5
+    const val FIELD_COMPRESSOR_ENABLED = 6
+    const val FIELD_COMPRESSOR_THRESHOLD = 7
+    const val FIELD_COMPRESSOR_RATIO = 8
+    const val FIELD_COMPRESSOR_KNEE = 9
+    const val FIELD_COMPRESSOR_ATTACK = 10
+    const val FIELD_COMPRESSOR_RELEASE = 11
+    const val FIELD_COMPRESSOR_MAKEUP = 12
+
+    fun outputIndex(output: Int, field: Int): Int {
+        require(output in 0 until OUTPUT_COUNT) { "Invalid BMW output $output" }
+        require(field in 0 until OUTPUT_CONFIG_WIDTH) { "Invalid BMW output field $field" }
+        return INDEX_OUTPUT_CONFIG + output * OUTPUT_CONFIG_WIDTH + field
+    }
+
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_KNEE = INDEX_LOW_COMPRESSOR_KNEE
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ATTACK = INDEX_LOW_COMPRESSOR_ATTACK
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RELEASE = INDEX_LOW_COMPRESSOR_RELEASE
+    @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_MAKEUP = INDEX_LOW_COMPRESSOR_MAKEUP
 
     val DEFAULTS = floatArrayOf(
         1f, 0f, 0f, 0f, 0f,
@@ -107,22 +144,36 @@ object NativeBmwDspValues {
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         0f, 80f, 100f, 0f,
-        // Low L, Low R, Mid L, Mid R: [Front L, Front R] -- unity same-side, zero crossfeed.
+        // Low L, Low R, Mid L, Mid R: [Front L, Front R].
         1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
-        // Two disabled second-order all-pass sections per output: enabled, order, Hz, Q.
+        // Two disabled second-order all-pass sections per output.
         0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
         0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
         0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
         0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        // Schema marker. Zero means "seed the independent output block from legacy settings".
+        0f,
+        // Low Left: XO Hz, LR4, sub on/Hz, mute, invert, compressor 7-tuple.
+        150f, 0f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        // Low Right.
+        150f, 0f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        // Mid Left: subsonic fields are retained for a uniform block but ignored by native.
+        125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        // Mid Right.
+        125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
     )
+
+    init {
+        check(DEFAULTS.size == SIZE) { "BMW DSP defaults size=${DEFAULTS.size}, expected=$SIZE" }
+    }
 
     fun load(context: Context): FloatArray {
         val store = store(context)
         val values = store.load() ?: migrateLegacy(context, store) ?: DEFAULTS.copyOf()
-        // The master enable switch was removed from the UI (redundant with the app-level
-        // on/off, which already achieves the same thing) - force it on so anyone who had
-        // it persisted off from before can't end up silently stuck with no way to re-enable it.
+        // App-level power owns the master enable. Force the native path enabled so a stale
+        // historical value cannot strand the user in silence with no corresponding control.
         values[INDEX_ENABLED] = 1f
+        migrateIndependentOutputsIfNeeded(store, values)
         return values
     }
 
@@ -133,9 +184,44 @@ object NativeBmwDspValues {
 
     private fun store(context: Context) = NativeBmwDspStore(context.noBackupFilesDir)
 
-    /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob, tolerant of any
-     *  saved length (not just the old hardcoded 35->42 case) since it pads/truncates against
-     *  [DEFAULTS] by position instead of rejecting the whole array on a size mismatch. */
+    private fun migrateIndependentOutputsIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_OUTPUT_SCHEMA_VERSION] >= OUTPUT_SCHEMA_VERSION) return
+
+        fun copyCompressor(output: Int, legacyBase: Int) {
+            values[outputIndex(output, FIELD_COMPRESSOR_ENABLED)] = values[legacyBase]
+            values[outputIndex(output, FIELD_COMPRESSOR_THRESHOLD)] = values[legacyBase + 1]
+            values[outputIndex(output, FIELD_COMPRESSOR_RATIO)] = values[legacyBase + 2]
+            values[outputIndex(output, FIELD_COMPRESSOR_KNEE)] = values[legacyBase + 3]
+            values[outputIndex(output, FIELD_COMPRESSOR_ATTACK)] = values[legacyBase + 4]
+            values[outputIndex(output, FIELD_COMPRESSOR_RELEASE)] = values[legacyBase + 5]
+            values[outputIndex(output, FIELD_COMPRESSOR_MAKEUP)] = values[legacyBase + 6]
+        }
+
+        listOf(OUTPUT_LOW_LEFT, OUTPUT_LOW_RIGHT).forEach { output ->
+            values[outputIndex(output, FIELD_CROSSOVER_FREQ)] = values[INDEX_LOW_CROSSOVER_FREQ]
+            values[outputIndex(output, FIELD_CROSSOVER_LR4)] = values[INDEX_LOW_LR4]
+            values[outputIndex(output, FIELD_SUBSONIC_ENABLED)] = values[INDEX_SUBSONIC_ENABLED]
+            values[outputIndex(output, FIELD_SUBSONIC_FREQ)] = values[INDEX_SUBSONIC_FREQ]
+            values[outputIndex(output, FIELD_MUTE)] = values[INDEX_LOW_MUTE]
+            values[outputIndex(output, FIELD_INVERT)] = values[INDEX_LOW_INVERT]
+            copyCompressor(output, INDEX_LOW_COMPRESSOR_ENABLED)
+        }
+        listOf(OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT).forEach { output ->
+            values[outputIndex(output, FIELD_CROSSOVER_FREQ)] = values[INDEX_MID_CROSSOVER_FREQ]
+            values[outputIndex(output, FIELD_CROSSOVER_LR4)] = 1f
+            values[outputIndex(output, FIELD_SUBSONIC_ENABLED)] = 0f
+            values[outputIndex(output, FIELD_SUBSONIC_FREQ)] = values[INDEX_SUBSONIC_FREQ]
+            values[outputIndex(output, FIELD_MUTE)] = values[INDEX_MID_MUTE]
+            values[outputIndex(output, FIELD_INVERT)] = values[INDEX_MID_INVERT]
+            copyCompressor(output, INDEX_MID_COMPRESSOR_ENABLED)
+        }
+
+        values[INDEX_OUTPUT_SCHEMA_VERSION] = OUTPUT_SCHEMA_VERSION
+        val saved = store.save(values)
+        Timber.i("BMW DSP migrated independent four-output config success=$saved")
+    }
+
+    /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob. */
     private fun migrateLegacy(context: Context, store: NativeBmwDspStore): FloatArray? {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val saved = prefs.getString(KEY, null) ?: return null
@@ -148,7 +234,7 @@ object NativeBmwDspValues {
         return values
     }
 
-    /** Same-side unity routing, zero crossfeed -- the pre-routing-matrix topology. */
+    /** Same-side unity routing, zero crossfeed. */
     fun resetRoutingToDefaults(values: FloatArray) {
         DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
