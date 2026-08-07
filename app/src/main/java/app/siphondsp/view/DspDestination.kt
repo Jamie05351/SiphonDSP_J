@@ -47,7 +47,7 @@ object DspCrossNavBar {
         container.gravity = Gravity.TOP
 
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
-        val activeColor = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorPrimary, Color.rgb(63, 174, 229))
+        val activeColor = MaterialColors.getColor(activity, androidx.appcompat.R.attr.colorPrimary, Color.rgb(63, 174, 229))
         val activeText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnPrimary, Color.WHITE)
         val inactiveText = MaterialColors.getColor(activity, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
         val outlinedButtonStyle = if (compact)
