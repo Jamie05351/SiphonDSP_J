@@ -122,7 +122,6 @@ class CrossoverDashboardBuilder(
             trackHeight = dp(9)
             thumbWidth = dp(14)
             thumbHeight = dp(30)
-            tickVisible = false
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
