@@ -55,12 +55,12 @@ object DspCrossNavBar {
         else
             com.google.android.material.R.attr.materialButtonOutlinedStyle
 
-        val destinations = if (compact) DspDestination.entries.filter { it != current } else DspDestination.entries
-        destinations.forEach { destination ->
+        DspDestination.entries.forEach { destination ->
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
                 icon = ContextCompat.getDrawable(activity, destination.icon)
                 contentDescription = activity.getString(destination.labelRes)
+                tooltipText = activity.getString(destination.labelRes)
                 insetTop = 0
                 insetBottom = 0
                 cornerRadius = activity.dp(7)
