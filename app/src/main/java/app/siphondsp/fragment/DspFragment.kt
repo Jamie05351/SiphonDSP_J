@@ -169,7 +169,10 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     ) {
         card.layoutParams = card.layoutParams.apply {
             width = dp(250)
-            height = dp(200)
+            // Keep the dashboard cards proportional to the actual display rather than assuming
+            // that a dp value maps directly to the head unit's physical pixels. A 480px-tall
+            // display gets cards around 278px high.
+            height = (resources.displayMetrics.heightPixels * 0.58f).roundToInt()
         }
         card.removeAllViews()
 
