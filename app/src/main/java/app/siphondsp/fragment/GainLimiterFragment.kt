@@ -9,51 +9,51 @@ import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.view.BmwControlBuilder
+import app.siphondsp.view.CrossoverDashboardBuilder
 import kotlin.math.roundToInt
 
-/**
- * Dedicated "Gains & Delay" screen: BMW per-band/channel gains, plus delay and polarity
- * (merged in from the former standalone Delay & Polarity destination to free up a bottom-nav
- * slot for Crossovers & Tilt). The limiter and post gain already live in Output Control -- no
- * duplicate surface for either here (post gain L/R dropped in favor of that single existing
- * global control).
- */
+/** Dedicated Gains & Delay workspace using the shared BMW dashboard skin. */
 class GainLimiterFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        val scroll = NestedScrollView(requireContext()).apply { isFillViewport = true }
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), dp(16))
+            setPadding(dp(4), dp(2), dp(4), dp(8))
         }
-        scroll.addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val values = NativeBmwDspValues.load(requireContext())
-        val builder = BmwControlBuilder(requireContext(), root, values) { updated ->
+        val builder = CrossoverDashboardBuilder(requireContext(), root, values) { updated ->
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        builder.sectionCard(getString(R.string.bmw_dsp_gain_structure)) {
+
+        builder.dashboardPanel(
+            getString(R.string.action_gain_limiter),
+            "Per-band level, delay and polarity",
+        ) {
+            sectionHeader(getString(R.string.bmw_dsp_gain_structure))
             addSliderRow(getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB")
             addSliderRow(getString(R.string.bmw_dsp_low_gain_l), NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .1f, "dB")
             addSliderRow(getString(R.string.bmw_dsp_low_gain_r), NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .1f, "dB")
             addSliderRow(getString(R.string.bmw_dsp_mid_gain_l), NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .1f, "dB")
             addSliderRow(getString(R.string.bmw_dsp_mid_gain_r), NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .1f, "dB")
-        }
-        builder.sectionCard(getString(R.string.bmw_dsp_delay_polarity)) {
-            addSwitchRow(getString(R.string.bmw_dsp_invert_low_polarity), null, NativeBmwDspValues.INDEX_LOW_INVERT)
-            addSwitchRow(getString(R.string.bmw_dsp_invert_mid_polarity), null, NativeBmwDspValues.INDEX_MID_INVERT)
+
+            sectionHeader(getString(R.string.bmw_dsp_delay_polarity))
+            addSegmentedSwitchRow(getString(R.string.bmw_dsp_invert_low_polarity), null, NativeBmwDspValues.INDEX_LOW_INVERT)
+            addSegmentedSwitchRow(getString(R.string.bmw_dsp_invert_mid_polarity), null, NativeBmwDspValues.INDEX_MID_INVERT)
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
             addSliderRow(getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R, 0f, 2.8f, .01f, "ms")
         }
 
-        return scroll
+        return NestedScrollView(requireContext()).apply {
+            isFillViewport = true
+            addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
