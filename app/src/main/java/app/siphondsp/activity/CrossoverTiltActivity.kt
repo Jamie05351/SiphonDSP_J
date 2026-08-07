@@ -5,6 +5,7 @@ import android.widget.LinearLayout
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.fragment.CrossoverTiltFragment
+import app.siphondsp.fragment.RoutingFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
@@ -16,11 +17,23 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.CROSSOVER_TILT)
+
+        val mode = intent.getStringExtra(EXTRA_WORKSPACE_MODE) ?: MODE_CROSSOVER
+        val routingMode = mode == MODE_ROUTING
+        val current = if (routingMode) DspDestination.ROUTING else DspDestination.CROSSOVER_TILT
+        supportActionBar?.title = if (routingMode) getString(R.string.action_routing) else getString(R.string.action_crossover_tilt)
+        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), current)
+
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.params, CrossoverTiltFragment())
+                .replace(R.id.params, if (routingMode) RoutingFragment() else CrossoverTiltFragment())
                 .commit()
         }
+    }
+
+    companion object {
+        const val EXTRA_WORKSPACE_MODE = "dsp_workspace_mode"
+        const val MODE_CROSSOVER = "crossover"
+        const val MODE_ROUTING = "routing"
     }
 }
