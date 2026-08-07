@@ -1,6 +1,5 @@
 package app.siphondsp.fragment
 
-import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -16,8 +15,8 @@ import kotlin.math.roundToInt
 /**
  * Dedicated Crossovers & Tilt screen.
  *
- * This branch intentionally prototypes the BMW dashboard treatment on this screen only.
- * The underlying NativeBmwDspValues indices, persistence and broadcasts are unchanged.
+ * Uses one vertical dashboard column on all orientations so the controls read as one
+ * continuous workspace instead of a busy two-pane layout.
  */
 class CrossoverTiltFragment : Fragment() {
     override fun onCreateView(
@@ -25,22 +24,19 @@ class CrossoverTiltFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val values = NativeBmwDspValues.load(requireContext())
 
         val page = LinearLayout(requireContext()).apply {
-            orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(8), dp(10), dp(10))
         }
 
-        val leftColumn = createColumn()
-        val rightColumn = createColumn()
-
-        val leftBuilder = CrossoverDashboardBuilder(requireContext(), leftColumn, values) { updated ->
+        val builder = CrossoverDashboardBuilder(requireContext(), page, values) { updated ->
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        leftBuilder.sectionCard(getString(R.string.bmw_dsp_crossovers)) {
+
+        builder.sectionCard(getString(R.string.bmw_dsp_crossovers)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_subsonic_bw2),
                 null,
@@ -80,11 +76,7 @@ class CrossoverTiltFragment : Fragment() {
             )
         }
 
-        val rightBuilder = CrossoverDashboardBuilder(requireContext(), rightColumn, values) { updated ->
-            NativeBmwDspValues.save(requireContext(), updated)
-            NativeBmwDspValues.broadcast(requireContext(), updated)
-        }
-        rightBuilder.sectionCard(getString(R.string.bmw_dsp_tilt_section)) {
+        builder.sectionCard(getString(R.string.bmw_dsp_tilt_section)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_tilt_active),
                 null,
@@ -101,7 +93,8 @@ class CrossoverTiltFragment : Fragment() {
                 200f, 2000f, 1f, "Hz",
             )
         }
-        rightBuilder.sectionCard(getString(R.string.bmw_dsp_mono_bass)) {
+
+        builder.sectionCard(getString(R.string.bmw_dsp_mono_bass)) {
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mono_bass),
                 null,
@@ -124,26 +117,10 @@ class CrossoverTiltFragment : Fragment() {
             )
         }
 
-        if (landscape) {
-            page.addView(leftColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.08f).apply {
-                marginEnd = dp(4)
-            })
-            page.addView(rightColumn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, .92f).apply {
-                marginStart = dp(4)
-            })
-        } else {
-            page.addView(leftColumn)
-            page.addView(rightColumn)
-        }
-
         return NestedScrollView(requireContext()).apply {
             isFillViewport = true
             addView(page, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-    }
-
-    private fun createColumn() = LinearLayout(requireContext()).apply {
-        orientation = LinearLayout.VERTICAL
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
