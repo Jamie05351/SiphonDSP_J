@@ -15,6 +15,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -87,27 +88,40 @@ class CrossoverDashboardBuilder(
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(42)
-            setPadding(0, dp(2), 0, dp(2))
+            minimumHeight = dp(38)
+            setPadding(0, dp(1), 0, dp(1))
         }
         row.addView(labelBlock(title, subtitle), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        val group = MaterialButtonToggleGroup(context).apply {
-            isSingleSelection = true
-            isSelectionRequired = true
+        if (offLabel == "OFF" && onLabel == "ON") {
+            val toggle = MaterialSwitch(context).apply {
+                isChecked = values[index] >= .5f
+                contentDescription = title
+                showText = false
+                setOnCheckedChangeListener { _, checked ->
+                    values[index] = if (checked) 1f else 0f
+                    onChanged(values)
+                }
+            }
+            row.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        } else {
+            val group = MaterialButtonToggleGroup(context).apply {
+                isSingleSelection = true
+                isSelectionRequired = true
+            }
+            val off = segmentButton(offLabel)
+            val on = segmentButton(onLabel)
+            group.addView(off, LinearLayout.LayoutParams(dp(54), dp(28)))
+            group.addView(on, LinearLayout.LayoutParams(dp(54), dp(28)))
+            val checked = if (values[index] >= .5f) on.id else off.id
+            group.check(checked)
+            group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+                if (!isChecked) return@addOnButtonCheckedListener
+                values[index] = if (checkedId == on.id) 1f else 0f
+                onChanged(values)
+            }
+            row.addView(group)
         }
-        val off = segmentButton(offLabel)
-        val on = segmentButton(onLabel)
-        group.addView(off, LinearLayout.LayoutParams(dp(68), dp(32)))
-        group.addView(on, LinearLayout.LayoutParams(dp(68), dp(32)))
-        val checked = if (values[index] >= .5f) on.id else off.id
-        group.check(checked)
-        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            values[index] = if (checkedId == on.id) 1f else 0f
-            onChanged(values)
-        }
-        row.addView(group)
         currentContent.addView(row)
     }
 
@@ -185,7 +199,7 @@ class CrossoverDashboardBuilder(
     private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
         id = View.generateViewId()
         text = textValue
-        textSize = 11.5f
+        textSize = 11f
         isAllCaps = false
         minHeight = 0
         minimumHeight = 0
@@ -193,7 +207,7 @@ class CrossoverDashboardBuilder(
         insetBottom = 0
         cornerRadius = dp(5)
         strokeWidth = dp(1)
-        setPadding(dp(6), 0, dp(6), 0)
+        setPadding(dp(4), 0, dp(4), 0)
         backgroundTintList = checkedColorStateList(accentBlue, segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
         setTextColor(checkedColorStateList(Color.WHITE, resolveColor(com.google.android.material.R.attr.colorOnSurface)))
