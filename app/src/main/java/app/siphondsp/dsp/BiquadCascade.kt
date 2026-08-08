@@ -40,11 +40,13 @@ internal class BiquadCascade(maxSections: Int) {
         sectionCount++
     }
 
+    /** Mirrors JamesDspLocalEngine/NativeBmwDspProcessor::makePeq via the existing BiquadUtils formulas. */
     fun addPeqBand(band: ParametricEqBand, sampleRate: Double) {
         val c = BiquadUtils.computeCoefficients(band.frequency, band.gain, band.q, band.filterType, sampleRate)
         addNormalised(c.b0 / c.a0, c.b1 / c.a0, c.b2 / c.a0, c.a1 / c.a0, c.a2 / c.a0)
     }
 
+    /** NativeBmwDspProcessor::makeLowPass. */
     fun addLowPass(fc: Double, q: Double, sampleRate: Double) {
         val w = 2.0 * PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate
         val c = cos(w)
@@ -55,6 +57,7 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(b0, (1.0 - c) / d, b0, (-2.0 * c) / d, (1.0 - alpha) / d)
     }
 
+    /** NativeBmwDspProcessor::makeHighPass. */
     fun addHighPass(fc: Double, q: Double, sampleRate: Double) {
         val w = 2.0 * PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate
         val c = cos(w)
@@ -65,14 +68,21 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(b0, (-(1.0 + c)) / d, b0, (-2.0 * c) / d, (1.0 - alpha) / d)
     }
 
+    /**
+     * NativeBmwDspProcessor::makeOnePoleLow / OnePole::run. This is a first-order
+     * section (H(z) = a0*(1+z^-1) / (1+b1*z^-1)); stored with b2=a2=0 so the generic
+     * biquad evaluator in [accumulate] handles it without special-casing.
+     */
     fun addOnePoleLow(fc: Double, sampleRate: Double) {
         val k = tan(PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate)
         val a0 = k / (k + 1.0)
         addNormalised(a0, a0, 0.0, (k - 1.0) / (k + 1.0), 0.0)
     }
 
+    /** NativeBmwDspProcessor::makeLowShelf. */
     fun addLowShelf(fc: Double, gainDb: Double, sampleRate: Double) = addShelf(fc, gainDb, sampleRate, high = false)
 
+    /** NativeBmwDspProcessor::makeHighShelf. */
     fun addHighShelf(fc: Double, gainDb: Double, sampleRate: Double) = addShelf(fc, gainDb, sampleRate, high = true)
 
     private fun addShelf(fc: Double, gainDb: Double, sampleRate: Double, high: Boolean) {
@@ -133,11 +143,20 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(b0, b1, 1.0, b1, b0)
     }
 
+    /**
+     * NativeBmwDspProcessor::processChannelInput's 10Hz DC blocker:
+     * H(z) = (1 - z^-1) / (1 - dcR*z^-1), dcR = exp(-2*pi*cutoffHz/sampleRate).
+     */
     fun addDcBlocker(cutoffHz: Double, sampleRate: Double) {
         val dcR = exp(-2.0 * PI * cutoffHz / sampleRate)
         addNormalised(1.0, -1.0, 0.0, -dcR, 0.0)
     }
 
+    /**
+     * Multiplies [acc] by this cascade's H(e^jw) at the point described by [cosW]/[sinW]
+     * (angle w = 2*pi*f/sr) and [cos2W]/[sin2W] (double angle, for z^-2). z^-1 = cos(w) -
+     * j*sin(w), matching NativeBmwDspResponseView's unitDelay convention.
+     */
     fun accumulate(cosW: Double, sinW: Double, cos2W: Double, sin2W: Double, acc: ComplexAcc) {
         val z1Re = cosW
         val z1Im = -sinW

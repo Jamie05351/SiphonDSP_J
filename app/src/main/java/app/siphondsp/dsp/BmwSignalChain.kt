@@ -88,12 +88,15 @@ object BmwSignalChain {
      * Determines whether a parametric EQ band applies to the given physical output.
      *
      * Accounts for the internal L/R swap when routing:
-     * - A band tagged with [ParametricEqChannel.LEFT] applies to physical LEFT output
-     * - A band tagged with [ParametricEqChannel.RIGHT] applies to physical RIGHT output
+     * - A band tagged with [ParametricEqChannel.LEFT] targets the internal "left" chain,
+     *   which -- due to the swap -- feeds the physical RIGHT output
+     * - A band tagged with [ParametricEqChannel.RIGHT] targets the internal "right" chain,
+     *   which feeds the physical LEFT output
      * - A band tagged with [ParametricEqChannel.LEFT_RIGHT] applies to both
      *
-     * Internally, the native processor swaps the outputs, but this method returns
-     * the mapping from the user's perspective (physical channels).
+     * Internally, the native processor swaps the outputs; this method's return value already
+     * reflects that swap, so callers can compare directly against a physical [BmwOutputChannel]
+     * without re-deriving the mapping themselves.
      *
      * @param band The parametric EQ band model (contains channel tag)
      * @param output Physical output channel to check against
@@ -105,11 +108,11 @@ object BmwSignalChain {
      * val rightBand = ParametricEqBand(channel = ParametricEqChannel.RIGHT)
      * val bothBand = ParametricEqBand(channel = ParametricEqChannel.LEFT_RIGHT)
      *
-     * bandAppliesTo(leftBand, BmwOutputChannel.LEFT)    // true  (direct match)
-     * bandAppliesTo(leftBand, BmwOutputChannel.RIGHT)   // false (no match)
+     * bandAppliesTo(leftBand, BmwOutputChannel.LEFT)    // false (swapped: LEFT band feeds physical RIGHT)
+     * bandAppliesTo(leftBand, BmwOutputChannel.RIGHT)   // true  (swapped match)
      *
-     * bandAppliesTo(rightBand, BmwOutputChannel.LEFT)   // false (no match)
-     * bandAppliesTo(rightBand, BmwOutputChannel.RIGHT)  // true  (direct match)
+     * bandAppliesTo(rightBand, BmwOutputChannel.LEFT)   // true  (swapped match)
+     * bandAppliesTo(rightBand, BmwOutputChannel.RIGHT)  // false (swapped: RIGHT band feeds physical LEFT)
      *
      * bandAppliesTo(bothBand, BmwOutputChannel.LEFT)    // true  (always matches)
      * bandAppliesTo(bothBand, BmwOutputChannel.RIGHT)   // true  (always matches)
