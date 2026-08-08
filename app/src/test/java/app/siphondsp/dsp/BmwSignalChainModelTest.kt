@@ -134,6 +134,16 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun subsonicIsLr4AtItsCornerFrequency() {
+        val values = baseValues().also { it[1] = 1f }
+        val enabled = compute(values)
+        val disabled = compute(values.copyOf().also { it[12] = 0f })
+        val i = nearestIndex(values[13].toDouble())
+
+        assertEquals(-6.0, enabled.lowBranchDb[0][i] - disabled.lowBranchDb[0][i], 0.35)
+    }
+
+    @Test
     fun bothCrossoversBypassedReturnsPreSplitSignalNotDoubled() {
         val result = compute(baseValues().also { it[1] = 1f; it[2] = 1f; it[25] = 0f })
         assertTrue(result.bothCrossoversBypassed)

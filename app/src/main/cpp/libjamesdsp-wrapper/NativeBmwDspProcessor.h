@@ -101,7 +101,7 @@ private:
         bool muted = false;
         bool polarityInverted = false;
         float gain = 1.0f;
-        Biquad subsonic;
+        Biquad subsonic1, subsonic2;
         Biquad crossover1, crossover2;
         OnePole crossoverPole;
         Biquad monoBassHpf1, monoBassHpf2;
@@ -116,7 +116,7 @@ private:
             return sample;
         }
         void clearState() {
-            subsonic.clear(); crossover1.clear(); crossover2.clear(); crossoverPole.clear();
+            subsonic1.clear(); subsonic2.clear(); crossover1.clear(); crossover2.clear(); crossoverPole.clear();
             monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
             for (auto& section : allPassState) section.clear();
         }

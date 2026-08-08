@@ -49,7 +49,7 @@ class CrossoverTiltFragment : Fragment() {
         ) {
             sectionHeader(getString(R.string.bmw_dsp_crossovers))
             addSegmentedSwitchRow(
-                getString(R.string.bmw_dsp_subsonic_bw2),
+                getString(R.string.bmw_dsp_subsonic_lr4),
                 null,
                 NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
                 mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),

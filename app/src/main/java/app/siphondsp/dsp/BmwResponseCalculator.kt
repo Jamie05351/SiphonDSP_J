@@ -124,8 +124,12 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private fun rebuildLowCascade(values: FloatArray, peq: BmwPeqState, channel: BmwOutputChannel) {
         val cascade = lowCascade[channel.ordinal]
         cascade.clear()
-        // Subsonic HPF applies unconditionally when enabled, independent of crossover bypass.
-        if (values[12] >= .5f) cascade.addHighPass(values[13].toDouble(), BUTTERWORTH_Q, sampleRate)
+        // Native LR4 subsonic protection: two cascaded Butterworth HPF sections.
+        // It applies independently of the low-crossover bypass control.
+        if (values[12] >= .5f) {
+            cascade.addHighPass(values[13].toDouble(), BUTTERWORTH_Q, sampleRate)
+            cascade.addHighPass(values[13].toDouble(), BUTTERWORTH_Q, sampleRate)
+        }
         if (values[1] < .5f) {
             if (values[16] >= .5f) {
                 cascade.addLowPass(values[15].toDouble(), BUTTERWORTH_Q, sampleRate)

@@ -12,7 +12,7 @@ stereo capture (l, r)
   -> input-correction preamp + PEQ, Left/Right              [formerly "Full Range" PEQ]
   -> headroom
   -> routing matrix (Front L/R -> Low L, Low R, Mid L, Mid R)
-  -> per output: subsonic HPF (low only) -> crossover LPF/HPF
+  -> per output: subsonic LR4 HPF (low only) -> crossover LPF/HPF
   -> mono-bass blend (low outputs only, combines Low L + Low R when enabled)
   -> per-band PEQ (Low bank / Mid bank, shared L/R banks, unchanged from before)
   -> per-output all-pass (up to 2 sections)

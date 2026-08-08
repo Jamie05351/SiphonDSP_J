@@ -179,8 +179,8 @@
     <string name="bmw_dsp_low_delay_l">Low delay L</string>
     <string name="bmw_dsp_low_delay_r">Low delay R</string>
     <string name="bmw_dsp_crossovers">Crossovers</string>
-    <string name="bmw_dsp_subsonic_bw2">Subsonic BW2</string>
-    <string name="bmw_dsp_subsonic_bw2_subtitle">12 dB/oct Butterworth protection</string>
+    <string name="bmw_dsp_subsonic_lr4">Subsonic LR4</string>
+    <string name="bmw_dsp_subsonic_lr4_subtitle">24 dB/oct Linkwitz-Riley protection</string>
     <string name="bmw_dsp_subsonic_freq">Subsonic freq</string>
     <string name="bmw_dsp_mute_low_band">Mute low band</string>
     <string name="bmw_dsp_low_lpf_freq">Low LPF freq</string>
