@@ -72,8 +72,16 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
    candidate.q=qValue;
    if(candidate.enabled&&!candidate.isValid(sampleRate_))return false;
    candidate.rebuild(sampleRate_);
+   const auto& current=outputs_[out].allPass[section];
+   const bool sectionChanged=current.enabled!=candidate.enabled||
+       current.secondOrder!=candidate.secondOrder||
+       changed(current.frequencyHz,candidate.frequencyHz)||
+       changed(current.q,candidate.q);
    nextOutputs[out].allPass[section]=candidate;
-   nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
+   // Keep the delay history when an unrelated setting is configured. Clearing an
+   // active all-pass section here creates a phase discontinuity even though its
+   // coefficients did not change.
+   if(sectionChanged)nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
   }
  }
 
@@ -200,6 +208,6 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
 }
 
 const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)return s;auto*w=const_cast<float*>(s);for(std::size_t i=0;i+1<n;i+=2)processFrame(w[i],w[i+1]);return s;}
-const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s)return s;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=w[i],r=w[i+1];processFrame(l,r);w[i]=clampInt<int16_t>(l);w[i+1]=clampInt<int16_t>(r);}return s;}
-const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s)return s;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=w[i],r=w[i+1];processFrame(l,r);w[i]=clampInt<int32_t>(l);w[i+1]=clampInt<int32_t>(r);}return s;}
+const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s||!p_.enabled)return s;constexpr float scale=32768.f,invScale=1.f/scale;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;processFrame(l,r);w[i]=clampInt<int16_t>(l*scale);w[i+1]=clampInt<int16_t>(r*scale);}return s;}
+const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s||!p_.enabled)return s;constexpr float scale=2147483648.f,invScale=1.f/scale;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;processFrame(l,r);w[i]=clampInt<int32_t>(l*scale);w[i+1]=clampInt<int32_t>(r*scale);}return s;}
 void NativeBmwDspProcessor::readCompressorMeter(float*v,std::size_t n)const{if(!v||n<6)return;const auto&ll=dynamics(OutputId::LowLeft);const auto&lr=dynamics(OutputId::LowRight);const auto&ml=dynamics(OutputId::MidLeft);const auto&mr=dynamics(OutputId::MidRight);v[0]=std::max(ll.inputDb.load(),lr.inputDb.load());v[1]=std::max(ll.outputDb.load(),lr.outputDb.load());v[2]=std::max(ll.gainReductionDb.load(),lr.gainReductionDb.load());v[3]=std::max(ml.inputDb.load(),mr.inputDb.load());v[4]=std::max(ml.outputDb.load(),mr.outputDb.load());v[5]=std::max(ml.gainReductionDb.load(),mr.gainReductionDb.load());}
