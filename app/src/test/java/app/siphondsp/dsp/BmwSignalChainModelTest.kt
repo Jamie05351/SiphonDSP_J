@@ -12,15 +12,13 @@ import org.junit.Test
 import kotlin.math.abs
 
 /**
- * Verifies BmwResponseCalculator mirrors NativeBmwDspProcessor::processFrame's stage order.
- * The response model still consumes the linked front-facing band settings, while the native
- * engine mirrors those values into independent Low L/R and Mid L/R runtime paths.
+ * Verifies BmwResponseCalculator mirrors NativeBmwDspProcessor::processFrame's linear
+ * response stages, including the independent per-output configuration block.
  */
 class BmwSignalChainModelTest {
     private val calculator = BmwResponseCalculator(pointCount = POINT_COUNT)
     private val curves = BmwResponseCurves(POINT_COUNT)
 
-    /** Independent, immutable snapshot -- [BmwResponseCurves] itself is a reused mutable buffer. */
     private class Snapshot(
         val sumDb: Array<DoubleArray>,
         val lowBranchDb: Array<DoubleArray>,
@@ -67,6 +65,10 @@ class BmwSignalChainModelTest {
         lowBandBands = ParametricEqBandList().apply { addAll(low) },
         midBandBands = ParametricEqBandList().apply { addAll(mid) },
     )
+
+    private fun setOutput(values: FloatArray, output: Int, field: Int, value: Float) {
+        values[NativeBmwDspValues.outputIndex(output, field)] = value
+    }
 
     @Test
     fun headroomShiftsEveryStageByExactlyItsOwnDelta() {
@@ -125,27 +127,57 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun lowCrossoverBypassedStillAppliesSubsonicFilter() {
-        val bypassed = compute(baseValues().also { it[1] = 1f })
-        val subsonicOff = compute(baseValues().also { it[1] = 1f; it[12] = 0f })
+    fun lowCrossoverBypassAlsoBypassesSubsonicLikeNative() {
+        val withSubsonicConfigured = compute(baseValues().also { it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f })
+        val subsonicDisabled = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+        })
         val i = nearestIndex(20.0)
 
-        assertTrue(bypassed.lowBranchDb[0][i] < subsonicOff.lowBranchDb[0][i] - 3.0)
+        assertEquals(subsonicDisabled.lowBranchDb[0][i], withSubsonicConfigured.lowBranchDb[0][i], 1e-6)
+        assertEquals(subsonicDisabled.lowBranchDb[1][i], withSubsonicConfigured.lowBranchDb[1][i], 1e-6)
     }
 
     @Test
     fun subsonicIsLr4AtItsCornerFrequency() {
-        val values = baseValues().also { it[1] = 1f }
+        val values = baseValues()
+        val corner = values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_SUBSONIC_FREQ)].toDouble()
         val enabled = compute(values)
-        val disabled = compute(values.copyOf().also { it[12] = 0f })
-        val i = nearestIndex(values[13].toDouble())
+        val disabled = compute(values.copyOf().also {
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+        })
+        val i = nearestIndex(corner)
 
-        assertEquals(-6.0, enabled.lowBranchDb[0][i] - disabled.lowBranchDb[0][i], 0.35)
+        assertEquals(-6.0, enabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i] - disabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i], 0.35)
+    }
+
+    @Test
+    fun independentLowCrossoversAffectOnlyTheirPhysicalOutput() {
+        val baseline = compute(baseValues())
+        val changed = compute(baseValues().also {
+            // Physical LEFT is fed by native LowRight after the final native L/R swap.
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ, 90f)
+        })
+        val i = nearestIndex(120.0)
+
+        assertTrue(abs(changed.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i]) > 0.5)
+        assertEquals(
+            baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            changed.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            1e-6,
+        )
     }
 
     @Test
     fun bothCrossoversBypassedReturnsPreSplitSignalNotDoubled() {
-        val result = compute(baseValues().also { it[1] = 1f; it[2] = 1f; it[25] = 0f })
+        val result = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
+            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
+        })
         assertTrue(result.bothCrossoversBypassed)
         for (i in result.sumDb[0].indices) {
             assertEquals(result.preSplitDb[0][i], result.sumDb[0][i], 1e-6)
@@ -154,7 +186,7 @@ class BmwSignalChainModelTest {
 
     @Test
     fun tiltAppliesAfterSummationNotToIndividualBranches() {
-        val baseline = compute(baseValues().also { it[25] = 0f })
+        val baseline = compute(baseValues().also { it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f })
         val tilted = compute(baseValues())
         val i = nearestIndex(100.0)
 
@@ -189,7 +221,7 @@ class BmwSignalChainModelTest {
 
     @Test
     fun channelMuteOneSilencesPhysicalRightOutputOnly() {
-        val result = compute(baseValues().also { it[3] = 1f })
+        val result = compute(baseValues().also { it[NativeBmwDspValues.INDEX_CHANNEL_MUTE] = 1f })
 
         val freqIndex = nearestIndex(1_000.0)
         assertEquals(FLOOR_DB, result.sumDb[BmwOutputChannel.RIGHT.ordinal][freqIndex], 1e-6)
@@ -197,17 +229,30 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun lowInvertChangesSumButNotLowBranchMagnitude() {
-        val values = baseValues().also { it[2] = 1f }
-        val notInverted = compute(values.copyOf().also { it[19] = 0f })
-        val inverted = compute(values.copyOf().also { it[19] = 1f })
+    fun perOutputLowInvertChangesOnlyMappedPhysicalSum() {
+        val baseline = compute(baseValues().also { it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f })
+        val inverted = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
+            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT, 1f)
+        })
 
-        for (i in notInverted.lowBranchDb[0].indices) {
-            assertEquals("low branch magnitude at point $i", notInverted.lowBranchDb[0][i], inverted.lowBranchDb[0][i], 1e-6)
+        for (i in baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal].indices) {
+            assertEquals(
+                baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+                inverted.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+                1e-6,
+            )
+            assertEquals(
+                baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][i],
+                inverted.sumDb[BmwOutputChannel.RIGHT.ordinal][i],
+                1e-6,
+            )
         }
         val region = nearestIndex(50.0)..nearestIndex(500.0)
-        val maxDelta = region.maxOf { abs(inverted.sumDb[0][it] - notInverted.sumDb[0][it]) }
-        assertTrue("expected inverting the low branch to change the summed result somewhere in 50-500Hz, max delta was $maxDelta", maxDelta > 0.5)
+        val maxDelta = region.maxOf {
+            abs(inverted.sumDb[BmwOutputChannel.LEFT.ordinal][it] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][it])
+        }
+        assertTrue("expected LowRight inversion to change physical LEFT sum, max delta was $maxDelta", maxDelta > 0.5)
     }
 
     @Test
@@ -245,7 +290,7 @@ class BmwSignalChainModelTest {
 
     @Test
     fun processorDisabledIsUnityAcrossTheBoard() {
-        val result = compute(baseValues().also { it[0] = 0f })
+        val result = compute(baseValues().also { it[NativeBmwDspValues.INDEX_ENABLED] = 0f })
         assertTrue(!result.processorEnabled)
         for (channel in 0..1) {
             result.sumDb[channel].forEach { assertEquals(0.0, it, 1e-6) }
@@ -253,8 +298,6 @@ class BmwSignalChainModelTest {
     }
 
     private fun baseValues(): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
-        // The response calculator models the linked front-facing controls. Mark the independent
-        // schema as current so this fixture has the same shape as a post-migration runtime array.
         it[NativeBmwDspValues.INDEX_OUTPUT_SCHEMA_VERSION] = NativeBmwDspValues.OUTPUT_SCHEMA_VERSION
     }
 
