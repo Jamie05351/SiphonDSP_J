@@ -3,10 +3,13 @@ package app.siphondsp.fragment
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import androidx.preference.ListPreference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
+import androidx.preference.SeekBarPreference
+import androidx.preference.SwitchPreferenceCompat
 import androidx.preference.children
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
@@ -135,10 +138,25 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             val base = NativeBmwDspValues.INDEX_ALL_PASS +
                 (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
             val prefix = "allpass_${section + 1}_"
-            editor.putBoolean(prefix + "enabled", values[base] >= .5f)
-            editor.putString(prefix + "order", values[base + 1].toInt().toString())
-            editor.putInt(prefix + "frequency", values[base + 2].toInt())
-            editor.putInt(prefix + "q", (values[base + 3] * 100f).toInt())
+            val enabled = values[base] >= .5f
+            val order = values[base + 1].toInt().toString()
+            val frequency = values[base + 2].toInt()
+            val q = (values[base + 3] * 100f).toInt()
+
+            editor.putBoolean(prefix + "enabled", enabled)
+            editor.putString(prefix + "order", order)
+            editor.putInt(prefix + "frequency", frequency)
+            editor.putInt(prefix + "q", q)
+
+            // editor.apply() alone doesn't refresh already-bound widgets -- a Preference only
+            // reads its persisted value once, at first bind. Without also setting these
+            // directly, switching the output channel silently keeps showing whichever channel's
+            // controls were last touched on screen, even though the correct per-channel values
+            // are (and always were) being saved/loaded underneath.
+            findPreference<SwitchPreferenceCompat>(prefix + "enabled")?.isChecked = enabled
+            findPreference<ListPreference>(prefix + "order")?.value = order
+            findPreference<SeekBarPreference>(prefix + "frequency")?.value = frequency
+            findPreference<SeekBarPreference>(prefix + "q")?.value = q
         }
         editor.apply()
         updatingMenu = false
