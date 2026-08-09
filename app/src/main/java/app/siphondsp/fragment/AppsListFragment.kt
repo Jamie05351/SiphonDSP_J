@@ -26,7 +26,8 @@ import app.siphondsp.utils.extensions.CompatExtensions.getInstalledApplicationsC
 
 class AppsListFragment : BottomSheetDialogFragment() {
 
-    private lateinit var binding: FragmentApplistSheetBinding
+    private var _binding: FragmentApplistSheetBinding? = null
+    private val binding get() = _binding!!
     private lateinit var adapter: AppsListAdapter
     private lateinit var watcher: TextWatcher
 
@@ -39,7 +40,7 @@ class AppsListFragment : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        binding = FragmentApplistSheetBinding.inflate(layoutInflater, container, false)
+        _binding = FragmentApplistSheetBinding.inflate(layoutInflater, container, false)
 
         watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -61,7 +62,7 @@ class AppsListFragment : BottomSheetDialogFragment() {
         binding.recyclerview.adapter = adapter
         binding.recyclerview.layoutManager = LinearLayoutManagerWrapper(requireContext())
 
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             binding.loader.isVisible = true
             binding.recyclerview.isVisible = false
             binding.filter.isEnabled = false
@@ -95,6 +96,7 @@ class AppsListFragment : BottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         binding.filter.removeTextChangedListener(watcher)
+        _binding = null
         super.onDestroyView()
     }
 
