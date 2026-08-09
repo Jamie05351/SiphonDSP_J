@@ -15,6 +15,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,8 @@ import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
+import app.siphondsp.databinding.FragmentDspPageSettingsBinding
+import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
@@ -37,6 +40,8 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     private val prefsVar: Preferences.Var by inject()
 
     private lateinit var binding: FragmentDspBinding
+    private lateinit var shortcutsBinding: FragmentDspPageShortcutsBinding
+    private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
 
@@ -56,17 +61,36 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         savedInstanceState: Bundle?,
     ): View {
         binding = FragmentDspBinding.inflate(layoutInflater, container, false)
+        shortcutsBinding = FragmentDspPageShortcutsBinding.inflate(layoutInflater, binding.dspPager, false)
+        settingsBinding = FragmentDspPageSettingsBinding.inflate(layoutInflater, binding.dspPager, false)
 
-        binding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
-        binding.translationNotice.setOnRootClickListener {
+        setUpShortcutsPage()
+
+        // The settings page hosts child fragments through FragmentContainerView, which needs its
+        // container ids to already be resolvable in the live view tree when the transaction runs.
+        // ViewPager2 only actually attaches a page's view once that page is laid out, so the
+        // child-fragment transaction is deferred until the page view is attached to the window
+        // rather than run eagerly here.
+        binding.dspPager.offscreenPageLimit = 1
+        binding.dspPager.adapter = DspPagerAdapter(
+            pages = listOf(shortcutsBinding.root, settingsBinding.root),
+            onPageAttached = { position -> if (position == 1) setUpSettingsPage() },
+        )
+
+        return binding.root
+    }
+
+    private fun setUpShortcutsPage() {
+        shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
+        shortcutsBinding.translationNotice.setOnRootClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://crowdin.com/project/siphondsp")))
             hideTranslationNotice()
         }
 
-        binding.updateNotice.setOnCloseClickListener {
+        shortcutsBinding.updateNotice.setOnCloseClickListener {
             updateNoticeOnCloseClick?.invoke()
         }
-        binding.updateNotice.setOnRootClickListener {
+        shortcutsBinding.updateNotice.setOnRootClickListener {
             updateNoticeOnClick?.invoke()
         }
 
@@ -74,25 +98,25 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         // the head-unit concept. The XML keeps the stable IDs/click targets; only the visual
         // contents are replaced here so navigation and DSP behavior remain untouched.
         decorateDestinationCard(
-            binding.cardShortcutPeq,
+            shortcutsBinding.cardShortcutPeq,
             R.drawable.card_peq_e60,
             R.drawable.ic_twotone_peq_sliders_28dp,
             "PEQ",
         )
         decorateDestinationCard(
-            binding.cardShortcutGainsDelay,
+            shortcutsBinding.cardShortcutGainsDelay,
             R.drawable.card_gains_delay_e60,
             R.drawable.ic_twotone_gain_knob_28dp,
             "GAINS / DELAY",
         )
         decorateDestinationCard(
-            binding.cardShortcutCompressor,
+            shortcutsBinding.cardShortcutCompressor,
             R.drawable.card_compressor_e60,
             R.drawable.ic_twotone_compressor_pulse_28dp,
             "COMPRESSOR",
         )
         decorateDestinationCard(
-            binding.cardShortcutCrossovers,
+            shortcutsBinding.cardShortcutCrossovers,
             R.drawable.card_crossovers_e60,
             R.drawable.ic_twotone_crossover_tilt_28dp,
             "CROSSOVERS",
@@ -100,29 +124,35 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
 
         // Primary BMW DSP shortcuts. These open the same activities as the existing nav/menu
         // actions; the cards are only an additional main-menu entry point.
-        binding.cardShortcutPeq.setOnClickListener {
+        shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
-        binding.cardShortcutGainsDelay.setOnClickListener {
+        shortcutsBinding.cardShortcutGainsDelay.setOnClickListener {
             startActivity(Intent(requireContext(), GainLimiterActivity::class.java))
         }
-        binding.cardShortcutCompressor.setOnClickListener {
+        shortcutsBinding.cardShortcutCompressor.setOnClickListener {
             startActivity(Intent(requireContext(), NativeBmwCompressorActivity::class.java))
         }
-        binding.cardShortcutCrossovers.setOnClickListener {
+        shortcutsBinding.cardShortcutCrossovers.setOnClickListener {
             startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java))
         }
 
         // Should show notice?
         Timber.e(Locale.getDefault().language.toString())
-        binding.translationNotice.isVisible =
+        shortcutsBinding.translationNotice.isVisible =
            prefsVar.get<Long>(R.string.key_snooze_translation_notice) < (System.currentTimeMillis() / 1000L) &&
                     !Locale.getDefault().language.equals("en")
-        binding.updateNotice.isVisible = false
+        shortcutsBinding.updateNotice.isVisible = false
 
         val transition = LayoutTransition()
         transition.enableTransitionType(LayoutTransition.CHANGING)
-        binding.cardContainer.layoutTransition = transition
+        shortcutsBinding.pageShortcutsRoot.layoutTransition = transition
+    }
+
+    private fun setUpSettingsPage() {
+        val transition = LayoutTransition()
+        transition.enableTransitionType(LayoutTransition.CHANGING)
+        settingsBinding.cardContainer.layoutTransition = transition
 
         childFragmentManager.beginTransaction()
             .replace(R.id.card_device_profiles, DeviceProfilesCardFragment.newInstance())
@@ -157,8 +187,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         arrayOf(R.string.key_device_profiles_enable).forEach {
             onSharedPreferenceChanged(null, getString(it))
         }
-
-        return binding.root
     }
 
     private fun decorateDestinationCard(
@@ -167,13 +195,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         iconRes: Int,
         label: String,
     ) {
-        card.layoutParams = card.layoutParams.apply {
-            width = dp(250)
-            // Keep the dashboard cards proportional to the actual display rather than assuming
-            // that a dp value maps directly to the head unit's physical pixels. A 480px-tall
-            // display gets cards around 278px high.
-            height = (resources.displayMetrics.heightPixels * 0.58f).roundToInt()
-        }
         card.removeAllViews()
 
         val frame = FrameLayout(requireContext()).apply {
@@ -231,14 +252,14 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when(key) {
             getString(R.string.key_device_profiles_enable) -> {
-                (binding.cardDeviceProfiles.parent as ViewGroup).isVisible =
+                (settingsBinding.cardDeviceProfiles.parent as ViewGroup).isVisible =
                     prefsApp.get<Boolean>(R.string.key_device_profiles_enable)
             }
         }
     }
 
     private fun hideTranslationNotice() {
-        binding.translationNotice.isVisible = false
+        shortcutsBinding.translationNotice.isVisible = false
         // Set timer +1y
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
@@ -247,11 +268,11 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         (value * resources.displayMetrics.density).roundToInt()
 
     fun setUpdateCardVisible(visible: Boolean) {
-        binding.updateNotice.isVisible = visible
+        shortcutsBinding.updateNotice.isVisible = visible
     }
 
     fun setUpdateCardTitle(title: String) {
-        binding.updateNotice.titleText = title
+        shortcutsBinding.updateNotice.titleText = title
     }
 
     fun setUpdateCardOnClick(onClick: () -> Unit) {
@@ -272,6 +293,37 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
             catch(ex: IllegalStateException) {
                 Timber.e("Failed to restart fragment")
                 Timber.i(ex)
+            }
+        }
+    }
+
+    /**
+     * Wraps a fixed set of pre-inflated page views (one per position) for [binding.dspPager].
+     * There are only ever two static pages here, so this skips Fragment-per-page machinery and
+     * just hands ViewPager2's RecyclerView the already-built view for each position.
+     */
+    private class DspPagerAdapter(
+        private val pages: List<View>,
+        private val onPageAttached: (position: Int) -> Unit,
+    ) : RecyclerView.Adapter<DspPagerAdapter.PageViewHolder>() {
+        private val attachedPositions = mutableSetOf<Int>()
+
+        class PageViewHolder(view: View) : RecyclerView.ViewHolder(view)
+
+        override fun getItemCount() = pages.size
+
+        override fun getItemViewType(position: Int) = position
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            PageViewHolder(pages[viewType])
+
+        override fun onBindViewHolder(holder: PageViewHolder, position: Int) {}
+
+        override fun onViewAttachedToWindow(holder: PageViewHolder) {
+            super.onViewAttachedToWindow(holder)
+            val position = holder.bindingAdapterPosition
+            if (position != RecyclerView.NO_POSITION && attachedPositions.add(position)) {
+                onPageAttached(position)
             }
         }
     }
