@@ -1,15 +1,21 @@
 package app.siphondsp.fragment
 
+import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
+import app.siphondsp.R
+import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.RoutingDiagramView
+import com.google.android.material.button.MaterialButton
 import kotlin.math.roundToInt
 
 class RoutingFragment : Fragment() {
@@ -25,6 +31,21 @@ class RoutingFragment : Fragment() {
         }
         builder.sectionCard("Signal path", "The routing matrix blends the two inputs into four processing bands, which are then summed back to a stereo output") {
             addCustomView(RoutingDiagramView(requireContext()))
+            addCustomView(TextView(requireContext()).apply {
+                text = "Each of the four band outputs above can also carry up to two cascaded all-pass filters, for phase/time alignment between them."
+                textSize = 11.5f
+                setTextColor(Color.rgb(178, 187, 198))
+                setPadding(0, dp(2), 0, dp(10))
+            })
+            addCustomView(MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                text = getString(R.string.action_output_allpass)
+                isAllCaps = false
+                setOnClickListener {
+                    startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java).apply {
+                        putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
+                    })
+                }
+            }, topMarginDp = 0, bottomMarginDp = 4)
         }
         builder.sectionCard("Output routing") {
             addSliderRow("Input L → Low Left", NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
