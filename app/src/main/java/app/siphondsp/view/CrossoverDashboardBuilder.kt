@@ -103,6 +103,17 @@ class CrossoverDashboardBuilder(
         dashboardPanel(title, subtitle, build)
     }
 
+    /** Embeds an arbitrary view (e.g. an illustrative diagram) inside the current section card. */
+    fun addCustomView(view: View, topMarginDp: Int = 4, bottomMarginDp: Int = 10) {
+        currentContent.addView(
+            view,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(topMarginDp)
+                bottomMargin = dp(bottomMarginDp)
+            },
+        )
+    }
+
     fun sectionHeader(title: String) {
         if (currentContent.childCount > 2) currentContent.addView(space(8))
         currentContent.addView(TextView(context).apply {
