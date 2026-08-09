@@ -13,6 +13,12 @@ import kotlin.math.sqrt
  * grown to the session's buffer size, so it cannot stall audio processing the way holding a lock
  * across disk/JNI calls would. All FFT work happens on a dedicated background thread instead.
  *
+ * Each tick publishes a matched pair of buffers from the same instant: the dry (pre-DSP) signal
+ * and the wet (post-DSP) signal. Both are analyzed into independent traces so a graph can show
+ * the two together -- the gap between them at any frequency is what the active filters are
+ * actually doing to the live audio, not just a single post-processing snapshot with nothing to
+ * compare it to.
+ *
  * Consumers (PEQ graph views) reference-count activation with acquire()/release() so the analyzer
  * thread only runs while at least one graph is actually showing the overlay.
  */
@@ -27,7 +33,8 @@ object SpectrumEngine {
 
     // --- Producer side (audio thread) ---
     private val feedLock = Any()
-    private var feedScratch: FloatArray? = null
+    private var feedDryScratch: FloatArray? = null
+    private var feedWetScratch: FloatArray? = null
     private var feedLength = 0
     private var feedSampleRate = 48000
 
@@ -35,33 +42,33 @@ object SpectrumEngine {
     private var activationCount = 0
     val isActive: Boolean get() = activationCount > 0
 
-    fun publish(interleavedStereo: FloatArray, length: Int, sampleRate: Int) {
+    /** Publishes one tick's dry (pre-DSP) and wet (post-DSP) interleaved buffers as a pair. */
+    fun publish(dryInterleaved: FloatArray, wetInterleaved: FloatArray, length: Int, sampleRate: Int) {
         if (activationCount <= 0) return
         synchronized(feedLock) {
-            var dest = feedScratch
-            if (dest == null || dest.size < length) {
-                dest = FloatArray(length)
-                feedScratch = dest
+            feedDryScratch = growIfNeeded(feedDryScratch, length).also {
+                System.arraycopy(dryInterleaved, 0, it, 0, length)
             }
-            System.arraycopy(interleavedStereo, 0, dest, 0, length)
+            feedWetScratch = growIfNeeded(feedWetScratch, length).also {
+                System.arraycopy(wetInterleaved, 0, it, 0, length)
+            }
             feedLength = length
             feedSampleRate = sampleRate
         }
     }
 
+    private fun growIfNeeded(existing: FloatArray?, length: Int): FloatArray =
+        if (existing == null || existing.size < length) FloatArray(length) else existing
+
     // --- Consumer side (background analyzer thread) ---
-    private val analyzeBuffer = FloatArray(FFT_LEN)
-    private var analyzeWritePos = 0
-    private val workingMagnitudeDb = FloatArray(FFT_LEN / 2 + 1) { FLOOR_DB }
-    // Published as an immutable snapshot so the UI thread never observes a half-updated array.
-    @Volatile private var publishedMagnitudeDb = workingMagnitudeDb.copyOf()
+    private val dryChannel = SpectrumChannel()
+    private val wetChannel = SpectrumChannel()
     @Volatile private var analyzedSampleRate = 48000
     private var thread: Thread? = null
     @Volatile private var running = false
 
-    // Per-channel level meters, computed on this same background analyzer thread from the
-    // still-interleaved buffer inside feedAnalysis() before it gets mono-downmixed -- zero
-    // additional audio-thread cost, zero additional allocation.
+    // Per-channel level meters, computed on this same background analyzer thread from the wet
+    // (post-DSP) buffer -- these reflect actual output level, not the dry comparison signal.
     @Volatile private var publishedLeftPeakDb = LEVEL_FLOOR_DB
     @Volatile private var publishedLeftRmsDb = LEVEL_FLOOR_DB
     @Volatile private var publishedRightPeakDb = LEVEL_FLOOR_DB
@@ -90,16 +97,15 @@ object SpectrumEngine {
             // Wait for the loop to actually exit before returning: it only ever sleeps for 16ms
             // at a time, so this is a short, bounded wait — but skipping it would let a quick
             // release()+acquire() start a second thread while the old one is still touching
-            // analyzeBuffer/analyzeWritePos, which neither thread synchronizes on.
+            // the channels, which neither thread synchronizes on.
             try {
                 thread?.join(100)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
             thread = null
-            // Only swap in a fresh array (a new allocation, not a mutation of the buffer the
-            // analyzer thread may still briefly be touching) — avoids racing with computeFrame().
-            publishedMagnitudeDb = FloatArray(workingMagnitudeDb.size) { FLOOR_DB }
+            dryChannel.reset()
+            wetChannel.reset()
             publishedLeftPeakDb = LEVEL_FLOOR_DB
             publishedLeftRmsDb = LEVEL_FLOOR_DB
             publishedRightPeakDb = LEVEL_FLOOR_DB
@@ -108,10 +114,15 @@ object SpectrumEngine {
     }
 
     private fun runLoop() {
-        val drainBuffer = FloatArray(FFT_LEN * 2)
+        val dryDrain = FloatArray(FFT_LEN * 2)
+        val wetDrain = FloatArray(FFT_LEN * 2)
         while (running) {
-            val consumed = drainInto(drainBuffer)
-            if (consumed > 0) feedAnalysis(drainBuffer, consumed)
+            val consumed = drainInto(dryDrain, wetDrain)
+            if (consumed > 0) {
+                dryChannel.feed(dryDrain, consumed, fft)
+                wetChannel.feed(wetDrain, consumed, fft)
+                updateLevelsFromInterleaved(wetDrain, consumed)
+            }
             try {
                 Thread.sleep(16L)
             } catch (e: InterruptedException) {
@@ -120,25 +131,22 @@ object SpectrumEngine {
         }
     }
 
-    private fun drainInto(dest: FloatArray): Int {
+    private fun drainInto(dryDest: FloatArray, wetDest: FloatArray): Int {
         synchronized(feedLock) {
             val len = feedLength
             if (len <= 0) return 0
-            val src = feedScratch ?: return 0
-            val n = len.coerceAtMost(dest.size)
-            System.arraycopy(src, 0, dest, 0, n)
+            val dry = feedDryScratch ?: return 0
+            val wet = feedWetScratch ?: return 0
+            val n = len.coerceAtMost(dryDest.size).coerceAtMost(wetDest.size)
+            System.arraycopy(dry, 0, dryDest, 0, n)
+            System.arraycopy(wet, 0, wetDest, 0, n)
             feedLength = 0
             analyzedSampleRate = feedSampleRate
             return n
         }
     }
 
-    /**
-     * Downmixes interleaved stereo to mono and runs a hop-based STFT as the ring buffer fills.
-     * Also accumulates per-channel peak/RMS over this block for the gain meters, while the
-     * interleaved L/R samples are still available (before the mono downmix).
-     */
-    private fun feedAnalysis(interleaved: FloatArray, length: Int) {
+    private fun updateLevelsFromInterleaved(interleaved: FloatArray, length: Int) {
         var leftPeak = 0f
         var rightPeak = 0f
         var leftSumSq = 0.0
@@ -148,7 +156,6 @@ object SpectrumEngine {
         while (i + 1 < length) {
             val left = interleaved[i]
             val right = interleaved[i + 1]
-            analyzeBuffer[analyzeWritePos++] = (left + right) * 0.5f
             val absLeft = abs(left)
             val absRight = abs(right)
             if (absLeft > leftPeak) leftPeak = absLeft
@@ -157,11 +164,6 @@ object SpectrumEngine {
             rightSumSq += (right * right).toDouble()
             pairCount++
             i += 2
-            if (analyzeWritePos == FFT_LEN) {
-                computeFrame()
-                System.arraycopy(analyzeBuffer, HOP_LEN, analyzeBuffer, 0, FFT_LEN - HOP_LEN)
-                analyzeWritePos = FFT_LEN - HOP_LEN
-            }
         }
         if (pairCount > 0) {
             updateLevels(
@@ -180,7 +182,7 @@ object SpectrumEngine {
     }
 
     // Rise fast (transients read immediately), decay slower (readable peaks) -- same shape as
-    // the spectrum bin smoothing above.
+    // the spectrum bin smoothing below.
     private fun smoothLevel(prev: Float, db: Float): Float =
         if (db > prev) prev + (db - prev) * 0.6f else prev * 0.90f + db * 0.10f
 
@@ -189,24 +191,11 @@ object SpectrumEngine {
         return (20.0 * log10(amplitude.toDouble())).toFloat().coerceIn(LEVEL_FLOOR_DB, 0f)
     }
 
-    private fun computeFrame() {
-        val windowed = fft.applyWindow(analyzeBuffer)
-        val power = fft.computePowerSpectrum(windowed)
-        for (bin in power.indices) {
-            val db = (10.0 * log10(power[bin].coerceAtLeast(1e-18))).toFloat()
-            val prev = workingMagnitudeDb[bin]
-            // Rise fast (transients read immediately), decay slower (readable peaks).
-            workingMagnitudeDb[bin] = if (db > prev) prev + (db - prev) * 0.6f else prev * 0.90f + db * 0.10f
-        }
-        publishedMagnitudeDb = workingMagnitudeDb.copyOf()
-    }
+    /** Smoothed magnitude in dB of the post-DSP ("wet") signal, clamped to [FLOOR_DB, CEILING_DB]. */
+    fun magnitudeDbAt(frequencyHz: Double): Float = wetChannel.magnitudeDbAt(frequencyHz, analyzedSampleRate)
 
-    /** Smoothed magnitude in dB, clamped to [FLOOR_DB, CEILING_DB], at the given frequency. */
-    fun magnitudeDbAt(frequencyHz: Double): Float {
-        val snapshot = publishedMagnitudeDb
-        val bin = (frequencyHz * FFT_LEN / analyzedSampleRate).toInt().coerceIn(0, snapshot.size - 1)
-        return snapshot[bin].coerceIn(FLOOR_DB, CEILING_DB)
-    }
+    /** Smoothed magnitude in dB of the pre-DSP ("dry") signal, clamped to [FLOOR_DB, CEILING_DB]. */
+    fun dryMagnitudeDbAt(frequencyHz: Double): Float = dryChannel.magnitudeDbAt(frequencyHz, analyzedSampleRate)
 
     /**
      * Fills [out] with `[leftPeakDb, leftRmsDb, rightPeakDb, rightRmsDb]` in dBFS.
@@ -217,5 +206,52 @@ object SpectrumEngine {
         out[1] = publishedLeftRmsDb
         out[2] = publishedRightPeakDb
         out[3] = publishedRightRmsDb
+    }
+
+    /** One trace's hop-buffer + smoothed magnitude state. There is one of these per dry/wet side. */
+    private class SpectrumChannel {
+        private val analyzeBuffer = FloatArray(FFT_LEN)
+        private var analyzeWritePos = 0
+        private val workingMagnitudeDb = FloatArray(FFT_LEN / 2 + 1) { FLOOR_DB }
+        // Published as an immutable snapshot so the UI thread never observes a half-updated array.
+        @Volatile private var publishedMagnitudeDb = workingMagnitudeDb.copyOf()
+
+        /** Downmixes interleaved stereo to mono and runs a hop-based STFT as the ring buffer fills. */
+        fun feed(interleaved: FloatArray, length: Int, fft: FFT) {
+            var i = 0
+            while (i + 1 < length) {
+                analyzeBuffer[analyzeWritePos++] = (interleaved[i] + interleaved[i + 1]) * 0.5f
+                i += 2
+                if (analyzeWritePos == FFT_LEN) {
+                    computeFrame(fft)
+                    System.arraycopy(analyzeBuffer, HOP_LEN, analyzeBuffer, 0, FFT_LEN - HOP_LEN)
+                    analyzeWritePos = FFT_LEN - HOP_LEN
+                }
+            }
+        }
+
+        private fun computeFrame(fft: FFT) {
+            val windowed = fft.applyWindow(analyzeBuffer)
+            val power = fft.computePowerSpectrum(windowed)
+            for (bin in power.indices) {
+                val db = (10.0 * log10(power[bin].coerceAtLeast(1e-18))).toFloat()
+                val prev = workingMagnitudeDb[bin]
+                // Rise fast (transients read immediately), decay slower (readable peaks).
+                workingMagnitudeDb[bin] = if (db > prev) prev + (db - prev) * 0.6f else prev * 0.90f + db * 0.10f
+            }
+            publishedMagnitudeDb = workingMagnitudeDb.copyOf()
+        }
+
+        fun magnitudeDbAt(frequencyHz: Double, sampleRate: Int): Float {
+            val snapshot = publishedMagnitudeDb
+            val bin = (frequencyHz * FFT_LEN / sampleRate).toInt().coerceIn(0, snapshot.size - 1)
+            return snapshot[bin].coerceIn(FLOOR_DB, CEILING_DB)
+        }
+
+        fun reset() {
+            analyzeWritePos = 0
+            workingMagnitudeDb.fill(FLOOR_DB)
+            publishedMagnitudeDb = FloatArray(workingMagnitudeDb.size) { FLOOR_DB }
+        }
     }
 }
