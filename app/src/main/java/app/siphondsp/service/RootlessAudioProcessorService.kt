@@ -469,6 +469,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             val floatOutBuffer = FloatArray(bufferSamples)
             val shortBuffer = ShortArray(bufferSamples)
             val shortOutBuffer = ShortArray(bufferSamples)
+            val spectrumScratchDry = FloatArray(bufferSamples)
             val spectrumScratch = FloatArray(bufferSamples)
 
             while (!isProcessorDisposing) {
@@ -538,14 +539,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if(encoding == AudioEncoding.PcmShort) {
                     engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
                     if(SpectrumEngine.isActive) {
-                        for(i in 0 until processCount) spectrumScratch[i] = shortOutBuffer[i] / 32768f
-                        SpectrumEngine.publish(spectrumScratch, processCount, sampleRate)
+                        for(i in 0 until processCount) {
+                            spectrumScratchDry[i] = shortBuffer[i] / 32768f
+                            spectrumScratch[i] = shortOutBuffer[i] / 32768f
+                        }
+                        SpectrumEngine.publish(spectrumScratchDry, spectrumScratch, processCount, sampleRate)
                     }
                     writeFully(track, shortOutBuffer, processCount)
                 }
                 else {
                     engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
-                    if(SpectrumEngine.isActive) SpectrumEngine.publish(floatOutBuffer, processCount, sampleRate)
+                    if(SpectrumEngine.isActive) SpectrumEngine.publish(floatBuffer, floatOutBuffer, processCount, sampleRate)
                     writeFully(track, floatOutBuffer, processCount)
                 }
             }

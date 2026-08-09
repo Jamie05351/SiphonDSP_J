@@ -152,8 +152,35 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         strokeWidth = density
         alpha = 90
     }
+    // Dry (pre-DSP) reference trace -- dashed and faint so it reads as "before" rather than
+    // competing with the live wet trace drawn on top of it.
+    private val dryStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = themeColor(android.R.attr.textColorSecondary)
+        style = Paint.Style.STROKE
+        strokeWidth = density
+        alpha = 130
+        pathEffect = DashPathEffect(floatArrayOf(4f * density, 4f * density), 0f)
+    }
+    // Shaded gap between the dry and wet traces: green where the filters are adding energy at
+    // that frequency right now, amber where they're cutting it. This is what actually shows what
+    // the filters are doing to the live audio, rather than two independently overlaid lines.
+    private val spectrumBoostFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(102, 210, 130)
+        style = Paint.Style.FILL
+        alpha = 70
+    }
+    private val spectrumCutFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(235, 140, 60)
+        style = Paint.Style.FILL
+        alpha = 70
+    }
     private val spectrumStrokePath = Path()
     private val spectrumFillPath = Path()
+    private val dryStrokePath = Path()
+    private val deltaFillPath = Path()
+    private val spectrumXs = FloatArray(SPECTRUM_STEPS + 1)
+    private val spectrumDryYs = FloatArray(SPECTRUM_STEPS + 1)
+    private val spectrumWetYs = FloatArray(SPECTRUM_STEPS + 1)
 
     private val leftPath = Path()
     private val rightPath = Path()
@@ -848,21 +875,65 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun drawUnifiedSpectrum(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         spectrumStrokePath.rewind()
         spectrumFillPath.rewind()
+        dryStrokePath.rewind()
         spectrumFillPath.moveTo(left, bottom)
         for (i in 0..SPECTRUM_STEPS) {
             val fraction = i / SPECTRUM_STEPS.toFloat()
             val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
-            val spectrumDb = SpectrumEngine.magnitudeDbAt(freq)
-            val graphGain = PeqGraphMath.spectrumDbToGraphGain(spectrumDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
+            val wetGain = PeqGraphMath.spectrumDbToGraphGain(SpectrumEngine.magnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
+            val dryGain = PeqGraphMath.spectrumDbToGraphGain(SpectrumEngine.dryMagnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
             val x = left + fraction * (right - left)
-            val y = yForGain(graphGain)
-            if (i == 0) spectrumStrokePath.moveTo(x, y) else spectrumStrokePath.lineTo(x, y)
-            spectrumFillPath.lineTo(x, y)
+            val wetY = yForGain(wetGain)
+            val dryY = yForGain(dryGain)
+            spectrumXs[i] = x
+            spectrumWetYs[i] = wetY
+            spectrumDryYs[i] = dryY
+            if (i == 0) {
+                spectrumStrokePath.moveTo(x, wetY)
+                dryStrokePath.moveTo(x, dryY)
+            } else {
+                spectrumStrokePath.lineTo(x, wetY)
+                dryStrokePath.lineTo(x, dryY)
+            }
+            spectrumFillPath.lineTo(x, wetY)
         }
         spectrumFillPath.lineTo(right, bottom)
         spectrumFillPath.close()
+        drawSpectrumDelta(canvas, SPECTRUM_STEPS + 1)
         canvas.drawPath(spectrumFillPath, unifiedSpectrumFillPaint)
+        canvas.drawPath(dryStrokePath, dryStrokePaint)
         canvas.drawPath(spectrumStrokePath, unifiedSpectrumStrokePaint)
+    }
+
+    /**
+     * Shades the gap between the dry and wet traces already written into [spectrumXs] /
+     * [spectrumDryYs] / [spectrumWetYs] by the caller, split at each sign change so a boost and a
+     * cut get different fill colors instead of one flat band. Y is screen space (smaller = higher
+     * gain/louder), so "boost" is wherever the wet trace sits at or above the dry one.
+     */
+    private fun drawSpectrumDelta(canvas: Canvas, pointCount: Int) {
+        if (pointCount < 2) return
+        var segmentStart = 0
+        var segmentBoost = spectrumWetYs[0] <= spectrumDryYs[0]
+        for (i in 1 until pointCount) {
+            val isBoost = spectrumWetYs[i] <= spectrumDryYs[i]
+            if (isBoost != segmentBoost) {
+                fillDeltaSegment(canvas, segmentStart, i, segmentBoost)
+                segmentStart = i
+                segmentBoost = isBoost
+            }
+        }
+        fillDeltaSegment(canvas, segmentStart, pointCount - 1, segmentBoost)
+    }
+
+    private fun fillDeltaSegment(canvas: Canvas, startIndex: Int, endIndex: Int, boost: Boolean) {
+        if (endIndex <= startIndex) return
+        deltaFillPath.rewind()
+        deltaFillPath.moveTo(spectrumXs[startIndex], spectrumWetYs[startIndex])
+        for (i in startIndex + 1..endIndex) deltaFillPath.lineTo(spectrumXs[i], spectrumWetYs[i])
+        for (i in endIndex downTo startIndex) deltaFillPath.lineTo(spectrumXs[i], spectrumDryYs[i])
+        deltaFillPath.close()
+        canvas.drawPath(deltaFillPath, if (boost) spectrumBoostFillPaint else spectrumCutFillPaint)
     }
 
     private fun drawBranchCurves(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -1128,20 +1199,34 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
         spectrumStrokePath.rewind()
         spectrumFillPath.rewind()
+        dryStrokePath.rewind()
         spectrumFillPath.moveTo(0f, h)
         val dbSpan = SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB
         for (i in 0..SPECTRUM_STEPS) {
             val fraction = i / SPECTRUM_STEPS.toFloat()
             val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
-            val db = SpectrumEngine.magnitudeDbAt(freq)
+            val wetDb = SpectrumEngine.magnitudeDbAt(freq)
+            val dryDb = SpectrumEngine.dryMagnitudeDbAt(freq)
             val x = fraction * w
-            val y = h * (SpectrumEngine.CEILING_DB - db) / dbSpan
-            if (i == 0) spectrumStrokePath.moveTo(x, y) else spectrumStrokePath.lineTo(x, y)
-            spectrumFillPath.lineTo(x, y)
+            val wetY = h * (SpectrumEngine.CEILING_DB - wetDb) / dbSpan
+            val dryY = h * (SpectrumEngine.CEILING_DB - dryDb) / dbSpan
+            spectrumXs[i] = x
+            spectrumWetYs[i] = wetY
+            spectrumDryYs[i] = dryY
+            if (i == 0) {
+                spectrumStrokePath.moveTo(x, wetY)
+                dryStrokePath.moveTo(x, dryY)
+            } else {
+                spectrumStrokePath.lineTo(x, wetY)
+                dryStrokePath.lineTo(x, dryY)
+            }
+            spectrumFillPath.lineTo(x, wetY)
         }
         spectrumFillPath.lineTo(w, h)
         spectrumFillPath.close()
+        drawSpectrumDelta(canvas, SPECTRUM_STEPS + 1)
         canvas.drawPath(spectrumFillPath, spectrumFillPaint)
+        canvas.drawPath(dryStrokePath, dryStrokePaint)
         canvas.drawPath(spectrumStrokePath, spectrumStrokePaint)
     }
 
