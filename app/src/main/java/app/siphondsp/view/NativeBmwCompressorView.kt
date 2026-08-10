@@ -4,23 +4,17 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Per-band compressor transfer curve and live native meter.
- *
- * The interaction follows Equalizer314's useful convention: drag the threshold
- * point horizontally and drag the compressed part of the curve vertically to
- * adjust ratio. The knee handle -- where the soft-knee curve meets the straight
- * ratio segment -- drags horizontally to widen/narrow the knee. The glowing
- * trace is native detector/output telemetry.
- */
+/** Technical transfer-curve display for the selected BMW compressor band. */
 class NativeBmwCompressorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -45,53 +39,74 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private val minDb = -60f
     private val maxDb = 6f
     private val padLeft = 34f * density
-    private val padTop = 14f * density
-    private val padRight = 25f * density
-    private val padBottom = 24f * density
-    private val thresholdHitRadiusPx = 34f * density
-    private val kneeHitRadiusPx = 26f * density
+    private val padTop = 15f * density
+    private val padRight = 20f * density
+    private val padBottom = 22f * density
+    private val thresholdHitRadiusPx = 30f * density
+    private val kneeHitRadiusPx = 24f * density
     private var meterInputDb = -60f
     private var meterOutputDb = -60f
     private var gainReductionDb = 0f
     private val history = ArrayDeque<Pair<Float, Float>>()
     private var dragMode: CompressorGraphMath.DragMode? = null
 
-    private val backgroundPaint = Paint().apply { color = Color.rgb(24, 24, 26) }
+    private val backgroundPaint = Paint()
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(62, 62, 66); strokeWidth = density
+        color = Color.rgb(51, 60, 68)
+        strokeWidth = .8f * density
+    }
+    private val minorGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(35, 42, 49)
+        strokeWidth = .6f * density
     }
     private val unityPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(100, 100, 106); strokeWidth = 1.2f * density
-        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
+        color = Color.rgb(91, 101, 111)
+        strokeWidth = 1f * density
+        pathEffect = DashPathEffect(floatArrayOf(5f * density, 5f * density), 0f)
+    }
+    private val curveGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(72, 70, 181, 232)
+        strokeWidth = 5f * density
+        style = Paint.Style.STROKE
     }
     private val curvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(230, 232, 240); strokeWidth = 2.4f * density
+        color = BmwDashboardSkin.LIGHT_BLUE
+        strokeWidth = 1.8f * density
         style = Paint.Style.STROKE
     }
     private val thresholdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(244, 76, 92); strokeWidth = 1.5f * density
-        pathEffect = DashPathEffect(floatArrayOf(5f * density, 4f * density), 0f)
+        color = BmwDashboardSkin.M_RED
+        strokeWidth = 1.1f * density
+        pathEffect = DashPathEffect(floatArrayOf(4f * density, 4f * density), 0f)
+    }
+    private val thresholdNodePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = BmwDashboardSkin.LIGHT_BLUE
+        style = Paint.Style.FILL
     }
     private val kneeHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(255, 183, 77); style = Paint.Style.FILL
-    }
-    private val kneeHandleStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(255, 183, 77); style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density; alpha = 160
+        color = Color.rgb(206, 216, 224)
+        style = Paint.Style.FILL
     }
     private val liveTracePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(67, 137, 255); strokeWidth = 2.5f * density
+        color = Color.argb(170, 70, 181, 232)
+        strokeWidth = 1.4f * density
         style = Paint.Style.STROKE
     }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(88, 154, 255); style = Paint.Style.FILL
-        setShadowLayer(9f * density, 0f, 0f, Color.rgb(64, 126, 255))
+        color = Color.rgb(196, 231, 246)
+        style = Paint.Style.FILL
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(170, 170, 178); textSize = 10f * density
+        color = Color.rgb(140, 151, 161)
+        textSize = 9f * density
+    }
+    private val reductionTrack = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(29, 35, 41)
+        style = Paint.Style.FILL
     }
     private val reductionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(244, 76, 92); style = Paint.Style.FILL
+        color = BmwDashboardSkin.M_RED
+        style = Paint.Style.FILL
     }
 
     init {
@@ -134,34 +149,41 @@ class NativeBmwCompressorView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        backgroundPaint.shader = LinearGradient(
+            0f, 0f, 0f, height.toFloat(),
+            Color.rgb(18, 23, 28), Color.rgb(9, 12, 15),
+            Shader.TileMode.CLAMP,
+        )
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
+        backgroundPaint.shader = null
 
-        for (db in -60..0 step 10) {
-            canvas.drawLine(x(db.toFloat()), padTop, x(db.toFloat()), height - padBottom, gridPaint)
-            canvas.drawLine(padLeft, y(db.toFloat()), width - padRight, y(db.toFloat()), gridPaint)
-            canvas.drawText(db.toString(), 3f * density, y(db.toFloat()) + 3f * density, textPaint)
+        for (db in -60..0 step 5) {
+            val p = if (db % 10 == 0) gridPaint else minorGridPaint
+            canvas.drawLine(x(db.toFloat()), padTop, x(db.toFloat()), height - padBottom, p)
+            canvas.drawLine(padLeft, y(db.toFloat()), width - padRight, y(db.toFloat()), p)
+            if (db % 10 == 0) canvas.drawText(db.toString(), 4f * density, y(db.toFloat()) + 3f * density, textPaint)
         }
         canvas.drawLine(x(minDb), y(minDb), x(maxDb), y(maxDb), unityPaint)
 
         val curve = Path()
-        for (step in 0..160) {
-            val input = minDb + (maxDb - minDb) * step / 160f
+        for (step in 0..180) {
+            val input = minDb + (maxDb - minDb) * step / 180f
             val output = outputFor(input).coerceIn(minDb, maxDb)
             if (step == 0) curve.moveTo(x(input), y(output)) else curve.lineTo(x(input), y(output))
         }
-        curvePaint.alpha = if (compressorEnabled) 255 else 100
+        val alpha = if (compressorEnabled) 255 else 90
+        curveGlow.alpha = if (compressorEnabled) 70 else 20
+        curvePaint.alpha = alpha
+        canvas.drawPath(curve, curveGlow)
         canvas.drawPath(curve, curvePaint)
 
         val thresholdX = x(thresholdDb)
         val thresholdY = y(outputFor(thresholdDb).coerceIn(minDb, maxDb))
         canvas.drawLine(thresholdX, padTop, thresholdX, height - padBottom, thresholdPaint)
-        canvas.drawCircle(thresholdX, thresholdY, 8f * density, liveDotPaint)
+        canvas.drawCircle(thresholdX, thresholdY, 5.2f * density, thresholdNodePaint)
 
         if (kneeDb > 0f) {
-            val kneeX = kneeHandleX()
-            val kneeY = kneeHandleY()
-            canvas.drawCircle(kneeX, kneeY, 7f * density, kneeHandlePaint)
-            canvas.drawCircle(kneeX, kneeY, 7f * density, kneeHandleStrokePaint)
+            canvas.drawCircle(kneeHandleX(), kneeHandleY(), 4.7f * density, kneeHandlePaint)
         }
 
         if (history.size > 1) {
@@ -173,17 +195,17 @@ class NativeBmwCompressorView @JvmOverloads constructor(
             canvas.drawPath(trace, liveTracePaint)
         }
         if (meterInputDb > minDb + .5f) {
-            canvas.drawCircle(x(meterInputDb), y(meterOutputDb), 5f * density, liveDotPaint)
+            canvas.drawCircle(x(meterInputDb), y(meterOutputDb), 3f * density, liveDotPaint)
         }
 
-        val meterLeft = width - 13f * density
+        val meterLeft = width - 11f * density
         val meterTop = padTop
         val meterBottom = height - padBottom
-        canvas.drawRect(meterLeft, meterTop, width - 7f * density, meterBottom, gridPaint)
+        canvas.drawRect(meterLeft, meterTop, width - 7f * density, meterBottom, reductionTrack)
         val reductionHeight = (meterBottom - meterTop) * (gainReductionDb / 24f)
         canvas.drawRect(meterLeft, meterTop, width - 7f * density, meterTop + reductionHeight, reductionPaint)
-        canvas.drawText("IN", padLeft, height - 6f * density, textPaint)
-        canvas.drawText("OUT", width - padRight - 26f * density, height - 6f * density, textPaint)
+        canvas.drawText("IN", padLeft, height - 5f * density, textPaint)
+        canvas.drawText("OUT", width - padRight - 24f * density, height - 5f * density, textPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
