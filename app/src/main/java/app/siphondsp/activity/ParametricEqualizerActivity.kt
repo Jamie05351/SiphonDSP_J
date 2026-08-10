@@ -1,12 +1,20 @@
 package app.siphondsp.activity
 
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import app.siphondsp.R
 import app.siphondsp.databinding.ActivityParametricEqBinding
 import app.siphondsp.fragment.ParametricEqualizerFragment
 import app.siphondsp.view.BmwDashboardSkin
+import app.siphondsp.view.DspOutputLevelView
+import app.siphondsp.view.ParametricEqSurface
+import com.google.android.material.card.MaterialCardView
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -34,7 +42,33 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
             BmwDashboardSkin.styleWorkspace(binding.root)
             bindPeqPageSwipe(findViewById(R.id.preview_title))
             bindPeqPageSwipe(findViewById(R.id.edit_card_title))
+            installOutputMeter()
         }
+    }
+
+    private fun installOutputMeter() {
+        if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) return
+        val surface = findViewById<ParametricEqSurface>(R.id.equalizer_surface) ?: return
+        val card = findViewById<MaterialCardView>(R.id.preview_card) ?: return
+        surface.showGainMeters = false
+        if (card.findViewWithTag<View>(OUTPUT_METER_TAG) != null) return
+
+        val meter = DspOutputLevelView(this).apply {
+            tag = OUTPUT_METER_TAG
+            background = GradientDrawable().apply {
+                setColor(Color.argb(214, 12, 16, 20))
+                setStroke(dp(1), Color.rgb(55, 66, 76))
+                cornerRadius = dp(5).toFloat()
+            }
+        }
+        card.addView(
+            meter,
+            FrameLayout.LayoutParams(dp(108), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(8)
+                marginEnd = dp(5)
+            },
+        )
     }
 
     private fun bindPeqPageSwipe(view: View?) {
@@ -67,4 +101,8 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
+
+    companion object {
+        private const val OUTPUT_METER_TAG = "dsp_output_level_meter"
+    }
 }
