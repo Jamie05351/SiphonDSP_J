@@ -14,46 +14,60 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Native dual-band dynamics"
+            android:text="COMPRESSOR"
             android:textAppearance="?android:attr/textAppearanceLarge" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Choose the low or mid branch, then adjust its independent stereo-linked compressor."
-            android:textColor="?android:attr/textColorSecondary" />
-
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/compressor_band_toggle"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/compressor_band_toggle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/compressor_band_low"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:checkable="true"
+                    android:text="LOW" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/compressor_band_mid"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:checkable="true"
+                    android:text="MID" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/compressor_band_low"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Low band" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/compressor_band_mid"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Mid band" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                android:id="@+id/compressor_enable"
+                style="?attr/materialIconButtonOutlinedStyle"
+                android:layout_width="44dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="10dp"
+                android:checkable="true"
+                android:contentDescription="Selected compressor power"
+                android:minWidth="0dp"
+                app:icon="@drawable/ic_dsp_power_24" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            app:cardCornerRadius="20dp"
+            android:layout_marginTop="8dp"
+            app:cardCornerRadius="8dp"
             app:cardElevation="0dp"
             app:strokeWidth="1dp">
 
@@ -65,45 +79,37 @@
                 <app.siphondsp.view.NativeBmwCompressorView
                     android:id="@+id/compressor_visualizer"
                     android:layout_width="match_parent"
-                    android:layout_height="300dp"
+                    android:layout_height="260dp"
                     android:contentDescription="Interactive compressor transfer curve and live gain reduction" />
 
                 <app.siphondsp.view.CompressorGrTraceView
                     android:id="@+id/compressor_gr_trace"
                     android:layout_width="match_parent"
-                    android:layout_height="120dp"
+                    android:layout_height="90dp"
                     android:contentDescription="Scrolling input level and gain reduction history" />
 
                 <TextView
                     android:id="@+id/compressor_meter_text"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="14dp"
+                    android:layout_height="36dp"
+                    android:gravity="center"
                     android:text="Waiting for native audio…"
-                    android:textAlignment="center"
-                    android:textColor="?android:attr/textColorSecondary" />
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="11sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/compressor_enable"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="14dp"
-            android:gravity="center_vertical"
-            android:text="Selected compressor active" />
-
-        <TextView android:id="@+id/compressor_threshold_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <TextView android:id="@+id/compressor_threshold_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" />
         <com.google.android.material.slider.Slider android:id="@+id/compressor_threshold" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
         <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
         <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_attack_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <TextView android:id="@+id/compressor_attack_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
         <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_release_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <TextView android:id="@+id/compressor_release_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
         <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_makeup_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_makeup" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp" />
+        <TextView android:id="@+id/compressor_makeup_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_makeup" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="18dp" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
