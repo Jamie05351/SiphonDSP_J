@@ -8,13 +8,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorGrTraceView
 import app.siphondsp.view.NativeBmwCompressorView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.slider.Slider
 import java.util.Locale
@@ -28,7 +29,7 @@ class NativeBmwCompressorFragment : Fragment() {
     private lateinit var grTrace: CompressorGrTraceView
     private lateinit var meterText: TextView
     private lateinit var bandToggle: MaterialButtonToggleGroup
-    private lateinit var enabledSwitch: SwitchCompat
+    private lateinit var enabledButton: MaterialButton
     private lateinit var threshold: Slider
     private lateinit var ratio: Slider
     private lateinit var knee: Slider
@@ -59,7 +60,7 @@ class NativeBmwCompressorFragment : Fragment() {
                 grTrace.pushFrame(input, output, reduction)
                 meterText.text = String.format(
                     Locale.ENGLISH,
-                    "%s   Input %.1f dBFS   Output %.1f dBFS   GR %.1f dB",
+                    "%s  IN %.1f  OUT %.1f  GR %.1f dB",
                     if (selectedBand == Band.LOW) "LOW" else "MID",
                     input, output, reduction,
                 )
@@ -78,19 +79,19 @@ class NativeBmwCompressorFragment : Fragment() {
         grTrace = view.findViewById(R.id.compressor_gr_trace)
         meterText = view.findViewById(R.id.compressor_meter_text)
         bandToggle = view.findViewById(R.id.compressor_band_toggle)
-        enabledSwitch = view.findViewById(R.id.compressor_enable)
+        enabledButton = view.findViewById(R.id.compressor_enable)
         threshold = view.findViewById(R.id.compressor_threshold)
         ratio = view.findViewById(R.id.compressor_ratio)
         knee = view.findViewById(R.id.compressor_knee)
         attack = view.findViewById(R.id.compressor_attack)
         release = view.findViewById(R.id.compressor_release)
         makeup = view.findViewById(R.id.compressor_makeup)
-        configureSlider(threshold, -24f, 0f, .5f)
-        configureSlider(ratio, 1f, 10f, .1f)
-        configureSlider(knee, 0f, 12f, 1f)
-        configureSlider(attack, 1f, 100f, 1f)
-        configureSlider(release, 20f, 800f, 1f)
-        configureSlider(makeup, 0f, 6f, .1f)
+        configureSlider(threshold, -24f, 0f, .5f) { String.format(Locale.ENGLISH, "%.1f dB", it) }
+        configureSlider(ratio, 1f, 10f, .1f) { String.format(Locale.ENGLISH, "%.1f:1", it) }
+        configureSlider(knee, 0f, 12f, 1f) { String.format(Locale.ENGLISH, "%.0f dB", it) }
+        configureSlider(attack, 1f, 100f, 1f) { String.format(Locale.ENGLISH, "%.0f ms", it) }
+        configureSlider(release, 20f, 800f, 1f) { String.format(Locale.ENGLISH, "%.0f ms", it) }
+        configureSlider(makeup, 0f, 6f, .1f) { String.format(Locale.ENGLISH, "+%.1f dB", it) }
         thresholdLabel = view.findViewById(R.id.compressor_threshold_label)
         ratioLabel = view.findViewById(R.id.compressor_ratio_label)
         kneeLabel = view.findViewById(R.id.compressor_knee_label)
@@ -102,10 +103,17 @@ class NativeBmwCompressorFragment : Fragment() {
         bindSelectedBand()
     }
 
-    private fun configureSlider(slider: Slider, from: Float, to: Float, step: Float) {
+    private fun configureSlider(
+        slider: Slider,
+        from: Float,
+        to: Float,
+        step: Float,
+        formatter: (Float) -> String,
+    ) {
         slider.valueFrom = from
         slider.valueTo = to
         slider.stepSize = step
+        BmwDashboardSkin.styleSlider(slider, formatter)
     }
 
     override fun onStart() {
@@ -132,7 +140,9 @@ class NativeBmwCompressorFragment : Fragment() {
             grTrace.reset()
             bindSelectedBand()
         }
-        enabledSwitch.setOnCheckedChangeListener { _, value -> if (!bindingState) updateBand(enabled = value) }
+        enabledButton.addOnCheckedChangeListener { _, value ->
+            if (!bindingState) updateBand(enabled = value)
+        }
         threshold.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(thresholdDb = value) }
         ratio.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(ratioValue = value) }
         knee.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(kneeDb = value) }
@@ -205,7 +215,7 @@ class NativeBmwCompressorFragment : Fragment() {
             enabled = state.midEnabled; thresholdDb = state.midThresholdDb; ratioValue = state.midRatio
             kneeDb = state.midKneeDb; attackMs = state.midAttackMs; releaseMs = state.midReleaseMs; makeupDb = state.midMakeupDb
         }
-        enabledSwitch.isChecked = enabled
+        enabledButton.isChecked = enabled
         threshold.value = thresholdDb.coerceIn(threshold.valueFrom, threshold.valueTo)
         ratio.value = ratioValue.coerceIn(ratio.valueFrom, ratio.valueTo)
         knee.value = kneeDb.coerceIn(knee.valueFrom, knee.valueTo)
@@ -219,12 +229,12 @@ class NativeBmwCompressorFragment : Fragment() {
         visualizer.kneeDb = kneeDb
         visualizer.makeupDb = makeupDb
         grTrace.thresholdDb = thresholdDb
-        thresholdLabel.text = String.format(Locale.ENGLISH, "Threshold   %.1f dB", thresholdDb)
-        ratioLabel.text = String.format(Locale.ENGLISH, "Ratio   %.1f:1", ratioValue)
-        kneeLabel.text = String.format(Locale.ENGLISH, "Soft knee   %.0f dB", kneeDb)
-        attackLabel.text = String.format(Locale.ENGLISH, "Attack   %.0f ms", attackMs)
-        releaseLabel.text = String.format(Locale.ENGLISH, "Release   %.0f ms", releaseMs)
-        makeupLabel.text = String.format(Locale.ENGLISH, "Makeup gain   %.1f dB", makeupDb)
+        thresholdLabel.text = String.format(Locale.ENGLISH, "THRESHOLD   %.1f dB", thresholdDb)
+        ratioLabel.text = String.format(Locale.ENGLISH, "RATIO   %.1f:1", ratioValue)
+        kneeLabel.text = String.format(Locale.ENGLISH, "SOFT KNEE   %.0f dB", kneeDb)
+        attackLabel.text = String.format(Locale.ENGLISH, "ATTACK   %.0f ms", attackMs)
+        releaseLabel.text = String.format(Locale.ENGLISH, "RELEASE   %.0f ms", releaseMs)
+        makeupLabel.text = String.format(Locale.ENGLISH, "MAKEUP   +%.1f dB", makeupDb)
         bindingState = false
     }
 
