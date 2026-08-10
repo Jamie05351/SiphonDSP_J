@@ -18,6 +18,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.LabelFormatter
 import com.google.android.material.slider.Slider
 import kotlin.math.roundToInt
 
@@ -77,26 +78,30 @@ object BmwDashboardSkin {
         }
     }
 
-    private fun styleSlider(slider: Slider) {
+    fun styleSlider(slider: Slider, formatter: ((Float) -> String)? = null) {
         val context = slider.context
         slider.trackHeight = dp(context, 6)
         slider.thumbWidth = dp(context, 13)
         slider.thumbHeight = dp(context, 24)
+        slider.labelBehavior = LabelFormatter.LABEL_FLOATING
+        if (formatter != null) slider.setLabelFormatter { formatter(it) }
         slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(31, 35, 41)))
         slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-        slider.setCustomThumbDrawable(GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(Color.rgb(190, 196, 203))
-            setStroke(dp(context, 1), Color.rgb(232, 236, 240))
-            cornerRadius = dp(context, 1).toFloat()
-            setSize(dp(context, 13), dp(context, 24))
-        })
+        slider.setCustomThumbDrawable(rectangularThumb(context))
+    }
+
+    fun rectangularThumb(context: Context): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(Color.rgb(190, 196, 203))
+        setStroke(dp(context, 1), Color.rgb(232, 236, 240))
+        cornerRadius = dp(context, 1).toFloat()
+        setSize(dp(context, 13), dp(context, 24))
     }
 
     private fun styleSwitch(toggle: SwitchCompat) {
-        toggle.thumbTintList = checkedColours(LIGHT_BLUE, Color.rgb(170, 177, 184))
-        toggle.trackTintList = checkedColours(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
+        toggle.thumbTintList = checkedColours(LIGHT_BLUE, M_RED)
+        toggle.trackTintList = checkedColours(Color.rgb(32, 78, 111), Color.rgb(72, 30, 35))
     }
 
     /**
@@ -131,11 +136,6 @@ object BmwDashboardSkin {
         chip.checkedIconTint = ColorStateList.valueOf(LIGHT_BLUE)
     }
 
-    /**
-     * Only recolor buttons that are genuine selection controls (Graph/List, Low/Mid band,
-     * filter/channel segmented controls). Ordinary Add/Done/Cancel/action buttons keep their
-     * existing Material treatment.
-     */
     private fun styleCheckableButton(button: MaterialButton) {
         val states = arrayOf(
             intArrayOf(android.R.attr.state_checked),
