@@ -2,6 +2,7 @@ package app.siphondsp.activity
 
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -42,6 +43,7 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
             installRealPeqPager()
             BmwDashboardSkin.styleWorkspace(binding.root)
             installOutputMeter()
+            findViewById<ParametricEqSurface>(R.id.equalizer_surface)?.let(::styleTechnicalPeqGraph)
         }
     }
 
@@ -114,6 +116,63 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
                 marginEnd = dp(5)
             },
         )
+    }
+
+    /**
+     * The response surface predates the BMW dashboard skin and owns its Paints internally.
+     * Restyle those paints in-place so the graph reads like instrumentation rather than the
+     * high-saturation demo palette, without touching response math or gesture behavior.
+     */
+    private fun styleTechnicalPeqGraph(surface: ParametricEqSurface) {
+        val density = resources.displayMetrics.density
+        fun paint(name: String, block: Paint.() -> Unit) {
+            runCatching {
+                val field = ParametricEqSurface::class.java.getDeclaredField(name)
+                field.isAccessible = true
+                (field.get(surface) as? Paint)?.block()
+            }
+        }
+
+        paint("unifiedGridPaint") {
+            color = Color.rgb(40, 48, 56)
+            strokeWidth = .65f * density
+            alpha = 175
+        }
+        paint("unifiedZeroPaint") {
+            color = Color.rgb(82, 94, 104)
+            strokeWidth = 1f * density
+            alpha = 210
+        }
+        paint("unifiedLabelPaint") { color = Color.rgb(132, 143, 153) }
+        paint("unifiedLegendPaint") { color = Color.rgb(153, 164, 174) }
+        paint("lowBranchPaint") {
+            color = Color.rgb(55, 126, 178)
+            strokeWidth = 1.35f * density
+            alpha = 125
+        }
+        paint("midBranchPaint") {
+            color = Color.rgb(112, 124, 136)
+            strokeWidth = 1.35f * density
+            alpha = 110
+        }
+        paint("sumPaintSolid") {
+            color = Color.rgb(215, 223, 230)
+            strokeWidth = 2f * density
+        }
+        paint("sumPaintDashed") {
+            color = Color.rgb(158, 171, 182)
+            strokeWidth = 1.35f * density
+            alpha = 180
+        }
+        paint("unifiedSpectrumFillPaint") { alpha = 18 }
+        paint("unifiedSpectrumStrokePaint") {
+            color = BmwDashboardSkin.LIGHT_BLUE
+            strokeWidth = 1f * density
+            alpha = 135
+        }
+        paint("crossoverShadePaint") { alpha = 10 }
+        paint("tiltHandlePaint") { color = Color.rgb(194, 205, 214) }
+        surface.invalidate()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
