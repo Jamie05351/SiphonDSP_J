@@ -141,7 +141,7 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun subsonicIsLr4AtItsCornerFrequency() {
+    fun subsonicIsSecondOrderButterworthAtItsCornerFrequency() {
         val values = baseValues()
         val corner = values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_SUBSONIC_FREQ)].toDouble()
         val enabled = compute(values)
@@ -151,7 +151,7 @@ class BmwSignalChainModelTest {
         })
         val i = nearestIndex(corner)
 
-        assertEquals(-6.0, enabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i] - disabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i], 0.35)
+        assertEquals(-3.0, enabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i] - disabled.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i], 0.35)
     }
 
     @Test

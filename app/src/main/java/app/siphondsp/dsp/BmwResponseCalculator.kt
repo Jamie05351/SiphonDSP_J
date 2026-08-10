@@ -113,7 +113,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val subsonicFreq = outputValue(values, output, NativeBmwDspValues.FIELD_SUBSONIC_FREQ).toDouble()
             if (subsonicEnabled) {
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
-                cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
             }
 
             val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
