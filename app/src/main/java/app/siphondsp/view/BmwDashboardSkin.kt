@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.appcompat.widget.SwitchCompat
+import app.siphondsp.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -104,10 +105,6 @@ object BmwDashboardSkin {
         toggle.trackTintList = checkedColours(Color.rgb(32, 78, 111), Color.rgb(72, 30, 35))
     }
 
-    /**
-     * PEQ scope chips inherit Material's app colorPrimary by default. Give selected chips the
-     * same BMW light-blue language as the sliders/nav, while preserving dark inactive chips.
-     */
     private fun styleChip(chip: Chip) {
         val states = arrayOf(
             intArrayOf(android.R.attr.state_checked),
@@ -142,13 +139,22 @@ object BmwDashboardSkin {
             intArrayOf(android.R.attr.state_pressed),
             intArrayOf(),
         )
+        val isPowerButton = button.id == R.id.compressor_enable
         button.backgroundTintList = ColorStateList(
             states,
-            intArrayOf(selectedSurface, Color.rgb(28, 35, 43), inactiveSurface),
+            intArrayOf(
+                if (isPowerButton) inactiveSurface else selectedSurface,
+                Color.rgb(28, 35, 43),
+                inactiveSurface,
+            ),
         )
         button.strokeColor = ColorStateList(
             states,
-            intArrayOf(LIGHT_BLUE, Color.rgb(83, 96, 109), inactiveStroke),
+            intArrayOf(
+                LIGHT_BLUE,
+                Color.rgb(83, 96, 109),
+                if (isPowerButton) M_RED else inactiveStroke,
+            ),
         )
         button.strokeWidth = dp(button.context, 1)
         button.setTextColor(
@@ -159,7 +165,11 @@ object BmwDashboardSkin {
         )
         button.iconTint = ColorStateList(
             states,
-            intArrayOf(LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)),
+            intArrayOf(
+                LIGHT_BLUE,
+                LIGHT_BLUE,
+                if (isPowerButton) M_RED else Color.rgb(172, 184, 195),
+            ),
         )
     }
 
