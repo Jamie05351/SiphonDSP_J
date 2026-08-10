@@ -5,7 +5,7 @@ import android.widget.LinearLayout
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.fragment.CrossoverTiltFragment
-import app.siphondsp.fragment.NativeBmwDspCardFragment
+import app.siphondsp.fragment.OutputAllPassFragment
 import app.siphondsp.fragment.RoutingFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
@@ -23,8 +23,8 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         val routingMode = mode == MODE_ROUTING
         val allPassMode = mode == MODE_ALLPASS
         // All-pass is reached as a link from the Routing screen rather than its own primary nav
-        // entry, so it shares Routing's (hidden) nav identity here too -- there's nothing in the
-        // visible nav bar for either mode to mismatch.
+        // entry, so it shares Routing's hidden nav identity. The left workspace rail remains
+        // untouched; only content inside this destination pages horizontally.
         val current = if (routingMode || allPassMode) DspDestination.ROUTING else DspDestination.CROSSOVER_TILT
         supportActionBar?.title = when {
             allPassMode -> getString(R.string.action_output_allpass)
@@ -35,7 +35,7 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
 
         if (savedInstanceState == null) {
             val fragment = when {
-                allPassMode -> NativeBmwDspCardFragment.newInstance()
+                allPassMode -> OutputAllPassFragment()
                 routingMode -> RoutingFragment()
                 else -> CrossoverTiltFragment()
             }
