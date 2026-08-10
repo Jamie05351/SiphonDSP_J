@@ -9,11 +9,4 @@
         <item name="cornerSizeBottomRight">8dp</item>
     </style>
 
-    <style name="ShapeAppearanceOverlay.SiphonDSP.Button" parent="">
-        <item name="cornerSize">14dp</item>
-    </style>
-
-    <style name="ShapeAppearanceOverlay.SiphonDSP.ButtonToggleGroup" parent="">
-        <item name="cornerSize">10dp</item>
-    </style>
 </resources>

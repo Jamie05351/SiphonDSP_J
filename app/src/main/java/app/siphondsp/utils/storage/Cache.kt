@@ -3,7 +3,6 @@ package app.siphondsp.utils.storage
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
-import android.content.pm.PackageManager
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
@@ -11,7 +10,6 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.system.Os
-import app.siphondsp.utils.extensions.CompatExtensions.getPackageInfoCompat
 import app.siphondsp.utils.sdkAbove
 import timber.log.Timber
 import java.io.File
@@ -61,30 +59,6 @@ object Cache {
                 }
             }
         }
-    }
-
-    fun getReleaseUri(context: Context, cacheFileName: String): Uri {
-        val file = getReleaseFile(context, cacheFileName)
-        val packageInfo =
-            try {
-                context.packageManager.getPackageInfoCompat(
-                    context.packageName,
-                    PackageManager.GET_PROVIDERS
-                )
-            } catch (e: Exception) {
-                null
-            }
-        val authority =
-            packageInfo?.providers?.find { it.name == Provider::class.java.name }!!.authority
-        return Uri.Builder()
-            .scheme("content")
-            .authority(authority)
-            .encodedPath(file.path.drop(context.cacheDir.path.length))
-            .build()
-    }
-
-    fun getTemporaryFile(context: Context): File {
-        return File(ensureCacheDir(context, TEMP_DIR), UUID.randomUUID().toString())
     }
 
     fun cleanupNow(context: Context) {
