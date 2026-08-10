@@ -1,6 +1,7 @@
 package app.siphondsp.view
 
 import android.content.Context
+import android.content.res.Configuration
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.AttributeSet
@@ -73,7 +74,10 @@ class NumberInputBox @JvmOverloads constructor(
     var helperTextEnabled: Boolean = false
         set(value) {
             field = value
-            binding.inputLayout.isHelperTextEnabled = value
+            // On the 1280x480 DSP workspace the old helper line made each Hz/dB/Q box almost
+            // twice as tall. Keep the range help in portrait, but collapse it in landscape.
+            binding.inputLayout.isHelperTextEnabled = value &&
+                resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
         }
 
     var hintText: String = ""
