@@ -23,6 +23,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.BuildConfig
@@ -53,6 +54,7 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.ParametricEqSurface
+import app.siphondsp.view.StaticPagerAdapter
 import timber.log.Timber
 import java.util.UUID
 import java.io.InputStream
@@ -379,6 +381,7 @@ class ParametricEqualizerFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
+        setUpCardsPager()
         binding.qInput.min = 0.1f
         binding.equalizerSurface.showSpectrum = true
 
@@ -462,8 +465,26 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    /** Left-edge Graph/List tab strip (landscape only). A real MaterialButtonToggleGroup now
-     *  drives which icon looks "lit", instead of manually-managed isEnabled/style bookkeeping. */
+    /** Detaches edit_card/preview_card from the plain ConstraintLayout position the landscape
+     *  layout declares them at (kept there purely so ViewBinding still generates their field
+     *  references, and so portrait -- which has no cards_pager -- can use them as-is) and hands
+     *  them to cards_pager as swipeable pages: 0 = preview_card/GRAPH, 1 = edit_card/LIST.
+     *  Portrait has no cards_pager -- no-op there. */
+    private fun setUpCardsPager() {
+        val pager = binding.cardsPager ?: return
+        val pages = listOf(binding.previewCard, binding.editCard)
+        pages.forEach { page ->
+            (page.parent as? ViewGroup)?.removeView(page)
+            page.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            page.visibility = View.VISIBLE
+        }
+        pager.offscreenPageLimit = 1
+        pager.adapter = StaticPagerAdapter(pages)
+    }
+
+    /** Left-edge Graph/List tab strip (landscape only), synced bidirectionally with cards_pager:
+     *  tapping a tab pages cards_pager to it (smooth-scrolled), swiping cards_pager updates
+     *  which tab looks "lit" -- both funnel through [setDisplayMode]. */
     private fun configureModeTabs() {
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         peqDisplayMode = runCatching {
@@ -472,23 +493,36 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.modeTabStrip?.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
-            peqDisplayMode = if (checkedId == R.id.list_mode_tab) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH
-            graphPrefs.edit().putString(GRAPH_DISPLAY_MODE, peqDisplayMode.name).apply()
-            applyDisplayMode()
+            setDisplayMode(if (checkedId == R.id.list_mode_tab) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH, smoothScroll = true)
         }
-        applyDisplayMode()
+        binding.cardsPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                setDisplayMode(if (position == 1) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH, smoothScroll = false)
+            }
+        })
+        applyDisplayMode(smoothScroll = false)
     }
 
-    /** GRAPH: only the live visualizer is shown. LIST: only the band editor is shown -- the two
-     *  are mutually exclusive, List mode is dedicated entirely to the filter list, not sharing
-     *  space with the visualizer. Portrait has none of these views -- no-op there. */
-    private fun applyDisplayMode() {
+    private fun setDisplayMode(mode: PeqDisplayMode, smoothScroll: Boolean) {
+        if (peqDisplayMode == mode) return
+        peqDisplayMode = mode
+        requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+            .edit().putString(GRAPH_DISPLAY_MODE, mode.name).apply()
+        applyDisplayMode(smoothScroll)
+    }
+
+    /** GRAPH: page 0, the live visualizer. LIST: page 1, the band editor -- the two are
+     *  mutually exclusive pages of cards_pager, List mode dedicated entirely to the filter list,
+     *  not sharing space with the visualizer. Portrait has none of these views -- no-op there. */
+    private fun applyDisplayMode(smoothScroll: Boolean) {
         binding.modeTabStrip ?: return
         binding.modeTabStrip?.check(
             if (peqDisplayMode == PeqDisplayMode.LIST) R.id.list_mode_tab else R.id.graph_mode_tab
         )
-        binding.editCard.isVisible = peqDisplayMode == PeqDisplayMode.LIST
-        binding.previewCard.isVisible = peqDisplayMode == PeqDisplayMode.GRAPH
+        val targetPosition = if (peqDisplayMode == PeqDisplayMode.LIST) 1 else 0
+        binding.cardsPager?.let { pager ->
+            if (pager.currentItem != targetPosition) pager.setCurrentItem(targetPosition, smoothScroll)
+        }
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {

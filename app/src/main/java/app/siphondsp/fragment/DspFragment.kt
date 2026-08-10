@@ -15,7 +15,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +29,7 @@ import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
@@ -72,7 +72,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         // child-fragment transaction is deferred until the page view is attached to the window
         // rather than run eagerly here.
         binding.dspPager.offscreenPageLimit = 1
-        binding.dspPager.adapter = DspPagerAdapter(
+        binding.dspPager.adapter = StaticPagerAdapter(
             pages = listOf(shortcutsBinding.root, settingsBinding.root),
             onPageAttached = { position -> if (position == 1) setUpSettingsPage() },
         )
@@ -293,37 +293,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
             catch(ex: IllegalStateException) {
                 Timber.e("Failed to restart fragment")
                 Timber.i(ex)
-            }
-        }
-    }
-
-    /**
-     * Wraps a fixed set of pre-inflated page views (one per position) for [binding.dspPager].
-     * There are only ever two static pages here, so this skips Fragment-per-page machinery and
-     * just hands ViewPager2's RecyclerView the already-built view for each position.
-     */
-    private class DspPagerAdapter(
-        private val pages: List<View>,
-        private val onPageAttached: (position: Int) -> Unit,
-    ) : RecyclerView.Adapter<DspPagerAdapter.PageViewHolder>() {
-        private val attachedPositions = mutableSetOf<Int>()
-
-        class PageViewHolder(view: View) : RecyclerView.ViewHolder(view)
-
-        override fun getItemCount() = pages.size
-
-        override fun getItemViewType(position: Int) = position
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            PageViewHolder(pages[viewType])
-
-        override fun onBindViewHolder(holder: PageViewHolder, position: Int) {}
-
-        override fun onViewAttachedToWindow(holder: PageViewHolder) {
-            super.onViewAttachedToWindow(holder)
-            val position = holder.bindingAdapterPosition
-            if (position != RecyclerView.NO_POSITION && attachedPositions.add(position)) {
-                onPageAttached(position)
             }
         }
     }
