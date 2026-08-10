@@ -65,50 +65,6 @@
         <item>1</item>
     </string-array>
 
-    <string-array name="reverb_presets" translatable="false">
-        <item>@string/reverb_preset_default</item>
-        <item>@string/reverb_preset_small_hall1</item>
-        <item>@string/reverb_preset_small_hall2</item>
-        <!--<item>Medium hall 1</item>-->
-        <item>@string/reverb_preset_medium_hall2</item>
-        <item>@string/reverb_preset_large_hall1</item>
-        <!--<item>Large hall 2</item>-->
-        <item>@string/reverb_preset_small_room1</item>
-        <item>@string/reverb_preset_small_room2</item>
-        <item>@string/reverb_preset_medium_room1</item>
-        <!--<item>Medium room 2</item>-->
-        <item>@string/reverb_preset_large_room1</item>
-        <!--<item>Large room 2</item>-->
-        <!--<item>Medium ER 1</item>-->
-        <!--<item>Medium ER 2</item>-->
-        <item>@string/reverb_preset_plate_high</item>
-        <item>@string/reverb_preset_plate_low</item>
-        <item>@string/reverb_preset_long_reverb1</item>
-        <item>@string/reverb_preset_long_reverb2</item>
-    </string-array>
-
-    <string-array name="reverb_presets_values" translatable="false">
-        <item>0</item>
-        <item>1</item>
-        <item>2</item>
-        <!--<item>3</item>-->
-        <item>4</item>
-        <item>5</item>
-        <!--<item>6</item>-->
-        <item>7</item>
-        <item>8</item>
-        <item>9</item>
-        <!--<item>10</item>-->
-        <item>11</item>
-        <!--<item>12</item>-->
-        <!--<item>13</item>-->
-        <!--<item>14</item>-->
-        <item>15</item>
-        <item>16</item>
-        <item>17</item>
-        <item>18</item>
-    </string-array>
-
     <string-array name="eq_filter_types" translatable="false">
         <item>@string/eq_filter_type_fir_minimum</item>
         <item>@string/eq_filter_type_iir_4_order</item>
@@ -135,24 +91,6 @@
     <string-array name="eq_interpolators_values" translatable="false">
         <item>0</item>
         <item>1</item>
-    </string-array>
-
-    <string-array name="crossfeed_modes" translatable="false">
-        <item>@string/crossfeed_preset_bs2b_weak</item>
-        <item>@string/crossfeed_preset_bs2b_strong</item>
-        <item>@string/crossfeed_preset_out_of_head</item>
-        <item>@string/crossfeed_preset_surround1</item>
-        <item>@string/crossfeed_preset_surround2</item>
-        <item>@string/crossfeed_preset_realistic_surround</item>
-    </string-array>
-
-    <string-array name="crossfeed_modes_values" translatable="false">
-        <item>0</item>
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
-        <item>4</item>
-        <item>5</item>
     </string-array>
 
     <string-array name="compander_tf_transforms" translatable="false">

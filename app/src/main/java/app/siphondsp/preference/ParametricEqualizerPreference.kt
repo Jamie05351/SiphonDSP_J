@@ -17,7 +17,6 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
-import app.siphondsp.view.ParametricEqSurface
 
 class ParametricEqualizerPreference : Preference {
 
@@ -72,7 +71,6 @@ class ParametricEqualizerPreference : Preference {
 
         binding = PreferenceParametricEqualizerBinding.bind(holder.itemView)
         binding?.layoutEqualizer?.apply {
-            surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
             showTiltHandles = false
             showGainMeters = false
             interactive = false

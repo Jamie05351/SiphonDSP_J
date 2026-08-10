@@ -52,7 +52,6 @@
     <string name="install">Install</string>
     <string name="update">Update</string>
     <string name="unknown_error">Unknown error</string>
-    <string name="details">Details</string>
     <string name="actions">Actions</string>
     <string name="warning">Warning</string>
     <string name="success">Success</string>
@@ -122,7 +121,6 @@
     <string name="eq_preset_rock">Rock</string>
     <string name="eq_preset_vocal">Vocal Booster</string>
 
-    <string name="peq_enable">Parametric equalizer</string>
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>
     <string name="title_activity_gain_limiter">Gains &amp; Delay</string>
@@ -133,8 +131,6 @@
     <string name="peq_export">Export</string>
     <string name="peq_edit_as_string">Edit as string</string>
     <string name="peq_reset">Reset</string>
-    <string name="peq_reset_confirm_title">Are you sure?</string>
-    <string name="peq_reset_confirm">Do you want to reset your parametric EQ settings?</string>
     <string name="peq_band_editor">Band editor</string>
     <string name="peq_band_list">Band list</string>
     <string name="peq_no_bands_defined">No filters in this scope</string>
@@ -162,8 +158,6 @@
     <string name="peq_import_error">Failed to import file. Invalid EqualizerAPO format.</string>
     <string name="peq_export_success">Exported successfully</string>
     <string name="peq_edit_hint">EqualizerAPO format</string>
-    <string name="peq_preamp">Preamp</string>
-    <string name="peq_preamp_range">Value between -30dB and 0dB</string>
 
     <string name="bmw_dsp_gain_structure">Gain structure</string>
     <string name="bmw_dsp_headroom">Headroom</string>
@@ -180,46 +174,22 @@
     <string name="bmw_dsp_low_delay_r">Low delay R</string>
     <string name="bmw_dsp_crossovers">Crossovers</string>
     <string name="bmw_dsp_subsonic_lr4">Subsonic LR4</string>
-    <string name="bmw_dsp_subsonic_lr4_subtitle">24 dB/oct Linkwitz-Riley protection</string>
     <string name="bmw_dsp_subsonic_freq">Subsonic freq</string>
     <string name="bmw_dsp_mute_low_band">Mute low band</string>
     <string name="bmw_dsp_low_lpf_freq">Low LPF freq</string>
-    <string name="bmw_dsp_lr4_topology">LR4 topology</string>
-    <string name="bmw_dsp_lr4_topology_subtitle">Off uses BW3 (3rd-order) instead of LR4 (4th-order)</string>
     <string name="bmw_dsp_mute_mid_band">Mute mid band</string>
     <string name="bmw_dsp_mid_hpf_freq">Mid HPF freq</string>
     <string name="bmw_dsp_tilt_section">Post-sum tonality tilt</string>
     <string name="bmw_dsp_tilt_active">Tilt active</string>
-    <string name="bmw_dsp_tilt_active_subtitle">Broad tonal balance after the bands rejoin</string>
     <string name="bmw_dsp_tilt_amount">Tilt amount</string>
     <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
     <string name="bmw_dsp_mono_bass">Mono bass</string>
-    <string name="bmw_dsp_mono_bass_subtitle">Sums the low band to mono below the chosen frequency for a more stable, door-independent bass; stays stereo above it</string>
     <string name="bmw_dsp_mono_bass_freq">Mono below</string>
     <string name="bmw_dsp_mono_bass_blend">Blend</string>
     <string name="bmw_dsp_mono_bass_makeup">Makeup gain</string>
 
     <string name="geq_enable">Arbitrary response equalizer</string>
     <string name="geq_nodes">Magnitude response</string>
-
-    <string name="bass_enable">Dynamic bass boost</string>
-    <string name="bass_max_gain">Maximum gain</string>
-
-    <string name="reverb_enable">Virtual room effect</string>
-    <string name="reverb_room_type">Room type</string>
-    <string name="reverb_preset_default">Default</string>
-    <string name="reverb_preset_small_hall1">Small hall 1</string>
-    <string name="reverb_preset_small_hall2">Small hall 2</string>
-    <string name="reverb_preset_medium_hall2">Medium hall</string>
-    <string name="reverb_preset_large_hall1">Large hall</string>
-    <string name="reverb_preset_small_room1">Small room 1</string>
-    <string name="reverb_preset_small_room2">Small room 2</string>
-    <string name="reverb_preset_medium_room1">Medium room</string>
-    <string name="reverb_preset_large_room1">Large room</string>
-    <string name="reverb_preset_plate_high">Plate high</string>
-    <string name="reverb_preset_plate_low">Plate low</string>
-    <string name="reverb_preset_long_reverb1">Long reverb 1</string>
-    <string name="reverb_preset_long_reverb2">Long reverb 2</string>
 
     <string name="convolver_enable">Convolver</string>
     <string name="convolver_impulse">Impulse response</string>
@@ -241,9 +211,6 @@
     <string name="liveprog_edit_header">Edit selected script</string>
     <string name="liveprog_edit">Open active script in built-in editor</string>
 
-    <string name="tube_enable">Analog modelling</string>
-    <string name="tube_drive">Preamp</string>
-
     <string name="output_control_header">Output control</string>
     <string name="output_limiter_threshold">Limiter threshold</string>
     <string name="output_limiter_release">Limiter release</string>
@@ -256,15 +223,6 @@
     <string name="stereowide_level_wide">Wide</string>
     <string name="stereowide_level_very_narrow">Very narrow</string>
     <string name="stereowide_level_narrow">Narrow</string>
-
-    <string name="crossfeed_enable">Crossfeed</string>
-    <string name="crossfeed_preset">Preset</string>
-    <string name="crossfeed_preset_bs2b_weak">BS2B Weak</string>
-    <string name="crossfeed_preset_bs2b_strong">BS2B Strong</string>
-    <string name="crossfeed_preset_out_of_head">Out of head</string>
-    <string name="crossfeed_preset_surround1">Surround 1</string>
-    <string name="crossfeed_preset_surround2">Surround 2</string>
-    <string name="crossfeed_preset_realistic_surround">Joe0Bloggs Realistic surround</string>
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
@@ -519,7 +477,6 @@
     <!-- File library preference -->
     <string name="action_import">Import</string>
     <string name="filelibrary_hint_tap_and_hold">Tap and hold any item for more options</string>
-    <string name="filelibrary_context_load">Load</string>
     <string name="filelibrary_context_edit">Edit</string>
     <string name="filelibrary_context_overwrite">Overwrite</string>
     <string name="filelibrary_context_rename">Rename</string>
@@ -571,9 +528,6 @@
     <string name="geq_node_list">Node list</string>
     <string name="geq_no_nodes_defined">No nodes defined</string>
     <string name="geq_delete_node">Delete node</string>
-    <string name="geq_go_back_to_node_list">Go back to node list</string>
-    <string name="geq_next_node">Next node</string>
-    <string name="geq_previous_node">Previous node</string>
     <string name="geq_done_spaced">&#160;&#160;Done&#160;</string>
     <string name="geq_done">Done</string>
     <string name="geq_cancel_spaced">&#160;&#160;Discard&#160;</string>

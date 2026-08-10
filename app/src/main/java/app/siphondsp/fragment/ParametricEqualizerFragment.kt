@@ -577,7 +577,6 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun configureGraph() {
-        binding.equalizerSurface.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
         // Tilt now has its own dedicated page (CrossoverTiltFragment) for precise numeric
         // editing, but the drag-to-adjust handles stay directly on this graph too.
         binding.equalizerSurface.showTiltHandles = true

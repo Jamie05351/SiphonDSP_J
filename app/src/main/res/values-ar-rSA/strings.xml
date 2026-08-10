@@ -210,14 +210,11 @@
     <string name="onboarding_adb_shizuku_grant_fail_denied">الرجاء منح هذا التطبيق حق الوصول إلى شيزوكو. قد تحتاج إلى فتح مدير إذن شيزوكو ومنح الإذن يدوياً إذا كنت قد رفضته مسبقاً ولم تعد تظهر النوافذ المنبثقة.</string>
     <string name="onboarding_adb_shizuku_no_dump_perm_title">فشل Shizuku في منح أذونات ADB</string>
     <string name="onboarding_adb_shizuku_no_dump_perm">الرجاء الانتظار بضع ثوان ثم حاول مرة أخرى. إذا كان لا يزال لا يعمل، حاول الطريقة البديلة.</string>
-    <string name="onboarding_adb_dump_not_granted_title">لم يتم بعد منح الإذن</string>
-    <string name="onboarding_adb_dump_not_granted">الرجاء اتباع الإرشادات أولاً وحاول مرة أخرى. لم يتم بعد إعداد الوصول إلى ADB بشكل صحيح.</string>
     <string name="onboarding_adb_manual_step1">انتقل إلى إعدادات التطوير المخفية للأندرويد وتمكين تصحيح أخطاء USB. تحتاج إلى فتح هذه الإعدادات عن طريق النقر على رقم البناء في إعدادات النظام عدة مرات.</string>
     <string name="onboarding_adb_manual_step2">افتح https://app.webadb.com في متصفح الكمبيوتر الخاص بك (يعمل بشكل أفضل في Chrome) واتصل جهازك باستخدام USB مع الكمبيوتر.</string>
     <string name="onboarding_adb_manual_step3">إضافة وتوصيل جهاز USB في WebADB.</string>
     <string name="onboarding_adb_manual_step4">انتقل إلى \'Interactive Shell\' وتنفيذ الأمر التالي في الطرفية: \'pm grant %s android.permission.DUMP\'</string>
     <string name="onboarding_adb_manual_step5">انقر فوق \'التالي\' في هذا التطبيق للمتابعة.</string>
-    <string name="onboarding_adb_manual_step5b">(اختياري) يمكنك تخطي طلبات السماح بالتقاط الصوت بشكل دائم عن طريق تنفيذ هذا الأمر: \'appops set %s PROJECT_MEDIA allow\'</string>
     <string name="onboarding_adb_manual_step5c">(اختياري) بالإضافة إلى الخطوة السابقة، يمكنك أيضا تمكين البدء التلقائي بتنفيذ الأمر التالي: \'appops set %s SYSTEM_ALERT_WINDOW allow\'</string>
     <string name="onboarding_adb_manual_step1_button">فتح إعدادات التطوير</string>
     <string name="onboarding_perm_title">الأذونات الأخرى</string>

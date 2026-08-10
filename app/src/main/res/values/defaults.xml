@@ -17,7 +17,7 @@
     <!-- Internal DSP -->
     <bool name="default_powered_on" translatable="false" tools:keep="@bool/default_powered_on">true</bool>
     <string name="default_benchmark_c0" translatable="false" tools:keep="@string/default_benchmark_c0" />
-    <string name="default_benchmark_c1" translatable="false" tools:keep="@string/default_benchmark_c0" />
+    <string name="default_benchmark_c1" translatable="false" tools:keep="@string/default_benchmark_c1" />
 
     <!-- Settings -->
     <bool name="default_share_crash_reports" translatable="false">true</bool>
@@ -45,7 +45,7 @@
     <bool name="default_appearance_pure_black" translatable="false">false</bool>
     <string name="default_appearance_app_theme" translatable="false">DEFAULT</string>
     <!-- ARGB packed as a signed 32-bit int (two's complement of 0xFF6750A4, Material3 baseline purple) -->
-    <integer name="default_appearance_custom_color" translatable="false">-10006364</integer>
+    <integer name="default_appearance_custom_color" translatable="false" tools:keep="@integer/default_appearance_custom_color">-10006364</integer>
     <bool name="default_appearance_nav_hide" translatable="false">false</bool>
     <bool name="default_appearance_show_icons" translatable="false">true</bool>
 

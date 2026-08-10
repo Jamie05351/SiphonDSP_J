@@ -10,6 +10,7 @@ import android.graphics.Path
 import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.MotionEvent
@@ -33,26 +34,18 @@ import app.siphondsp.utils.extensions.prettyNumberFormat
 import java.util.UUID
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
- * PEQ graph view with two personalities, selected by [surfaceMode]:
- *
- * - [SurfaceMode.PEQ_ONLY] (default): the original intent-only single-bank PEQ graph.
- *   Committed bands are supplied by the caller; the view owns only a single visual drag
- *   draft and never persists or configures audio. Used by non-interactive/legacy
- *   consumers (live EQ preview, graphic EQ, preference dialogs) -- this mode's behavior
- *   is unchanged from before the unified-visualiser rework.
- * - [SurfaceMode.UNIFIED_SYSTEM]: the full-screen PEQ editor's unified BMW response
- *   visualiser -- shows the complete modelled signal chain (via [BmwResponseCalculator]),
- *   draggable nodes for all three PEQ banks simultaneously (only the active bank's nodes
- *   are draggable), and draggable tilt handles. Still intent-only: nothing here writes to
- *   SharedPreferences or configures the native engine directly, everything flows back
- *   through [onDragCommitted]/[onTiltDragCommitted] for the caller to validate and apply.
+ * The full-screen PEQ editor's unified BMW response visualiser -- shows the complete
+ * modelled signal chain (via [BmwResponseCalculator]), draggable nodes for all three PEQ
+ * banks simultaneously (only the active bank's nodes are draggable), and draggable tilt
+ * handles. Intent-only: nothing here writes to SharedPreferences or configures the native
+ * engine directly, everything flows back through [onDragCommitted]/[onTiltDragCommitted]
+ * for the caller to validate and apply.
  */
 class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     enum class ChannelDisplay { BOTH, LEFT, RIGHT }
-    enum class SurfaceMode { PEQ_ONLY, UNIFIED_SYSTEM }
-    /** UNIFIED_SYSTEM only -- PEQ_ONLY always renders magnitude regardless of this value. */
     enum class DisplayMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
     private enum class TiltHandle { PIVOT, AMOUNT }
 
@@ -61,12 +54,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     var onTiltDragCommitted: ((tiltFrequencyHz: Float, tiltAmountDb: Float) -> Unit)? = null
     var onTiltDragPreview: ((tiltFrequencyHz: Float, tiltAmountDb: Float) -> Unit)? = null
 
-    var surfaceMode: SurfaceMode = SurfaceMode.PEQ_ONLY
-        set(value) {
-            if (field == value) return
-            field = value
-            invalidate()
-        }
     var showTiltHandles = false
         set(value) {
             field = value
@@ -94,64 +81,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private val density = resources.displayMetrics.density
 
-    // --- PEQ_ONLY paints (unchanged) -----------------------------------------------------
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.colorControlHighlight)
-        style = Paint.Style.STROKE
-        strokeWidth = density
-    }
-    private val zeroPaint = Paint(gridPaint).apply { strokeWidth = 2f * density }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorPrimary)
-        textAlign = Paint.Align.CENTER
-        textSize = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_SP, 10f, resources.displayMetrics
-        )
-    }
-    private val leftPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.colorAccent)
-        style = Paint.Style.STROKE
-        strokeWidth = 3f * density
-    }
-    private val rightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorPrimary)
-        alpha = 190
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * density
-        pathEffect = DashPathEffect(floatArrayOf(8f * density, 5f * density), 0f)
-    }
-    private val overlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorSecondary)
-        alpha = 80
-        style = Paint.Style.STROKE
-        strokeWidth = density
-    }
-    private val selectedOverlayPaint = Paint(leftPaint).apply { strokeWidth = 2f * density }
-    private val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.colorAccent)
-        style = Paint.Style.FILL
-    }
-    private val selectedPointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.colorAccent)
-        style = Paint.Style.STROKE
-        strokeWidth = 3f * density
-    }
-    private val pointTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textAlign = Paint.Align.CENTER
-        textSize = 10f * density
-    }
-    private val spectrumFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorSecondary)
-        style = Paint.Style.FILL
-        alpha = 30
-    }
-    private val spectrumStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorSecondary)
-        style = Paint.Style.STROKE
-        strokeWidth = density
-        alpha = 90
-    }
     // Dry (pre-DSP) reference trace -- dashed and faint so it reads as "before" rather than
     // competing with the live wet trace drawn on top of it.
     private val dryStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -182,13 +111,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val spectrumDryYs = FloatArray(SPECTRUM_STEPS + 1)
     private val spectrumWetYs = FloatArray(SPECTRUM_STEPS + 1)
 
-    private val leftPath = Path()
-    private val rightPath = Path()
-    private val overlayPaths = mutableListOf<Path>()
-
-    // --- Shared band-drag state (used by both modes; UNIFIED_SYSTEM always represents
-    // only the active bank's bands here, mirroring how the fragment already scopes
-    // committedBands/renderBands per bank) --------------------------------------------
+    // --- Band-drag state (UNIFIED_SYSTEM always represents only the active bank's bands
+    // here, mirroring how the fragment already scopes committedBands/renderBands per bank) --
     private var committedBands: List<ParametricEqBand> = emptyList()
     private var renderBands: List<ParametricEqBand> = emptyList()
     private var selectedId: UUID? = null
@@ -200,11 +124,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var sampleRate = 48_000.0
     private var maximumFrequency = PeqGraphMath.MAX_FREQUENCY
-    private var preampDb = 0.0
-    private var leftGains = DoubleArray(0)
-    private var rightGains = DoubleArray(0)
-    private var overlayGains: List<DoubleArray> = emptyList()
-    private var frequencies = DoubleArray(0)
 
     var showIndividualFilters = true
         set(value) {
@@ -262,6 +181,35 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         rightMeter.reset()
     }
 
+    // --- Node auto-hide: once bands are set (typed or dragged), node markers/labels stay
+    // visible briefly then fade out, leaving just the curve. Re-armed by any touch drag or by
+    // setBands()/setSystemState(), so it covers both drag edits and REW-value entry. ---------
+
+    private val nodeFadeHandler = Handler(Looper.getMainLooper())
+    private var lastNodeInteractionAtMs = 0L
+    private val nodeFadeTick = object : Runnable {
+        override fun run() {
+            invalidate()
+            if (nodeAlphaFraction() > 0f) nodeFadeHandler.postDelayed(this, 32L)
+        }
+    }
+
+    private fun noteNodeInteraction() {
+        lastNodeInteractionAtMs = SystemClock.uptimeMillis()
+        nodeFadeHandler.removeCallbacks(nodeFadeTick)
+        nodeFadeHandler.postDelayed(nodeFadeTick, 32L)
+    }
+
+    private fun nodeAlphaFraction(): Float {
+        if (draft != null || tiltDraft != null) return 1f
+        val sinceHold = SystemClock.uptimeMillis() - lastNodeInteractionAtMs - NODE_IDLE_HOLD_MS
+        return when {
+            sinceHold <= 0L -> 1f
+            sinceHold >= NODE_FADE_DURATION_MS -> 0f
+            else -> 1f - sinceHold.toFloat() / NODE_FADE_DURATION_MS
+        }
+    }
+
     // --- UNIFIED_SYSTEM state -----------------------------------------------------------
     private var systemValues: FloatArray = FloatArray(BmwSignalChain.VALUE_COUNT)
     private var peqState: BmwPeqState = BmwPeqState.empty()
@@ -276,7 +224,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     // Dark, fixed palette for the unified visualiser (deliberate design commitment, matching
     // the existing compressor visualisers' dark aesthetic rather than following the light/
-    // dark app theme -- PEQ_ONLY's themeColor()-based paints above are unaffected).
+    // dark app theme).
     private val bgTopColor = Color.rgb(20, 21, 24)
     private val bgBottomColor = Color.rgb(13, 13, 15)
     private val unifiedGridColor = Color.rgb(58, 60, 66)
@@ -427,11 +375,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         }
     }
 
-    // --- PEQ_ONLY public API (unchanged) -------------------------------------------------
+    // --- Band state API ---------------------------------------------------------------
 
-    fun setBands(
+    private fun setBands(
         bands: ParametricEqBandList,
-        preampDb: Double = this.preampDb,
         selectedId: UUID? = this.selectedId,
         sampleRate: Double = this.sampleRate,
     ) {
@@ -439,12 +386,11 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         renderBands = committedBands
         draft = null
         dragging = false
-        this.preampDb = preampDb
         this.selectedId = selectedId?.takeIf { id -> committedBands.any { it.uuid == id } }
         this.sampleRate = sampleRate
         maximumFrequency = min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
-        recomputeResponses()
         updateContentDescription()
+        noteNodeInteraction()
     }
 
     fun selectBand(id: UUID?) {
@@ -461,11 +407,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         dragging = false
         activePointerId = MotionEvent.INVALID_POINTER_ID
         parent?.requestDisallowInterceptTouchEvent(false)
-        recomputeResponses()
-        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM) {
-            calculator.invalidateAll()
-            recomputeSystemResponse()
-        }
+        calculator.invalidateAll()
+        recomputeSystemResponse()
         invalidate()
     }
 
@@ -474,16 +417,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     override fun onDetachedFromWindow() {
         cancelDraft()
         stopSpectrum()
+        nodeFadeHandler.removeCallbacks(nodeFadeTick)
         super.onDetachedFromWindow()
     }
 
-    // --- UNIFIED_SYSTEM public API -------------------------------------------------------
-
     /**
-     * Full rebind for the unified surface: [values] is the 35-float native BMW DSP config
-     * array, [peq] the already-loaded three-bank PEQ state, [activeBank] which bank's nodes
-     * are draggable right now. Mirrors [setBands] for the active bank's list so dragging
-     * behaves identically to PEQ_ONLY; the other two banks are stored read-only for display.
+     * Full rebind for the surface: [values] is the 35-float native BMW DSP config array,
+     * [peq] the already-loaded three-bank PEQ state, [activeBank] which bank's nodes are
+     * draggable right now. The other two banks are stored read-only for display.
      */
     fun setSystemState(
         values: FloatArray,
@@ -507,10 +448,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             BmwPeqBank.LOW -> allLowBandBands
             BmwPeqBank.MID -> allMidBandBands
         }
-        val activePreamp = if (activeBank == BmwPeqBank.FULL) peq.preampDb.toDouble() else 0.0
         setBands(
             ParametricEqBandList().apply { addAll(activeBands) },
-            preampDb = activePreamp,
             selectedId = selectedId,
             sampleRate = sampleRate,
         )
@@ -560,7 +499,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!interactive) return false
-        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM && displayMode != DisplayMode.MAGNITUDE) return false
+        if (displayMode != DisplayMode.MAGNITUDE) return false
         if (event.pointerCount > 1) {
             cancelDraft()
             return true
@@ -578,6 +517,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun handleActionDown(event: MotionEvent): Boolean {
+        noteNodeInteraction()
         val hit = hitTest(event.x, event.y)
         if (hit != null) {
             selectedId = hit.uuid
@@ -594,7 +534,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             invalidate()
             return true
         }
-        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM && showTiltHandles && systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
+        if (showTiltHandles && systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
             val handle = hitTestTiltHandle(event.x, event.y)
             if (handle != null) {
                 tiltDragHandle = handle
@@ -629,11 +569,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 maximumFrequency,
             )
             renderBands = committedBands.map { if (it.uuid == selectedId) draft!! else it }
-            recomputeResponses()
-            if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM) {
-                calculator.invalidateBank(activeBank)
-                recomputeSystemResponse()
-            }
+            calculator.invalidateBank(activeBank)
+            recomputeSystemResponse()
             updateContentDescription()
         } else {
             val handle = tiltDragHandle ?: return true
@@ -656,6 +593,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private fun handleActionUp(): Boolean {
         if (draft == null && tiltDraft == null) return false
+        noteNodeInteraction()
         parent?.requestDisallowInterceptTouchEvent(false)
         val wasDragging = dragging
         activePointerId = MotionEvent.INVALID_POINTER_ID
@@ -668,8 +606,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             } else {
                 draft = null
                 renderBands = committedBands
-                recomputeResponses()
-                if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM) recomputeSystemResponse()
+                recomputeSystemResponse()
             }
         } else {
             val committedTilt = tiltDraft
@@ -691,7 +628,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         return true
     }
 
-    // --- Coordinate mapping (UNIFIED_SYSTEM only; PEQ_ONLY keeps its own edge-to-edge math) --
+    // --- Coordinate mapping ----------------------------------------------------------------
 
     private fun plotLeft(): Float = paddingLeft + padLeft
     private fun plotRight(): Float = width - paddingRight - padRight
@@ -732,34 +669,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM) {
-            drawUnifiedSystem(canvas)
-        } else {
-            drawPeqOnly(canvas)
-        }
-    }
-
-    private fun drawPeqOnly(canvas: Canvas) {
-        drawGrid(canvas)
-        if (showSpectrum && spectrumActive) drawSpectrum(canvas)
-        buildPath(leftPath, leftGains)
-        buildPath(rightPath, rightGains)
-
-        if (showIndividualFilters) {
-            overlayGains.forEachIndexed { index, gains ->
-                while (overlayPaths.size <= index) overlayPaths.add(Path())
-                val path = overlayPaths[index]
-                buildPath(path, gains, includePreamp = false)
-                canvas.drawPath(
-                    path,
-                    if (renderBands.getOrNull(index)?.uuid == selectedId) selectedOverlayPaint else overlayPaint,
-                )
-            }
-        }
-        if (channelDisplay != ChannelDisplay.RIGHT) canvas.drawPath(leftPath, leftPaint)
-        if (channelDisplay != ChannelDisplay.LEFT) canvas.drawPath(rightPath, rightPaint)
-        drawPoints(canvas)
-        drawChannelLabels(canvas)
+        drawUnifiedSystem(canvas)
     }
 
     private fun drawUnifiedSystem(canvas: Canvas) {
@@ -1025,15 +935,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawMultiBankNodes(canvas: Canvas) {
-        if (activeBank != BmwPeqBank.FULL) drawInactiveBankNodes(canvas, allFullRangeBands, BmwPeqBank.FULL)
-        if (activeBank != BmwPeqBank.LOW) drawInactiveBankNodes(canvas, allLowBandBands, BmwPeqBank.LOW)
-        if (activeBank != BmwPeqBank.MID) drawInactiveBankNodes(canvas, allMidBandBands, BmwPeqBank.MID)
-        drawActiveBankNodes(canvas)
+        val nodeAlpha = (nodeAlphaFraction() * 255f).roundToInt()
+        if (nodeAlpha <= 0) return
+        if (activeBank != BmwPeqBank.FULL) drawInactiveBankNodes(canvas, allFullRangeBands, BmwPeqBank.FULL, nodeAlpha)
+        if (activeBank != BmwPeqBank.LOW) drawInactiveBankNodes(canvas, allLowBandBands, BmwPeqBank.LOW, nodeAlpha)
+        if (activeBank != BmwPeqBank.MID) drawInactiveBankNodes(canvas, allMidBandBands, BmwPeqBank.MID, nodeAlpha)
+        drawActiveBankNodes(canvas, nodeAlpha)
     }
 
-    private fun drawInactiveBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank) {
+    private fun drawInactiveBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank, nodeAlpha: Int) {
         bands.forEach { band ->
             nodeDimPaint.color = colorForBand(band, bank)
+            nodeDimPaint.alpha = nodeDimPaint.alpha * nodeAlpha / 255
+            nodeRingPaint.alpha = nodeAlpha
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             canvas.drawCircle(x, y, INACTIVE_NODE_RADIUS_DP * density, nodeDimPaint)
@@ -1043,16 +957,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         }
     }
 
-    private fun drawActiveBankNodes(canvas: Canvas) {
+    private fun drawActiveBankNodes(canvas: Canvas, nodeAlpha: Int) {
         renderBands.forEachIndexed { index, band ->
             val color = colorForBand(band, activeBank)
             nodeFillPaint.color = color
+            nodeFillPaint.alpha = nodeAlpha
             nodeHaloPaint.color = color
+            nodeRingPaint.alpha = nodeAlpha
+            nodeTextPaint.alpha = nodeAlpha
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             val selected = band.uuid == selectedId
             if (selected) {
-                nodeHaloPaint.alpha = 60
+                nodeHaloPaint.alpha = 60 * nodeAlpha / 255
                 canvas.drawCircle(x, y, ACTIVE_NODE_RADIUS_DP * density + 8f * density, nodeHaloPaint)
             }
             val radius = (if (selected) ACTIVE_NODE_RADIUS_DP + 1.5f else ACTIVE_NODE_RADIUS_DP) * density
@@ -1177,149 +1094,13 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         }
     }
 
-    // --- PEQ_ONLY drawing helpers (unchanged) --------------------------------------------
-
-    private fun drawGrid(canvas: Canvas) {
-        FREQ_SCALE.forEach { frequency ->
-            val x = PeqGraphMath.frequencyToFraction(frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency) * width
-            canvas.drawText(frequency.prettyNumberFormat(), x, height - 4f * density, textPaint)
-        }
-        var gain = PeqGraphMath.MIN_GAIN.toInt() + 3
-        while (gain < PeqGraphMath.MAX_GAIN) {
-            val y = PeqGraphMath.gainToFraction(gain.toDouble()) * height
-            canvas.drawLine(0f, y, width.toFloat(), y, if (gain == 0) zeroPaint else gridPaint)
-            gain += 3
-        }
-    }
-
-    private fun drawSpectrum(canvas: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        if (w <= 0f || h <= 0f) return
-
-        spectrumStrokePath.rewind()
-        spectrumFillPath.rewind()
-        dryStrokePath.rewind()
-        spectrumFillPath.moveTo(0f, h)
-        val dbSpan = SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB
-        for (i in 0..SPECTRUM_STEPS) {
-            val fraction = i / SPECTRUM_STEPS.toFloat()
-            val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
-            val wetDb = SpectrumEngine.magnitudeDbAt(freq)
-            val dryDb = SpectrumEngine.dryMagnitudeDbAt(freq)
-            val x = fraction * w
-            val wetY = h * (SpectrumEngine.CEILING_DB - wetDb) / dbSpan
-            val dryY = h * (SpectrumEngine.CEILING_DB - dryDb) / dbSpan
-            spectrumXs[i] = x
-            spectrumWetYs[i] = wetY
-            spectrumDryYs[i] = dryY
-            if (i == 0) {
-                spectrumStrokePath.moveTo(x, wetY)
-                dryStrokePath.moveTo(x, dryY)
-            } else {
-                spectrumStrokePath.lineTo(x, wetY)
-                dryStrokePath.lineTo(x, dryY)
-            }
-            spectrumFillPath.lineTo(x, wetY)
-        }
-        spectrumFillPath.lineTo(w, h)
-        spectrumFillPath.close()
-        drawSpectrumDelta(canvas, SPECTRUM_STEPS + 1)
-        canvas.drawPath(spectrumFillPath, spectrumFillPaint)
-        canvas.drawPath(dryStrokePath, dryStrokePaint)
-        canvas.drawPath(spectrumStrokePath, spectrumStrokePaint)
-    }
-
-    private fun drawPoints(canvas: Canvas) {
-        renderBands.forEachIndexed { index, band ->
-            val x = PeqGraphMath.frequencyToFraction(
-                band.frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency
-            ) * width
-            val y = PeqGraphMath.gainToFraction(band.gain) * height
-            val selected = band.uuid == selectedId
-            val radius = (if (selected) 10f else 8f) * density
-            canvas.drawCircle(x, y, radius, pointPaint)
-            if (selected) canvas.drawCircle(x, y, radius + 4f * density, selectedPointPaint)
-            val baseline = y - (pointTextPaint.ascent() + pointTextPaint.descent()) / 2
-            canvas.drawText((index + 1).toString(), x, baseline, pointTextPaint)
-        }
-    }
-
-    private fun drawChannelLabels(canvas: Canvas) {
-        textPaint.textAlign = Paint.Align.LEFT
-        val label = when (channelDisplay) {
-            ChannelDisplay.BOTH -> "L solid   R dashed"
-            ChannelDisplay.LEFT -> "Left"
-            ChannelDisplay.RIGHT -> "Right"
-        }
-        canvas.drawText(label, 8f * density, 14f * density, textPaint)
-        textPaint.textAlign = Paint.Align.CENTER
-    }
-
     private fun hitTest(x: Float, y: Float): ParametricEqBand? {
         val radius = 24f * density
         return renderBands.map { band ->
-            val pointX: Float
-            val pointY: Float
-            if (surfaceMode == SurfaceMode.UNIFIED_SYSTEM) {
-                pointX = xForFrequency(band.frequency)
-                pointY = yForGain(band.gain)
-            } else {
-                pointX = PeqGraphMath.frequencyToFraction(band.frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency) * width
-                pointY = PeqGraphMath.gainToFraction(band.gain) * height
-            }
+            val pointX = xForFrequency(band.frequency)
+            val pointY = yForGain(band.gain)
             band to hypot(x - pointX, y - pointY)
         }.filter { it.second <= radius }.minByOrNull { it.second }?.first
-    }
-
-    private fun recomputeResponses() {
-        fun response(channel: ParametricEqChannel) = BiquadUtils.computeCombinedResponse(
-            renderBands,
-            numPoints = POINT_COUNT,
-            minFreq = PeqGraphMath.MIN_FREQUENCY,
-            maxFreq = maximumFrequency,
-            sampleRate = sampleRate,
-            channel = channel,
-        )
-        val left = response(ParametricEqChannel.LEFT)
-        val right = response(ParametricEqChannel.RIGHT)
-        val source = if (left.isNotEmpty()) left else right
-        frequencies = DoubleArray(source.size) { source[it].first }
-        leftGains = DoubleArray(frequencies.size) { left.getOrNull(it)?.second ?: 0.0 }
-        rightGains = DoubleArray(frequencies.size) { right.getOrNull(it)?.second ?: 0.0 }
-        overlayGains = renderBands.map { band ->
-            val channel = when {
-                channelDisplay == ChannelDisplay.LEFT -> ParametricEqChannel.LEFT
-                channelDisplay == ChannelDisplay.RIGHT -> ParametricEqChannel.RIGHT
-                band.channel == ParametricEqChannel.RIGHT -> ParametricEqChannel.RIGHT
-                else -> ParametricEqChannel.LEFT
-            }
-            val result = BiquadUtils.computeCombinedResponse(
-                listOf(band), POINT_COUNT, PeqGraphMath.MIN_FREQUENCY,
-                maximumFrequency, sampleRate, channel,
-            )
-            DoubleArray(frequencies.size) { result.getOrNull(it)?.second ?: 0.0 }
-        }
-        invalidate()
-    }
-
-    private fun buildPath(path: Path, gains: DoubleArray, includePreamp: Boolean = true) {
-        path.rewind()
-        if (frequencies.isEmpty() || gains.size != frequencies.size) {
-            val y = PeqGraphMath.gainToFraction(if (includePreamp) preampDb else 0.0) * height
-            path.moveTo(0f, y)
-            path.lineTo(width.toFloat(), y)
-            return
-        }
-        gains.indices.forEach { index ->
-            val x = PeqGraphMath.frequencyToFraction(
-                frequencies[index], PeqGraphMath.MIN_FREQUENCY, maximumFrequency
-            ) * width
-            val y = PeqGraphMath.gainToFraction(
-                gains[index] + if (includePreamp) preampDb else 0.0
-            ) * height
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
     }
 
     private fun updateContentDescription() {
@@ -1344,7 +1125,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     companion object {
-        private const val POINT_COUNT = 256
         private const val SYSTEM_POINT_COUNT = 192
         private const val OVERLAY_POINT_COUNT = 96
         private const val SPECTRUM_STEPS = 160
@@ -1359,6 +1139,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
         private const val METER_FLOOR_DB = -50f
         private const val METER_CEILING_DB = 0f
+
+        private const val NODE_IDLE_HOLD_MS = 1200L
+        private const val NODE_FADE_DURATION_MS = 400L
 
         private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,

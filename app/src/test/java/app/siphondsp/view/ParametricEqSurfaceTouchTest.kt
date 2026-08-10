@@ -61,22 +61,21 @@ class ParametricEqSurfaceTouchTest {
         )
     }
 
-    // --- PEQ_ONLY band drag ---------------------------------------------------------------
+    // --- Band drag --------------------------------------------------------------------------
 
-    private fun bandPixel(band: ParametricEqBand): Pair<Float, Float> {
-        val x = PeqGraphMath.frequencyToFraction(band.frequency, PeqGraphMath.MIN_FREQUENCY, PeqGraphMath.MAX_FREQUENCY) * width
-        val y = PeqGraphMath.gainToFraction(band.gain) * height
-        return x to y
+    private fun bindSingleBand(band: ParametricEqBand) {
+        val peq = BmwPeqState.empty().copy(fullRangeBands = ParametricEqBandList().apply { add(band) })
+        view.setSystemState(NativeBmwDspValues.DEFAULTS.copyOf(), peq, BmwPeqBank.FULL, null, 48_000.0)
     }
 
     @Test
     fun dragCommitsExactlyOnceOnActionUp() {
         val band = ParametricEqBand(1000.0, 0.0, 1.41)
-        view.setBands(ParametricEqBandList().apply { add(band) }, sampleRate = 48_000.0)
+        bindSingleBand(band)
         var commitCount = 0
         var lastCommitted: ParametricEqBand? = null
         view.onDragCommitted = { commitCount++; lastCommitted = it }
-        val (x, y) = bandPixel(band)
+        val (x, y) = unifiedPixel(band)
 
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, x, y))
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, x + 60f, y + 40f))
@@ -91,10 +90,10 @@ class ParametricEqSurfaceTouchTest {
     @Test
     fun tapWithoutMovementDoesNotCommit() {
         val band = ParametricEqBand(1000.0, 0.0, 1.41)
-        view.setBands(ParametricEqBandList().apply { add(band) }, sampleRate = 48_000.0)
+        bindSingleBand(band)
         var commitCount = 0
         view.onDragCommitted = { commitCount++ }
-        val (x, y) = bandPixel(band)
+        val (x, y) = unifiedPixel(band)
 
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, x, y))
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_UP, x, y))
@@ -106,10 +105,10 @@ class ParametricEqSurfaceTouchTest {
     @Test
     fun cancelledDragCommitsNothingAndClearsTheDraft() {
         val band = ParametricEqBand(1000.0, 0.0, 1.41)
-        view.setBands(ParametricEqBandList().apply { add(band) }, sampleRate = 48_000.0)
+        bindSingleBand(band)
         var commitCount = 0
         view.onDragCommitted = { commitCount++ }
-        val (x, y) = bandPixel(band)
+        val (x, y) = unifiedPixel(band)
 
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, x, y))
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, x + 60f, y + 40f))
@@ -122,10 +121,10 @@ class ParametricEqSurfaceTouchTest {
     @Test
     fun secondPointerDownCancelsTheDraft() {
         val band = ParametricEqBand(1000.0, 0.0, 1.41)
-        view.setBands(ParametricEqBandList().apply { add(band) }, sampleRate = 48_000.0)
+        bindSingleBand(band)
         var commitCount = 0
         view.onDragCommitted = { commitCount++ }
-        val (x, y) = bandPixel(band)
+        val (x, y) = unifiedPixel(band)
 
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, x, y))
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, x + 60f, y + 40f))
@@ -135,7 +134,7 @@ class ParametricEqSurfaceTouchTest {
         assertFalse(view.hasActiveDraft())
     }
 
-    // --- UNIFIED_SYSTEM tilt drag ----------------------------------------------------------
+    // --- Tilt drag ----------------------------------------------------------------------
 
     private fun tiltAmountPixel(): Pair<Float, Float> {
         val padLeft = 34f
@@ -156,7 +155,6 @@ class ParametricEqSurfaceTouchTest {
 
     @Test
     fun tiltDragCommitsExactlyOnceOnActionUp() {
-        view.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
         view.showTiltHandles = true
         val values = NativeBmwDspValues.DEFAULTS.copyOf() // tilt enabled=1, amount=3dB, freq=550Hz
         view.setSystemState(values, BmwPeqState.empty(), BmwPeqBank.FULL, null, 48_000.0)
@@ -172,11 +170,10 @@ class ParametricEqSurfaceTouchTest {
         assertEquals(1, commitCount)
     }
 
-    // --- UNIFIED_SYSTEM per-bank hit-test scoping -------------------------------------------
+    // --- Per-bank hit-test scoping -----------------------------------------------------------
 
-    /** UNIFIED_SYSTEM's hitTest() maps through plotLeft/plotRight/plotTop/plotBottom, unlike
-     *  PEQ_ONLY's plain fraction*width/height -- must mirror that offset here or the computed
-     *  point wouldn't actually land where the node is drawn. */
+    /** hitTest() maps through plotLeft/plotRight/plotTop/plotBottom -- must mirror that offset
+     *  here or the computed point wouldn't actually land where the node is drawn. */
     private fun unifiedPixel(band: ParametricEqBand): Pair<Float, Float> {
         val padLeft = 34f
         val padTop = 16f
@@ -193,7 +190,6 @@ class ParametricEqSurfaceTouchTest {
 
     @Test
     fun inactiveBankNodeNeverStealsATouch() {
-        view.surfaceMode = ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM
         val lowBand = ParametricEqBand(2_000.0, 5.0, 1.41)
         val peq = BmwPeqState.empty().copy(
             lowBandBands = ParametricEqBandList().apply { add(lowBand) },

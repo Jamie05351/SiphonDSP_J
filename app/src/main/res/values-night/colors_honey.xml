@@ -23,10 +23,6 @@
     <color name="honey_onTertiary">#581149</color>
     <color name="honey_tertiaryContainer">#742A61</color>
     <color name="honey_onTertiaryContainer">#FFD8EE</color>
-    <color name="honey_error">#FFB4AB</color>
-    <color name="honey_errorContainer">#93000A</color>
-    <color name="honey_onError">#690005</color>
-    <color name="honey_onErrorContainer">#FFDAD6</color>
     <color name="honey_background">#1F1B16</color>
     <color name="honey_onBackground">#EBE1D9</color>
     <color name="honey_surface">#1F1B16</color>
@@ -37,9 +33,6 @@
     <color name="honey_inverseOnSurface">#1F1B16</color>
     <color name="honey_inverseSurface">#EBE1D9</color>
     <color name="honey_primaryInverse">#885200</color>
-    <color name="honey_shadow">#000000</color>
-    <color name="honey_surfaceTint">#FFB869</color>
-    <color name="honey_surfaceTintColor">#FFB869</color>
 
     <color name="honey_elevationOverlay">@color/honey_primary</color>
 </resources>

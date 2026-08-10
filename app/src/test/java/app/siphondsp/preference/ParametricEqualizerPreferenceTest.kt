@@ -13,7 +13,6 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.view.ParametricEqSurface
 import app.siphondsp.view.PeqGraphMath
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
@@ -50,8 +49,7 @@ class ParametricEqualizerPreferenceTest {
     }
 
     @Test
-    fun bindsInNonInteractiveUnifiedSystemMode() {
-        assertEquals(ParametricEqSurface.SurfaceMode.UNIFIED_SYSTEM, surface.surfaceMode)
+    fun bindsInNonInteractiveMode() {
         assertFalse(surface.interactive)
     }
 

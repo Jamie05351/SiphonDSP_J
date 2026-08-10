@@ -23,10 +23,6 @@
     <color name="yotsuba_onTertiary">#FFFFFF</color>
     <color name="yotsuba_tertiaryContainer">#FFE173</color>
     <color name="yotsuba_onTertiaryContainer">#221B00</color>
-    <color name="yotsuba_error">#BA1A1A</color>
-    <color name="yotsuba_errorContainer">#FFDAD6</color>
-    <color name="yotsuba_onError">#FFFFFF</color>
-    <color name="yotsuba_onErrorContainer">#410002</color>
     <color name="yotsuba_background">#FFFBFF</color>
     <color name="yotsuba_onBackground">#3D0700</color>
     <color name="yotsuba_surface">#FFFBFF</color>
@@ -37,10 +33,7 @@
     <color name="yotsuba_inverseOnSurface">#FFEDE9</color>
     <color name="yotsuba_inverseSurface">#5E1605</color>
     <color name="yotsuba_primaryInverse">#FFB59E</color>
-    <color name="yotsuba_shadow">#000000</color>
-    <color name="yotsuba_surfaceTint">#AE3200</color>
-    <color name="yotsuba_surfaceTintColor">#AE3200</color>
-    
+
     <!--<color name="yotsuba_primary">#AE3200</color>
     <color name="yotsuba_onPrimary">#FFFFFF</color>
     <color name="yotsuba_primaryContainer">#FFDBCF</color>
