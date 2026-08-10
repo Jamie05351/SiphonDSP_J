@@ -8,7 +8,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -57,15 +56,14 @@ object BmwDashboardSkin {
         styleTree(root)
     }
 
-    /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {
         when (root) {
             is MaterialCardView -> {
-                root.radius = dp(root.context, 7).toFloat()
+                root.radius = dp(root.context, 4).toFloat()
                 root.cardElevation = 0f
                 root.strokeWidth = dp(root.context, 1)
-                root.strokeColor = inactiveStroke
-                root.setCardBackgroundColor(Color.argb(215, 18, 23, 29))
+                root.strokeColor = Color.rgb(56, 67, 77)
+                root.setCardBackgroundColor(Color.argb(222, 15, 20, 25))
             }
             is Slider -> styleSlider(root)
             is MaterialSwitch -> styleSwitch(root)
@@ -79,25 +77,18 @@ object BmwDashboardSkin {
         }
     }
 
+    /** Slim cyan rail with a short brushed-metal rectangle sitting inline on the rail. */
     fun styleSlider(slider: Slider, formatter: ((Float) -> String)? = null) {
         val context = slider.context
-        slider.trackHeight = dp(context, 6)
-        slider.thumbWidth = dp(context, 13)
-        slider.thumbHeight = dp(context, 24)
+        slider.trackHeight = dp(context, 4)
+        slider.thumbWidth = dp(context, 24)
+        slider.thumbHeight = dp(context, 10)
         slider.labelBehavior = LabelFormatter.LABEL_FLOATING
         if (formatter != null) slider.setLabelFormatter { formatter(it) }
         slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
-        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(31, 35, 41)))
-        slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-        slider.setCustomThumbDrawable(rectangularThumb(context))
-    }
-
-    fun rectangularThumb(context: Context): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(Color.rgb(190, 196, 203))
-        setStroke(dp(context, 1), Color.rgb(232, 236, 240))
-        cornerRadius = dp(context, 1).toFloat()
-        setSize(dp(context, 13), dp(context, 24))
+        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(35, 42, 49)))
+        slider.setHaloTintList(ColorStateList.valueOf(Color.TRANSPARENT))
+        slider.setCustomThumbDrawable(BrushedMetalThumbDrawable(dp(context, 24), dp(context, 10)))
     }
 
     private fun styleSwitch(toggle: SwitchCompat) {
@@ -120,16 +111,8 @@ object BmwDashboardSkin {
             intArrayOf(LIGHT_BLUE, Color.rgb(83, 96, 109), inactiveStroke),
         )
         chip.chipStrokeWidth = dp(chip.context, 1).toFloat()
-        chip.setTextColor(
-            ColorStateList(
-                states,
-                intArrayOf(Color.WHITE, Color.WHITE, inactiveText),
-            )
-        )
-        chip.chipIconTint = ColorStateList(
-            states,
-            intArrayOf(LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)),
-        )
+        chip.setTextColor(ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE, inactiveText)))
+        chip.chipIconTint = ColorStateList(states, intArrayOf(LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)))
         chip.checkedIconTint = ColorStateList.valueOf(LIGHT_BLUE)
     }
 
@@ -139,38 +122,24 @@ object BmwDashboardSkin {
             intArrayOf(android.R.attr.state_pressed),
             intArrayOf(),
         )
-        val isPowerButton = button.id == R.id.compressor_enable
-        button.backgroundTintList = ColorStateList(
-            states,
-            intArrayOf(
-                if (isPowerButton) inactiveSurface else selectedSurface,
-                Color.rgb(28, 35, 43),
-                inactiveSurface,
-            ),
-        )
-        button.strokeColor = ColorStateList(
-            states,
-            intArrayOf(
-                LIGHT_BLUE,
-                Color.rgb(83, 96, 109),
-                if (isPowerButton) M_RED else inactiveStroke,
-            ),
-        )
+        val isPowerButton = button.id == R.id.compressor_enable || button.tag == "dsp_power"
+
+        if (isPowerButton) {
+            // Power controls are icons, not faux circular switches: no fill, no outline, no pill.
+            button.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            button.strokeWidth = 0
+            button.iconTint = ColorStateList(states, intArrayOf(LIGHT_BLUE, LIGHT_BLUE, M_RED))
+            button.rippleColor = ColorStateList.valueOf(Color.argb(26, 255, 255, 255))
+            button.setTextColor(Color.TRANSPARENT)
+            button.cornerRadius = 0
+            return
+        }
+
+        button.backgroundTintList = ColorStateList(states, intArrayOf(selectedSurface, Color.rgb(28, 35, 43), inactiveSurface))
+        button.strokeColor = ColorStateList(states, intArrayOf(LIGHT_BLUE, Color.rgb(83, 96, 109), inactiveStroke))
         button.strokeWidth = dp(button.context, 1)
-        button.setTextColor(
-            ColorStateList(
-                states,
-                intArrayOf(Color.WHITE, Color.WHITE, inactiveText),
-            )
-        )
-        button.iconTint = ColorStateList(
-            states,
-            intArrayOf(
-                LIGHT_BLUE,
-                LIGHT_BLUE,
-                if (isPowerButton) M_RED else Color.rgb(172, 184, 195),
-            ),
-        )
+        button.setTextColor(ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE, inactiveText)))
+        button.iconTint = ColorStateList(states, intArrayOf(LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)))
     }
 
     private fun checkedColours(checked: Int, unchecked: Int) = ColorStateList(
@@ -199,7 +168,7 @@ object BmwDashboardSkin {
             var y = b.top
             var index = 0
             while (y < b.bottom) {
-                val alpha = if (index % 3 == 0) 22 else 10
+                val alpha = if (index % 3 == 0) 16 else 6
                 linePaint.color = Color.argb(alpha, 205, 215, 225)
                 canvas.drawLine(b.left.toFloat(), y.toFloat(), b.right.toFloat(), y.toFloat(), linePaint)
                 y += 3
@@ -208,7 +177,7 @@ object BmwDashboardSkin {
 
             paint.shader = LinearGradient(
                 b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
-                intArrayOf(Color.argb(34, 255, 255, 255), Color.TRANSPARENT, Color.argb(28, 0, 0, 0)),
+                intArrayOf(Color.argb(26, 255, 255, 255), Color.TRANSPARENT, Color.argb(24, 0, 0, 0)),
                 null,
                 Shader.TileMode.CLAMP,
             )
