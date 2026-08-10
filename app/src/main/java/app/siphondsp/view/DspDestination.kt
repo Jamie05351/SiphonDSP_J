@@ -82,8 +82,11 @@ object DspCrossNavBar {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
                         destination.workspaceMode?.let { intent.putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
+                        // Do not immediately finish the source workspace. The DSP screens now own
+                        // ViewPager2/custom graph state and need their normal onStop/onDestroy path;
+                        // force-finishing during the destination's creation can tear down bound
+                        // views while callbacks are still dispatching from the navigation tap.
                         activity.startActivity(intent)
-                        activity.finish()
                     }
                 }
             }
