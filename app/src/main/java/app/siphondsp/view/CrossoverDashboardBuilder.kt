@@ -4,17 +4,16 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.siphondsp.R
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -32,9 +31,7 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
-    private val inactiveTrack = Color.rgb(31, 35, 41)
-    private val thumbFill = Color.rgb(190, 196, 203)
-    private val thumbStroke = Color.rgb(232, 236, 240)
+    private val accentRed = BmwDashboardSkin.M_RED
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
     private val divider = Color.rgb(47, 53, 61)
@@ -103,7 +100,6 @@ class CrossoverDashboardBuilder(
         dashboardPanel(title, subtitle, build)
     }
 
-    /** Embeds an arbitrary view (e.g. an illustrative diagram) inside the current section card. */
     fun addCustomView(view: View, topMarginDp: Int = 4, bottomMarginDp: Int = 10) {
         currentContent.addView(
             view,
@@ -130,6 +126,10 @@ class CrossoverDashboardBuilder(
         })
     }
 
+    /**
+     * OFF/ON rows use the requested single power glyph: red is off, BMW light blue is on.
+     * Named two-state controls (Normal/Invert, BW3/LR4, etc.) stay as compact segmented tabs.
+     */
     fun addSegmentedSwitchRow(
         title: String,
         subtitle: String?,
@@ -147,20 +147,26 @@ class CrossoverDashboardBuilder(
         }
 
         if (offLabel == "OFF" && onLabel == "ON") {
-            val toggle = MaterialSwitch(context).apply {
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            val power = MaterialButton(context, null, com.google.android.material.R.attr.materialIconButtonOutlinedStyle).apply {
+                id = View.generateViewId()
+                isCheckable = true
                 isChecked = values[index] >= .5f
                 contentDescription = title
-                showText = false
+                icon = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_dsp_power_24)
+                iconTint = ColorStateList(states, intArrayOf(accentBlue, accentRed))
+                strokeColor = ColorStateList(states, intArrayOf(accentBlue, accentRed))
+                backgroundTintList = ColorStateList.valueOf(segmentIdle)
+                insetTop = 0
+                insetBottom = 0
                 minWidth = 0
                 minimumWidth = 0
                 setPadding(0, 0, 0, 0)
-                thumbTintList = checkedColorStateList(accentBlue, Color.rgb(170, 177, 184))
-                trackTintList = checkedColorStateList(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
-                setOnCheckedChangeListener { _, checked ->
+                addOnCheckedChangeListener { _, checked ->
                     writeValue(index, mirrorIndices, if (checked) 1f else 0f)
                 }
             }
-            controlSlot.addView(toggle)
+            controlSlot.addView(power, LinearLayout.LayoutParams(dp(42), dp(36)))
         } else {
             val group = MaterialButtonToggleGroup(context).apply {
                 isSingleSelection = true
@@ -168,8 +174,8 @@ class CrossoverDashboardBuilder(
             }
             val off = segmentButton(offLabel)
             val on = segmentButton(onLabel)
-            group.addView(off, LinearLayout.LayoutParams(dp(62), dp(30)))
-            group.addView(on, LinearLayout.LayoutParams(dp(62), dp(30)))
+            group.addView(off, LinearLayout.LayoutParams(dp(74), dp(34)))
+            group.addView(on, LinearLayout.LayoutParams(dp(74), dp(34)))
             group.check(if (values[index] >= .5f) on.id else off.id)
             group.addOnButtonCheckedListener { _, checkedId, isChecked ->
                 if (!isChecked) return@addOnButtonCheckedListener
@@ -205,13 +211,9 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = values[index].coerceIn(min, max)
-            trackHeight = dp(6)
-            thumbWidth = dp(13)
-            thumbHeight = dp(24)
-            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
-            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-            setCustomThumbDrawable(createRectangularThumb())
+            BmwDashboardSkin.styleSlider(this) { raw ->
+                "${format.format(raw * displayScale)} $suffix".trim()
+            }
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -258,8 +260,8 @@ class CrossoverDashboardBuilder(
     private fun createRow() = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = dp(48)
-        setPadding(0, dp(2), 0, dp(2))
+        minimumHeight = dp(46)
+        setPadding(0, dp(1), 0, dp(1))
     }
 
     private fun addRow(row: LinearLayout) {
@@ -290,7 +292,7 @@ class CrossoverDashboardBuilder(
         setPadding(dp(5), 0, dp(5), 0)
         backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
-        setTextColor(checkedColorStateList(accentBlue, Color.rgb(225, 230, 235)))
+        setTextColor(checkedColorStateList(Color.WHITE, Color.rgb(225, 230, 235)))
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
@@ -314,16 +316,8 @@ class CrossoverDashboardBuilder(
         isClickable = true
         isFocusable = true
         setTextColor(Color.WHITE)
-        setBackgroundResource(app.siphondsp.R.drawable.background_dsp_value_box)
+        setBackgroundResource(R.drawable.background_dsp_value_box)
         updateValueBox(this, value, suffix)
-    }
-
-    private fun createRectangularThumb() = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(thumbFill)
-        setStroke(dp(1), thumbStroke)
-        cornerRadius = dp(1).toFloat()
-        setSize(dp(13), dp(24))
     }
 
     private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
@@ -342,7 +336,7 @@ class CrossoverDashboardBuilder(
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).roundToInt()
 
     companion object {
-        private const val LABEL_WIDTH_DP = 225
-        private const val VALUE_WIDTH_DP = 88
+        private const val LABEL_WIDTH_DP = 205
+        private const val VALUE_WIDTH_DP = 82
     }
 }
