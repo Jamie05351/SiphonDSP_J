@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.view.Menu
 import android.view.MenuItem
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
 import app.siphondsp.R
@@ -23,6 +24,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.isPlugin
 import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
+import app.siphondsp.view.BmwDashboardSkin
 
 /** Shared top-right chrome for the dedicated BMW DSP workspaces. */
 abstract class DspWorkspaceActivity : BaseActivity() {
@@ -41,7 +43,13 @@ abstract class DspWorkspaceActivity : BaseActivity() {
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         menu.findItem(R.id.workspace_blocklist)?.isVisible = !isPlugin() && (!isRoot() || app.isEnhancedProcessing)
-        menu.findItem(R.id.workspace_power)?.icon?.alpha = if (workspacePowerIsOn()) 255 else 120
+        menu.findItem(R.id.workspace_power)?.icon?.mutate()?.let { icon ->
+            DrawableCompat.setTint(
+                icon,
+                if (workspacePowerIsOn()) BmwDashboardSkin.LIGHT_BLUE else BmwDashboardSkin.M_RED,
+            )
+            icon.alpha = 255
+        }
         return super.onPrepareOptionsMenu(menu)
     }
 
