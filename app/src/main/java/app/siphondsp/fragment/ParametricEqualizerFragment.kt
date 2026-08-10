@@ -443,16 +443,15 @@ class ParametricEqualizerFragment : Fragment() {
                 }
             }
         }
-        configureModeTabs()
+        configurePager()
         configureCrossNav()
         updateViewState()
         return binding.root
     }
 
-    /** The other 3 DSP screens, stacked directly below the Graph/List toggle so both read as
-     *  one sidebar (landscape only, same as mode_tab_strip -- see DspCrossNavBar). Blocked
-     *  while there's an unsaved filter edit or an in-flight graph drag, same guard as switching
-     *  Full/Low/Mid scope. */
+    /** The other 3 DSP screens, forming the left sidebar (landscape only -- see DspCrossNavBar).
+     *  Blocked while there's an unsaved filter edit or an in-flight graph drag, same guard as
+     *  switching Full/Low/Mid scope. */
     private fun configureCrossNav() {
         val container = binding.peqCrossNav ?: return
         DspCrossNavBar.populate(requireActivity(), container, DspDestination.PARAMETRIC_EQ) {
@@ -482,19 +481,17 @@ class ParametricEqualizerFragment : Fragment() {
         pager.adapter = StaticPagerAdapter(pages)
     }
 
-    /** Left-edge Graph/List tab strip (landscape only), synced bidirectionally with cards_pager:
-     *  tapping a tab pages cards_pager to it (smooth-scrolled), swiping cards_pager updates
-     *  which tab looks "lit" -- both funnel through [setDisplayMode]. */
-    private fun configureModeTabs() {
+    /** Left-edge Graph/List paging (landscape only): restores which page cards_pager should
+     *  open on, and keeps [peqDisplayMode] (and its persisted preference) in sync as the user
+     *  swipes -- see [setDisplayMode]. The old tap-to-switch mode_tab_strip is gone now that
+     *  swiping does the same job; cards_pager is the only way to switch. Portrait has no
+     *  cards_pager -- no-op there. */
+    private fun configurePager() {
         val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         peqDisplayMode = runCatching {
             PeqDisplayMode.valueOf(graphPrefs.getString(GRAPH_DISPLAY_MODE, PeqDisplayMode.GRAPH.name)!!)
         }.getOrDefault(PeqDisplayMode.GRAPH)
 
-        binding.modeTabStrip?.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            setDisplayMode(if (checkedId == R.id.list_mode_tab) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH, smoothScroll = true)
-        }
         binding.cardsPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 setDisplayMode(if (position == 1) PeqDisplayMode.LIST else PeqDisplayMode.GRAPH, smoothScroll = false)
@@ -515,14 +512,9 @@ class ParametricEqualizerFragment : Fragment() {
      *  mutually exclusive pages of cards_pager, List mode dedicated entirely to the filter list,
      *  not sharing space with the visualizer. Portrait has none of these views -- no-op there. */
     private fun applyDisplayMode(smoothScroll: Boolean) {
-        binding.modeTabStrip ?: return
-        binding.modeTabStrip?.check(
-            if (peqDisplayMode == PeqDisplayMode.LIST) R.id.list_mode_tab else R.id.graph_mode_tab
-        )
+        val pager = binding.cardsPager ?: return
         val targetPosition = if (peqDisplayMode == PeqDisplayMode.LIST) 1 else 0
-        binding.cardsPager?.let { pager ->
-            if (pager.currentItem != targetPosition) pager.setCurrentItem(targetPosition, smoothScroll)
-        }
+        if (pager.currentItem != targetPosition) pager.setCurrentItem(targetPosition, smoothScroll)
     }
 
     private fun loadBands(savedInstanceState: Bundle?) {
