@@ -86,12 +86,15 @@ class SettingsAudioFormatFragment : SettingsBaseFragment() {
 
         fun runBenchmark() = context?.let { ctx ->
             BenchmarkManager.runBenchmarks(ctx) {
-                // onFinished may fire from a background thread after the view is gone;
-                // guard against accessing viewLifecycleOwner past onDestroyView.
-                view?.let {
+                // onFinished fires from whatever thread completed the benchmark job, which may
+                // race with the view being torn down on the main thread; a plain view != null
+                // check doesn't close that window, so catch the resulting IllegalStateException.
+                try {
                     viewLifecycleOwner.lifecycleScope.launch {
                         benchmark?.isChecked = BenchmarkManager.hasBenchmarksCached()
                     }
+                } catch (_: IllegalStateException) {
+                    // View destroyed before benchmark completion landed
                 }
             }
         }
