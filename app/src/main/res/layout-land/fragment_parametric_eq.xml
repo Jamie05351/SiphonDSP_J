@@ -163,72 +163,49 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/horizontalScrollView">
 
-        <!-- Graph/List mode toggle: pinned to the left edge, always visible. Using a real
-             MaterialButtonToggleGroup (like filter_type_group/channel_group below) means the
-             "lit" button always matches the checked state, with no separate isEnabled
-             bookkeeping that can drift out of sync with peqDisplayMode. -->
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/mode_tab_strip"
-            android:layout_width="52dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            app:singleSelection="true"
-            app:selectionRequired="true"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/graph_mode_tab"
-                style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginBottom="8dp"
-                android:checkable="true"
-                android:contentDescription="Show the live graph"
-                app:icon="@drawable/ic_baseline_equalizer_24dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/list_mode_tab"
-                style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:checkable="true"
-                android:contentDescription="Show the band list"
-                app:icon="@drawable/ic_twotone_nodes_24dp" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
-
-        <!-- Cross-navigation to the other 3 DSP screens: one-shot navigation actions, kept
-             as a separate plain column (not merged into mode_tab_strip's toggle group above)
-             since a nav tap isn't a persistent view-mode selection. Stacks directly below the
-             Graph/List toggle so both read as one continuous sidebar. -->
+        <!-- Cross-navigation to the other 3 DSP screens. Used to stack below a Graph/List
+             MaterialButtonToggleGroup mode_tab_strip; that toggle is gone now that swiping
+             cards_pager (below) does the same job, so this is the whole sidebar. -->
         <LinearLayout
             android:id="@+id/peq_cross_nav"
             android:layout_width="52dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:layout_marginTop="16dp"
             android:orientation="vertical"
             android:gravity="center_horizontal"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/mode_tab_strip" />
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Only one of edit_card/preview_card is visible at a time (see applyDisplayMode()):
-             both span the same full region so List mode is dedicated to the filter list, not
-             sharing space with the live visualizer. Inside edit_card, the editor and the list
-             are a permanent side-by-side split; see the horizontal LinearLayout below. -->
+        <!-- Graph and List are swipeable pages of a ViewPager2 (position 0 = preview_card/GRAPH,
+             1 = edit_card/LIST); see configurePager()/applyDisplayMode() in the fragment.
+             edit_card/preview_card stay declared below (still needed for ViewBinding to generate
+             their field references and for portrait, which doesn't use cards_pager) but are
+             detached from this ConstraintLayout and handed to cards_pager's adapter at
+             view-creation time. -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/cards_pager"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="16dp"
+            app:layout_constrainedHeight="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Inside edit_card, the editor and the list are a permanent side-by-side split; see
+             the horizontal LinearLayout below. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/edit_card"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_marginStart="8dp"
             android:layout_marginEnd="16dp"
-            android:visibility="gone"
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/mode_tab_strip"
+            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
             app:layout_constraintTop_toTopOf="parent">
 
             <LinearLayout
@@ -544,7 +521,7 @@
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/mode_tab_strip"
+            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
             app:layout_constraintTop_toTopOf="parent">
 
             <androidx.constraintlayout.widget.ConstraintLayout
