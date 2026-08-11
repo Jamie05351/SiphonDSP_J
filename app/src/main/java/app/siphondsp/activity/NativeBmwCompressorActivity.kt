@@ -23,6 +23,7 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.COMPRESSOR)
+        setUpWorkspaceSidebarActions()
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())

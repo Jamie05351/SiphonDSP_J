@@ -51,8 +51,6 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.view.DspCrossNavBar
-import app.siphondsp.view.DspDestination
 import app.siphondsp.view.ParametricEqSurface
 import app.siphondsp.view.StaticPagerAdapter
 import timber.log.Timber
@@ -444,24 +442,21 @@ class ParametricEqualizerFragment : Fragment() {
             }
         }
         configurePager()
-        configureCrossNav()
         updateViewState()
         return binding.root
     }
 
-    /** The other 3 DSP screens, forming the left sidebar (landscape only -- see DspCrossNavBar).
-     *  Blocked while there's an unsaved filter edit or an in-flight graph drag, same guard as
-     *  switching Full/Low/Mid scope. */
-    private fun configureCrossNav() {
-        val container = binding.peqCrossNav ?: return
-        DspCrossNavBar.populate(requireActivity(), container, DspDestination.PARAMETRIC_EQ) {
-            if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
-                requireContext().toast("Confirm or cancel the active filter edit before switching screens")
-                false
-            } else {
-                true
-            }
+    /** Guard for ParametricEqualizerActivity's DspCrossNavBar.populate() call (the sidebar now
+     *  lives at the activity level, alongside the toolbar, not inside this fragment -- see
+     *  activity_parametric_eq.xml). Blocks switching to another DSP screen while there's an
+     *  unsaved filter edit or an in-flight graph drag, same guard as switching Full/Low/Mid
+     *  scope. */
+    fun canSwitchDspScreens(): Boolean {
+        if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
+            requireContext().toast("Confirm or cancel the active filter edit before switching screens")
+            return false
         }
+        return true
     }
 
     /** Detaches edit_card/preview_card from the plain ConstraintLayout position the landscape

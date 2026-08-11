@@ -4,9 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Build
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import androidx.appcompat.widget.PopupMenu
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
 import app.siphondsp.R
@@ -23,8 +27,13 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.isPlugin
 import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
+import app.siphondsp.view.BmwDashboardSkin
+import com.google.android.material.button.MaterialButton
+import kotlin.math.roundToInt
 
-/** Shared top-right chrome for the dedicated BMW DSP workspaces. */
+/** Shared chrome for the dedicated BMW DSP workspaces: the power toggle (still a Toolbar action
+ *  icon) plus the settings/overflow buttons every activity_parametric_eq-based layout's sidebar
+ *  provides -- see [setUpWorkspaceSidebarActions]. */
 abstract class DspWorkspaceActivity : BaseActivity() {
     private var presetDialogHost: WorkspacePresetFragment? = null
 
@@ -40,7 +49,6 @@ abstract class DspWorkspaceActivity : BaseActivity() {
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.workspace_blocklist)?.isVisible = !isPlugin() && (!isRoot() || app.isEnhancedProcessing)
         menu.findItem(R.id.workspace_power)?.icon?.alpha = if (workspacePowerIsOn()) 255 else 120
         return super.onPrepareOptionsMenu(menu)
     }
@@ -50,31 +58,63 @@ abstract class DspWorkspaceActivity : BaseActivity() {
             toggleWorkspacePower()
             true
         }
-        R.id.workspace_settings -> {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            true
-        }
-        R.id.workspace_routing -> {
-            startActivity(Intent(this, CrossoverTiltActivity::class.java).apply {
-                putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING)
-            })
-            true
-        }
-        R.id.workspace_presets -> {
-            showPresetLibrary()
-            true
-        }
-        R.id.workspace_revert -> {
-            showYesNoAlert(R.string.revert_confirmation_title, R.string.revert_confirmation) { confirmed ->
-                if (confirmed) restoreDspSettings()
-            }
-            true
-        }
-        R.id.workspace_blocklist -> {
-            startActivity(Intent(this, BlocklistActivity::class.java))
-            true
-        }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    /** Wires the sidebar's settings/overflow buttons and gives them the same lit, always-on
+     *  accent look as DspCrossNavBar's icons (rather than the plain outlined-button default,
+     *  which reads as an afterthought bolted onto that panel) -- call once after
+     *  setContentView(), same as each subclass already calls DspCrossNavBar.populate() itself.
+     *  (AppCompatActivity doesn't reliably call onContentChanged() the way plain Activity does
+     *  -- it delegates setContentView() to AppCompatDelegate instead -- so that hook isn't a
+     *  safe place for this.) */
+    protected fun setUpWorkspaceSidebarActions() {
+        val settingsButton = findViewById<MaterialButton>(R.id.workspace_settings_button)
+        val moreButton = findViewById<MaterialButton>(R.id.workspace_more_button)
+        listOfNotNull(settingsButton, moreButton).forEach { button ->
+            button.backgroundTintList = ColorStateList.valueOf(Color.rgb(26, 69, 103))
+            button.strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+            button.strokeWidth = (1 * resources.displayMetrics.density).roundToInt()
+            button.iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+        }
+        settingsButton?.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        moreButton?.setOnClickListener(::showWorkspaceMoreMenu)
+    }
+
+    /** Formerly the Toolbar's 3-dot overflow submenu; same items, same actions, now triggered
+     *  from the sidebar's workspace_more_button instead. */
+    private fun showWorkspaceMoreMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.menu_dsp_workspace_more, popup.menu)
+        popup.menu.findItem(R.id.workspace_blocklist)?.isVisible = !isPlugin() && (!isRoot() || app.isEnhancedProcessing)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.workspace_routing -> {
+                    startActivity(Intent(this, CrossoverTiltActivity::class.java).apply {
+                        putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING)
+                    })
+                    true
+                }
+                R.id.workspace_presets -> {
+                    showPresetLibrary()
+                    true
+                }
+                R.id.workspace_revert -> {
+                    showYesNoAlert(R.string.revert_confirmation_title, R.string.revert_confirmation) { confirmed ->
+                        if (confirmed) restoreDspSettings()
+                    }
+                    true
+                }
+                R.id.workspace_blocklist -> {
+                    startActivity(Intent(this, BlocklistActivity::class.java))
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
     }
 
     override fun onStart() {

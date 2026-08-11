@@ -27,20 +27,53 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <!-- Sidebar for the content area only, below the toolbar; not alongside it. Holds
+             dsp_cross_nav (destination icons, populated by DspCrossNavBar.populate()) plus the
+             settings/overflow actions that used to render as Toolbar action icons; see
+             DspWorkspaceActivity.setUpWorkspaceSidebarActions(). Back navigation and the power
+             toggle stay in the toolbar itself. -->
         <LinearLayout
-            android:id="@+id/dsp_cross_nav"
+            android:id="@+id/dsp_sidebar"
             android:layout_width="60dp"
             android:layout_height="0dp"
             android:layout_marginStart="6dp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:orientation="vertical"
-            android:gravity="top|center_horizontal"
-            android:padding="4dp"
-            android:visibility="gone"
+            android:gravity="center_horizontal"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent">
+
+            <LinearLayout
+                android:id="@+id/dsp_cross_nav"
+                android:layout_width="60dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="top|center_horizontal"
+                android:padding="4dp"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/workspace_settings_button"
+                style="?attr/materialIconButtonOutlinedStyle"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp"
+                android:contentDescription="@string/workspace_settings"
+                android:tooltipText="@string/workspace_settings"
+                app:icon="@drawable/ic_twotone_settings_24dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/workspace_more_button"
+                style="?attr/materialIconButtonOutlinedStyle"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/workspace_more"
+                android:tooltipText="@string/workspace_more"
+                app:icon="@drawable/ic_twotone_more_vert_24dp" />
+        </LinearLayout>
 
         <FrameLayout
             android:id="@+id/params"
@@ -48,7 +81,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginStart="4dp"
-            app:layout_constraintStart_toEndOf="@id/dsp_cross_nav"
+            app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
