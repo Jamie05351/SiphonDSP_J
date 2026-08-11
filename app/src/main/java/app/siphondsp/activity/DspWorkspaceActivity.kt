@@ -62,16 +62,26 @@ abstract class DspWorkspaceActivity : BaseActivity() {
     }
 
     /** Wires the sidebar's settings/overflow buttons and gives them the same lit, always-on
-     *  accent look as DspCrossNavBar's icons (rather than the plain outlined-button default,
-     *  which reads as an afterthought bolted onto that panel) -- call once after
-     *  setContentView(), same as each subclass already calls DspCrossNavBar.populate() itself.
-     *  (AppCompatActivity doesn't reliably call onContentChanged() the way plain Activity does
-     *  -- it delegates setContentView() to AppCompatDelegate instead -- so that hook isn't a
-     *  safe place for this.) */
+     *  accent look and rounded-square shape as DspCrossNavBar's icons -- both are needed for
+     *  them to actually read as part of the same panel: DspCrossNavBar.populate() only paints
+     *  its brushed-metal background behind the destination icons it adds to dsp_cross_nav, so
+     *  that background is set on the shared dsp_sidebar container here instead, behind
+     *  everything; and these buttons default to the outlined-icon-button style's circular
+     *  shape unless corner radius/insets are overridden to match DspCrossNavBar's buttons
+     *  explicitly, same as it does. Call once after setContentView(), same as each subclass
+     *  already calls DspCrossNavBar.populate() itself. (AppCompatActivity doesn't reliably call
+     *  onContentChanged() the way plain Activity does -- it delegates setContentView() to
+     *  AppCompatDelegate instead -- so that hook isn't a safe place for this.) */
     protected fun setUpWorkspaceSidebarActions() {
+        findViewById<View>(R.id.dsp_sidebar)?.background = BmwDashboardSkin.brushedPanelDrawable()
+
         val settingsButton = findViewById<MaterialButton>(R.id.workspace_settings_button)
         val moreButton = findViewById<MaterialButton>(R.id.workspace_more_button)
+        val cornerRadiusPx = (6 * resources.displayMetrics.density).roundToInt()
         listOfNotNull(settingsButton, moreButton).forEach { button ->
+            button.insetTop = 0
+            button.insetBottom = 0
+            button.cornerRadius = cornerRadiusPx
             button.backgroundTintList = ColorStateList.valueOf(Color.rgb(26, 69, 103))
             button.strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
             button.strokeWidth = (1 * resources.displayMetrics.density).roundToInt()
