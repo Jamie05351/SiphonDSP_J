@@ -5,6 +5,8 @@ import app.siphondsp.R
 import app.siphondsp.databinding.ActivityParametricEqBinding
 import app.siphondsp.fragment.ParametricEqualizerFragment
 import app.siphondsp.view.BmwDashboardSkin
+import app.siphondsp.view.DspCrossNavBar
+import app.siphondsp.view.DspDestination
 
 class ParametricEqualizerActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -14,19 +16,19 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
-        if (savedInstanceState == null) {
-            supportFragmentManager
-                .beginTransaction()
-                .replace(R.id.params, ParametricEqualizerFragment.newInstance())
-                .commitNow()
+        val fragment = if (savedInstanceState == null) {
+            ParametricEqualizerFragment.newInstance().also {
+                supportFragmentManager.beginTransaction().replace(R.id.params, it).commitNow()
+            }
+        } else {
+            supportFragmentManager.findFragmentById(R.id.params) as ParametricEqualizerFragment
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        DspCrossNavBar.populate(this, binding.dspCrossNav, DspDestination.PARAMETRIC_EQ) {
+            fragment.canSwitchDspScreens()
+        }
 
-        // Keep Graph/List where the PEQ landscape layout owns it: the dedicated left-side
-        // mode strip. Moving it into the top-right content area caused it to cover the
-        // Add/Edit Filter action buttons on the 1280x480 workspace.
-        //
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
         // is not attached to onStart/onResume or any DSP/service lifecycle callback.
         binding.root.post { BmwDashboardSkin.styleWorkspace(binding.root) }

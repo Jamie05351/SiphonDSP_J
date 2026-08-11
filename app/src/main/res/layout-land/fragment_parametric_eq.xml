@@ -163,35 +163,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/horizontalScrollView">
 
-        <!-- Cross-navigation to the other 3 DSP screens. Used to stack below a Graph/List
-             MaterialButtonToggleGroup mode_tab_strip; that toggle is gone now that swiping
-             cards_pager (below) does the same job, so this is the whole sidebar. -->
-        <LinearLayout
-            android:id="@+id/peq_cross_nav"
-            android:layout_width="52dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
         <!-- Graph and List are swipeable pages of a ViewPager2 (position 0 = preview_card/GRAPH,
              1 = edit_card/LIST); see configurePager()/applyDisplayMode() in the fragment.
              edit_card/preview_card stay declared below (still needed for ViewBinding to generate
              their field references and for portrait, which doesn't use cards_pager) but are
              detached from this ConstraintLayout and handed to cards_pager's adapter at
-             view-creation time. -->
+             view-creation time. Cross-navigation to the other 3 DSP screens used to live here
+             (peq_cross_nav) but now lives in the activity's full-height sidebar instead; see
+             activity_parametric_eq.xml and ParametricEqualizerActivity. This spans the whole
+             width now that peq_cross_nav is gone. -->
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/cards_pager"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginStart="8dp"
             android:layout_marginEnd="16dp"
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <!-- Inside edit_card, the editor and the list are a permanent side-by-side split; see
@@ -205,7 +194,7 @@
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
             <LinearLayout
@@ -521,7 +510,7 @@
             app:layout_constrainedHeight="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/peq_cross_nav"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
             <androidx.constraintlayout.widget.ConstraintLayout

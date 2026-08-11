@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Popup menu shown from workspace_more_button in the sidebar; see
+     DspWorkspaceActivity.showWorkspaceMoreMenu(). Flat (no wrapping "more" parent item) since
+     PopupMenu doesn't need one the way the old Toolbar overflow rendering did. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/workspace_routing"
+        android:title="@string/action_routing" />
+    <item
+        android:id="@+id/workspace_presets"
+        android:title="@string/action_presets" />
+    <item
+        android:id="@+id/workspace_revert"
+        android:title="@string/action_revert" />
+    <item
+        android:id="@+id/workspace_blocklist"
+        android:title="@string/action_blocked_apps" />
+</menu>
