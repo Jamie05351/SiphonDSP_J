@@ -57,10 +57,10 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/workspace_settings_button"
                 style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
                 android:layout_marginTop="12dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="7dp"
                 android:contentDescription="@string/workspace_settings"
                 android:tooltipText="@string/workspace_settings"
                 app:icon="@drawable/ic_twotone_settings_24dp" />
@@ -68,8 +68,9 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/workspace_more_button"
                 style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:layout_marginBottom="4dp"
                 android:contentDescription="@string/workspace_more"
                 android:tooltipText="@string/workspace_more"
                 app:icon="@drawable/ic_twotone_more_vert_24dp" />

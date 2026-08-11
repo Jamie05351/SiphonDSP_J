@@ -45,7 +45,10 @@ object DspCrossNavBar {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
         container.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        container.background = BmwDashboardSkin.brushedPanelDrawable()
+        // No background here: the panel behind the whole sidebar (this container plus the
+        // settings/overflow buttons below it) is painted once on the shared dsp_sidebar parent
+        // by DspWorkspaceActivity.setUpWorkspaceSidebarActions(), so cross-nav icons and
+        // workspace actions read as one continuous panel instead of two separate boxes.
 
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
