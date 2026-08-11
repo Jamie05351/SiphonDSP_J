@@ -62,6 +62,7 @@ import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
@@ -233,6 +234,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener)
         notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
+
+        applicationScope.cancel()
 
         super.onDestroy()
     }

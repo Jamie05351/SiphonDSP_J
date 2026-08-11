@@ -15,6 +15,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.hippo.unifile.UniFile
+import kotlinx.coroutines.CancellationException
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.R
 import app.siphondsp.utils.preferences.Preferences
@@ -39,6 +40,8 @@ class BackupCreatorJob(private val context: Context, workerParams: WorkerParamet
             val location = BackupManager(context).createBackup(uri, isAutoBackup)
             if (!isAutoBackup) notifier.showBackupComplete(UniFile.fromUri(context, location.toUri()))
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e)
             if (!isAutoBackup) notifier.showBackupError(e.message)

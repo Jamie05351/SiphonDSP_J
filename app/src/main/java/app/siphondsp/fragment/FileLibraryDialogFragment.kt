@@ -139,7 +139,7 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
 
                             Timber.d("resample: Resampling ${selectedFile.name} to ${targetRate}Hz")
 
-                            CoroutineScope(Dispatchers.IO).launch {
+                            scriptScannerScope.launch {
                                 val newName = JdspImpResToolbox.OfflineAudioResample(
                                     (selectedFile.absoluteFile.parentFile?.absolutePath + "/"),
                                     selectedFile.name,
@@ -277,7 +277,7 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
                     return@let
                 }
 
-                CoroutineScope(Dispatchers.Main).launch {
+                scriptScannerScope.launch(Dispatchers.Main) {
                     delay(150L)
                     refresh()
                 }

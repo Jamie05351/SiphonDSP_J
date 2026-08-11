@@ -3,10 +3,10 @@ package app.siphondsp.fragment.settings
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,7 +88,7 @@ class SettingsAboutFragment : SettingsBaseFragment() {
         if(!isRoot())
             return
 
-        CoroutineScope(Dispatchers.Default).launch {
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
             updateManager.isUpdateAvailable().collect {
                 when(it) {
                     is Result.Success -> it.data

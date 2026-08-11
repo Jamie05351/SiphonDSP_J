@@ -29,11 +29,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -545,7 +545,7 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        CoroutineScope(Dispatchers.Default).launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             updateManager.isUpdateAvailable().collect {
                 when(it) {
                     is Result.Error -> {
@@ -777,7 +777,7 @@ class MainActivity : BaseActivity() {
             when (idx) {
                 0 -> makeSnackbar(getString(R.string.intent_import_success, name)).show()
                 1 -> {
-                    CoroutineScope(Dispatchers.Default).launch {
+                    lifecycleScope.launch(Dispatchers.Default) {
                         delay(250L)
 
                         if (name.endsWith(".tar")) {

@@ -20,6 +20,7 @@ import androidx.core.content.getSystemService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -111,6 +112,9 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
 
         sessionManager.removeOnActiveSessionsChangedListener(this)
         context.unregisterLocalReceiver(this)
+
+        continuousPollingJob?.cancel()
+        pollingScope.cancel()
     }
 
     private fun loadFromPreferences(key: String?){

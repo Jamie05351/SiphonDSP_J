@@ -2,10 +2,9 @@ package app.siphondsp.fragment.settings
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.activity.OnboardingActivity
@@ -87,8 +86,12 @@ class SettingsAudioFormatFragment : SettingsBaseFragment() {
 
         fun runBenchmark() = context?.let { ctx ->
             BenchmarkManager.runBenchmarks(ctx) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    benchmark?.isChecked = BenchmarkManager.hasBenchmarksCached()
+                // onFinished may fire from a background thread after the view is gone;
+                // guard against accessing viewLifecycleOwner past onDestroyView.
+                view?.let {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        benchmark?.isChecked = BenchmarkManager.hasBenchmarksCached()
+                    }
                 }
             }
         }
