@@ -66,31 +66,36 @@ class CrossoverTiltFragment : Fragment() {
                 NativeBmwDspValues.INDEX_LOW_MUTE,
                 mirrorIndices = lowPair(NativeBmwDspValues.FIELD_MUTE),
             )
-            addSliderRow(
-                getString(R.string.bmw_dsp_low_lpf_freq),
-                NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
-                80f, 200f, 1f, "Hz",
-                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-            )
-            addSegmentedSwitchRow(
-                "Low topology",
-                null,
-                NativeBmwDspValues.INDEX_LOW_LR4,
-                offLabel = "BW3",
-                onLabel = "LR4",
-                mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_LR4),
-            )
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_mute_mid_band),
                 null,
                 NativeBmwDspValues.INDEX_MID_MUTE,
                 mirrorIndices = midPair(NativeBmwDspValues.FIELD_MUTE),
             )
-            addSliderRow(
-                getString(R.string.bmw_dsp_mid_hpf_freq),
-                NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
-                80f, 200f, 1f, "Hz",
-                mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+            addCrossoverBandPair(
+                low = CrossoverDashboardBuilder.CrossoverBandSpec(
+                    title = "LOW PASS",
+                    freqIndex = NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
+                    freqMin = 80f,
+                    freqMax = 200f,
+                    curveDrawableRes = R.drawable.ic_crossover_lowpass_curve,
+                    freqMirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    // BW3 (3rd-order Butterworth) = 18dB/oct, LR4 (4th-order Linkwitz-Riley) = 24dB/oct.
+                    slopeIndex = NativeBmwDspValues.INDEX_LOW_LR4,
+                    slopeMirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_LR4),
+                    slopeOptions = listOf("18 dB/Oct" to 0f, "24 dB/Oct" to 1f),
+                ),
+                // The mid-band highpass has no topology switch at the native layer -- it's a
+                // fixed-order filter -- so its slope reads as a fixed label, not a real dropdown.
+                high = CrossoverDashboardBuilder.CrossoverBandSpec(
+                    title = "HIGH PASS",
+                    freqIndex = NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
+                    freqMin = 80f,
+                    freqMax = 200f,
+                    curveDrawableRes = R.drawable.ic_crossover_highpass_curve,
+                    freqMirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    fixedSlopeLabel = "24 dB/Oct",
+                ),
             )
 
             sectionHeader(getString(R.string.bmw_dsp_tilt_section))
