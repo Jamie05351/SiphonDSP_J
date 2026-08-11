@@ -54,12 +54,16 @@ class GainLimiterFragment : Fragment() {
                 getString(R.string.bmw_dsp_invert_low_polarity),
                 null,
                 NativeBmwDspValues.INDEX_LOW_INVERT,
+                offLabel = "NORMAL",
+                onLabel = "INVERT",
                 mirrorIndices = lowPair(NativeBmwDspValues.FIELD_INVERT),
             )
             addSegmentedSwitchRow(
                 getString(R.string.bmw_dsp_invert_mid_polarity),
                 null,
                 NativeBmwDspValues.INDEX_MID_INVERT,
+                offLabel = "NORMAL",
+                onLabel = "INVERT",
                 mirrorIndices = midPair(NativeBmwDspValues.FIELD_INVERT),
             )
             addSliderRow(getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")

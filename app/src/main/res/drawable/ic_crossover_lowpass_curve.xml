@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="24dp"
+    android:viewportWidth="40"
+    android:viewportHeight="24">
+    <!-- Decorative low-pass rolloff sparkline: flat, then curves down toward the corner
+         frequency. Purely illustrative, not plotted from the actual filter response. -->
+    <path
+        android:pathData="M2,6 C14,6 18,6 22,11 C28,18 32,21 38,21"
+        android:strokeColor="#E8623B"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

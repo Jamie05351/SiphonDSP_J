@@ -8,8 +8,13 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.DrawableRes
+import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.ContextCompat
+import app.siphondsp.R
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -32,9 +37,10 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
-    private val inactiveTrack = Color.rgb(31, 35, 41)
-    private val thumbFill = Color.rgb(190, 196, 203)
-    private val thumbStroke = Color.rgb(232, 236, 240)
+    private val inactiveTrack = Color.rgb(98, 104, 112)
+    private val thumbFillTop = Color.rgb(248, 249, 251)
+    private val thumbFillBottom = Color.rgb(163, 169, 177)
+    private val thumbStroke = Color.rgb(110, 116, 123)
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
     private val divider = Color.rgb(47, 53, 61)
@@ -168,8 +174,8 @@ class CrossoverDashboardBuilder(
             }
             val off = segmentButton(offLabel)
             val on = segmentButton(onLabel)
-            group.addView(off, LinearLayout.LayoutParams(dp(62), dp(30)))
-            group.addView(on, LinearLayout.LayoutParams(dp(62), dp(30)))
+            group.addView(off, LinearLayout.LayoutParams(dp(80), dp(34)))
+            group.addView(on, LinearLayout.LayoutParams(dp(80), dp(34)))
             group.check(if (values[index] >= .5f) on.id else off.id)
             group.addOnButtonCheckedListener { _, checkedId, isChecked ->
                 if (!isChecked) return@addOnButtonCheckedListener
@@ -196,22 +202,40 @@ class CrossoverDashboardBuilder(
         displayScale: Float = 1f,
         mirrorIndices: IntArray = intArrayOf(),
     ) {
-        val row = createRow()
-        row.addView(singleLineLabel(label), labelParams())
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(3), 0, dp(3))
+        }
 
-        val valueText = createValueBox(values[index] * displayScale, suffix)
+        val topRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(34)
+        }
+
+        val valueText = createInlineValueText(values[index] * displayScale, suffix)
+        val labelValue = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(singleLineLabel(label))
+            addView(valueText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(10)
+            })
+        }
+        topRow.addView(labelValue, labelParams())
+
         val slider = Slider(context).apply {
             valueFrom = min
             valueTo = max
             stepSize = step
             value = values[index].coerceIn(min, max)
-            trackHeight = dp(6)
-            thumbWidth = dp(13)
-            thumbHeight = dp(24)
+            trackHeight = dp(8)
+            thumbWidth = dp(22)
+            thumbHeight = dp(22)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
             setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-            setCustomThumbDrawable(createRectangularThumb())
+            setCustomThumbDrawable(createRoundThumb())
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -221,11 +245,6 @@ class CrossoverDashboardBuilder(
                 }
             }
         }
-
-        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(14)
-            marginEnd = dp(18)
-        })
 
         valueText.setOnClickListener {
             context.showInputAlert(
@@ -245,8 +264,172 @@ class CrossoverDashboardBuilder(
                 onChanged(values)
             }
         }
-        row.addView(valueText, LinearLayout.LayoutParams(dp(VALUE_WIDTH_DP), dp(34)))
-        addRow(row)
+
+        topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(14)
+            marginEnd = dp(4)
+        })
+        container.addView(topRow)
+
+        val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        tickRow.addView(space(LABEL_WIDTH_DP + 14))
+        tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
+        tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
+        tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
+        container.addView(tickRow)
+
+        currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** One LOW PASS / HIGH PASS mini-card: corner frequency (tap to edit, same numeric-entry
+     *  dialog addSliderRow's value uses) plus a decorative rolloff sparkline. [slopeIndex] null
+     *  means there's no real topology switch backing a slope choice for this band (e.g. the
+     *  mid-band highpass is a fixed-order filter at the native layer) -- the slope reads as a
+     *  fixed, non-interactive label instead of a working dropdown in that case. */
+    class CrossoverBandSpec(
+        val title: String,
+        val freqIndex: Int,
+        val freqMin: Float,
+        val freqMax: Float,
+        @DrawableRes val curveDrawableRes: Int,
+        val freqMirrorIndices: IntArray = intArrayOf(),
+        val slopeIndex: Int? = null,
+        val slopeMirrorIndices: IntArray = intArrayOf(),
+        val slopeOptions: List<Pair<String, Float>> = listOf("18 dB/Oct" to 0f, "24 dB/Oct" to 1f),
+        val fixedSlopeLabel: String = "24 dB/Oct",
+    )
+
+    /** Places two CrossoverBandSpec cards side by side, matching the reference "LOW PASS" /
+     *  "HIGH PASS" panel style. */
+    fun addCrossoverBandPair(low: CrossoverBandSpec, high: CrossoverBandSpec) {
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(
+            crossoverBandCard(low),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) },
+        )
+        row.addView(
+            crossoverBandCard(high),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) },
+        )
+        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(8)
+        })
+    }
+
+    private fun crossoverBandCard(spec: CrossoverBandSpec): View {
+        val card = MaterialCardView(context).apply {
+            radius = dp(6).toFloat()
+            cardElevation = 0f
+            strokeWidth = dp(1)
+            strokeColor = segmentStroke
+            setCardBackgroundColor(Color.rgb(16, 19, 24))
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+
+        content.addView(TextView(context).apply {
+            text = spec.title
+            textSize = 10.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(160, 168, 178))
+            letterSpacing = 0.04f
+        })
+        content.addView(vspace(4))
+
+        fun freqLabel() = "${values[spec.freqIndex].roundToInt()} Hz"
+        val freqText = TextView(context).apply {
+            text = freqLabel()
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(accentBlue)
+            isClickable = true
+            isFocusable = true
+        }
+        val freqRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(freqText)
+            addView(space(8))
+            addView(
+                ImageView(context).apply { setImageResource(spec.curveDrawableRes) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+        freqText.setOnClickListener {
+            context.showInputAlert(
+                android.view.LayoutInflater.from(context),
+                spec.title,
+                "${spec.freqMin.roundToInt()}–${spec.freqMax.roundToInt()}",
+                values[spec.freqIndex].roundToInt().toString(),
+                true,
+                "Hz",
+            ) { entered ->
+                val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
+                val stored = parsed.coerceIn(spec.freqMin, spec.freqMax)
+                values[spec.freqIndex] = stored
+                spec.freqMirrorIndices.forEach { values[it] = stored }
+                freqText.text = freqLabel()
+                onChanged(values)
+            }
+        }
+        content.addView(freqRow)
+        content.addView(vspace(10))
+
+        content.addView(TextView(context).apply {
+            text = "SLOPE"
+            textSize = 9.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(130, 138, 148))
+            letterSpacing = 0.04f
+        })
+        content.addView(vspace(4))
+
+        fun currentSlopeLabel(): String {
+            val slopeIndex = spec.slopeIndex ?: return spec.fixedSlopeLabel
+            val current = values[slopeIndex]
+            return spec.slopeOptions.minByOrNull { kotlin.math.abs(it.second - current) }?.first
+                ?: spec.slopeOptions.first().first
+        }
+        val slopeButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = currentSlopeLabel()
+            textSize = 12f
+            isAllCaps = false
+            minHeight = dp(32)
+            insetTop = 0
+            insetBottom = 0
+            cornerRadius = dp(4)
+            strokeColor = ColorStateList.valueOf(segmentStroke)
+            backgroundTintList = ColorStateList.valueOf(segmentIdle)
+            setTextColor(Color.rgb(220, 226, 232))
+            iconGravity = MaterialButton.ICON_GRAVITY_END
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        }
+        if (spec.slopeIndex != null) {
+            slopeButton.icon = ContextCompat.getDrawable(context, R.drawable.ic_baseline_keyboard_arrow_down_24dp)
+            slopeButton.setOnClickListener { anchor ->
+                val popup = PopupMenu(context, anchor)
+                spec.slopeOptions.forEachIndexed { i, (optionLabel, _) -> popup.menu.add(0, i, i, optionLabel) }
+                popup.setOnMenuItemClickListener { item ->
+                    val stored = spec.slopeOptions[item.itemId].second
+                    values[spec.slopeIndex] = stored
+                    spec.slopeMirrorIndices.forEach { values[it] = stored }
+                    slopeButton.text = currentSlopeLabel()
+                    onChanged(values)
+                    true
+                }
+                popup.show()
+            }
+        } else {
+            slopeButton.alpha = 0.55f
+            slopeButton.isClickable = false
+        }
+        content.addView(slopeButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        card.addView(content)
+        return card
     }
 
     private fun writeValue(index: Int, mirrorIndices: IntArray, value: Float) {
@@ -279,18 +462,19 @@ class CrossoverDashboardBuilder(
     private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
         id = View.generateViewId()
         text = textValue
-        textSize = 10.5f
-        isAllCaps = false
+        textSize = 11f
+        isAllCaps = true
         minHeight = 0
         minimumHeight = 0
         insetTop = 0
         insetBottom = 0
-        cornerRadius = dp(3)
+        cornerRadius = dp(6)
         strokeWidth = dp(1)
-        setPadding(dp(5), 0, dp(5), 0)
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(6), 0, dp(6), 0)
         backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
-        setTextColor(checkedColorStateList(accentBlue, Color.rgb(225, 230, 235)))
+        setTextColor(checkedColorStateList(Color.WHITE, Color.rgb(180, 188, 197)))
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
@@ -307,23 +491,35 @@ class CrossoverDashboardBuilder(
         }
     }
 
-    private fun createValueBox(value: Float, suffix: String) = TextView(context).apply {
-        gravity = Gravity.CENTER
-        textSize = 12f
+    /** Bold accent-coloured value reading next to a slider's label -- tap to edit, same as the
+     *  old boxed value display, just without the box background. */
+    private fun createInlineValueText(value: Float, suffix: String) = TextView(context).apply {
+        textSize = 14.5f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
-        setTextColor(Color.WHITE)
-        setBackgroundResource(app.siphondsp.R.drawable.background_dsp_value_box)
+        setTextColor(accentBlue)
         updateValueBox(this, value, suffix)
     }
 
-    private fun createRectangularThumb() = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(thumbFill)
+    /** Min/center/max reading below a slider's track, aligned under it. */
+    private fun tickLabel(text: String, alignment: Int) = TextView(context).apply {
+        this.text = text
+        textSize = 10f
+        gravity = alignment
+        setTextColor(Color.rgb(124, 132, 142))
+    }
+
+    private fun tickParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+
+    /** Chrome-ball thumb: a light-to-dark vertical gradient on a circle reads as a shiny sphere
+     *  without needing a real radial highlight, which GradientDrawable can't do directly. */
+    private fun createRoundThumb() = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        orientation = GradientDrawable.Orientation.TOP_BOTTOM
+        colors = intArrayOf(thumbFillTop, thumbFillBottom)
         setStroke(dp(1), thumbStroke)
-        cornerRadius = dp(1).toFloat()
-        setSize(dp(13), dp(24))
+        setSize(dp(22), dp(22))
     }
 
     private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
@@ -337,6 +533,10 @@ class CrossoverDashboardBuilder(
 
     private fun space(widthDp: Int) = View(context).apply {
         layoutParams = LinearLayout.LayoutParams(dp(widthDp), dp(1))
+    }
+
+    private fun vspace(heightDp: Int) = View(context).apply {
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp))
     }
 
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).roundToInt()
