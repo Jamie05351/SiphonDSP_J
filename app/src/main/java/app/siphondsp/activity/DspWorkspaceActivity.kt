@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Build
 import android.view.Menu
 import android.view.MenuItem
@@ -25,10 +27,13 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.isPlugin
 import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
+import app.siphondsp.view.BmwDashboardSkin
+import com.google.android.material.button.MaterialButton
+import kotlin.math.roundToInt
 
 /** Shared chrome for the dedicated BMW DSP workspaces: the power toggle (still a Toolbar action
- *  icon) plus the settings/overflow buttons every activity_parametric_eq-based layout's
- *  full-height sidebar provides -- see [onContentChanged]. */
+ *  icon) plus the settings/overflow buttons every activity_parametric_eq-based layout's sidebar
+ *  provides -- see [setUpWorkspaceSidebarActions]. */
 abstract class DspWorkspaceActivity : BaseActivity() {
     private var presetDialogHost: WorkspacePresetFragment? = null
 
@@ -56,16 +61,26 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
-    /** Wires the sidebar's settings/overflow buttons once activity_parametric_eq's view tree
-     *  exists. onContentChanged() fires automatically right after setContentView(), so (unlike
-     *  DspCrossNavBar.populate(), which each subclass still calls itself since it needs a
-     *  per-screen DspDestination) subclasses don't need to invoke this themselves. */
-    override fun onContentChanged() {
-        super.onContentChanged()
-        findViewById<View>(R.id.workspace_settings_button)?.setOnClickListener {
+    /** Wires the sidebar's settings/overflow buttons and gives them the same lit, always-on
+     *  accent look as DspCrossNavBar's icons (rather than the plain outlined-button default,
+     *  which reads as an afterthought bolted onto that panel) -- call once after
+     *  setContentView(), same as each subclass already calls DspCrossNavBar.populate() itself.
+     *  (AppCompatActivity doesn't reliably call onContentChanged() the way plain Activity does
+     *  -- it delegates setContentView() to AppCompatDelegate instead -- so that hook isn't a
+     *  safe place for this.) */
+    protected fun setUpWorkspaceSidebarActions() {
+        val settingsButton = findViewById<MaterialButton>(R.id.workspace_settings_button)
+        val moreButton = findViewById<MaterialButton>(R.id.workspace_more_button)
+        listOfNotNull(settingsButton, moreButton).forEach { button ->
+            button.backgroundTintList = ColorStateList.valueOf(Color.rgb(26, 69, 103))
+            button.strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+            button.strokeWidth = (1 * resources.displayMetrics.density).roundToInt()
+            button.iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+        }
+        settingsButton?.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<View>(R.id.workspace_more_button)?.setOnClickListener(::showWorkspaceMoreMenu)
+        moreButton?.setOnClickListener(::showWorkspaceMoreMenu)
     }
 
     /** Formerly the Toolbar's 3-dot overflow submenu; same items, same actions, now triggered

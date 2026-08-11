@@ -32,6 +32,7 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
             else -> getString(R.string.action_crossover_tilt)
         }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), current)
+        setUpWorkspaceSidebarActions()
 
         if (savedInstanceState == null) {
             val fragment = when {
