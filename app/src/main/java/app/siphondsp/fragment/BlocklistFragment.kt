@@ -8,9 +8,8 @@ import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import app.siphondsp.MainApplication
 import app.siphondsp.R
@@ -49,7 +48,6 @@ class BlocklistFragment : Fragment() {
     private val iconCache: HashMap<Int, Drawable> = hashMapOf()
 
     private lateinit var sessionRecordingPolicyManager: SessionRecordingPolicyManager
-    private val policyPollingScope = CoroutineScope(Dispatchers.Main)
     private var restrictedApps = arrayOf<String>()
 
     override fun onCreateView(
@@ -131,7 +129,7 @@ class BlocklistFragment : Fragment() {
 
     private fun updateUnsupportedApps() {
         if(isRootless()) {
-            policyPollingScope.launch {
+            viewLifecycleOwner.lifecycleScope.launch {
                 val isAllowed = preferences.get<Boolean>(R.string.key_session_exclude_restricted)
 
                 restrictedApps = if (!isAllowed) {
