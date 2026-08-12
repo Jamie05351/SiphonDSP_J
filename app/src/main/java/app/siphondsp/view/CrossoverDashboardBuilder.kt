@@ -38,9 +38,7 @@ class CrossoverDashboardBuilder(
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
     private val inactiveTrack = Color.rgb(98, 104, 112)
-    private val thumbFillTop = Color.rgb(248, 249, 251)
-    private val thumbFillBottom = Color.rgb(163, 169, 177)
-    private val thumbStroke = Color.rgb(110, 116, 123)
+    private val valueBoxBackground = Color.rgb(16, 19, 24)
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
     private val divider = Color.rgb(47, 53, 61)
@@ -207,22 +205,20 @@ class CrossoverDashboardBuilder(
             setPadding(0, dp(3), 0, dp(3))
         }
 
-        val topRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(34)
-        }
+        container.addView(singleLineLabel(label))
 
-        val valueText = createInlineValueText(values[index] * displayScale, suffix)
-        val labelValue = LinearLayout(context).apply {
+        // Value sits in its own row, evenly spaced between the title above and the slider
+        // below (equal top/bottom margin), rather than crammed inline next to the title.
+        val valueText = createBoxedValueText(values[index] * displayScale, suffix)
+        val valueRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(singleLineLabel(label))
-            addView(valueText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dp(10)
-            })
+            gravity = Gravity.CENTER_HORIZONTAL
         }
-        topRow.addView(labelValue, labelParams())
+        valueRow.addView(valueText)
+        container.addView(valueRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(6)
+            bottomMargin = dp(6)
+        })
 
         val slider = Slider(context).apply {
             valueFrom = min
@@ -230,12 +226,12 @@ class CrossoverDashboardBuilder(
             stepSize = step
             value = values[index].coerceIn(min, max)
             trackHeight = dp(8)
-            thumbWidth = dp(22)
-            thumbHeight = dp(22)
+            thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
+            thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
             setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-            setCustomThumbDrawable(createRoundThumb())
+            setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -265,14 +261,9 @@ class CrossoverDashboardBuilder(
             }
         }
 
-        topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(14)
-            marginEnd = dp(4)
-        })
-        container.addView(topRow)
+        container.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        tickRow.addView(space(LABEL_WIDTH_DP + 14))
         tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
         tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
         tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
@@ -491,14 +482,22 @@ class CrossoverDashboardBuilder(
         }
     }
 
-    /** Bold accent-coloured value reading next to a slider's label -- tap to edit, same as the
-     *  old boxed value display, just without the box background. */
-    private fun createInlineValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 14.5f
+    /** Bold accent-coloured value reading in a darkened box between a slider's title and its
+     *  track -- tap to edit. Typography (bold, accent blue, 17sp) matches the LOW PASS/HIGH
+     *  PASS crossover cards' own large frequency readout; the box background is new, using
+     *  those same cards' dark card background color so it reads as part of the same family. */
+    private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
+        textSize = 17f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
         setTextColor(accentBlue)
+        gravity = Gravity.CENTER
+        setPadding(dp(14), dp(4), dp(14), dp(4))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(5).toFloat()
+            setColor(valueBoxBackground)
+        }
         updateValueBox(this, value, suffix)
     }
 
@@ -511,16 +510,6 @@ class CrossoverDashboardBuilder(
     }
 
     private fun tickParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-
-    /** Chrome-ball thumb: a light-to-dark vertical gradient on a circle reads as a shiny sphere
-     *  without needing a real radial highlight, which GradientDrawable can't do directly. */
-    private fun createRoundThumb() = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        orientation = GradientDrawable.Orientation.TOP_BOTTOM
-        colors = intArrayOf(thumbFillTop, thumbFillBottom)
-        setStroke(dp(1), thumbStroke)
-        setSize(dp(22), dp(22))
-    }
 
     private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
         arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),

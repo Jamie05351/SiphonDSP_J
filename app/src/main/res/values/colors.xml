@@ -8,6 +8,12 @@
     <color name="bmw_m_purple">#2B115A</color>
     <color name="bmw_m_red">#F11A22</color>
 
+    <!-- BMW DSP workspace accent + slider value box, matching BmwDashboardSkin.LIGHT_BLUE and
+         the LOW PASS/HIGH PASS crossover cards' dark background (see CrossoverDashboardBuilder,
+         Widget.SiphonDSP.SliderValueBox in themes.xml). -->
+    <color name="bmw_dsp_accent_blue">#46B5E8</color>
+    <color name="bmw_dsp_value_box_background">#101318</color>
+
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>
     <color name="background_amoled">#000000</color>

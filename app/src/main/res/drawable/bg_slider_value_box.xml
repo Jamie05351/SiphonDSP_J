@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Darkened value-box background shared by every DSP workspace slider's value readout; see
+     Widget.SiphonDSP.SliderValueBox and CrossoverDashboardBuilder.createBoxedValueText(). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/bmw_dsp_value_box_background" />
+    <corners android:radius="5dp" />
+</shape>

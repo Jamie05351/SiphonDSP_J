@@ -6,8 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.Drawable.ConstantState
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -35,6 +37,19 @@ object BmwDashboardSkin {
     private val selectedSurface = Color.rgb(24, 69, 101)
 
     fun brushedPanelDrawable(): Drawable = BrushedMetalDrawable()
+
+    // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
+    // Mono Bass, Routing, Compressor) -- long side horizontal, like a physical fader cap, with
+    // the same brushed-metal grain as the workspace panels. Replaces the previously divergent
+    // circular "chrome ball" (CrossoverDashboardBuilder.createRoundThumb) and tall rectangular
+    // "ingot" (the old styleSlider()) thumbs.
+    const val SLIDER_THUMB_WIDTH_DP = 28
+    const val SLIDER_THUMB_HEIGHT_DP = 14
+    private val thumbFillTop = Color.rgb(238, 240, 243)
+    private val thumbFillBottom = Color.rgb(176, 182, 190)
+    private val thumbStroke = Color.rgb(110, 116, 123)
+
+    fun sliderThumbDrawable(context: Context): Drawable = BrushedThumbDrawable(context)
 
     fun addMAccent(parent: LinearLayout) {
         val context = parent.context
@@ -80,18 +95,12 @@ object BmwDashboardSkin {
     private fun styleSlider(slider: Slider) {
         val context = slider.context
         slider.trackHeight = dp(context, 6)
-        slider.thumbWidth = dp(context, 13)
-        slider.thumbHeight = dp(context, 24)
+        slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
+        slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(31, 35, 41)))
         slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-        slider.setCustomThumbDrawable(GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(Color.rgb(190, 196, 203))
-            setStroke(dp(context, 1), Color.rgb(232, 236, 240))
-            cornerRadius = dp(context, 1).toFloat()
-            setSize(dp(context, 13), dp(context, 24))
-        })
+        slider.setCustomThumbDrawable(sliderThumbDrawable(context))
     }
 
     private fun styleSwitch(toggle: SwitchCompat) {
@@ -210,5 +219,81 @@ object BmwDashboardSkin {
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { paint.colorFilter = colorFilter }
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+    }
+
+    /**
+     * The unified slider thumb: a light brushed-aluminum rectangle, long side horizontal. Same
+     * scan-line-grain + sheen technique as [BrushedMetalDrawable], but on a light base (dark
+     * grain lines instead of light ones) since this sits on top of dark tracks/panels rather
+     * than being one itself, and rounded/stroked like a real control instead of a flat panel.
+     */
+    private class BrushedThumbDrawable(private val context: Context) : Drawable() {
+        private val cornerRadius = dp(context, 2).toFloat()
+        private val strokeWidthPx = dp(context, 1).toFloat()
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1f }
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+            color = thumbStroke
+        }
+
+        override fun draw(canvas: Canvas) {
+            val b = bounds
+            val rect = RectF(b)
+
+            paint.shader = LinearGradient(
+                b.left.toFloat(), b.top.toFloat(), b.left.toFloat(), b.bottom.toFloat(),
+                intArrayOf(thumbFillTop, thumbFillBottom),
+                null,
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+            paint.shader = null
+
+            var y = b.top
+            var index = 0
+            while (y < b.bottom) {
+                val alpha = if (index % 2 == 0) 40 else 18
+                linePaint.color = Color.argb(alpha, 90, 96, 104)
+                canvas.drawLine(b.left.toFloat(), y.toFloat(), b.right.toFloat(), y.toFloat(), linePaint)
+                y += 2
+                index++
+            }
+
+            paint.shader = LinearGradient(
+                b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
+                intArrayOf(Color.argb(90, 255, 255, 255), Color.TRANSPARENT, Color.argb(40, 0, 0, 0)),
+                null,
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+            paint.shader = null
+
+            canvas.drawRoundRect(
+                RectF(
+                    b.left + strokeWidthPx / 2f, b.top + strokeWidthPx / 2f,
+                    b.right - strokeWidthPx / 2f, b.bottom - strokeWidthPx / 2f,
+                ),
+                cornerRadius, cornerRadius, strokePaint,
+            )
+        }
+
+        override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { paint.colorFilter = colorFilter }
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+
+        // Drawable.getConstantState() returns null unless a subclass provides one.
+        // BaseSlider.setCustomThumbDrawable() calls getConstantState().newDrawable() internally
+        // (to make per-thumb-index copies), so without this it NPEs the instant a Slider using
+        // this thumb is created -- GradientDrawable (the old thumb) has this built in already,
+        // which is why that path never hit it.
+        private val constantState = object : ConstantState() {
+            override fun newDrawable(): Drawable = BrushedThumbDrawable(context)
+            override fun getChangingConfigurations(): Int = 0
+        }
+
+        override fun getConstantState(): ConstantState = constantState
     }
 }
