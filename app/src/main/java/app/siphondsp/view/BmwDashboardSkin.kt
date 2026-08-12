@@ -131,7 +131,10 @@ object BmwDashboardSkin {
         }
     }
 
-    private fun styleSlider(slider: Slider) {
+    // Public so callers that build/inflate sliders onto pages ViewPager2 may not have attached
+    // yet (e.g. NativeBmwCompressorFragment's off-screen pager pages) can style them directly
+    // at creation time, instead of relying on styleTree's later recursive walk to reach them.
+    fun styleSlider(slider: Slider) {
         val context = slider.context
         slider.trackHeight = dp(context, 6)
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
