@@ -205,20 +205,25 @@ class CrossoverDashboardBuilder(
             setPadding(0, dp(3), 0, dp(3))
         }
 
-        container.addView(singleLineLabel(label))
-
-        // Value sits in its own row, evenly spaced between the title above and the slider
-        // below (equal top/bottom margin), rather than crammed inline next to the title.
-        val valueText = createBoxedValueText(values[index] * displayScale, suffix)
-        val valueRow = LinearLayout(context).apply {
+        val topRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(34)
         }
-        valueRow.addView(valueText)
-        container.addView(valueRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(6)
-            bottomMargin = dp(6)
-        })
+
+        // Title, value, and slider all on one row: the value sits at the end of the fixed-width
+        // label column (same column every other row type aligns to), with a flexible spacer
+        // absorbing whatever room is left after the title text -- so it reads as evenly spaced
+        // between the title and the slider rather than crammed against either one.
+        val valueText = createBoxedValueText(values[index] * displayScale, suffix)
+        val labelValue = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(singleLineLabel(label))
+            addView(View(context), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(valueText)
+        }
+        topRow.addView(labelValue, labelParams())
 
         val slider = Slider(context).apply {
             valueFrom = min
@@ -261,9 +266,14 @@ class CrossoverDashboardBuilder(
             }
         }
 
-        container.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(14)
+            marginEnd = dp(4)
+        })
+        container.addView(topRow)
 
         val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        tickRow.addView(space(LABEL_WIDTH_DP + 14))
         tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
         tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
         tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
