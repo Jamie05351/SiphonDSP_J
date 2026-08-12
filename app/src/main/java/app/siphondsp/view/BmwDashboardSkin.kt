@@ -55,6 +55,17 @@ object BmwDashboardSkin {
         styleTree(root)
     }
 
+    /**
+     * Background-only half of [styleWorkspace], for workspaces (Gains/Delay, Crossovers &amp; Tilt)
+     * whose content is built by [CrossoverDashboardBuilder], which already styles its own cards
+     * and sliders. Running the full [styleTree] walk there would overwrite that styling with the
+     * generic XML-card/slider skin -- this just paints the continuous panel background behind
+     * the toolbar/sidebar/content seam, without touching anything inside the content tree.
+     */
+    fun paintWorkspaceBackground(root: View) {
+        root.background = brushedPanelDrawable()
+    }
+
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {
         when (root) {
