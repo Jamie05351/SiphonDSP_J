@@ -1,10 +1,12 @@
 package app.siphondsp.activity
 
 import android.os.Bundle
+import android.view.View
 import android.widget.LinearLayout
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.fragment.GainLimiterFragment
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
@@ -22,6 +24,12 @@ class GainLimiterActivity : DspWorkspaceActivity() {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, GainLimiterFragment())
                 .commit()
+        }
+
+        // Same continuous chrome background as the other DSP workspaces, so the toolbar strip,
+        // sidebar, and content area read as one panel instead of leaving a seam.
+        findViewById<View>(android.R.id.content).post {
+            BmwDashboardSkin.paintWorkspaceBackground(findViewById(android.R.id.content))
         }
     }
 }
