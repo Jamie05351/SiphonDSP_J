@@ -51,9 +51,9 @@
             <LinearLayout
                 android:id="@+id/dsp_cross_nav"
                 android:layout_width="60dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:orientation="vertical"
-                android:gravity="top|center_horizontal"
+                android:gravity="center_horizontal"
                 android:padding="4dp"
                 android:visibility="gone" />
         </LinearLayout>

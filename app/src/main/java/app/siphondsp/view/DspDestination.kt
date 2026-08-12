@@ -44,16 +44,22 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
-        container.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        // No background here: the panel behind the whole sidebar (this container plus the
-        // settings/overflow buttons below it) is painted once on the shared dsp_sidebar parent
-        // by DspWorkspaceActivity.setUpWorkspaceSidebarActions(), so cross-nav icons and
-        // workspace actions read as one continuous panel instead of two separate boxes.
+        container.gravity = Gravity.CENTER_HORIZONTAL
+        // No background here: the panel behind the whole sidebar is painted once on the shared
+        // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
+        val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
-        DspDestination.entries.filter { it.showInPrimaryNav }.forEach { destination ->
+        destinations.forEachIndexed { index, destination ->
+            // Flexible spacer before every tile except the first, so the tiles distribute evenly
+            // across the sidebar's full height (dsp_cross_nav is match_parent) instead of
+            // clustering at the top with empty space left below the last one.
+            if (index > 0) {
+                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            }
+
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
                 icon = ContextCompat.getDrawable(activity, destination.icon)
@@ -68,17 +74,19 @@ object DspCrossNavBar {
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
-                // Tile background stays the same whether selected or not -- only the border and
-                // icon (and, when not compact, the label) switch to the accent color, so the
-                // active tile reads as "illuminated" rather than as a differently-filled block.
-                backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
-                strokeWidth = activity.dp(1)
                 if (selected) {
-                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
-                    setTextColor(BmwDashboardSkin.LIGHT_BLUE)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+                    // Custom background (fill + brighter border + bottom glow) replaces
+                    // Material's own stroke/corner shape handling entirely, so the glow's
+                    // BlurMaskFilter actually renders -- that requires a software layer, since
+                    // BlurMaskFilter has no effect on hardware-accelerated views.
+                    background = BmwDashboardSkin.litTileDrawable(activity)
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
                     isClickable = false
                 } else {
+                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                    strokeWidth = activity.dp(1)
                     strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
                     setTextColor(Color.rgb(211, 217, 223))
                     iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
@@ -94,13 +102,9 @@ object DspCrossNavBar {
             container.addView(
                 button,
                 if (compact) {
-                    LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)).apply {
-                        bottomMargin = activity.dp(7)
-                    }
+                    LinearLayout.LayoutParams(activity.dp(46), activity.dp(46))
                 } else {
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46)).apply {
-                        bottomMargin = activity.dp(7)
-                    }
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46))
                 },
             )
         }
