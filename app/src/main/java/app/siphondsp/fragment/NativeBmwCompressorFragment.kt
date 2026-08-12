@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorGrTraceView
 import app.siphondsp.view.DspPager
 import app.siphondsp.view.NativeBmwCompressorView
@@ -120,6 +121,10 @@ class NativeBmwCompressorFragment : Fragment() {
         slider.valueFrom = from
         slider.valueTo = to
         slider.stepSize = step
+        // Styled directly here rather than left to BmwDashboardSkin.styleWorkspace()'s later
+        // recursive walk: the dynamics page is off-screen at that point, and ViewPager2 doesn't
+        // guarantee it's attached to the view hierarchy yet, so the walk can miss its sliders.
+        BmwDashboardSkin.styleSlider(slider)
     }
 
     override fun onStart() {
