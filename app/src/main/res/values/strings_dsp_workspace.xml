@@ -2,7 +2,5 @@
 <resources>
     <string name="action_routing">Routing</string>
     <string name="action_output_allpass">Output all-pass</string>
-    <string name="workspace_more">More</string>
-    <string name="workspace_settings">Settings</string>
     <string name="workspace_power">DSP power</string>
 </resources>

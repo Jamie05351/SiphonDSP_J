@@ -28,6 +28,9 @@ object BmwDashboardSkin {
     const val M_RED = 0xFFE32B3B.toInt()
     const val PANEL_TOP = 0xFF20262D.toInt()
     const val PANEL_BOTTOM = 0xFF101419.toInt()
+    // Flat gunmetal for the sidebar panel -- deliberately not a gradient, unlike the workspace
+    // background it sits in front of, so the sidebar itself reads as a distinct solid fixture.
+    const val SIDEBAR_GUNMETAL = 0xFF2A2F35.toInt()
 
     private val inactiveSurface = Color.rgb(18, 23, 29)
     private val inactiveStroke = Color.rgb(61, 71, 82)
@@ -35,6 +38,16 @@ object BmwDashboardSkin {
     private val selectedSurface = Color.rgb(24, 69, 101)
 
     fun brushedPanelDrawable(): Drawable = BrushedMetalDrawable()
+
+    /**
+     * Solid sidebar background + border, matching DspCrossNavBar's own unselected-tile border
+     * color ([Color.rgb] 62,70,79) so the panel reads as made of the same material as the tiles
+     * inside it, rather than the brushed-gradient look the rest of the workspace chrome uses.
+     */
+    fun sidebarPanelDrawable(context: Context): Drawable = GradientDrawable().apply {
+        setColor(SIDEBAR_GUNMETAL)
+        setStroke(dp(context, 1), Color.rgb(62, 70, 79))
+    }
 
     fun addMAccent(parent: LinearLayout) {
         val context = parent.context
