@@ -37,12 +37,14 @@ class NativeBmwCompressorFragment : Fragment() {
     private lateinit var attack: Slider
     private lateinit var release: Slider
     private lateinit var makeup: Slider
-    private lateinit var thresholdLabel: TextView
-    private lateinit var ratioLabel: TextView
-    private lateinit var kneeLabel: TextView
-    private lateinit var attackLabel: TextView
-    private lateinit var releaseLabel: TextView
-    private lateinit var makeupLabel: TextView
+    // Named *ValueText, not *Value, to avoid colliding with the ratioValue/thresholdDb/etc.
+    // Float parameter names already used throughout updateBand()/bindSelectedBand() below.
+    private lateinit var thresholdValueText: TextView
+    private lateinit var ratioValueText: TextView
+    private lateinit var kneeValueText: TextView
+    private lateinit var attackValueText: TextView
+    private lateinit var releaseValueText: TextView
+    private lateinit var makeupValueText: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var bindingState = false
     private var pendingPersist = false
@@ -103,12 +105,12 @@ class NativeBmwCompressorFragment : Fragment() {
         configureSlider(attack, 1f, 100f, 1f)
         configureSlider(release, 20f, 800f, 1f)
         configureSlider(makeup, 0f, 6f, .1f)
-        thresholdLabel = shapePage.findViewById(R.id.compressor_threshold_label)
-        ratioLabel = shapePage.findViewById(R.id.compressor_ratio_label)
-        kneeLabel = shapePage.findViewById(R.id.compressor_knee_label)
-        attackLabel = dynamicsPage.findViewById(R.id.compressor_attack_label)
-        releaseLabel = dynamicsPage.findViewById(R.id.compressor_release_label)
-        makeupLabel = dynamicsPage.findViewById(R.id.compressor_makeup_label)
+        thresholdValueText = shapePage.findViewById(R.id.compressor_threshold_value)
+        ratioValueText = shapePage.findViewById(R.id.compressor_ratio_value)
+        kneeValueText = shapePage.findViewById(R.id.compressor_knee_value)
+        attackValueText = dynamicsPage.findViewById(R.id.compressor_attack_value)
+        releaseValueText = dynamicsPage.findViewById(R.id.compressor_release_value)
+        makeupValueText = dynamicsPage.findViewById(R.id.compressor_makeup_value)
         state = NativeBmwCompressorState.load(requireContext())
         configureListeners()
         bindSelectedBand()
@@ -231,12 +233,12 @@ class NativeBmwCompressorFragment : Fragment() {
         visualizer.kneeDb = kneeDb
         visualizer.makeupDb = makeupDb
         grTrace.thresholdDb = thresholdDb
-        thresholdLabel.text = String.format(Locale.ENGLISH, "Threshold   %.1f dB", thresholdDb)
-        ratioLabel.text = String.format(Locale.ENGLISH, "Ratio   %.1f:1", ratioValue)
-        kneeLabel.text = String.format(Locale.ENGLISH, "Soft knee   %.0f dB", kneeDb)
-        attackLabel.text = String.format(Locale.ENGLISH, "Attack   %.0f ms", attackMs)
-        releaseLabel.text = String.format(Locale.ENGLISH, "Release   %.0f ms", releaseMs)
-        makeupLabel.text = String.format(Locale.ENGLISH, "Makeup gain   %.1f dB", makeupDb)
+        thresholdValueText.text = String.format(Locale.ENGLISH, "%.1f dB", thresholdDb)
+        ratioValueText.text = String.format(Locale.ENGLISH, "%.1f:1", ratioValue)
+        kneeValueText.text = String.format(Locale.ENGLISH, "%.0f dB", kneeDb)
+        attackValueText.text = String.format(Locale.ENGLISH, "%.0f ms", attackMs)
+        releaseValueText.text = String.format(Locale.ENGLISH, "%.0f ms", releaseMs)
+        makeupValueText.text = String.format(Locale.ENGLISH, "%.1f dB", makeupDb)
         bindingState = false
     }
 

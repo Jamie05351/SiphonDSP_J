@@ -111,6 +111,22 @@
         <item name="trackInsideCornerSize">2dp</item>
     </style>
 
+    <!-- DSP workspace slider value readout (Compressor's XML sliders); matches
+         CrossoverDashboardBuilder.createBoxedValueText()'s Kotlin-built styling: bold accent
+         blue text in a darkened rounded box, typography borrowed from the LOW PASS/HIGH PASS
+         crossover cards' own frequency readout. -->
+    <style name="Widget.SiphonDSP.SliderValueBox" parent="">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/bmw_dsp_accent_blue</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bg_slider_value_box</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+    </style>
+
     <!-- === Custom themes taken from Tachiyomi: https://github.com/tachiyomiorg/tachiyomi === -->
     <style name="Theme.SiphonDSP.Monet" />
 
