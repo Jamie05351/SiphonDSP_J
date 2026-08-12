@@ -19,6 +19,8 @@
             android:layout_height="@dimen/header_toolbar_height"
             app:titleCentered="true" />
 
+        <include layout="@layout/view_m_stripe_divider" />
+
     </com.google.android.material.appbar.AppBarLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton

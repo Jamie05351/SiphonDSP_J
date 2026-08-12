@@ -37,6 +37,10 @@
                     app:goIcon="@drawable/ic_twotone_chevron_right_24dp"
                     app:iconifiedByDefault="true" />
             </androidx.appcompat.widget.Toolbar>
+
+            <include
+                layout="@layout/view_m_stripe_divider"
+                android:layout_gravity="bottom" />
         </com.google.android.material.appbar.CollapsingToolbarLayout>
     </com.google.android.material.appbar.AppBarLayout>
 

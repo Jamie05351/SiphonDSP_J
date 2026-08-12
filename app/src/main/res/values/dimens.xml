@@ -6,4 +6,6 @@
     <!-- Half the standard 56dp actionBarSize, freeing vertical space on small/landscape
          head-unit displays. Applies only to top header toolbars, not the bottom app bar. -->
     <dimen name="header_toolbar_height">28dp</dimen>
+    <!-- BMW ///M stripe divider under the top banner; see view_m_stripe_divider.xml. -->
+    <dimen name="m_stripe_height">3dp</dimen>
 </resources>

@@ -26,6 +26,8 @@
             android:background="@android:color/transparent"
             app:titleCentered="true" />
 
+        <include layout="@layout/view_m_stripe_divider" />
+
     </com.google.android.material.appbar.AppBarLayout>
 
     <include layout="@layout/content_main" />
