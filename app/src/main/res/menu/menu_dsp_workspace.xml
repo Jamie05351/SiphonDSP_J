@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings and overflow ("more") used to live here as Toolbar action icons; they're now
-     buttons in the full-height sidebar instead (see activity_parametric_eq.xml's
-     workspace_settings_button/workspace_more_button and
-     DspWorkspaceActivity.onContentChanged()). The "more" submenu's items moved to
-     menu_dsp_workspace_more.xml, inflated into a PopupMenu from that button. Power stays here,
-     it's still a Toolbar action icon. -->
+<!-- Settings and overflow ("more") used to live here, then moved to buttons in the sidebar;
+     both are gone now. Settings, Presets, Revert, and Blocklist are reachable solely from
+     MainActivity's bottom bar, and Routing took the sidebar space instead as a DspCrossNavBar
+     tile. Power stays here, it's still a Toolbar action icon. -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 

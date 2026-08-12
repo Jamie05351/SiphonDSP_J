@@ -28,7 +28,7 @@ enum class DspDestination(
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING, false),
+    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
     GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
     CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
@@ -68,17 +68,18 @@ object DspCrossNavBar {
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
+                // Tile background stays the same whether selected or not -- only the border and
+                // icon (and, when not compact, the label) switch to the accent color, so the
+                // active tile reads as "illuminated" rather than as a differently-filled block.
+                backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                strokeWidth = activity.dp(1)
                 if (selected) {
-                    backgroundTintList = ColorStateList.valueOf(Color.rgb(26, 69, 103))
                     strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
-                    strokeWidth = activity.dp(1)
-                    setTextColor(Color.WHITE)
+                    setTextColor(BmwDashboardSkin.LIGHT_BLUE)
                     iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
                     isClickable = false
                 } else {
-                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
                     strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
-                    strokeWidth = activity.dp(1)
                     setTextColor(Color.rgb(211, 217, 223))
                     iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
                     setOnClickListener {
