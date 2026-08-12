@@ -20,6 +20,8 @@
             app:contentInsetEnd="24dp"
             app:contentInsetEndWithActions="24dp"
             app:titleCentered="true" />
+
+        <include layout="@layout/view_m_stripe_divider" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout

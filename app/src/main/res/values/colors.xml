@@ -2,6 +2,12 @@
 <resources>
     <color name="divider_default">@color/md_black_1000_12</color>
 
+    <!-- BMW ///M Motorsport stripe colors (fixed brand colors, independent of the selected
+         app palette; see view_m_stripe_divider.xml). -->
+    <color name="bmw_m_blue">#008AC9</color>
+    <color name="bmw_m_purple">#2B115A</color>
+    <color name="bmw_m_red">#F11A22</color>
+
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>
     <color name="background_amoled">#000000</color>
