@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Page-indicator dot: accent blue when its page is current, dim gray otherwise. Toggled via
+     View.isSelected in DspPager.build(); see that file for the ViewPager2 wiring. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:drawable="@drawable/dot_indicator_selected" />
+    <item android:drawable="@drawable/dot_indicator_unselected" />
+</selector>

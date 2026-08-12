@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
@@ -14,6 +15,7 @@ import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.CompressorGrTraceView
+import app.siphondsp.view.DspPager
 import app.siphondsp.view.NativeBmwCompressorView
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.slider.Slider
@@ -81,24 +83,34 @@ class NativeBmwCompressorFragment : Fragment() {
         meterText = view.findViewById(R.id.compressor_meter_text)
         bandToggle = view.findViewById(R.id.compressor_band_toggle)
         enabledSwitch = view.findViewById(R.id.compressor_enable)
-        threshold = view.findViewById(R.id.compressor_threshold)
-        ratio = view.findViewById(R.id.compressor_ratio)
-        knee = view.findViewById(R.id.compressor_knee)
-        attack = view.findViewById(R.id.compressor_attack)
-        release = view.findViewById(R.id.compressor_release)
-        makeup = view.findViewById(R.id.compressor_makeup)
+
+        // The 6 parameter sliders live on two swipeable pages inflated at runtime -- Threshold/
+        // Ratio/Knee ("shape") and Attack/Release/Makeup ("dynamics") -- rather than in this
+        // fragment's own layout, so the visualizer/toggle/enable switch above can stay a fixed
+        // header while only the sliders page.
+        val pagerContainer = view.findViewById<FrameLayout>(R.id.compressor_slider_pager_container)
+        val shapePage = layoutInflater.inflate(R.layout.page_compressor_shape, pagerContainer, false)
+        val dynamicsPage = layoutInflater.inflate(R.layout.page_compressor_dynamics, pagerContainer, false)
+        pagerContainer.addView(DspPager.build(requireContext(), listOf(shapePage, dynamicsPage)))
+
+        threshold = shapePage.findViewById(R.id.compressor_threshold)
+        ratio = shapePage.findViewById(R.id.compressor_ratio)
+        knee = shapePage.findViewById(R.id.compressor_knee)
+        attack = dynamicsPage.findViewById(R.id.compressor_attack)
+        release = dynamicsPage.findViewById(R.id.compressor_release)
+        makeup = dynamicsPage.findViewById(R.id.compressor_makeup)
         configureSlider(threshold, -24f, 0f, .5f)
         configureSlider(ratio, 1f, 10f, .1f)
         configureSlider(knee, 0f, 12f, 1f)
         configureSlider(attack, 1f, 100f, 1f)
         configureSlider(release, 20f, 800f, 1f)
         configureSlider(makeup, 0f, 6f, .1f)
-        thresholdValueText = view.findViewById(R.id.compressor_threshold_value)
-        ratioValueText = view.findViewById(R.id.compressor_ratio_value)
-        kneeValueText = view.findViewById(R.id.compressor_knee_value)
-        attackValueText = view.findViewById(R.id.compressor_attack_value)
-        releaseValueText = view.findViewById(R.id.compressor_release_value)
-        makeupValueText = view.findViewById(R.id.compressor_makeup_value)
+        thresholdValueText = shapePage.findViewById(R.id.compressor_threshold_value)
+        ratioValueText = shapePage.findViewById(R.id.compressor_ratio_value)
+        kneeValueText = shapePage.findViewById(R.id.compressor_knee_value)
+        attackValueText = dynamicsPage.findViewById(R.id.compressor_attack_value)
+        releaseValueText = dynamicsPage.findViewById(R.id.compressor_release_value)
+        makeupValueText = dynamicsPage.findViewById(R.id.compressor_makeup_value)
         state = NativeBmwCompressorState.load(requireContext())
         configureListeners()
         bindSelectedBand()
