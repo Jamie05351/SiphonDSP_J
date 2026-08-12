@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One page of NativeBmwCompressorFragment's slider pager: the "shape" params (Threshold,
+     Ratio, Knee). Visualizer/band-toggle/enable switch stay in the persistent header above the
+     pager in fragment_native_bmw_compressor.xml; only the parameter sliders are paged. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="18dp">
+
+        <TextView android:id="@+id/compressor_threshold_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_threshold" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+        <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

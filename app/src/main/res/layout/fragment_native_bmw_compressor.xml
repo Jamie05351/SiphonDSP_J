@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Visualizer/band-toggle/enable switch are a persistent, non-scrolling header (they're the
+     primary readout, not secondary controls); only the parameter sliders below page (see
+     compressor_slider_pager_container, filled at runtime by NativeBmwCompressorFragment with
+     page_compressor_shape.xml + page_compressor_dynamics.xml via DspPager). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -92,18 +96,11 @@
             android:layout_marginTop="14dp"
             android:gravity="center_vertical"
             android:text="Selected compressor active" />
-
-        <TextView android:id="@+id/compressor_threshold_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_threshold" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_ratio_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_knee_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_attack_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_release_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="match_parent" android:layout_height="wrap_content" />
-        <TextView android:id="@+id/compressor_makeup_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
-        <com.google.android.material.slider.Slider android:id="@+id/compressor_makeup" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp" />
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+
+    <FrameLayout
+        android:id="@+id/compressor_slider_pager_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>
