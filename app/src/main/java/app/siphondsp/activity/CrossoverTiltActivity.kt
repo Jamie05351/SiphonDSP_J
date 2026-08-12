@@ -1,12 +1,14 @@
 package app.siphondsp.activity
 
 import android.os.Bundle
+import android.view.View
 import android.widget.LinearLayout
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.fragment.CrossoverTiltFragment
 import app.siphondsp.fragment.NativeBmwDspCardFragment
 import app.siphondsp.fragment.RoutingFragment
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
@@ -43,6 +45,12 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, fragment)
                 .commit()
+        }
+
+        // Same continuous chrome background as the other DSP workspaces, so the toolbar strip,
+        // sidebar, and content area read as one panel instead of leaving a seam.
+        findViewById<View>(android.R.id.content).post {
+            BmwDashboardSkin.paintWorkspaceBackground(findViewById(android.R.id.content))
         }
     }
 

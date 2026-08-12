@@ -30,6 +30,9 @@ object BmwDashboardSkin {
     const val M_RED = 0xFFE32B3B.toInt()
     const val PANEL_TOP = 0xFF20262D.toInt()
     const val PANEL_BOTTOM = 0xFF101419.toInt()
+    // Flat gunmetal for the sidebar panel -- deliberately not a gradient, unlike the workspace
+    // background it sits in front of, so the sidebar itself reads as a distinct solid fixture.
+    const val SIDEBAR_GUNMETAL = 0xFF2A2F35.toInt()
 
     private val inactiveSurface = Color.rgb(18, 23, 29)
     private val inactiveStroke = Color.rgb(61, 71, 82)
@@ -37,6 +40,16 @@ object BmwDashboardSkin {
     private val selectedSurface = Color.rgb(24, 69, 101)
 
     fun brushedPanelDrawable(): Drawable = BrushedMetalDrawable()
+
+    /**
+     * Solid sidebar background + border, matching DspCrossNavBar's own unselected-tile border
+     * color ([Color.rgb] 62,70,79) so the panel reads as made of the same material as the tiles
+     * inside it, rather than the brushed-gradient look the rest of the workspace chrome uses.
+     */
+    fun sidebarPanelDrawable(context: Context): Drawable = GradientDrawable().apply {
+        setColor(SIDEBAR_GUNMETAL)
+        setStroke(dp(context, 1), Color.rgb(62, 70, 79))
+    }
 
     // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
     // Mono Bass, Routing, Compressor) -- long side horizontal, like a physical fader cap, with
@@ -68,6 +81,17 @@ object BmwDashboardSkin {
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable()
         styleTree(root)
+    }
+
+    /**
+     * Background-only half of [styleWorkspace], for workspaces (Gains/Delay, Crossovers &amp; Tilt)
+     * whose content is built by [CrossoverDashboardBuilder], which already styles its own cards
+     * and sliders. Running the full [styleTree] walk there would overwrite that styling with the
+     * generic XML-card/slider skin -- this just paints the continuous panel background behind
+     * the toolbar/sidebar/content seam, without touching anything inside the content tree.
+     */
+    fun paintWorkspaceBackground(root: View) {
+        root.background = brushedPanelDrawable()
     }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */

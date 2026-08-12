@@ -30,10 +30,11 @@
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <!-- Sidebar for the content area only, below the toolbar; not alongside it. Holds
-             dsp_cross_nav (destination icons, populated by DspCrossNavBar.populate()) plus the
-             settings/overflow actions that used to render as Toolbar action icons; see
-             DspWorkspaceActivity.setUpWorkspaceSidebarActions(). Back navigation and the power
-             toggle stay in the toolbar itself. -->
+             dsp_cross_nav (destination icons, including Routing, populated by
+             DspCrossNavBar.populate()). Settings/overflow used to also live here but were
+             removed in favor of MainActivity's bottom bar being the sole entry point for those;
+             see DspWorkspaceActivity.setUpWorkspaceSidebarActions() for the panel background.
+             Back navigation and the power toggle stay in the toolbar itself. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
             android:layout_width="60dp"
@@ -55,27 +56,6 @@
                 android:gravity="top|center_horizontal"
                 android:padding="4dp"
                 android:visibility="gone" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/workspace_settings_button"
-                style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="46dp"
-                android:layout_height="46dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="7dp"
-                android:contentDescription="@string/workspace_settings"
-                android:tooltipText="@string/workspace_settings"
-                app:icon="@drawable/ic_twotone_settings_24dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/workspace_more_button"
-                style="?attr/materialIconButtonOutlinedStyle"
-                android:layout_width="46dp"
-                android:layout_height="46dp"
-                android:layout_marginBottom="4dp"
-                android:contentDescription="@string/workspace_more"
-                android:tooltipText="@string/workspace_more"
-                app:icon="@drawable/ic_twotone_more_vert_24dp" />
         </LinearLayout>
 
         <FrameLayout
