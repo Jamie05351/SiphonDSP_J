@@ -44,25 +44,18 @@ object DspCrossNavBar {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
         container.gravity = Gravity.CENTER_HORIZONTAL
-        // No background here: the panel behind the whole sidebar is painted once on the shared
-        // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
         val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
-            // Flexible spacer before every tile except the first, so the tiles distribute evenly
-            // across the sidebar's full height (dsp_cross_nav is match_parent) instead of
-            // clustering at the top with empty space left below the last one.
             if (index > 0) {
                 container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             }
 
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
-                // Use the supplied BMW DSP tile artwork directly instead of the old basic vector
-                // icons. Keep tint disabled so the chrome, black and cyan artwork is preserved.
                 icon = DspSidebarTileAssets.drawable(activity, destination)
                 iconSize = activity.dp(40)
                 iconTint = null
@@ -77,20 +70,17 @@ object DspCrossNavBar {
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
+                backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                strokeWidth = activity.dp(if (selected) 2 else 1)
+                strokeColor = ColorStateList.valueOf(
+                    if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.rgb(62, 70, 79)
+                )
+                setTextColor(if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.rgb(211, 217, 223))
+                iconTint = null
+
                 if (selected) {
-                    // The selected destination gets a full cyan/blue illuminated perimeter using
-                    // the same light-blue family as the tile artwork.
-                    background = BmwDashboardSkin.litTileDrawable(activity)
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                    iconTint = null
                     isClickable = false
                 } else {
-                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
-                    strokeWidth = activity.dp(1)
-                    strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
-                    setTextColor(Color.rgb(211, 217, 223))
-                    iconTint = null
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -100,6 +90,7 @@ object DspCrossNavBar {
                     }
                 }
             }
+
             container.addView(
                 button,
                 if (compact) {
