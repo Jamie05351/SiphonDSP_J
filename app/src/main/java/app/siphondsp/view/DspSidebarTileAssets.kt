@@ -5,25 +5,38 @@ import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
+import androidx.core.content.ContextCompat
+import java.util.EnumMap
 
 /** Sidebar artwork derived directly from the supplied BMW DSP tiles. */
 object DspSidebarTileAssets {
-    fun drawable(context: Context, destination: DspDestination): Drawable {
-        val encoded = when (destination) {
-            DspDestination.ROUTING -> ROUTING
-            DspDestination.GAINS_DELAY -> GAINS_DELAY
-            DspDestination.COMPRESSOR -> COMPRESSOR
-            DspDestination.CROSSOVER_TILT -> CROSSOVERS
-            DspDestination.PARAMETRIC_EQ -> EQ
-        }
-        val bytes = Base64.decode(encoded, Base64.DEFAULT)
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        return BitmapDrawable(context.resources, bitmap).apply { isFilterBitmap = true }
+    private val drawableCache = EnumMap<DspDestination, Drawable>(DspDestination::class.java)
+
+    fun drawable(context: Context, destination: DspDestination): Drawable? = synchronized(drawableCache) {
+        drawableCache[destination]?.let { return@synchronized it }
+
+        val decoded = runCatching {
+            val encoded = when (destination) {
+                DspDestination.ROUTING -> ROUTING
+                DspDestination.GAINS_DELAY -> GAINS_DELAY
+                DspDestination.COMPRESSOR -> COMPRESSOR
+                DspDestination.CROSSOVER_TILT -> CROSSOVERS
+                DspDestination.PARAMETRIC_EQ -> EQ
+            }
+            val bytes = Base64.decode(encoded, Base64.DEFAULT)
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: error("BitmapFactory failed to decode sidebar tile")
+            BitmapDrawable(context.resources, bitmap).apply { isFilterBitmap = true }
+        }.getOrNull()
+
+        val result = decoded ?: ContextCompat.getDrawable(context, destination.icon)
+        result?.also { drawableCache[destination] = it }
+        result
     }
 
     private const val ROUTING = "UklGRq4DAABXRUJQVlA4IKIDAABQEgCdASowADAAPjEWiUOiISERxgAgAwSgCdMw5JUC44sGA/Du8A/YD9AP8B8AP1R/WP3Xv9B+kHXgdQ76AH6O+kt+3PwW/uj6RX//wggUdNIMZtazZi//d8tf1H7Av6u76r+ypUI9fdVOle05lZSm+5TonjX0Ak6c4itKrDeSRGkqZxV4aHbw5cSztfNLuRcnE04ewTE88t8BZAD+//44TaH84JYrxlG/t510Qn8/fieHWzi+iwcG1z36olVadVqjxWfMICAfAeXDC4YGwJa1W//U9O7/GCzhmHgl5aB4x5CMr7Keg+Sn/qtSzFtZ1fs2fZH2mZLz3PpiSCKMUzsfuh0ovVg4iui6X3ORoLNJXPn/EfiIR3w64IIBpUGM1fW3od0LtNGzL1yadv9Vr12+SdOnQPOwnMbKvFcpfkiTyVtiGTkoTzMKxk07iSf3wDbl7wqQAlO+PxLycInFzHZ+u0XogasLsHZ/moKcqDUFUCS+W+1Kx1f5s5/BBR53+aL0r8YmyjgQDvap1wM9AFUHOLf4M4iT8w99c/A8iLYhBnmxHWzTlpzJKnGTdns5MI12V0zvpu4A8YLKq91qRfVKHioLLMOl7avwKV6SHvPk1qxfiG3/6v3Sm176eje0ZL3Ov+CVT+5Q9s5C0P8tfi/0zO3deFlvHvMdcCgVzefhheVysyrZJ7jYlBDJUPsE7RA9R41d3dmNn1DFJlauNmkhgeMtFHuJbZlNzV1K80dCb7P73+a7Cl70QQwv+ztHnUgTaMLYw1PeIYEaBgMcf/SAToCktxfdIB5CvyS3CYCx2OS4FDNWm6BKnNRQvPy/9OBNgE6w9/oxDwNDeUbw4u4rZs8lidspVsIFOOvI2fn6z1jIQ5ekOoEO6ymXdO+ggR9kHmA7Gl9no/3NbBvJOnBtBZ+zbgzCVJ+t/8+n8GOpMtJ8/6B7/NSbz4b0CsiP+EoEY5Taetht+fyzCOaU7/n3aT6PR8Hfm1AZmH51+3S3BnYK5tgy/c9PEHgXAp8sx7HR8PRzX5uw6BV7eWqEpvBq0gxYnewBtPV+6nVJcVxRNbQY8NBGKX/rysTFF17qFZw20ma9KZlDtDtwRVrlMnop8eyrsQYglU9w/STQ7/iz1xC+3e1td60zPFwbzSBAQp5EjI9iCtYCV0yGhJOXpy1IFHMSBVLZC8xkh9VWTeS/IFgXZ/ZUeopXKTB9pC2O7NRbx54oe/wmKuyjZ6JPJVODEAA="
 
-    private const val GAINS_DELAY = "UklGRqwDAABXRUJQVlA4IKADAADwEQCdASowADAAPjEWiUOiIQjjPhABglAE6ZQkDaRDUjEyud+iPlcP1V9yPmA82X/D/oB7gP8vvoH65ewB0o9nINRAc/My2VZhP88/2XqH59Xn/2CP5b/S/9d+ZfeO8oAymeI91qKVOIFFEA4xHrtJEfy7lLLiC1vQR94R7ppmGfRtK0wmA10Va6plOOllH09z8e2GcoXOAAD+//5GV+I478FRGAuEHgg6i/LD9TXqUeN0y6JynS7w8FtFDbKqx65IsSQWRT3CemhVQruxBigTRd8YXrzsDynCPOPgyaMMFKOO9pWc3FLz4orHxTpnOxcDWcd4K+xeJXG+lSzmHn1vMrChc3yn35usv4I8i/6ReB908efeOJLjyXyirJw//lqYX+ctreBcgGZ7XmYEf87cmPKOE3w7V4eH0sYAaubxugD3dxcoMK+Do0c3cL69ggZOfI+zLxU48EWCEH0lCx/7/0hOQoxFloh6Kox3a+v3fcTusxbElwr8CIRp4K5fHsFAeD6N2hrHuv42Odo0MUBPUv9TxoAM+RBC5OMoYOAPfPXrc+8E3+F7xacuDzp/n8UDGs5w6U0XGFt9bziHj3F7DXIRO/TFoUsyoYqTSZX1GqM4Qv+Pznp4CzYk9d1p7HG9c+w50q5zEJeYe8p3gMOgKURH364w+OqIqQYkr5+enOoCUN9WKdpi3XCOR8pFn9w/ZPy5p00/4r258hb+kJO+Lgk/DJr25HIsEGW/7CDFTP410IVDd3arkglbihSmsEP1p1vg+9DoU7Zf0rJ5TJbEp2B9erkYiqzDuhz/+ATGKVW/p/X/g/7j94I+Oo2JnqPsVvzZEDIpsf81C9EtuJkshDkroej6p8u08a2igt8XLjPrYaQg44s3QxBY2Gnmnzfp/Dl5Z7l816ZrFTeYHhRHW5XB6OFqta3OjyuDWX7wl10b0VlPPg/VaK/Pw2ymdZOupgH0t8MwF8K/Ya7AmsvSwsX/9a80ON8tQ7ajb3RL0V3yf2Wd1+KQ+HKdrkUtxuc3N+k3KPtbN9BXRlya+h+pIS/BesJHjz83XMEio/33tepYKtq28Vgmepnz5nveFcGosHfPbXsJaOIlNslUX5rWDXESDIP3EomDUODB4W8d0TXFmeoAeXa2PNIyP/0NO04tOStvno7bNp/wz76Loh8E4BoIoAdRzO9XRvkVww3Xb524/ASr2Hcai6fzCUUKRienHHTBnGyhS0hN0IY4AAAA"
+    private const val GAINS_DELAY = "UklGRqwDAABXRUJQVlA4IKADAADwEQCdASowADAAPjEWiUOiIQjjPhABglAE6ZQkDaRDUjEyud+iPlcP1V9yPmA82X/D/oB7gP8vvoH65ewB0o9nINRAc/My2VZhP88/2XqH59Xn/2CP5b/S/9d+ZfeO8oAymeI91qKVOIFFEA4xHrtJEfy7lLLiC1vQR94R7ppmGfRtK0wmA10Va6plOOllH09z8e2GcoXOAAD+//5GV+I478FRGAuEHgg6i/LD9TXqUeN0y6JynS7w8FtFDbKqx65IsSQWRT3CemhVQruxBigTRd8YXrzsDynCPOPgyaMMFKOO9pWc3FLz4orHxTpnOxcDWcd4K+xeJXG+lSzmHn1vMrChc3yn35usv4I8i/6ReB908efeOJLjyXyirJw//lqYX+ctreBcgGZ7XmYEf87cmPKOE3w7V4eH0sYAaubxugD3dxcoMK+Do0c3cL69ggZOfI+zLxU48EWCEH0lCx/7/0hOQoxFloh6Kox3a+v3fcTusxbElwr8CIRp4K5fHsFAeD6N2hrHuv42Odo0MUBPUv9TxoAM+RBC5OMoYOAPfPXrc+8E3+F7xacuDzp/n8UDGs5w6U0XGFt9bziHj3F7DXIRO/TFoUsyoYqTSZX1GqM4Qv+Pznp4CzYk9d1p7HG9c+w50q5zEJeYe8p3gMOgKURH364w+OqIqQYkr5+enOoCUN9WKdpi3XCOR8pFn9w/ZPy5p00/4r258hb+kJO+Lgk/DJr25HIsEGW/7CDFTP410IVDd3arkglbihSmsEP1p1vg+9DoU7Zf0rJ5TJbEp2B9erkYiqzDuhz/+ATGKVW/p/X/g/7j94I+Oo2JnqPsVvzZEDIpsf81C9EtuJkshDkroej6p8u08a2igt8XLjPrYaQg44s3QxBY2Gnmnzfp/Dl5Z7l816ZrFTeYHhRHW5XB6OFqta3OjyuDWX7wl10b0VlPPg/VaK/Pw2ymdZOupgH0t8MwF8K/Ya7AmsvSwsX/9a80ON8tQ7ajb3RL0V3yf2Wd1+KQ+HKdrkUtxuc3N+k3KPtbN9BXRlya+h+pIS/BesJHjz83XMEio/33tepYKtq28Vgmepnz5nveFcGosHfPbXsJaOIlNslUX5rWDXESDIP3EomDUODB4W8d0TXFmeoAeXa2PNIyP/0NO04tOStvno7bNp/wz76Loh8E4BoIoAdRzO9XRvkVww3Xb524/ASr2Hcai6fzCUUKRienHHTBnGyhS0hN0IY4AAAA="
 
     private const val COMPRESSOR = "UklGRqgDAABXRUJQVlA4IJwDAABQFACdASowADAAPjEUiUMiISEVWq1UIAMEsQBOmY4+q9P8yKqP23c+CKVt/UX+Sf8z6gHnHfoB1CP1m/ZX3cf8P+oHuA/4vmm9ZB6AH8A/iHpe+yP+5/pAYGOYP5ALSu/h3wEbX+K9PfPl9TfrL8A36w/8DeMzeI9enP0AhO//pIWeZwezt4/sFU1QG0Cxb0sAU/m2eLXyBF2/vzb6aUQRiJnw71u14QAwI4gA/v/+OCnaVPrQsUlZ1m7/QlbIbb+jaEQpFRp40gZmLEtifHDVxlHyiBXVjgnnDqGdnXEMwUAz73syU+jz/g1MeWXBFb/N1z5bm6ebqa5NBrSUR0ZUrRsvdCqWI74/mB+DN0/Vh0T1rH79D9ZTju9ojpdUgpeZ+lvnFTMukVOSxqMsURVryYvpaQDcLDMJw/Yndr5BAUG4SK5fUyw2TAiaicP61rONBDimPyb1wuz+6A/6jts17SBxtfaRdbfovb/+cFRIkrWwKSBaPh68WEolxVrzDGTwiv47uHHBuqB3h/hGsdhPe4Y1DLk4y138/KFPV0Gj9NBsCaSVOGjW2Jv1e5va0XZ/2pLiH/09DKH+EIiSojcHntcfnUZyxRmM4bhwPKtQb+w++eMRWgj9L5Jy6euDa4SLG18KhS+rsmI9NF6AA+A9AJQMbI5kf8GbAZ4Lp/hKhYqy1hXZ7l0+7gKMklPg5SfC/+t6qX/5srWMFsOXU2mbox5mlRT3neeNX64g/qMrP9XHNH2jKGva3rkKTGYR4vyQva3v/0UKSErIUtFLgzwhjKRz7YVf9rWeSGonTInqIP5WqDf98qDTmzJdQMTIJeyRM0hC/ghlX+/wHe2BnvTFMrn4KdjtP8T+hfyqDfbhP+Tk7FKf388BluEwi9WX5w3aGlFzHpLYGYcp1tX4OR4uNAVHucgmvLuHeXIQ2nlXJFEmufHUOQts1vh0hpcTCzi2KzzlnhrHTbpFhR6qdb+qm0z50EK33ghqQ7mO7Khru1sYHunPsHkjRswAC5JWrNMQ+Cd2/QhuWqKsIlgokyPlzydAeB+zjRWl/i+zjT/vfFbqzc6XX6LrtKjL3/82BeShOijIoZ8DQ/h9przkZqD28fhGy813chkWMqQ6fcLHX5NnFo7c5O3RFqAAHlatCgcykpLq3SuQkW/8osDvzFimAphzWXPyu5n2G0rM5QFJOQmPRX44Upfeqa4I4MFVPhNWW6O7suMRCvdAAAA="
 
