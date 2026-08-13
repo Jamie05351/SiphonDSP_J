@@ -53,9 +53,6 @@ object DspCrossNavBar {
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
-            // Flexible spacer before every tile except the first, so the tiles distribute evenly
-            // across the sidebar's full height (dsp_cross_nav is match_parent) instead of
-            // clustering at the top with empty space left below the last one.
             if (index > 0) {
                 container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             }
@@ -74,19 +71,17 @@ object DspCrossNavBar {
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
+                // Keep MaterialButton's own managed background intact. Replacing the background
+                // with a custom Drawable broke the sidebar on-device; the active state is now
+                // expressed only through Material-supported tint/stroke/icon properties.
+                backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                strokeWidth = activity.dp(1)
                 if (selected) {
-                    // Custom background (fill + brighter border + bottom glow) replaces
-                    // Material's own stroke/corner shape handling entirely, so the glow's
-                    // BlurMaskFilter actually renders -- that requires a software layer, since
-                    // BlurMaskFilter has no effect on hardware-accelerated views.
-                    background = BmwDashboardSkin.litTileDrawable(activity)
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+                    setTextColor(BmwDashboardSkin.LIGHT_BLUE)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
                     isClickable = false
                 } else {
-                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
-                    strokeWidth = activity.dp(1)
                     strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
                     setTextColor(Color.rgb(211, 217, 223))
                     iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
