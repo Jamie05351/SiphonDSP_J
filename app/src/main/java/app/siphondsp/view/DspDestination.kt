@@ -28,11 +28,11 @@ enum class DspDestination(
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
-    GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
+    ROUTING(R.string.action_routing, R.drawable.ic_tile_routing, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
+    GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_tile_gains_delay, GainLimiterActivity::class),
+    COMPRESSOR(R.string.action_compressor, R.drawable.ic_tile_compressor, NativeBmwCompressorActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_tile_crossover, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_tile_eq, ParametricEqualizerActivity::class),
 }
 
 object DspCrossNavBar {
@@ -45,6 +45,9 @@ object DspCrossNavBar {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
         container.gravity = Gravity.CENTER_HORIZONTAL
+        container.setPadding(0, 0, 0, 0)
+        container.clipToPadding = false
+        container.clipChildren = false
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
@@ -63,33 +66,41 @@ object DspCrossNavBar {
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
                 icon = ContextCompat.getDrawable(activity, destination.icon)
+                iconSize = activity.dp(60)
                 contentDescription = activity.getString(destination.labelRes)
                 tooltipText = activity.getString(destination.labelRes)
                 insetTop = 0
                 insetBottom = 0
+                insetLeft = 0
+                insetRight = 0
+                minimumWidth = 0
+                minimumHeight = 0
+                setPadding(0, 0, 0, 0)
                 cornerRadius = activity.dp(6)
                 text = if (compact) "" else activity.getString(destination.labelRes)
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = if (compact) 0 else activity.dp(10)
+                iconPadding = 0
                 isAllCaps = false
-                if (compact) setPadding(0, 0, 0, 0)
+
+                // Sidebar tile buttons must retain MaterialButton's managed background. Custom
+                // background replacement caused an on-device regression, so the selected state
+                // stays on supported stroke/icon tint properties while preserving the artwork.
+                // Do not restore the old software-layer BlurMaskFilter background here.
+                backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
+                strokeWidth = activity.dp(if (selected) 2 else 1)
+                strokeColor = ColorStateList.valueOf(
+                    if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.WHITE
+                )
+                setTextColor(if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.rgb(211, 217, 223))
+                iconTint = if (selected) {
+                    ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                } else {
+                    null
+                }
 
                 if (selected) {
-                    // Custom background (fill + brighter border + bottom glow) replaces
-                    // Material's own stroke/corner shape handling entirely, so the glow's
-                    // BlurMaskFilter actually renders -- that requires a software layer, since
-                    // BlurMaskFilter has no effect on hardware-accelerated views.
-                    background = BmwDashboardSkin.litTileDrawable(activity)
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
                     isClickable = false
                 } else {
-                    backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
-                    strokeWidth = activity.dp(1)
-                    strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
-                    setTextColor(Color.rgb(211, 217, 223))
-                    iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -102,9 +113,9 @@ object DspCrossNavBar {
             container.addView(
                 button,
                 if (compact) {
-                    LinearLayout.LayoutParams(activity.dp(46), activity.dp(46))
+                    LinearLayout.LayoutParams(activity.dp(60), activity.dp(60))
                 } else {
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46))
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(60))
                 },
             )
         }
