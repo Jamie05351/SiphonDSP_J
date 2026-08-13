@@ -70,6 +70,9 @@ object DspCrossNavBar {
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
+                // Sidebar tile buttons must retain MaterialButton's managed background. Custom
+                // background replacement caused an on-device regression, so the selected state
+                // stays on supported stroke/text properties while preserving the tile artwork.
                 backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
                 strokeWidth = activity.dp(if (selected) 2 else 1)
                 strokeColor = ColorStateList.valueOf(
