@@ -82,21 +82,16 @@ object DspCrossNavBar {
                 iconPadding = 0
                 isAllCaps = false
 
-                // Sidebar tile buttons must retain MaterialButton's managed background. Custom
-                // background replacement caused an on-device regression, so the selected state
-                // stays on supported stroke/icon tint properties while preserving the artwork.
-                // Do not restore the old software-layer BlurMaskFilter background here.
+                // Keep each tile's supplied artwork completely unchanged. Selection is indicated
+                // only by the outline: the active tile gets the BMW cyan/blue border while
+                // inactive tiles keep a white border. Do not tint the bitmap artwork itself.
                 backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
                 strokeWidth = activity.dp(if (selected) 2 else 1)
                 strokeColor = ColorStateList.valueOf(
                     if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.WHITE
                 )
                 setTextColor(if (selected) BmwDashboardSkin.LIGHT_BLUE_BRIGHT else Color.rgb(211, 217, 223))
-                iconTint = if (selected) {
-                    ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                } else {
-                    null
-                }
+                iconTint = null
 
                 if (selected) {
                     isClickable = false
