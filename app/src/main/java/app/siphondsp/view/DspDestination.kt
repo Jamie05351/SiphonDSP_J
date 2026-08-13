@@ -10,7 +10,6 @@ import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
@@ -62,7 +61,11 @@ object DspCrossNavBar {
 
             val selected = destination == current
             val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
-                icon = ContextCompat.getDrawable(activity, destination.icon)
+                // Use the supplied BMW DSP tile artwork directly instead of the old basic vector
+                // icons. Keep tint disabled so the chrome, black and cyan artwork is preserved.
+                icon = DspSidebarTileAssets.drawable(activity, destination)
+                iconSize = activity.dp(40)
+                iconTint = null
                 contentDescription = activity.getString(destination.labelRes)
                 tooltipText = activity.getString(destination.labelRes)
                 insetTop = 0
@@ -75,21 +78,19 @@ object DspCrossNavBar {
                 if (compact) setPadding(0, 0, 0, 0)
 
                 if (selected) {
-                    // Custom background (fill + brighter border + bottom glow) replaces
-                    // Material's own stroke/corner shape handling entirely, so the glow's
-                    // BlurMaskFilter actually renders -- that requires a software layer, since
-                    // BlurMaskFilter has no effect on hardware-accelerated views.
+                    // The selected destination gets a full cyan/blue illuminated perimeter using
+                    // the same light-blue family as the tile artwork.
                     background = BmwDashboardSkin.litTileDrawable(activity)
                     setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    iconTint = null
                     isClickable = false
                 } else {
                     backgroundTintList = ColorStateList.valueOf(Color.argb(110, 12, 16, 21))
                     strokeWidth = activity.dp(1)
                     strokeColor = ColorStateList.valueOf(Color.rgb(62, 70, 79))
                     setTextColor(Color.rgb(211, 217, 223))
-                    iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
+                    iconTint = null
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
