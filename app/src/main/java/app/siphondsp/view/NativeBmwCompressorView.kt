@@ -26,7 +26,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
     var thresholdDb = -12f
-        set(value) { field = value.coerceIn(-18f, 0f); invalidate() }
+        set(value) { field = value.coerceIn(-24f, 0f); invalidate() }
     var ratio = 2f
         set(value) { field = value.coerceIn(1f, 10f); invalidate() }
     var kneeDb = 8f
@@ -97,6 +97,12 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     init {
         setLayerType(LAYER_TYPE_SOFTWARE, null)
         isClickable = true
+    }
+
+    /** Clears the transfer-curve trace history, eg. when switching to a different band. */
+    fun resetHistory() {
+        history.clear()
+        invalidate()
     }
 
     fun setMeter(inputDb: Float, outputDb: Float, gainReductionDb: Float) {
@@ -205,7 +211,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 when (dragMode) {
                     CompressorGraphMath.DragMode.THRESHOLD -> {
-                        val value = (dbAtX(event.x).coerceIn(-18f, 0f) * 2f).roundToInt() / 2f
+                        val value = (dbAtX(event.x).coerceIn(-24f, 0f) * 2f).roundToInt() / 2f
                         thresholdDb = value
                         onThresholdChanged?.invoke(value)
                     }
