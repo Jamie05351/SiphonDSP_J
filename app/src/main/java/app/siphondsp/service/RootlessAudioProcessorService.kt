@@ -34,6 +34,7 @@ import app.siphondsp.interop.JamesDspLocalEngine
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.interop.ProcessorMessageHandler
 import app.siphondsp.model.IEffectSession
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.preference.AudioEncoding
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
@@ -46,6 +47,7 @@ import app.siphondsp.session.rootless.SessionRecordingPolicyManager
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.Constants.ACTION_NATIVE_BMW_DSP_UPDATED
 import app.siphondsp.utils.Constants.ACTION_PREFERENCES_UPDATED
+import app.siphondsp.utils.Constants.ACTION_PRESET_LOADED
 import app.siphondsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
 import app.siphondsp.utils.Constants.ACTION_SERVICE_HARD_REBOOT_CORE
 import app.siphondsp.utils.Constants.ACTION_SERVICE_RELOAD_LIVEPROG
@@ -152,6 +154,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
         filter.addAction(ACTION_NATIVE_BMW_DSP_UPDATED)
+        filter.addAction(ACTION_PRESET_LOADED)
         registerLocalReceiver(broadcastReceiver, filter)
 
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
@@ -270,10 +273,27 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 ACTION_NATIVE_BMW_DSP_UPDATED -> {
                     intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                        engine.configureNativeBmwDsp(it)
+                        if (!engine.configureNativeBmwDsp(it)) {
+                            Timber.e("Failed to apply native BMW DSP configuration from broadcast")
+                        }
                     }
                 }
+                ACTION_PRESET_LOADED -> resyncNativeBmwStateFromDisk()
             }
+        }
+    }
+
+    // Preset loads, profile rotation, and backup restores all funnel through Preset.load(),
+    // which only broadcasts ACTION_PREFERENCES_UPDATED/ACTION_PRESET_LOADED -- neither of
+    // which otherwise reaches the BMW DSP/PEQ engine state (syncWithPreferences() only knows
+    // about the legacy dsp_*.xml namespaces). Re-read both stores from disk and push them to
+    // the running engine so a restored preset/profile/backup actually takes effect.
+    private fun resyncNativeBmwStateFromDisk() {
+        if (!engine.configureNativeBmwDsp(NativeBmwDspValues.load(this))) {
+            Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
+        }
+        if (!engine.configureNativeBmwPeq(BmwPeqState.load(this), persistOnSuccess = false, source = "preset-restore")) {
+            Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
     }
 

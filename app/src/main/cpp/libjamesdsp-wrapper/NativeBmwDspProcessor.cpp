@@ -70,7 +70,10 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
    candidate.secondOrder=orderValue>=1.5f;
    candidate.frequencyHz=freqValue;
    candidate.q=qValue;
-   if(candidate.enabled&&!candidate.isValid(sampleRate_))return false;
+   // Do not reject the whole 139-value config over one out-of-range all-pass
+   // section (eg. a frequency at/above this output's current Nyquist limit).
+   // rebuild() already degrades an invalid section to an identity
+   // pass-through on its own and leaves every other pending change intact.
    candidate.rebuild(sampleRate_);
    const auto& current=outputs_[out].allPass[section];
    const bool sectionChanged=current.enabled!=candidate.enabled||
