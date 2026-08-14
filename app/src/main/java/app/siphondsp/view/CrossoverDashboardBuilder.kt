@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.PopupMenu
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import app.siphondsp.R
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
@@ -282,6 +283,145 @@ class CrossoverDashboardBuilder(
         currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
+    /** Top-down BMW diagram for the 4 delay values (door mids + underseat lows) plus the 2
+     *  polarity switches beside it, replacing what used to be 2 switch rows stacked above 4
+     *  addSliderRow rows. The diagram is fixed-width (not full-bleed) so the photo renders at a
+     *  sane size instead of dominating the page, and each value box sits in its own row directly
+     *  above/below the image -- outside its bounds, never over the artwork -- but still aligned
+     *  with its speaker's horizontal position via a percent guideline shared by the image and
+     *  both box rows (all three are pinned to the same fixed diagram width, so the fractions line
+     *  up). Tap-to-edit only, no drag slider: the point of the diagram is showing *where* each
+     *  delay applies, not fine adjustment. */
+    fun addDelayDiagramSection(
+        lowPolarityLabel: String, lowPolarityIndex: Int, lowPolarityMirror: IntArray,
+        midPolarityLabel: String, midPolarityIndex: Int, midPolarityMirror: IntArray,
+        midLeftLabel: String, midLeftIndex: Int,
+        midRightLabel: String, midRightIndex: Int,
+        lowLeftLabel: String, lowLeftIndex: Int,
+        lowRightLabel: String, lowRightIndex: Int,
+        min: Float, max: Float,
+        suffix: String = "ms",
+    ) {
+        // The switches + diagram group is built at its natural (WRAP_CONTENT) size, then
+        // centered as a whole inside a FrameLayout -- centering it directly via ConstraintLayout
+        // bias fought the solver in testing (fixed-width children measured correctly but bias
+        // positioning left a large gap), while FrameLayout + Gravity.CENTER is simple and reliable.
+        // Value boxes flank the car's left/right sides (mid pair above the low pair on each side)
+        // rather than stacking in rows above/below the photo -- on short landscape viewports the
+        // stacked layout pushed the low pair below the visible area, while flanking columns spend
+        // the extra horizontal room this row already has instead of vertical room it doesn't.
+        val innerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        // Fixed width, not WRAP_CONTENT: a vertical LinearLayout's default child width is
+        // MATCH_PARENT (not WRAP_CONTENT), which made this column and everything nested inside it
+        // repeatedly stretch to fill the whole row in testing, no matter how many descendants got
+        // an explicit WRAP_CONTENT override. Pinning the column itself sidesteps that entirely --
+        // MATCH_PARENT children inside a fixed-width parent is a bounded, harmless default.
+        val switchesColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        switchesColumn.addView(compactSegmentedSwitch(lowPolarityLabel, lowPolarityIndex, "NORMAL", "INVERT", lowPolarityMirror))
+        switchesColumn.addView(vspace(16))
+        switchesColumn.addView(compactSegmentedSwitch(midPolarityLabel, midPolarityIndex, "NORMAL", "INVERT", midPolarityMirror))
+        innerRow.addView(switchesColumn, LinearLayout.LayoutParams(dp(SWITCHES_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = dp(32)
+        })
+
+        fun labeledBox(caption: String, label: String, index: Int): View {
+            val box = createLabeledValueBox(caption, values[index], suffix)
+            box.setOnClickListener {
+                context.showInputAlert(
+                    android.view.LayoutInflater.from(context),
+                    label,
+                    "${format.format(min)}–${format.format(max)}",
+                    format.format(values[index]),
+                    true,
+                    suffix,
+                ) { entered ->
+                    val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
+                    val stored = parsed.coerceIn(min, max)
+                    values[index] = stored
+                    updateLabeledValueBox(box, stored, suffix)
+                    onChanged(values)
+                }
+            }
+            return box
+        }
+
+        fun boxColumn(topCaption: String, topLabel: String, topIndex: Int, bottomCaption: String, bottomLabel: String, bottomIndex: Int): LinearLayout {
+            val col = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(labeledBox(topCaption, topLabel, topIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            col.addView(vspace(14))
+            col.addView(labeledBox(bottomCaption, bottomLabel, bottomIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            return col
+        }
+
+        innerRow.addView(
+            boxColumn("MID LEFT", midLeftLabel, midLeftIndex, "LOW LEFT", lowLeftLabel, lowLeftIndex),
+            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(14) },
+        )
+
+        innerRow.addView(
+            ImageView(context).apply {
+                setImageResource(R.drawable.bmw_delay_positions)
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            },
+            LinearLayout.LayoutParams(dp(DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+
+        innerRow.addView(
+            boxColumn("MID RIGHT", midRightLabel, midRightIndex, "LOW RIGHT", lowRightLabel, lowRightIndex),
+            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(14) },
+        )
+
+        val centeredFrame = android.widget.FrameLayout(context).apply {
+            addView(innerRow, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ))
+        }
+        addCustomView(centeredFrame, topMarginDp = 4, bottomMarginDp = 4)
+    }
+
+    /** Narrow title-above-toggle switch block for the delay diagram's side column, where the wide
+     *  label-left/toggle-right layout addSegmentedSwitchRow uses wouldn't fit. */
+    private fun compactSegmentedSwitch(
+        title: String,
+        index: Int,
+        offLabel: String,
+        onLabel: String,
+        mirrorIndices: IntArray,
+    ): View {
+        // block's own width comes from switchesColumn's fixed SWITCHES_COLUMN_WIDTH_DP, so this
+        // default MATCH_PARENT (LinearLayout's default child width when orientation=VERTICAL) is
+        // bounded and harmless -- see the comment on switchesColumn's construction.
+        val block = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        block.addView(TextView(context).apply {
+            text = title
+            textSize = 11.5f
+            setTextColor(Color.rgb(200, 207, 215))
+        })
+        block.addView(vspace(6))
+        val group = MaterialButtonToggleGroup(context).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+        }
+        val off = segmentButton(offLabel)
+        val on = segmentButton(onLabel)
+        group.addView(off, LinearLayout.LayoutParams(dp(80), dp(34)))
+        group.addView(on, LinearLayout.LayoutParams(dp(80), dp(34)))
+        group.check(if (values[index] >= .5f) on.id else off.id)
+        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
+        }
+        block.addView(group)
+        return block
+    }
+
     /** One LOW PASS / HIGH PASS mini-card: corner frequency (tap to edit, same numeric-entry
      *  dialog addSliderRow's value uses) plus a decorative rolloff sparkline. [slopeIndex] null
      *  means there's no real topology switch backing a slope choice for this band (e.g. the
@@ -511,6 +651,43 @@ class CrossoverDashboardBuilder(
         updateValueBox(this, value, suffix)
     }
 
+    /** A larger boxed value reading with a small caption above it (e.g. "MID LEFT" / "0 ms") --
+     *  used by the delay car diagram, where createBoxedValueText's plain number reads too small
+     *  and unlabeled once it's no longer sitting directly next to a text title on the same row. */
+    private fun createLabeledValueBox(caption: String, value: Float, suffix: String): LinearLayout {
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(6).toFloat()
+                setColor(valueBoxBackground)
+            }
+        }
+        box.addView(TextView(context).apply {
+            text = caption
+            textSize = 10f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(150, 158, 168))
+            letterSpacing = 0.03f
+        })
+        box.addView(TextView(context).apply {
+            id = View.generateViewId()
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(accentBlue)
+            gravity = Gravity.CENTER
+        })
+        updateLabeledValueBox(box, value, suffix)
+        return box
+    }
+
+    private fun updateLabeledValueBox(box: LinearLayout, value: Float, suffix: String) {
+        (box.getChildAt(1) as TextView).text = "${format.format(value)} $suffix".trim()
+    }
+
     /** Min/center/max reading below a slider's track, aligned under it. */
     private fun tickLabel(text: String, alignment: Int) = TextView(context).apply {
         this.text = text
@@ -543,5 +720,8 @@ class CrossoverDashboardBuilder(
     companion object {
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
+        private const val DIAGRAM_WIDTH_DP = 220
+        private const val BOX_COLUMN_WIDTH_DP = 110
+        private const val SWITCHES_COLUMN_WIDTH_DP = 190
     }
 }

@@ -62,26 +62,15 @@ class GainLimiterFragment : Fragment() {
 
         val delayPolarityPage = page {
             dashboardPanel(getString(R.string.bmw_dsp_delay_polarity), "Delay and polarity") {
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_invert_low_polarity),
-                    null,
-                    NativeBmwDspValues.INDEX_LOW_INVERT,
-                    offLabel = "NORMAL",
-                    onLabel = "INVERT",
-                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_INVERT),
+                addDelayDiagramSection(
+                    getString(R.string.bmw_dsp_invert_low_polarity), NativeBmwDspValues.INDEX_LOW_INVERT, lowPair(NativeBmwDspValues.FIELD_INVERT),
+                    getString(R.string.bmw_dsp_invert_mid_polarity), NativeBmwDspValues.INDEX_MID_INVERT, midPair(NativeBmwDspValues.FIELD_INVERT),
+                    getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L,
+                    getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R,
+                    getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L,
+                    getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R,
+                    0f, 2.8f, "ms",
                 )
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_invert_mid_polarity),
-                    null,
-                    NativeBmwDspValues.INDEX_MID_INVERT,
-                    offLabel = "NORMAL",
-                    onLabel = "INVERT",
-                    mirrorIndices = midPair(NativeBmwDspValues.FIELD_INVERT),
-                )
-                addSliderRow(getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L, 0f, 2.8f, .01f, "ms")
-                addSliderRow(getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R, 0f, 2.8f, .01f, "ms")
-                addSliderRow(getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L, 0f, 2.8f, .01f, "ms")
-                addSliderRow(getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R, 0f, 2.8f, .01f, "ms")
             }
         }
 
