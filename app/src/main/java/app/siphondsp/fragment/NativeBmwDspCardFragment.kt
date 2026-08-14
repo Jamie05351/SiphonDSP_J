@@ -33,14 +33,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         val values = NativeBmwDspValues.load(requireContext())
         writeValuesToMenu(values)
         setPreferencesFromResource(R.xml.dsp_native_bmw_preferences, rootKey)
-        findPreference<androidx.preference.Preference>("route_reset_stereo")?.setOnPreferenceClickListener {
-            val current = NativeBmwDspValues.load(requireContext())
-            NativeBmwDspValues.resetRoutingToDefaults(current)
-            NativeBmwDspValues.save(requireContext(), current)
-            NativeBmwDspValues.broadcast(requireContext(), current)
-            writeValuesToMenu(current)
-            true
-        }
         configureSectionCards(preferenceScreen)
     }
 
@@ -107,7 +99,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         values[index] = when {
             index in BOOLEAN_INDEXES -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
             index in LIST_INDEXES -> menuPreferences.getString(key, "0")?.toFloatOrNull() ?: 0f
-            index in ROUTING_INDEXES -> menuPreferences.getInt(key, (values[index] * 100f).toInt()) / 100f
             else -> menuPreferences.getFloat(key, values[index])
         }
         NativeBmwDspValues.save(requireContext(), values)
@@ -121,7 +112,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             when {
                 index in BOOLEAN_INDEXES -> editor.putBoolean(key, values[index] >= .5f)
                 index in LIST_INDEXES -> editor.putString(key, values[index].toInt().toString())
-                index in ROUTING_INDEXES -> editor.putInt(key, (values[index] * 100f).toInt())
                 else -> editor.putFloat(key, values[index])
             }
         }
@@ -189,21 +179,11 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         // now forces index 0 on unconditionally, so there's nothing left to bind here.
         private val BOOLEAN_INDEXES = setOf(1, 2)
         private val LIST_INDEXES = setOf(3, 4)
-        private val ROUTING_INDEXES = (NativeBmwDspValues.INDEX_ROUTING until
-            NativeBmwDspValues.INDEX_ROUTING + NativeBmwDspValues.ROUTING_VALUE_COUNT).toSet()
         private val KEY_TO_INDEX = linkedMapOf(
             "bmw_lpf_passthrough" to 1,
             "bmw_hpf_passthrough" to 2,
             "bmw_channel_isolation" to 3,
             "bmw_measurement_mute" to 4,
-            "route_low_left_fl" to NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT,
-            "route_low_left_fr" to NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT,
-            "route_low_right_fl" to NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT,
-            "route_low_right_fr" to NativeBmwDspValues.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT,
-            "route_mid_left_fl" to NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_LEFT,
-            "route_mid_left_fr" to NativeBmwDspValues.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT,
-            "route_mid_right_fl" to NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT,
-            "route_mid_right_fr" to NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT,
         )
         private val ALL_PASS_KEYS = setOf(
             "allpass_1_enabled", "allpass_1_order", "allpass_1_frequency", "allpass_1_q",
