@@ -10,14 +10,20 @@ enum class BmwPeqBank { FULL, LOW, MID }
 /**
  * The physically-perceived output channel, as heard through the car's speakers.
  *
- * **Critical:** Native's `processFrame` ends with `l = oR; r = oL;` -- the physical
- * left output is fed by the internally-computed "right" processing chain, and vice versa.
+ * **Two swaps, not one:** native's `processFrame` ends with `l = oR; r = oL;` -- a
+ * deliberate, required correction for this vehicle's factory-reversed speaker wiring
+ * harness (see the comment on that line in `NativeBmwDspProcessor.cpp`). Because the
+ * code-level swap and the physical wiring fault cancel each other out, the internal
+ * "left"/"right" processing chain (`LowLeft`/`MidLeft` vs `LowRight`/`MidRight`,
+ * addressed via [NativeBmwDspValues.outputIndex]) already corresponds directly to what
+ * the user hears on that same physical side -- no additional swap is needed anywhere
+ * downstream, including here.
  *
  * Every consumer of this package speaks in [BmwOutputChannel] terms so "Left" always
- * means what the user hears on the left, never the internal chain name.
+ * means what the user hears on the left, which is also the internal "left" chain.
  *
- * @property LEFT   Physical left speaker (fed by internal "right" chain)
- * @property RIGHT  Physical right speaker (fed by internal "left" chain)
+ * @property LEFT   Physical left speaker (fed directly by internal "left" chain)
+ * @property RIGHT  Physical right speaker (fed directly by internal "right" chain)
  */
 enum class BmwOutputChannel { LEFT, RIGHT }
 
@@ -29,15 +35,15 @@ enum class BmwOutputChannel { LEFT, RIGHT }
  * - Physical-vs-internal channel mapping ([internalIsLeftChainFor])
  * - PEQ band routing logic ([bandAppliesTo])
  *
- * The native processor swaps L/R at the end of its signal chain for hardware routing.
- * This class hides that swap from UI/graph code.
+ * See [BmwOutputChannel]'s doc comment for why the internal chain maps directly (not
+ * swapped) onto the physical side the user hears.
  *
  * Example:
  * ```
  * val leftBand = ParametricEqBand(channel = ParametricEqChannel.LEFT)
  * // UI edits the "left" band
- * // Internally, it feeds the RIGHT output (due to the swap)
- * val appliesToRight = bandAppliesTo(leftBand, BmwOutputChannel.RIGHT)  // true
+ * // Internally, it feeds the LEFT output directly
+ * val appliesToLeft = bandAppliesTo(leftBand, BmwOutputChannel.LEFT)  // true
  * ```
  */
 object BmwSignalChain {
@@ -66,37 +72,29 @@ object BmwSignalChain {
     /**
      * Determines which internal processing chain feeds the given physical output.
      *
-     * Due to the `l=oR; r=oL` swap at the end of native's processFrame:
-     * - Physical LEFT (user hears on left) is fed by internal "RIGHT" chain
-     * - Physical RIGHT (user hears on right) is fed by internal "LEFT" chain
-     *
-     * This is the **inverse relationship**: internal left → physical right.
+     * The internal chain maps directly onto the physical side the user hears -- see
+     * [BmwOutputChannel]'s doc comment for why no swap is needed here.
      *
      * @param output Physical output channel
      * @return True if [output] is fed by the internal "left" processing chain
      *
      * Example:
      * ```
-     * internalIsLeftChainFor(BmwOutputChannel.LEFT)   // false (fed by internal RIGHT)
-     * internalIsLeftChainFor(BmwOutputChannel.RIGHT)  // true  (fed by internal LEFT)
+     * internalIsLeftChainFor(BmwOutputChannel.LEFT)   // true  (fed by internal LEFT, directly)
+     * internalIsLeftChainFor(BmwOutputChannel.RIGHT)  // false (fed by internal RIGHT, directly)
      * ```
      */
-    fun internalIsLeftChainFor(output: BmwOutputChannel): Boolean = 
-        output == BmwOutputChannel.RIGHT
+    fun internalIsLeftChainFor(output: BmwOutputChannel): Boolean =
+        output == BmwOutputChannel.LEFT
 
     /**
      * Determines whether a parametric EQ band applies to the given physical output.
      *
-     * Accounts for the internal L/R swap when routing:
-     * - A band tagged with [ParametricEqChannel.LEFT] targets the internal "left" chain,
-     *   which -- due to the swap -- feeds the physical RIGHT output
-     * - A band tagged with [ParametricEqChannel.RIGHT] targets the internal "right" chain,
-     *   which feeds the physical LEFT output
+     * The internal chain maps directly onto the physical side the user hears (see
+     * [BmwOutputChannel]'s doc comment), so this is a plain, unswapped match:
+     * - A band tagged with [ParametricEqChannel.LEFT] applies to the physical LEFT output
+     * - A band tagged with [ParametricEqChannel.RIGHT] applies to the physical RIGHT output
      * - A band tagged with [ParametricEqChannel.LEFT_RIGHT] applies to both
-     *
-     * Internally, the native processor swaps the outputs; this method's return value already
-     * reflects that swap, so callers can compare directly against a physical [BmwOutputChannel]
-     * without re-deriving the mapping themselves.
      *
      * @param band The parametric EQ band model (contains channel tag)
      * @param output Physical output channel to check against
@@ -108,11 +106,11 @@ object BmwSignalChain {
      * val rightBand = ParametricEqBand(channel = ParametricEqChannel.RIGHT)
      * val bothBand = ParametricEqBand(channel = ParametricEqChannel.LEFT_RIGHT)
      *
-     * bandAppliesTo(leftBand, BmwOutputChannel.LEFT)    // false (swapped: LEFT band feeds physical RIGHT)
-     * bandAppliesTo(leftBand, BmwOutputChannel.RIGHT)   // true  (swapped match)
+     * bandAppliesTo(leftBand, BmwOutputChannel.LEFT)    // true  (direct match)
+     * bandAppliesTo(leftBand, BmwOutputChannel.RIGHT)   // false
      *
-     * bandAppliesTo(rightBand, BmwOutputChannel.LEFT)   // true  (swapped match)
-     * bandAppliesTo(rightBand, BmwOutputChannel.RIGHT)  // false (swapped: RIGHT band feeds physical LEFT)
+     * bandAppliesTo(rightBand, BmwOutputChannel.LEFT)   // false
+     * bandAppliesTo(rightBand, BmwOutputChannel.RIGHT)  // true  (direct match)
      *
      * bandAppliesTo(bothBand, BmwOutputChannel.LEFT)    // true  (always matches)
      * bandAppliesTo(bothBand, BmwOutputChannel.RIGHT)   // true  (always matches)
@@ -121,10 +119,10 @@ object BmwSignalChain {
     fun bandAppliesTo(band: ParametricEqBand, output: BmwOutputChannel): Boolean {
         // If band applies to both, always match
         if (band.channel == ParametricEqChannel.LEFT_RIGHT) return true
-        
-        // Determine which internal chain feeds this physical output
+
+        // The internal chain maps directly onto the physical output -- no swap needed.
         val internalLeft = internalIsLeftChainFor(output)
-        
+
         // Match the band's channel tag against the internal chain
         return if (internalLeft) {
             band.channel == ParametricEqChannel.LEFT
