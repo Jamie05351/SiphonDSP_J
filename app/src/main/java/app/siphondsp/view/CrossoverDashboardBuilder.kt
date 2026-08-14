@@ -306,7 +306,14 @@ class CrossoverDashboardBuilder(
         // centered as a whole inside a FrameLayout -- centering it directly via ConstraintLayout
         // bias fought the solver in testing (fixed-width children measured correctly but bias
         // positioning left a large gap), while FrameLayout + Gravity.CENTER is simple and reliable.
-        val innerRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        // Value boxes flank the car's left/right sides (mid pair above the low pair on each side)
+        // rather than stacking in rows above/below the photo -- on short landscape viewports the
+        // stacked layout pushed the low pair below the visible area, while flanking columns spend
+        // the extra horizontal room this row already has instead of vertical room it doesn't.
+        val innerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
 
         // Fixed width, not WRAP_CONTENT: a vertical LinearLayout's default child width is
         // MATCH_PARENT (not WRAP_CONTENT), which made this column and everything nested inside it
@@ -320,36 +327,6 @@ class CrossoverDashboardBuilder(
         innerRow.addView(switchesColumn, LinearLayout.LayoutParams(dp(SWITCHES_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             marginEnd = dp(32)
         })
-
-        val diagram = buildDelayDiagram(
-            midLeftLabel, midLeftIndex, midRightLabel, midRightIndex,
-            lowLeftLabel, lowLeftIndex, lowRightLabel, lowRightIndex,
-            min, max, suffix,
-        )
-        innerRow.addView(diagram, LinearLayout.LayoutParams(dp(DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        val centeredFrame = android.widget.FrameLayout(context).apply {
-            addView(innerRow, android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER,
-            ))
-        }
-        addCustomView(centeredFrame, topMarginDp = 8, bottomMarginDp = 4)
-    }
-
-    /** The full top-down car photo with a labeled value-box row above it (mid pair) and another
-     *  below (low pair) -- separated from each other and from the photo, rather than crowding
-     *  right against the speakers, and each box is captioned so it's unambiguous which speaker it
-     *  controls without relying on position alone. */
-    private fun buildDelayDiagram(
-        midLeftLabel: String, midLeftIndex: Int,
-        midRightLabel: String, midRightIndex: Int,
-        lowLeftLabel: String, lowLeftIndex: Int,
-        lowRightLabel: String, lowRightIndex: Int,
-        min: Float, max: Float, suffix: String,
-    ): LinearLayout {
-        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
         fun labeledBox(caption: String, label: String, index: Int): View {
             val box = createLabeledValueBox(caption, values[index], suffix)
@@ -372,30 +349,41 @@ class CrossoverDashboardBuilder(
             return box
         }
 
-        fun boxRow(leftCaption: String, leftLabel: String, leftIndex: Int, rightCaption: String, rightLabel: String, rightIndex: Int): LinearLayout {
-            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-            row.addView(labeledBox(leftCaption, leftLabel, leftIndex), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
-            row.addView(labeledBox(rightCaption, rightLabel, rightIndex), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
-            return row
+        fun boxColumn(topCaption: String, topLabel: String, topIndex: Int, bottomCaption: String, bottomLabel: String, bottomIndex: Int): LinearLayout {
+            val col = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(labeledBox(topCaption, topLabel, topIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            col.addView(vspace(14))
+            col.addView(labeledBox(bottomCaption, bottomLabel, bottomIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            return col
         }
 
-        column.addView(
-            boxRow("MID LEFT", midLeftLabel, midLeftIndex, "MID RIGHT", midRightLabel, midRightIndex),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) },
+        innerRow.addView(
+            boxColumn("MID LEFT", midLeftLabel, midLeftIndex, "LOW LEFT", lowLeftLabel, lowLeftIndex),
+            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(14) },
         )
-        column.addView(
+
+        innerRow.addView(
             ImageView(context).apply {
                 setImageResource(R.drawable.bmw_delay_positions)
                 adjustViewBounds = true
                 scaleType = ImageView.ScaleType.FIT_CENTER
             },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            LinearLayout.LayoutParams(dp(DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        column.addView(
-            boxRow("LOW LEFT", lowLeftLabel, lowLeftIndex, "LOW RIGHT", lowRightLabel, lowRightIndex),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) },
+
+        innerRow.addView(
+            boxColumn("MID RIGHT", midRightLabel, midRightIndex, "LOW RIGHT", lowRightLabel, lowRightIndex),
+            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(14) },
         )
-        return column
+
+        val centeredFrame = android.widget.FrameLayout(context).apply {
+            addView(innerRow, android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ))
+        }
+        addCustomView(centeredFrame, topMarginDp = 4, bottomMarginDp = 4)
     }
 
     /** Narrow title-above-toggle switch block for the delay diagram's side column, where the wide
@@ -732,7 +720,8 @@ class CrossoverDashboardBuilder(
     companion object {
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
-        private const val DIAGRAM_WIDTH_DP = 260
+        private const val DIAGRAM_WIDTH_DP = 220
+        private const val BOX_COLUMN_WIDTH_DP = 110
         private const val SWITCHES_COLUMN_WIDTH_DP = 190
     }
 }
