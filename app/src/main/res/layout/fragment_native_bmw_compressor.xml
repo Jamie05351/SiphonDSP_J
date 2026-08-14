@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Visualizer/band-toggle/enable switch are a persistent, non-scrolling header (they're the
+<!-- Visualizer/band-title/enable switch are a persistent, non-scrolling header (they're the
      primary readout, not secondary controls); only the parameter sliders below page (see
-     compressor_slider_pager_container, filled at runtime by NativeBmwCompressorFragment with
-     page_compressor_shape.xml + page_compressor_dynamics.xml via DspPager). -->
+     compressor_slider_pager_container, filled at runtime by NativeBmwCompressorFragment with two
+     page_compressor_band.xml instances, one per band, via DspPager). Swiping the pager itself
+     moves between bands (there's no separate band selector control). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -15,43 +16,26 @@
         android:orientation="vertical"
         android:padding="18dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Native dual-band dynamics"
-            android:textAppearance="?android:attr/textAppearanceLarge" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Choose the low or mid branch, then adjust its independent stereo-linked compressor."
-            android:textColor="?android:attr/textColorSecondary" />
-
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/compressor_band_toggle"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/compressor_band_low"
-                style="?attr/materialButtonOutlinedStyle"
+            <TextView
+                android:id="@+id/compressor_band_title"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Low band" />
+                android:text="Low Band Dynamics"
+                android:textAppearance="?android:attr/textAppearanceLarge" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/compressor_band_mid"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Mid band" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/compressor_enable"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Compressor active" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -88,14 +72,6 @@
                     android:textColor="?android:attr/textColorSecondary" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/compressor_enable"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="14dp"
-            android:gravity="center_vertical"
-            android:text="Selected compressor active" />
     </LinearLayout>
 
     <FrameLayout

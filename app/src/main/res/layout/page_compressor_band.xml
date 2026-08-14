@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One band's full set of parameter sliders (Threshold, Ratio, Knee, Attack, Release, Makeup
+     gain) on a single page. NativeBmwCompressorFragment inflates this twice, once per band, so
+     swiping the pager moves between bands instead of between parameter subgroups. Row spacing is
+     kept tight so all six fit without scrolling even on short landscape viewports (the delay
+     diagram in CrossoverDashboardBuilder hit the same landscape-height ceiling). -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingTop="0dp"
+        android:paddingBottom="2dp">
+
+        <!-- Each slider is one row: title, a flexible gap, the value in a darkened box
+             (Widget.SiphonDSP.SliderValueBox), then the slider filling the rest. Value text is
+             set at runtime in NativeBmwCompressorFragment. -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_threshold_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Threshold" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_threshold_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_threshold" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_ratio_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ratio" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_ratio_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_ratio" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_knee_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Soft knee" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_knee_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_knee" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_attack_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Attack" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_attack_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_attack" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_release_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Release" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_release_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_release" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <LinearLayout android:layout_width="150dp" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:id="@+id/compressor_makeup_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Makeup gain" android:textAppearance="?android:attr/textAppearanceListItemSmall" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                <TextView android:id="@+id/compressor_makeup_value" style="@style/Widget.SiphonDSP.SliderValueBox" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingTop="2dp" android:paddingBottom="2dp" />
+            </LinearLayout>
+            <com.google.android.material.slider.Slider android:id="@+id/compressor_makeup" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

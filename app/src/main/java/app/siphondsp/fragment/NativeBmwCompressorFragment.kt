@@ -18,34 +18,41 @@ import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorGrTraceView
 import app.siphondsp.view.DspPager
 import app.siphondsp.view.NativeBmwCompressorView
-import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.slider.Slider
 import java.util.Locale
 
 class NativeBmwCompressorFragment : Fragment() {
     private enum class Band { LOW, MID }
 
+    /** One band's full set of parameter sliders/value labels -- each band gets its own permanent
+     *  instances (inflated once, on its own pager page) rather than one shared set that gets
+     *  rebound, since both pages stay attached simultaneously under ViewPager2. */
+    private class BandControls(page: View) {
+        val threshold: Slider = page.findViewById(R.id.compressor_threshold)
+        val ratio: Slider = page.findViewById(R.id.compressor_ratio)
+        val knee: Slider = page.findViewById(R.id.compressor_knee)
+        val attack: Slider = page.findViewById(R.id.compressor_attack)
+        val release: Slider = page.findViewById(R.id.compressor_release)
+        val makeup: Slider = page.findViewById(R.id.compressor_makeup)
+        // Named *ValueText, not *Value, to avoid colliding with the ratioValue/thresholdDb/etc.
+        // Float parameter names used throughout applyBandChange()/bindBandFromState() below.
+        val thresholdValueText: TextView = page.findViewById(R.id.compressor_threshold_value)
+        val ratioValueText: TextView = page.findViewById(R.id.compressor_ratio_value)
+        val kneeValueText: TextView = page.findViewById(R.id.compressor_knee_value)
+        val attackValueText: TextView = page.findViewById(R.id.compressor_attack_value)
+        val releaseValueText: TextView = page.findViewById(R.id.compressor_release_value)
+        val makeupValueText: TextView = page.findViewById(R.id.compressor_makeup_value)
+    }
+
     private lateinit var state: NativeBmwCompressorState
     private var selectedBand = Band.LOW
     private lateinit var visualizer: NativeBmwCompressorView
     private lateinit var grTrace: CompressorGrTraceView
     private lateinit var meterText: TextView
-    private lateinit var bandToggle: MaterialButtonToggleGroup
+    private lateinit var bandTitle: TextView
     private lateinit var enabledSwitch: SwitchCompat
-    private lateinit var threshold: Slider
-    private lateinit var ratio: Slider
-    private lateinit var knee: Slider
-    private lateinit var attack: Slider
-    private lateinit var release: Slider
-    private lateinit var makeup: Slider
-    // Named *ValueText, not *Value, to avoid colliding with the ratioValue/thresholdDb/etc.
-    // Float parameter names already used throughout updateBand()/bindSelectedBand() below.
-    private lateinit var thresholdValueText: TextView
-    private lateinit var ratioValueText: TextView
-    private lateinit var kneeValueText: TextView
-    private lateinit var attackValueText: TextView
-    private lateinit var releaseValueText: TextView
-    private lateinit var makeupValueText: TextView
+    private lateinit var lowControls: BandControls
+    private lateinit var midControls: BandControls
     private val handler = Handler(Looper.getMainLooper())
     private var bindingState = false
     private var pendingPersist = false
@@ -82,39 +89,41 @@ class NativeBmwCompressorFragment : Fragment() {
         visualizer = view.findViewById(R.id.compressor_visualizer)
         grTrace = view.findViewById(R.id.compressor_gr_trace)
         meterText = view.findViewById(R.id.compressor_meter_text)
-        bandToggle = view.findViewById(R.id.compressor_band_toggle)
+        bandTitle = view.findViewById(R.id.compressor_band_title)
         enabledSwitch = view.findViewById(R.id.compressor_enable)
 
-        // The 6 parameter sliders live on two swipeable pages inflated at runtime -- Threshold/
-        // Ratio/Knee ("shape") and Attack/Release/Makeup ("dynamics") -- rather than in this
-        // fragment's own layout, so the visualizer/toggle/enable switch above can stay a fixed
-        // header while only the sliders page.
+        // Each band's 6 sliders live on its own swipeable pager page, inflated at runtime from
+        // the same page_compressor_band.xml -- rather than a toggle switching one shared set of
+        // sliders between bands, swiping the pager itself moves between bands. The visualizer/
+        // title/enable switch above stay a fixed header, updated to match whichever band is
+        // currently swiped to.
         val pagerContainer = view.findViewById<FrameLayout>(R.id.compressor_slider_pager_container)
-        val shapePage = layoutInflater.inflate(R.layout.page_compressor_shape, pagerContainer, false)
-        val dynamicsPage = layoutInflater.inflate(R.layout.page_compressor_dynamics, pagerContainer, false)
-        pagerContainer.addView(DspPager.build(requireContext(), listOf(shapePage, dynamicsPage)))
+        val lowPage = layoutInflater.inflate(R.layout.page_compressor_band, pagerContainer, false)
+        val midPage = layoutInflater.inflate(R.layout.page_compressor_band, pagerContainer, false)
+        pagerContainer.addView(
+            DspPager.build(requireContext(), listOf(lowPage, midPage)) { position ->
+                selectedBand = if (position == 0) Band.LOW else Band.MID
+                grTrace.reset()
+                refreshHeader()
+            },
+        )
 
-        threshold = shapePage.findViewById(R.id.compressor_threshold)
-        ratio = shapePage.findViewById(R.id.compressor_ratio)
-        knee = shapePage.findViewById(R.id.compressor_knee)
-        attack = dynamicsPage.findViewById(R.id.compressor_attack)
-        release = dynamicsPage.findViewById(R.id.compressor_release)
-        makeup = dynamicsPage.findViewById(R.id.compressor_makeup)
-        configureSlider(threshold, -24f, 0f, .5f)
-        configureSlider(ratio, 1f, 10f, .1f)
-        configureSlider(knee, 0f, 12f, 1f)
-        configureSlider(attack, 1f, 100f, 1f)
-        configureSlider(release, 20f, 800f, 1f)
-        configureSlider(makeup, 0f, 6f, .1f)
-        thresholdValueText = shapePage.findViewById(R.id.compressor_threshold_value)
-        ratioValueText = shapePage.findViewById(R.id.compressor_ratio_value)
-        kneeValueText = shapePage.findViewById(R.id.compressor_knee_value)
-        attackValueText = dynamicsPage.findViewById(R.id.compressor_attack_value)
-        releaseValueText = dynamicsPage.findViewById(R.id.compressor_release_value)
-        makeupValueText = dynamicsPage.findViewById(R.id.compressor_makeup_value)
+        lowControls = BandControls(lowPage)
+        midControls = BandControls(midPage)
+        listOf(lowControls, midControls).forEach { controls ->
+            configureSlider(controls.threshold, -24f, 0f, .5f)
+            configureSlider(controls.ratio, 1f, 10f, .1f)
+            configureSlider(controls.knee, 0f, 12f, 1f)
+            configureSlider(controls.attack, 1f, 100f, 1f)
+            configureSlider(controls.release, 20f, 800f, 1f)
+            configureSlider(controls.makeup, 0f, 6f, .1f)
+        }
+
         state = NativeBmwCompressorState.load(requireContext())
         configureListeners()
-        bindSelectedBand()
+        bindBandFromState(Band.LOW)
+        bindBandFromState(Band.MID)
+        refreshHeader()
     }
 
     private fun configureSlider(slider: Slider, from: Float, to: Float, step: Float) {
@@ -122,15 +131,17 @@ class NativeBmwCompressorFragment : Fragment() {
         slider.valueTo = to
         slider.stepSize = step
         // Styled directly here rather than left to BmwDashboardSkin.styleWorkspace()'s later
-        // recursive walk: the dynamics page is off-screen at that point, and ViewPager2 doesn't
-        // guarantee it's attached to the view hierarchy yet, so the walk can miss its sliders.
+        // recursive walk: the non-visible band page is off-screen at that point, and ViewPager2
+        // doesn't guarantee it's attached to the view hierarchy yet, so the walk can miss it.
         BmwDashboardSkin.styleSlider(slider)
     }
 
     override fun onStart() {
         super.onStart()
         state = NativeBmwCompressorState.load(requireContext())
-        bindSelectedBand()
+        bindBandFromState(Band.LOW)
+        bindBandFromState(Band.MID)
+        refreshHeader()
         grTrace.reset()
         handler.post(meterTick)
     }
@@ -145,25 +156,25 @@ class NativeBmwCompressorFragment : Fragment() {
     }
 
     private fun configureListeners() {
-        bandToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked || bindingState) return@addOnButtonCheckedListener
-            selectedBand = if (checkedId == R.id.compressor_band_mid) Band.MID else Band.LOW
-            grTrace.reset()
-            bindSelectedBand()
-        }
-        enabledSwitch.setOnCheckedChangeListener { _, value -> if (!bindingState) updateBand(enabled = value) }
-        threshold.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(thresholdDb = value) }
-        ratio.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(ratioValue = value) }
-        knee.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(kneeDb = value) }
-        attack.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(attackMs = value) }
-        release.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(releaseMs = value) }
-        makeup.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) updateBand(makeupDb = value) }
-        visualizer.onThresholdChanged = { updateBand(thresholdDb = it) }
-        visualizer.onRatioChanged = { updateBand(ratioValue = it) }
-        visualizer.onKneeChanged = { updateBand(kneeDb = it) }
+        bindSliderListeners(lowControls, Band.LOW)
+        bindSliderListeners(midControls, Band.MID)
+        enabledSwitch.setOnCheckedChangeListener { _, value -> if (!bindingState) applyBandChange(selectedBand, enabled = value) }
+        visualizer.onThresholdChanged = { applyBandChange(selectedBand, thresholdDb = it) }
+        visualizer.onRatioChanged = { applyBandChange(selectedBand, ratioValue = it) }
+        visualizer.onKneeChanged = { applyBandChange(selectedBand, kneeDb = it) }
     }
 
-    private fun updateBand(
+    private fun bindSliderListeners(controls: BandControls, band: Band) {
+        controls.threshold.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, thresholdDb = value) }
+        controls.ratio.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, ratioValue = value) }
+        controls.knee.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, kneeDb = value) }
+        controls.attack.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, attackMs = value) }
+        controls.release.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, releaseMs = value) }
+        controls.makeup.addOnChangeListener { _, value, fromUser -> if (fromUser && !bindingState) applyBandChange(band, makeupDb = value) }
+    }
+
+    private fun applyBandChange(
+        band: Band,
         enabled: Boolean? = null,
         thresholdDb: Float? = null,
         ratioValue: Float? = null,
@@ -172,7 +183,7 @@ class NativeBmwCompressorFragment : Fragment() {
         releaseMs: Float? = null,
         makeupDb: Float? = null,
     ) {
-        state = if (selectedBand == Band.LOW) {
+        state = if (band == Band.LOW) {
             state.copy(
                 enabled = enabled ?: state.enabled,
                 thresholdDb = thresholdDb ?: state.thresholdDb,
@@ -193,7 +204,8 @@ class NativeBmwCompressorFragment : Fragment() {
                 midMakeupDb = makeupDb ?: state.midMakeupDb,
             )
         }
-        bindSelectedBand()
+        bindBandFromState(band)
+        if (band == selectedBand) refreshHeader()
         pendingPersist = true
         handler.removeCallbacks(flushPersist)
         if (SystemClock.uptimeMillis() - lastPersistMs >= PERSIST_THROTTLE_MS) persistNow()
@@ -206,31 +218,60 @@ class NativeBmwCompressorFragment : Fragment() {
         state.persistAndApply(requireContext())
     }
 
-    private fun bindSelectedBand() {
-        if (!::visualizer.isInitialized) return
-        bindingState = true
-        bandToggle.check(if (selectedBand == Band.LOW) R.id.compressor_band_low else R.id.compressor_band_mid)
-        val enabled: Boolean
+    /** Pushes [band]'s stored state into its own sliders/value labels -- called on initial load,
+     *  on reload, and after any change to that band (including changes to the other band, which
+     *  is a no-op here since only the matching band's own fields are read). */
+    private fun bindBandFromState(band: Band) {
+        val controls = if (band == Band.LOW) lowControls else midControls
         val thresholdDb: Float
         val ratioValue: Float
         val kneeDb: Float
         val attackMs: Float
         val releaseMs: Float
         val makeupDb: Float
+        if (band == Band.LOW) {
+            thresholdDb = state.thresholdDb; ratioValue = state.ratio; kneeDb = state.kneeDb
+            attackMs = state.attackMs; releaseMs = state.releaseMs; makeupDb = state.makeupDb
+        } else {
+            thresholdDb = state.midThresholdDb; ratioValue = state.midRatio; kneeDb = state.midKneeDb
+            attackMs = state.midAttackMs; releaseMs = state.midReleaseMs; makeupDb = state.midMakeupDb
+        }
+        bindingState = true
+        controls.threshold.value = thresholdDb.coerceIn(controls.threshold.valueFrom, controls.threshold.valueTo)
+        controls.ratio.value = ratioValue.coerceIn(controls.ratio.valueFrom, controls.ratio.valueTo)
+        controls.knee.value = kneeDb.coerceIn(controls.knee.valueFrom, controls.knee.valueTo)
+        controls.attack.value = attackMs.coerceIn(controls.attack.valueFrom, controls.attack.valueTo)
+        controls.release.value = releaseMs.coerceIn(controls.release.valueFrom, controls.release.valueTo)
+        controls.makeup.value = makeupDb.coerceIn(controls.makeup.valueFrom, controls.makeup.valueTo)
+        controls.thresholdValueText.text = String.format(Locale.ENGLISH, "%.1f dB", thresholdDb)
+        controls.ratioValueText.text = String.format(Locale.ENGLISH, "%.1f:1", ratioValue)
+        controls.kneeValueText.text = String.format(Locale.ENGLISH, "%.0f dB", kneeDb)
+        controls.attackValueText.text = String.format(Locale.ENGLISH, "%.0f ms", attackMs)
+        controls.releaseValueText.text = String.format(Locale.ENGLISH, "%.0f ms", releaseMs)
+        controls.makeupValueText.text = String.format(Locale.ENGLISH, "%.1f dB", makeupDb)
+        bindingState = false
+    }
+
+    /** Refreshes the persistent header (title, enable switch, visualizer, GR trace) to match
+     *  [selectedBand] -- the only widgets still shared between bands rather than duplicated per
+     *  page, so they need to follow whichever band's page is currently swiped into view. */
+    private fun refreshHeader() {
+        if (!::visualizer.isInitialized) return
+        val enabled: Boolean
+        val thresholdDb: Float
+        val ratioValue: Float
+        val kneeDb: Float
+        val makeupDb: Float
         if (selectedBand == Band.LOW) {
             enabled = state.enabled; thresholdDb = state.thresholdDb; ratioValue = state.ratio
-            kneeDb = state.kneeDb; attackMs = state.attackMs; releaseMs = state.releaseMs; makeupDb = state.makeupDb
+            kneeDb = state.kneeDb; makeupDb = state.makeupDb
         } else {
             enabled = state.midEnabled; thresholdDb = state.midThresholdDb; ratioValue = state.midRatio
-            kneeDb = state.midKneeDb; attackMs = state.midAttackMs; releaseMs = state.midReleaseMs; makeupDb = state.midMakeupDb
+            kneeDb = state.midKneeDb; makeupDb = state.midMakeupDb
         }
+        bindingState = true
         enabledSwitch.isChecked = enabled
-        threshold.value = thresholdDb.coerceIn(threshold.valueFrom, threshold.valueTo)
-        ratio.value = ratioValue.coerceIn(ratio.valueFrom, ratio.valueTo)
-        knee.value = kneeDb.coerceIn(knee.valueFrom, knee.valueTo)
-        attack.value = attackMs.coerceIn(attack.valueFrom, attack.valueTo)
-        release.value = releaseMs.coerceIn(release.valueFrom, release.valueTo)
-        makeup.value = makeupDb.coerceIn(makeup.valueFrom, makeup.valueTo)
+        bindingState = false
         visualizer.compressorEnabled = enabled
         visualizer.isEnabled = enabled
         visualizer.thresholdDb = thresholdDb
@@ -238,13 +279,7 @@ class NativeBmwCompressorFragment : Fragment() {
         visualizer.kneeDb = kneeDb
         visualizer.makeupDb = makeupDb
         grTrace.thresholdDb = thresholdDb
-        thresholdValueText.text = String.format(Locale.ENGLISH, "%.1f dB", thresholdDb)
-        ratioValueText.text = String.format(Locale.ENGLISH, "%.1f:1", ratioValue)
-        kneeValueText.text = String.format(Locale.ENGLISH, "%.0f dB", kneeDb)
-        attackValueText.text = String.format(Locale.ENGLISH, "%.0f ms", attackMs)
-        releaseValueText.text = String.format(Locale.ENGLISH, "%.0f ms", releaseMs)
-        makeupValueText.text = String.format(Locale.ENGLISH, "%.1f dB", makeupDb)
-        bindingState = false
+        bandTitle.text = if (selectedBand == Band.LOW) "Low Band Dynamics" else "Mid Band Dynamics"
     }
 
     companion object {

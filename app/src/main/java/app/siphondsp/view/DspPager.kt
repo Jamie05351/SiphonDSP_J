@@ -17,7 +17,7 @@ import kotlin.math.roundToInt
  * TabLayout, matching how the rest of this dashboard chrome is built directly in code.
  */
 object DspPager {
-    fun build(context: Context, pages: List<View>): View {
+    fun build(context: Context, pages: List<View>, onPageSelected: (Int) -> Unit = {}): View {
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -57,6 +57,7 @@ object DspPager {
             viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     dots.forEachIndexed { index, dot -> dot.isSelected = index == position }
+                    onPageSelected(position)
                 }
             })
             root.addView(dotsRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
