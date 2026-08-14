@@ -743,10 +743,13 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun performReset() {
+        // Constants.DEFAULT_PEQ is an empty filter string, ie. there's no curated default
+        // curve to restore -- clearing is the only actual behavior, for every scope including
+        // Full. Word the confirmation to match that instead of implying a designed baseline.
         requireContext().showYesNoAlert(
-            "Reset ${selectedScope.label}?",
+            "Clear ${selectedScope.label}?",
             if (selectedScope == PeqScope.FULL) {
-                "Restore the Full Range default filters and reset its preamp to 0 dB?"
+                "Clear every filter from Full Range and reset its preamp to 0 dB?"
             } else {
                 "Clear every filter from ${selectedScope.label}?"
             },
@@ -778,10 +781,9 @@ class ParametricEqualizerFragment : Fragment() {
                 val result = parsed.fromApoString(it)
                 val candidate = peqState.deepCopy()
                 replaceScopeBands(candidate, parsed)
-                applyCandidate(
-                    if (selectedScope == PeqScope.FULL) candidate.copy(preampDb = result.preampDb.toFloat()) else candidate,
-                    "text-import",
-                )
+                // preampDb is a single global field, not scoped per band group -- a Preamp line
+                // in the pasted text should always apply, not just when editing Full scope.
+                applyCandidate(candidate.copy(preampDb = result.preampDb.toFloat()), "text-import")
             }
         }
     }
