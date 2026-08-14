@@ -35,13 +35,13 @@
              removed in favor of MainActivity's bottom bar being the sole entry point for those;
              see DspWorkspaceActivity.setUpWorkspaceSidebarActions() for the panel background.
              Back navigation and the power toggle stay in the toolbar itself. -->
+        <!-- Flush against the left, top, and bottom edges of the content area (no margins),
+             so the panel reads as a structural fixture built into the workspace rather than a
+             card floating with gaps around it. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
             android:layout_width="60dp"
             android:layout_height="0dp"
-            android:layout_marginStart="6dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
             android:orientation="vertical"
             android:gravity="center_horizontal"
             app:layout_constraintTop_toTopOf="parent"
@@ -63,7 +63,6 @@
             android:name="androidx.navigation.fragment.NavHostFragment"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
