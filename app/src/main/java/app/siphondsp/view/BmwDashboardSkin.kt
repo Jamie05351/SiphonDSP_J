@@ -35,10 +35,12 @@ object BmwDashboardSkin {
     const val M_RED = 0xFFE32B3B.toInt()
     const val PANEL_TOP = 0xFF20262D.toInt()
     const val PANEL_BOTTOM = 0xFF101419.toInt()
-    // Near-black for the sidebar panel -- deliberately not a gradient, unlike the workspace
-    // background it sits in front of, so the sidebar itself reads as a distinct, well-defined
-    // solid fixture rather than blending into the content behind it.
-    const val SIDEBAR_GUNMETAL = 0xFF0B0D0F.toInt()
+    // Solid, flat fill for the sidebar panel -- deliberately not a gradient, unlike the workspace
+    // background it sits in front of, so it reads as a distinct, well-defined fixture rather than
+    // blending into the content behind it. Close to PANEL_BOTTOM's own tone (not near-black) so
+    // it sits alongside the main gradient panel without the harsh contrast a true near-black read
+    // as "a separate slab dropped on top."
+    const val SIDEBAR_GUNMETAL = 0xFF171B21.toInt()
 
     private val inactiveSurface = Color.rgb(18, 23, 29)
     private val inactiveStroke = Color.rgb(61, 71, 82)
@@ -58,13 +60,14 @@ object BmwDashboardSkin {
     }
 
     /**
-     * The sidebar's active-tile background: same neutral fill as an inactive tile, a brighter
-     * accent border, and a soft glow concentrated near the bottom edge, as if lit from beneath.
-     * Uses a real [BlurMaskFilter] blur rather than layered fake-blur shapes, which requires the
-     * View this is set on to render via a software layer -- BlurMaskFilter has no effect on
-     * hardware-accelerated layers. See DspCrossNavBar.populate(), which sets that layer type.
+     * The sidebar's active-tile background: a bright, genuinely "lit" fill (the accent blue
+     * itself, not the muted navy used for selected pills/chips elsewhere -- against the sidebar's
+     * own dark background that muted tone read as barely different from unselected) with a
+     * blurred glow ring around the border so the tile visibly radiates rather than just having a
+     * crisp outline. Requires the host view to run on a software layer -- BlurMaskFilter has no
+     * hardware-accelerated path -- see the LAYER_TYPE_SOFTWARE call in DspCrossNavBar.populate().
      */
-    fun litTileDrawable(context: Context): Drawable = LitTileGlowDrawable(context)
+    fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
     // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
     // Mono Bass, Routing, Compressor) -- long side horizontal, like a physical fader cap, with
@@ -339,64 +342,43 @@ object BmwDashboardSkin {
         override fun getConstantState(): ConstantState = constantState
     }
 
-    private class LitTileGlowDrawable(private val context: Context) : Drawable() {
-        private val cornerRadius = dp(context, 6).toFloat()
+    /**
+     * The sidebar's selected-tile background: bright accent fill, plus a blurred glow ring drawn
+     * behind a crisp bright stroke so the border visibly radiates instead of just being outlined.
+     */
+    private class IlluminatedTileDrawable(context: Context) : Drawable() {
+        private val corner = dp(context, 6).toFloat()
         private val strokeWidthPx = dp(context, 2).toFloat()
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = LIGHT_BLUE
             style = Paint.Style.FILL
-            // Same neutral fill DspCrossNavBar.populate() uses for every tile, selected or not --
-            // the glow/border are what set this tile apart, not a different background color.
-            color = Color.argb(110, 12, 16, 21)
         }
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
             color = LIGHT_BLUE_BRIGHT
-            alpha = 150
-            maskFilter = BlurMaskFilter(dp(context, 6).toFloat(), BlurMaskFilter.Blur.NORMAL)
-        }
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = strokeWidthPx
+            maskFilter = BlurMaskFilter(dp(context, 5).toFloat(), BlurMaskFilter.Blur.NORMAL)
+        }
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = LIGHT_BLUE_BRIGHT
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
         }
 
         override fun draw(canvas: Canvas) {
-            val b = bounds
-            canvas.drawRoundRect(RectF(b), cornerRadius, cornerRadius, fillPaint)
+            val fillRect = RectF(bounds)
+            canvas.drawRoundRect(fillRect, corner, corner, fillPaint)
 
-            // Glow: a soft blurred blob confined to the bottom ~45% of the tile, as if a light
-            // source sits just beneath it. Kept inside the tile's own bounds rather than
-            // overflowing past them, since the sidebar's LinearLayout clips its children.
-            val inset = dp(context, 3).toFloat()
-            val glowTop = b.top + b.height() * 0.55f
-            canvas.drawRoundRect(
-                RectF(b.left + inset, glowTop, b.right - inset, b.bottom - inset),
-                cornerRadius, cornerRadius, glowPaint,
-            )
-
-            val strokeInset = strokeWidthPx / 2f
-            canvas.drawRoundRect(
-                RectF(
-                    b.left + strokeInset, b.top + strokeInset,
-                    b.right - strokeInset, b.bottom - strokeInset,
-                ),
-                cornerRadius, cornerRadius, strokePaint,
-            )
+            val strokeRect = RectF(bounds).apply {
+                inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
+            }
+            canvas.drawRoundRect(strokeRect, corner, corner, glowPaint)
+            canvas.drawRoundRect(strokeRect, corner, corner, strokePaint)
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-
-        // Same reasoning as BrushedThumbDrawable above: no ConstantState by default, and while
-        // a plain View background doesn't strictly need one, MaterialButton's internal handling
-        // can still query it -- cheap to provide, so we do.
-        private val constantState = object : ConstantState() {
-            override fun newDrawable(): Drawable = LitTileGlowDrawable(context)
-            override fun getChangingConfigurations(): Int = 0
-        }
-
-        override fun getConstantState(): ConstantState = constantState
     }
 }
