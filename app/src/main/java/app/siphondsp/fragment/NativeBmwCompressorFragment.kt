@@ -104,6 +104,7 @@ class NativeBmwCompressorFragment : Fragment() {
             DspPager.build(requireContext(), listOf(lowPage, midPage)) { position ->
                 selectedBand = if (position == 0) Band.LOW else Band.MID
                 grTrace.reset()
+                visualizer.resetHistory()
                 refreshHeader()
             },
         )
@@ -143,6 +144,7 @@ class NativeBmwCompressorFragment : Fragment() {
         bindBandFromState(Band.MID)
         refreshHeader()
         grTrace.reset()
+        visualizer.resetHistory()
         handler.post(meterTick)
     }
 
