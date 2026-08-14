@@ -258,7 +258,14 @@ class CrossoverDashboardBuilder(
                 suffix,
             ) { entered ->
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
-                val stored = (parsed / displayScale).coerceIn(min, max)
+                // Material Slider requires its value to land on a stepSize-aligned multiple of
+                // valueFrom, or `slider.value = stored` below throws IllegalStateException.
+                // Snap to the nearest step before storing/assigning rather than the raw typed
+                // value, which is very unlikely to happen to already be aligned (eg. any
+                // 2-decimal routing percentage against a .01f step is fine, but most other
+                // fields have a coarser step than what a user can type).
+                val raw = (parsed / displayScale).coerceIn(min, max)
+                val stored = (min + ((raw - min) / step).roundToInt() * step).coerceIn(min, max)
                 values[index] = stored
                 mirrorIndices.forEach { values[it] = stored }
                 slider.value = stored
