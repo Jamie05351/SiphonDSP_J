@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
@@ -20,11 +21,27 @@ import kotlin.math.roundToInt
  * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
  */
 class CrossoverTiltFragment : Fragment() {
+    private lateinit var container: FrameLayout
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
+        this.container = FrameLayout(requireContext())
+        rebuild()
+        return this.container
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // NativeBmwDspValues is loaded once into a local array and captured by closures below;
+        // rebuild from disk on every resume so edits made elsewhere aren't silently overwritten
+        // by this screen's stale snapshot the next time a slider here is touched.
+        if (::container.isInitialized) rebuild()
+    }
+
+    private fun rebuild() {
         val values = NativeBmwDspValues.load(requireContext())
         val onChanged: (FloatArray) -> Unit = { updated ->
             NativeBmwDspValues.save(requireContext(), updated)
@@ -151,7 +168,11 @@ class CrossoverTiltFragment : Fragment() {
             }
         }
 
-        return DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage))
+        container.removeAllViews()
+        container.addView(
+            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage)),
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
