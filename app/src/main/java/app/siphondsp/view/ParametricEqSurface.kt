@@ -776,8 +776,13 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun drawCrossoverShading(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         val values = systemValues
         if (values[1] >= .5f || values[2] >= .5f) return
-        val lowFreq = values[15].toDouble().coerceIn(20.0, maximumFrequency)
-        val midFreq = values[18].toDouble().coerceIn(20.0, maximumFrequency)
+        // Read the live per-output crossover fields rather than the legacy scalar indices --
+        // those are only kept mirrored by the UI's write path, so reading them directly here
+        // stays correct even if a future write path updates the per-output block only.
+        val lowFreq = values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)]
+            .toDouble().coerceIn(20.0, maximumFrequency)
+        val midFreq = values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)]
+            .toDouble().coerceIn(20.0, maximumFrequency)
         if (midFreq <= lowFreq) return
         canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, crossoverShadePaint)
     }
@@ -852,7 +857,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawSumCurve(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid, ::yForGain)
+        if (channelDisplay != ChannelDisplay.RIGHT) {
+            drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid, ::yForGain)
+        }
         if (channelDisplay != ChannelDisplay.LEFT) {
             drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed, ::yForGain)
         }
@@ -867,7 +874,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun drawPhaseCurves(canvas: Canvas, left: Float, right: Float) {
         drawSystemCurve(canvas, curves.lowBranchPhase, left, right, lowBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
         drawSystemCurve(canvas, curves.midBranchPhase, left, right, midBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
-        drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid) { yForPhaseDeg(Math.toDegrees(it)) }
+        if (channelDisplay != ChannelDisplay.RIGHT) {
+            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid) { yForPhaseDeg(Math.toDegrees(it)) }
+        }
         if (channelDisplay != ChannelDisplay.LEFT) {
             drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed) { yForPhaseDeg(Math.toDegrees(it)) }
         }
