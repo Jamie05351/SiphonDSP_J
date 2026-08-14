@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
@@ -19,11 +20,27 @@ import kotlin.math.roundToInt
  * scrolling panel used to have, so nothing about the content changed, only how it's paged.
  */
 class GainLimiterFragment : Fragment() {
+    private lateinit var container: FrameLayout
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
+        this.container = FrameLayout(requireContext())
+        rebuild()
+        return this.container
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // NativeBmwDspValues is loaded once into a local array and captured by closures below;
+        // rebuild from disk on every resume so edits made elsewhere aren't silently overwritten
+        // by this screen's stale snapshot the next time a slider here is touched.
+        if (::container.isInitialized) rebuild()
+    }
+
+    private fun rebuild() {
         val values = NativeBmwDspValues.load(requireContext())
         val onChanged: (FloatArray) -> Unit = { updated ->
             NativeBmwDspValues.save(requireContext(), updated)
@@ -74,7 +91,11 @@ class GainLimiterFragment : Fragment() {
             }
         }
 
-        return DspPager.build(requireContext(), listOf(gainStructurePage, delayPolarityPage))
+        container.removeAllViews()
+        container.addView(
+            DspPager.build(requireContext(), listOf(gainStructurePage, delayPolarityPage)),
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()

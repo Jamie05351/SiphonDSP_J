@@ -19,7 +19,24 @@ import com.google.android.material.button.MaterialButton
 import kotlin.math.roundToInt
 
 class RoutingFragment : Fragment() {
+    private lateinit var scrollView: NestedScrollView
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        scrollView = NestedScrollView(requireContext()).apply { isFillViewport = true }
+        rebuild()
+        return scrollView
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // NativeBmwDspValues is loaded once into a local array and captured by closures below;
+        // rebuild from disk on every resume so edits made elsewhere (Output all-pass, a restored
+        // preset/profile/backup) aren't silently overwritten by this screen's stale snapshot the
+        // next time a slider here is touched.
+        if (::scrollView.isInitialized) rebuild()
+    }
+
+    private fun rebuild() {
         val values = NativeBmwDspValues.load(requireContext())
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -44,6 +61,7 @@ class RoutingFragment : Fragment() {
                     startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java).apply {
                         putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
                     })
+                    activity?.finish()
                 }
             }, topMarginDp = 0, bottomMarginDp = 4)
         }
@@ -57,10 +75,8 @@ class RoutingFragment : Fragment() {
             addSliderRow("Input L → Mid Right", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT, -2f, 2f, .01f, "%", 100f)
             addSliderRow("Input R → Mid Right", NativeBmwDspValues.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT, -2f, 2f, .01f, "%", 100f)
         }
-        return NestedScrollView(requireContext()).apply {
-            isFillViewport = true
-            addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
+        scrollView.removeAllViews()
+        scrollView.addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
