@@ -108,7 +108,11 @@ data class BmwPeqState(
 
         fun empty() = BmwPeqState(false, 0f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
 
-        fun load(context: Context): BmwPeqState {
+        // PEQ has no enable/disable control anymore -- it's always live -- so every load() result
+        // is coerced on regardless of what's actually persisted (legacy data, migrations, etc.).
+        fun load(context: Context): BmwPeqState = loadStored(context).copy(enabled = true)
+
+        private fun loadStored(context: Context): BmwPeqState {
             val result = store(context).load()
             result.state?.let { restored ->
                 if (result.source == BmwPeqStore.Source.LEGACY_V1_PRIMARY ||

@@ -10,21 +10,16 @@ import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
-import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.MenuHost
-import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.material.materialswitch.MaterialSwitch
 import app.siphondsp.R
 import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
@@ -76,7 +71,6 @@ class ParametricEqualizerFragment : Fragment() {
         }
 
     private fun refreshActionChips() {
-        if (isAdded) activity?.invalidateMenu() // keeps the toolbar enable switch synced, see onPrepareMenu()
         binding.chipUndo?.isEnabled = !editorActive && history.canUndo
         binding.chipRedo?.isEnabled = !editorActive && history.canRedo
         binding.chipReset?.isEnabled = !editorActive
@@ -421,7 +415,6 @@ class ParametricEqualizerFragment : Fragment() {
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
         configureGraph()
-        configureProductionTools()
         configureActionChips()
         loadBands(savedInstanceState)
         binding.peqScopeGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -727,46 +720,6 @@ class ParametricEqualizerFragment : Fragment() {
         setFilterTypeSelection(band.filterType)
         setChannelSelection(band.channel)
         updateViewState()
-    }
-
-    /** Sets up the toolbar's enable switch -- the only remaining toolbar menu item, everything
-     *  else lives in the horizontally-scrolling action-chip row (see configureActionChips()). */
-    private fun configureProductionTools() {
-        val menuHost = requireActivity() as MenuHost
-        var bindingEnableSwitch = false
-        menuHost.addMenuProvider(
-            object : MenuProvider {
-                override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                    menuInflater.inflate(R.menu.menu_parametric_eq, menu)
-                    val enableSwitch = menu.findItem(R.id.menu_peq_enable)?.actionView as? MaterialSwitch
-                    enableSwitch?.setOnCheckedChangeListener { _, checked ->
-                        if (bindingEnableSwitch) return@setOnCheckedChangeListener
-                        val current = BmwPeqState.load(requireContext())
-                        val candidate = current.copy(enabled = checked)
-                        val applied = RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
-                        val saved = applied || candidate.persist(requireContext())
-                        Timber.i(
-                            "PEQ enabled change (toolbar) enabled=${candidate.enabled} " +
-                                "nativeApply=$applied saved=$saved"
-                        )
-                    }
-                }
-
-                override fun onPrepareMenu(menu: Menu) {
-                    val enableSwitch = menu.findItem(R.id.menu_peq_enable)?.actionView as? MaterialSwitch
-                    val currentlyEnabled = BmwPeqState.load(requireContext()).enabled
-                    if (enableSwitch != null && enableSwitch.isChecked != currentlyEnabled) {
-                        bindingEnableSwitch = true
-                        enableSwitch.isChecked = currentlyEnabled
-                        bindingEnableSwitch = false
-                    }
-                }
-
-                override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
-            },
-            viewLifecycleOwner,
-            Lifecycle.State.RESUMED,
-        )
     }
 
     /** Restores the pre-redesign horizontally-scrolling action-chip row (same row as the
@@ -1199,10 +1152,14 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun applyCandidate(
-        candidate: BmwPeqState,
+        rawCandidate: BmwPeqState,
         source: String,
         recordHistory: Boolean = true,
     ): Boolean {
+        // PEQ has no enable/disable control anymore -- it's always live -- so every candidate
+        // funnelled through here (band edits, preset import, backup restore, etc.) is coerced on
+        // regardless of what an imported preset or legacy persisted state happened to carry.
+        val candidate = rawCandidate.copy(enabled = true)
         // When the service isn't running, validate against the lowest sample rate it can ever
         // open the recorder at (RootlessAudioProcessorService clamps to 44100-48000Hz), not the
         // usual 48kHz assumption. Otherwise a near-Nyquist band can pass validation here, get
