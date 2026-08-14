@@ -8,13 +8,13 @@ import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
-import androidx.preference.SeekBarPreference
 import androidx.preference.SwitchPreferenceCompat
 import androidx.preference.children
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.preference.MaterialSeekbarPreference
 
 /** Inline, expandable controls for the native BMW processor. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
@@ -95,8 +95,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             }] = when {
                 key.endsWith("enabled") -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
                 key.endsWith("order") -> menuPreferences.getString(key, "2")?.toFloatOrNull() ?: 2f
-                key.endsWith("frequency") -> menuPreferences.getInt(key, 150).toFloat()
-                else -> menuPreferences.getInt(key, 71) / 100f
+                key.endsWith("frequency") -> menuPreferences.getFloat(key, 150f)
+                else -> menuPreferences.getFloat(key, 0.71f)
             }
             NativeBmwDspValues.save(requireContext(), values)
             NativeBmwDspValues.broadcast(requireContext(), values)
@@ -140,13 +140,13 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             val prefix = "allpass_${section + 1}_"
             val enabled = values[base] >= .5f
             val order = values[base + 1].toInt().toString()
-            val frequency = values[base + 2].toInt()
-            val q = (values[base + 3] * 100f).toInt()
+            val frequency = values[base + 2]
+            val q = values[base + 3]
 
             editor.putBoolean(prefix + "enabled", enabled)
             editor.putString(prefix + "order", order)
-            editor.putInt(prefix + "frequency", frequency)
-            editor.putInt(prefix + "q", q)
+            editor.putFloat(prefix + "frequency", frequency)
+            editor.putFloat(prefix + "q", q)
 
             // editor.apply() alone doesn't refresh already-bound widgets -- a Preference only
             // reads its persisted value once, at first bind. Without also setting these
@@ -155,8 +155,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             // are (and always were) being saved/loaded underneath.
             findPreference<SwitchPreferenceCompat>(prefix + "enabled")?.isChecked = enabled
             findPreference<ListPreference>(prefix + "order")?.value = order
-            findPreference<SeekBarPreference>(prefix + "frequency")?.value = frequency
-            findPreference<SeekBarPreference>(prefix + "q")?.value = q
+            findPreference<MaterialSeekbarPreference>(prefix + "frequency")?.setValue(frequency)
+            findPreference<MaterialSeekbarPreference>(prefix + "q")?.setValue(q)
         }
         editor.apply()
         updatingMenu = false

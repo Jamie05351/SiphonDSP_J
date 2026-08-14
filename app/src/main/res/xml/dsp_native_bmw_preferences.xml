@@ -10,11 +10,11 @@
 <ListPreference android:key="allpass_output" android:title="Output channel" android:entries="@array/bmw_output_channel_entries" android:entryValues="@array/bmw_output_channel_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 <SwitchPreferenceCompat android:key="allpass_1_enabled" android:title="Section 1" app:iconSpaceReserved="false"/>
 <ListPreference android:key="allpass_1_order" android:title="Section 1 type" android:entries="@array/bmw_allpass_type_entries" android:entryValues="@array/bmw_allpass_type_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="allpass_1_frequency" android:title="Section 1 frequency (Hz)" app:min="20" android:max="20000" android:defaultValue="150" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="allpass_1_q" android:title="Section 1 Q × 100" app:min="10" android:max="3000" android:defaultValue="71" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="allpass_1_frequency" android:title="Section 1 frequency" android:defaultValue="150" app:minValue="20" app:maxValue="20000" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="allpass_1_q" android:title="Section 1 Q" android:defaultValue="0.71" app:minValue="0.1" app:maxValue="30" app:precision="2" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 <SwitchPreferenceCompat android:key="allpass_2_enabled" android:title="Section 2" app:iconSpaceReserved="false"/>
 <ListPreference android:key="allpass_2_order" android:title="Section 2 type" android:entries="@array/bmw_allpass_type_entries" android:entryValues="@array/bmw_allpass_type_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="allpass_2_frequency" android:title="Section 2 frequency (Hz)" app:min="20" android:max="20000" android:defaultValue="150" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
-<SeekBarPreference android:key="allpass_2_q" android:title="Section 2 Q × 100" app:min="10" android:max="3000" android:defaultValue="71" app:showSeekBarValue="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="allpass_2_frequency" android:title="Section 2 frequency" android:defaultValue="150" app:minValue="20" app:maxValue="20000" app:precision="0" app:unit="Hz" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="allpass_2_q" android:title="Section 2 Q" android:defaultValue="0.71" app:minValue="0.1" app:maxValue="30" app:precision="2" app:showSeekBarValue="true" app:updatesContinuously="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
 </PreferenceScreen>
