@@ -142,7 +142,9 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
                 } else {
                     val parsed = match.groupValues[1].toDoubleOrNull()
                     if (parsed == null || !parsed.isFinite()) skipped++
-                    else preampDb = parsed.coerceIn(-30.0, 0.0)
+                    // Match BmwPeqState.validate()'s actual allowed range, not just the AutoEq
+                    // convention's typical negative-only preamp values.
+                    else preampDb = parsed.coerceIn(-30.0, 12.0)
                 }
                 continue
             }
