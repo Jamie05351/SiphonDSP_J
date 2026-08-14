@@ -204,6 +204,16 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
  if(p_.channelMute==1)oL=0;if(p_.channelMute==2)oR=0;
  oL=ftz(oL);oR=ftz(oR);
  processLimiter(oL,oR);
+ // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
+ // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
+ // at the amp/speaker connectors, not something this DSP can see or control). This swap
+ // cancels that physical fault: oL (built from the LowLeft/MidLeft chain) is written to
+ // output param r, and oR (LowRight/MidRight) to output param l. Because of this, every
+ // "Left"/"Right"-labeled control elsewhere in the app (gains, routing, delay, PEQ, and the
+ // BmwSignalChain preview-graph mapping) is correct as a direct, unswapped index -- they all
+ // rely on this line already correcting the physical fault. If a future review flags this as
+ // "controls wired backwards", the bug is almost certainly elsewhere; do not add a
+ // compensating swap here or anywhere downstream in response to that.
  l=oR;r=oL;
 }
 
