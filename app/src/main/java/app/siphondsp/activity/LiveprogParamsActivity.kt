@@ -40,8 +40,7 @@ class LiveprogParamsActivity : BaseActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_reset -> {
-                val fragment = supportFragmentManager.findFragmentById(R.id.params) as LiveprogParamsFragment
-                fragment.restoreDefaults()
+                (supportFragmentManager.findFragmentById(R.id.params) as? LiveprogParamsFragment)?.restoreDefaults()
                 true
             }
             else -> super.onOptionsItemSelected(item)

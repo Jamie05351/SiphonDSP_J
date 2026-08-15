@@ -75,7 +75,7 @@ class AppsListAdapter: RecyclerView.Adapter<AppsListAdapter.ViewHolder>(), Filte
         return object : Filter() {
             override fun performFiltering(constraint: CharSequence?): FilterResults {
                 val charString = constraint?.toString() ?: ""
-                filteredDataList =
+                val result =
                     if (charString.isEmpty())
                         dataList
                     else {
@@ -87,7 +87,7 @@ class AppsListAdapter: RecyclerView.Adapter<AppsListAdapter.ViewHolder>(), Filte
                             .forEach { filteredList.add(it) }
                         filteredList
                     }
-                return FilterResults().apply { values = filteredDataList }
+                return FilterResults().apply { values = result }
             }
 
             @SuppressLint("NotifyDataSetChanged")

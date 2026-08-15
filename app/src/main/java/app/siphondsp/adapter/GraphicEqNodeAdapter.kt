@@ -16,7 +16,7 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.*
 
-class GraphicEqNodeAdapter(var nodes: GraphicEqNodeList) :
+class GraphicEqNodeAdapter(val nodes: GraphicEqNodeList) :
     RecyclerView.Adapter<GraphicEqNodeAdapter.ViewHolder>() {
 
     private val df = DecimalFormat("0", DecimalFormatSymbols.getInstance())
