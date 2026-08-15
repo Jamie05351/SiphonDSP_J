@@ -1,5 +1,6 @@
 package app.siphondsp.view
 
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -50,8 +51,11 @@ object CompressorGraphMath {
     /**
      * Threshold is checked first (largest radius, matches prior behavior exactly), then knee
      * (smaller radius, so it can only claim area that used to fall through to "ratio anywhere"),
-     * then ratio as the catch-all -- this ordering guarantees no regression to the existing
-     * threshold-drag hit test.
+     * then ratio -- but only within [curveRadiusPx] of the curve itself, not anywhere on the
+     * graph. Returns null when the touch is far from all three (empty graph space), so the
+     * caller can decline the gesture instead of always consuming it -- otherwise the view's
+     * touch handling permanently blocks a parent ViewPager2 from ever seeing a swipe that starts
+     * on the graph, even in blank areas nowhere near any control.
      */
     fun pickDragMode(
         touchX: Float,
@@ -60,12 +64,15 @@ object CompressorGraphMath {
         thresholdY: Float,
         kneeX: Float,
         kneeY: Float,
+        curveY: Float,
         thresholdRadiusPx: Float,
         kneeRadiusPx: Float,
-    ): DragMode {
+        curveRadiusPx: Float,
+    ): DragMode? {
         if (hypot(touchX - thresholdX, touchY - thresholdY) < thresholdRadiusPx) return DragMode.THRESHOLD
         if (hypot(touchX - kneeX, touchY - kneeY) < kneeRadiusPx) return DragMode.KNEE
-        return DragMode.RATIO
+        if (abs(touchY - curveY) < curveRadiusPx) return DragMode.RATIO
+        return null
     }
 
     /** Dragged input position determines knee half-width; quantized to 1dB, matching the knee slider's step. */

@@ -75,7 +75,8 @@ class CompressorGraphMathTest {
             touchX = 100f, touchY = 100f,
             thresholdX = 100f, thresholdY = 100f,
             kneeX = 105f, kneeY = 105f,
-            thresholdRadiusPx = 34f, kneeRadiusPx = 26f,
+            curveY = 100f,
+            thresholdRadiusPx = 34f, kneeRadiusPx = 26f, curveRadiusPx = 24f,
         )
         assertEquals(CompressorGraphMath.DragMode.THRESHOLD, mode)
     }
@@ -86,20 +87,34 @@ class CompressorGraphMathTest {
             touchX = 200f, touchY = 200f,
             thresholdX = 100f, thresholdY = 100f,
             kneeX = 205f, kneeY = 205f,
-            thresholdRadiusPx = 34f, kneeRadiusPx = 26f,
+            curveY = 200f,
+            thresholdRadiusPx = 34f, kneeRadiusPx = 26f, curveRadiusPx = 24f,
         )
         assertEquals(CompressorGraphMath.DragMode.KNEE, mode)
     }
 
     @Test
-    fun pickDragModeFallsThroughToRatioWhenNeitherHandleIsClose() {
+    fun pickDragModeFallsThroughToRatioWhenNearTheCurve() {
         val mode = CompressorGraphMath.pickDragMode(
             touchX = 500f, touchY = 500f,
             thresholdX = 100f, thresholdY = 100f,
             kneeX = 150f, kneeY = 150f,
-            thresholdRadiusPx = 34f, kneeRadiusPx = 26f,
+            curveY = 510f,
+            thresholdRadiusPx = 34f, kneeRadiusPx = 26f, curveRadiusPx = 24f,
         )
         assertEquals(CompressorGraphMath.DragMode.RATIO, mode)
+    }
+
+    @Test
+    fun pickDragModeReturnsNullOnEmptyGraphSpace() {
+        val mode = CompressorGraphMath.pickDragMode(
+            touchX = 500f, touchY = 500f,
+            thresholdX = 100f, thresholdY = 100f,
+            kneeX = 150f, kneeY = 150f,
+            curveY = 50f,
+            thresholdRadiusPx = 34f, kneeRadiusPx = 26f, curveRadiusPx = 24f,
+        )
+        assertEquals(null, mode)
     }
 
     @Test

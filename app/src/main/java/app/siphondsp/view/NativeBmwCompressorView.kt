@@ -20,6 +20,11 @@ import kotlin.math.roundToInt
  * adjust ratio. The knee handle -- where the soft-knee curve meets the straight
  * ratio segment -- drags horizontally to widen/narrow the knee. The glowing
  * trace is native detector/output telemetry.
+ *
+ * A touch only starts a drag when it lands on the threshold handle, the knee handle, or within
+ * [curveHitRadiusPx] of the curve itself -- empty graph space (away from all three) declines the
+ * gesture instead, so a parent ViewPager2 can still treat a swipe starting there as a page change
+ * rather than the view unconditionally claiming every touch across its whole surface.
  */
 class NativeBmwCompressorView @JvmOverloads constructor(
     context: Context,
@@ -50,6 +55,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private val padBottom = 24f * density
     private val thresholdHitRadiusPx = 34f * density
     private val kneeHitRadiusPx = 26f * density
+    private val curveHitRadiusPx = 28f * density
     private var meterInputDb = -60f
     private var meterOutputDb = -60f
     private var gainReductionDb = 0f
@@ -199,13 +205,21 @@ class NativeBmwCompressorView @JvmOverloads constructor(
         val thresholdY = y(outputFor(thresholdDb).coerceIn(minDb, maxDb))
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                parent?.requestDisallowInterceptTouchEvent(true)
+                val curveY = y(outputFor(dbAtX(event.x)).coerceIn(minDb, maxDb))
                 dragMode = CompressorGraphMath.pickDragMode(
                     event.x, event.y,
                     thresholdX, thresholdY,
                     kneeHandleX(), kneeHandleY(),
-                    thresholdHitRadiusPx, kneeHitRadiusPx,
+                    curveY,
+                    thresholdHitRadiusPx, kneeHitRadiusPx, curveHitRadiusPx,
                 )
+                // Only claim the gesture (blocking a parent ViewPager2 from ever treating it as a
+                // swipe) when the touch actually landed on something interactive. Empty graph
+                // space stays swipeable: returning true below doesn't itself prevent the parent
+                // from intercepting a later ACTION_MOVE for paging -- only
+                // requestDisallowInterceptTouchEvent does, so simply not calling it here is
+                // enough to let a swipe starting on blank graph area reach the pager.
+                if (dragMode != null) parent?.requestDisallowInterceptTouchEvent(true)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -223,7 +237,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
                             onKneeChanged?.invoke(value)
                         }
                     }
-                    CompressorGraphMath.DragMode.RATIO, null -> {
+                    CompressorGraphMath.DragMode.RATIO -> {
                         val input = dbAtX(event.x).coerceIn(thresholdDb + 1f, maxDb)
                         val output = (dbAtY(event.y) - makeupDb).coerceAtLeast(thresholdDb + .05f)
                         val snapped = CompressorGraphMath.ratioFromDrag(input, output, thresholdDb)
@@ -232,6 +246,7 @@ class NativeBmwCompressorView @JvmOverloads constructor(
                             onRatioChanged?.invoke(snapped)
                         }
                     }
+                    null -> Unit // touch started on empty graph space; nothing to drag
                 }
                 return true
             }
