@@ -73,6 +73,23 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             writeAllPassToMenu(NativeBmwDspValues.load(requireContext()))
             return
         }
+        if (key in MUTE_KEYS) {
+            val values = NativeBmwDspValues.load(requireContext())
+            val muted = menuPreferences.getBoolean(key, false)
+            val muteValue = if (muted) 1f else 0f
+            if (key == "bmw_mute_low_band") {
+                values[NativeBmwDspValues.INDEX_LOW_MUTE] = muteValue
+                values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
+                values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
+            } else {
+                values[NativeBmwDspValues.INDEX_MID_MUTE] = muteValue
+                values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
+                values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
+            }
+            NativeBmwDspValues.save(requireContext(), values)
+            NativeBmwDspValues.broadcast(requireContext(), values)
+            return
+        }
         if (key in ALL_PASS_KEYS) {
             val values = NativeBmwDspValues.load(requireContext())
             val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
@@ -115,6 +132,8 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
                 else -> editor.putFloat(key, values[index])
             }
         }
+        editor.putBoolean("bmw_mute_low_band", values[NativeBmwDspValues.INDEX_LOW_MUTE] >= .5f)
+        editor.putBoolean("bmw_mute_mid_band", values[NativeBmwDspValues.INDEX_MID_MUTE] >= .5f)
         editor.apply()
         writeAllPassToMenu(values)
         updatingMenu = false
@@ -185,6 +204,7 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             "bmw_channel_isolation" to 3,
             "bmw_measurement_mute" to 4,
         )
+        private val MUTE_KEYS = setOf("bmw_mute_low_band", "bmw_mute_mid_band")
         private val ALL_PASS_KEYS = setOf(
             "allpass_1_enabled", "allpass_1_order", "allpass_1_frequency", "allpass_1_q",
             "allpass_2_enabled", "allpass_2_order", "allpass_2_frequency", "allpass_2_q",

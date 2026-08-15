@@ -3,6 +3,8 @@
 <PreferenceCategory android:title="Measurements / routing" app:iconSpaceReserved="false">
 <SwitchPreferenceCompat android:key="bmw_lpf_passthrough" android:title="LPF passthrough" app:iconSpaceReserved="false"/>
 <SwitchPreferenceCompat android:key="bmw_hpf_passthrough" android:title="HPF passthrough" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_mute_low_band" android:title="Mute low band" app:iconSpaceReserved="false"/>
+<SwitchPreferenceCompat android:key="bmw_mute_mid_band" android:title="Mute mid band" app:iconSpaceReserved="false"/>
 <ListPreference android:key="bmw_channel_isolation" android:title="Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 <ListPreference android:key="bmw_measurement_mute" android:title="Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
