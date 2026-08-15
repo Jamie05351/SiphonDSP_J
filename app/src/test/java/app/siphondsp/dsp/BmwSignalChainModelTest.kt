@@ -158,15 +158,17 @@ class BmwSignalChainModelTest {
     fun independentLowCrossoversAffectOnlyTheirPhysicalOutput() {
         val baseline = compute(baseValues())
         val changed = compute(baseValues().also {
-            // Physical LEFT is fed by native LowRight after the final native L/R swap.
+            // Native's final l=oR;r=oL swap cancels the vehicle's physically-reversed wiring
+            // harness, so OUTPUT_LOW_RIGHT maps directly (unswapped) to physical RIGHT -- see
+            // BmwSignalChain.kt's BmwOutputChannel doc comment.
             setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ, 90f)
         })
         val i = nearestIndex(120.0)
 
-        assertTrue(abs(changed.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i]) > 0.5)
+        assertTrue(abs(changed.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i] - baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i]) > 0.5)
         assertEquals(
-            baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
-            changed.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+            changed.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             1e-6,
         )
     }
@@ -207,7 +209,7 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun leftTaggedFullRangeBandLandsOnPhysicalRightOutput() {
+    fun leftTaggedFullRangeBandLandsOnPhysicalLeftOutput() {
         val baseline = compute(baseValues())
         val filtered = compute(
             baseValues(),
@@ -215,8 +217,10 @@ class BmwSignalChainModelTest {
         )
         val i = nearestIndex(1_000.0)
 
-        assertEquals(0.0, filtered.sumDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][i], 1e-6)
-        assertTrue(abs(filtered.sumDb[BmwOutputChannel.RIGHT.ordinal][i] - baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][i]) > 6.0)
+        // A LEFT-tagged band matches BmwOutputChannel.LEFT directly (no swap) -- see
+        // BmwSignalChain.bandAppliesTo and its BmwOutputChannel doc comment.
+        assertTrue(abs(filtered.sumDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][i]) > 6.0)
+        assertEquals(0.0, filtered.sumDb[BmwOutputChannel.RIGHT.ordinal][i] - baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][i], 1e-6)
     }
 
     @Test
@@ -236,27 +240,32 @@ class BmwSignalChainModelTest {
             setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT, 1f)
         })
 
-        for (i in baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal].indices) {
+        // OUTPUT_LOW_RIGHT maps directly (unswapped) to physical RIGHT -- see
+        // BmwSignalChain.kt's BmwOutputChannel doc comment.
+        for (i in baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal].indices) {
             assertEquals(
-                baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
-                inverted.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+                baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+                inverted.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
                 1e-6,
             )
             assertEquals(
-                baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][i],
-                inverted.sumDb[BmwOutputChannel.RIGHT.ordinal][i],
+                baseline.sumDb[BmwOutputChannel.LEFT.ordinal][i],
+                inverted.sumDb[BmwOutputChannel.LEFT.ordinal][i],
                 1e-6,
             )
         }
         val region = nearestIndex(50.0)..nearestIndex(500.0)
         val maxDelta = region.maxOf {
-            abs(inverted.sumDb[BmwOutputChannel.LEFT.ordinal][it] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][it])
+            abs(inverted.sumDb[BmwOutputChannel.RIGHT.ordinal][it] - baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][it])
         }
-        assertTrue("expected LowRight inversion to change physical LEFT sum, max delta was $maxDelta", maxDelta > 0.5)
+        assertTrue("expected LowRight inversion to change physical RIGHT sum, max delta was $maxDelta", maxDelta > 0.5)
     }
 
     @Test
     fun lowOutputAllPassLeavesMagnitudeUnityButShiftsPhaseOnItsOwnPhysicalSideOnly() {
+        // Raw output ordinal 1 = LowRight (LowLeft=0, LowRight=1, MidLeft=2, MidRight=3), which
+        // maps directly (unswapped) to physical RIGHT -- see BmwSignalChain.kt's BmwOutputChannel
+        // doc comment.
         val allPassBase = NativeBmwDspValues.INDEX_ALL_PASS + (1 * 2 + 0) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
         val baseline = compute(baseValues())
         val withAllPass = compute(
@@ -270,21 +279,21 @@ class BmwSignalChainModelTest {
         val i = nearestIndex(140.0)
 
         assertEquals(
-            baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
-            withAllPass.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+            baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            withAllPass.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
             1e-4,
         )
         assertEquals(
-            baseline.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
-            withAllPass.lowBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+            withAllPass.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             1e-6,
         )
         assertEquals(
-            baseline.midBranchDb[BmwOutputChannel.LEFT.ordinal][i],
-            withAllPass.midBranchDb[BmwOutputChannel.LEFT.ordinal][i],
+            baseline.midBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
+            withAllPass.midBranchDb[BmwOutputChannel.RIGHT.ordinal][i],
             1e-6,
         )
-        val delta = withAllPass.sumDb[BmwOutputChannel.LEFT.ordinal][i] - baseline.sumDb[BmwOutputChannel.LEFT.ordinal][i]
+        val delta = withAllPass.sumDb[BmwOutputChannel.RIGHT.ordinal][i] - baseline.sumDb[BmwOutputChannel.RIGHT.ordinal][i]
         assertTrue("expected sum to change at the crossover overlap, delta was $delta", abs(delta) > 0.05)
     }
 
