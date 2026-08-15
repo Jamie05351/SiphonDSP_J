@@ -141,7 +141,7 @@ jobs:
           unzip -l "$APK" | grep -E 'lib/[^/]+/.*\.so$'
 
       - name: Prepare private APK
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
         shell: bash
         run: |
           set -euo pipefail
@@ -158,7 +158,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload private APK
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: SiphonDSP-private-${{ github.sha }}
