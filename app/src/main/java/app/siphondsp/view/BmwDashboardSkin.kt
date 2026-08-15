@@ -115,13 +115,7 @@ object BmwDashboardSkin {
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {
         when (root) {
-            is MaterialCardView -> {
-                root.radius = dp(root.context, 7).toFloat()
-                root.cardElevation = 0f
-                root.strokeWidth = dp(root.context, 1)
-                root.strokeColor = inactiveStroke
-                root.setCardBackgroundColor(Color.argb(215, 18, 23, 29))
-            }
+            is MaterialCardView -> styleCard(root)
             is Slider -> styleSlider(root)
             is MaterialSwitch -> styleSwitch(root)
             is SwitchCompat -> styleSwitch(root)
@@ -134,9 +128,10 @@ object BmwDashboardSkin {
         }
     }
 
-    // Public so callers that build/inflate sliders onto pages ViewPager2 may not have attached
-    // yet (e.g. NativeBmwCompressorFragment's off-screen pager pages) can style them directly
-    // at creation time, instead of relying on styleTree's later recursive walk to reach them.
+    // Public so callers that build/inflate sliders, cards, or switches onto pages ViewPager2 may
+    // not have attached yet (e.g. NativeBmwCompressorFragment's off-screen pager pages) can style
+    // them directly at creation time, instead of relying on styleTree's later recursive walk to
+    // reach them.
     fun styleSlider(slider: Slider) {
         val context = slider.context
         slider.trackHeight = dp(context, 6)
@@ -148,7 +143,15 @@ object BmwDashboardSkin {
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
     }
 
-    private fun styleSwitch(toggle: SwitchCompat) {
+    fun styleCard(card: MaterialCardView) {
+        card.radius = dp(card.context, 7).toFloat()
+        card.cardElevation = 0f
+        card.strokeWidth = dp(card.context, 1)
+        card.strokeColor = inactiveStroke
+        card.setCardBackgroundColor(Color.argb(215, 18, 23, 29))
+    }
+
+    fun styleSwitch(toggle: SwitchCompat) {
         toggle.thumbTintList = checkedColours(LIGHT_BLUE, Color.rgb(170, 177, 184))
         toggle.trackTintList = checkedColours(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
     }
