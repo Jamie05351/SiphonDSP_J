@@ -132,6 +132,10 @@ jobs:
       - name: Build APKs
         run: ./gradlew "${{ env.GRADLE_TASK }}"
 
+      - name: Run Android unit tests and lint
+        if: github.event_name == 'pull_request'
+        run: ./gradlew :app:test${{ matrix.gradle_variant }}DebugUnitTest :app:lint${{ matrix.gradle_variant }}Preview
+
       - name: Verify native libraries are packaged
         shell: bash
         run: |
@@ -157,12 +161,15 @@ jobs:
           path: ${{ env.OUTPUT_DIR }}/*.apk
           if-no-files-found: error
 
-      - name: Upload private APK
+      - name: Upload private APK and reports
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: SiphonDSP-private-${{ github.sha }}
-          path: private-apk/*.apk
+          path: |
+            private-apk/*.apk
+            app/build/reports/tests/
+            app/build/reports/lint-results-*.html
           if-no-files-found: error
 
   release:
