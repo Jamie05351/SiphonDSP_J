@@ -1,82 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Visualizer/band-title/enable switch are a persistent, non-scrolling header (they're the
-     primary readout, not secondary controls); only the parameter sliders below page (see
-     compressor_slider_pager_container, filled at runtime by NativeBmwCompressorFragment with two
-     page_compressor_band.xml instances, one per band, via DspPager). Swiping the pager itself
-     moves between bands (there's no separate band selector control). -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- Each band's complete view (title, enable switch, visualizer, GR trace, meter, and all 6
+     parameter sliders) lives on its own page (page_compressor_band.xml), inflated twice by
+     NativeBmwCompressorFragment and paged via DspPager. Swiping moves the whole band view at
+     once, so there's a large non-slider touch area (the visualizer) to start the swipe from. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/compressor_slider_pager_container"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="18dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/compressor_band_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Low Band Dynamics"
-                android:textAppearance="?android:attr/textAppearanceLarge" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/compressor_enable"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="Compressor active" />
-        </LinearLayout>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <app.siphondsp.view.NativeBmwCompressorView
-                    android:id="@+id/compressor_visualizer"
-                    android:layout_width="match_parent"
-                    android:layout_height="300dp"
-                    android:contentDescription="Interactive compressor transfer curve and live gain reduction" />
-
-                <app.siphondsp.view.CompressorGrTraceView
-                    android:id="@+id/compressor_gr_trace"
-                    android:layout_width="match_parent"
-                    android:layout_height="120dp"
-                    android:contentDescription="Scrolling input level and gain reduction history" />
-
-                <TextView
-                    android:id="@+id/compressor_meter_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="14dp"
-                    android:text="Waiting for native audio…"
-                    android:textAlignment="center"
-                    android:textColor="?android:attr/textColorSecondary" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
-
-    <FrameLayout
-        android:id="@+id/compressor_slider_pager_container"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-</LinearLayout>
+    android:layout_height="match_parent" />
