@@ -123,7 +123,9 @@ class BmwPeqStateTest {
     fun coldStartWithNothingPersistedReturnsEmptyState() {
         val restored = BmwPeqState.load(context)
 
-        assertFalse(restored.enabled)
+        // load() always coerces enabled=true -- PEQ has no enable/disable control anymore,
+        // it's always live, regardless of what's actually persisted. See BmwPeqState.load().
+        assertTrue(restored.enabled)
         assertTrue(restored.fullRangeBands.isEmpty())
         assertTrue(restored.lowBandBands.isEmpty())
         assertTrue(restored.midBandBands.isEmpty())
