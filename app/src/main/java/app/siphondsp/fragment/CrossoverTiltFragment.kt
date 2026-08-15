@@ -64,7 +64,13 @@ class CrossoverTiltFragment : Fragment() {
             }
             CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).build()
             return NestedScrollView(requireContext()).apply {
-                isFillViewport = true
+                // Deliberately NOT isFillViewport=true: stretching a shorter-than-viewport page
+                // (eg. Tilt's 3 rows, Mono Bass's 4) to fill the remaining height corrupts
+                // LinearLayout's measure pass for addSegmentedSwitchRow's MATCH_PARENT control
+                // slot and addSliderRow's weighted spacer, silently dropping every row after the
+                // first slider that follows a switch (confirmed: their views ARE added to the
+                // tree, they just never get measured/laid out). Only pages whose natural content
+                // already exceeds the viewport (eg. Gain Structure's 5 sliders) were unaffected.
                 addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
         }
