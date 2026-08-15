@@ -10,6 +10,7 @@
 class IJavaObject {
 public:
     IJavaObject(JNIEnv* env) : _env(env) {};
+    virtual ~IJavaObject() = default;
     virtual bool isValid() const = 0;
     virtual jobject getJavaReference() = 0;
 

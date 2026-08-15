@@ -27,6 +27,8 @@ EelVmVariable::EelVmVariable(JNIEnv *env, const char *name, const char *value, b
     auto jName = _env->NewStringUTF(name);
     auto jValue = _env->NewStringUTF(value);
     innerObject = _env->NewObject(arrayClass, methodInit, jName, jValue, isString);
+    _env->DeleteLocalRef(jName);
+    _env->DeleteLocalRef(jValue);
 
     if (innerObject == nullptr)
     {
