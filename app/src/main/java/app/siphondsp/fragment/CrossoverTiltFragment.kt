@@ -15,9 +15,9 @@ import app.siphondsp.view.DspPager
 import kotlin.math.roundToInt
 
 /**
- * Dedicated Crossovers & Tilt screen using the shared BMW dashboard skin. Swipes between three
- * pages -- Crossovers, Tilt, and Mono Bass -- at the same section boundaries the single
- * scrolling panel used to have, so nothing about the content changed, only how it's paged.
+ * Dedicated Crossovers & Tilt screen using the shared BMW dashboard skin. Swipes between two
+ * pages -- Crossovers and Tilt -- at the same section boundaries the single scrolling panel used
+ * to have, so nothing about the content changed, only how it's paged.
  * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
  */
 class CrossoverTiltFragment : Fragment() {
@@ -143,34 +143,9 @@ class CrossoverTiltFragment : Fragment() {
             }
         }
 
-        val monoBassPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_mono_bass), "Sum low frequencies to mono below a crossover") {
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_mono_bass),
-                    null,
-                    NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_freq),
-                    NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
-                    40f, 120f, 1f, "Hz",
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_blend),
-                    NativeBmwDspValues.INDEX_MONO_BASS_BLEND,
-                    0f, 100f, 1f, "%",
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_makeup),
-                    NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP,
-                    -6f, 6f, .1f, "dB",
-                )
-            }
-        }
-
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage)),
+            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage)),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }
