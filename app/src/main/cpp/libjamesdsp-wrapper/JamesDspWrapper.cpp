@@ -122,7 +122,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv *env, jobject obj, jobje
     {
         LOGE("JamesDspWrapper::ctor: Failed to allocate memory for libjamesdsp class object");
         delete self;
-        return 1;
+        return 0;
     }
 
     JamesDSPGlobalMemoryAllocation();
@@ -135,7 +135,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_alloc(JNIEnv *env, jobject obj, jobje
         JamesDSPFree(_dsp);
         JamesDSPGlobalMemoryDeallocation();
         delete self;
-        return 2;
+        return 0;
     }
 
     self->dsp = _dsp;
@@ -749,7 +749,15 @@ void receiveLiveprogStdOut(const char *buffer, void* userData)
         return;
     }
 
-    self->env->CallVoidMethod(self->callbackInterface, self->callbackOnLiveprogOutput, self->env->NewStringUTF(buffer));
+    JNIEnv* env = self->env.operator->();
+    if(env == nullptr)
+    {
+        LOGE("JamesDspWrapper::receiveLiveprogStdOut: Failed to resolve JNIEnv for callback thread");
+        return;
+    }
+    jstring jbuffer = env->NewStringUTF(buffer);
+    env->CallVoidMethod(self->callbackInterface, self->callbackOnLiveprogOutput, jbuffer);
+    env->DeleteLocalRef(jbuffer);
 }
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *, void *)
