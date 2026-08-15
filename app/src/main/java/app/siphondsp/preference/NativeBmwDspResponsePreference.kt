@@ -54,6 +54,6 @@ class NativeBmwDspResponsePreference : Preference {
         val compressor = if (values[28] >= .5f) "compressor on" else "compressor bypassed"
         val tilt = if (values[25] >= .5f) "tilt ${format.format(values[26])} dB" else "tilt off"
         signalPathView?.text =
-            "Subsonic ${format.format(values[13])} Hz LR4  →  Low ${format.format(values[15])} Hz $topology  +  Mid ${format.format(values[18])} Hz LR4  →  $compressor  →  $tilt  →  L/R corrected"
+            "Subsonic ${format.format(values[13])} Hz  →  Low ${format.format(values[15])} Hz $topology  +  Mid ${format.format(values[18])} Hz LR4  →  $compressor  →  $tilt  →  L/R corrected"
     }
 }
