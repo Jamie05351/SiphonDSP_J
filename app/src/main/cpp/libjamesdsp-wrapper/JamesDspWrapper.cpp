@@ -235,9 +235,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv *env, jobject obj
 
     auto input = env->GetShortArrayElements(inputObj, nullptr);
     auto output = env->GetShortArrayElements(outputObj, nullptr);
-    dsp->processInt16Multiplexd(dsp, input + offset, output, inputLength / 2);
-    env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
-    env->ReleaseShortArrayElements(outputObj, output, 0);
+    if(input != nullptr && output != nullptr)
+        dsp->processInt16Multiplexd(dsp, input + offset, output, inputLength / 2);
+    else
+        LOGE("JamesDspWrapper::processInt16: Failed to acquire array elements");
+    if(input != nullptr) env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
+    if(output != nullptr) env->ReleaseShortArrayElements(outputObj, output, 0);
 }
 
 extern "C"
@@ -256,9 +259,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv *env, jobject obj
 
     auto input = env->GetIntArrayElements(inputObj, nullptr);
     auto output = env->GetIntArrayElements(outputObj, nullptr);
-    dsp->processInt32Multiplexd(dsp, input + offset, output, inputLength / 2);
-    env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
-    env->ReleaseIntArrayElements(outputObj, output, 0);
+    if(input != nullptr && output != nullptr)
+        dsp->processInt32Multiplexd(dsp, input + offset, output, inputLength / 2);
+    else
+        LOGE("JamesDspWrapper::processInt32: Failed to acquire array elements");
+    if(input != nullptr) env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
+    if(output != nullptr) env->ReleaseIntArrayElements(outputObj, output, 0);
 }
 
 extern "C"
@@ -275,9 +281,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv *env, jobje
 
     auto input = env->GetBooleanArrayElements(inputObj, nullptr);
     auto output = env->GetBooleanArrayElements(outputObj, nullptr);
-    dsp->processInt24PackedMultiplexd(dsp, input, output, inputLength / 2);
-    env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
-    env->ReleaseBooleanArrayElements(outputObj, output, 0);
+    if(input != nullptr && output != nullptr)
+        dsp->processInt24PackedMultiplexd(dsp, input, output, inputLength / 2);
+    else
+        LOGE("JamesDspWrapper::processInt24Packed: Failed to acquire array elements");
+    if(input != nullptr) env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
+    if(output != nullptr) env->ReleaseBooleanArrayElements(outputObj, output, 0);
     return outputObj;
 }
 
@@ -293,9 +302,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv *env, jobject o
 
     auto input = env->GetIntArrayElements(inputObj, nullptr);
     auto output = env->GetIntArrayElements(outputObj, nullptr);
-    dsp->processInt8_24Multiplexd(dsp, input, output, inputLength / 2);
-    env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
-    env->ReleaseIntArrayElements(outputObj, output, 0);
+    if(input != nullptr && output != nullptr)
+        dsp->processInt8_24Multiplexd(dsp, input, output, inputLength / 2);
+    else
+        LOGE("JamesDspWrapper::processInt8U24: Failed to acquire array elements");
+    if(input != nullptr) env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
+    if(output != nullptr) env->ReleaseIntArrayElements(outputObj, output, 0);
     return outputObj;
 }
 
@@ -316,10 +328,13 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv *env, jobject obj
     auto input = env->GetFloatArrayElements(inputObj, nullptr);
     auto output = env->GetFloatArrayElements(outputObj, nullptr);
 
-    dsp->processFloatMultiplexd(dsp, input + offset, output, inputLength / 2);
+    if(input != nullptr && output != nullptr)
+        dsp->processFloatMultiplexd(dsp, input + offset, output, inputLength / 2);
+    else
+        LOGE("JamesDspWrapper::processFloat: Failed to acquire array elements");
 
-    env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
-    env->ReleaseFloatArrayElements(outputObj, output, 0);
+    if(input != nullptr) env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
+    if(output != nullptr) env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

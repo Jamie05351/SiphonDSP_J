@@ -20,6 +20,15 @@ public:
         kOutputConfigWidth = 13,
     };
 
+    // KNOWN ISSUE (not yet fixed -- flagged during an OpenCodeReview pass, left for a dedicated
+    // follow-up rather than patched blindly here): setSampleRate()/configure()/configurePeq(),
+    // called from the UI/config thread, write p_/routing_/outputs_/outputConfigs_/PEQ state with
+    // no synchronization against process()'s reads of that same state on the audio thread. Every
+    // field involved is a plain float/bool/enum (no pointers), so this can't corrupt memory or
+    // crash -- worst case is a torn read producing one inconsistent audio frame (e.g. new filter
+    // coefficients paired with old delay-buffer contents) right as a setting changes, which could
+    // manifest as a brief click/glitch. A real fix (a mutex locked once per process() call, or
+    // lock-free double-buffering) needs on-device audio-glitch verification before landing.
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
