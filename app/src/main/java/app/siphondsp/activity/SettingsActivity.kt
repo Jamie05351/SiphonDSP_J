@@ -12,6 +12,7 @@ import app.siphondsp.databinding.ActivitySettingsBinding
 import app.siphondsp.fragment.settings.SettingsAboutFragment
 import app.siphondsp.fragment.settings.SettingsBackupFragment
 import app.siphondsp.fragment.settings.SettingsFragment
+import timber.log.Timber
 
 class SettingsActivity : BaseActivity(),
     PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
@@ -86,10 +87,15 @@ class SettingsActivity : BaseActivity(),
     private fun onBackupLocationSet(uri: Uri?) {
         accessFragment<SettingsBackupFragment> {
             if (uri != null) {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                }
+                catch (ex: SecurityException) {
+                    Timber.e(ex, "Failed to persist URI permission for backup location $uri")
+                }
                 prefsApp.set(R.string.key_backup_location, uri.toString())
                 updateSummaries()
             } else {

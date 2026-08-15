@@ -78,8 +78,14 @@ class EelParser {
             return false
 
         contents?.let {
-            File(path!!).writeText(it)
-            return true
+            return try {
+                File(path!!).writeText(it)
+                true
+            }
+            catch (ex: Exception) {
+                Timber.e(ex, "Failed to save '$path'")
+                false
+            }
         }
 
         return false

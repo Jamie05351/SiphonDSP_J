@@ -98,6 +98,7 @@ class AeqSelectorActivity : BaseActivity() {
             autoEqClient.getProfile(
                 it.id!!,
                 onResponse = { profile, _  ->
+                    if (isFinishing || isDestroyed) return@getProfile
                     val response = Intent()
                     response.putExtra(AutoEqSelectorContract.EXTRA_RESULT, profile)
                     setResult(RESULT_OK, response)
@@ -134,6 +135,7 @@ class AeqSelectorActivity : BaseActivity() {
         autoEqClient.queryProfiles(
             query,
             onResponse = { results, isPartial  ->
+                if (isFinishing || isDestroyed) return@queryProfiles
                 binding.partialResultsCard.bodyText = getString(R.string.autoeq_partial_results_warning, results.size)
                 binding.partialResultsCard.isVisible = isPartial
 
@@ -152,6 +154,7 @@ class AeqSelectorActivity : BaseActivity() {
     }
 
     private fun handleFailure(error: String) {
+        if (isFinishing || isDestroyed) return
         Snackbar
             .make(binding.root, error, Snackbar.LENGTH_SHORT)
             .setTextMaxLines(5)

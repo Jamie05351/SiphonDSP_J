@@ -218,7 +218,10 @@ class LiveprogEditorActivity : BaseActivity() {
 
     private fun save() {
         parser.contents = codeView.text.toString()
-        parser.save()
+        if (!parser.save()) {
+            toast(getString(R.string.editor_save_fail))
+            return
+        }
         isDirty = false
     }
 

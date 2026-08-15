@@ -552,6 +552,7 @@
     <string name="editor_find_and_replace">Find/replace…</string>
     <string name="editor_docs">Help</string>
     <string name="editor_open_fail">Script file does not exist or cannot be opened.</string>
+    <string name="editor_save_fail">Failed to save script file.</string>
     <string name="editor_run">Save and run</string>
     <string name="editor_save">Save</string>
     <string name="editor_liveprog_enabled">Liveprog has been automatically turned on.</string>
