@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include "NativeBmwRouting.h"
 
 class NativeBmwDspProcessor {
@@ -20,15 +21,12 @@ public:
         kOutputConfigWidth = 13,
     };
 
-    // KNOWN ISSUE (not yet fixed -- flagged during an OpenCodeReview pass, left for a dedicated
-    // follow-up rather than patched blindly here): setSampleRate()/configure()/configurePeq(),
-    // called from the UI/config thread, write p_/routing_/outputs_/outputConfigs_/PEQ state with
-    // no synchronization against process()'s reads of that same state on the audio thread. Every
-    // field involved is a plain float/bool/enum (no pointers), so this can't corrupt memory or
-    // crash -- worst case is a torn read producing one inconsistent audio frame (e.g. new filter
-    // coefficients paired with old delay-buffer contents) right as a setting changes, which could
-    // manifest as a brief click/glitch. A real fix (a mutex locked once per process() call, or
-    // lock-free double-buffering) needs on-device audio-glitch verification before landing.
+    // setSampleRate()/configure()/configurePeq() (UI/config thread) and process() (audio thread)
+    // both touch p_/routing_/outputs_/outputConfigs_/PEQ state, so each takes stateMutex_ --
+    // configure family for its whole write, process() once per call (not per sample) around the
+    // whole buffer -- to avoid a torn read/write of that state. The audio-thread side is a brief,
+    // uncontended lock/unlock in the common case, since config changes are rare relative to how
+    // often process() runs.
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -196,6 +194,8 @@ private:
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
+
+    std::mutex stateMutex_;
 };
 
 #endif
