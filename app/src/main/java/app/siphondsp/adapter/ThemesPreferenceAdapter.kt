@@ -23,8 +23,6 @@ class ThemesPreferenceAdapter(private val clickListener: OnItemClickListener) :
     private var themes = emptyList<AppTheme>()
     private val preferences: Preferences.App by inject()
 
-    private lateinit var binding: PreferenceThemeItemBinding
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ThemeViewHolder {
         val isAmoled = preferences.get<Boolean>(R.string.key_appearance_pure_black)
         val appTheme = themes[viewType]
@@ -48,8 +46,8 @@ class ThemesPreferenceAdapter(private val clickListener: OnItemClickListener) :
             }
         }
 
-        binding = PreferenceThemeItemBinding.inflate(LayoutInflater.from(themedContext), parent, false)
-        return ThemeViewHolder(binding.root)
+        val binding = PreferenceThemeItemBinding.inflate(LayoutInflater.from(themedContext), parent, false)
+        return ThemeViewHolder(binding)
     }
 
     override fun getItemViewType(position: Int): Int = position
@@ -66,8 +64,10 @@ class ThemesPreferenceAdapter(private val clickListener: OnItemClickListener) :
         notifyDataSetChanged()
     }
 
-    inner class ThemeViewHolder(private val view: View) : RecyclerView.ViewHolder(view) {
+    inner class ThemeViewHolder(private val binding: PreferenceThemeItemBinding) :
+        RecyclerView.ViewHolder(binding.root) {
 
+        private val view = binding.root
         private val selectedColor = view.context.getResourceColor(androidx.appcompat.R.attr.colorPrimary)
         private val unselectedColor = view.context.getResourceColor(android.R.attr.divider)
 

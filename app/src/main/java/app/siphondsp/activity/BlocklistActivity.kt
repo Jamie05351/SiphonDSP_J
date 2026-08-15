@@ -24,7 +24,7 @@ class BlocklistActivity : BaseActivity() {
         }
 
         binding.fab.setOnClickListener {
-            (supportFragmentManager.findFragmentById(R.id.blocklist_host) as BlocklistFragment).showAppSelector()
+            (supportFragmentManager.findFragmentById(R.id.blocklist_host) as? BlocklistFragment)?.showAppSelector()
         }
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)

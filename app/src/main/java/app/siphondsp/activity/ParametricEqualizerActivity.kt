@@ -21,7 +21,8 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
                 supportFragmentManager.beginTransaction().replace(R.id.params, it).commitNow()
             }
         } else {
-            supportFragmentManager.findFragmentById(R.id.params) as ParametricEqualizerFragment
+            supportFragmentManager.findFragmentById(R.id.params) as? ParametricEqualizerFragment
+                ?: error("ParametricEqualizerFragment missing from restored state")
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }

@@ -15,7 +15,7 @@ import app.siphondsp.model.ParametricEqBandList
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 
-class ParametricEqBandAdapter(var bands: ParametricEqBandList) :
+class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     RecyclerView.Adapter<ParametricEqBandAdapter.ViewHolder>() {
 
     private val dfFreq = DecimalFormat("0", DecimalFormatSymbols.getInstance())
