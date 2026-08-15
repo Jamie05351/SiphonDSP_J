@@ -83,18 +83,6 @@ class CrossoverTiltFragment : Fragment() {
                     20f, 60f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                 )
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_mute_low_band),
-                    null,
-                    NativeBmwDspValues.INDEX_LOW_MUTE,
-                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_MUTE),
-                )
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_mute_mid_band),
-                    null,
-                    NativeBmwDspValues.INDEX_MID_MUTE,
-                    mirrorIndices = midPair(NativeBmwDspValues.FIELD_MUTE),
-                )
                 addCrossoverBandPair(
                     low = CrossoverDashboardBuilder.CrossoverBandSpec(
                         title = "LOW PASS",
