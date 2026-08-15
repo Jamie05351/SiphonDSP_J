@@ -119,17 +119,45 @@ class NativeBmwCompressorViewTouchTest {
         view.onKneeChanged = { kneeCalls++ }
         view.onThresholdChanged = { thresholdCalls++ }
         view.onRatioChanged = { ratioCalls++ }
-        // input ~5.5dB (far right, well outside the threshold/knee handle radii) with an
-        // output ~-2dB (clearly above threshold, so the ratio math stays well-defined).
-        val rx = x(maxDb - 0.5f)
-        val ry = y(-2f)
+        // input ~5.5dB (far right, well outside the threshold/knee handle radii). ACTION_DOWN
+        // lands exactly on the transfer curve at that input -- ratio-dragging now only starts
+        // within curveHitRadiusPx of the curve itself, not anywhere on the graph -- then
+        // ACTION_MOVE drags 15px up (comfortably inside that same radius) to a materially
+        // different output, so the resulting ratio actually differs from the initial 4:1.
+        val rInput = maxDb - 0.5f
+        val rOutput = CompressorGraphMath.outputFor(rInput, thresholdDb, ratio, kneeDb, makeupDb, true)
+        val rx = x(rInput)
+        val ry = y(rOutput.coerceIn(minDb, maxDb))
+        val movedRy = ry - 15f
 
         view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, rx, ry))
-        view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, rx, ry))
-        view.onTouchEvent(motionEvent(MotionEvent.ACTION_UP, rx, ry))
+        view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, rx, movedRy))
+        view.onTouchEvent(motionEvent(MotionEvent.ACTION_UP, rx, movedRy))
 
         assertEquals(0, kneeCalls)
         assertEquals(0, thresholdCalls)
         assertTrue("expected at least one onRatioChanged call", ratioCalls > 0)
+    }
+
+    @Test
+    fun touchOnEmptyGraphSpaceFiresNoCallbackAndDoesNotDisallowIntercept() {
+        var kneeCalls = 0
+        var thresholdCalls = 0
+        var ratioCalls = 0
+        view.onKneeChanged = { kneeCalls++ }
+        view.onThresholdChanged = { thresholdCalls++ }
+        view.onRatioChanged = { ratioCalls++ }
+        // Top-left corner: far from the threshold/knee handles and far above the curve (a
+        // compressor curve never reaches this high this early), so this is genuinely empty space.
+        val ex = x(minDb + 2f)
+        val ey = y(maxDb)
+
+        view.onTouchEvent(motionEvent(MotionEvent.ACTION_DOWN, ex, ey))
+        view.onTouchEvent(motionEvent(MotionEvent.ACTION_MOVE, ex + 40f, ey))
+        view.onTouchEvent(motionEvent(MotionEvent.ACTION_UP, ex + 40f, ey))
+
+        assertEquals(0, kneeCalls)
+        assertEquals(0, thresholdCalls)
+        assertEquals(0, ratioCalls)
     }
 }
