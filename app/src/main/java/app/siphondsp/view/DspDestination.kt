@@ -23,16 +23,17 @@ import kotlin.reflect.KClass
 
 enum class DspDestination(
     @StringRes val labelRes: Int,
+    @StringRes val sidebarLabelRes: Int,
     @DrawableRes val icon: Int,
     val activityClass: KClass<out AppCompatActivity>,
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
-    GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
+    ROUTING(R.string.action_routing, R.string.sidebar_label_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
 }
 
 object DspCrossNavBar {
@@ -48,16 +49,16 @@ object DspCrossNavBar {
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
-        val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
-            // Flexible spacer before every tile except the first, so the tiles distribute evenly
-            // across the sidebar's full height (dsp_cross_nav is match_parent) instead of
-            // clustering at the top with empty space left below the last one.
+            // Small fixed gap before every tile except the first -- tiles themselves are weighted
+            // to fill the column's full height (see the addView below), so this is just breathing
+            // room between them, not a flexible spacer soaking up leftover space the way a huge gap
+            // between small fixed-height tiles used to.
             if (index > 0) {
-                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(8)))
             }
 
             val selected = destination == current
@@ -68,38 +69,40 @@ object DspCrossNavBar {
                 insetTop = 0
                 insetBottom = 0
                 cornerRadius = activity.dp(6)
-                text = if (compact) "" else activity.getString(destination.labelRes)
+                text = activity.getString(destination.sidebarLabelRes)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                textSize = 12f
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = if (compact) 0 else activity.dp(10)
+                iconPadding = activity.dp(8)
                 iconSize = activity.dp(30)
                 isAllCaps = false
-                if (compact) setPadding(0, 0, 0, 0)
 
                 if (selected) {
-                    // Bright illuminated fill with a blurred glow ring around the border -- white
-                    // icon on top. BlurMaskFilter has no hardware-accelerated path, so the button
-                    // needs a software layer for the glow to actually render.
+                    // Darker brushed-metal fill with a blurred glow ring around the border, and a
+                    // BMW-blue illuminated icon/label to match -- BlurMaskFilter has no
+                    // hardware-accelerated path, so the button needs a software layer for the
+                    // glow to actually render.
                     setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     background = BmwDashboardSkin.litTileDrawable(activity)
                     // MaterialButton tints ANY background drawable (custom ones included) with
                     // whatever backgroundTintList it has -- here inherited from the outlined-button
-                    // style -- via SRC_IN, which was silently replacing the bright fill/glow colors
-                    // above with a flat dark tint. Clearing it lets the custom drawable's own
-                    // colors render unmodified.
+                    // style -- via SRC_IN, which was silently replacing the custom drawable's own
+                    // colors with a flat dark tint. Clearing it lets it render unmodified.
+                    backgroundTintList = null
+                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    isClickable = false
+                } else {
+                    // Lighter brushed-metal fill (vs. the selected tile's darker one) so the
+                    // selected tile visibly pops; white border/icon keep unselected tiles clearly
+                    // visible instead of getting lost against the metal texture. The border is
+                    // drawn by the custom drawable itself (see MetalTileDrawable) -- MaterialButton's
+                    // own strokeColor/strokeWidth don't render once `background` is overridden.
+                    background = BmwDashboardSkin.metalTileDrawable(activity, darkened = false, strokeColor = Color.WHITE)
                     backgroundTintList = null
                     setTextColor(Color.WHITE)
                     iconTint = ColorStateList.valueOf(Color.WHITE)
-                    isClickable = false
-                } else {
-                    // Opaque, not translucent: needs to read as a distinct surface against the
-                    // sidebar's own background rather than blending into it. White border (rather
-                    // than a dark stroke close to the background tone) so unselected tiles stay
-                    // clearly visible instead of getting lost.
-                    backgroundTintList = ColorStateList.valueOf(Color.rgb(18, 23, 29))
-                    strokeWidth = activity.dp(1)
-                    strokeColor = ColorStateList.valueOf(Color.WHITE)
-                    setTextColor(Color.rgb(211, 217, 223))
-                    iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -111,14 +114,11 @@ object DspCrossNavBar {
             }
             container.addView(
                 button,
-                if (compact) {
-                    // Fills the column's full usable width (60dp column - 4dp padding each side),
-                    // up from 46dp -- bigger tiles with bigger icons, and less empty gap between
-                    // them since the flexible spacers above now have less leftover height to fill.
-                    LinearLayout.LayoutParams(activity.dp(52), activity.dp(52))
-                } else {
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46))
-                },
+                // Weighted (0 height + weight) rather than a fixed dp height, so the tiles
+                // themselves expand to fill the column's available height -- the gaps between
+                // them come only from the small fixed spacer above, not from the tiles staying
+                // small while empty space collects around them.
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
             )
         }
         container.visibility = View.VISIBLE

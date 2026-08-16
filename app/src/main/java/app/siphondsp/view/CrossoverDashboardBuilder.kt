@@ -2,7 +2,9 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -38,15 +40,27 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
-    private val inactiveTrack = Color.rgb(98, 104, 112)
     private val valueBoxBackground = Color.rgb(16, 19, 24)
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
     private val divider = Color.rgb(47, 53, 61)
 
+    /** A compact vertical slider docked to a [dashboardPanel]'s right-hand border (e.g. Headroom
+     *  on Gains & Delay), like a fader on the edge of a channel strip, instead of taking up space
+     *  in the title row or a full row of its own further down the card. */
+    class HeaderSliderSpec(
+        val label: String,
+        val index: Int,
+        val min: Float,
+        val max: Float,
+        val step: Float,
+        val suffix: String,
+    )
+
     fun dashboardPanel(
         title: String,
         subtitle: String? = null,
+        headerSlider: HeaderSliderSpec? = null,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
         val card = MaterialCardView(context).apply {
@@ -55,7 +69,7 @@ class CrossoverDashboardBuilder(
             strokeWidth = dp(1)
             strokeColor = Color.rgb(62, 72, 84)
             setCardBackgroundColor(Color.TRANSPARENT)
-            background = BmwDashboardSkin.brushedPanelDrawable()
+            background = BmwDashboardSkin.brushedPanelDrawable(context)
         }
 
         val content = LinearLayout(context).apply {
@@ -63,19 +77,16 @@ class CrossoverDashboardBuilder(
             setPadding(dp(28), dp(18), dp(24), dp(20))
         }
 
-        val titleRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        // Blank title skips the row entirely -- for a page whose toolbar already shows this same
+        // title (Gains & Delay), repeating it inside the card too just wastes vertical space.
+        if (title.isNotBlank()) {
+            content.addView(TextView(context).apply {
+                text = title
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.WHITE)
+            })
         }
-        titleRow.addView(TextView(context).apply {
-            text = title
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        BmwDashboardSkin.addMAccent(titleRow)
-        content.addView(titleRow)
-
         if (!subtitle.isNullOrBlank()) {
             content.addView(TextView(context).apply {
                 text = subtitle
@@ -89,7 +100,23 @@ class CrossoverDashboardBuilder(
 
         currentContent = content
         build()
-        card.addView(content)
+
+        // The whole card is a horizontal split when there's a header slider: the regular content
+        // (title + build()) on the left filling whatever width is left, a vertical fader docked to
+        // the card's own right-hand edge -- rather than a full-width row of its own, which is the
+        // whole point (saves vertical space the page badly needs, per this page's fit-without-
+        // scrolling requirement).
+        if (headerSlider == null) {
+            card.addView(content)
+        } else {
+            val outer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            outer.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            outer.addView(
+                buildVerticalHeaderSlider(headerSlider),
+                LinearLayout.LayoutParams(dp(VERTICAL_HEADER_SLIDER_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT),
+            )
+            card.addView(outer)
+        }
         root.addView(
             card,
             LinearLayout.LayoutParams(
@@ -105,7 +132,7 @@ class CrossoverDashboardBuilder(
     }
 
     fun sectionCard(title: String, subtitle: String? = null, build: CrossoverDashboardBuilder.() -> Unit) {
-        dashboardPanel(title, subtitle, build)
+        dashboardPanel(title, subtitle, build = build)
     }
 
     /** Embeds an arbitrary view (e.g. an illustrative diagram) inside the current section card. */
@@ -212,32 +239,25 @@ class CrossoverDashboardBuilder(
             minimumHeight = dp(34)
         }
 
-        // Title, value, and slider all on one row: the value sits at the end of the fixed-width
-        // label column (same column every other row type aligns to), with a flexible spacer
-        // absorbing whatever room is left after the title text -- so it reads as evenly spaced
-        // between the title and the slider rather than crammed against either one.
+        // Title, slider, and value all on one row, always in that order: the title sits in its
+        // own fixed-width column, the slider fills whatever room is left, and the value box sits
+        // at the very end -- never in the middle of the row.
         val valueText = createBoxedValueText(values[index] * displayScale, suffix)
-        val labelValue = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(singleLineLabel(label))
-            addView(View(context), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(valueText)
-        }
-        topRow.addView(labelValue, labelParams())
+        topRow.addView(singleLineLabel(label), labelParams())
 
         val slider = Slider(context).apply {
             valueFrom = min
             valueTo = max
             stepSize = step
-            value = values[index].coerceIn(min, max)
+            value = snapToStep(values[index], min, max, step)
             trackHeight = dp(8)
             thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
             thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
+            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
+            BmwDashboardSkin.applyTrackOutline(this)
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -276,8 +296,9 @@ class CrossoverDashboardBuilder(
 
         topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = dp(14)
-            marginEnd = dp(4)
+            marginEnd = dp(14)
         })
+        topRow.addView(valueText)
         container.addView(topRow)
 
         val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
@@ -285,102 +306,253 @@ class CrossoverDashboardBuilder(
         tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
         tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
         tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
+        tickRow.addView(space(VALUE_WIDTH_DP + 14))
         container.addView(tickRow)
 
         currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
-    /** Top-down BMW diagram for the 4 delay values (door mids + underseat lows) plus the 2
-     *  polarity switches beside it, replacing what used to be 2 switch rows stacked above 4
-     *  addSliderRow rows. The diagram is fixed-width (not full-bleed) so the photo renders at a
-     *  sane size instead of dominating the page, and each value box sits in its own row directly
-     *  above/below the image -- outside its bounds, never over the artwork -- but still aligned
-     *  with its speaker's horizontal position via a percent guideline shared by the image and
-     *  both box rows (all three are pinned to the same fixed diagram width, so the fractions line
-     *  up). Tap-to-edit only, no drag slider: the point of the diagram is showing *where* each
-     *  delay applies, not fine adjustment. */
-    fun addDelayDiagramSection(
-        lowPolarityLabel: String, lowPolarityIndex: Int, lowPolarityMirror: IntArray,
-        midPolarityLabel: String, midPolarityIndex: Int, midPolarityMirror: IntArray,
-        midLeftLabel: String, midLeftIndex: Int,
-        midRightLabel: String, midRightIndex: Int,
-        lowLeftLabel: String, lowLeftIndex: Int,
-        lowRightLabel: String, lowRightIndex: Int,
-        min: Float, max: Float,
-        suffix: String = "ms",
-    ) {
-        // The switches + diagram group is built at its natural (WRAP_CONTENT) size, then
-        // centered as a whole inside a FrameLayout -- centering it directly via ConstraintLayout
-        // bias fought the solver in testing (fixed-width children measured correctly but bias
-        // positioning left a large gap), while FrameLayout + Gravity.CENTER is simple and reliable.
-        // Value boxes flank the car's left/right sides (mid pair above the low pair on each side)
-        // rather than stacking in rows above/below the photo -- on short landscape viewports the
-        // stacked layout pushed the low pair below the visible area, while flanking columns spend
-        // the extra horizontal room this row already has instead of vertical room it doesn't.
-        val innerRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+    /** Compact vertical label-slider-valuebox fader docked to a [dashboardPanel]'s right-hand
+     *  border (see [HeaderSliderSpec]) -- label on top, slider filling the available height,
+     *  value box (tap-to-edit) at the bottom. Doesn't call [BmwDashboardSkin.applyTrackOutline]:
+     *  that helper insets top/bottom to reveal a *horizontal* track band, which is the wrong axis
+     *  once the slider is vertical, so this fader keeps the plain black inactive track without the
+     *  white outline rather than drawing a misaligned one. */
+    private fun buildVerticalHeaderSlider(spec: HeaderSliderSpec): View {
+        val column = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(4), dp(10), dp(4), dp(10))
         }
-
-        // Fixed width, not WRAP_CONTENT: a vertical LinearLayout's default child width is
-        // MATCH_PARENT (not WRAP_CONTENT), which made this column and everything nested inside it
-        // repeatedly stretch to fill the whole row in testing, no matter how many descendants got
-        // an explicit WRAP_CONTENT override. Pinning the column itself sidesteps that entirely --
-        // MATCH_PARENT children inside a fixed-width parent is a bounded, harmless default.
-        val switchesColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        switchesColumn.addView(compactSegmentedSwitch(lowPolarityLabel, lowPolarityIndex, "NORMAL", "INVERT", lowPolarityMirror))
-        switchesColumn.addView(vspace(16))
-        switchesColumn.addView(compactSegmentedSwitch(midPolarityLabel, midPolarityIndex, "NORMAL", "INVERT", midPolarityMirror))
-        innerRow.addView(switchesColumn, LinearLayout.LayoutParams(dp(SWITCHES_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            marginEnd = dp(32)
+        column.addView(TextView(context).apply {
+            text = spec.label
+            textSize = 10.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(210, 216, 222))
+            gravity = Gravity.CENTER
         })
+        column.addView(vspace(8))
 
-        fun labeledBox(caption: String, label: String, index: Int): View {
-            val box = createLabeledValueBox(caption, values[index], suffix)
-            box.setOnClickListener {
-                context.showInputAlert(
-                    android.view.LayoutInflater.from(context),
-                    label,
-                    "${format.format(min)}–${format.format(max)}",
-                    format.format(values[index]),
-                    true,
-                    suffix,
-                ) { entered ->
-                    val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
-                    val stored = parsed.coerceIn(min, max)
-                    values[index] = stored
-                    updateLabeledValueBox(box, stored, suffix)
+        val valueText = createBoxedValueText(values[spec.index], spec.suffix)
+        val slider = Slider(context).apply {
+            setOrientation(LinearLayout.VERTICAL)
+            valueFrom = spec.min
+            valueTo = spec.max
+            stepSize = spec.step
+            value = snapToStep(values[spec.index], spec.min, spec.max, spec.step)
+            trackHeight = dp(6)
+            thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
+            thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
+            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
+            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
+            setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
+            addOnChangeListener { _, newValue, fromUser ->
+                if (fromUser) {
+                    values[spec.index] = newValue
+                    updateValueBox(valueText, newValue, spec.suffix)
                     onChanged(values)
                 }
             }
-            return box
+        }
+        column.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 0, 1f))
+        column.addView(vspace(8))
+        column.addView(valueText)
+        return column
+    }
+
+    /** Single-line [label][slider][boxed value] row, scaled down to fit inside a narrow channel
+     *  card (see [addChannelCard]'s Gain row) -- same title-slider-valuebox order as
+     *  [addSliderRow], just with the label in a narrower fixed column instead of [LABEL_WIDTH_DP]. */
+    private fun buildMiniSliderRow(label: String, index: Int, min: Float, max: Float, step: Float, suffix: String): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val valueText = createBoxedValueText(values[index], suffix)
+        val slider = Slider(context).apply {
+            valueFrom = min
+            valueTo = max
+            stepSize = step
+            value = snapToStep(values[index], min, max, step)
+            trackHeight = dp(6)
+            thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
+            thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
+            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
+            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
+            setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
+            addOnChangeListener { _, newValue, fromUser ->
+                if (fromUser) {
+                    values[index] = newValue
+                    updateValueBox(valueText, newValue, suffix)
+                    onChanged(values)
+                }
+            }
+        }
+        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(8)
+            marginEnd = dp(8)
+        })
+        row.addView(valueText)
+
+        valueText.setOnClickListener {
+            context.showInputAlert(
+                android.view.LayoutInflater.from(context),
+                label,
+                "${format.format(min)}–${format.format(max)}",
+                format.format(values[index]),
+                true,
+                suffix,
+            ) { entered ->
+                val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
+                val stored = (min + ((parsed.coerceIn(min, max) - min) / step).roundToInt() * step).coerceIn(min, max)
+                values[index] = stored
+                slider.value = stored
+                updateValueBox(valueText, stored, suffix)
+                onChanged(values)
+            }
+        }
+        return row
+    }
+
+    /** Single-line [label][tap-to-edit value] row for [addChannelCard]'s Delay row -- no drag
+     *  slider, matching the original delay diagram's own tap-only rationale (this is about showing
+     *  *where* a delay applies, not fine adjustment). */
+    private fun buildMiniValueRow(label: String, index: Int, min: Float, max: Float, suffix: String): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+        val valueText = createBoxedValueText(values[index], suffix)
+        valueText.setOnClickListener {
+            context.showInputAlert(
+                android.view.LayoutInflater.from(context),
+                label,
+                "${format.format(min)}–${format.format(max)}",
+                format.format(values[index]),
+                true,
+                suffix,
+            ) { entered ->
+                val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
+                val stored = parsed.coerceIn(min, max)
+                values[index] = stored
+                updateValueBox(valueText, stored, suffix)
+                onChanged(values)
+            }
+        }
+        row.addView(valueText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        return row
+    }
+
+    /** Single-line [label][NORMAL/INVERT toggle] row for [addChannelCard]'s Polarity row. */
+    private fun buildMiniToggleRow(label: String, index: Int, mirrorIndices: IntArray, onToggled: () -> Unit): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+        val group = MaterialButtonToggleGroup(context).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+        }
+        val off = segmentButton("NORMAL")
+        val on = segmentButton("INVERT")
+        group.addView(off, LinearLayout.LayoutParams(0, dp(30), 1f))
+        group.addView(on, LinearLayout.LayoutParams(0, dp(30), 1f))
+        group.check(if (values[index] >= .5f) on.id else off.id)
+        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
+            onToggled()
+        }
+        row.addView(group, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+        return row
+    }
+
+    /** One "Left Mid"/"Right Mid"/"Left Low"/"Right Low" channel card for the Gains & Delay car
+     *  diagram (see [addChannelDiagramSection]): a coloured title (matching that channel's
+     *  connector-line colour) plus one compact single-line row each for Delay, Gain, and Polarity. */
+    fun addChannelCard(
+        title: String,
+        accentColor: Int,
+        delayIndex: Int, delayMin: Float, delayMax: Float,
+        gainIndex: Int, gainMin: Float, gainMax: Float, gainStep: Float,
+        polarityIndex: Int, polarityMirror: IntArray,
+        // Low/mid polarity is one value shared by both the Left and Right card of that band (see
+        // NativeBmwDspValues.INDEX_LOW_INVERT/INDEX_MID_INVERT), not 4 independent per-channel
+        // flags -- so toggling it on one card also needs the OTHER card sharing this same
+        // polarityIndex to update. Rebuilding the whole page is simpler and more robust than
+        // holding a second toggle-group reference to keep in sync by hand.
+        onPolarityChanged: () -> Unit = {},
+    ): View {
+        val card = MaterialCardView(context).apply {
+            radius = dp(8).toFloat()
+            cardElevation = 0f
+            strokeWidth = dp(1)
+            strokeColor = segmentStroke
+            setCardBackgroundColor(Color.rgb(14, 17, 21))
+        }
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
         }
 
-        fun boxColumn(topCaption: String, topLabel: String, topIndex: Int, bottomCaption: String, bottomLabel: String, bottomIndex: Int): LinearLayout {
-            val col = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            col.addView(labeledBox(topCaption, topLabel, topIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            col.addView(vspace(14))
-            col.addView(labeledBox(bottomCaption, bottomLabel, bottomIndex), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            return col
+        content.addView(TextView(context).apply {
+            text = title
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(accentColor)
+        })
+        content.addView(vspace(6))
+        content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms"))
+        content.addView(vspace(4))
+        content.addView(buildMiniSliderRow("GAIN", gainIndex, gainMin, gainMax, gainStep, "dB"))
+        content.addView(vspace(4))
+        content.addView(buildMiniToggleRow("POL", polarityIndex, polarityMirror, onPolarityChanged))
+
+        card.addView(content)
+        return card
+    }
+
+    /** Places the 4 [addChannelCard] views around the car/speaker diagram (mid pair above the low
+     *  pair on each side, matching the physical door-mid/underseat-low layout) and draws a
+     *  coloured connector line from each card to its speaker's approximate position on the image
+     *  -- each line's colour matches that card's own title colour, so which line belongs to which
+     *  card is unambiguous without a legend. Speaker positions are fixed fractional coordinates
+     *  within R.drawable.bmw_gains_delay_car (tuned by eye against that asset, not computed). */
+    fun addChannelDiagramSection(
+        midLeft: View, lowLeft: View, midRight: View, lowRight: View,
+        midLeftColor: Int, lowLeftColor: Int, midRightColor: Int, lowRightColor: Int,
+    ) {
+        val leftColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        leftColumn.addView(midLeft, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        leftColumn.addView(vspace(14))
+        leftColumn.addView(lowLeft, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val rightColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        rightColumn.addView(midRight, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        rightColumn.addView(vspace(14))
+        rightColumn.addView(lowRight, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val carImage = ImageView(context).apply {
+            setImageResource(R.drawable.bmw_gains_delay_car)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
+        val innerRow = ChannelConnectorRow(context, midLeftColor, lowLeftColor, midRightColor, lowRightColor)
         innerRow.addView(
-            boxColumn("MID LEFT", midLeftLabel, midLeftIndex, "LOW LEFT", lowLeftLabel, lowLeftIndex),
-            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(14) },
+            leftColumn,
+            LinearLayout.LayoutParams(dp(CHANNEL_CARD_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(18) },
         )
-
+        innerRow.addView(carImage, LinearLayout.LayoutParams(dp(CAR_DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
         innerRow.addView(
-            ImageView(context).apply {
-                setImageResource(R.drawable.bmw_delay_positions)
-                adjustViewBounds = true
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            },
-            LinearLayout.LayoutParams(dp(DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
-
-        innerRow.addView(
-            boxColumn("MID RIGHT", midRightLabel, midRightIndex, "LOW RIGHT", lowRightLabel, lowRightIndex),
-            LinearLayout.LayoutParams(dp(BOX_COLUMN_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(14) },
+            rightColumn,
+            LinearLayout.LayoutParams(dp(CHANNEL_CARD_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(18) },
         )
 
         val centeredFrame = android.widget.FrameLayout(context).apply {
@@ -393,40 +565,12 @@ class CrossoverDashboardBuilder(
         addCustomView(centeredFrame, topMarginDp = 4, bottomMarginDp = 4)
     }
 
-    /** Narrow title-above-toggle switch block for the delay diagram's side column, where the wide
-     *  label-left/toggle-right layout addSegmentedSwitchRow uses wouldn't fit. */
-    private fun compactSegmentedSwitch(
-        title: String,
-        index: Int,
-        offLabel: String,
-        onLabel: String,
-        mirrorIndices: IntArray,
-    ): View {
-        // block's own width comes from switchesColumn's fixed SWITCHES_COLUMN_WIDTH_DP, so this
-        // default MATCH_PARENT (LinearLayout's default child width when orientation=VERTICAL) is
-        // bounded and harmless -- see the comment on switchesColumn's construction.
-        val block = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        block.addView(TextView(context).apply {
-            text = title
-            textSize = 11.5f
-            setTextColor(Color.rgb(200, 207, 215))
-        })
-        block.addView(vspace(6))
-        val group = MaterialButtonToggleGroup(context).apply {
-            isSingleSelection = true
-            isSelectionRequired = true
-        }
-        val off = segmentButton(offLabel)
-        val on = segmentButton(onLabel)
-        group.addView(off, LinearLayout.LayoutParams(dp(80), dp(34)))
-        group.addView(on, LinearLayout.LayoutParams(dp(80), dp(34)))
-        group.check(if (values[index] >= .5f) on.id else off.id)
-        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
-        }
-        block.addView(group)
-        return block
+    private fun smallLabel(text: String) = TextView(context).apply {
+        this.text = text
+        textSize = 10f
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(Color.rgb(150, 158, 168))
+        letterSpacing = 0.03f
     }
 
     /** One LOW PASS / HIGH PASS mini-card: corner frequency (tap to edit, same numeric-entry
@@ -586,6 +730,17 @@ class CrossoverDashboardBuilder(
         onChanged(values)
     }
 
+    /** MDC's Slider throws IllegalStateException if its initial `value` isn't exactly
+     *  `valueFrom` plus a whole multiple of `stepSize` -- persisted values can violate that for a
+     *  row whose step size changed since the value was saved (e.g. gain used to be a 0.1 step on
+     *  the old Gain Structure page; a value like -5.6 is valid there but not against this page's
+     *  coarser 0.5 step), so every raw persisted value feeding a Slider's `value=` is snapped here
+     *  first rather than assumed already aligned. */
+    private fun snapToStep(value: Float, min: Float, max: Float, step: Float): Float {
+        val clamped = value.coerceIn(min, max)
+        return (min + ((clamped - min) / step).roundToInt() * step).coerceIn(min, max)
+    }
+
     private fun createRow() = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -654,6 +809,7 @@ class CrossoverDashboardBuilder(
         background = GradientDrawable().apply {
             cornerRadius = dp(5).toFloat()
             setColor(valueBoxBackground)
+            setStroke(dp(1), accentBlue)
         }
         updateValueBox(this, value, suffix)
     }
@@ -671,6 +827,7 @@ class CrossoverDashboardBuilder(
             background = GradientDrawable().apply {
                 cornerRadius = dp(6).toFloat()
                 setColor(valueBoxBackground)
+                setStroke(dp(1), accentBlue)
             }
         }
         box.addView(TextView(context).apply {
@@ -727,8 +884,64 @@ class CrossoverDashboardBuilder(
     companion object {
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
-        private const val DIAGRAM_WIDTH_DP = 220
-        private const val BOX_COLUMN_WIDTH_DP = 110
-        private const val SWITCHES_COLUMN_WIDTH_DP = 190
+        private const val VERTICAL_HEADER_SLIDER_WIDTH_DP = 64
+        private const val ROW_LABEL_WIDTH_DP = 46
+        private const val CHANNEL_CARD_WIDTH_DP = 340
+        private const val CAR_DIAGRAM_WIDTH_DP = 190
+    }
+}
+
+/** Draws a coloured connector line from each of [ChannelConnectorRow]'s two flanking columns
+ *  (2 stacked channel cards each) to a fixed fractional position on the car diagram in the
+ *  middle child -- see [CrossoverDashboardBuilder.addChannelDiagramSection]. Expects exactly 3
+ *  children in this order: left column, car image, right column, each column itself holding
+ *  [mid card, vertical spacer, low card]. */
+private class ChannelConnectorRow(
+    context: Context,
+    private val midLeftColor: Int,
+    private val lowLeftColor: Int,
+    private val midRightColor: Int,
+    private val lowRightColor: Int,
+) : LinearLayout(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = context.resources.displayMetrics.density * 2f
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    init {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setWillNotDraw(false)
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        if (childCount < 3) return
+        val leftColumn = getChildAt(0) as? LinearLayout ?: return
+        val carImage = getChildAt(1)
+        val rightColumn = getChildAt(2) as? LinearLayout ?: return
+        if (leftColumn.childCount < 3 || rightColumn.childCount < 3) return
+
+        fun anchorY(column: LinearLayout, index: Int): Float {
+            val child = column.getChildAt(index)
+            return column.top + child.top + child.height / 2f
+        }
+
+        val carLeft = carImage.left.toFloat()
+        val carTop = carImage.top.toFloat()
+        val carW = carImage.width.toFloat()
+        val carH = carImage.height.toFloat()
+
+        fun drawLine(startX: Float, startY: Float, speakerFx: Float, speakerFy: Float, color: Int) {
+            paint.color = color
+            canvas.drawLine(startX, startY, carLeft + carW * speakerFx, carTop + carH * speakerFy, paint)
+        }
+
+        // Fractional speaker positions within bmw_gains_delay_car.png, tuned by eye.
+        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 0), 0.186f, 0.336f, midLeftColor)
+        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 2), 0.152f, 0.488f, lowLeftColor)
+        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 0), 0.811f, 0.336f, midRightColor)
+        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 2), 0.844f, 0.488f, lowRightColor)
     }
 }

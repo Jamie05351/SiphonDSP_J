@@ -10,14 +10,15 @@ import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
-import app.siphondsp.view.DspPager
 import kotlin.math.roundToInt
 
 /**
- * Dedicated Gains & Delay workspace using the shared BMW dashboard skin. Swipes between two
- * pages -- Gain Structure and Delay & Polarity -- at the same section boundaries the single
- * scrolling panel used to have, so nothing about the content changed, only how it's paged.
+ * Dedicated Gains & Delay workspace using the shared BMW dashboard skin. One unified page --
+ * Headroom sits inline on the title row, and the 4 channel cards (Left/Right Mid, Left/Right Low)
+ * each combine Delay, Gain, and Polarity around the car/speaker diagram -- rather than the
+ * previous 2-page swipe between a separate Gain Structure page and a Delay & Polarity page.
  */
 class GainLimiterFragment : Fragment() {
     private lateinit var container: FrameLayout
@@ -36,7 +37,7 @@ class GainLimiterFragment : Fragment() {
         super.onResume()
         // NativeBmwDspValues is loaded once into a local array and captured by closures below;
         // rebuild from disk on every resume so edits made elsewhere aren't silently overwritten
-        // by this screen's stale snapshot the next time a slider here is touched.
+        // by this screen's stale snapshot the next time a control here is touched.
         if (::container.isInitialized) rebuild()
     }
 
@@ -55,48 +56,73 @@ class GainLimiterFragment : Fragment() {
             NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
         )
 
-        fun page(build: CrossoverDashboardBuilder.() -> Unit): View {
-            val pageRoot = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(4), dp(2), dp(4), dp(8))
-            }
-            CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).build()
-            return NestedScrollView(requireContext()).apply {
-                isFillViewport = true
-                addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            }
+        val pageRoot = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(2), dp(4), dp(8))
+        }
+        val builder = CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged)
+
+        builder.dashboardPanel(
+            // Blank: the toolbar above already shows "Gains & Delay" -- repeating it here would
+            // just cost a row of vertical space this page can't spare.
+            "",
+            "Level, polarity and time alignment",
+            CrossoverDashboardBuilder.HeaderSliderSpec(
+                getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
+            ),
+        ) {
+            val midLeft = addChannelCard(
+                title = "Left Mid",
+                accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_L, delayMin = 0f, delayMax = 2.8f,
+                gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_L, gainMin = -6f, gainMax = 0f, gainStep = .5f,
+                polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
+                onPolarityChanged = ::rebuild,
+            )
+            val lowLeft = addChannelCard(
+                title = "Left Low",
+                accentColor = TEAL,
+                delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_L, delayMin = 0f, delayMax = 2.8f,
+                gainIndex = NativeBmwDspValues.INDEX_LOW_GAIN_L, gainMin = -6f, gainMax = 0f, gainStep = .5f,
+                polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
+                onPolarityChanged = ::rebuild,
+            )
+            val midRight = addChannelCard(
+                title = "Right Mid",
+                accentColor = ORANGE,
+                delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_R, delayMin = 0f, delayMax = 2.8f,
+                gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_R, gainMin = -6f, gainMax = 0f, gainStep = .5f,
+                polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
+                onPolarityChanged = ::rebuild,
+            )
+            val lowRight = addChannelCard(
+                title = "Right Low",
+                accentColor = BmwDashboardSkin.M_RED,
+                delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_R, delayMin = 0f, delayMax = 2.8f,
+                gainIndex = NativeBmwDspValues.INDEX_LOW_GAIN_R, gainMin = -6f, gainMax = 0f, gainStep = .5f,
+                polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
+                onPolarityChanged = ::rebuild,
+            )
+            addChannelDiagramSection(
+                midLeft, lowLeft, midRight, lowRight,
+                midLeftColor = BmwDashboardSkin.LIGHT_BLUE, lowLeftColor = TEAL,
+                midRightColor = ORANGE, lowRightColor = BmwDashboardSkin.M_RED,
+            )
         }
 
-        val gainStructurePage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_gain_structure), "Per-band level") {
-                addSliderRow(getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB")
-                addSliderRow(getString(R.string.bmw_dsp_low_gain_l), NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .1f, "dB")
-                addSliderRow(getString(R.string.bmw_dsp_low_gain_r), NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .1f, "dB")
-                addSliderRow(getString(R.string.bmw_dsp_mid_gain_l), NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .1f, "dB")
-                addSliderRow(getString(R.string.bmw_dsp_mid_gain_r), NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .1f, "dB")
-            }
-        }
-
-        val delayPolarityPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_delay_polarity), "Delay and polarity") {
-                addDelayDiagramSection(
-                    getString(R.string.bmw_dsp_invert_low_polarity), NativeBmwDspValues.INDEX_LOW_INVERT, lowPair(NativeBmwDspValues.FIELD_INVERT),
-                    getString(R.string.bmw_dsp_invert_mid_polarity), NativeBmwDspValues.INDEX_MID_INVERT, midPair(NativeBmwDspValues.FIELD_INVERT),
-                    getString(R.string.bmw_dsp_mid_delay_l), NativeBmwDspValues.INDEX_MID_DELAY_L,
-                    getString(R.string.bmw_dsp_mid_delay_r), NativeBmwDspValues.INDEX_MID_DELAY_R,
-                    getString(R.string.bmw_dsp_low_delay_l), NativeBmwDspValues.INDEX_LOW_DELAY_L,
-                    getString(R.string.bmw_dsp_low_delay_r), NativeBmwDspValues.INDEX_LOW_DELAY_R,
-                    0f, 2.8f, "ms",
-                )
-            }
+        val page = NestedScrollView(requireContext()).apply {
+            isFillViewport = true
+            addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
 
         container.removeAllViews()
-        container.addView(
-            DspPager.build(requireContext(), listOf(gainStructurePage, delayPolarityPage)),
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-        )
+        container.addView(page, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
+
+    companion object {
+        private val TEAL = android.graphics.Color.rgb(38, 198, 218)
+        private val ORANGE = android.graphics.Color.rgb(255, 152, 0)
+    }
 }

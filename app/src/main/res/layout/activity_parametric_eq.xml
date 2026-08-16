@@ -35,12 +35,13 @@
              removed in favor of MainActivity's bottom bar being the sole entry point for those;
              see DspWorkspaceActivity.setUpWorkspaceSidebarActions() for the panel background.
              Back navigation and the power toggle stay in the toolbar itself. -->
-        <!-- Flush against the left, top, and bottom edges of the content area (no margins),
-             so the panel reads as a structural fixture built into the workspace rather than a
-             card floating with gaps around it. -->
+        <!-- Flush against the top and bottom edges of the content area (no margins), so the
+             panel reads as a structural fixture built into the workspace. Wide enough (120dp)
+             to push DspCrossNavBar.populate()'s `compact` check past its 72dp threshold, which
+             switches tiles to the wider icon+label layout instead of small icon-only squares. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
-            android:layout_width="60dp"
+            android:layout_width="120dp"
             android:layout_height="0dp"
             android:orientation="vertical"
             android:gravity="center_horizontal"
@@ -50,11 +51,14 @@
 
             <LinearLayout
                 android:id="@+id/dsp_cross_nav"
-                android:layout_width="60dp"
+                android:layout_width="120dp"
                 android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center_horizontal"
-                android:padding="4dp"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
                 android:visibility="gone" />
         </LinearLayout>
 

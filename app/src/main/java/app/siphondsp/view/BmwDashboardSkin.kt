@@ -2,21 +2,30 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Drawable.ConstantState
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.appcompat.widget.SwitchCompat
+import app.siphondsp.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -33,13 +42,10 @@ object BmwDashboardSkin {
     const val LIGHT_BLUE_BRIGHT = 0xFF87CFF0.toInt()
     const val M_BLUE = 0xFF135BA7.toInt()
     const val M_RED = 0xFFE32B3B.toInt()
-    const val PANEL_TOP = 0xFF20262D.toInt()
-    const val PANEL_BOTTOM = 0xFF101419.toInt()
-    // Solid, flat fill for the sidebar panel -- deliberately not a gradient, unlike the workspace
-    // background it sits in front of, so it reads as a distinct, well-defined fixture rather than
-    // blending into the content behind it. Close to PANEL_BOTTOM's own tone (not near-black) so
-    // it sits alongside the main gradient panel without the harsh contrast a true near-black read
-    // as "a separate slab dropped on top."
+    // Solid, flat fill for the sidebar panel -- deliberately not the photo texture the workspace
+    // background/cards use, so it reads as a distinct, well-defined fixture rather than blending
+    // into the content behind it. Not near-black, so it sits alongside the main panel without the
+    // harsh contrast a true near-black would read as "a separate slab dropped on top."
     const val SIDEBAR_GUNMETAL = 0xFF171B21.toInt()
 
     private val inactiveSurface = Color.rgb(18, 23, 29)
@@ -47,7 +53,91 @@ object BmwDashboardSkin {
     private val inactiveText = Color.rgb(211, 217, 223)
     private val selectedSurface = Color.rgb(24, 69, 101)
 
-    fun brushedPanelDrawable(): Drawable = BrushedMetalDrawable()
+    // Brightness multipliers applied (via ColorMatrix scale) to the same plain-metal crop for the
+    // sidebar's unselected vs. selected tile fills, so the selected tile's darker backing makes it
+    // visibly "pop" against the lighter unselected ones instead of both reading the same shade.
+    private const val UNSELECTED_TILE_BRIGHTNESS = 1.7f
+    private const val SELECTED_TILE_BRIGHTNESS = 0.55f
+
+    fun brushedPanelDrawable(context: Context): Drawable = PhotoBrushedMetalDrawable(context)
+
+    /** Plain (no stripe, no logo) brushed-metal tile fill for sidebar nav tiles -- [darkened]
+     *  picks the selected (darker) or unselected (lighter) brightness variant of the same crop.
+     *  [strokeColor], if given, is drawn as this drawable's own border (see [MetalTileDrawable]'s
+     *  doc for why it can't just be MaterialButton.strokeColor here). */
+    fun metalTileDrawable(context: Context, darkened: Boolean, strokeColor: Int? = null): Drawable =
+        MetalTileDrawable(context, if (darkened) SELECTED_TILE_BRIGHTNESS else UNSELECTED_TILE_BRIGHTNESS, strokeColor)
+
+    @Volatile private var cardBackgroundBitmap: Bitmap? = null
+
+    private fun loadCardBackgroundBitmap(context: Context): Bitmap {
+        cardBackgroundBitmap?.let { return it }
+        synchronized(this) {
+            cardBackgroundBitmap?.let { return it }
+            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_card_background)
+            cardBackgroundBitmap = decoded
+            return decoded
+        }
+    }
+
+    @Volatile private var plainMetalBitmap: Bitmap? = null
+
+    // A small patch of the same background asset, cropped once from a region clear of both the
+    // top M-stripe and the bottom-right logo watermark, then reused (tiled/stretched, at two
+    // different brightness levels) for every sidebar tile instead of decoding/cropping per tile.
+    private fun loadPlainMetalBitmap(context: Context): Bitmap {
+        plainMetalBitmap?.let { return it }
+        synchronized(this) {
+            plainMetalBitmap?.let { return it }
+            val source = loadCardBackgroundBitmap(context)
+            val x = (source.width * 0.05f).roundToInt()
+            val y = (source.height * 0.45f).roundToInt()
+            val w = (source.width * 0.30f).roundToInt()
+            val h = (source.height * 0.30f).roundToInt()
+            val cropped = Bitmap.createBitmap(source, x, y, w, h)
+            plainMetalBitmap = cropped
+            return cropped
+        }
+    }
+
+    @Volatile private var stripeBitmap: Bitmap? = null
+
+    // The tri-colour M-stripe band, cropped once from near the top of the source asset. Drawn
+    // pinned to a fixed height at the top of every card/background (see PhotoBrushedMetalDrawable)
+    // instead of being part of a whole-image crop -- a fixed pixel feature like this gets scaled
+    // away to nothing (or cropped out entirely) once the container's aspect ratio departs very far
+    // from the source image's, which a tall stacked card like Gains & Delay's does.
+    private fun loadStripeBitmap(context: Context): Bitmap {
+        stripeBitmap?.let { return it }
+        synchronized(this) {
+            stripeBitmap?.let { return it }
+            val source = loadCardBackgroundBitmap(context)
+            val y = (source.height * 0.03f).roundToInt()
+            val h = (source.height * 0.05f).roundToInt().coerceAtLeast(1)
+            val cropped = Bitmap.createBitmap(source, 0, y, source.width, h)
+            stripeBitmap = cropped
+            return cropped
+        }
+    }
+
+    @Volatile private var logoBitmap: Bitmap? = null
+
+    // The "M" logo watermark, cropped once from the source asset's bottom-right corner. Drawn at a
+    // fixed size anchored to each card's own bottom-right corner -- same rationale as the stripe.
+    private fun loadLogoBitmap(context: Context): Bitmap {
+        logoBitmap?.let { return it }
+        synchronized(this) {
+            logoBitmap?.let { return it }
+            val source = loadCardBackgroundBitmap(context)
+            val x = (source.width * 0.70f).roundToInt()
+            val y = (source.height * 0.58f).roundToInt()
+            val w = source.width - x
+            val h = (source.height * 0.37f).roundToInt().coerceAtMost(source.height - y)
+            val cropped = Bitmap.createBitmap(source, x, y, w, h)
+            logoBitmap = cropped
+            return cropped
+        }
+    }
 
     /**
      * Solid, near-black sidebar background with an always-lit accent border (the same blue as a
@@ -76,28 +166,16 @@ object BmwDashboardSkin {
     // "ingot" (the old styleSlider()) thumbs.
     const val SLIDER_THUMB_WIDTH_DP = 28
     const val SLIDER_THUMB_HEIGHT_DP = 14
-    private val thumbFillTop = Color.rgb(238, 240, 243)
-    private val thumbFillBottom = Color.rgb(176, 182, 190)
-    private val thumbStroke = Color.rgb(110, 116, 123)
+    // Gunmetal grey, not light aluminum -- reads as a distinct handle against the track's own
+    // black base rather than blending into it.
+    private val thumbFillTop = Color.rgb(94, 100, 108)
+    private val thumbFillBottom = Color.rgb(52, 56, 62)
+    private val thumbStroke = Color.rgb(30, 33, 37)
 
     fun sliderThumbDrawable(context: Context): Drawable = BrushedThumbDrawable(context)
 
-    fun addMAccent(parent: LinearLayout) {
-        val context = parent.context
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        listOf(LIGHT_BLUE, M_BLUE, M_RED).forEach { colour ->
-            row.addView(View(context).apply { setBackgroundColor(colour) }, LinearLayout.LayoutParams(dp(context, 6), dp(context, 18)).apply {
-                marginEnd = dp(context, 2)
-            })
-        }
-        parent.addView(row)
-    }
-
     fun styleWorkspace(root: View) {
-        root.background = brushedPanelDrawable()
+        root.background = brushedPanelDrawable(root.context)
         styleTree(root)
     }
 
@@ -109,7 +187,7 @@ object BmwDashboardSkin {
      * the toolbar/sidebar/content seam, without touching anything inside the content tree.
      */
     fun paintWorkspaceBackground(root: View) {
-        root.background = brushedPanelDrawable()
+        root.background = brushedPanelDrawable(root.context)
     }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
@@ -138,9 +216,28 @@ object BmwDashboardSkin {
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
-        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.rgb(31, 35, 41)))
+        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
         slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
+        applyTrackOutline(slider)
+    }
+
+    /**
+     * Material's Slider only exposes a flat inactive-track tint, no stroke API, so the thin white
+     * border around the black base is drawn as a separate stroke-only rounded-rect behind the
+     * slider, inset from the slider's own (thumb-halo-padded) full height down to roughly the
+     * track band itself.
+     */
+    fun applyTrackOutline(slider: Slider) {
+        val context = slider.context
+        val outline = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(context, 3).toFloat()
+            setStroke(dp(context, 1), Color.WHITE)
+            setColor(Color.TRANSPARENT)
+        }
+        val verticalInset = dp(context, SLIDER_THUMB_HEIGHT_DP)
+        slider.background = InsetDrawable(outline, 0, verticalInset, 0, verticalInset)
     }
 
     fun styleCard(card: MaterialCardView) {
@@ -228,52 +325,133 @@ object BmwDashboardSkin {
     private fun dp(context: Context, value: Int) =
         (value * context.resources.displayMetrics.density).roundToInt()
 
-    private class BrushedMetalDrawable : Drawable() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1f }
+    /**
+     * Renders the real photographed/rendered brushed-metal background: a center-cropped, tiled
+     * plain-metal fill covering the whole bounds, with the tri-colour M-stripe pinned to a fixed
+     * height along the top edge and the "M" logo watermark pinned at a fixed size to the
+     * bottom-right corner -- both independent of the container's own aspect ratio. A whole-image
+     * center-crop was tried first, but on a container much taller than the source photo (e.g. the
+     * Gains & Delay card, which stacks several rows) the crop had to zoom in so far to cover the
+     * height that the stripe and logo -- both fixed pixel features near the source's edges -- were
+     * scaled out of frame entirely. Pinning them as separate fixed-size overlays avoids that.
+     */
+    private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
+        private val fillBitmap = loadPlainMetalBitmap(context)
+        private val stripeBitmap = loadStripeBitmap(context)
+        private val logoBitmap = loadLogoBitmap(context)
+        private val density = context.resources.displayMetrics.density
+
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isFilterBitmap = true
+            shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        }
+        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        private val fillMatrix = Matrix()
+        private val stripeRect = RectF()
+        private val logoRect = RectF()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            if (bounds.width() <= 0 || bounds.height() <= 0) return
+
+            val scale = maxOf(bounds.width().toFloat() / fillBitmap.width, bounds.height().toFloat() / fillBitmap.height)
+            val dx = (bounds.width() - fillBitmap.width * scale) / 2f
+            val dy = (bounds.height() - fillBitmap.height * scale) / 2f
+            fillMatrix.setScale(scale, scale)
+            fillMatrix.postTranslate(bounds.left + dx, bounds.top + dy)
+            (fillPaint.shader as BitmapShader).setLocalMatrix(fillMatrix)
+
+            val stripeHeight = (STRIPE_HEIGHT_DP * density).coerceAtMost(bounds.height().toFloat())
+            stripeRect.set(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.top + stripeHeight)
+
+            val logoAspect = logoBitmap.height.toFloat() / logoBitmap.width
+            val logoMargin = LOGO_MARGIN_DP * density
+            val logoWidth = (LOGO_WIDTH_DP * density).coerceAtMost((bounds.width() - logoMargin * 2).coerceAtLeast(0f))
+            val logoHeight = logoWidth * logoAspect
+            logoRect.set(
+                bounds.right - logoMargin - logoWidth, bounds.bottom - logoMargin - logoHeight,
+                bounds.right - logoMargin, bounds.bottom - logoMargin,
+            )
+        }
 
         override fun draw(canvas: Canvas) {
-            val b = bounds
-            paint.shader = LinearGradient(
-                b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
-                intArrayOf(PANEL_TOP, 0xFF171C22.toInt(), PANEL_BOTTOM),
-                floatArrayOf(0f, .45f, 1f),
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRect(b, paint)
-            paint.shader = null
+            canvas.drawRect(bounds, fillPaint)
+            canvas.drawBitmap(stripeBitmap, null, stripeRect, bitmapPaint)
+            if (!logoRect.isEmpty) canvas.drawBitmap(logoBitmap, null, logoRect, bitmapPaint)
+        }
 
-            var y = b.top
-            var index = 0
-            while (y < b.bottom) {
-                val alpha = if (index % 3 == 0) 22 else 10
-                linePaint.color = Color.argb(alpha, 205, 215, 225)
-                canvas.drawLine(b.left.toFloat(), y.toFloat(), b.right.toFloat(), y.toFloat(), linePaint)
-                y += 3
-                index++
+        override fun setAlpha(alpha: Int) {
+            fillPaint.alpha = alpha
+            bitmapPaint.alpha = alpha
+        }
+
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
+            fillPaint.colorFilter = colorFilter
+            bitmapPaint.colorFilter = colorFilter
+        }
+
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+
+        companion object {
+            private const val STRIPE_HEIGHT_DP = 4
+            private const val LOGO_WIDTH_DP = 90
+            private const val LOGO_MARGIN_DP = 12
+        }
+    }
+
+    /** Plain brushed-metal fill for small sidebar tiles -- see [metalTileDrawable]. Draws its own
+     *  optional stroke ([strokeColor]) rather than relying on MaterialButton's built-in stroke:
+     *  assigning a custom `background` drawable to a MaterialButton replaces its whole internal
+     *  background stack (fill + stroke together), so `MaterialButton.strokeColor` silently stops
+     *  drawing anything once `background` is overridden like this -- the stroke has to be part of
+     *  this drawable itself. */
+    private class MetalTileDrawable(context: Context, brightness: Float, private val strokeColor: Int? = null) : Drawable() {
+        private val bitmap = loadPlainMetalBitmap(context)
+        private val cornerRadiusPx = dp(context, 6).toFloat()
+        private val strokeWidthPx = dp(context, 1).toFloat()
+        private val rect = RectF()
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isFilterBitmap = true
+            shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setScale(brightness, brightness, brightness, 1f) })
+        }
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+        }
+        private val matrix = Matrix()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            rect.set(bounds)
+            if (strokeColor != null) rect.inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
+            if (bounds.width() <= 0 || bounds.height() <= 0) return
+            val scale = maxOf(bounds.width().toFloat() / bitmap.width, bounds.height().toFloat() / bitmap.height)
+            val dx = (bounds.width() - bitmap.width * scale) / 2f
+            val dy = (bounds.height() - bitmap.height * scale) / 2f
+            matrix.setScale(scale, scale)
+            matrix.postTranslate(bounds.left + dx, bounds.top + dy)
+            (paint.shader as BitmapShader).setLocalMatrix(matrix)
+        }
+
+        override fun draw(canvas: Canvas) {
+            canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
+            if (strokeColor != null) {
+                strokePaint.color = strokeColor
+                canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, strokePaint)
             }
-
-            paint.shader = LinearGradient(
-                b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
-                intArrayOf(Color.argb(34, 255, 255, 255), Color.TRANSPARENT, Color.argb(28, 0, 0, 0)),
-                null,
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRect(b, paint)
-            paint.shader = null
         }
 
         override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { paint.colorFilter = colorFilter }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
         @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
     /**
-     * The unified slider thumb: a light brushed-aluminum rectangle, long side horizontal. Same
-     * scan-line-grain + sheen technique as [BrushedMetalDrawable], but on a light base (dark
-     * grain lines instead of light ones) since this sits on top of dark tracks/panels rather
-     * than being one itself, and rounded/stroked like a real control instead of a flat panel.
+     * The unified slider thumb: a gunmetal-grey brushed rectangle, long side horizontal, rounded
+     * and stroked like a real control rather than a flat panel.
      */
     private class BrushedThumbDrawable(private val context: Context) : Drawable() {
         private val cornerRadius = dp(context, 2).toFloat()
@@ -302,8 +480,8 @@ object BmwDashboardSkin {
             var y = b.top
             var index = 0
             while (y < b.bottom) {
-                val alpha = if (index % 2 == 0) 40 else 18
-                linePaint.color = Color.argb(alpha, 90, 96, 104)
+                val alpha = if (index % 2 == 0) 55 else 24
+                linePaint.color = Color.argb(alpha, 150, 156, 164)
                 canvas.drawLine(b.left.toFloat(), y.toFloat(), b.right.toFloat(), y.toFloat(), linePaint)
                 y += 2
                 index++
@@ -346,15 +524,23 @@ object BmwDashboardSkin {
     }
 
     /**
-     * The sidebar's selected-tile background: bright accent fill, plus a blurred glow ring drawn
-     * behind a crisp bright stroke so the border visibly radiates instead of just being outlined.
+     * The sidebar's selected-tile background: a darker brushed-metal fill (vs. the lighter fill
+     * unselected tiles get, via [metalTileDrawable]) so the tile itself visibly "pops", plus a
+     * blurred glow ring drawn behind a crisp bright stroke so the border visibly radiates instead
+     * of just being outlined.
      */
     private class IlluminatedTileDrawable(context: Context) : Drawable() {
         private val corner = dp(context, 6).toFloat()
         private val strokeWidthPx = dp(context, 2).toFloat()
+        private val metalBitmap = loadPlainMetalBitmap(context)
+        private val fillRect = RectF()
+        private val matrix = Matrix()
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = LIGHT_BLUE
-            style = Paint.Style.FILL
+            isFilterBitmap = true
+            shader = BitmapShader(metalBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply {
+                setScale(SELECTED_TILE_BRIGHTNESS, SELECTED_TILE_BRIGHTNESS, SELECTED_TILE_BRIGHTNESS, 1f)
+            })
         }
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = LIGHT_BLUE_BRIGHT
@@ -368,8 +554,19 @@ object BmwDashboardSkin {
             strokeWidth = strokeWidthPx
         }
 
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            fillRect.set(bounds)
+            if (bounds.width() <= 0 || bounds.height() <= 0) return
+            val scale = maxOf(bounds.width().toFloat() / metalBitmap.width, bounds.height().toFloat() / metalBitmap.height)
+            val dx = (bounds.width() - metalBitmap.width * scale) / 2f
+            val dy = (bounds.height() - metalBitmap.height * scale) / 2f
+            matrix.setScale(scale, scale)
+            matrix.postTranslate(bounds.left + dx, bounds.top + dy)
+            (fillPaint.shader as BitmapShader).setLocalMatrix(matrix)
+        }
+
         override fun draw(canvas: Canvas) {
-            val fillRect = RectF(bounds)
             canvas.drawRoundRect(fillRect, corner, corner, fillPaint)
 
             val strokeRect = RectF(bounds).apply {
@@ -380,7 +577,7 @@ object BmwDashboardSkin {
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
