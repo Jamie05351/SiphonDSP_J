@@ -211,19 +211,11 @@ class CrossoverDashboardBuilder(
             minimumHeight = dp(34)
         }
 
-        // Title, value, and slider all on one row: the value sits at the end of the fixed-width
-        // label column (same column every other row type aligns to), with a flexible spacer
-        // absorbing whatever room is left after the title text -- so it reads as evenly spaced
-        // between the title and the slider rather than crammed against either one.
+        // Title, slider, and value all on one row, always in that order: the title sits in its
+        // own fixed-width column, the slider fills whatever room is left, and the value box sits
+        // at the very end -- never in the middle of the row.
         val valueText = createBoxedValueText(values[index] * displayScale, suffix)
-        val labelValue = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(singleLineLabel(label))
-            addView(View(context), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(valueText)
-        }
-        topRow.addView(labelValue, labelParams())
+        topRow.addView(singleLineLabel(label), labelParams())
 
         val slider = Slider(context).apply {
             valueFrom = min
@@ -276,8 +268,9 @@ class CrossoverDashboardBuilder(
 
         topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = dp(14)
-            marginEnd = dp(4)
+            marginEnd = dp(14)
         })
+        topRow.addView(valueText)
         container.addView(topRow)
 
         val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
@@ -285,6 +278,7 @@ class CrossoverDashboardBuilder(
         tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
         tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
         tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
+        tickRow.addView(space(VALUE_WIDTH_DP + 14))
         container.addView(tickRow)
 
         currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
