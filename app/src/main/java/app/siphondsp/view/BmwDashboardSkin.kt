@@ -51,6 +51,15 @@ object BmwDashboardSkin {
     private val inactiveSurface = Color.rgb(18, 23, 29)
     private val inactiveStroke = Color.rgb(61, 71, 82)
     private val inactiveText = Color.rgb(211, 217, 223)
+
+    // Same flat fill/stroke language as styleCheckableButton's segmented controls (Input
+    // Correction/Low Band/Mid Band etc.) -- exposed publicly so the sidebar nav tiles
+    // (DspCrossNavBar) can match that look instead of having their own distinct treatment.
+    // `get()` (not a plain `val`) because these reference `selectedSurface`, declared further
+    // down this same object -- a plain val here would read it before it's initialized.
+    val SELECTED_TILE_SURFACE get() = selectedSurface
+    val INACTIVE_TILE_SURFACE get() = inactiveSurface
+    val INACTIVE_TILE_STROKE get() = inactiveStroke
     private val selectedSurface = Color.rgb(24, 69, 101)
 
     // Brightness multipliers applied (via ColorMatrix scale) to the same plain-metal crop for the
@@ -137,16 +146,6 @@ object BmwDashboardSkin {
             logoBitmap = cropped
             return cropped
         }
-    }
-
-    /**
-     * Solid, near-black sidebar background with an always-lit accent border (the same blue as a
-     * tile's own border when it's the active one), rather than the brushed-gradient look the
-     * rest of the workspace chrome uses.
-     */
-    fun sidebarPanelDrawable(context: Context): Drawable = GradientDrawable().apply {
-        setColor(SIDEBAR_GUNMETAL)
-        setStroke(dp(context, 1), LIGHT_BLUE)
     }
 
     /**
@@ -395,8 +394,10 @@ object BmwDashboardSkin {
 
         companion object {
             private const val STRIPE_HEIGHT_DP = 4
-            private const val LOGO_WIDTH_DP = 90
-            private const val LOGO_MARGIN_DP = 12
+            // Sized for rendering once at full-screen scale (dashboardPanel cards no longer paint
+            // their own independent copy of this background, so this is the only copy on screen).
+            private const val LOGO_WIDTH_DP = 160
+            private const val LOGO_MARGIN_DP = 16
         }
     }
 

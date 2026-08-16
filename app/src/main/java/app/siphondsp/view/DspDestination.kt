@@ -78,29 +78,20 @@ object DspCrossNavBar {
                 iconSize = activity.dp(30)
                 isAllCaps = false
 
+                // Flat fill + clean stroke, same language as the segmented controls elsewhere
+                // (Input Correction/Low Band/Mid Band and friends) rather than the sidebar having
+                // its own distinct metal-texture-plus-glow treatment.
                 if (selected) {
-                    // Darker brushed-metal fill with a blurred glow ring around the border, and a
-                    // BMW-blue illuminated icon/label to match -- BlurMaskFilter has no
-                    // hardware-accelerated path, so the button needs a software layer for the
-                    // glow to actually render.
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                    background = BmwDashboardSkin.litTileDrawable(activity)
-                    // MaterialButton tints ANY background drawable (custom ones included) with
-                    // whatever backgroundTintList it has -- here inherited from the outlined-button
-                    // style -- via SRC_IN, which was silently replacing the custom drawable's own
-                    // colors with a flat dark tint. Clearing it lets it render unmodified.
-                    backgroundTintList = null
-                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    backgroundTintList = ColorStateList.valueOf(BmwDashboardSkin.SELECTED_TILE_SURFACE)
+                    strokeWidth = activity.dp(1)
+                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
+                    setTextColor(Color.WHITE)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
                     isClickable = false
                 } else {
-                    // Lighter brushed-metal fill (vs. the selected tile's darker one) so the
-                    // selected tile visibly pops; white border/icon keep unselected tiles clearly
-                    // visible instead of getting lost against the metal texture. The border is
-                    // drawn by the custom drawable itself (see MetalTileDrawable) -- MaterialButton's
-                    // own strokeColor/strokeWidth don't render once `background` is overridden.
-                    background = BmwDashboardSkin.metalTileDrawable(activity, darkened = false, strokeColor = Color.WHITE)
-                    backgroundTintList = null
+                    backgroundTintList = ColorStateList.valueOf(BmwDashboardSkin.INACTIVE_TILE_SURFACE)
+                    strokeWidth = activity.dp(1)
+                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.INACTIVE_TILE_STROKE)
                     setTextColor(Color.WHITE)
                     iconTint = ColorStateList.valueOf(Color.WHITE)
                     setOnClickListener {

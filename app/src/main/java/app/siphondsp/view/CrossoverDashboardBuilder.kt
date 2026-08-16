@@ -63,13 +63,19 @@ class CrossoverDashboardBuilder(
         headerSlider: HeaderSliderSpec? = null,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
+        // Transparent, not its own copy of the photo background: the workspace root already
+        // paints that once, full-screen (paintWorkspaceBackground/styleWorkspace) -- a card
+        // painting an independent opaque copy across its own (smaller) bounds both hides that
+        // real background behind an opaque duplicate and, since each card gets its own pinned
+        // M-badge, shrinks the badge down to card scale instead of it reading at one full-screen
+        // size. Text, value boxes, sliders, and any live visualizer keep their own solid
+        // backgrounds regardless -- only the card's own body becomes see-through.
         val card = MaterialCardView(context).apply {
             radius = dp(7).toFloat()
             cardElevation = 0f
             strokeWidth = dp(1)
             strokeColor = Color.rgb(62, 72, 84)
             setCardBackgroundColor(Color.TRANSPARENT)
-            background = BmwDashboardSkin.brushedPanelDrawable(context)
         }
 
         val content = LinearLayout(context).apply {
@@ -503,7 +509,7 @@ class CrossoverDashboardBuilder(
 
         content.addView(TextView(context).apply {
             text = title
-            textSize = 13f
+            textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentColor)
         })
@@ -567,7 +573,7 @@ class CrossoverDashboardBuilder(
 
     private fun smallLabel(text: String) = TextView(context).apply {
         this.text = text
-        textSize = 10f
+        textSize = 9f
         setTypeface(typeface, Typeface.BOLD)
         setTextColor(Color.rgb(150, 158, 168))
         letterSpacing = 0.03f
@@ -799,13 +805,13 @@ class CrossoverDashboardBuilder(
      *  PASS crossover cards' own large frequency readout; the box background is new, using
      *  those same cards' dark card background color so it reads as part of the same family. */
     private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 17f
+        textSize = 15f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
         setTextColor(accentBlue)
         gravity = Gravity.CENTER
-        setPadding(dp(14), dp(4), dp(14), dp(4))
+        setPadding(dp(14), dp(3), dp(14), dp(3))
         background = GradientDrawable().apply {
             cornerRadius = dp(5).toFloat()
             setColor(valueBoxBackground)

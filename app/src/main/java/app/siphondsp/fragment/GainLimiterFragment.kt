@@ -63,10 +63,11 @@ class GainLimiterFragment : Fragment() {
         val builder = CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged)
 
         builder.dashboardPanel(
-            // Blank: the toolbar above already shows "Gains & Delay" -- repeating it here would
-            // just cost a row of vertical space this page can't spare.
+            // Blank title and subtitle: the toolbar above already shows "Gains & Delay", and the
+            // subtitle wasn't telling the user anything the page itself doesn't already -- both
+            // just cost rows of vertical space this page can't spare.
             "",
-            "Level, polarity and time alignment",
+            null,
             CrossoverDashboardBuilder.HeaderSliderSpec(
                 getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
             ),
