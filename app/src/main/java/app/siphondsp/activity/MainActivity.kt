@@ -17,7 +17,6 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PersistableBundle
 import android.view.HapticFeedbackConstants
-import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
@@ -198,27 +197,10 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        // Inflate bottom left menu
-        menuInflater.inflate(R.menu.menu_main_bottom_left, binding.leftMenu.menu)
-        binding.leftMenu.setOnMenuItemClickListener { arg0 ->
-            when (arg0.itemId) {
-                R.id.action_settings -> {
-                    startActivity(Intent(this, SettingsActivity::class.java))
-                    true
-                }
-                R.id.action_parametric_eq -> {
-                    startActivity(Intent(this, ParametricEqualizerActivity::class.java))
-                    true
-                }
-                R.id.action_gain_limiter -> {
-                    startActivity(Intent(this, GainLimiterActivity::class.java))
-                    true
-                }
-                else -> false
-            }
-        }
-
-        // Inflate bottom right menu
+        // Inflate bottom bar menu. PEQ/Gains&Delay/Compressor/Crossovers/Settings used to live
+        // here too, but they're all reachable as dedicated tiles on the main shortcuts grid now,
+        // so the bar only carries what isn't: presets/revert/blocklist (collapsed into the "more"
+        // overflow, since none of them are `showAsAction="always"`) plus the power toggle.
         binding.bar.inflateMenu(R.menu.menu_main_bottom)
 
         if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))
@@ -226,14 +208,6 @@ class MainActivity : BaseActivity() {
 
         binding.bar.setOnMenuItemClickListener { arg0 ->
             when (arg0.itemId) {
-                R.id.action_compressor -> {
-                    startActivity(Intent(this, NativeBmwCompressorActivity::class.java))
-                    true
-                }
-                R.id.action_crossover_tilt -> {
-                    startActivity(Intent(this, CrossoverTiltActivity::class.java))
-                    true
-                }
                 R.id.action_blocklist -> {
                     if(!app.isEnhancedProcessing && isRoot()) {
                         showAlert(
@@ -429,16 +403,15 @@ class MainActivity : BaseActivity() {
         val initialLeftPadding = binding.bar.paddingLeft
         val initialRightPadding = binding.bar.paddingRight
         ViewCompat.setOnApplyWindowInsetsListener(binding.bar) { bar, windowInsets ->
+            // Left/right only, to keep the quick actions clear of a landscape gesture-nav strip
+            // on either display edge. Deliberately NOT pushing bottomMargin by the navigation-bar
+            // inset here -- that was leaving a visible gap between the bar and the true bottom
+            // edge, which reads as the bar floating rather than sitting flush against the screen.
             val navigationInsets = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
             bar.updatePadding(
                 left = initialLeftPadding + navigationInsets.left,
                 right = initialRightPadding + navigationInsets.right,
             )
-            val layoutParams = bar.layoutParams as ViewGroup.MarginLayoutParams
-            if (layoutParams.bottomMargin != navigationInsets.bottom) {
-                layoutParams.bottomMargin = navigationInsets.bottom
-                bar.layoutParams = layoutParams
-            }
             windowInsets
         }
         ViewCompat.requestApplyInsets(binding.bar)

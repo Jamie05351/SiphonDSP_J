@@ -3,26 +3,21 @@ package app.siphondsp.fragment
 import android.animation.LayoutTransition
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
+import app.siphondsp.activity.SettingsActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
@@ -32,7 +27,6 @@ import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
-import kotlin.math.roundToInt
 
 class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val prefsApp: Preferences.App by inject()
@@ -93,36 +87,11 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
             updateNoticeOnClick?.invoke()
         }
 
-        // Give the primary DSP destinations the large image-backed dashboard treatment used on
-        // the head-unit concept. The XML keeps the stable IDs/click targets; only the visual
-        // contents are replaced here so navigation and DSP behavior remain untouched.
-        decorateDestinationCard(
-            shortcutsBinding.cardShortcutPeq,
-            R.drawable.card_peq_e60,
-            R.drawable.ic_twotone_peq_sliders_28dp,
-            "PEQ",
-        )
-        decorateDestinationCard(
-            shortcutsBinding.cardShortcutGainsDelay,
-            R.drawable.card_gains_delay_e60,
-            R.drawable.ic_twotone_gain_knob_28dp,
-            "GAINS / DELAY",
-        )
-        decorateDestinationCard(
-            shortcutsBinding.cardShortcutCompressor,
-            R.drawable.card_compressor_e60,
-            R.drawable.ic_twotone_compressor_pulse_28dp,
-            "COMPRESSOR",
-        )
-        decorateDestinationCard(
-            shortcutsBinding.cardShortcutCrossovers,
-            R.drawable.card_crossovers_e60,
-            R.drawable.ic_twotone_crossover_tilt_28dp,
-            "CROSSOVERS",
-        )
-
-        // Primary BMW DSP shortcuts. These open the same activities as the existing nav/menu
-        // actions; the cards are only an additional main-menu entry point.
+        // Primary BMW DSP shortcuts. Each card's whole visible content is one of the pre-built
+        // tile images set directly in the XML (icon/title/subtitle/graphic already baked in) --
+        // only the click targets are wired here. These open the same activities the old bottom
+        // bar icons did; Routing and System are new entries that only used to be reachable via
+        // the DSP workspace sidebar / bottom bar settings icon respectively.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
@@ -134,6 +103,15 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         }
         shortcutsBinding.cardShortcutCrossovers.setOnClickListener {
             startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java))
+        }
+        shortcutsBinding.cardShortcutRouting.setOnClickListener {
+            startActivity(
+                Intent(requireContext(), CrossoverTiltActivity::class.java)
+                    .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING),
+            )
+        }
+        shortcutsBinding.cardShortcutSystem.setOnClickListener {
+            startActivity(Intent(requireContext(), SettingsActivity::class.java))
         }
 
         // Should show notice?
@@ -188,66 +166,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         }
     }
 
-    private fun decorateDestinationCard(
-        card: MaterialCardView,
-        backgroundRes: Int,
-        iconRes: Int,
-        label: String,
-    ) {
-        card.removeAllViews()
-
-        val frame = FrameLayout(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            )
-        }
-
-        frame.addView(ImageView(requireContext()).apply {
-            setImageResource(backgroundRes)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            contentDescription = null
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT,
-        ))
-
-        frame.addView(View(requireContext()).apply {
-            setBackgroundResource(R.drawable.bg_dsp_destination_overlay)
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT,
-        ))
-
-        frame.addView(ImageView(requireContext()).apply {
-            setImageResource(iconRes)
-            setColorFilter(Color.WHITE)
-            contentDescription = label
-        }, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER).apply {
-            topMargin = -dp(18)
-        })
-
-        frame.addView(TextView(requireContext()).apply {
-            text = label
-            setTextColor(Color.WHITE)
-            textSize = if (label == "PEQ") 19f else 17f
-            gravity = Gravity.CENTER
-            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
-            letterSpacing = 0.05f
-            setShadowLayer(5f, 0f, 2f, Color.BLACK)
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            dp(48),
-            Gravity.BOTTOM,
-        ).apply {
-            marginStart = dp(10)
-            marginEnd = dp(10)
-            bottomMargin = dp(8)
-        })
-
-        card.addView(frame)
-    }
-
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when(key) {
             getString(R.string.key_device_profiles_enable) -> {
@@ -262,9 +180,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         // Set timer +1y
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
-
-    private fun dp(value: Int) =
-        (value * resources.displayMetrics.density).roundToInt()
 
     fun setUpdateCardVisible(visible: Boolean) {
         shortcutsBinding.updateNotice.isVisible = visible
