@@ -5,14 +5,15 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.appcompat.widget.ActionMenuView
 import com.google.android.material.bottomappbar.BottomAppBar
-import app.siphondsp.R
 import kotlin.math.roundToInt
 
 /**
- * Bottom app bar that keeps the six landscape quick actions away from the
- * display edges. Their centres are positioned at 10%, 22%, 34%, 66%, 78% and
- * 90% of the complete bar width, while the power FAB remains centred by
- * BottomAppBar in the cradle gap between the two groups.
+ * Bottom app bar that keeps its "more" overflow action away from the display's edge. Its centre
+ * is positioned at 90% of the complete bar width, while the power FAB remains centred by
+ * BottomAppBar in the cradle gap. Used to also position two full groups of quick-action icons
+ * (PEQ/Gains&Delay/Settings on the left, Compressor/Crossovers/overflow on the right) before
+ * those all moved to dedicated tiles on the main shortcuts grid, leaving just the one overflow
+ * icon here.
  */
 class PositionedBottomAppBar @JvmOverloads constructor(
     context: Context,
@@ -20,8 +21,7 @@ class PositionedBottomAppBar @JvmOverloads constructor(
     defStyleAttr: Int = com.google.android.material.R.attr.bottomAppBarStyle,
 ) : BottomAppBar(context, attrs, defStyleAttr) {
 
-    private val leftPositions = floatArrayOf(0.10f, 0.22f, 0.34f)
-    private val rightPositions = floatArrayOf(0.66f, 0.78f, 0.90f)
+    private val positions = floatArrayOf(0.90f)
 
     init {
         clipChildren = false
@@ -39,11 +39,10 @@ class PositionedBottomAppBar @JvmOverloads constructor(
             menu.clipChildren = false
             menu.clipToPadding = false
 
-            // Give each menu the complete bar width so its action views can be
+            // Give the menu the complete bar width so its action views can be
             // positioned using percentages of the full display width.
             menu.layout(0, 0, width, height)
 
-            val positions = if (menu.id == R.id.left_menu) leftPositions else rightPositions
             positionVisibleItems(menu, positions)
         }
     }

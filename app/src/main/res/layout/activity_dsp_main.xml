@@ -45,13 +45,7 @@
         android:contentInsetStart="0.0dip"
         android:contentInsetLeft="0dp"
         app:contentInsetLeft="0dp"
-        app:contentInsetStart="0dp">
-
-        <androidx.appcompat.widget.ActionMenuView
-            android:id="@+id/left_menu"
-            android:layout_width="match_parent"
-            android:layout_height="?actionBarSize" />
-    </app.siphondsp.view.PositionedBottomAppBar>
+        app:contentInsetStart="0dp" />
 
     <app.siphondsp.view.FloatingToggleButton
         android:id="@+id/power_toggle"

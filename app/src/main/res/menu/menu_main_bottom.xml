@@ -3,22 +3,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="me.timschneebrger.siphondsp.activity.MainActivity">
     <item
-        android:id="@+id/action_compressor"
-        android:orderInCategory="20"
-        android:title="@string/action_compressor"
-        android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_twotone_compressor_pulse_28dp"
-        app:showAsAction="always" />
-
-    <item
-        android:id="@+id/action_crossover_tilt"
-        android:orderInCategory="25"
-        android:title="@string/action_crossover_tilt"
-        android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_twotone_crossover_tilt_28dp"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/action_presets"
         android:orderInCategory="100"
         android:title="@string/action_presets"
