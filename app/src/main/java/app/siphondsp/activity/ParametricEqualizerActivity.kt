@@ -29,7 +29,6 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         DspCrossNavBar.populate(this, binding.dspCrossNav, DspDestination.PARAMETRIC_EQ) {
             fragment.canSwitchDspScreens()
         }
-        setUpWorkspaceSidebarActions()
 
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
         // is not attached to onStart/onResume or any DSP/service lifecycle callback.

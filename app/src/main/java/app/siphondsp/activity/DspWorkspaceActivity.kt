@@ -21,10 +21,12 @@ import app.siphondsp.utils.isRootless
 import app.siphondsp.view.BmwDashboardSkin
 
 /** Shared chrome for the dedicated BMW DSP workspaces: the power toggle (still a Toolbar action
- *  icon) plus the sidebar's solid panel background -- see [setUpWorkspaceSidebarActions].
- *  Settings, Presets, Revert, and Blocklist live solely on MainActivity's bottom bar now; they
- *  used to also be reachable from a settings cog/3-dot overflow in this sidebar, removed in
- *  favor of Routing taking that space as a DspCrossNavBar tile instead. */
+ *  icon). Settings, Presets, Revert, and Blocklist live solely on MainActivity's bottom bar now;
+ *  they used to also be reachable from a settings cog/3-dot overflow in this sidebar, removed in
+ *  favor of Routing taking that space as a DspCrossNavBar tile instead. The sidebar itself has no
+ *  background of its own -- it's transparent, so the same continuous photo background painted on
+ *  the workspace root (paintWorkspaceBackground/styleWorkspace) shows through behind it too,
+ *  rather than a separate solid panel colour hiding it. */
 abstract class DspWorkspaceActivity : BaseActivity() {
     private val serviceStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -48,15 +50,6 @@ abstract class DspWorkspaceActivity : BaseActivity() {
             true
         }
         else -> super.onOptionsItemSelected(item)
-    }
-
-    /** Paints the sidebar's solid gunmetal panel background. Call once after setContentView(),
-     *  same as each subclass already calls DspCrossNavBar.populate() itself. (AppCompatActivity
-     *  doesn't reliably call onContentChanged() the way plain Activity does -- it delegates
-     *  setContentView() to AppCompatDelegate instead -- so that hook isn't a safe place for
-     *  this.) */
-    protected fun setUpWorkspaceSidebarActions() {
-        findViewById<View>(R.id.dsp_sidebar)?.background = BmwDashboardSkin.sidebarPanelDrawable(this)
     }
 
     override fun onStart() {

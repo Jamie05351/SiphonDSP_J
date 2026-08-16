@@ -63,13 +63,19 @@ class CrossoverDashboardBuilder(
         headerSlider: HeaderSliderSpec? = null,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
+        // Transparent, not its own copy of the photo background: the workspace root already
+        // paints that once, full-screen (paintWorkspaceBackground/styleWorkspace) -- a card
+        // painting an independent opaque copy across its own (smaller) bounds both hides that
+        // real background behind an opaque duplicate and, since each card gets its own pinned
+        // M-badge, shrinks the badge down to card scale instead of it reading at one full-screen
+        // size. Text, value boxes, sliders, and any live visualizer keep their own solid
+        // backgrounds regardless -- only the card's own body becomes see-through.
         val card = MaterialCardView(context).apply {
             radius = dp(7).toFloat()
             cardElevation = 0f
             strokeWidth = dp(1)
             strokeColor = Color.rgb(62, 72, 84)
             setCardBackgroundColor(Color.TRANSPARENT)
-            background = BmwDashboardSkin.brushedPanelDrawable(context)
         }
 
         val content = LinearLayout(context).apply {
@@ -503,7 +509,7 @@ class CrossoverDashboardBuilder(
 
         content.addView(TextView(context).apply {
             text = title
-            textSize = 13f
+            textSize = 12f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentColor)
         })
@@ -544,30 +550,30 @@ class CrossoverDashboardBuilder(
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
+        // Weighted (0dp + weight), not fixed dp widths: this row's total width used to be a fixed
+        // ~906dp (340+190+340 plus margins) centered in a FrameLayout, which comfortably fit the
+        // wide reference emulator this was tuned against but hard-clipped off-screen on a phone
+        // whose landscape width in dp is narrower than that -- nothing here scrolls, so overflow
+        // just vanishes past the screen edge instead of shrinking to fit. Weights preserve the
+        // same relative proportions (reusing the old fixed dp values as weight ratios) while
+        // making the whole row stretch or shrink to whatever width is actually available.
         val innerRow = ChannelConnectorRow(context, midLeftColor, lowLeftColor, midRightColor, lowRightColor)
         innerRow.addView(
             leftColumn,
-            LinearLayout.LayoutParams(dp(CHANNEL_CARD_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(18) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginEnd = dp(18) },
         )
-        innerRow.addView(carImage, LinearLayout.LayoutParams(dp(CAR_DIAGRAM_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+        innerRow.addView(carImage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CAR_DIAGRAM_WIDTH_DP.toFloat()))
         innerRow.addView(
             rightColumn,
-            LinearLayout.LayoutParams(dp(CHANNEL_CARD_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(18) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginStart = dp(18) },
         )
 
-        val centeredFrame = android.widget.FrameLayout(context).apply {
-            addView(innerRow, android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER,
-            ))
-        }
-        addCustomView(centeredFrame, topMarginDp = 4, bottomMarginDp = 4)
+        addCustomView(innerRow, topMarginDp = 4, bottomMarginDp = 4)
     }
 
     private fun smallLabel(text: String) = TextView(context).apply {
         this.text = text
-        textSize = 10f
+        textSize = 9f
         setTypeface(typeface, Typeface.BOLD)
         setTextColor(Color.rgb(150, 158, 168))
         letterSpacing = 0.03f
@@ -799,13 +805,13 @@ class CrossoverDashboardBuilder(
      *  PASS crossover cards' own large frequency readout; the box background is new, using
      *  those same cards' dark card background color so it reads as part of the same family. */
     private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 17f
+        textSize = 15f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
         setTextColor(accentBlue)
         gravity = Gravity.CENTER
-        setPadding(dp(14), dp(4), dp(14), dp(4))
+        setPadding(dp(14), dp(3), dp(14), dp(3))
         background = GradientDrawable().apply {
             cornerRadius = dp(5).toFloat()
             setColor(valueBoxBackground)
