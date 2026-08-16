@@ -49,16 +49,16 @@ object DspCrossNavBar {
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
-        val compact = container.layoutParams?.width?.let { it in 1..activity.dp(72) } == true
         val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
-            // Flexible spacer before every tile except the first, so the tiles distribute evenly
-            // across the sidebar's full height (dsp_cross_nav is match_parent) instead of
-            // clustering at the top with empty space left below the last one.
+            // Small fixed gap before every tile except the first -- tiles themselves are weighted
+            // to fill the column's full height (see the addView below), so this is just breathing
+            // room between them, not a flexible spacer soaking up leftover space the way a huge gap
+            // between small fixed-height tiles used to.
             if (index > 0) {
-                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(8)))
             }
 
             val selected = destination == current
@@ -69,15 +69,14 @@ object DspCrossNavBar {
                 insetTop = 0
                 insetBottom = 0
                 cornerRadius = activity.dp(6)
-                text = if (compact) "" else activity.getString(destination.sidebarLabelRes)
+                text = activity.getString(destination.sidebarLabelRes)
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
-                if (!compact) textSize = 12f
+                textSize = 12f
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = if (compact) 0 else activity.dp(8)
+                iconPadding = activity.dp(8)
                 iconSize = activity.dp(30)
                 isAllCaps = false
-                if (compact) setPadding(0, 0, 0, 0)
 
                 if (selected) {
                     // Darker brushed-metal fill with a blurred glow ring around the border, and a
@@ -115,14 +114,11 @@ object DspCrossNavBar {
             }
             container.addView(
                 button,
-                if (compact) {
-                    // Fills the column's full usable width (60dp column - 4dp padding each side),
-                    // up from 46dp -- bigger tiles with bigger icons, and less empty gap between
-                    // them since the flexible spacers above now have less leftover height to fill.
-                    LinearLayout.LayoutParams(activity.dp(52), activity.dp(52))
-                } else {
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(46))
-                },
+                // Weighted (0 height + weight) rather than a fixed dp height, so the tiles
+                // themselves expand to fill the column's available height -- the gaps between
+                // them come only from the small fixed spacer above, not from the tiles staying
+                // small while empty space collects around them.
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
             )
         }
         container.visibility = View.VISIBLE
