@@ -23,16 +23,17 @@ import kotlin.reflect.KClass
 
 enum class DspDestination(
     @StringRes val labelRes: Int,
+    @StringRes val sidebarLabelRes: Int,
     @DrawableRes val icon: Int,
     val activityClass: KClass<out AppCompatActivity>,
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
-    GAINS_DELAY(R.string.action_gain_limiter, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    COMPRESSOR(R.string.action_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
+    ROUTING(R.string.action_routing, R.string.sidebar_label_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
 }
 
 object DspCrossNavBar {
@@ -68,38 +69,41 @@ object DspCrossNavBar {
                 insetTop = 0
                 insetBottom = 0
                 cornerRadius = activity.dp(6)
-                text = if (compact) "" else activity.getString(destination.labelRes)
+                text = if (compact) "" else activity.getString(destination.sidebarLabelRes)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                if (!compact) textSize = 12f
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = if (compact) 0 else activity.dp(10)
+                iconPadding = if (compact) 0 else activity.dp(8)
                 iconSize = activity.dp(30)
                 isAllCaps = false
                 if (compact) setPadding(0, 0, 0, 0)
 
                 if (selected) {
-                    // Bright illuminated fill with a blurred glow ring around the border -- white
-                    // icon on top. BlurMaskFilter has no hardware-accelerated path, so the button
-                    // needs a software layer for the glow to actually render.
+                    // Darker brushed-metal fill with a blurred glow ring around the border, and a
+                    // BMW-blue illuminated icon/label to match -- BlurMaskFilter has no
+                    // hardware-accelerated path, so the button needs a software layer for the
+                    // glow to actually render.
                     setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     background = BmwDashboardSkin.litTileDrawable(activity)
                     // MaterialButton tints ANY background drawable (custom ones included) with
                     // whatever backgroundTintList it has -- here inherited from the outlined-button
-                    // style -- via SRC_IN, which was silently replacing the bright fill/glow colors
-                    // above with a flat dark tint. Clearing it lets the custom drawable's own
-                    // colors render unmodified.
+                    // style -- via SRC_IN, which was silently replacing the custom drawable's own
+                    // colors with a flat dark tint. Clearing it lets it render unmodified.
                     backgroundTintList = null
-                    setTextColor(Color.WHITE)
-                    iconTint = ColorStateList.valueOf(Color.WHITE)
+                    setTextColor(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
                     isClickable = false
                 } else {
-                    // Opaque, not translucent: needs to read as a distinct surface against the
-                    // sidebar's own background rather than blending into it. White border (rather
-                    // than a dark stroke close to the background tone) so unselected tiles stay
-                    // clearly visible instead of getting lost.
-                    backgroundTintList = ColorStateList.valueOf(Color.rgb(18, 23, 29))
+                    // Lighter brushed-metal fill (vs. the selected tile's darker one) so the
+                    // selected tile visibly pops; white border/icon keep unselected tiles clearly
+                    // visible instead of getting lost against the metal texture.
+                    background = BmwDashboardSkin.metalTileDrawable(activity, darkened = false)
+                    backgroundTintList = null
                     strokeWidth = activity.dp(1)
                     strokeColor = ColorStateList.valueOf(Color.WHITE)
-                    setTextColor(Color.rgb(211, 217, 223))
-                    iconTint = ColorStateList.valueOf(Color.rgb(194, 202, 210))
+                    setTextColor(Color.WHITE)
+                    iconTint = ColorStateList.valueOf(Color.WHITE)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)

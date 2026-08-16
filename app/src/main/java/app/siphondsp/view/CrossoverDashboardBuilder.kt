@@ -38,7 +38,6 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
-    private val inactiveTrack = Color.rgb(98, 104, 112)
     private val valueBoxBackground = Color.rgb(16, 19, 24)
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
@@ -55,7 +54,7 @@ class CrossoverDashboardBuilder(
             strokeWidth = dp(1)
             strokeColor = Color.rgb(62, 72, 84)
             setCardBackgroundColor(Color.TRANSPARENT)
-            background = BmwDashboardSkin.brushedPanelDrawable()
+            background = BmwDashboardSkin.brushedPanelDrawable(context)
         }
 
         val content = LinearLayout(context).apply {
@@ -235,9 +234,10 @@ class CrossoverDashboardBuilder(
             thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
             thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
             setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(inactiveTrack))
+            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
+            BmwDashboardSkin.applyTrackOutline(this)
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -654,6 +654,7 @@ class CrossoverDashboardBuilder(
         background = GradientDrawable().apply {
             cornerRadius = dp(5).toFloat()
             setColor(valueBoxBackground)
+            setStroke(dp(1), accentBlue)
         }
         updateValueBox(this, value, suffix)
     }
@@ -671,6 +672,7 @@ class CrossoverDashboardBuilder(
             background = GradientDrawable().apply {
                 cornerRadius = dp(6).toFloat()
                 setColor(valueBoxBackground)
+                setStroke(dp(1), accentBlue)
             }
         }
         box.addView(TextView(context).apply {
