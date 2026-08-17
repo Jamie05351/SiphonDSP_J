@@ -42,6 +42,8 @@
         app:fabAnchorMode="cradle"
         app:fabCradleMargin="16dp"
         app:menuAlignmentMode="auto"
+        app:navigationIcon="@drawable/ic_twotone_settings_24dp"
+        app:navigationIconTint="?attr/actionMenuTextColor"
         android:contentInsetStart="0.0dip"
         android:contentInsetLeft="0dp"
         app:contentInsetLeft="0dp"

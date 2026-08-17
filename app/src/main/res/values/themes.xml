@@ -89,6 +89,18 @@
         <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.SiphonDSP.Card</item>
     </style>
 
+    <!-- Overlaid on top of a photographic tile background, so it needs its own contrast (shadow)
+         rather than relying on the theme's on-surface color. -->
+    <style name="TextAppearance.SiphonDSP.TileLabel" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:shadowColor">#B3000000</item>
+        <item name="android:shadowDx">0</item>
+        <item name="android:shadowDy">1</item>
+        <item name="android:shadowRadius">4</item>
+    </style>
+
     <style name="Theme.SiphonDSP.MaterialSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
         <item name="thumbTint">@color/selector_material_switch_thumb_tint</item>
         <item name="trackTint">@color/selector_material_switch_track_tint</item>
