@@ -56,3 +56,57 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCompressorMeter(JNIEnv* e
     if(result != nullptr) env->SetFloatArrayRegion(result,0,6,values);
     return result;
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env,jobject,jlong self)
+{
+    if(env == nullptr || self == 0) return;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor != nullptr) processor->startCapture();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_stopNativeBmwCapture(JNIEnv* env,jobject,jlong self)
+{
+    if(env == nullptr || self == 0) return;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor != nullptr) processor->stopCapture();
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCaptureFrameCount(JNIEnv* env,jobject,jlong self)
+{
+    if(env == nullptr || self == 0) return 0;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor == nullptr) return 0;
+    return static_cast<jlong>(processor->captureFrameCount());
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_exportNativeBmwCaptureWav(
+    JNIEnv* env, jobject, jlong self, jstring rawInPathObj, jstring outPathObj)
+{
+    if(env == nullptr || self == 0 || rawInPathObj == nullptr || outPathObj == nullptr) return nullptr;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor == nullptr) return nullptr;
+    const char* rawInPath = env->GetStringUTFChars(rawInPathObj, nullptr);
+    const char* outPath = env->GetStringUTFChars(outPathObj, nullptr);
+    if(rawInPath == nullptr || outPath == nullptr) {
+        if(rawInPath) env->ReleaseStringUTFChars(rawInPathObj, rawInPath);
+        if(outPath) env->ReleaseStringUTFChars(outPathObj, outPath);
+        return nullptr;
+    }
+    NativeBmwDspProcessor::CaptureExportResult result;
+    const bool ok = processor->exportCaptureWav(rawInPath, outPath, result);
+    env->ReleaseStringUTFChars(rawInPathObj, rawInPath);
+    env->ReleaseStringUTFChars(outPathObj, outPath);
+    if(!ok) return nullptr;
+    const float values[3] = {result.peakInDb, result.peakOutDb, result.nullTestRmsDb};
+    jfloatArray resultArray = env->NewFloatArray(3);
+    if(resultArray != nullptr) env->SetFloatArrayRegion(resultArray, 0, 3, values);
+    return resultArray;
+}

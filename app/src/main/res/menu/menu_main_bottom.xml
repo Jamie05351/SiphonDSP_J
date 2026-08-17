@@ -25,4 +25,12 @@
         android:icon="@drawable/ic_twotone_app_blocking_24dp"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_measurement"
+        android:orderInCategory="100"
+        android:title="@string/action_measurement"
+        android:iconTint="?attr/actionMenuTextColor"
+        android:icon="@drawable/ic_baseline_waveform_24dp"
+        app:showAsAction="never" />
+
 </menu>

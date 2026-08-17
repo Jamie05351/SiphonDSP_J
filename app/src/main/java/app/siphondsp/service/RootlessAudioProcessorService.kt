@@ -850,6 +850,21 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeBmwCompressorMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwCompressorMeter()
 
+        fun startNativeBmwCapture(): Boolean {
+            val service = activeInstance ?: return false
+            service.engine.startNativeBmwCapture()
+            return true
+        }
+
+        fun stopNativeBmwCapture() {
+            activeInstance?.engine?.stopNativeBmwCapture()
+        }
+
+        fun nativeBmwCaptureFrameCount(): Long? = activeInstance?.engine?.nativeBmwCaptureFrameCount()
+
+        fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =
+            activeInstance?.engine?.exportNativeBmwCaptureWav(rawInPath, outPath)
+
         fun start(context: Context, data: Intent?) {
             try {
                 context.startForegroundService(ServiceNotificationHelper.createStartIntent(context, data))
