@@ -6,7 +6,10 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -17,7 +20,7 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
-import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
@@ -37,6 +40,9 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
+    // Sampled from the brushed-metal reference photos' outer border stroke.
+    private val SIDEBAR_BORDER_COLOR = Color.rgb(0x90, 0xA3, 0xAC)
+
     fun populate(
         activity: FragmentActivity,
         container: LinearLayout,
@@ -49,7 +55,6 @@ object DspCrossNavBar {
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
-        val outlinedButtonStyle = com.google.android.material.R.attr.materialIconButtonOutlinedStyle
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
@@ -62,38 +67,21 @@ object DspCrossNavBar {
             }
 
             val selected = destination == current
-            val button = MaterialButton(activity, null, outlinedButtonStyle).apply {
-                icon = ContextCompat.getDrawable(activity, destination.icon)
+
+            // Brushed-metal panel + a left accent bar that lights up solid blue when selected,
+            // replacing the old flat-tinted-button look. Icon and label stay white in both
+            // states now -- only the accent bar's image changes -- since that's the whole
+            // selected/unselected signal in the reference photos this was designed from.
+            val card = MaterialCardView(activity).apply {
                 contentDescription = activity.getString(destination.labelRes)
                 tooltipText = activity.getString(destination.labelRes)
-                insetTop = 0
-                insetBottom = 0
-                cornerRadius = activity.dp(6)
-                text = activity.getString(destination.sidebarLabelRes)
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                textSize = 12f
-                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-                iconPadding = activity.dp(8)
-                iconSize = activity.dp(30)
-                isAllCaps = false
-
-                // Flat fill + clean stroke, same language as the segmented controls elsewhere
-                // (Input Correction/Low Band/Mid Band and friends) rather than the sidebar having
-                // its own distinct metal-texture-plus-glow treatment.
+                radius = activity.dp(6).toFloat()
+                strokeWidth = activity.dp(1)
+                setStrokeColor(ColorStateList.valueOf(SIDEBAR_BORDER_COLOR))
+                cardElevation = 0f
                 if (selected) {
-                    backgroundTintList = ColorStateList.valueOf(BmwDashboardSkin.SELECTED_TILE_SURFACE)
-                    strokeWidth = activity.dp(1)
-                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
-                    setTextColor(Color.WHITE)
-                    iconTint = ColorStateList.valueOf(BmwDashboardSkin.LIGHT_BLUE)
                     isClickable = false
                 } else {
-                    backgroundTintList = ColorStateList.valueOf(BmwDashboardSkin.INACTIVE_TILE_SURFACE)
-                    strokeWidth = activity.dp(1)
-                    strokeColor = ColorStateList.valueOf(BmwDashboardSkin.INACTIVE_TILE_STROKE)
-                    setTextColor(Color.WHITE)
-                    iconTint = ColorStateList.valueOf(Color.WHITE)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -103,8 +91,51 @@ object DspCrossNavBar {
                     }
                 }
             }
+
+            val texture = ImageView(activity).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageResource(R.drawable.sidebar_tile_texture)
+            }
+            card.addView(texture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+            val content = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val accentBar = ImageView(activity).apply {
+                scaleType = ImageView.ScaleType.FIT_XY
+                setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
+            }
+            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(14), LinearLayout.LayoutParams.MATCH_PARENT))
+
+            val icon = ImageView(activity).apply {
+                setImageDrawable(ContextCompat.getDrawable(activity, destination.icon))
+                imageTintList = ColorStateList.valueOf(Color.WHITE)
+            }
+            content.addView(
+                icon,
+                LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply { leftMargin = activity.dp(8) },
+            )
+
+            val label = TextView(activity).apply {
+                text = activity.getString(destination.sidebarLabelRes)
+                setTextColor(Color.WHITE)
+                textSize = 12f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+            content.addView(
+                label,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    leftMargin = activity.dp(8)
+                },
+            )
+
+            card.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
             container.addView(
-                button,
+                card,
                 // Weighted (0 height + weight) rather than a fixed dp height, so the tiles
                 // themselves expand to fill the column's available height -- the gaps between
                 // them come only from the small fixed spacer above, not from the tiles staying
