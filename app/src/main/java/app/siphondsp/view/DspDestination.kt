@@ -79,6 +79,10 @@ object DspCrossNavBar {
                 strokeWidth = activity.dp(1)
                 setStrokeColor(ColorStateList.valueOf(SIDEBAR_BORDER_COLOR))
                 cardElevation = 0f
+                // The default Material3 outlined-card content padding was eating into the
+                // already-tight 120dp column, leaving barely any room for the label before it
+                // had to ellipsize -- this tile draws all the way to its own stroke instead.
+                setContentPadding(0, 0, 0, 0)
                 if (selected) {
                     isClickable = false
                 } else {
@@ -107,7 +111,7 @@ object DspCrossNavBar {
                 scaleType = ImageView.ScaleType.FIT_XY
                 setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
             }
-            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(14), LinearLayout.LayoutParams.MATCH_PARENT))
+            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(10), LinearLayout.LayoutParams.MATCH_PARENT))
 
             val icon = ImageView(activity).apply {
                 setImageDrawable(ContextCompat.getDrawable(activity, destination.icon))
@@ -115,20 +119,24 @@ object DspCrossNavBar {
             }
             content.addView(
                 icon,
-                LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply { leftMargin = activity.dp(8) },
+                LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply { leftMargin = activity.dp(6) },
             )
 
             val label = TextView(activity).apply {
                 text = activity.getString(destination.sidebarLabelRes)
                 setTextColor(Color.WHITE)
-                textSize = 12f
-                maxLines = 1
+                textSize = 11f
+                // Wraps instead of ellipsizing: at this column width even the pre-shortened
+                // labels ("Comp", "Xover") don't reliably fit on one line once the icon and
+                // accent bar are accounted for, and a mid-word "Co..." reads as broken UI.
+                maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
             content.addView(
                 label,
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    leftMargin = activity.dp(8)
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = activity.dp(4)
+                    rightMargin = activity.dp(4)
                 },
             )
 
