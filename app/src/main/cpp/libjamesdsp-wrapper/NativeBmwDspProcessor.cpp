@@ -2,6 +2,11 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
+// Declarations only -- NOT defining DR_WAV_IMPLEMENTATION here. JdspImpResToolbox.c already
+// defines it once and jamesdsp-wrapper links against jdspimprestoolbox (see CMakeLists.txt),
+// so the actual drwav_* function bodies are resolved from there at link time.
+#include "../libjdspimptoolbox/dr_wav.h"
 
 namespace {
 constexpr float PI=3.14159265358979323846f,BW=0.7071067812f;
@@ -218,7 +223,77 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
  l=oR;r=oL;
 }
 
-const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);auto*w=const_cast<float*>(s);for(std::size_t i=0;i+1<n;i+=2)processFrame(w[i],w[i+1]);return s;}
-const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=32768.f,invScale=1.f/scale;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;processFrame(l,r);w[i]=clampInt<int16_t>(l*scale);w[i+1]=clampInt<int16_t>(r*scale);}return s;}
-const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=2147483648.f,invScale=1.f/scale;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;processFrame(l,r);w[i]=clampInt<int32_t>(l*scale);w[i+1]=clampInt<int32_t>(r*scale);}return s;}
+const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);auto*w=const_cast<float*>(s);for(std::size_t i=0;i+1<n;i+=2){captureTapIn(w[i],w[i+1]);processFrame(w[i],w[i+1]);captureTapOut(w[i],w[i+1]);}return s;}
+const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=32768.f,invScale=1.f/scale;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;captureTapIn(l,r);processFrame(l,r);captureTapOut(l,r);w[i]=clampInt<int16_t>(l*scale);w[i+1]=clampInt<int16_t>(r*scale);}return s;}
+const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=2147483648.f,invScale=1.f/scale;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;captureTapIn(l,r);processFrame(l,r);captureTapOut(l,r);w[i]=clampInt<int32_t>(l*scale);w[i+1]=clampInt<int32_t>(r*scale);}return s;}
 void NativeBmwDspProcessor::readCompressorMeter(float*v,std::size_t n)const{if(!v||n<6)return;const auto&ll=dynamics(OutputId::LowLeft);const auto&lr=dynamics(OutputId::LowRight);const auto&ml=dynamics(OutputId::MidLeft);const auto&mr=dynamics(OutputId::MidRight);v[0]=std::max(ll.inputDb.load(),lr.inputDb.load());v[1]=std::max(ll.outputDb.load(),lr.outputDb.load());v[2]=std::max(ll.gainReductionDb.load(),lr.gainReductionDb.load());v[3]=std::max(ml.inputDb.load(),mr.inputDb.load());v[4]=std::max(ml.outputDb.load(),mr.outputDb.load());v[5]=std::max(ml.gainReductionDb.load(),mr.gainReductionDb.load());}
+
+void NativeBmwDspProcessor::startCapture() {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    // Reallocating only when the size actually changes (not on every start) avoids repeatedly
+    // touching ~23MB of memory for repeat captures at the same sample rate.
+    const std::size_t capacity = static_cast<std::size_t>(sampleRate_ * kCaptureMaxSeconds);
+    if (captureRawInL_.size() != capacity) {
+        captureRawInL_.assign(capacity, 0.f);
+        captureRawInR_.assign(capacity, 0.f);
+        captureOutL_.assign(capacity, 0.f);
+        captureOutR_.assign(capacity, 0.f);
+    }
+    captureCapacity_ = capacity;
+    captureWriteIndex_.store(0, std::memory_order_relaxed);
+    captureEnabled_ = capacity > 0;
+}
+
+void NativeBmwDspProcessor::stopCapture() {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    captureEnabled_ = false;
+}
+
+std::size_t NativeBmwDspProcessor::captureFrameCount() const {
+    return captureWriteIndex_.load(std::memory_order_relaxed);
+}
+
+bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* outPath, CaptureExportResult& result) const {
+    if (!rawInPath || !outPath) return false;
+    const std::size_t n = captureFrameCount();
+    if (n == 0) return false;
+
+    auto writeStereo = [&](const char* path, const float* left, const float* right) -> bool {
+        std::vector<float> interleaved(n * 2);
+        for (std::size_t i = 0; i < n; ++i) {
+            interleaved[i * 2] = left[i];
+            interleaved[i * 2 + 1] = right[i];
+        }
+        drwav wav;
+        drwav_data_format format;
+        format.container = drwav_container_riff;
+        format.format = DR_WAVE_FORMAT_IEEE_FLOAT;
+        format.channels = 2;
+        format.sampleRate = static_cast<drwav_uint32>(sampleRate_);
+        format.bitsPerSample = 32;
+        if (!drwav_init_file_write(&wav, path, &format, nullptr)) return false;
+        const drwav_uint64 written = drwav_write_pcm_frames(&wav, n, interleaved.data());
+        drwav_uninit(&wav);
+        return written == n;
+    };
+
+    if (!writeStereo(rawInPath, captureRawInL_.data(), captureRawInR_.data())) return false;
+    if (!writeStereo(outPath, captureOutL_.data(), captureOutR_.data())) return false;
+
+    // Null test: RMS of (final output - raw input) across both channels. Near-silent when the
+    // DSP genuinely isn't changing the signal beyond headroom/tilt/limiter defaults; a nonzero
+    // reading pinpoints that *something* in the chain is doing more than expected.
+    float peakIn = 0.f, peakOut = 0.f, diffSumSq = 0.f;
+    for (std::size_t i = 0; i < n; ++i) {
+        peakIn = std::max({peakIn, std::fabs(captureRawInL_[i]), std::fabs(captureRawInR_[i])});
+        peakOut = std::max({peakOut, std::fabs(captureOutL_[i]), std::fabs(captureOutR_[i])});
+        const float dl = captureOutL_[i] - captureRawInL_[i];
+        const float dr = captureOutR_[i] - captureRawInR_[i];
+        diffSumSq += dl * dl + dr * dr;
+    }
+    const float rms = std::sqrt(diffSumSq / static_cast<float>(n * 2));
+    result.peakInDb = peakIn > 0.f ? 20.f * std::log10(peakIn) : -100.f;
+    result.peakOutDb = peakOut > 0.f ? 20.f * std::log10(peakOut) : -100.f;
+    result.nullTestRmsDb = rms > 0.f ? 20.f * std::log10(rms) : -100.f;
+    return true;
+}

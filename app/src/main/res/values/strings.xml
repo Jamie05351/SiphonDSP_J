@@ -10,6 +10,7 @@
     <string name="action_presets">Presets</string>
     <string name="action_revert">Reset to defaults</string>
     <string name="action_blocked_apps">Excluded apps</string>
+    <string name="action_measurement">Measurement</string>
 
     <!-- Notification channels -->
     <string name="notification_group_service">Service</string>
@@ -576,6 +577,20 @@
     <string name="blocklist_delete_title">Remove selected app?</string>
     <string name="blocklist_delete">Do you want to remove this app from the exclusion list?</string>
     <string name="blocklist_no_exclusions">No excluded apps</string>
+
+    <!-- Measurement capture -->
+    <string name="title_activity_measurement_capture">Measurement</string>
+    <string name="measurement_explainer">Capture the signal entering the DSP chain and the signal leaving it, then export both as WAV files for analysis.</string>
+    <string name="measurement_start_capture">Start capture</string>
+    <string name="measurement_stop_capture">Stop capture</string>
+    <string name="measurement_export">Export to folder</string>
+    <string name="measurement_status_idle">Not capturing</string>
+    <string name="measurement_status_capturing">Capturing… %1$.1fs / %2$.1fs</string>
+    <string name="measurement_status_captured">Captured %1$.1fs</string>
+    <string name="measurement_engine_not_running">Enable the DSP engine before capturing</string>
+    <string name="measurement_export_failed">Export failed</string>
+    <string name="measurement_export_succeeded">Exported to selected folder</string>
+    <string name="measurement_readout">Peak in %1$.1f dB   Peak out %2$.1f dB   Null test RMS %3$.1f dB</string>
     <string name="blocklist_unsupported_apps">Unsupported apps</string>
     <string name="blocklist_unsupported_apps_message"><![CDATA[<p>This app does not support processing apps that block third parties from recording their audio output. To prevent these apps from being muted due to their capture restrictions, they are automatically excluded from audio processing and are not re-routed.</p><p><u>Affected apps:</u><br/>%s</p>]]></string>
 

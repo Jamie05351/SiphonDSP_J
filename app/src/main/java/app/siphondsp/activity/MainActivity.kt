@@ -245,6 +245,10 @@ class MainActivity : BaseActivity() {
                     }
                     true
                 }
+                R.id.action_measurement -> {
+                    startActivity(Intent(this, MeasurementCaptureActivity::class.java))
+                    true
+                }
                 else -> false
             }
         }

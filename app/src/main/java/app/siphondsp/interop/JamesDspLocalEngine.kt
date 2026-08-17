@@ -340,6 +340,16 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCompressorMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
+    fun startNativeBmwCapture() = withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
+
+    fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }
+
+    fun nativeBmwCaptureFrameCount(): Long =
+        withHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
+
+    fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =
+        withHandle<FloatArray?>(null) { JamesDspWrapper.exportNativeBmwCaptureWav(it, rawInPath, outPath) }
+
     companion object {
         private const val MIN_VALID_SAMPLE_RATE = 8000f
     }

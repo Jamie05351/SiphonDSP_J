@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <vector>
 #include "NativeBmwRouting.h"
 
 class NativeBmwDspProcessor {
@@ -19,6 +20,16 @@ public:
         kAllPassValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
         kOutputConfigBase = 87,
         kOutputConfigWidth = 13,
+    };
+    // Capture buffers hold this many seconds at whatever sampleRate_ is current when
+    // startCapture() (re)allocates them -- fixed duration, not a wraparound ring: capture
+    // auto-stops once full rather than overwriting the start of a long take.
+    static constexpr float kCaptureMaxSeconds = 30.f;
+
+    struct CaptureExportResult {
+        float peakInDb = -100.f;
+        float peakOutDb = -100.f;
+        float nullTestRmsDb = -100.f;
     };
 
     // setSampleRate()/configure()/configurePeq() (UI/config thread) and process() (audio thread)
@@ -39,6 +50,17 @@ public:
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
     void readCompressorMeter(float* values, std::size_t count) const;
+
+    // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
+    // buffers at the current sample rate, so it's a control-thread call, never made from
+    // process() itself -- same "brief, uncontended lock" discipline as configure().
+    void startCapture();
+    void stopCapture();
+    std::size_t captureFrameCount() const;
+    // Writes 2 float32 WAV files (raw input, final output) from whatever's been captured so far
+    // and fills `result` with peak/null-test readings computed from that same data. Safe to call
+    // whether or not capture is still running (reads only up to captureFrameCount() frames).
+    bool exportCaptureWav(const char* rawInPath, const char* outPath, CaptureExportResult& result) const;
 
 private:
     enum Dirty : uint32_t {
@@ -194,6 +216,40 @@ private:
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
+
+    // Capture state -- see startCapture()/stopCapture()/exportCaptureWav(). The buffers and
+    // captureEnabled_ are protected by stateMutex_ like everything else here (including from
+    // inside process() itself, which already holds stateMutex_ for the whole buffer, so mutating
+    // captureEnabled_ there needs no extra locking). captureWriteIndex_ is the one exception --
+    // it's an atomic (same spirit as CompressorState's atomic<float> meters) specifically so
+    // captureFrameCount() can be polled from the UI thread for progress without taking the
+    // audio-thread's lock at all.
+    std::vector<float> captureRawInL_, captureRawInR_, captureOutL_, captureOutR_;
+    bool captureEnabled_ = false;
+    std::atomic<std::size_t> captureWriteIndex_{0};
+    std::size_t captureCapacity_ = 0;
+
+    // Called from inside the stateMutex_-locked section of each process() overload, once before
+    // processFrame() (rawIn) and once after (out). No-ops (single branch) when capture is off or
+    // the buffer's already full, so this is cheap on every frame regardless.
+    void captureTapIn(float l, float r) {
+        if (!captureEnabled_) return;
+        const std::size_t i = captureWriteIndex_.load(std::memory_order_relaxed);
+        if (i < captureCapacity_) {
+            captureRawInL_[i] = l;
+            captureRawInR_[i] = r;
+        }
+    }
+    void captureTapOut(float l, float r) {
+        if (!captureEnabled_) return;
+        const std::size_t i = captureWriteIndex_.load(std::memory_order_relaxed);
+        if (i >= captureCapacity_) return;
+        captureOutL_[i] = l;
+        captureOutR_[i] = r;
+        const std::size_t next = i + 1;
+        captureWriteIndex_.store(next, std::memory_order_relaxed);
+        if (next >= captureCapacity_) captureEnabled_ = false;
+    }
 
     std::mutex stateMutex_;
 };
