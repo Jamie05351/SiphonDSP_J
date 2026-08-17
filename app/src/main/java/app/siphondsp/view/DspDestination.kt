@@ -102,6 +102,14 @@ object DspCrossNavBar {
             }
             card.addView(texture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
+            // The texture's bright horizontal sheen band washes out the white icon/label
+            // wherever it lands -- a flat dark scrim underneath the content keeps contrast
+            // consistent across the whole tile instead of only where the sheen happens to be dim.
+            val scrim = View(activity).apply {
+                setBackgroundColor(Color.argb(140, 0, 0, 0))
+            }
+            card.addView(scrim, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
             val content = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -111,7 +119,7 @@ object DspCrossNavBar {
                 scaleType = ImageView.ScaleType.FIT_XY
                 setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
             }
-            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(10), LinearLayout.LayoutParams.MATCH_PARENT))
+            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(12), LinearLayout.LayoutParams.MATCH_PARENT))
 
             val icon = ImageView(activity).apply {
                 setImageDrawable(ContextCompat.getDrawable(activity, destination.icon))
@@ -119,13 +127,14 @@ object DspCrossNavBar {
             }
             content.addView(
                 icon,
-                LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply { leftMargin = activity.dp(6) },
+                LinearLayout.LayoutParams(activity.dp(28), activity.dp(28)).apply { leftMargin = activity.dp(8) },
             )
 
             val label = TextView(activity).apply {
                 text = activity.getString(destination.sidebarLabelRes)
                 setTextColor(Color.WHITE)
-                textSize = 11f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                textSize = 13f
                 // Wraps instead of ellipsizing: at this column width even the pre-shortened
                 // labels ("Comp", "Xover") don't reliably fit on one line once the icon and
                 // accent bar are accounted for, and a mid-word "Co..." reads as broken UI.
@@ -135,7 +144,7 @@ object DspCrossNavBar {
             content.addView(
                 label,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    leftMargin = activity.dp(4)
+                    leftMargin = activity.dp(6)
                     rightMargin = activity.dp(4)
                 },
             )
