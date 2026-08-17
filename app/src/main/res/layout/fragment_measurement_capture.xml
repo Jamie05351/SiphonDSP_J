@@ -49,6 +49,14 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <app.siphondsp.view.MeasurementResponseView
+        android:id="@+id/measurement_response_view"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/measurement_capture_button"
         android:layout_width="match_parent"
