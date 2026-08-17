@@ -197,10 +197,14 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        // Inflate bottom bar menu. PEQ/Gains&Delay/Compressor/Crossovers/Settings used to live
-        // here too, but they're all reachable as dedicated tiles on the main shortcuts grid now,
-        // so the bar only carries what isn't: presets/revert/blocklist (collapsed into the "more"
-        // overflow, since none of them are `showAsAction="always"`) plus the power toggle.
+        // Inflate bottom bar menu. PEQ/Gains&Delay/Compressor/Crossovers are reachable as
+        // dedicated tiles on the main shortcuts grid, so the bar only carries what isn't:
+        // presets/revert/blocklist/measurement (collapsed into the "more" overflow, since none
+        // of them are `showAsAction="always"`), the settings gear (navigation icon), and the
+        // power toggle.
+        binding.bar.setNavigationOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
         binding.bar.inflateMenu(R.menu.menu_main_bottom)
 
         if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))

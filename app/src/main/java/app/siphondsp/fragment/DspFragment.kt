@@ -17,7 +17,6 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
-import app.siphondsp.activity.SettingsActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
@@ -87,11 +86,11 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
             updateNoticeOnClick?.invoke()
         }
 
-        // Primary BMW DSP shortcuts. Each card's whole visible content is one of the pre-built
-        // tile images set directly in the XML (icon/title/subtitle/graphic already baked in) --
-        // only the click targets are wired here. These open the same activities the old bottom
-        // bar icons did; Routing and System are new entries that only used to be reachable via
-        // the DSP workspace sidebar / bottom bar settings icon respectively.
+        // Primary BMW DSP shortcuts. Each card's background is one of the pre-built tile images
+        // set directly in the XML, with a text label view drawn on top -- only the click targets
+        // are wired here. These open the same activities the old bottom bar icons did; Routing
+        // is a new entry that only used to be reachable via the DSP workspace sidebar. Settings
+        // moved back to the bottom bar's gear icon, so there's no System tile anymore.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
@@ -110,10 +109,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING),
             )
         }
-        shortcutsBinding.cardShortcutSystem.setOnClickListener {
-            startActivity(Intent(requireContext(), SettingsActivity::class.java))
-        }
-
         // Should show notice?
         Timber.e(Locale.getDefault().language.toString())
         shortcutsBinding.translationNotice.isVisible =

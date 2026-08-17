@@ -11,6 +11,12 @@
     <string name="action_revert">Reset to defaults</string>
     <string name="action_blocked_apps">Excluded apps</string>
 
+    <string name="tile_label_peq">PEQ</string>
+    <string name="tile_label_gains">GAINS</string>
+    <string name="tile_label_xovers">XOVERS</string>
+    <string name="tile_label_compressor">COMPRESSOR</string>
+    <string name="tile_label_routing">ROUTING</string>
+
     <!-- Notification channels -->
     <string name="notification_group_service">Service</string>
     <string name="notification_channel_service">Service notification</string>
