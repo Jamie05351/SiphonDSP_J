@@ -10,12 +10,18 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import app.siphondsp.R
 import app.siphondsp.activity.MeasurementCaptureActivity
+import app.siphondsp.audio.MeasurementSpectrumAnalyzer
 import app.siphondsp.databinding.FragmentMeasurementCaptureBinding
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import com.hippo.unifile.UniFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.File
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
@@ -96,8 +102,29 @@ class MeasurementCaptureFragment : Fragment() {
             binding.measurementReadout.text = getString(R.string.measurement_readout, result[0], result[1], result[2])
             binding.measurementReadout.isVisible = true
             binding.measurementExportButton.isEnabled = true
+            analyzeSpectrum()
         } else {
             requireContext().toast(getString(R.string.measurement_export_failed))
+        }
+    }
+
+    private fun analyzeSpectrum() {
+        binding.measurementResponseView.isVisible = false
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            // A too-short capture (fewer frames than one analysis window) is a normal outcome,
+            // not an error -- the chart just stays hidden rather than showing garbage.
+            val result = try {
+                MeasurementSpectrumAnalyzer.analyze(rawInFile, outFile)
+            } catch (ex: Exception) {
+                Timber.e(ex, "Spectrum analysis failed")
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (result != null && isAdded) {
+                    binding.measurementResponseView.setData(result.rawInDb, result.outDb, result.sampleRate, result.fftSize)
+                    binding.measurementResponseView.isVisible = true
+                }
+            }
         }
     }
 
