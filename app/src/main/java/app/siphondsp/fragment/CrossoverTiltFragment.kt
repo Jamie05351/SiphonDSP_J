@@ -12,6 +12,7 @@ import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.DspPager
+import app.siphondsp.view.FilterResponseCurveView
 import kotlin.math.roundToInt
 
 /**
@@ -76,7 +77,9 @@ class CrossoverTiltFragment : Fragment() {
         }
 
         val crossoversPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_crossovers), "Subsonic filter and per-band crossover points") {
+            // Blank title/subtitle: the toolbar already shows "Crossovers & Tilt", so repeating
+            // it here just wastes vertical space (same reasoning Gains & Delay's page uses).
+            dashboardPanel("", null) {
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_subsonic_lr4),
                     null,
@@ -95,7 +98,7 @@ class CrossoverTiltFragment : Fragment() {
                         freqIndex = NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
                         freqMin = 80f,
                         freqMax = 200f,
-                        curveDrawableRes = R.drawable.ic_crossover_lowpass_curve,
+                        curveKind = FilterResponseCurveView.Kind.LOW_PASS,
                         freqMirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                         // BW3 (3rd-order Butterworth) = 18dB/oct, LR4 (4th-order Linkwitz-Riley) = 24dB/oct.
                         slopeIndex = NativeBmwDspValues.INDEX_LOW_LR4,
@@ -109,7 +112,7 @@ class CrossoverTiltFragment : Fragment() {
                         freqIndex = NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
                         freqMin = 80f,
                         freqMax = 200f,
-                        curveDrawableRes = R.drawable.ic_crossover_highpass_curve,
+                        curveKind = FilterResponseCurveView.Kind.HIGH_PASS,
                         freqMirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                         fixedSlopeLabel = "24 dB/Oct",
                     ),
