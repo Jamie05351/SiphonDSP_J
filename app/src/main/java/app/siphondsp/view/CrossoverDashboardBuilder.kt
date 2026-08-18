@@ -819,15 +819,15 @@ class CrossoverDashboardBuilder(
      *  PASS crossover cards' own large frequency readout; the box background is new, using
      *  those same cards' dark card background color so it reads as part of the same family. */
     private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 30f
+        textSize = 15f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
         setTextColor(accentBlue)
         gravity = Gravity.CENTER
-        setPadding(dp(28), dp(6), dp(28), dp(6))
+        setPadding(dp(14), dp(3), dp(14), dp(3))
         background = GradientDrawable().apply {
-            cornerRadius = dp(10).toFloat()
+            cornerRadius = dp(5).toFloat()
             setColor(valueBoxBackground)
             setStroke(dp(1), accentBlue)
         }
