@@ -43,11 +43,6 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
-    // ~1.463:1 width:height at the sidebar's 120dp column width, measured directly off the
-    // sidebar_tile_selected/unselected art (490x335 shared crop) -- these are noticeably
-    // wider-than-tall pills, not tall rectangles.
-    private const val TILE_HEIGHT_DP = 82
-
     fun populate(
         activity: FragmentActivity,
         container: LinearLayout,
@@ -56,22 +51,12 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
-        // CENTER, not CENTER_HORIZONTAL: the tile stack's total height is usually shorter than
-        // the sidebar column, so top-aligning (the old behavior) left the whole group pinned high
-        // with empty space below it. Centering vertically anchors the middle tile near the
-        // column's own center instead, so the group doesn't read as too high or too low.
-        container.gravity = Gravity.CENTER
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
-        destinations.forEachIndexed { index, destination ->
-            // Small fixed gap before every tile except the first.
-            if (index > 0) {
-                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(2)))
-            }
-
+        destinations.forEach { destination ->
             val selected = destination == current
 
             // The whole tile body (rounded shape, gloss sweep, and both accent bars) is baked
@@ -149,15 +134,11 @@ object DspCrossNavBar {
 
             card.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
-            container.addView(
-                card,
-                // Fixed height, not weighted/stretched to fill the column: the reference tiles
-                // are noticeably wider than tall (~1.463:1 at this 120dp column width, measured
-                // directly off the reference art), not the taller-than-wide shape stretching to
-                // fill produced. Any leftover column space splits evenly above/below the group
-                // instead, via container.gravity = CENTER above.
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(TILE_HEIGHT_DP)),
-            )
+            // Weighted, not a fixed dp height: every tile gets an equal share of whatever height
+            // the sidebar column actually has on this screen, so the group always fills it edge
+            // to edge -- no gap between tiles, no leftover space above/below the group, and no
+            // separate spacer view needed between entries.
+            container.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         container.visibility = View.VISIBLE
     }
