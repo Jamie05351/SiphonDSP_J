@@ -121,8 +121,10 @@ object BmwDashboardSkin {
         synchronized(this) {
             stripeBitmap?.let { return it }
             val source = loadCardBackgroundBitmap(context)
-            val y = (source.height * 0.03f).roundToInt()
-            val h = (source.height * 0.05f).roundToInt().coerceAtLeast(1)
+            // Stripe sits right at the top of this asset (no dead margin above it), unlike the
+            // old asset's ~3% top margin -- see bmw_card_background.png's own revision history.
+            val y = 0
+            val h = (source.height * 0.028f).roundToInt().coerceAtLeast(1)
             val cropped = Bitmap.createBitmap(source, 0, y, source.width, h)
             stripeBitmap = cropped
             return cropped
