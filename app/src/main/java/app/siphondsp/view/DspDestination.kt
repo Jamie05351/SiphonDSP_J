@@ -43,6 +43,10 @@ object DspCrossNavBar {
     // Sampled from the brushed-metal reference photos' outer border stroke.
     private val SIDEBAR_BORDER_COLOR = Color.rgb(0x90, 0xA3, 0xAC)
 
+    // ~1.78:1 width:height at the sidebar's 120dp column width, measured directly off the
+    // reference tile image -- these are noticeably wider-than-tall pills, not tall rectangles.
+    private const val TILE_HEIGHT_DP = 67
+
     fun populate(
         activity: FragmentActivity,
         container: LinearLayout,
@@ -58,10 +62,7 @@ object DspCrossNavBar {
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
 
         destinations.forEachIndexed { index, destination ->
-            // Small fixed gap before every tile except the first -- tiles themselves are weighted
-            // to fill the column's full height (see the addView below), so this is just breathing
-            // room between them, not a flexible spacer soaking up leftover space the way a huge gap
-            // between small fixed-height tiles used to.
+            // Small fixed gap before every tile except the first.
             if (index > 0) {
                 container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(8)))
             }
@@ -98,7 +99,7 @@ object DspCrossNavBar {
 
             val texture = ImageView(activity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                setImageResource(R.drawable.sidebar_tile_texture)
+                setImageResource(R.drawable.bmw_workspace_texture)
             }
             card.addView(texture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
@@ -149,15 +150,24 @@ object DspCrossNavBar {
                 },
             )
 
+            // Thinner mirror of the left accent bar on the tile's right edge -- same pill artwork,
+            // narrower, matching the reference design's asymmetric fat-left/thin-right bar pairing.
+            val accentBarEnd = ImageView(activity).apply {
+                scaleType = ImageView.ScaleType.FIT_XY
+                setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
+            }
+            content.addView(accentBarEnd, LinearLayout.LayoutParams(activity.dp(3), LinearLayout.LayoutParams.MATCH_PARENT))
+
             card.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
             container.addView(
                 card,
-                // Weighted (0 height + weight) rather than a fixed dp height, so the tiles
-                // themselves expand to fill the column's available height -- the gaps between
-                // them come only from the small fixed spacer above, not from the tiles staying
-                // small while empty space collects around them.
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
+                // Fixed height, not weighted/stretched to fill the column: the reference tiles
+                // are noticeably wider than tall (~1.78:1 at this 120dp column width, measured
+                // directly off the reference image), not the taller-than-wide shape stretching to
+                // fill produced. Leaves empty space below the 5th tile if the column is taller
+                // than 5 tiles' worth -- correct per the reference, not a bug to fill.
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(TILE_HEIGHT_DP)),
             )
         }
         container.visibility = View.VISIBLE
