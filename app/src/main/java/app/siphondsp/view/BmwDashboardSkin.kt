@@ -160,18 +160,22 @@ object BmwDashboardSkin {
     private const val LOGO_OVERLAY_TAG = "bmw_logo_overlay"
 
     /**
-     * Appends a plain, non-clickable View sized to fill [root] with the logo drawable as its
-     * *background*, added as [root]'s last child so it paints after every other child (cards
-     * included) in the same z-order pass a regular background/child would use.
+     * Inserts a plain, non-clickable View sized to fill [root] with the logo drawable as its
+     * *background*, as [root]'s FIRST child -- so it paints immediately after the plain
+     * background fill but before every real child (toolbar, sidebar, cards, sliders, text), i.e.
+     * behind all of them rather than on top. An earlier version appended this as the *last*
+     * child instead, which drew it over every control -- sliders and buttons underneath the
+     * logo's fixed corner became visually obscured, which is the opposite of what a watermark
+     * should do.
      *
-     * This is deliberately not `root.foreground` -- that was tried first, but `View.foreground`
-     * on an Activity's `android.R.id.content` view turned out to get its very first (and, absent
-     * another size change, only) bounds update during a transient relayout pass -- observed via
-     * logging to land mid-activity-transition with a bogus height of -1 -- and then never
-     * corrected, leaving the drawable permanently invisible. A plain child view goes through the
-     * exact same layout/measure path this root's own `background` already reliably uses (that one
-     * visibly repaints correctly on every resize), sidestepping ForegroundInfo's separate and
-     * apparently timing-sensitive bounds bookkeeping entirely.
+     * This is a separate overlay view rather than baking the logo into [PhotoBrushedMetalDrawable]
+     * itself (which is what `root.background` is) only because `root.background` on
+     * `android.R.id.content` is set once from a context where the callers differ (some call this
+     * before the fragment/content tree exists); `View.foreground` was tried too, but on an
+     * Activity's `android.R.id.content` view its bounds update landed once, during a transient
+     * relayout pass, with a logged bogus height of -1, and never corrected -- so it never rendered.
+     * A plain child view goes through the exact same layout/measure path this root's own
+     * `background` already reliably uses, sidestepping both problems.
      */
     private fun addLogoOverlay(root: View) {
         val parent = root as? ViewGroup ?: return
@@ -182,7 +186,7 @@ object BmwDashboardSkin {
             isFocusable = false
             background = LogoWatermarkDrawable(root.context)
         }
-        parent.addView(overlay, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        parent.addView(overlay, 0, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
@@ -402,7 +406,9 @@ object BmwDashboardSkin {
     private class LogoWatermarkDrawable(context: Context) : Drawable() {
         private val logoBitmap = loadLogoBitmap(context)
         private val density = context.resources.displayMetrics.density
-        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        // 50% transparent -- this now sits behind every control, not on top of them, but should
+        // still read as a subtle watermark rather than a fully-opaque badge competing with content.
+        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true; alpha = 128 }
         private val logoRect = RectF()
 
         override fun onBoundsChange(bounds: Rect) {

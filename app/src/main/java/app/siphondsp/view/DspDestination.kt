@@ -3,15 +3,7 @@ package app.siphondsp.view
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.ColorFilter
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.graphics.Rect
-import android.graphics.Shader
-import android.graphics.drawable.Drawable
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -28,7 +20,6 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
-import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
@@ -40,62 +31,22 @@ enum class DspDestination(
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
 ) {
-    ROUTING(R.string.action_routing, R.string.sidebar_label_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    // Declaration order is display order (used directly by DspCrossNavBar.populate()) --
+    // matches the main tile grid's PEQ, Gains, Xovers, Compressor, Routing order
+    // (fragment_dsp_page_shortcuts.xml) rather than an arbitrary/functional grouping, so the
+    // sidebar doesn't present a different sequence than the page the user navigated in from.
     PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
-}
-
-/** Glossy left-to-right sweep for each sidebar tile's fill -- a smooth highlight peaking around
- *  68% across, then dropping sharply toward the right edge. Grayscale gradient stops sampled
- *  directly off the reference tile design; a plain gradient, not a photo crop, since that
- *  reference gradient is one simple soft highlight, not the busier multi-streak brushed-metal
- *  texture the main workspace background uses (an earlier attempt reused that texture here and
- *  it looked nothing like the reference -- this is a genuinely different, simpler asset). */
-private class TileGlossDrawable : Drawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        if (bounds.width() <= 0 || bounds.height() <= 0) return
-        paint.shader = LinearGradient(
-            bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
-            intArrayOf(
-                Color.rgb(48, 48, 48),
-                Color.rgb(35, 35, 35),
-                Color.rgb(117, 117, 117),
-                Color.rgb(10, 10, 10),
-                Color.rgb(30, 30, 30),
-            ),
-            floatArrayOf(0f, 0.38f, 0.68f, 0.85f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-    }
-
-    override fun draw(canvas: Canvas) {
-        canvas.drawRect(bounds, paint)
-    }
-
-    override fun setAlpha(alpha: Int) {
-        paint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        paint.colorFilter = colorFilter
-    }
-
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = PixelFormat.OPAQUE
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    ROUTING(R.string.action_routing, R.string.sidebar_label_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
 }
 
 object DspCrossNavBar {
-    // Sampled from the brushed-metal reference photos' outer border stroke.
-    private val SIDEBAR_BORDER_COLOR = Color.rgb(0x90, 0xA3, 0xAC)
-
-    // ~1.78:1 width:height at the sidebar's 120dp column width, measured directly off the
-    // reference tile image -- these are noticeably wider-than-tall pills, not tall rectangles.
-    private const val TILE_HEIGHT_DP = 67
+    // ~1.463:1 width:height at the sidebar's 120dp column width, measured directly off the
+    // sidebar_tile_selected/unselected art (490x335 shared crop) -- these are noticeably
+    // wider-than-tall pills, not tall rectangles.
+    private const val TILE_HEIGHT_DP = 82
 
     fun populate(
         activity: FragmentActivity,
@@ -105,7 +56,11 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
-        container.gravity = Gravity.CENTER_HORIZONTAL
+        // CENTER, not CENTER_HORIZONTAL: the tile stack's total height is usually shorter than
+        // the sidebar column, so top-aligning (the old behavior) left the whole group pinned high
+        // with empty space below it. Centering vertically anchors the middle tile near the
+        // column's own center instead, so the group doesn't read as too high or too low.
+        container.gravity = Gravity.CENTER
         // No background here: the panel behind the whole sidebar is painted once on the shared
         // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
 
@@ -114,29 +69,32 @@ object DspCrossNavBar {
         destinations.forEachIndexed { index, destination ->
             // Small fixed gap before every tile except the first.
             if (index > 0) {
-                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(8)))
+                container.addView(View(activity), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(2)))
             }
 
             val selected = destination == current
 
-            // Brushed-metal panel + a left accent bar that lights up solid blue when selected,
-            // replacing the old flat-tinted-button look. Icon and label stay white in both
-            // states now -- only the accent bar's image changes -- since that's the whole
-            // selected/unselected signal in the reference photos this was designed from.
-            val card = MaterialCardView(activity).apply {
+            // The whole tile body (rounded shape, gloss sweep, and both accent bars) is baked
+            // into one of two source images now -- sidebar_tile_selected/unselected -- rather
+            // than composed from a programmatic gradient plus separately-driven accent-bar
+            // drawables, so it matches the reference art directly instead of approximating it.
+            //
+            // Plain FrameLayout, not MaterialCardView: MaterialCardView kept painting a solid
+            // dark rectangle (~rgb(20,25,32), a Material3 default surface/state-layer tint) behind
+            // its content even with cardElevation=0 and setCardBackgroundColor(TRANSPARENT) --
+            // visible as a hard-edged box around the tile's actual (smaller, padded) artwork. A
+            // plain ViewGroup has no such built-in surface painting, so nothing shows through the
+            // art's transparent margin except the sidebar's own background, as intended.
+            val card = FrameLayout(activity).apply {
                 contentDescription = activity.getString(destination.labelRes)
                 tooltipText = activity.getString(destination.labelRes)
-                radius = activity.dp(6).toFloat()
-                strokeWidth = activity.dp(1)
-                setStrokeColor(ColorStateList.valueOf(SIDEBAR_BORDER_COLOR))
-                cardElevation = 0f
-                // The default Material3 outlined-card content padding was eating into the
-                // already-tight 120dp column, leaving barely any room for the label before it
-                // had to ellipsize -- this tile draws all the way to its own stroke instead.
-                setContentPadding(0, 0, 0, 0)
                 if (selected) {
                     isClickable = false
                 } else {
+                    isClickable = true
+                    val rippleAttr = android.util.TypedValue()
+                    activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, rippleAttr, true)
+                    foreground = ContextCompat.getDrawable(activity, rippleAttr.resourceId)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)
@@ -147,19 +105,19 @@ object DspCrossNavBar {
                 }
             }
 
-            val gloss = View(activity).apply { background = TileGlossDrawable() }
-            card.addView(gloss, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            val tileArt = ImageView(activity).apply {
+                scaleType = ImageView.ScaleType.FIT_XY
+                setImageResource(if (selected) R.drawable.sidebar_tile_selected else R.drawable.sidebar_tile_unselected)
+            }
+            card.addView(tileArt, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
             val content = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                // Both accent bars are already part of tileArt -- this row only needs to clear
+                // their painted width so the icon/label don't sit on top of them.
+                setPadding(activity.dp(12), 0, activity.dp(3), 0)
             }
-
-            val accentBar = ImageView(activity).apply {
-                scaleType = ImageView.ScaleType.FIT_XY
-                setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
-            }
-            content.addView(accentBar, LinearLayout.LayoutParams(activity.dp(12), LinearLayout.LayoutParams.MATCH_PARENT))
 
             val icon = ImageView(activity).apply {
                 setImageDrawable(ContextCompat.getDrawable(activity, destination.icon))
@@ -189,23 +147,15 @@ object DspCrossNavBar {
                 },
             )
 
-            // Thinner mirror of the left accent bar on the tile's right edge -- same pill artwork,
-            // narrower, matching the reference design's asymmetric fat-left/thin-right bar pairing.
-            val accentBarEnd = ImageView(activity).apply {
-                scaleType = ImageView.ScaleType.FIT_XY
-                setImageResource(if (selected) R.drawable.sidebar_accent_bar_on else R.drawable.sidebar_accent_bar_off)
-            }
-            content.addView(accentBarEnd, LinearLayout.LayoutParams(activity.dp(3), LinearLayout.LayoutParams.MATCH_PARENT))
-
             card.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
             container.addView(
                 card,
                 // Fixed height, not weighted/stretched to fill the column: the reference tiles
-                // are noticeably wider than tall (~1.78:1 at this 120dp column width, measured
-                // directly off the reference image), not the taller-than-wide shape stretching to
-                // fill produced. Leaves empty space below the 5th tile if the column is taller
-                // than 5 tiles' worth -- correct per the reference, not a bug to fill.
+                // are noticeably wider than tall (~1.463:1 at this 120dp column width, measured
+                // directly off the reference art), not the taller-than-wide shape stretching to
+                // fill produced. Any leftover column space splits evenly above/below the group
+                // instead, via container.gravity = CENTER above.
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, activity.dp(TILE_HEIGHT_DP)),
             )
         }
