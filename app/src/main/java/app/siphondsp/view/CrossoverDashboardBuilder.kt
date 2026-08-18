@@ -13,7 +13,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.PopupMenu
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -179,9 +178,12 @@ class CrossoverDashboardBuilder(
         val row = createRow()
         row.addView(labelBlock(title, subtitle), labelParams())
 
+        // Left-aligned to sit directly under the label column, at the same horizontal offset
+        // addSliderRow's slider starts at (label column + 14dp), rather than hugging the row's
+        // right edge -- so a toggle row and a slider row stack with their controls flush.
         val controlSlot = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         if (offLabel == "OFF" && onLabel == "ON") {
@@ -580,16 +582,17 @@ class CrossoverDashboardBuilder(
     }
 
     /** One LOW PASS / HIGH PASS mini-card: corner frequency (tap to edit, same numeric-entry
-     *  dialog addSliderRow's value uses) plus a decorative rolloff sparkline. [slopeIndex] null
-     *  means there's no real topology switch backing a slope choice for this band (e.g. the
-     *  mid-band highpass is a fixed-order filter at the native layer) -- the slope reads as a
-     *  fixed, non-interactive label instead of a working dropdown in that case. */
+     *  dialog addSliderRow's value uses) plus a live rolloff curve reflecting the actual
+     *  frequency/slope in use. [slopeIndex] null means there's no real topology switch backing a
+     *  slope choice for this band (e.g. the mid-band highpass is a fixed-order filter at the
+     *  native layer) -- the slope reads as a fixed, non-interactive label instead of a working
+     *  dropdown in that case. */
     class CrossoverBandSpec(
         val title: String,
         val freqIndex: Int,
         val freqMin: Float,
         val freqMax: Float,
-        @DrawableRes val curveDrawableRes: Int,
+        val curveKind: FilterResponseCurveView.Kind,
         val freqMirrorIndices: IntArray = intArrayOf(),
         val slopeIndex: Int? = null,
         val slopeMirrorIndices: IntArray = intArrayOf(),
@@ -621,7 +624,9 @@ class CrossoverDashboardBuilder(
             cardElevation = 0f
             strokeWidth = dp(1)
             strokeColor = segmentStroke
-            setCardBackgroundColor(Color.rgb(16, 19, 24))
+            // No fill: lets the workspace's own brushed-metal background (and its "M" watermark)
+            // show through, same reasoning as dashboardPanel's own transparent card above.
+            setCardBackgroundColor(Color.TRANSPARENT)
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -630,7 +635,7 @@ class CrossoverDashboardBuilder(
 
         content.addView(TextView(context).apply {
             text = spec.title
-            textSize = 10.5f
+            textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.rgb(160, 168, 178))
             letterSpacing = 0.04f
@@ -640,21 +645,28 @@ class CrossoverDashboardBuilder(
         fun freqLabel() = "${values[spec.freqIndex].roundToInt()} Hz"
         val freqText = TextView(context).apply {
             text = freqLabel()
-            textSize = 17f
+            textSize = 20f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentBlue)
             isClickable = true
             isFocusable = true
         }
+        fun currentSteep(): Boolean {
+            val slopeIndex = spec.slopeIndex ?: return true
+            return values[slopeIndex] >= .5f
+        }
+        val curveView = FilterResponseCurveView(context).apply {
+            kind = spec.curveKind
+            frequencyHz = values[spec.freqIndex]
+            steep = currentSteep()
+        }
         val freqRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(50)
             addView(freqText)
             addView(space(8))
-            addView(
-                ImageView(context).apply { setImageResource(spec.curveDrawableRes) },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
+            addView(curveView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         }
         freqText.setOnClickListener {
             context.showInputAlert(
@@ -670,6 +682,7 @@ class CrossoverDashboardBuilder(
                 values[spec.freqIndex] = stored
                 spec.freqMirrorIndices.forEach { values[it] = stored }
                 freqText.text = freqLabel()
+                curveView.frequencyHz = stored
                 onChanged(values)
             }
         }
@@ -715,6 +728,7 @@ class CrossoverDashboardBuilder(
                     values[spec.slopeIndex] = stored
                     spec.slopeMirrorIndices.forEach { values[it] = stored }
                     slopeButton.text = currentSlopeLabel()
+                    curveView.steep = stored >= .5f
                     onChanged(values)
                     true
                 }
