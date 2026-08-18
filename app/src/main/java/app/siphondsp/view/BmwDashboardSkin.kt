@@ -141,6 +141,7 @@ object BmwDashboardSkin {
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
+        addLogoOverlay(root)
         styleTree(root)
     }
 
@@ -153,6 +154,35 @@ object BmwDashboardSkin {
      */
     fun paintWorkspaceBackground(root: View) {
         root.background = brushedPanelDrawable(root.context)
+        addLogoOverlay(root)
+    }
+
+    private const val LOGO_OVERLAY_TAG = "bmw_logo_overlay"
+
+    /**
+     * Appends a plain, non-clickable View sized to fill [root] with the logo drawable as its
+     * *background*, added as [root]'s last child so it paints after every other child (cards
+     * included) in the same z-order pass a regular background/child would use.
+     *
+     * This is deliberately not `root.foreground` -- that was tried first, but `View.foreground`
+     * on an Activity's `android.R.id.content` view turned out to get its very first (and, absent
+     * another size change, only) bounds update during a transient relayout pass -- observed via
+     * logging to land mid-activity-transition with a bogus height of -1 -- and then never
+     * corrected, leaving the drawable permanently invisible. A plain child view goes through the
+     * exact same layout/measure path this root's own `background` already reliably uses (that one
+     * visibly repaints correctly on every resize), sidestepping ForegroundInfo's separate and
+     * apparently timing-sensitive bounds bookkeeping entirely.
+     */
+    private fun addLogoOverlay(root: View) {
+        val parent = root as? ViewGroup ?: return
+        (parent.findViewWithTag<View>(LOGO_OVERLAY_TAG))?.let { parent.removeView(it) }
+        val overlay = View(root.context).apply {
+            tag = LOGO_OVERLAY_TAG
+            isClickable = false
+            isFocusable = false
+            background = LogoWatermarkDrawable(root.context)
+        }
+        parent.addView(overlay, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
@@ -302,14 +332,12 @@ object BmwDashboardSkin {
      */
     private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
         private val fillBitmap = loadPlainMetalBitmap(context)
-        private val logoBitmap = loadLogoBitmap(context)
         private val density = context.resources.displayMetrics.density
 
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             isFilterBitmap = true
             shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         }
-        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
         // Drawn as 3 solid blocks, not a photo crop or a blended gradient -- the source stripe is
         // itself 3 hard-edged flat colors (confirmed by sampling it), so this reproduces it exactly
         // without depending on any raster asset's pixel layout.
@@ -318,7 +346,6 @@ object BmwDashboardSkin {
         private val stripeRedPaint = Paint().apply { color = Color.rgb(255, 4, 12) }
         private val fillMatrix = Matrix()
         private val stripeRect = RectF()
-        private val logoRect = RectF()
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
@@ -333,7 +360,54 @@ object BmwDashboardSkin {
 
             val stripeHeight = (STRIPE_HEIGHT_DP * density).coerceAtMost(bounds.height().toFloat())
             stripeRect.set(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.top + stripeHeight)
+        }
 
+        override fun draw(canvas: Canvas) {
+            canvas.drawRect(bounds, fillPaint)
+            val cyanEnd = stripeRect.left + stripeRect.width() * 0.355f
+            val purpleEnd = stripeRect.left + stripeRect.width() * 0.70f
+            canvas.drawRect(stripeRect.left, stripeRect.top, cyanEnd, stripeRect.bottom, stripeCyanPaint)
+            canvas.drawRect(cyanEnd, stripeRect.top, purpleEnd, stripeRect.bottom, stripePurplePaint)
+            canvas.drawRect(purpleEnd, stripeRect.top, stripeRect.right, stripeRect.bottom, stripeRedPaint)
+        }
+
+        override fun setAlpha(alpha: Int) {
+            fillPaint.alpha = alpha
+            stripeCyanPaint.alpha = alpha
+            stripePurplePaint.alpha = alpha
+            stripeRedPaint.alpha = alpha
+        }
+
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
+            fillPaint.colorFilter = colorFilter
+        }
+
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+
+        companion object {
+            private const val STRIPE_HEIGHT_DP = 4
+        }
+    }
+
+    /**
+     * The "M" logo watermark, pinned at a fixed size to the bottom-right corner -- set as an
+     * overlay child view's `background` (see [addLogoOverlay]), not part of
+     * [PhotoBrushedMetalDrawable]'s `background`, so it always draws on top of every card instead
+     * of behind them. It used to be baked into the workspace root's own background drawable,
+     * which put it behind cards' own stroke borders -- wherever a card's rounded corner happened
+     * to fall near the fixed bottom-right position, that border cut across the logo, reading as
+     * an unintended box/frame around it.
+     */
+    private class LogoWatermarkDrawable(context: Context) : Drawable() {
+        private val logoBitmap = loadLogoBitmap(context)
+        private val density = context.resources.displayMetrics.density
+        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        private val logoRect = RectF()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            if (bounds.width() <= 0 || bounds.height() <= 0) return
             val logoAspect = logoBitmap.height.toFloat() / logoBitmap.width
             val logoMargin = LOGO_MARGIN_DP * density
             val logoWidth = (LOGO_WIDTH_DP * density).coerceAtMost((bounds.width() - logoMargin * 2).coerceAtLeast(0f))
@@ -345,33 +419,21 @@ object BmwDashboardSkin {
         }
 
         override fun draw(canvas: Canvas) {
-            canvas.drawRect(bounds, fillPaint)
-            val cyanEnd = stripeRect.left + stripeRect.width() * 0.355f
-            val purpleEnd = stripeRect.left + stripeRect.width() * 0.70f
-            canvas.drawRect(stripeRect.left, stripeRect.top, cyanEnd, stripeRect.bottom, stripeCyanPaint)
-            canvas.drawRect(cyanEnd, stripeRect.top, purpleEnd, stripeRect.bottom, stripePurplePaint)
-            canvas.drawRect(purpleEnd, stripeRect.top, stripeRect.right, stripeRect.bottom, stripeRedPaint)
             if (!logoRect.isEmpty) canvas.drawBitmap(logoBitmap, null, logoRect, bitmapPaint)
         }
 
         override fun setAlpha(alpha: Int) {
-            fillPaint.alpha = alpha
             bitmapPaint.alpha = alpha
-            stripeCyanPaint.alpha = alpha
-            stripePurplePaint.alpha = alpha
-            stripeRedPaint.alpha = alpha
         }
 
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-            fillPaint.colorFilter = colorFilter
             bitmapPaint.colorFilter = colorFilter
         }
 
         @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
 
         companion object {
-            private const val STRIPE_HEIGHT_DP = 4
             // Sized for rendering once at full-screen scale (dashboardPanel cards no longer paint
             // their own independent copy of this background, so this is the only copy on screen).
             private const val LOGO_WIDTH_DP = 160

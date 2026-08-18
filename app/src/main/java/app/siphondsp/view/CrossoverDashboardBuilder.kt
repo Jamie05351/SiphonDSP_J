@@ -72,8 +72,7 @@ class CrossoverDashboardBuilder(
         val card = MaterialCardView(context).apply {
             radius = dp(7).toFloat()
             cardElevation = 0f
-            strokeWidth = dp(1)
-            strokeColor = Color.rgb(62, 72, 84)
+            strokeWidth = 0
             setCardBackgroundColor(Color.TRANSPARENT)
         }
 
