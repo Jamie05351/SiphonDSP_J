@@ -91,18 +91,26 @@ object BmwDashboardSkin {
 
     @Volatile private var plainMetalBitmap: Bitmap? = null
 
-    // A small patch of the same background asset, cropped once from a region clear of both the
-    // top M-stripe and the bottom-right logo watermark, then reused (tiled/stretched, at two
-    // different brightness levels) for every sidebar tile instead of decoding/cropping per tile.
+    // A patch of the same background asset, cropped once from a region clear of both the top
+    // M-stripe and the bottom-right logo watermark, then reused (tiled/stretched, at two
+    // different brightness levels) for every sidebar tile *and* as PhotoBrushedMetalDrawable's
+    // full-screen cover fill. Deliberately most of the source, not a small sample: a small crop
+    // here is fine at sidebar-tile scale but gets magnified far more to cover a full screen, and
+    // on a real device's actual pixel dimensions (much larger than this source photo's own
+    // 1280x431) that over-magnification blurs a small patch into a flat, washed-out smear --
+    // confirmed on-device (not visible on a lower-res emulator render). A large patch needs much
+    // less magnification to cover the same bounds, so the grain stays sharp and the fill stays as
+    // dark as the logo watermark expects (a too-light fill made the logo's own dark background
+    // read as a hard box instead of blending in).
     private fun loadPlainMetalBitmap(context: Context): Bitmap {
         plainMetalBitmap?.let { return it }
         synchronized(this) {
             plainMetalBitmap?.let { return it }
             val source = loadCardBackgroundBitmap(context)
-            val x = (source.width * 0.05f).roundToInt()
-            val y = (source.height * 0.45f).roundToInt()
-            val w = (source.width * 0.30f).roundToInt()
-            val h = (source.height * 0.30f).roundToInt()
+            val x = (source.width * 0.02f).roundToInt()
+            val y = (source.height * 0.08f).roundToInt()
+            val w = (source.width * 0.65f).roundToInt()
+            val h = (source.height * 0.88f).roundToInt()
             val cropped = Bitmap.createBitmap(source, x, y, w, h)
             plainMetalBitmap = cropped
             return cropped
