@@ -77,84 +77,40 @@ object BmwDashboardSkin {
     fun metalTileDrawable(context: Context, darkened: Boolean, strokeColor: Int? = null): Drawable =
         MetalTileDrawable(context, if (darkened) SELECTED_TILE_BRIGHTNESS else UNSELECTED_TILE_BRIGHTNESS, strokeColor)
 
-    @Volatile private var cardBackgroundBitmap: Bitmap? = null
-
-    private fun loadCardBackgroundBitmap(context: Context): Bitmap {
-        cardBackgroundBitmap?.let { return it }
-        synchronized(this) {
-            cardBackgroundBitmap?.let { return it }
-            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_card_background)
-            cardBackgroundBitmap = decoded
-            return decoded
-        }
-    }
-
     @Volatile private var plainMetalBitmap: Bitmap? = null
 
-    // A patch of the same background asset, cropped once from a region clear of both the top
-    // M-stripe and the bottom-right logo watermark, then reused (tiled/stretched, at two
-    // different brightness levels) for every sidebar tile *and* as PhotoBrushedMetalDrawable's
-    // full-screen cover fill. Deliberately most of the source, not a small sample: a small crop
-    // here is fine at sidebar-tile scale but gets magnified far more to cover a full screen, and
-    // on a real device's actual pixel dimensions (much larger than this source photo's own
-    // 1280x431) that over-magnification blurs a small patch into a flat, washed-out smear --
-    // confirmed on-device (not visible on a lower-res emulator render). A large patch needs much
-    // less magnification to cover the same bounds, so the grain stays sharp and the fill stays as
-    // dark as the logo watermark expects (a too-light fill made the logo's own dark background
-    // read as a hard box instead of blending in).
+    // A dedicated clean texture photo (no stripe or logo baked in, unlike the old composite
+    // asset this replaced) -- decoded once and reused (tiled/stretched, at two different
+    // brightness levels) for every sidebar tile *and* as PhotoBrushedMetalDrawable's full-screen
+    // cover fill. Used near-whole, not a small crop of it: a small crop is fine at sidebar-tile
+    // scale but gets magnified far more to cover a full screen, and on a real device's actual
+    // pixel dimensions (much larger than this source photo's own 1280x480) that over-magnification
+    // blurred a small patch into a flat, washed-out smear -- confirmed on-device (not visible on a
+    // lower-res emulator render). Using nearly the whole photo needs much less magnification to
+    // cover the same bounds, so the grain stays sharp.
     private fun loadPlainMetalBitmap(context: Context): Bitmap {
         plainMetalBitmap?.let { return it }
         synchronized(this) {
             plainMetalBitmap?.let { return it }
-            val source = loadCardBackgroundBitmap(context)
-            val x = (source.width * 0.02f).roundToInt()
-            val y = (source.height * 0.08f).roundToInt()
-            val w = (source.width * 0.65f).roundToInt()
-            val h = (source.height * 0.88f).roundToInt()
-            val cropped = Bitmap.createBitmap(source, x, y, w, h)
-            plainMetalBitmap = cropped
-            return cropped
-        }
-    }
-
-    @Volatile private var stripeBitmap: Bitmap? = null
-
-    // The tri-colour M-stripe band, cropped once from near the top of the source asset. Drawn
-    // pinned to a fixed height at the top of every card/background (see PhotoBrushedMetalDrawable)
-    // instead of being part of a whole-image crop -- a fixed pixel feature like this gets scaled
-    // away to nothing (or cropped out entirely) once the container's aspect ratio departs very far
-    // from the source image's, which a tall stacked card like Gains & Delay's does.
-    private fun loadStripeBitmap(context: Context): Bitmap {
-        stripeBitmap?.let { return it }
-        synchronized(this) {
-            stripeBitmap?.let { return it }
-            val source = loadCardBackgroundBitmap(context)
-            // Stripe sits right at the top of this asset (no dead margin above it), unlike the
-            // old asset's ~3% top margin -- see bmw_card_background.png's own revision history.
-            val y = 0
-            val h = (source.height * 0.028f).roundToInt().coerceAtLeast(1)
-            val cropped = Bitmap.createBitmap(source, 0, y, source.width, h)
-            stripeBitmap = cropped
-            return cropped
+            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_workspace_texture)
+            plainMetalBitmap = decoded
+            return decoded
         }
     }
 
     @Volatile private var logoBitmap: Bitmap? = null
 
-    // The "M" logo watermark, cropped once from the source asset's bottom-right corner. Drawn at a
-    // fixed size anchored to each card's own bottom-right corner -- same rationale as the stripe.
+    // The "M" logo watermark: a dedicated asset with real alpha transparency around the mark
+    // (not a rectangular crop out of a photo with an opaque background), so it draws cleanly over
+    // any fill color/brightness instead of showing its own crop bounds as a visible box -- drawn
+    // at a fixed size anchored to the background's bottom-right corner (see PhotoBrushedMetalDrawable).
     private fun loadLogoBitmap(context: Context): Bitmap {
         logoBitmap?.let { return it }
         synchronized(this) {
             logoBitmap?.let { return it }
-            val source = loadCardBackgroundBitmap(context)
-            val x = (source.width * 0.70f).roundToInt()
-            val y = (source.height * 0.58f).roundToInt()
-            val w = source.width - x
-            val h = (source.height * 0.37f).roundToInt().coerceAtMost(source.height - y)
-            val cropped = Bitmap.createBitmap(source, x, y, w, h)
-            logoBitmap = cropped
-            return cropped
+            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_m_logo)
+            logoBitmap = decoded
+            return decoded
         }
     }
 
@@ -346,7 +302,6 @@ object BmwDashboardSkin {
      */
     private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
         private val fillBitmap = loadPlainMetalBitmap(context)
-        private val stripeBitmap = loadStripeBitmap(context)
         private val logoBitmap = loadLogoBitmap(context)
         private val density = context.resources.displayMetrics.density
 
@@ -355,6 +310,12 @@ object BmwDashboardSkin {
             shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         }
         private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        // Drawn as 3 solid blocks, not a photo crop or a blended gradient -- the source stripe is
+        // itself 3 hard-edged flat colors (confirmed by sampling it), so this reproduces it exactly
+        // without depending on any raster asset's pixel layout.
+        private val stripeCyanPaint = Paint().apply { color = Color.rgb(0, 147, 255) }
+        private val stripePurplePaint = Paint().apply { color = Color.rgb(72, 21, 111) }
+        private val stripeRedPaint = Paint().apply { color = Color.rgb(255, 4, 12) }
         private val fillMatrix = Matrix()
         private val stripeRect = RectF()
         private val logoRect = RectF()
@@ -385,13 +346,20 @@ object BmwDashboardSkin {
 
         override fun draw(canvas: Canvas) {
             canvas.drawRect(bounds, fillPaint)
-            canvas.drawBitmap(stripeBitmap, null, stripeRect, bitmapPaint)
+            val cyanEnd = stripeRect.left + stripeRect.width() * 0.355f
+            val purpleEnd = stripeRect.left + stripeRect.width() * 0.70f
+            canvas.drawRect(stripeRect.left, stripeRect.top, cyanEnd, stripeRect.bottom, stripeCyanPaint)
+            canvas.drawRect(cyanEnd, stripeRect.top, purpleEnd, stripeRect.bottom, stripePurplePaint)
+            canvas.drawRect(purpleEnd, stripeRect.top, stripeRect.right, stripeRect.bottom, stripeRedPaint)
             if (!logoRect.isEmpty) canvas.drawBitmap(logoBitmap, null, logoRect, bitmapPaint)
         }
 
         override fun setAlpha(alpha: Int) {
             fillPaint.alpha = alpha
             bitmapPaint.alpha = alpha
+            stripeCyanPaint.alpha = alpha
+            stripePurplePaint.alpha = alpha
+            stripeRedPaint.alpha = alpha
         }
 
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
