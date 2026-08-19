@@ -62,12 +62,24 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Anchors the sidebar to the content area it controls: without it the tile column
+             reads as a separate panel floating over the shared background rather than a fixture
+             built into the workspace, since neither side has its own opaque fill to imply a seam. -->
+        <View
+            android:id="@+id/dsp_sidebar_divider"
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:background="#3E4854"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/dsp_sidebar" />
+
         <FrameLayout
             android:id="@+id/params"
             android:name="androidx.navigation.fragment.NavHostFragment"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
+            app:layout_constraintStart_toEndOf="@id/dsp_sidebar_divider"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />

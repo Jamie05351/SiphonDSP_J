@@ -326,30 +326,26 @@ object BmwDashboardSkin {
 
     /**
      * Renders the real photographed/rendered brushed-metal background: a center-cropped, tiled
-     * plain-metal fill covering the whole bounds, with the tri-colour M-stripe pinned to a fixed
-     * height along the top edge and the "M" logo watermark pinned at a fixed size to the
-     * bottom-right corner -- both independent of the container's own aspect ratio. A whole-image
-     * center-crop was tried first, but on a container much taller than the source photo (e.g. the
-     * Gains & Delay card, which stacks several rows) the crop had to zoom in so far to cover the
-     * height that the stripe and logo -- both fixed pixel features near the source's edges -- were
-     * scaled out of frame entirely. Pinning them as separate fixed-size overlays avoids that.
+     * plain-metal fill covering the whole bounds, plus the "M" logo watermark pinned at a fixed
+     * size to the bottom-right corner -- independent of the container's own aspect ratio. A
+     * whole-image center-crop was tried first, but on a container much taller than the source
+     * photo (e.g. the Gains & Delay card, which stacks several rows) the crop had to zoom in so
+     * far to cover the height that the logo -- a fixed pixel feature near the source's edge --
+     * was scaled out of frame entirely. Pinning it as a separate fixed-size overlay avoids that.
+     *
+     * The tri-colour M-stripe used to be drawn programmatically here (as 3 flat-colour blocks
+     * along the top edge), but the current bmw_workspace_texture.png bakes its own diagonal
+     * stripe directly into the photo -- drawing a second, differently-angled stripe on top would
+     * have doubled up and conflicted with it, so this class no longer draws one of its own.
      */
     private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
         private val fillBitmap = loadPlainMetalBitmap(context)
-        private val density = context.resources.displayMetrics.density
 
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             isFilterBitmap = true
             shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         }
-        // Drawn as 3 solid blocks, not a photo crop or a blended gradient -- the source stripe is
-        // itself 3 hard-edged flat colors (confirmed by sampling it), so this reproduces it exactly
-        // without depending on any raster asset's pixel layout.
-        private val stripeCyanPaint = Paint().apply { color = Color.rgb(0, 147, 255) }
-        private val stripePurplePaint = Paint().apply { color = Color.rgb(72, 21, 111) }
-        private val stripeRedPaint = Paint().apply { color = Color.rgb(255, 4, 12) }
         private val fillMatrix = Matrix()
-        private val stripeRect = RectF()
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
@@ -361,25 +357,14 @@ object BmwDashboardSkin {
             fillMatrix.setScale(scale, scale)
             fillMatrix.postTranslate(bounds.left + dx, bounds.top + dy)
             (fillPaint.shader as BitmapShader).setLocalMatrix(fillMatrix)
-
-            val stripeHeight = (STRIPE_HEIGHT_DP * density).coerceAtMost(bounds.height().toFloat())
-            stripeRect.set(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.top + stripeHeight)
         }
 
         override fun draw(canvas: Canvas) {
             canvas.drawRect(bounds, fillPaint)
-            val cyanEnd = stripeRect.left + stripeRect.width() * 0.355f
-            val purpleEnd = stripeRect.left + stripeRect.width() * 0.70f
-            canvas.drawRect(stripeRect.left, stripeRect.top, cyanEnd, stripeRect.bottom, stripeCyanPaint)
-            canvas.drawRect(cyanEnd, stripeRect.top, purpleEnd, stripeRect.bottom, stripePurplePaint)
-            canvas.drawRect(purpleEnd, stripeRect.top, stripeRect.right, stripeRect.bottom, stripeRedPaint)
         }
 
         override fun setAlpha(alpha: Int) {
             fillPaint.alpha = alpha
-            stripeCyanPaint.alpha = alpha
-            stripePurplePaint.alpha = alpha
-            stripeRedPaint.alpha = alpha
         }
 
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
@@ -388,10 +373,6 @@ object BmwDashboardSkin {
 
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
-
-        companion object {
-            private const val STRIPE_HEIGHT_DP = 4
-        }
     }
 
     /**
