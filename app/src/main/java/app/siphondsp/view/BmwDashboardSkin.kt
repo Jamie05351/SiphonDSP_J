@@ -211,7 +211,10 @@ object BmwDashboardSkin {
     // reach them.
     fun styleSlider(slider: Slider) {
         val context = slider.context
-        slider.trackHeight = dp(context, 6)
+        // 8dp, matching CrossoverDashboardBuilder.addSliderRow's inline slider setup exactly --
+        // this is the only styleTree()-reached Slider usage in the app (Compressor's), so bumping
+        // it here doesn't touch anything outside the DSP workspace sliders it's meant to match.
+        slider.trackHeight = dp(context, 8)
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
