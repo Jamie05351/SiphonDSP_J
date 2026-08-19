@@ -257,11 +257,11 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = snapToStep(values[index], min, max, step)
-            trackHeight = dp(8)
+            trackHeight = dp(BmwDashboardSkin.SLIDER_TRACK_HEIGHT_DP)
             thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
             thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
-            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+            setTrackActiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_ACTIVE_COLOR))
+            setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
             BmwDashboardSkin.applyTrackOutline(this)
@@ -347,11 +347,11 @@ class CrossoverDashboardBuilder(
             valueTo = spec.max
             stepSize = spec.step
             value = snapToStep(values[spec.index], spec.min, spec.max, spec.step)
-            trackHeight = dp(6)
+            trackHeight = dp(BmwDashboardSkin.SLIDER_TRACK_HEIGHT_DP)
             thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
             thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
-            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+            setTrackActiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_ACTIVE_COLOR))
+            setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
             addOnChangeListener { _, newValue, fromUser ->
@@ -384,11 +384,11 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = snapToStep(values[index], min, max, step)
-            trackHeight = dp(6)
+            trackHeight = dp(BmwDashboardSkin.SLIDER_TRACK_HEIGHT_DP)
             thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
             thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
-            setTrackActiveTintList(ColorStateList.valueOf(accentBlue))
-            setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+            setTrackActiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_ACTIVE_COLOR))
+            setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
             addOnChangeListener { _, newValue, fromUser ->
