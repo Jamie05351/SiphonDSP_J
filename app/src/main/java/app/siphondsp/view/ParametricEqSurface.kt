@@ -19,11 +19,13 @@ import android.view.ViewConfiguration
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.dsp.BiquadCascade
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
+import app.siphondsp.dsp.ComplexAcc
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
@@ -32,9 +34,12 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * The full-screen PEQ editor's unified BMW response visualiser -- shows the complete
@@ -234,6 +239,20 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val bankColorMid = Color.rgb(238, 164, 64)
     private val sumColor = Color.rgb(255, 255, 255)
 
+    // Per-band fill palette (FabFilter Pro-Q-style): each band gets its own colour, cycling by
+    // index within renderBands -- the same index drawActiveBankNodes already uses for its "1",
+    // "2", "3"... node labels, so a fill and its numbered node always match.
+    private val perBandPalette = intArrayOf(
+        Color.rgb(230, 76, 76),   // red
+        Color.rgb(158, 74, 230),  // violet
+        Color.rgb(74, 128, 230),  // blue
+        Color.rgb(96, 191, 96),   // green
+        Color.rgb(230, 158, 51),  // orange
+        Color.rgb(51, 191, 191),  // teal
+        Color.rgb(230, 102, 179), // pink
+        Color.rgb(191, 191, 51),  // olive
+    )
+
     private var backgroundShader: LinearGradient? = null
     private val backgroundPaint = Paint()
     private val unifiedGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -255,6 +274,25 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         color = unifiedTextColor
         alpha = 18
     }
+    // Per-band filled region + its outline (see drawPerBandFills) -- color AND alpha are both
+    // set per band on every draw call (setColor() overwrites alpha too), so nothing meaningful
+    // is configured here beyond style/stroke width.
+    private val bandFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val bandStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * density
+    }
+    // Reused, cleared-and-rebuilt-per-band scratch cascade/accumulator for drawPerBandFills --
+    // avoids allocating a new BiquadCascade/ComplexAcc for every band on every frame.
+    private val bandCascade = BiquadCascade(1)
+    private val bandAcc = ComplexAcc()
+    private val fillX = FloatArray(SYSTEM_POINT_COUNT)
+    private val fillTopY = FloatArray(SYSTEM_POINT_COUNT)
+    private val fillBottomY = FloatArray(SYSTEM_POINT_COUNT)
+    private val referenceCurveScratch = DoubleArray(SYSTEM_POINT_COUNT)
+
     private val lowBranchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2f * density
@@ -687,6 +725,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawActiveBankOverlays(canvas, left, right, top, bottom)
+                drawPerBandFills(canvas, left, right)
                 drawSumCurve(canvas, left, right, top, bottom)
                 if (showTiltHandles) drawTiltHandles(canvas)
                 drawMultiBankNodes(canvas)
@@ -854,6 +893,90 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun drawBranchCurves(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         drawSystemCurve(canvas, curves.lowBranchDb, left, right, lowBranchPaint, ::yForGain)
         drawSystemCurve(canvas, curves.midBranchDb, left, right, midBranchPaint, ::yForGain)
+    }
+
+    /**
+     * Each active-bank band's own contribution to the *actual* combined curve for this bank
+     * (cycling through [perBandPalette] by render-order index, same index [drawActiveBankNodes]
+     * numbers its nodes with) -- filled between the real curve (with this band included, exactly
+     * as already drawn by [drawBranchCurves]/[drawSumCurve]) and where that same curve would sit
+     * with this one band's own dB contribution subtracted back out. The fill's own edge always
+     * hugs the true curve's shape instead of a flat, context-free 0dB reference plane, the same
+     * convention FabFilter Pro-Q and similar EQs use. Drawn before [drawSumCurve] so the bright
+     * combined curve sits on top of every fill instead of being obscured by them.
+     *
+     * This subtraction is exact, not an approximation: every stage in this bank's cascade
+     * (crossover, subsonic, other PEQ bands) is a plain multiplicative LTI filter, and complex
+     * magnitudes multiply in a cascade -- which is exactly addition once everything is expressed
+     * in dB. So "curve with band i" minus "band i's own isolated dB response", at every
+     * frequency, is exactly "curve without band i", regardless of how many other stages sit
+     * before or after it in the chain.
+     */
+    private fun drawPerBandFills(canvas: Canvas, left: Float, right: Float) {
+        if (renderBands.isEmpty()) return
+        val referenceCurve = referenceCurveForActiveBank() ?: return
+        val path = Path()
+        renderBands.forEachIndexed { index, band ->
+            bandCascade.clear()
+            bandCascade.addPeqBand(band, sampleRate)
+            path.rewind()
+            for (i in 0 until SYSTEM_POINT_COUNT) {
+                val fraction = i.toFloat() / (SYSTEM_POINT_COUNT - 1)
+                val frequency = curves.frequencies[i]
+                val w = 2.0 * PI * frequency / sampleRate
+                val cosW = cos(w)
+                val sinW = sin(w)
+                val cos2W = 2.0 * cosW * cosW - 1.0
+                val sin2W = 2.0 * sinW * cosW
+                bandAcc.setUnity()
+                bandCascade.accumulate(cosW, sinW, cos2W, sin2W, bandAcc)
+                val withBandDb = referenceCurve[i]
+                val withoutBandDb = withBandDb - bandAcc.magnitudeDb()
+                fillX[i] = left + fraction * (right - left)
+                fillTopY[i] = yForGain(withBandDb)
+                fillBottomY[i] = yForGain(withoutBandDb)
+            }
+            for (i in 0 until SYSTEM_POINT_COUNT) {
+                if (i == 0) path.moveTo(fillX[i], fillTopY[i]) else path.lineTo(fillX[i], fillTopY[i])
+            }
+            for (i in SYSTEM_POINT_COUNT - 1 downTo 0) {
+                path.lineTo(fillX[i], fillBottomY[i])
+            }
+            path.close()
+            val color = perBandPalette[index % perBandPalette.size]
+            // Paint.setColor() overwrites alpha along with RGB (Color.rgb()'s palette entries are
+            // fully opaque), so alpha has to be re-applied after color on every draw -- setting it
+            // once in the Paint initializer got silently clobbered the instant color was assigned
+            // here, which is why overlapping fills were reading as solid opaque blocks instead of
+            // blending together.
+            bandFillPaint.color = color
+            bandFillPaint.alpha = BAND_FILL_ALPHA
+            canvas.drawPath(path, bandFillPaint)
+            bandStrokePaint.color = color
+            bandStrokePaint.alpha = BAND_STROKE_ALPHA
+            canvas.drawPath(path, bandStrokePaint)
+        }
+    }
+
+    /**
+     * The real curve [drawPerBandFills] should hug for the bank currently being edited -- the
+     * same arithmetic L/R mean [drawSystemCurve] already draws for branch curves, so a fill's
+     * top edge sits exactly on top of the visible blue/orange/white line for that bank, not a
+     * separately-computed approximation of it.
+     */
+    private fun referenceCurveForActiveBank(): DoubleArray? {
+        val perChannel = when (activeBank) {
+            BmwPeqBank.FULL -> curves.preSplitDb
+            BmwPeqBank.LOW -> curves.lowBranchDb
+            BmwPeqBank.MID -> curves.midBranchDb
+        }
+        val leftValues = perChannel[BmwOutputChannel.LEFT.ordinal]
+        val rightValues = perChannel[BmwOutputChannel.RIGHT.ordinal]
+        if (leftValues.size != SYSTEM_POINT_COUNT) return null
+        for (i in 0 until SYSTEM_POINT_COUNT) {
+            referenceCurveScratch[i] = (leftValues[i] + rightValues[i]) * 0.5
+        }
+        return referenceCurveScratch
     }
 
     private fun drawSumCurve(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -1148,8 +1271,16 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
         private const val METER_FLOOR_DB = -50f
         private const val METER_CEILING_DB = 0f
+        // Low enough that 2-3 overlapping bands visibly blend into a mixed color instead of the
+        // top-most one just opaquely covering the ones underneath.
+        private const val BAND_FILL_ALPHA = 55
+        private const val BAND_STROKE_ALPHA = 190
 
-        private const val NODE_IDLE_HOLD_MS = 1200L
+        // Total time nodes/labels stay visible after the last interaction before they're fully
+        // gone is HOLD + FADE (~10s), per explicit request to extend it well past the previous
+        // ~1.6s (1200 hold + 400 fade) -- kept the fade transition itself short so the last
+        // instant still reads as a fade-out, not an abrupt cut.
+        private const val NODE_IDLE_HOLD_MS = 9600L
         private const val NODE_FADE_DURATION_MS = 400L
 
         private val FREQ_SCALE = doubleArrayOf(
