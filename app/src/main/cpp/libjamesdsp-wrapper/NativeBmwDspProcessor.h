@@ -73,6 +73,7 @@ private:
         DirtyTilt       = 1u << 5,
         DirtyCompTiming = 1u << 6,
         DirtyCompState  = 1u << 7,
+        DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
         DirtyAll        = 0xffffffffu,
     };
@@ -132,6 +133,7 @@ private:
         Biquad subsonic1;
         Biquad crossover1, crossover2;
         OnePole crossoverPole;
+        Biquad monoBassHpf1, monoBassHpf2;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
         std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
@@ -144,7 +146,7 @@ private:
         }
         void clearState() {
             subsonic1.clear(); crossover1.clear(); crossover2.clear(); crossoverPole.clear();
-            delay.clear();
+            monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
             for (auto& section : allPassState) section.clear();
         }
     };
@@ -160,6 +162,8 @@ private:
         float headroom=-6,lowGainL=0,lowGainR=0,midGainL=-1,midGainR=-1,postGainL=0,postGainR=0;
         float midDelayL=0,midDelayR=0,lowDelayL=0,lowDelayR=0;
         float tiltAmount=3,tiltFreq=550;
+        bool monoBass=false;
+        float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
     } p_;
 
     static float dbToLin(float db);
@@ -186,6 +190,7 @@ private:
     void rebuildTilt();
     void rebuildCompressorTiming();
     void rebuildLimiter();
+    void rebuildMonoBass();
     void rebuildPolarityAndMute();
     void rebuildAllPass();
     void resetDynamics();
@@ -212,6 +217,8 @@ private:
     float headroom_=1,postGainL_=1,postGainR_=1;
     float rmsMix_=0,peakRelease_=0;
     Limiter limiter_;
+    Biquad monoBassLpf1_,monoBassLpf2_;
+    float monoBassMakeupLin_=1;
     Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
     static constexpr float kLimiterLookaheadMs = 5.f;
