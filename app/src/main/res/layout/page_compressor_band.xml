@@ -53,16 +53,18 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Shrunk from 260dp/100dp: this card sees little real use day-to-day, so it
+                     gives up height to the 6 sliders below it instead of crowding them. -->
                 <app.siphondsp.view.NativeBmwCompressorView
                     android:id="@+id/compressor_visualizer"
                     android:layout_width="match_parent"
-                    android:layout_height="260dp"
+                    android:layout_height="160dp"
                     android:contentDescription="Interactive compressor transfer curve and live gain reduction" />
 
                 <app.siphondsp.view.CompressorGrTraceView
                     android:id="@+id/compressor_gr_trace"
                     android:layout_width="match_parent"
-                    android:layout_height="100dp"
+                    android:layout_height="60dp"
                     android:contentDescription="Scrolling input level and gain reduction history" />
 
                 <TextView

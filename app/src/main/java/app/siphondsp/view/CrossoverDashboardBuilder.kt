@@ -44,22 +44,9 @@ class CrossoverDashboardBuilder(
     private val segmentStroke = Color.rgb(67, 73, 82)
     private val divider = Color.rgb(47, 53, 61)
 
-    /** A compact vertical slider docked to a [dashboardPanel]'s right-hand border (e.g. Headroom
-     *  on Gains & Delay), like a fader on the edge of a channel strip, instead of taking up space
-     *  in the title row or a full row of its own further down the card. */
-    class HeaderSliderSpec(
-        val label: String,
-        val index: Int,
-        val min: Float,
-        val max: Float,
-        val step: Float,
-        val suffix: String,
-    )
-
     fun dashboardPanel(
         title: String,
         subtitle: String? = null,
-        headerSlider: HeaderSliderSpec? = null,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
         // Transparent, not its own copy of the photo background: the workspace root already
@@ -105,22 +92,7 @@ class CrossoverDashboardBuilder(
         currentContent = content
         build()
 
-        // The whole card is a horizontal split when there's a header slider: the regular content
-        // (title + build()) on the left filling whatever width is left, a vertical fader docked to
-        // the card's own right-hand edge -- rather than a full-width row of its own, which is the
-        // whole point (saves vertical space the page badly needs, per this page's fit-without-
-        // scrolling requirement).
-        if (headerSlider == null) {
-            card.addView(content)
-        } else {
-            val outer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-            outer.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-            outer.addView(
-                buildVerticalHeaderSlider(headerSlider),
-                LinearLayout.LayoutParams(dp(VERTICAL_HEADER_SLIDER_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT),
-            )
-            card.addView(outer)
-        }
+        card.addView(content)
         root.addView(
             card,
             LinearLayout.LayoutParams(
@@ -319,112 +291,6 @@ class CrossoverDashboardBuilder(
         currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
-    /** Compact vertical label-slider-valuebox fader docked to a [dashboardPanel]'s right-hand
-     *  border (see [HeaderSliderSpec]) -- label on top, slider filling the available height,
-     *  value box (tap-to-edit) at the bottom. Doesn't call [BmwDashboardSkin.applyTrackOutline]:
-     *  that helper insets top/bottom to reveal a *horizontal* track band, which is the wrong axis
-     *  once the slider is vertical, so this fader keeps the plain black inactive track without the
-     *  white outline rather than drawing a misaligned one. */
-    private fun buildVerticalHeaderSlider(spec: HeaderSliderSpec): View {
-        val column = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(4), dp(10), dp(4), dp(10))
-        }
-        column.addView(TextView(context).apply {
-            text = spec.label
-            textSize = 10.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.rgb(210, 216, 222))
-            gravity = Gravity.CENTER
-        })
-        column.addView(vspace(8))
-
-        val valueText = createBoxedValueText(values[spec.index], spec.suffix)
-        val slider = Slider(context).apply {
-            setOrientation(LinearLayout.VERTICAL)
-            valueFrom = spec.min
-            valueTo = spec.max
-            stepSize = spec.step
-            value = snapToStep(values[spec.index], spec.min, spec.max, spec.step)
-            trackHeight = dp(BmwDashboardSkin.SLIDER_TRACK_HEIGHT_DP)
-            thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
-            thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
-            setTrackActiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_ACTIVE_COLOR))
-            setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
-            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-            setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
-            addOnChangeListener { _, newValue, fromUser ->
-                if (fromUser) {
-                    values[spec.index] = newValue
-                    updateValueBox(valueText, newValue, spec.suffix)
-                    onChanged(values)
-                }
-            }
-        }
-        column.addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 0, 1f))
-        column.addView(vspace(8))
-        column.addView(valueText)
-        return column
-    }
-
-    /** Single-line [label][slider][boxed value] row, scaled down to fit inside a narrow channel
-     *  card (see [addChannelCard]'s Gain row) -- same title-slider-valuebox order as
-     *  [addSliderRow], just with the label in a narrower fixed column instead of [LABEL_WIDTH_DP]. */
-    private fun buildMiniSliderRow(label: String, index: Int, min: Float, max: Float, step: Float, suffix: String): View {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        val valueText = createBoxedValueText(values[index], suffix)
-        val slider = Slider(context).apply {
-            valueFrom = min
-            valueTo = max
-            stepSize = step
-            value = snapToStep(values[index], min, max, step)
-            trackHeight = dp(BmwDashboardSkin.SLIDER_TRACK_HEIGHT_DP)
-            thumbWidth = dp(BmwDashboardSkin.SLIDER_THUMB_WIDTH_DP)
-            thumbHeight = dp(BmwDashboardSkin.SLIDER_THUMB_HEIGHT_DP)
-            setTrackActiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_ACTIVE_COLOR))
-            setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
-            setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
-            setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
-            addOnChangeListener { _, newValue, fromUser ->
-                if (fromUser) {
-                    values[index] = newValue
-                    updateValueBox(valueText, newValue, suffix)
-                    onChanged(values)
-                }
-            }
-        }
-        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(8)
-            marginEnd = dp(8)
-        })
-        row.addView(valueText)
-
-        valueText.setOnClickListener {
-            context.showInputAlert(
-                android.view.LayoutInflater.from(context),
-                label,
-                "${format.format(min)}–${format.format(max)}",
-                format.format(values[index]),
-                true,
-                suffix,
-            ) { entered ->
-                val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
-                val stored = (min + ((parsed.coerceIn(min, max) - min) / step).roundToInt() * step).coerceIn(min, max)
-                values[index] = stored
-                slider.value = stored
-                updateValueBox(valueText, stored, suffix)
-                onChanged(values)
-            }
-        }
-        return row
-    }
-
     /** Single-line [label][tap-to-edit value] row for [addChannelCard]'s Delay row -- no drag
      *  slider, matching the original delay diagram's own tap-only rationale (this is about showing
      *  *where* a delay applies, not fine adjustment). */
@@ -482,12 +348,13 @@ class CrossoverDashboardBuilder(
 
     /** One "Left Mid"/"Right Mid"/"Left Low"/"Right Low" channel card for the Gains & Delay car
      *  diagram (see [addChannelDiagramSection]): a coloured title (matching that channel's
-     *  connector-line colour) plus one compact single-line row each for Delay, Gain, and Polarity. */
+     *  connector-line colour) plus one compact single-line row each for Delay and Polarity. Gain
+     *  used to have its own mini-slider row here too, but moved to its own full horizontal slider
+     *  on a dedicated Gain page instead, alongside Headroom. */
     fun addChannelCard(
         title: String,
         accentColor: Int,
         delayIndex: Int, delayMin: Float, delayMax: Float,
-        gainIndex: Int, gainMin: Float, gainMax: Float, gainStep: Float,
         polarityIndex: Int, polarityMirror: IntArray,
         // Low/mid polarity is one value shared by both the Left and Right card of that band (see
         // NativeBmwDspValues.INDEX_LOW_INVERT/INDEX_MID_INVERT), not 4 independent per-channel
@@ -516,8 +383,6 @@ class CrossoverDashboardBuilder(
         })
         content.addView(vspace(6))
         content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms"))
-        content.addView(vspace(4))
-        content.addView(buildMiniSliderRow("GAIN", gainIndex, gainMin, gainMax, gainStep, "dB"))
         content.addView(vspace(4))
         content.addView(buildMiniToggleRow("POL", polarityIndex, polarityMirror, onPolarityChanged))
 
@@ -903,7 +768,6 @@ class CrossoverDashboardBuilder(
     companion object {
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
-        private const val VERTICAL_HEADER_SLIDER_WIDTH_DP = 64
         private const val ROW_LABEL_WIDTH_DP = 46
         private const val CHANNEL_CARD_WIDTH_DP = 340
         private const val CAR_DIAGRAM_WIDTH_DP = 190

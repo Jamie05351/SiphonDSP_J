@@ -85,12 +85,14 @@
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
+    <!-- Widened from the sliders' original 45% share: the visualizer/GR-trace/meter card sees
+         little real use day-to-day, so it gives up room to the 6 sliders it used to crowd. -->
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/compressor_split_guideline"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.45" />
+        app:layout_constraintGuide_percent="0.62" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/compressor_visualizer_card"
