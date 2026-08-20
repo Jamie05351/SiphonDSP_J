@@ -367,7 +367,9 @@ class CrossoverDashboardBuilder(
             cardElevation = 0f
             strokeWidth = dp(1)
             strokeColor = segmentStroke
-            setCardBackgroundColor(Color.rgb(14, 17, 21))
+            // No fill: same reasoning as dashboardPanel/crossoverBandCard -- lets the page's
+            // designed background show through instead of hiding it behind a solid card.
+            setCardBackgroundColor(Color.TRANSPARENT)
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
