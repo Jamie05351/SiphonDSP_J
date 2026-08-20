@@ -96,6 +96,21 @@ object BmwDashboardSkin {
         }
     }
 
+    @Volatile private var workspaceBackgroundBitmap: Bitmap? = null
+
+    // The DSP workspace full-screen background: a dedicated asset (distinct from
+    // bmw_workspace_texture, which stays reserved for the sidebar tiles) so this can be swapped
+    // without affecting tile rendering -- decoded once and reused across every workspace Activity.
+    private fun loadWorkspaceBackgroundBitmap(context: Context): Bitmap {
+        workspaceBackgroundBitmap?.let { return it }
+        synchronized(this) {
+            workspaceBackgroundBitmap?.let { return it }
+            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_bg_workspace)
+            workspaceBackgroundBitmap = decoded
+            return decoded
+        }
+    }
+
     @Volatile private var logoBitmap: Bitmap? = null
 
     // The "M" logo watermark: a dedicated asset with real alpha transparency around the mark
@@ -223,12 +238,17 @@ object BmwDashboardSkin {
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
     }
 
+    // No fill: lets the workspace's designed background (and its "M" watermark) show through
+    // behind the card, same reasoning as CrossoverDashboardBuilder's dashboardPanel and
+    // crossoverBandCard. A live-visualizer view inside a styled card (ParametricEqSurface,
+    // NativeBmwCompressorView, CompressorGrTraceView) still paints its own solid background every
+    // frame regardless -- only the card's own body becomes see-through.
     fun styleCard(card: MaterialCardView) {
         card.radius = dp(card.context, 7).toFloat()
         card.cardElevation = 0f
         card.strokeWidth = dp(card.context, 1)
         card.strokeColor = inactiveStroke
-        card.setCardBackgroundColor(Color.argb(215, 18, 23, 29))
+        card.setCardBackgroundColor(Color.TRANSPARENT)
     }
 
     fun styleSwitch(toggle: SwitchCompat) {
@@ -309,21 +329,14 @@ object BmwDashboardSkin {
         (value * context.resources.displayMetrics.density).roundToInt()
 
     /**
-     * Renders the real photographed/rendered brushed-metal background: a center-cropped, tiled
-     * plain-metal fill covering the whole bounds, plus the "M" logo watermark pinned at a fixed
-     * size to the bottom-right corner -- independent of the container's own aspect ratio. A
-     * whole-image center-crop was tried first, but on a container much taller than the source
-     * photo (e.g. the Gains & Delay card, which stacks several rows) the crop had to zoom in so
-     * far to cover the height that the logo -- a fixed pixel feature near the source's edge --
-     * was scaled out of frame entirely. Pinning it as a separate fixed-size overlay avoids that.
-     *
-     * The tri-colour M-stripe used to be drawn programmatically here (as 3 flat-colour blocks
-     * along the top edge), but the current bmw_workspace_texture.png bakes its own diagonal
-     * stripe directly into the photo -- drawing a second, differently-angled stripe on top would
-     * have doubled up and conflicted with it, so this class no longer draws one of its own.
+     * Renders the DSP workspace's designed background image: a center-cropped cover fill,
+     * independent of the container's own aspect ratio. The "M" logo watermark is deliberately NOT
+     * drawn by this class -- it's a separate overlay (see [addLogoOverlay]) pinned in front of
+     * every card, so it stays a single full-screen-scale badge rather than being baked into the
+     * background image itself.
      */
     private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
-        private val fillBitmap = loadPlainMetalBitmap(context)
+        private val fillBitmap = loadWorkspaceBackgroundBitmap(context)
 
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             isFilterBitmap = true
