@@ -215,7 +215,7 @@ class CrossoverDashboardBuilder(
         val topRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(34)
+            minimumHeight = dp(28)
         }
 
         // Title, slider, and value all on one row, always in that order: the title sits in its
@@ -236,7 +236,6 @@ class CrossoverDashboardBuilder(
             setTrackInactiveTintList(ColorStateList.valueOf(BmwDashboardSkin.SLIDER_TRACK_INACTIVE_COLOR))
             setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
             setCustomThumbDrawable(BmwDashboardSkin.sliderThumbDrawable(context))
-            BmwDashboardSkin.applyTrackOutline(this)
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue

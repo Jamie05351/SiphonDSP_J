@@ -10,6 +10,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
@@ -17,8 +18,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Drawable.ConstantState
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.InsetDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -124,26 +123,22 @@ object BmwDashboardSkin {
     fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
     // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
-    // Mono Bass, Routing, Compressor) -- a slim, tall dark bar straddling a thin capsule-outlined
-    // track, matching a supplied reference image (blue pill outline, white active/grey inactive
-    // line inside it, dark vertical scrubber handle). Width/height are swapped from the old
-    // wide-flat "physical fader cap" look on purpose: this thumb is narrower than it is tall.
-    // Sized to fit comfortably inside a compact ~34dp row (CrossoverDashboardBuilder.addSliderRow's
-    // own minimumHeight) with room to spare above/below for the label/value box it sits between,
-    // not scaled up to fill the row the way the reference image's own much taller thumb would.
-    const val SLIDER_THUMB_WIDTH_DP = 8
-    const val SLIDER_THUMB_HEIGHT_DP = 18
-    // The actual coloured line's thickness, well inside the capsule outline -- see
-    // applyTrackOutline for why the capsule itself needs a separately-sized inset.
-    const val SLIDER_TRACK_HEIGHT_DP = 3
-    // How far the capsule outline sits inset from the slider's own full (halo-padded) height --
-    // fixed and small, independent of SLIDER_THUMB_HEIGHT_DP, so the capsule stays a slim tube.
-    private const val SLIDER_CAPSULE_INSET_DP = 7
+    // Mono Bass, Routing, Compressor). Exact dimensions/colours below were specified explicitly
+    // by the user after a full breakdown was shared back to them -- see BmwDashboardSkin's
+    // slider-dimension summary in session history for the element-by-element reference; do not
+    // re-derive these from the original screenshot, they're deliberate overrides of it.
+    const val SLIDER_THUMB_WIDTH_DP = 12
+    const val SLIDER_THUMB_HEIGHT_DP = 20
+    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 7
+    const val SLIDER_TRACK_HEIGHT_DP = 8
     // Public so CrossoverDashboardBuilder's own inline slider setups (which don't go through
     // styleSlider()) can use the exact same colours instead of drifting from them over time.
-    val SLIDER_TRACK_ACTIVE_COLOR = Color.rgb(244, 246, 248)
+    val SLIDER_TRACK_ACTIVE_COLOR = LIGHT_BLUE
     val SLIDER_TRACK_INACTIVE_COLOR = Color.rgb(96, 100, 106)
-    private val thumbColor = Color.rgb(36, 38, 42)
+    // Thumb fill is a vertical gradient of LIGHT_BLUE: lighter at top for a glossy highlight,
+    // LIGHT_BLUE itself at the bottom.
+    private val thumbGradientTop = Color.rgb(144, 211, 241)
+    private val thumbGradientBottom = LIGHT_BLUE
 
     fun sliderThumbDrawable(context: Context): Drawable = SliderThumbDrawable(context)
 
@@ -226,27 +221,6 @@ object BmwDashboardSkin {
         slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
         slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
-        applyTrackOutline(slider)
-    }
-
-    /**
-     * Material's Slider only exposes a flat inactive-track tint, no stroke API, so the blue pill
-     * outline around the thin track line is drawn as a separate stroke-only rounded-rect behind
-     * the slider. The vertical inset is a small fixed value, deliberately *not* tied to the
-     * (much taller) thumb height -- the capsule needs to stay a slim tube close to the track's
-     * own thickness, not grow to match the thumb, or the whole control reads as chunky instead
-     * of the thin-line-in-a-tube look the reference image has.
-     */
-    fun applyTrackOutline(slider: Slider) {
-        val context = slider.context
-        val outline = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(context, SLIDER_TRACK_HEIGHT_DP).toFloat()
-            setStroke(dp(context, 2), LIGHT_BLUE)
-            setColor(Color.TRANSPARENT)
-        }
-        val verticalInset = dp(context, SLIDER_CAPSULE_INSET_DP)
-        slider.background = InsetDrawable(outline, 0, verticalInset, 0, verticalInset)
     }
 
     fun styleCard(card: MaterialCardView) {
@@ -488,20 +462,30 @@ object BmwDashboardSkin {
     }
 
     /**
-     * The unified slider thumb: a flat, dark, slim vertical bar -- matching a supplied reference
-     * image exactly. Deliberately plain (no gradient/grain/highlight) rather than the old
-     * brushed-metal look, since the reference thumb reads as a simple flat scrubber handle.
+     * The unified slider thumb: a slim vertical bar filled with a top-lit LIGHT_BLUE gradient.
+     * No stroke -- with the capsule outline and track already both blue, an extra grey border
+     * here just added visual clutter without adding legibility.
      */
     private class SliderThumbDrawable(private val context: Context) : Drawable() {
-        private val cornerRadius = dp(context, 2).toFloat()
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = thumbColor }
+        private val cornerRadius = dp(context, SLIDER_THUMB_CORNER_RADIUS_DP).toFloat()
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        override fun draw(canvas: Canvas) {
-            canvas.drawRoundRect(RectF(bounds), cornerRadius, cornerRadius, paint)
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            if (bounds.height() <= 0) return
+            fillPaint.shader = LinearGradient(
+                0f, bounds.top.toFloat(), 0f, bounds.bottom.toFloat(),
+                thumbGradientTop, thumbGradientBottom,
+                Shader.TileMode.CLAMP,
+            )
         }
 
-        override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { paint.colorFilter = colorFilter }
+        override fun draw(canvas: Canvas) {
+            canvas.drawRoundRect(RectF(bounds), cornerRadius, cornerRadius, fillPaint)
+        }
+
+        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
 
