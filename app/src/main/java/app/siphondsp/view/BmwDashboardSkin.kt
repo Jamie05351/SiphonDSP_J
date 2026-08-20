@@ -10,7 +10,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
-import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
@@ -125,19 +124,28 @@ object BmwDashboardSkin {
     fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
     // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
-    // Mono Bass, Routing, Compressor) -- long side horizontal, like a physical fader cap, with
-    // the same brushed-metal grain as the workspace panels. Replaces the previously divergent
-    // circular "chrome ball" (CrossoverDashboardBuilder.createRoundThumb) and tall rectangular
-    // "ingot" (the old styleSlider()) thumbs.
-    const val SLIDER_THUMB_WIDTH_DP = 28
-    const val SLIDER_THUMB_HEIGHT_DP = 14
-    // Gunmetal grey, not light aluminum -- reads as a distinct handle against the track's own
-    // black base rather than blending into it.
-    private val thumbFillTop = Color.rgb(94, 100, 108)
-    private val thumbFillBottom = Color.rgb(52, 56, 62)
-    private val thumbStroke = Color.rgb(30, 33, 37)
+    // Mono Bass, Routing, Compressor) -- a slim, tall dark bar straddling a thin capsule-outlined
+    // track, matching a supplied reference image (blue pill outline, white active/grey inactive
+    // line inside it, dark vertical scrubber handle). Width/height are swapped from the old
+    // wide-flat "physical fader cap" look on purpose: this thumb is narrower than it is tall.
+    // Sized to fit comfortably inside a compact ~34dp row (CrossoverDashboardBuilder.addSliderRow's
+    // own minimumHeight) with room to spare above/below for the label/value box it sits between,
+    // not scaled up to fill the row the way the reference image's own much taller thumb would.
+    const val SLIDER_THUMB_WIDTH_DP = 8
+    const val SLIDER_THUMB_HEIGHT_DP = 18
+    // The actual coloured line's thickness, well inside the capsule outline -- see
+    // applyTrackOutline for why the capsule itself needs a separately-sized inset.
+    const val SLIDER_TRACK_HEIGHT_DP = 3
+    // How far the capsule outline sits inset from the slider's own full (halo-padded) height --
+    // fixed and small, independent of SLIDER_THUMB_HEIGHT_DP, so the capsule stays a slim tube.
+    private const val SLIDER_CAPSULE_INSET_DP = 7
+    // Public so CrossoverDashboardBuilder's own inline slider setups (which don't go through
+    // styleSlider()) can use the exact same colours instead of drifting from them over time.
+    val SLIDER_TRACK_ACTIVE_COLOR = Color.rgb(244, 246, 248)
+    val SLIDER_TRACK_INACTIVE_COLOR = Color.rgb(96, 100, 106)
+    private val thumbColor = Color.rgb(36, 38, 42)
 
-    fun sliderThumbDrawable(context: Context): Drawable = BrushedThumbDrawable(context)
+    fun sliderThumbDrawable(context: Context): Drawable = SliderThumbDrawable(context)
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
@@ -211,34 +219,33 @@ object BmwDashboardSkin {
     // reach them.
     fun styleSlider(slider: Slider) {
         val context = slider.context
-        // 8dp, matching CrossoverDashboardBuilder.addSliderRow's inline slider setup exactly --
-        // this is the only styleTree()-reached Slider usage in the app (Compressor's), so bumping
-        // it here doesn't touch anything outside the DSP workspace sliders it's meant to match.
-        slider.trackHeight = dp(context, 8)
+        slider.trackHeight = dp(context, SLIDER_TRACK_HEIGHT_DP)
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
-        slider.setTrackActiveTintList(ColorStateList.valueOf(LIGHT_BLUE))
-        slider.setTrackInactiveTintList(ColorStateList.valueOf(Color.BLACK))
+        slider.setTrackActiveTintList(ColorStateList.valueOf(SLIDER_TRACK_ACTIVE_COLOR))
+        slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
         slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
         applyTrackOutline(slider)
     }
 
     /**
-     * Material's Slider only exposes a flat inactive-track tint, no stroke API, so the thin white
-     * border around the black base is drawn as a separate stroke-only rounded-rect behind the
-     * slider, inset from the slider's own (thumb-halo-padded) full height down to roughly the
-     * track band itself.
+     * Material's Slider only exposes a flat inactive-track tint, no stroke API, so the blue pill
+     * outline around the thin track line is drawn as a separate stroke-only rounded-rect behind
+     * the slider. The vertical inset is a small fixed value, deliberately *not* tied to the
+     * (much taller) thumb height -- the capsule needs to stay a slim tube close to the track's
+     * own thickness, not grow to match the thumb, or the whole control reads as chunky instead
+     * of the thin-line-in-a-tube look the reference image has.
      */
     fun applyTrackOutline(slider: Slider) {
         val context = slider.context
         val outline = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(context, 3).toFloat()
-            setStroke(dp(context, 1), Color.WHITE)
+            cornerRadius = dp(context, SLIDER_TRACK_HEIGHT_DP).toFloat()
+            setStroke(dp(context, 2), LIGHT_BLUE)
             setColor(Color.TRANSPARENT)
         }
-        val verticalInset = dp(context, SLIDER_THUMB_HEIGHT_DP)
+        val verticalInset = dp(context, SLIDER_CAPSULE_INSET_DP)
         slider.background = InsetDrawable(outline, 0, verticalInset, 0, verticalInset)
     }
 
@@ -481,59 +488,16 @@ object BmwDashboardSkin {
     }
 
     /**
-     * The unified slider thumb: a gunmetal-grey brushed rectangle, long side horizontal, rounded
-     * and stroked like a real control rather than a flat panel.
+     * The unified slider thumb: a flat, dark, slim vertical bar -- matching a supplied reference
+     * image exactly. Deliberately plain (no gradient/grain/highlight) rather than the old
+     * brushed-metal look, since the reference thumb reads as a simple flat scrubber handle.
      */
-    private class BrushedThumbDrawable(private val context: Context) : Drawable() {
+    private class SliderThumbDrawable(private val context: Context) : Drawable() {
         private val cornerRadius = dp(context, 2).toFloat()
-        private val strokeWidthPx = dp(context, 1).toFloat()
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1f }
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-            color = thumbStroke
-        }
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = thumbColor }
 
         override fun draw(canvas: Canvas) {
-            val b = bounds
-            val rect = RectF(b)
-
-            paint.shader = LinearGradient(
-                b.left.toFloat(), b.top.toFloat(), b.left.toFloat(), b.bottom.toFloat(),
-                intArrayOf(thumbFillTop, thumbFillBottom),
-                null,
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-            paint.shader = null
-
-            var y = b.top
-            var index = 0
-            while (y < b.bottom) {
-                val alpha = if (index % 2 == 0) 55 else 24
-                linePaint.color = Color.argb(alpha, 150, 156, 164)
-                canvas.drawLine(b.left.toFloat(), y.toFloat(), b.right.toFloat(), y.toFloat(), linePaint)
-                y += 2
-                index++
-            }
-
-            paint.shader = LinearGradient(
-                b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(),
-                intArrayOf(Color.argb(90, 255, 255, 255), Color.TRANSPARENT, Color.argb(40, 0, 0, 0)),
-                null,
-                Shader.TileMode.CLAMP,
-            )
-            canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
-            paint.shader = null
-
-            canvas.drawRoundRect(
-                RectF(
-                    b.left + strokeWidthPx / 2f, b.top + strokeWidthPx / 2f,
-                    b.right - strokeWidthPx / 2f, b.bottom - strokeWidthPx / 2f,
-                ),
-                cornerRadius, cornerRadius, strokePaint,
-            )
+            canvas.drawRoundRect(RectF(bounds), cornerRadius, cornerRadius, paint)
         }
 
         override fun setAlpha(alpha: Int) { paint.alpha = alpha }
@@ -547,7 +511,7 @@ object BmwDashboardSkin {
         // this thumb is created -- GradientDrawable (the old thumb) has this built in already,
         // which is why that path never hit it.
         private val constantState = object : ConstantState() {
-            override fun newDrawable(): Drawable = BrushedThumbDrawable(context)
+            override fun newDrawable(): Drawable = SliderThumbDrawable(context)
             override fun getChangingConfigurations(): Int = 0
         }
 
