@@ -6,7 +6,7 @@
 
     <!-- Short labels for the sidebar nav tiles (DspCrossNavBar): the tile column is fixed-width,
          so these are deliberately shorter than the full activity titles (action_gain_limiter etc). -->
-    <string name="sidebar_label_routing">Routing</string>
+    <string name="sidebar_label_routing">Matrix</string>
     <string name="sidebar_label_gains_delay">Gains</string>
     <string name="sidebar_label_compressor">Comp</string>
     <string name="sidebar_label_crossover_tilt">Xover</string>

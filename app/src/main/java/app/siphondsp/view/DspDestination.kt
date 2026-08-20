@@ -43,6 +43,35 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
+    // The whole 5-tile bar -- rounded tile shapes, gloss sweep, both accent bars on every tile,
+    // AND which single tile reads as "selected" (lit blue bars) -- is baked into one of 5
+    // whole-bar source images now, picked by [current], rather than assembled at populate() time
+    // from 2 reusable per-tile images stacked 5 times. populate() only needs to overlay each
+    // row's icon+label on top; it never touches tile artwork directly.
+    //
+    // The 5 tiles are NOT an even one-fifth-each split of the image -- each source image has its
+    // own top margin, a bottom margin roughly the top margin plus the leftover from 5 tiles that
+    // aren't perfectly identical in height, and small gaps between tiles that also vary slightly
+    // image to image. A naive 5-equal-weight overlay drifted visibly off the real button art (icon
+    // /label sitting above or below the pill it belongs to, and the row heights looking uneven
+    // where they should read as one continuous bar). [rowWeights] holds the *measured* pixel
+    // boundaries from each PNG directly (sampled with a vertical brightness scan down the bar's
+    // centre column) as 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3,
+    // tile4, gap4, tile5, bottom margin. LinearLayout weights are proportions, not absolute
+    // values, so passing the raw measured pixel heights as weights reproduces the exact source
+    // proportions regardless of the sidebar's actual on-screen height on any given device.
+    private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
+
+    private fun barArt(current: DspDestination): BarArt = when (current) {
+        DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, intArrayOf(50, 147, 13, 144, 12, 144, 11, 145, 11, 147, 56))
+        DspDestination.GAINS_DELAY -> BarArt(R.drawable.sidebar_bar_gains, intArrayOf(50, 148, 12, 144, 12, 144, 11, 145, 11, 147, 56))
+        DspDestination.CROSSOVER_TILT -> BarArt(R.drawable.sidebar_bar_xover, intArrayOf(51, 147, 13, 144, 12, 143, 12, 145, 12, 146, 55))
+        DspDestination.COMPRESSOR -> BarArt(R.drawable.sidebar_bar_compressor, intArrayOf(51, 147, 13, 144, 12, 144, 12, 144, 12, 146, 55))
+        DspDestination.ROUTING -> BarArt(R.drawable.sidebar_bar_routing, intArrayOf(51, 148, 12, 144, 12, 144, 11, 145, 12, 146, 55))
+    }
+
+    private class WeightedChild(val view: View, val weightIndex: Int)
+
     fun populate(
         activity: FragmentActivity,
         container: LinearLayout,
@@ -51,26 +80,33 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
-        // No background here: the panel behind the whole sidebar is painted once on the shared
-        // dsp_sidebar parent by DspWorkspaceActivity.setUpWorkspaceSidebarActions().
+        val art = barArt(current)
+        // A plain resource-referenced bitmap's default gravity is FILL, so this stretches to
+        // cover the container exactly like the old per-tile ImageView(FIT_XY) did -- View.background
+        // always paints behind every child added below regardless of container type.
+        container.background = ContextCompat.getDrawable(activity, art.res)
 
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
+        val weights = art.rowWeights
+        val children = mutableListOf<WeightedChild>()
 
-        destinations.forEach { destination ->
+        fun addSpacer(weightIndex: Int) {
+            val spacer = View(activity)
+            container.addView(spacer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+            children += WeightedChild(spacer, weightIndex)
+        }
+
+        addSpacer(0) // top margin, before the first tile
+
+        destinations.forEachIndexed { index, destination ->
             val selected = destination == current
 
-            // The whole tile body (rounded shape, gloss sweep, and both accent bars) is baked
-            // into one of two source images now -- sidebar_tile_selected/unselected -- rather
-            // than composed from a programmatic gradient plus separately-driven accent-bar
-            // drawables, so it matches the reference art directly instead of approximating it.
-            //
             // Plain FrameLayout, not MaterialCardView: MaterialCardView kept painting a solid
             // dark rectangle (~rgb(20,25,32), a Material3 default surface/state-layer tint) behind
             // its content even with cardElevation=0 and setCardBackgroundColor(TRANSPARENT) --
-            // visible as a hard-edged box around the tile's actual (smaller, padded) artwork. A
-            // plain ViewGroup has no such built-in surface painting, so nothing shows through the
-            // art's transparent margin except the sidebar's own background, as intended.
-            val card = FrameLayout(activity).apply {
+            // visible as a hard-edged box over the bar art underneath. A plain ViewGroup has no
+            // such built-in surface painting, so the bar art shows through untouched.
+            val row = FrameLayout(activity).apply {
                 contentDescription = activity.getString(destination.labelRes)
                 tooltipText = activity.getString(destination.labelRes)
                 if (selected) {
@@ -90,18 +126,14 @@ object DspCrossNavBar {
                 }
             }
 
-            val tileArt = ImageView(activity).apply {
-                scaleType = ImageView.ScaleType.FIT_XY
-                setImageResource(if (selected) R.drawable.sidebar_tile_selected else R.drawable.sidebar_tile_unselected)
-            }
-            card.addView(tileArt, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
             val content = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                // Both accent bars are already part of tileArt -- this row only needs to clear
-                // their painted width so the icon/label don't sit on top of them.
-                setPadding(activity.dp(12), 0, activity.dp(3), 0)
+                // Both accent bars are already part of the bar art -- this row only needs to
+                // clear their painted width so the icon/label don't sit on top of them. Right
+                // padding is generous (not just clearing the accent bar) so the longest label
+                // ("Routing") doesn't run past the tile's own right edge.
+                setPadding(activity.dp(12), 0, activity.dp(10), 0)
             }
 
             val icon = ImageView(activity).apply {
@@ -128,18 +160,43 @@ object DspCrossNavBar {
                 label,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                     leftMargin = activity.dp(6)
-                    rightMargin = activity.dp(4)
                 },
             )
 
-            card.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            row.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
-            // Weighted, not a fixed dp height: every tile gets an equal share of whatever height
-            // the sidebar column actually has on this screen, so the group always fills it edge
-            // to edge -- no gap between tiles, no leftover space above/below the group, and no
-            // separate spacer view needed between entries.
-            container.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            container.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+            // Tile weight is at an odd index (1, 3, 5, 7, 9); the gap that follows it (2, 4, 6, 8)
+            // sits between this tile and the next, so it's only added while a next tile remains.
+            children += WeightedChild(row, index * 2 + 1)
+            if (index < destinations.lastIndex) addSpacer(index * 2 + 2)
         }
+
+        addSpacer(10) // bottom margin, after the last tile
+
+        // Every child was added above with height=0 (a LinearLayout.LayoutParams default), not a
+        // weight -- weights are wrong here because LinearLayout rounds each weighted child's
+        // share to a whole pixel *independently*, and those small per-child rounding errors
+        // compound down 11 children (top margin, 5 tiles, 4 gaps, bottom margin), so icon/label
+        // content drifted visibly higher within its tile the further down the bar it sat. Instead,
+        // once the container has a real measured height (post, not before), each child's height is
+        // set explicitly from the *cumulative* weight fraction rounded to a pixel boundary -- the
+        // running sum is always exact, so no drift can accumulate regardless of position.
+        val totalWeight = weights.sum()
+        container.post {
+            val totalHeight = container.height
+            if (totalHeight <= 0) return@post
+            var cumulative = 0
+            var previousBoundary = 0
+            children.forEach { child ->
+                cumulative += weights[child.weightIndex]
+                val boundary = (totalHeight.toLong() * cumulative / totalWeight).toInt()
+                (child.view.layoutParams as LinearLayout.LayoutParams).height = boundary - previousBoundary
+                previousBoundary = boundary
+            }
+            container.requestLayout()
+        }
+
         container.visibility = View.VISIBLE
     }
 
