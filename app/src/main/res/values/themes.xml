@@ -125,10 +125,10 @@
 
     <!-- DSP workspace slider value readout (Compressor's XML sliders); matches
          CrossoverDashboardBuilder.createBoxedValueText()'s Kotlin-built styling: bold accent
-         blue text in a darkened rounded box, typography borrowed from the LOW PASS/HIGH PASS
-         crossover cards' own frequency readout. -->
+         blue text in a darkened, embossed rounded box. minWidth/minHeight (not fixed layout
+         dimensions) so a longer reading can still grow past the spec's floor size. -->
     <style name="Widget.SiphonDSP.SliderValueBox" parent="">
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/bmw_dsp_accent_blue</item>
         <item name="android:gravity">center</item>
@@ -137,6 +137,29 @@
         <item name="android:paddingEnd">14dp</item>
         <item name="android:paddingTop">3dp</item>
         <item name="android:paddingBottom">3dp</item>
+        <item name="android:minWidth">88dp</item>
+        <item name="android:minHeight">30dp</item>
+    </style>
+
+    <!-- DSP workspace slider row title (Compressor's XML sliders); same embossed box language as
+         Widget.SiphonDSP.SliderValueBox above but unbordered (bg_slider_title_box, no stroke).
+         No fixed width here: NativeBmwCompressorFragment measures every title in a band and
+         sets them all to whichever one actually needs the most room at runtime, the same
+         "size to the longest sibling" approach CrossoverDashboardBuilder's own slider rows use
+         (see its pendingTitleBoxes). layout_height stays fixed since every box in a row needs to
+         match regardless of its own text. -->
+    <style name="Widget.SiphonDSP.SliderTitleBox" parent="">
+        <item name="android:layout_height">40dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">#E7EBEF</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:background">@drawable/bg_slider_title_box</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:paddingTop">3dp</item>
+        <item name="android:paddingBottom">3dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
 
     <!-- === Custom themes taken from Tachiyomi: https://github.com/tachiyomiorg/tachiyomi === -->

@@ -62,7 +62,6 @@ class NativeBmwCompressorView @JvmOverloads constructor(
     private val history = ArrayDeque<Pair<Float, Float>>()
     private var dragMode: CompressorGraphMath.DragMode? = null
 
-    private val backgroundPaint = Paint().apply { color = Color.rgb(24, 24, 26) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(62, 62, 66); strokeWidth = density
     }
@@ -146,7 +145,8 @@ class NativeBmwCompressorView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
+        // No solid fill: the workspace's own designed background shows through behind the plot
+        // now, with only the grid wireframe below drawn on top of it.
 
         for (db in -60..0 step 10) {
             canvas.drawLine(x(db.toFloat()), padTop, x(db.toFloat()), height - padBottom, gridPaint)

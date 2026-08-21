@@ -4,10 +4,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -227,10 +225,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private var tiltDraft: BmwGraphGestureMath.TiltValues? = null
     private var tiltDragHandle: TiltHandle? = null
 
-    // Dark, fixed palette for the unified visualiser (deliberate design commitment, matching
-    // the existing compressor visualisers' dark aesthetic rather than following the light/
-    // dark app theme).
-    private val bgTopColor = Color.rgb(20, 21, 24)
+    // No solid background fill any more (see drawUnifiedSystem) -- the workspace's own designed
+    // background shows through instead. bgBottomColor survives as nodeRingPaint's stroke colour
+    // below, a leftover dark tone that still reads correctly against either background.
     private val bgBottomColor = Color.rgb(13, 13, 15)
     private val unifiedGridColor = Color.rgb(58, 60, 66)
     private val unifiedTextColor = Color.rgb(176, 178, 186)
@@ -253,8 +250,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         Color.rgb(191, 191, 51),  // olive
     )
 
-    private var backgroundShader: LinearGradient? = null
-    private val backgroundPaint = Paint()
     private val unifiedGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = density
@@ -405,13 +400,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         if (showSpectrum) startSpectrum()
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && h > 0) {
-            backgroundShader = LinearGradient(0f, 0f, 0f, h.toFloat(), bgTopColor, bgBottomColor, Shader.TileMode.CLAMP)
-            backgroundPaint.shader = backgroundShader
-        }
-    }
 
     // --- Band state API ---------------------------------------------------------------
 
@@ -715,7 +703,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val right = plotRight()
         val top = plotTop()
         val bottom = plotBottom()
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
+        // No solid fill: the workspace's own designed background shows through behind the plot
+        // now, with only the grid wireframe (drawUnifiedGrid etc., below) and the curves/fills
+        // drawn on top of it -- see BmwDashboardSkin.styleCard()'s matching change for the card
+        // wrapping this view.
         if (right <= left || bottom <= top) return
 
         when (displayMode) {

@@ -137,25 +137,70 @@ object BmwDashboardSkin {
      */
     fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
-    // Single slider thumb shared by every DSP workspace slider (Gains/Delay, Crossovers & Tilt,
-    // Mono Bass, Routing, Compressor). Exact dimensions/colours below were specified explicitly
-    // by the user after a full breakdown was shared back to them -- see BmwDashboardSkin's
-    // slider-dimension summary in session history for the element-by-element reference; do not
-    // re-derive these from the original screenshot, they're deliberate overrides of it.
-    const val SLIDER_THUMB_WIDTH_DP = 12
-    const val SLIDER_THUMB_HEIGHT_DP = 20
-    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 7
-    const val SLIDER_TRACK_HEIGHT_DP = 8
+    // Single slider thumb/track/capsule shared by every DSP workspace slider (Gains/Delay,
+    // Crossovers & Tilt, Mono Bass, Routing, Compressor). Exact dimensions/colours below were
+    // specified explicitly by the user as a full pixel spec (row layout, boxed title/value,
+    // capsule outline, 3d thumb) -- do not re-derive these from a screenshot, they're deliberate
+    // overrides of it. The track's own 0.5dp specular-highlight/shade sub-strips from that spec
+    // are NOT implemented: Slider only exposes trackHeight/trackColorActive/trackColorInactive,
+    // not a pluggable track drawable, so painting sub-pixel bevel strips over the real track would
+    // need a Slider subclass reverse-engineering BaseSlider's internal padding/thumb-radius inset
+    // math to find the exact active/inactive split each frame -- a real (if small) fidelity risk
+    // for a barely-visible detail, so left out of this pass rather than guessed at.
+    const val SLIDER_ROW_MIN_HEIGHT_DP = 28
+    // Used only by CrossoverDashboardBuilder's own slider rows (Gains & Delay, Crossovers & Tilt,
+    // Routing) -- Compressor's XML rows hardcode their own marginStart directly in
+    // page_compressor_band.xml (currently 0dp) rather than referencing this constant, so the two
+    // can differ without touching each other. Safe regardless of title-box width now: every title
+    // box in a group is sized to match its longest sibling (see CrossoverDashboardBuilder's
+    // pendingTitleBoxes and NativeBmwCompressorFragment.resizeTitleBoxesToLongest()), so this gap
+    // no longer needs to be 0 to avoid the "different title widths -> different slider lengths"
+    // problem that briefly motivated zeroing it.
+    const val SLIDER_TITLE_GAP_DP = 75
+    const val SLIDER_VALUE_GAP_DP = 24
+    const val SLIDER_TITLE_HEIGHT_DP = 40
+    const val SLIDER_VALUE_HEIGHT_DP = 30
+    const val SLIDER_VALUE_MIN_WIDTH_DP = 88
+    private const val SLIDER_BOX_CORNER_RADIUS_DP = 5f
+    private const val SLIDER_BOX_STROKE_WIDTH_DP = 1f
+    private val SLIDER_BOX_HIGHLIGHT_COLOR = Color.rgb(0x34, 0x3A, 0x40)
+    private val SLIDER_BOX_SHADOW_COLOR = Color.argb(128, 0, 0, 0)
+    private val SLIDER_BOX_DROP_SHADOW_COLOR = Color.argb(115, 0, 0, 0)
+    private val SLIDER_BOX_BACKGROUND_COLOR = Color.rgb(0x10, 0x13, 0x18)
+
+    fun sliderBoxDrawable(context: Context, showBorder: Boolean = true): Drawable = SliderBoxDrawable(context, showBorder)
+
+    const val SLIDER_THUMB_WIDTH_DP = 36
+    const val SLIDER_THUMB_HEIGHT_DP = 24
+    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 5f
+    private const val SLIDER_THUMB_BORDER_WIDTH_DP = 1f
+    private val SLIDER_THUMB_BORDER_COLOR = Color.rgb(0x9A, 0x9D, 0xA1)
+    // 3-stop vertical gradient: lit grey at top, mid grey centre, dark grey at bottom.
+    private val thumbGradientTop = Color.rgb(0x77, 0x7B, 0x80)
+    private val thumbGradientCenter = Color.rgb(0x51, 0x55, 0x5A)
+    private val thumbGradientBottom = Color.rgb(0x32, 0x35, 0x3A)
+    private val SLIDER_THUMB_HIGHLIGHT_COLOR = Color.argb(153, 0xC5, 0xC8, 0xCB) // 60%
+    private val SLIDER_THUMB_SHADOW_COLOR = Color.argb(140, 0, 0, 0) // 55%
+    private const val SLIDER_THUMB_INSET_MARGIN_DP = 3f
+    private const val SLIDER_THUMB_INSET_CORNER_RADIUS_DP = 3f
+    private val SLIDER_THUMB_INSET_FILL_COLOR = Color.rgb(0x25, 0x28, 0x2D)
+    private val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
+    private const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
+
+    const val SLIDER_TRACK_HEIGHT_DP = 2.5f
+    private const val SLIDER_CAPSULE_HEIGHT_DP = 10f
+    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 2f
     // Public so CrossoverDashboardBuilder's own inline slider setups (which don't go through
     // styleSlider()) can use the exact same colours instead of drifting from them over time.
     val SLIDER_TRACK_ACTIVE_COLOR = LIGHT_BLUE
-    val SLIDER_TRACK_INACTIVE_COLOR = Color.rgb(96, 100, 106)
-    // Thumb fill is a vertical gradient of LIGHT_BLUE: lighter at top for a glossy highlight,
-    // LIGHT_BLUE itself at the bottom.
-    private val thumbGradientTop = Color.rgb(144, 211, 241)
-    private val thumbGradientBottom = LIGHT_BLUE
+    // Same colour as the capsule fill -- the unfilled portion of the track is meant to
+    // disappear into the capsule background, so only the active (blue) progress reads visually.
+    val SLIDER_TRACK_INACTIVE_COLOR = Color.rgb(0x10, 0x13, 0x18)
+    val SLIDER_HALO_COLOR = Color.argb(42, 70, 181, 232)
+    const val SLIDER_HALO_RADIUS_DP = 4
 
     fun sliderThumbDrawable(context: Context): Drawable = SliderThumbDrawable(context)
+    fun sliderCapsuleDrawable(context: Context): Drawable = SliderCapsuleDrawable(context)
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
@@ -229,13 +274,19 @@ object BmwDashboardSkin {
     // reach them.
     fun styleSlider(slider: Slider) {
         val context = slider.context
-        slider.trackHeight = dp(context, SLIDER_TRACK_HEIGHT_DP)
+        slider.trackHeight = dpF(context, SLIDER_TRACK_HEIGHT_DP).roundToInt()
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
+        slider.haloRadius = dp(context, SLIDER_HALO_RADIUS_DP)
         slider.setTrackActiveTintList(ColorStateList.valueOf(SLIDER_TRACK_ACTIVE_COLOR))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
-        slider.setHaloTintList(ColorStateList.valueOf(Color.argb(42, 70, 181, 232)))
+        slider.setHaloTintList(ColorStateList.valueOf(SLIDER_HALO_COLOR))
         slider.setCustomThumbDrawable(sliderThumbDrawable(context))
+        // The capsule outline sits on the Slider's own background, not a separate wrapping view --
+        // it draws a fixed-height pill centred within whatever bounds the Slider view ends up
+        // with, so it stays aligned with Slider's own (also vertically-centred) track regardless
+        // of the view's actual measured height.
+        slider.background = sliderCapsuleDrawable(context)
     }
 
     // No fill: lets the workspace's designed background (and its "M" watermark) show through
@@ -327,6 +378,12 @@ object BmwDashboardSkin {
 
     private fun dp(context: Context, value: Int) =
         (value * context.resources.displayMetrics.density).roundToInt()
+
+    // Fractional dp -> px, for sub-pixel spec values (2.5dp track height, 1.5dp capsule gap,
+    // etc.) that would round away to nothing (or the wrong whole number) through the Int dp()
+    // above -- returned as Float since callers here need sub-pixel precision for Paint geometry,
+    // not an Int pixel count.
+    private fun dpF(context: Context, value: Float) = value * context.resources.displayMetrics.density
 
     /**
      * Renders the DSP workspace's designed background image: a center-cropped cover fill,
@@ -475,26 +532,73 @@ object BmwDashboardSkin {
     }
 
     /**
-     * The unified slider thumb: a slim vertical bar filled with a top-lit LIGHT_BLUE gradient.
-     * No stroke -- with the capsule outline and track already both blue, an extra grey border
-     * here just added visual clutter without adding legibility.
+     * The unified slider thumb: a 3d-lit grey block (top/centre/bottom gradient, a thin outer
+     * border, a top-edge highlight and bottom-edge shadow line for the emboss, and a small darker
+     * inset "detail panel" centred within it) -- taller than the capsule it sits in and the track
+     * it rides on, so it always reads as the grabbable control rather than blending into either.
      */
     private class SliderThumbDrawable(private val context: Context) : Drawable() {
-        private val cornerRadius = dp(context, SLIDER_THUMB_CORNER_RADIUS_DP).toFloat()
+        private val density = context.resources.displayMetrics.density
+        private val cornerRadius = SLIDER_THUMB_CORNER_RADIUS_DP * density
+        private val borderWidth = SLIDER_THUMB_BORDER_WIDTH_DP * density
+        private val insetMargin = SLIDER_THUMB_INSET_MARGIN_DP * density
+        private val insetCornerRadius = SLIDER_THUMB_INSET_CORNER_RADIUS_DP * density
+        private val insetBorderWidth = SLIDER_THUMB_INSET_BORDER_WIDTH_DP * density
+        private val edgeLineWidth = density // 1dp highlight/shadow lines
+
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = borderWidth
+            color = SLIDER_THUMB_BORDER_COLOR
+        }
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_HIGHLIGHT_COLOR }
+        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_SHADOW_COLOR }
+        private val insetFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_INSET_FILL_COLOR }
+        private val insetBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = insetBorderWidth
+            color = SLIDER_THUMB_INSET_BORDER_COLOR
+        }
+
+        private val bodyRect = RectF()
+        private val insetRect = RectF()
+        private val clipPath = android.graphics.Path()
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
             if (bounds.height() <= 0) return
+            bodyRect.set(bounds)
+            bodyRect.inset(borderWidth / 2f, borderWidth / 2f)
             fillPaint.shader = LinearGradient(
-                0f, bounds.top.toFloat(), 0f, bounds.bottom.toFloat(),
-                thumbGradientTop, thumbGradientBottom,
+                0f, bodyRect.top, 0f, bodyRect.bottom,
+                intArrayOf(thumbGradientTop, thumbGradientCenter, thumbGradientBottom),
+                floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP,
             )
+            clipPath.reset()
+            clipPath.addRoundRect(bodyRect, cornerRadius, cornerRadius, android.graphics.Path.Direction.CW)
+            insetRect.set(bodyRect)
+            insetRect.inset(insetMargin, insetMargin)
         }
 
         override fun draw(canvas: Canvas) {
-            canvas.drawRoundRect(RectF(bounds), cornerRadius, cornerRadius, fillPaint)
+            canvas.drawRoundRect(bodyRect, cornerRadius, cornerRadius, fillPaint)
+
+            // Emboss: a thin lit line along the top edge, a thin dark line along the bottom edge,
+            // both clipped to the thumb's own rounded silhouette so they don't spill past it.
+            canvas.save()
+            canvas.clipPath(clipPath)
+            canvas.drawRect(bodyRect.left, bodyRect.top, bodyRect.right, bodyRect.top + edgeLineWidth, highlightPaint)
+            canvas.drawRect(bodyRect.left, bodyRect.bottom - edgeLineWidth, bodyRect.right, bodyRect.bottom, shadowPaint)
+            canvas.restore()
+
+            canvas.drawRoundRect(bodyRect, cornerRadius, cornerRadius, borderPaint)
+
+            if (!insetRect.isEmpty) {
+                canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetFillPaint)
+                canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetBorderPaint)
+            }
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
@@ -513,6 +617,113 @@ object BmwDashboardSkin {
         }
 
         override fun getConstantState(): ConstantState = constantState
+    }
+
+    /**
+     * The pill-shaped outline wrapping a slider's track: a fixed [SLIDER_CAPSULE_HEIGHT_DP]-tall
+     * capsule centred vertically within whatever bounds the host Slider view actually ends up
+     * with (which is usually taller, since Material enforces its own minimum touch-target height)
+     * -- set as the Slider's own `background`, so it always shares the exact same vertical centre
+     * as Slider's own internally-drawn track, no separate alignment bookkeeping needed. The
+     * capsule interior is left transparent (just the border+fill drawn) so Slider's own track and
+     * thumb paint on top of it undisturbed.
+     */
+    private class SliderCapsuleDrawable(context: Context) : Drawable() {
+        private val density = context.resources.displayMetrics.density
+        private val capsuleHeight = SLIDER_CAPSULE_HEIGHT_DP * density
+        private val borderWidth = SLIDER_CAPSULE_BORDER_WIDTH_DP * density
+        private val cornerRadius = capsuleHeight / 2f
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_BACKGROUND_COLOR }
+        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = borderWidth
+            color = LIGHT_BLUE
+        }
+        private val capsuleRect = RectF()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            val centerY = bounds.top + bounds.height() / 2f
+            capsuleRect.set(
+                bounds.left + borderWidth / 2f, centerY - capsuleHeight / 2f + borderWidth / 2f,
+                bounds.right - borderWidth / 2f, centerY + capsuleHeight / 2f - borderWidth / 2f,
+            )
+        }
+
+        override fun draw(canvas: Canvas) {
+            if (capsuleRect.isEmpty) return
+            canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, fillPaint)
+            canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, borderPaint)
+        }
+
+        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha; borderPaint.alpha = alpha }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
+            fillPaint.colorFilter = colorFilter
+            borderPaint.colorFilter = colorFilter
+        }
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+    }
+
+    /**
+     * The boxed title/value readout shared by every DSP workspace slider row: a darkened rounded
+     * rect (same visual language as the capsule) with a 1dp lit line along the top inner edge and
+     * a 1dp dark line along the bottom inner edge for the same emboss the thumb gets, plus a soft
+     * blurred drop shadow offset a hair below it. [showBorder] draws the accent-blue stroke on top
+     * -- the value box keeps it, the title box doesn't (fill/emboss/shadow only, no outline).
+     */
+    private class SliderBoxDrawable(context: Context, private val showBorder: Boolean) : Drawable() {
+        private val density = context.resources.displayMetrics.density
+        private val cornerRadius = SLIDER_BOX_CORNER_RADIUS_DP * density
+        private val strokeWidth = SLIDER_BOX_STROKE_WIDTH_DP * density
+        private val edgeLineWidth = density
+        private val dropShadowOffset = density
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_BACKGROUND_COLOR }
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = this@SliderBoxDrawable.strokeWidth
+            color = LIGHT_BLUE
+        }
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_HIGHLIGHT_COLOR }
+        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_SHADOW_COLOR }
+        private val dropShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = SLIDER_BOX_DROP_SHADOW_COLOR
+            maskFilter = BlurMaskFilter(2f * density, BlurMaskFilter.Blur.NORMAL)
+        }
+        private val boxRect = RectF()
+        private val dropShadowRect = RectF()
+        private val clipPath = android.graphics.Path()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            boxRect.set(bounds)
+            // Without a border there's nothing to inset for -- the fill can use the view's full
+            // bounds instead of shrinking by half a (now nonexistent) stroke width.
+            if (showBorder) boxRect.inset(strokeWidth / 2f, strokeWidth / 2f)
+            dropShadowRect.set(boxRect)
+            dropShadowRect.offset(0f, dropShadowOffset)
+            clipPath.reset()
+            clipPath.addRoundRect(boxRect, cornerRadius, cornerRadius, android.graphics.Path.Direction.CW)
+        }
+
+        override fun draw(canvas: Canvas) {
+            if (boxRect.isEmpty) return
+            canvas.drawRoundRect(dropShadowRect, cornerRadius, cornerRadius, dropShadowPaint)
+            canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, fillPaint)
+
+            canvas.save()
+            canvas.clipPath(clipPath)
+            canvas.drawRect(boxRect.left, boxRect.top, boxRect.right, boxRect.top + edgeLineWidth, highlightPaint)
+            canvas.drawRect(boxRect.left, boxRect.bottom - edgeLineWidth, boxRect.right, boxRect.bottom, shadowPaint)
+            canvas.restore()
+
+            if (showBorder) canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, strokePaint)
+        }
+
+        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
     /**
