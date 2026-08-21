@@ -47,7 +47,6 @@ class CompressorGrTraceView @JvmOverloads constructor(
     var thresholdDb = -12f
         set(value) { field = value; invalidate() }
 
-    private val backgroundPaint = Paint().apply { color = Color.rgb(24, 24, 26) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(62, 62, 66); strokeWidth = density
     }
@@ -107,7 +106,8 @@ class CompressorGrTraceView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0 || h <= 0) return
 
-        canvas.drawRect(0f, 0f, w, h, backgroundPaint)
+        // No solid fill: the workspace's own designed background shows through behind the trace
+        // now, with only the grid wireframe below drawn on top of it.
 
         for (db in intArrayOf(0, -20, -40, -60)) {
             val y = levelDbToY(db.toFloat(), h)

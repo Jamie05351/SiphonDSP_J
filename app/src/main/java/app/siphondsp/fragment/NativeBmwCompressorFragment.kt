@@ -53,6 +53,18 @@ class NativeBmwCompressorFragment : Fragment() {
         val attackValueText: TextView = page.findViewById(R.id.compressor_attack_value)
         val releaseValueText: TextView = page.findViewById(R.id.compressor_release_value)
         val makeupValueText: TextView = page.findViewById(R.id.compressor_makeup_value)
+        // The titles' own text ("Threshold", "Makeup gain", ...) is static XML, but their boxed
+        // width isn't -- see resizeTitleBoxesToLongest(), which sizes every one of these to
+        // whichever single title actually needs the most room, matching how
+        // CrossoverDashboardBuilder.addSliderRow sizes its own Kotlin-built title boxes.
+        val titleTexts: List<TextView> = listOf(
+            page.findViewById(R.id.compressor_threshold_title),
+            page.findViewById(R.id.compressor_ratio_title),
+            page.findViewById(R.id.compressor_knee_title),
+            page.findViewById(R.id.compressor_attack_title),
+            page.findViewById(R.id.compressor_release_title),
+            page.findViewById(R.id.compressor_makeup_title),
+        )
     }
 
     private lateinit var state: NativeBmwCompressorState
@@ -122,6 +134,7 @@ class NativeBmwCompressorFragment : Fragment() {
             BmwDashboardSkin.styleCard(controls.visualizerCard)
             BmwDashboardSkin.styleSwitch(controls.enabledSwitch)
         }
+        resizeTitleBoxesToLongest(lowControls.titleTexts + midControls.titleTexts)
 
         state = NativeBmwCompressorState.load(requireContext())
         configureListeners()
@@ -134,6 +147,20 @@ class NativeBmwCompressorFragment : Fragment() {
         slider.valueTo = to
         slider.stepSize = step
         BmwDashboardSkin.styleSlider(slider)
+    }
+
+    /** Sizes every title box in [titles] to whichever single one actually needs the most room --
+     *  not a hand-picked dp guess -- so every slider row's title column (and therefore where its
+     *  slider starts) lines up across both bands, the same "size to the longest sibling" approach
+     *  CrossoverDashboardBuilder.addSliderRow uses for its own Kotlin-built title boxes
+     *  (see its pendingTitleBoxes). Each title already has its real font/size/padding applied by
+     *  Widget.SiphonDSP.SliderTitleBox, so measuring its own Paint gives the exact width needed. */
+    private fun resizeTitleBoxesToLongest(titles: List<TextView>) {
+        if (titles.isEmpty()) return
+        val horizontalPadding = titles.first().let { it.paddingStart + it.paddingEnd }
+        val maxTextWidth = titles.maxOf { it.paint.measureText(it.text.toString()) }
+        val boxWidth = (maxTextWidth + horizontalPadding).roundToInt()
+        titles.forEach { it.layoutParams = it.layoutParams.apply { width = boxWidth } }
     }
 
     override fun onStart() {

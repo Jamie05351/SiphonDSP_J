@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same embossed box as bg_slider_value_box.xml, minus the accent-blue border: the title box
+     shares the value box's fill/emboss/shadow language but reads as unbordered. See
+     BmwDashboardSkin.sliderBoxDrawable(showBorder = false) (the same look, drawn programmatically,
+     for CrossoverDashboardBuilder's own slider rows). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bmw_dsp_value_box_background" />
+            <corners android:radius="5dp" />
+        </shape>
+    </item>
+    <item android:top="0dp" android:gravity="top">
+        <shape android:shape="rectangle">
+            <solid android:color="#343A40" />
+            <size android:height="1dp" />
+        </shape>
+    </item>
+    <item android:bottom="0dp" android:gravity="bottom">
+        <shape android:shape="rectangle">
+            <solid android:color="#80000000" />
+            <size android:height="1dp" />
+        </shape>
+    </item>
+</layer-list>
