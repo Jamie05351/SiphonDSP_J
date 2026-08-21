@@ -2,9 +2,11 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -819,11 +821,12 @@ class CrossoverDashboardBuilder(
     }
 }
 
-/** Draws a coloured connector line from each of [ChannelConnectorRow]'s two flanking columns
- *  (2 stacked channel cards each) to a fixed fractional position on the car diagram in the
- *  middle child -- see [CrossoverDashboardBuilder.addChannelDiagramSection]. Expects exactly 3
- *  children in this order: left column, car image, right column, each column itself holding
- *  [mid card, vertical spacer, low card]. */
+/** Draws a coloured connector line -- ending in a speaker-cone marker icon, natural silver/black,
+ *  not tinted per channel -- from each of [ChannelConnectorRow]'s two flanking columns (2 stacked
+ *  channel cards each) to a fixed fractional position on the car diagram in the middle child --
+ *  see [CrossoverDashboardBuilder.addChannelDiagramSection]. Expects exactly 3 children in this
+ *  order: left column, car image, right column, each column itself holding [mid card, vertical
+ *  spacer, low card]. */
 private class ChannelConnectorRow(
     context: Context,
     private val midLeftColor: Int,
@@ -836,6 +839,10 @@ private class ChannelConnectorRow(
         strokeWidth = context.resources.displayMetrics.density * 2f
         strokeCap = Paint.Cap.ROUND
     }
+    private val markerBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.ic_speaker_marker)
+    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+    private val markerSize = context.resources.displayMetrics.density * 22f
+    private val markerRect = RectF()
 
     init {
         orientation = HORIZONTAL
@@ -862,14 +869,18 @@ private class ChannelConnectorRow(
         val carH = carImage.height.toFloat()
 
         fun drawLine(startX: Float, startY: Float, speakerFx: Float, speakerFy: Float, color: Int) {
+            val endX = carLeft + carW * speakerFx
+            val endY = carTop + carH * speakerFy
             paint.color = color
-            canvas.drawLine(startX, startY, carLeft + carW * speakerFx, carTop + carH * speakerFy, paint)
+            canvas.drawLine(startX, startY, endX, endY, paint)
+            markerRect.set(endX - markerSize / 2f, endY - markerSize / 2f, endX + markerSize / 2f, endY + markerSize / 2f)
+            canvas.drawBitmap(markerBitmap, null, markerRect, markerPaint)
         }
 
         // Fractional speaker positions within bmw_gains_delay_car.png, tuned by eye.
-        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 0), 0.186f, 0.336f, midLeftColor)
-        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 2), 0.152f, 0.488f, lowLeftColor)
-        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 0), 0.811f, 0.336f, midRightColor)
-        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 2), 0.844f, 0.488f, lowRightColor)
+        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 0), 0.13f, 0.40f, midLeftColor)
+        drawLine(leftColumn.right.toFloat(), anchorY(leftColumn, 2), 0.16f, 0.52f, lowLeftColor)
+        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 0), 0.87f, 0.40f, midRightColor)
+        drawLine(rightColumn.left.toFloat(), anchorY(rightColumn, 2), 0.84f, 0.52f, lowRightColor)
     }
 }
