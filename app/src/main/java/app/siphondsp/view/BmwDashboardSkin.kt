@@ -114,22 +114,6 @@ object BmwDashboardSkin {
         }
     }
 
-    @Volatile private var logoBitmap: Bitmap? = null
-
-    // The "M" logo watermark: a dedicated asset with real alpha transparency around the mark
-    // (not a rectangular crop out of a photo with an opaque background), so it draws cleanly over
-    // any fill color/brightness instead of showing its own crop bounds as a visible box -- drawn
-    // at a fixed size anchored to the background's bottom-right corner (see PhotoBrushedMetalDrawable).
-    private fun loadLogoBitmap(context: Context): Bitmap {
-        logoBitmap?.let { return it }
-        synchronized(this) {
-            logoBitmap?.let { return it }
-            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_m_logo)
-            logoBitmap = decoded
-            return decoded
-        }
-    }
-
     /**
      * The sidebar's active-tile background: a bright, genuinely "lit" fill (the accent blue
      * itself, not the muted navy used for selected pills/chips elsewhere -- against the sidebar's
@@ -222,7 +206,6 @@ object BmwDashboardSkin {
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
-        addLogoOverlay(root)
         styleTree(root)
     }
 
@@ -235,39 +218,6 @@ object BmwDashboardSkin {
      */
     fun paintWorkspaceBackground(root: View) {
         root.background = brushedPanelDrawable(root.context)
-        addLogoOverlay(root)
-    }
-
-    private const val LOGO_OVERLAY_TAG = "bmw_logo_overlay"
-
-    /**
-     * Inserts a plain, non-clickable View sized to fill [root] with the logo drawable as its
-     * *background*, as [root]'s FIRST child -- so it paints immediately after the plain
-     * background fill but before every real child (toolbar, sidebar, cards, sliders, text), i.e.
-     * behind all of them rather than on top. An earlier version appended this as the *last*
-     * child instead, which drew it over every control -- sliders and buttons underneath the
-     * logo's fixed corner became visually obscured, which is the opposite of what a watermark
-     * should do.
-     *
-     * This is a separate overlay view rather than baking the logo into [PhotoBrushedMetalDrawable]
-     * itself (which is what `root.background` is) only because `root.background` on
-     * `android.R.id.content` is set once from a context where the callers differ (some call this
-     * before the fragment/content tree exists); `View.foreground` was tried too, but on an
-     * Activity's `android.R.id.content` view its bounds update landed once, during a transient
-     * relayout pass, with a logged bogus height of -1, and never corrected -- so it never rendered.
-     * A plain child view goes through the exact same layout/measure path this root's own
-     * `background` already reliably uses, sidestepping both problems.
-     */
-    private fun addLogoOverlay(root: View) {
-        val parent = root as? ViewGroup ?: return
-        (parent.findViewWithTag<View>(LOGO_OVERLAY_TAG))?.let { parent.removeView(it) }
-        val overlay = View(root.context).apply {
-            tag = LOGO_OVERLAY_TAG
-            isClickable = false
-            isFocusable = false
-            background = LogoWatermarkDrawable(root.context)
-        }
-        parent.addView(overlay, 0, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
@@ -422,10 +372,7 @@ object BmwDashboardSkin {
 
     /**
      * Renders the DSP workspace's designed background image: a center-cropped cover fill,
-     * independent of the container's own aspect ratio. The "M" logo watermark is deliberately NOT
-     * drawn by this class -- it's a separate overlay (see [addLogoOverlay]) pinned in front of
-     * every card, so it stays a single full-screen-scale badge rather than being baked into the
-     * background image itself.
+     * independent of the container's own aspect ratio.
      */
     private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
         private val fillBitmap = loadWorkspaceBackgroundBitmap(context)
@@ -462,59 +409,6 @@ object BmwDashboardSkin {
 
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
-    }
-
-    /**
-     * The "M" logo watermark, pinned at a fixed size to the bottom-right corner -- set as an
-     * overlay child view's `background` (see [addLogoOverlay]), not part of
-     * [PhotoBrushedMetalDrawable]'s `background`, so it always draws on top of every card instead
-     * of behind them. It used to be baked into the workspace root's own background drawable,
-     * which put it behind cards' own stroke borders -- wherever a card's rounded corner happened
-     * to fall near the fixed bottom-right position, that border cut across the logo, reading as
-     * an unintended box/frame around it.
-     */
-    private class LogoWatermarkDrawable(context: Context) : Drawable() {
-        private val logoBitmap = loadLogoBitmap(context)
-        private val density = context.resources.displayMetrics.density
-        // 50% transparent -- this now sits behind every control, not on top of them, but should
-        // still read as a subtle watermark rather than a fully-opaque badge competing with content.
-        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true; alpha = 128 }
-        private val logoRect = RectF()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            if (bounds.width() <= 0 || bounds.height() <= 0) return
-            val logoAspect = logoBitmap.height.toFloat() / logoBitmap.width
-            val logoMargin = LOGO_MARGIN_DP * density
-            val logoWidth = (LOGO_WIDTH_DP * density).coerceAtMost((bounds.width() - logoMargin * 2).coerceAtLeast(0f))
-            val logoHeight = logoWidth * logoAspect
-            logoRect.set(
-                bounds.right - logoMargin - logoWidth, bounds.bottom - logoMargin - logoHeight,
-                bounds.right - logoMargin, bounds.bottom - logoMargin,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (!logoRect.isEmpty) canvas.drawBitmap(logoBitmap, null, logoRect, bitmapPaint)
-        }
-
-        override fun setAlpha(alpha: Int) {
-            bitmapPaint.alpha = alpha
-        }
-
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-            bitmapPaint.colorFilter = colorFilter
-        }
-
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-
-        companion object {
-            // Sized for rendering once at full-screen scale (dashboardPanel cards no longer paint
-            // their own independent copy of this background, so this is the only copy on screen).
-            private const val LOGO_WIDTH_DP = 160
-            private const val LOGO_MARGIN_DP = 16
-        }
     }
 
     /** Plain brushed-metal fill for small sidebar tiles -- see [metalTileDrawable]. Draws its own
