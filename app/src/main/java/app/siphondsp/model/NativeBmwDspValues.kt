@@ -13,8 +13,12 @@ object NativeBmwDspValues {
     const val KEY = "values"
 
     // 0..85 are the original/native four-output config. 86 is a schema marker and
-    // 87..138 are the independent per-output settings described below.
-    const val SIZE = 139
+    // 87..138 are the independent per-output settings described below. 139..142 are the
+    // Pultec-style bass boost/cut stage (global, post-routing -- see INDEX_PULTEC_ENABLED).
+    // 143 is the Gains & Delay "Link L/R Delay" toggle -- UI-only, never read natively (see
+    // INDEX_DELAY_LINKED), stored here anyway so it persists/syncs the same way every other
+    // toggle in this array does.
+    const val SIZE = 144
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -124,6 +128,19 @@ object NativeBmwDspValues {
         return INDEX_OUTPUT_CONFIG + output * OUTPUT_CONFIG_WIDTH + field
     }
 
+    // Pultec-style bass boost/cut: global, applied post-routing after Tilt (see
+    // NativeBmwDspProcessor::processFrame). Frequency is one of 4 classic stops (20/30/60/100Hz);
+    // the cut peak is derived natively at frequency * kPultecCutRatio, not independently settable.
+    const val INDEX_PULTEC_ENABLED = 139
+    const val INDEX_PULTEC_FREQ = 140
+    const val INDEX_PULTEC_BOOST = 141
+    const val INDEX_PULTEC_CUT = 142
+
+    // UI-only: links Low Left/Right and Mid Left/Right delay editing together on the Gains &
+    // Delay page. Native never reads this index -- see NativeBmwDspProcessor::configure(), which
+    // only consumes 0..142.
+    const val INDEX_DELAY_LINKED = 143
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -161,6 +178,10 @@ object NativeBmwDspValues {
         125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
         125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        // Pultec: enabled, freq Hz, boost dB, cut dB.
+        0f, 60f, 0f, 0f,
+        // Link L/R Delay (UI-only).
+        0f,
     )
 
     init {

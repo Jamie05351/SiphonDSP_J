@@ -74,38 +74,53 @@ class GainLimiterFragment : Fragment() {
             // subtitle wasn't telling the user anything the page itself doesn't already -- both
             // just cost rows of vertical space this page can't spare.
             dashboardPanel("", null) {
+                addSegmentedSwitchRow(
+                    "Link L/R Delay",
+                    null,
+                    NativeBmwDspValues.INDEX_DELAY_LINKED,
+                    onToggled = ::rebuild,
+                )
+                val linked = values[NativeBmwDspValues.INDEX_DELAY_LINKED] >= .5f
                 val midLeft = addChannelCard(
                     title = "Left Mid",
-                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_L, delayMin = 0f, delayMax = 2.8f,
                     polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
                     onPolarityChanged = ::rebuild,
+                    delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_MID_DELAY_R else null,
+                    onDelayChanged = ::rebuild,
                 )
                 val lowLeft = addChannelCard(
                     title = "Left Low",
-                    accentColor = TEAL,
+                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_L, delayMin = 0f, delayMax = 2.8f,
                     polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
                     onPolarityChanged = ::rebuild,
+                    delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_R else null,
+                    onDelayChanged = ::rebuild,
                 )
                 val midRight = addChannelCard(
                     title = "Right Mid",
-                    accentColor = ORANGE,
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_R, delayMin = 0f, delayMax = 2.8f,
                     polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
                     onPolarityChanged = ::rebuild,
+                    delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_MID_DELAY_L else null,
+                    onDelayChanged = ::rebuild,
                 )
                 val lowRight = addChannelCard(
                     title = "Right Low",
-                    accentColor = BmwDashboardSkin.M_RED,
+                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_R, delayMin = 0f, delayMax = 2.8f,
                     polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
                     onPolarityChanged = ::rebuild,
+                    delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_L else null,
+                    onDelayChanged = ::rebuild,
                 )
                 addChannelDiagramSection(
                     midLeft, lowLeft, midRight, lowRight,
-                    midLeftColor = BmwDashboardSkin.LIGHT_BLUE, lowLeftColor = TEAL,
-                    midRightColor = ORANGE, lowRightColor = BmwDashboardSkin.M_RED,
+                    midLeftColor = BmwDashboardSkin.MID_BAND_YELLOW, lowLeftColor = BmwDashboardSkin.LIGHT_BLUE,
+                    midRightColor = BmwDashboardSkin.MID_BAND_YELLOW, lowRightColor = BmwDashboardSkin.LIGHT_BLUE,
                 )
             }
         }
@@ -117,15 +132,19 @@ class GainLimiterFragment : Fragment() {
                 )
                 addSliderRow(
                     "Left Mid", NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                 )
                 addSliderRow(
                     "Right Mid", NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                 )
                 addSliderRow(
                     "Left Low", NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
                 )
                 addSliderRow(
                     "Right Low", NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
                 )
             }
         }
@@ -138,9 +157,4 @@ class GainLimiterFragment : Fragment() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
-
-    companion object {
-        private val TEAL = android.graphics.Color.rgb(38, 198, 218)
-        private val ORANGE = android.graphics.Color.rgb(255, 152, 0)
-    }
 }

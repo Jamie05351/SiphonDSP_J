@@ -57,7 +57,9 @@ object BmwSignalChain {
      * History:
      * - Original: 35 values (pre-dual-band compressor)
      * - Extended: 46 values (added routing matrix)
-     * - Current: 139 values (extended routing, all-pass, compressor per output)
+     * - Extended: 139 values (extended routing, all-pass, compressor per output)
+     * - Extended: 143 values (added the Pultec-style bass boost/cut stage)
+     * - Current: 144 values (added the UI-only Link L/R Delay toggle)
      *
      * The dual-band compressor extension grew this array from 35 to 42+ values.
      * Leaving the response model at 35 caused setSystemState() and BMW update

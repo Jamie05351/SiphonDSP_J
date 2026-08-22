@@ -126,15 +126,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
             }
 
+            // Always LR4 now -- the 18dB/oct option was removed (see
+            // NativeBmwDspProcessor::rebuildLowCrossover/processLowCrossover).
             val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
-            val crossoverLr4 = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_LR4) >= .5f
-            if (crossoverLr4) {
-                cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
-                cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
-            } else {
-                cascade.addLowPass(crossoverFreq, 1.0, sampleRate)
-                cascade.addOnePoleLow(crossoverFreq, sampleRate)
-            }
+            cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
             if (peq.enabled) {
                 for (band in peq.lowBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
             }

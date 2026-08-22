@@ -233,7 +233,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val unifiedTextColor = Color.rgb(176, 178, 186)
     private val bankColorFull = Color.rgb(230, 232, 238)
     private val bankColorLow = Color.rgb(88, 164, 255)
-    private val bankColorMid = Color.rgb(238, 164, 64)
+    private val bankColorMid = BmwDashboardSkin.MID_BAND_YELLOW
     private val sumColor = Color.rgb(255, 255, 255)
 
     // Per-band fill palette (FabFilter Pro-Q-style): each band gets its own colour, cycling by
