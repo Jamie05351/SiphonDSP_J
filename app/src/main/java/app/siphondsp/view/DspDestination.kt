@@ -1,15 +1,9 @@
 package app.siphondsp.view
 
-import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -20,7 +14,6 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
-import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 enum class DspDestination(
@@ -43,31 +36,30 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
-    // The whole 5-tile bar -- rounded tile shapes, gloss sweep, both accent bars on every tile,
-    // AND which single tile reads as "selected" (lit blue bars) -- is baked into one of 5
-    // whole-bar source images now, picked by [current], rather than assembled at populate() time
-    // from 2 reusable per-tile images stacked 5 times. populate() only needs to overlay each
-    // row's icon+label on top; it never touches tile artwork directly.
+    // The whole 5-tile bar -- glass tile shapes, each tile's own icon, gloss sweep, AND which
+    // single tile reads as "selected" (lit cyan glow) -- is baked entirely into one of 5
+    // whole-bar source images, picked by [current]. populate() draws no icon/label of its own; it
+    // only lays an invisible click-target/focus-ring row over each tile's measured bounds.
     //
-    // The 5 tiles are NOT an even one-fifth-each split of the image -- each source image has its
-    // own top margin, a bottom margin roughly the top margin plus the leftover from 5 tiles that
-    // aren't perfectly identical in height, and small gaps between tiles that also vary slightly
-    // image to image. A naive 5-equal-weight overlay drifted visibly off the real button art (icon
-    // /label sitting above or below the pill it belongs to, and the row heights looking uneven
-    // where they should read as one continuous bar). [rowWeights] holds the *measured* pixel
-    // boundaries from each PNG directly (sampled with a vertical brightness scan down the bar's
-    // centre column) as 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3,
-    // tile4, gap4, tile5, bottom margin. LinearLayout weights are proportions, not absolute
-    // values, so passing the raw measured pixel heights as weights reproduces the exact source
-    // proportions regardless of the sidebar's actual on-screen height on any given device.
+    // The 5 tiles are NOT an even one-fifth-each split of the image -- there's a top margin, a
+    // bottom margin, and small gaps between tiles. [rowWeights] holds the *measured* pixel
+    // boundaries (sampled by locating each destination's own lit tile in its source image, since
+    // that tile's glow is the one clearly-detectable edge per image; the 5 renders share the same
+    // template layout closely enough that these boundaries are reused for all 5 destinations) as
+    // 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4, tile5,
+    // bottom margin. LinearLayout weights are proportions, not absolute values, so passing the raw
+    // measured pixel heights as weights reproduces the exact source proportions regardless of the
+    // sidebar's actual on-screen height on any given device.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
+    private val ROW_WEIGHTS = intArrayOf(37, 137, 19, 140, 19, 133, 13, 132, 17, 131, 45)
+
     private fun barArt(current: DspDestination): BarArt = when (current) {
-        DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, intArrayOf(50, 147, 13, 144, 12, 144, 11, 145, 11, 147, 56))
-        DspDestination.GAINS_DELAY -> BarArt(R.drawable.sidebar_bar_gains, intArrayOf(50, 148, 12, 144, 12, 144, 11, 145, 11, 147, 56))
-        DspDestination.CROSSOVER_TILT -> BarArt(R.drawable.sidebar_bar_xover, intArrayOf(51, 147, 13, 144, 12, 143, 12, 145, 12, 146, 55))
-        DspDestination.COMPRESSOR -> BarArt(R.drawable.sidebar_bar_compressor, intArrayOf(51, 147, 13, 144, 12, 144, 12, 144, 12, 146, 55))
-        DspDestination.ROUTING -> BarArt(R.drawable.sidebar_bar_routing, intArrayOf(51, 148, 12, 144, 12, 144, 11, 145, 12, 146, 55))
+        DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
+        DspDestination.GAINS_DELAY -> BarArt(R.drawable.sidebar_bar_gains, ROW_WEIGHTS)
+        DspDestination.CROSSOVER_TILT -> BarArt(R.drawable.sidebar_bar_xover, ROW_WEIGHTS)
+        DspDestination.COMPRESSOR -> BarArt(R.drawable.sidebar_bar_compressor, ROW_WEIGHTS)
+        DspDestination.ROUTING -> BarArt(R.drawable.sidebar_bar_routing, ROW_WEIGHTS)
     }
 
     private class WeightedChild(val view: View, val weightIndex: Int)
@@ -136,45 +128,9 @@ object DspCrossNavBar {
                 }
             }
 
-            val content = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                // Both accent bars are already part of the bar art -- this row only needs to
-                // clear their painted width so the icon/label don't sit on top of them. Right
-                // padding is generous (not just clearing the accent bar) so the longest label
-                // ("Routing") doesn't run past the tile's own right edge.
-                setPadding(activity.dp(12), 0, activity.dp(10), 0)
-            }
-
-            val icon = ImageView(activity).apply {
-                setImageDrawable(ContextCompat.getDrawable(activity, destination.icon))
-                imageTintList = ColorStateList.valueOf(Color.WHITE)
-            }
-            content.addView(
-                icon,
-                LinearLayout.LayoutParams(activity.dp(28), activity.dp(28)).apply { leftMargin = activity.dp(8) },
-            )
-
-            val label = TextView(activity).apply {
-                text = activity.getString(destination.sidebarLabelRes)
-                setTextColor(Color.WHITE)
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                textSize = 11f
-                // Wraps instead of ellipsizing: at this column width even the pre-shortened
-                // labels ("Comp", "Xover") don't reliably fit on one line once the icon and
-                // accent bar are accounted for, and a mid-word "Co..." reads as broken UI.
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-            }
-            content.addView(
-                label,
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    leftMargin = activity.dp(6)
-                },
-            )
-
-            row.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-
+            // No icon/label overlay: the bar art's own tile already carries its icon (and, for
+            // the current destination, its lit glow) baked in -- this row exists purely as the
+            // invisible click target / focus-ring host over that tile, per its measured bounds.
             container.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
             // Tile weight is at an odd index (1, 3, 5, 7, 9); the gap that follows it (2, 4, 6, 8)
             // sits between this tile and the next, so it's only added while a next tile remains.
@@ -209,6 +165,4 @@ object DspCrossNavBar {
 
         container.visibility = View.VISIBLE
     }
-
-    private fun Context.dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 }
