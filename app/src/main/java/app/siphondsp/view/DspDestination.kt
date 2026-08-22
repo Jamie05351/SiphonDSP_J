@@ -111,11 +111,21 @@ object DspCrossNavBar {
                 tooltipText = activity.getString(destination.labelRes)
                 if (selected) {
                     isClickable = false
+                    // Already carries its own selected-state look via the bar art itself, so it's
+                    // left out of D-pad/rotary traversal rather than showing a redundant focus ring.
+                    isFocusable = false
                 } else {
                     isClickable = true
+                    isFocusable = true
                     val rippleAttr = android.util.TypedValue()
                     activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, rippleAttr, true)
                     foreground = ContextCompat.getDrawable(activity, rippleAttr.resourceId)
+                    // Transparent except when this row has Android focus (see
+                    // BmwDashboardSkin.sidebarTileFocusRingDrawable) -- makes a hardware rotary
+                    // controller's current position visible, since it moves focus without any
+                    // touch/ripple feedback ever firing.
+                    background = BmwDashboardSkin.sidebarTileFocusRingDrawable(activity)
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
                         val intent = Intent(activity, destination.activityClass.java)

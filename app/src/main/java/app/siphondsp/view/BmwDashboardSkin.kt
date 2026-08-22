@@ -137,6 +137,16 @@ object BmwDashboardSkin {
      */
     fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
+    /**
+     * Transparent everywhere except when the host view has Android keyboard/D-pad focus, in which
+     * case it draws the same glow-ring language as [litTileDrawable] around the tile's edge. This
+     * is what makes a hardware rotary controller's (e.g. a car's iDrive wheel, wired in through a
+     * CAN-to-Android adapter) current position visible on an unselected sidebar tile -- that
+     * input moves Android focus exactly like a Tab key would, never touching the screen, so there
+     * is otherwise no on-screen indication of where it currently sits.
+     */
+    fun sidebarTileFocusRingDrawable(context: Context): Drawable = TileFocusRingDrawable(context)
+
     // Single slider thumb/track/capsule shared by every DSP workspace slider (Gains/Delay,
     // Crossovers & Tilt, Mono Bass, Routing, Compressor). Exact dimensions/colours below were
     // specified explicitly by the user as a full pixel spec (row layout, boxed title/value,
@@ -287,6 +297,11 @@ object BmwDashboardSkin {
         // with, so it stays aligned with Slider's own (also vertically-centred) track regardless
         // of the view's actual measured height.
         slider.background = sliderCapsuleDrawable(context)
+        // The capsule's focus glow uses BlurMaskFilter, which silently no-ops on a hardware
+        // layer -- without this the ring would still appear on focus, just as a crisp unblurred
+        // outline instead of a soft glow. Matches the existing LAYER_TYPE_SOFTWARE usage for the
+        // same reason in NativeBmwCompressorView/CompressorGrTraceView.
+        slider.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
     }
 
     // No fill: lets the workspace's designed background (and its "M" watermark) show through
@@ -345,29 +360,38 @@ object BmwDashboardSkin {
      * existing Material treatment.
      */
     private fun styleCheckableButton(button: MaterialButton) {
+        // state_focused is listed before the checked/pressed states: a D-pad/rotary controller
+        // (e.g. a car's iDrive wheel) moving Android focus onto an already-checked button (the
+        // currently active Graph/List or Low/Mid selection) should still show the focus ring, not
+        // get silently swallowed by the checked color -- ColorStateList picks the first state
+        // array in the list that fully matches, so focused+checked must resolve to the focused
+        // entry, not the checked one further down.
         val states = arrayOf(
+            intArrayOf(android.R.attr.state_focused),
             intArrayOf(android.R.attr.state_checked),
             intArrayOf(android.R.attr.state_pressed),
             intArrayOf(),
         )
         button.backgroundTintList = ColorStateList(
             states,
-            intArrayOf(selectedSurface, Color.rgb(28, 35, 43), inactiveSurface),
+            intArrayOf(selectedSurface, selectedSurface, Color.rgb(28, 35, 43), inactiveSurface),
         )
         button.strokeColor = ColorStateList(
             states,
-            intArrayOf(LIGHT_BLUE, Color.rgb(83, 96, 109), inactiveStroke),
+            intArrayOf(LIGHT_BLUE_BRIGHT, LIGHT_BLUE, Color.rgb(83, 96, 109), inactiveStroke),
         )
+        // strokeWidth is a single Int on MaterialButton, not stateful like the ColorStateLists
+        // above -- focus is distinguished by the brighter LIGHT_BLUE_BRIGHT stroke color instead.
         button.strokeWidth = dp(button.context, 1)
         button.setTextColor(
             ColorStateList(
                 states,
-                intArrayOf(Color.WHITE, Color.WHITE, inactiveText),
+                intArrayOf(Color.WHITE, Color.WHITE, Color.WHITE, inactiveText),
             )
         )
         button.iconTint = ColorStateList(
             states,
-            intArrayOf(LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)),
+            intArrayOf(LIGHT_BLUE_BRIGHT, LIGHT_BLUE, LIGHT_BLUE, Color.rgb(172, 184, 195)),
         )
     }
 
@@ -627,6 +651,14 @@ object BmwDashboardSkin {
      * as Slider's own internally-drawn track, no separate alignment bookkeeping needed. The
      * capsule interior is left transparent (just the border+fill drawn) so Slider's own track and
      * thumb paint on top of it undisturbed.
+     *
+     * [isStateful]/[onStateChange] make this react to the Slider's own focused state -- Android
+     * propagates a View's state (focused, pressed, etc.) to its `background` drawable
+     * automatically, no listener needed. A hardware D-pad/rotary controller (e.g. a car's iDrive
+     * wheel wired in through a CAN-to-Android adapter) moves Android focus between views the same
+     * way pressing Tab does, but without ever touching the screen -- so touch-driven feedback
+     * (the halo, a drag) never appears; this glow is the only visual sign of where that input
+     * currently is.
      */
     private class SliderCapsuleDrawable(context: Context) : Drawable() {
         private val density = context.resources.displayMetrics.density
@@ -639,7 +671,28 @@ object BmwDashboardSkin {
             strokeWidth = borderWidth
             color = LIGHT_BLUE
         }
+        private val focusGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = borderWidth
+            color = LIGHT_BLUE_BRIGHT
+            maskFilter = BlurMaskFilter(4f * density, BlurMaskFilter.Blur.NORMAL)
+        }
+        private val focusRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = borderWidth
+            color = LIGHT_BLUE_BRIGHT
+        }
         private val capsuleRect = RectF()
+        private var focused = false
+
+        override fun isStateful(): Boolean = true
+
+        override fun onStateChange(state: IntArray): Boolean {
+            val wasFocused = focused
+            focused = state.contains(android.R.attr.state_focused)
+            if (focused != wasFocused) invalidateSelf()
+            return focused != wasFocused
+        }
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
@@ -653,7 +706,12 @@ object BmwDashboardSkin {
         override fun draw(canvas: Canvas) {
             if (capsuleRect.isEmpty) return
             canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, fillPaint)
-            canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, borderPaint)
+            if (focused) {
+                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusGlowPaint)
+                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusRingPaint)
+            } else {
+                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, borderPaint)
+            }
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha; borderPaint.alpha = alpha }
@@ -781,6 +839,54 @@ object BmwDashboardSkin {
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
         override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
+        @Deprecated("Deprecated in Android")
+        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+    }
+
+    /** See [sidebarTileFocusRingDrawable]. */
+    private class TileFocusRingDrawable(context: Context) : Drawable() {
+        private val corner = dp(context, 6).toFloat()
+        private val strokeWidthPx = dp(context, 2).toFloat()
+        private val strokeRect = RectF()
+        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = LIGHT_BLUE_BRIGHT
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+            maskFilter = BlurMaskFilter(dp(context, 5).toFloat(), BlurMaskFilter.Blur.NORMAL)
+        }
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = LIGHT_BLUE_BRIGHT
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+        }
+        private var focused = false
+
+        override fun isStateful(): Boolean = true
+
+        override fun onStateChange(state: IntArray): Boolean {
+            val wasFocused = focused
+            focused = state.contains(android.R.attr.state_focused)
+            if (focused != wasFocused) invalidateSelf()
+            return focused != wasFocused
+        }
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            strokeRect.set(bounds)
+            strokeRect.inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
+        }
+
+        override fun draw(canvas: Canvas) {
+            if (!focused || strokeRect.isEmpty) return
+            canvas.drawRoundRect(strokeRect, corner, corner, glowPaint)
+            canvas.drawRoundRect(strokeRect, corner, corner, strokePaint)
+        }
+
+        override fun setAlpha(alpha: Int) { glowPaint.alpha = alpha; strokePaint.alpha = alpha }
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
+            glowPaint.colorFilter = colorFilter
+            strokePaint.colorFilter = colorFilter
+        }
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
