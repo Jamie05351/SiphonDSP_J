@@ -11,7 +11,10 @@
 
 class NativeBmwDspProcessor {
 public:
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 139 };
+    // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
+    // never read in configure(); it only has to be included here so the array length check
+    // (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 144 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     enum : std::size_t {
@@ -75,6 +78,7 @@ private:
         DirtyCompState  = 1u << 7,
         DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
+        DirtyPultec     = 1u << 10,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -83,11 +87,6 @@ private:
         float run(float x);
         void clear();
         void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
-    };
-    struct OnePole {
-        float a0=1,a1=0,b1=0,x1=0,y1=0;
-        float run(float x);
-        void clear();
     };
     struct Delay {
         std::array<float,kDelayLineCapacity> data{};
@@ -117,6 +116,8 @@ private:
     };
     struct OutputConfig {
         float crossoverFreq=150;
+        // Always LR4 now -- the 18dB/oct (BW3) option was removed. This field is read (and
+        // forced true) but no longer branched on; see rebuildLowCrossover/processLowCrossover.
         bool crossoverLr4=true;
         bool subsonicEnabled=false;
         float subsonicFreq=32;
@@ -132,7 +133,6 @@ private:
         float gain = 1.0f;
         Biquad subsonic1;
         Biquad crossover1, crossover2;
-        OnePole crossoverPole;
         Biquad monoBassHpf1, monoBassHpf2;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
@@ -145,7 +145,7 @@ private:
             return sample;
         }
         void clearState() {
-            subsonic1.clear(); crossover1.clear(); crossover2.clear(); crossoverPole.clear();
+            subsonic1.clear(); crossover1.clear(); crossover2.clear();
             monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
             for (auto& section : allPassState) section.clear();
         }
@@ -164,6 +164,8 @@ private:
         float tiltAmount=3,tiltFreq=550;
         bool monoBass=false;
         float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
+        bool pultec=false;
+        float pultecFreq=60,pultecBoost=0,pultecCut=0;
     } p_;
 
     static float dbToLin(float db);
@@ -172,7 +174,6 @@ private:
     static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
-    static void makeOnePoleLow(OnePole& p,float fc,float sr);
     float processChannelInput(float x, float& dcX, float& dcY);
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     float processMidCrossover(OutputRuntime& out, float sample);
@@ -191,6 +192,7 @@ private:
     void rebuildCompressorTiming();
     void rebuildLimiter();
     void rebuildMonoBass();
+    void rebuildPultec();
     void rebuildPolarityAndMute();
     void rebuildAllPass();
     void resetDynamics();
@@ -221,6 +223,7 @@ private:
     float monoBassMakeupLin_=1;
     Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
+    Biquad pultecBoostL_,pultecBoostR_,pultecCutL_,pultecCutR_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
 

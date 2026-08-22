@@ -10,9 +10,9 @@ import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.DspPager
-import app.siphondsp.view.FilterResponseCurveView
 import kotlin.math.roundToInt
 
 /**
@@ -92,30 +92,20 @@ class CrossoverTiltFragment : Fragment() {
                     20f, 60f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                 )
-                addCrossoverBandPair(
-                    low = CrossoverDashboardBuilder.CrossoverBandSpec(
-                        title = "LOW PASS",
-                        freqIndex = NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
-                        freqMin = 80f,
-                        freqMax = 200f,
-                        curveKind = FilterResponseCurveView.Kind.LOW_PASS,
-                        freqMirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                        // BW3 (3rd-order Butterworth) = 18dB/oct, LR4 (4th-order Linkwitz-Riley) = 24dB/oct.
-                        slopeIndex = NativeBmwDspValues.INDEX_LOW_LR4,
-                        slopeMirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_LR4),
-                        slopeOptions = listOf("18 dB/Oct" to 0f, "24 dB/Oct" to 1f),
-                    ),
-                    // The mid-band highpass has no topology switch at the native layer -- it's a
-                    // fixed-order filter -- so its slope reads as a fixed label, not a real dropdown.
-                    high = CrossoverDashboardBuilder.CrossoverBandSpec(
-                        title = "HIGH PASS",
-                        freqIndex = NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
-                        freqMin = 80f,
-                        freqMax = 200f,
-                        curveKind = FilterResponseCurveView.Kind.HIGH_PASS,
-                        freqMirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                        fixedSlopeLabel = "24 dB/Oct",
-                    ),
+                // Both crossovers are LR4-only now (the 18dB/oct option was removed -- the
+                // mid-band highpass was already secretly LR4-only at the native layer, so this
+                // just makes the low-band one match instead of exposing a slope choice for it).
+                addSliderRow(
+                    "Lowpass freq (LR4)", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
+                    80f, 200f, 1f, "Hz",
+                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                )
+                addSliderRow(
+                    "Highpass freq (LR4)", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
+                    80f, 200f, 1f, "Hz",
+                    mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                 )
             }
         }
@@ -136,6 +126,31 @@ class CrossoverTiltFragment : Fragment() {
                     getString(R.string.bmw_dsp_tilt_pivot),
                     NativeBmwDspValues.INDEX_TILT_FREQ,
                     200f, 2000f, 1f, "Hz",
+                )
+            }
+        }
+
+        val pultecPage = page {
+            dashboardPanel(getString(R.string.bmw_dsp_pultec), "Vintage-style bass boost + cut") {
+                addSegmentedSwitchRow(
+                    getString(R.string.bmw_dsp_pultec_active),
+                    null,
+                    NativeBmwDspValues.INDEX_PULTEC_ENABLED,
+                )
+                addDropdownRow(
+                    getString(R.string.bmw_dsp_pultec_freq),
+                    NativeBmwDspValues.INDEX_PULTEC_FREQ,
+                    listOf("20 Hz" to 20f, "30 Hz" to 30f, "60 Hz" to 60f, "100 Hz" to 100f),
+                )
+                addSliderRow(
+                    getString(R.string.bmw_dsp_pultec_boost),
+                    NativeBmwDspValues.INDEX_PULTEC_BOOST,
+                    0f, 8f, .1f, "dB",
+                )
+                addSliderRow(
+                    getString(R.string.bmw_dsp_pultec_cut),
+                    NativeBmwDspValues.INDEX_PULTEC_CUT,
+                    0f, 4f, .1f, "dB",
                 )
             }
         }
@@ -167,7 +182,7 @@ class CrossoverTiltFragment : Fragment() {
 
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage)),
+            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, pultecPage, monoBassPage)),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }

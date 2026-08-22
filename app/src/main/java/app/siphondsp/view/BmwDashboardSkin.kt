@@ -40,6 +40,9 @@ object BmwDashboardSkin {
     const val LIGHT_BLUE_BRIGHT = 0xFF87CFF0.toInt()
     const val M_BLUE = 0xFF135BA7.toInt()
     const val M_RED = 0xFFE32B3B.toInt()
+    // Mid-band accent, paired with LIGHT_BLUE for the app-wide Low=blue / Mid=yellow convention
+    // (PEQ visualizer, Gains & Delay channel cards/sliders, Crossovers Lowpass/Highpass sliders).
+    const val MID_BAND_YELLOW = 0xFFFFCA28.toInt()
     // Solid, flat fill for the sidebar panel -- deliberately not the photo texture the workspace
     // background/cards use, so it reads as a distinct, well-defined fixture rather than blending
     // into the content behind it. Not near-black, so it sits alongside the main panel without the
@@ -169,8 +172,8 @@ object BmwDashboardSkin {
     const val SLIDER_TITLE_GAP_DP = 75
     const val SLIDER_VALUE_GAP_DP = 24
     const val SLIDER_TITLE_HEIGHT_DP = 40
-    const val SLIDER_VALUE_HEIGHT_DP = 30
-    const val SLIDER_VALUE_MIN_WIDTH_DP = 88
+    const val SLIDER_VALUE_HEIGHT_DP = 24
+    const val SLIDER_VALUE_MIN_WIDTH_DP = 64
     private const val SLIDER_BOX_CORNER_RADIUS_DP = 5f
     private const val SLIDER_BOX_STROKE_WIDTH_DP = 1f
     private val SLIDER_BOX_HIGHLIGHT_COLOR = Color.rgb(0x34, 0x3A, 0x40)
@@ -209,7 +212,12 @@ object BmwDashboardSkin {
     val SLIDER_HALO_COLOR = Color.argb(42, 70, 181, 232)
     const val SLIDER_HALO_RADIUS_DP = 4
 
-    fun sliderThumbDrawable(context: Context): Drawable = SliderThumbDrawable(context)
+    // [accentColor], when given, replaces the thumb's neutral grey 3-stop gradient with one
+    // derived from that color (lit/mid/dark shades of it) instead -- used to color-code the
+    // Low-band (blue) / Mid-band (yellow) sliders on the Crossovers and Gains & Delay pages, so
+    // those specific rows read as a distinct colored knob rather than the plain metal one every
+    // other slider still uses.
+    fun sliderThumbDrawable(context: Context, accentColor: Int? = null): Drawable = SliderThumbDrawable(context, accentColor)
     fun sliderCapsuleDrawable(context: Context): Drawable = SliderCapsuleDrawable(context)
 
     fun styleWorkspace(root: View) {
@@ -282,16 +290,19 @@ object BmwDashboardSkin {
     // not have attached yet (e.g. NativeBmwCompressorFragment's off-screen pager pages) can style
     // them directly at creation time, instead of relying on styleTree's later recursive walk to
     // reach them.
-    fun styleSlider(slider: Slider) {
+    fun styleSlider(slider: Slider, accentColor: Int? = null) {
         val context = slider.context
         slider.trackHeight = dpF(context, SLIDER_TRACK_HEIGHT_DP).roundToInt()
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.haloRadius = dp(context, SLIDER_HALO_RADIUS_DP)
+        // Track stays the standard blue regardless of [accentColor] -- only the handle itself
+        // recolors, per an explicit correction: an earlier pass also tinted the track, which
+        // read as "the whole slider changed color" rather than "this one has a colored handle."
         slider.setTrackActiveTintList(ColorStateList.valueOf(SLIDER_TRACK_ACTIVE_COLOR))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
         slider.setHaloTintList(ColorStateList.valueOf(SLIDER_HALO_COLOR))
-        slider.setCustomThumbDrawable(sliderThumbDrawable(context))
+        slider.setCustomThumbDrawable(sliderThumbDrawable(context, accentColor))
         // The capsule outline sits on the Slider's own background, not a separate wrapping view --
         // it draws a fixed-height pill centred within whatever bounds the Slider view ends up
         // with, so it stays aligned with Slider's own (also vertically-centred) track regardless
@@ -561,8 +572,25 @@ object BmwDashboardSkin {
      * inset "detail panel" centred within it) -- taller than the capsule it sits in and the track
      * it rides on, so it always reads as the grabbable control rather than blending into either.
      */
-    private class SliderThumbDrawable(private val context: Context) : Drawable() {
+    /** Linear per-channel blend of [from] toward [to] by [t] (0 = [from], 1 = [to]). */
+    private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
+        (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt(),
+        (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt(),
+        (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).roundToInt(),
+    )
+
+    private class SliderThumbDrawable(private val context: Context, private val accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
+        // Border/highlight/shadow stay the neutral metal colors regardless of [accentColor] --
+        // just the face gradient AND the inset centre panel recolor. The inset panel is the
+        // biggest flat area at this thumb's actual rendered size (the gradient face is mostly a
+        // thin margin around it), so leaving it grey read as "a grey handle with a colored rim"
+        // instead of a colored handle -- coloring it too is what actually makes the whole thumb
+        // read as blue/yellow at a glance.
+        private val gradientTop = accentColor?.let { blend(it, Color.WHITE, 0.35f) } ?: thumbGradientTop
+        private val gradientCenter = accentColor ?: thumbGradientCenter
+        private val gradientBottom = accentColor?.let { blend(it, Color.BLACK, 0.45f) } ?: thumbGradientBottom
+        private val insetColor = accentColor?.let { blend(it, Color.BLACK, 0.25f) } ?: SLIDER_THUMB_INSET_FILL_COLOR
         private val cornerRadius = SLIDER_THUMB_CORNER_RADIUS_DP * density
         private val borderWidth = SLIDER_THUMB_BORDER_WIDTH_DP * density
         private val insetMargin = SLIDER_THUMB_INSET_MARGIN_DP * density
@@ -578,7 +606,7 @@ object BmwDashboardSkin {
         }
         private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_HIGHLIGHT_COLOR }
         private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_SHADOW_COLOR }
-        private val insetFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_INSET_FILL_COLOR }
+        private val insetFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = insetColor }
         private val insetBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = insetBorderWidth
@@ -596,7 +624,7 @@ object BmwDashboardSkin {
             bodyRect.inset(borderWidth / 2f, borderWidth / 2f)
             fillPaint.shader = LinearGradient(
                 0f, bodyRect.top, 0f, bodyRect.bottom,
-                intArrayOf(thumbGradientTop, thumbGradientCenter, thumbGradientBottom),
+                intArrayOf(gradientTop, gradientCenter, gradientBottom),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP,
             )
@@ -626,7 +654,14 @@ object BmwDashboardSkin {
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
+        // No-op, deliberately: BaseSlider applies its theme's default thumbTintList to whatever
+        // drawable setCustomThumbDrawable() is given, by computing a PorterDuff ColorFilter from
+        // it and calling setColorFilter() -- which, if honored, silently flattens this drawable's
+        // own gradientTop/Center/Bottom (grey by default, or the accent color) to one flat theme
+        // color. There's no public API to clear BaseSlider's thumbTintList from the outside
+        // (setThumbTintList() requires non-null), so this drawable instead just refuses any
+        // externally-imposed tint -- it's fully self-colored already, it never needs one.
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
         @Deprecated("Deprecated in Android")
         override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
 
@@ -634,9 +669,11 @@ object BmwDashboardSkin {
         // BaseSlider.setCustomThumbDrawable() calls getConstantState().newDrawable() internally
         // (to make per-thumb-index copies), so without this it NPEs the instant a Slider using
         // this thumb is created -- GradientDrawable (the old thumb) has this built in already,
-        // which is why that path never hit it.
+        // which is why that path never hit it. newDrawable() MUST forward accentColor -- it used
+        // to construct a plain SliderThumbDrawable(context), silently reconstructing every accented
+        // thumb back to the default grey gradient the instant BaseSlider asked for its "real" copy.
         private val constantState = object : ConstantState() {
-            override fun newDrawable(): Drawable = SliderThumbDrawable(context)
+            override fun newDrawable(): Drawable = SliderThumbDrawable(context, accentColor)
             override fun getChangingConfigurations(): Int = 0
         }
 

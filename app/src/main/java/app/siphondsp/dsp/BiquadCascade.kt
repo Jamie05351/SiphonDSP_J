@@ -68,17 +68,6 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(b0, (-(1.0 + c)) / d, b0, (-2.0 * c) / d, (1.0 - alpha) / d)
     }
 
-    /**
-     * NativeBmwDspProcessor::makeOnePoleLow / OnePole::run. This is a first-order
-     * section (H(z) = a0*(1+z^-1) / (1+b1*z^-1)); stored with b2=a2=0 so the generic
-     * biquad evaluator in [accumulate] handles it without special-casing.
-     */
-    fun addOnePoleLow(fc: Double, sampleRate: Double) {
-        val k = tan(PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate)
-        val a0 = k / (k + 1.0)
-        addNormalised(a0, a0, 0.0, (k - 1.0) / (k + 1.0), 0.0)
-    }
-
     /** NativeBmwDspProcessor::makeLowShelf. */
     fun addLowShelf(fc: Double, gainDb: Double, sampleRate: Double) = addShelf(fc, gainDb, sampleRate, high = false)
 

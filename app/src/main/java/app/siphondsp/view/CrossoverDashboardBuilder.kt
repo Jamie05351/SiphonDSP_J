@@ -174,6 +174,9 @@ class CrossoverDashboardBuilder(
         offLabel: String = "OFF",
         onLabel: String = "ON",
         mirrorIndices: IntArray = intArrayOf(),
+        // Called after the value is written -- for callers whose other rows need to be rebuilt to
+        // reflect this switch's new state (see the Gains & Delay Link L/R toggle).
+        onToggled: () -> Unit = {},
     ) {
         val row = createRow()
         row.addView(labelBlock(title, subtitle), labelParams())
@@ -198,6 +201,7 @@ class CrossoverDashboardBuilder(
                 trackTintList = checkedColorStateList(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
                 setOnCheckedChangeListener { _, checked ->
                     writeValue(index, mirrorIndices, if (checked) 1f else 0f)
+                    onToggled()
                 }
             }
             controlSlot.addView(toggle)
@@ -214,6 +218,7 @@ class CrossoverDashboardBuilder(
             group.addOnButtonCheckedListener { _, checkedId, isChecked ->
                 if (!isChecked) return@addOnButtonCheckedListener
                 writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
+                onToggled()
             }
             controlSlot.addView(group)
         }
@@ -235,6 +240,10 @@ class CrossoverDashboardBuilder(
         suffix: String,
         displayScale: Float = 1f,
         mirrorIndices: IntArray = intArrayOf(),
+        // Recolors this row's slider handle (see BmwDashboardSkin.styleSlider) and title text --
+        // used for the Low=blue/Mid=yellow band sliders. Track stays the standard blue regardless.
+        // null keeps the default grey thumb and off-white title.
+        accentColor: Int? = null,
     ) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -252,7 +261,7 @@ class CrossoverDashboardBuilder(
         // panel is known -- see pendingTitleBoxes), the slider fills whatever room is left, and
         // the value box sits at the very end -- never in the middle of the row.
         val valueText = createBoxedValueText(values[index] * displayScale, suffix)
-        val titleBox = createBoxedTitleText(label)
+        val titleBox = createBoxedTitleText(label, accentColor)
         topRow.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
         pendingTitleBoxes += titleBox
 
@@ -261,7 +270,7 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = snapToStep(values[index], min, max, step)
-            BmwDashboardSkin.styleSlider(this)
+            BmwDashboardSkin.styleSlider(this, accentColor)
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue
@@ -325,8 +334,22 @@ class CrossoverDashboardBuilder(
 
     /** Single-line [label][tap-to-edit value] row for [addChannelCard]'s Delay row -- no drag
      *  slider, matching the original delay diagram's own tap-only rationale (this is about showing
-     *  *where* a delay applies, not fine adjustment). */
-    private fun buildMiniValueRow(label: String, index: Int, min: Float, max: Float, suffix: String): View {
+     *  *where* a delay applies, not fine adjustment).
+     *
+     *  [linkedIndex], when given, is the paired L/R channel's own delay index (see the Gains &
+     *  Delay "Link L/R Delay" toggle) -- committing a new value here also writes it there. That
+     *  other card's own boxed value Text isn't reachable from this closure, so [onLinked] (a full
+     *  page rebuild, same reasoning as [buildMiniToggleRow]'s Polarity linking) is called instead
+     *  of the normal single-box [updateValueBox] to refresh it. */
+    private fun buildMiniValueRow(
+        label: String,
+        index: Int,
+        min: Float,
+        max: Float,
+        suffix: String,
+        linkedIndex: Int? = null,
+        onLinked: () -> Unit = {},
+    ): View {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -345,8 +368,14 @@ class CrossoverDashboardBuilder(
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
                 val stored = parsed.coerceIn(min, max)
                 values[index] = stored
-                updateValueBox(valueText, stored, suffix)
-                onChanged(values)
+                if (linkedIndex != null) {
+                    values[linkedIndex] = stored
+                    onChanged(values)
+                    onLinked()
+                } else {
+                    updateValueBox(valueText, stored, suffix)
+                    onChanged(values)
+                }
             }
         }
         row.addView(valueText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -366,8 +395,8 @@ class CrossoverDashboardBuilder(
         }
         val off = segmentButton("NORMAL")
         val on = segmentButton("INVERT")
-        group.addView(off, LinearLayout.LayoutParams(0, dp(30), 1f))
-        group.addView(on, LinearLayout.LayoutParams(0, dp(30), 1f))
+        group.addView(off, LinearLayout.LayoutParams(0, dp(24), 1f))
+        group.addView(on, LinearLayout.LayoutParams(0, dp(24), 1f))
         group.check(if (values[index] >= .5f) on.id else off.id)
         group.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -394,6 +423,11 @@ class CrossoverDashboardBuilder(
         // polarityIndex to update. Rebuilding the whole page is simpler and more robust than
         // holding a second toggle-group reference to keep in sync by hand.
         onPolarityChanged: () -> Unit = {},
+        // Delay is normally 4 fully independent values (unlike polarity above) -- this band's
+        // OTHER side's delay index, only when the page's "Link L/R Delay" toggle is on; null
+        // (the default) keeps this card's delay independent of its sibling, same as always.
+        delayLinkedIndex: Int? = null,
+        onDelayChanged: () -> Unit = {},
     ): View {
         val card = MaterialCardView(context).apply {
             radius = dp(8).toFloat()
@@ -416,7 +450,7 @@ class CrossoverDashboardBuilder(
             setTextColor(accentColor)
         })
         content.addView(vspace(6))
-        content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms"))
+        content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms", delayLinkedIndex, onDelayChanged))
         content.addView(vspace(4))
         content.addView(buildMiniToggleRow("POL", polarityIndex, polarityMirror, onPolarityChanged))
 
@@ -479,131 +513,25 @@ class CrossoverDashboardBuilder(
         letterSpacing = 0.03f
     }
 
-    /** One LOW PASS / HIGH PASS mini-card: corner frequency (tap to edit, same numeric-entry
-     *  dialog addSliderRow's value uses) plus a live rolloff curve reflecting the actual
-     *  frequency/slope in use. [slopeIndex] null means there's no real topology switch backing a
-     *  slope choice for this band (e.g. the mid-band highpass is a fixed-order filter at the
-     *  native layer) -- the slope reads as a fixed, non-interactive label instead of a working
-     *  dropdown in that case. */
-    class CrossoverBandSpec(
-        val title: String,
-        val freqIndex: Int,
-        val freqMin: Float,
-        val freqMax: Float,
-        val curveKind: FilterResponseCurveView.Kind,
-        val freqMirrorIndices: IntArray = intArrayOf(),
-        val slopeIndex: Int? = null,
-        val slopeMirrorIndices: IntArray = intArrayOf(),
-        val slopeOptions: List<Pair<String, Float>> = listOf("18 dB/Oct" to 0f, "24 dB/Oct" to 1f),
-        val fixedSlopeLabel: String = "24 dB/Oct",
-    )
-
-    /** Places two CrossoverBandSpec cards side by side, matching the reference "LOW PASS" /
-     *  "HIGH PASS" panel style. */
-    fun addCrossoverBandPair(low: CrossoverBandSpec, high: CrossoverBandSpec) {
-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(
-            crossoverBandCard(low),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) },
-        )
-        row.addView(
-            crossoverBandCard(high),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) },
-        )
-        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(4)
-            bottomMargin = dp(8)
-        })
-    }
-
-    private fun crossoverBandCard(spec: CrossoverBandSpec): View {
-        val card = MaterialCardView(context).apply {
-            radius = dp(6).toFloat()
-            cardElevation = 0f
-            strokeWidth = dp(1)
-            strokeColor = segmentStroke
-            // No fill: lets the workspace's own brushed-metal background (and its "M" watermark)
-            // show through, same reasoning as dashboardPanel's own transparent card above.
-            setCardBackgroundColor(Color.TRANSPARENT)
-        }
-        val content = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-
-        content.addView(TextView(context).apply {
-            text = spec.title
-            textSize = 12.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.rgb(160, 168, 178))
-            letterSpacing = 0.04f
-        })
-        content.addView(vspace(4))
-
-        fun freqLabel() = "${values[spec.freqIndex].roundToInt()} Hz"
-        val freqText = TextView(context).apply {
-            text = freqLabel()
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(accentBlue)
-            isClickable = true
-            isFocusable = true
-        }
-        fun currentSteep(): Boolean {
-            val slopeIndex = spec.slopeIndex ?: return true
-            return values[slopeIndex] >= .5f
-        }
-        val curveView = FilterResponseCurveView(context).apply {
-            kind = spec.curveKind
-            frequencyHz = values[spec.freqIndex]
-            steep = currentSteep()
-        }
-        val freqRow = LinearLayout(context).apply {
+    /** Dropdown row: label + tap-to-open PopupMenu offering a fixed set of stored values (e.g.
+     *  Pultec's 20/30/60/100Hz frequency stops). Lifted from the old crossover slope selector,
+     *  which this replaced -- same PopupMenu-off-a-MaterialButton interaction, generalized. */
+    fun addDropdownRow(label: String, index: Int, options: List<Pair<String, Float>>, mirrorIndices: IntArray = intArrayOf()) {
+        val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(50)
-            addView(freqText)
-            addView(space(8))
-            addView(curveView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            minimumHeight = dp(BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP)
         }
-        freqText.setOnClickListener {
-            context.showInputAlert(
-                android.view.LayoutInflater.from(context),
-                spec.title,
-                "${spec.freqMin.roundToInt()}–${spec.freqMax.roundToInt()}",
-                values[spec.freqIndex].roundToInt().toString(),
-                true,
-                "Hz",
-            ) { entered ->
-                val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
-                val stored = parsed.coerceIn(spec.freqMin, spec.freqMax)
-                values[spec.freqIndex] = stored
-                spec.freqMirrorIndices.forEach { values[it] = stored }
-                freqText.text = freqLabel()
-                curveView.frequencyHz = stored
-                onChanged(values)
-            }
-        }
-        content.addView(freqRow)
-        content.addView(vspace(10))
+        val titleBox = createBoxedTitleText(label)
+        row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
+        pendingTitleBoxes += titleBox
 
-        content.addView(TextView(context).apply {
-            text = "SLOPE"
-            textSize = 9.5f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.rgb(130, 138, 148))
-            letterSpacing = 0.04f
-        })
-        content.addView(vspace(4))
-
-        fun currentSlopeLabel(): String {
-            val slopeIndex = spec.slopeIndex ?: return spec.fixedSlopeLabel
-            val current = values[slopeIndex]
-            return spec.slopeOptions.minByOrNull { kotlin.math.abs(it.second - current) }?.first
-                ?: spec.slopeOptions.first().first
+        fun currentLabel(): String {
+            val current = values[index]
+            return options.minByOrNull { kotlin.math.abs(it.second - current) }?.first ?: options.first().first
         }
-        val slopeButton = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = currentSlopeLabel()
+        val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = currentLabel()
             textSize = 12f
             isAllCaps = false
             minHeight = dp(32)
@@ -613,33 +541,27 @@ class CrossoverDashboardBuilder(
             strokeColor = ColorStateList.valueOf(segmentStroke)
             backgroundTintList = ColorStateList.valueOf(segmentIdle)
             setTextColor(Color.rgb(220, 226, 232))
+            icon = ContextCompat.getDrawable(context, R.drawable.ic_baseline_keyboard_arrow_down_24dp)
             iconGravity = MaterialButton.ICON_GRAVITY_END
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
-        }
-        if (spec.slopeIndex != null) {
-            slopeButton.icon = ContextCompat.getDrawable(context, R.drawable.ic_baseline_keyboard_arrow_down_24dp)
-            slopeButton.setOnClickListener { anchor ->
+            setOnClickListener { anchor ->
                 val popup = PopupMenu(context, anchor)
-                spec.slopeOptions.forEachIndexed { i, (optionLabel, _) -> popup.menu.add(0, i, i, optionLabel) }
+                options.forEachIndexed { i, (optionLabel, _) -> popup.menu.add(0, i, i, optionLabel) }
                 popup.setOnMenuItemClickListener { item ->
-                    val stored = spec.slopeOptions[item.itemId].second
-                    values[spec.slopeIndex] = stored
-                    spec.slopeMirrorIndices.forEach { values[it] = stored }
-                    slopeButton.text = currentSlopeLabel()
-                    curveView.steep = stored >= .5f
-                    onChanged(values)
+                    val stored = options[item.itemId].second
+                    writeValue(index, mirrorIndices, stored)
+                    text = currentLabel()
                     true
                 }
                 popup.show()
             }
-        } else {
-            slopeButton.alpha = 0.55f
-            slopeButton.isClickable = false
         }
-        content.addView(slopeButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        card.addView(content)
-        return card
+        row.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
+            marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
+        })
+        row.addView(space(VALUE_WIDTH_DP))
+        addRow(row)
     }
 
     private fun writeValue(index: Int, mirrorIndices: IntArray, value: Float) {
@@ -683,7 +605,7 @@ class CrossoverDashboardBuilder(
     private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
         id = View.generateViewId()
         text = textValue
-        textSize = 11f
+        textSize = 10f
         isAllCaps = true
         minHeight = 0
         minimumHeight = 0
@@ -692,7 +614,7 @@ class CrossoverDashboardBuilder(
         cornerRadius = dp(6)
         strokeWidth = dp(1)
         setTypeface(typeface, Typeface.BOLD)
-        setPadding(dp(6), 0, dp(6), 0)
+        setPadding(dp(5), 0, dp(5), 0)
         backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
         strokeColor = checkedColorStateList(accentBlue, segmentStroke)
         setTextColor(checkedColorStateList(Color.WHITE, Color.rgb(180, 188, 197)))
@@ -717,13 +639,13 @@ class CrossoverDashboardBuilder(
      *  as one family; [minimumWidth]/[minimumHeight] (not fixed layout dimensions) let it grow for
      *  a longer reading while still meeting the spec's floor size for a short one. */
     private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 16f
+        textSize = 13f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
         setTextColor(accentBlue)
         gravity = Gravity.CENTER
-        setPadding(dp(14), dp(3), dp(14), dp(3))
+        setPadding(dp(10), dp(2), dp(10), dp(2))
         minimumWidth = dp(BmwDashboardSkin.SLIDER_VALUE_MIN_WIDTH_DP)
         minimumHeight = dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)
         background = BmwDashboardSkin.sliderBoxDrawable(context)
@@ -734,12 +656,12 @@ class CrossoverDashboardBuilder(
      *  [createBoxedValueText] but with no border, left-aligned, regular weight. Its width is left
      *  to the caller: dashboardPanel sizes it (via pendingTitleBoxes) once the whole panel's
      *  titles are known, not fixed here. */
-    private fun createBoxedTitleText(title: String) = TextView(context).apply {
+    private fun createBoxedTitleText(title: String, color: Int? = null) = TextView(context).apply {
         text = title
         textSize = 14f
         maxLines = 1
         ellipsize = android.text.TextUtils.TruncateAt.END
-        setTextColor(Color.rgb(0xE7, 0xEB, 0xEF))
+        setTextColor(color ?: Color.rgb(0xE7, 0xEB, 0xEF))
         gravity = Gravity.CENTER_VERTICAL or Gravity.START
         setPadding(dp(18), dp(3), dp(18), dp(3))
         background = BmwDashboardSkin.sliderBoxDrawable(context, showBorder = false)
