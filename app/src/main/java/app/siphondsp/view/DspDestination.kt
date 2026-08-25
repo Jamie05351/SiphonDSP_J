@@ -54,7 +54,7 @@ object DspCrossNavBar {
     // regardless of the sidebar's actual on-screen height on any given device.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(88, 295, 0, 282, 0, 257, 0, 240, 0, 237, 88)
+    private val ROW_WEIGHTS = intArrayOf(16, 895, 0, 846, 0, 766, 0, 782, 0, 830, 165)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
