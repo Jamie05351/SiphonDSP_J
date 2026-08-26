@@ -136,15 +136,22 @@ object BmwDashboardSkin {
     fun sidebarTileFocusRingDrawable(context: Context): Drawable = TileFocusRingDrawable(context)
 
     // Single slider thumb/track/capsule shared by every DSP workspace slider (Gains/Delay,
-    // Crossovers & Tilt, Mono Bass, Routing, Compressor). Exact dimensions/colours below were
-    // specified explicitly by the user as a full pixel spec (row layout, boxed title/value,
-    // capsule outline, 3d thumb) -- do not re-derive these from a screenshot, they're deliberate
-    // overrides of it. The track's own 0.5dp specular-highlight/shade sub-strips from that spec
-    // are NOT implemented: Slider only exposes trackHeight/trackColorActive/trackColorInactive,
-    // not a pluggable track drawable, so painting sub-pixel bevel strips over the real track would
-    // need a Slider subclass reverse-engineering BaseSlider's internal padding/thumb-radius inset
-    // math to find the exact active/inactive split each frame -- a real (if small) fidelity risk
-    // for a barely-visible detail, so left out of this pass rather than guessed at.
+    // Crossovers & Tilt, Mono Bass, Routing, Compressor). Recreates the user-supplied
+    // slider_{dark_blue,light_blue,purple,yellow}.xml reference art: a chunky recessed groove
+    // (outer capsule shell + inset bezel + thin highlight line) with the fill and thumb both
+    // tinted per accent. The groove/bezel layers are painted onto the Slider's own `background`
+    // (SliderCapsuleDrawable, below); the actual active/inactive fill stays Slider's real native
+    // track (just made much taller and recolored via trackColorActive/trackColorInactive) rather
+    // than hand-painted, deliberately -- Slider only exposes trackHeight/trackColorActive/
+    // trackColorInactive, not a pluggable track drawable, so repainting the live value-fill
+    // ourselves would need a Slider subclass reverse-engineering BaseSlider's internal
+    // padding/thumb-radius inset math to find the exact active/inactive split each frame, and any
+    // drift from that math would visibly desync the fill's edge from the real thumb position. The
+    // reference's own gradient gets approximated as a single lightened solid for the same reason
+    // (trackColorActive only accepts a flat tint, not a Shader) -- reads correctly at the size
+    // this actually renders at, so not worth the alignment risk. Dimensions below are starting
+    // numbers picked by eye to match the reference's proportions against this app's existing row
+    // heights, same as every other pixel spec in this codebase, meant to be refined on-device.
     const val SLIDER_ROW_MIN_HEIGHT_DP = 28
     // Used only by CrossoverDashboardBuilder's own slider rows (Gains & Delay, Crossovers & Tilt,
     // Routing) -- Compressor's XML rows hardcode their own marginStart directly in
@@ -204,24 +211,34 @@ object BmwDashboardSkin {
     private val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
     private const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
 
-    // Per-band slider accent, taken directly from the dedicated slider_{blue,yellow,purple}
-    // art's own capsule-outline stroke color -- Low=blue, Mid=yellow, Headroom=purple (headroom
-    // only). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for title text/PEQ curves/diagram
-    // lines elsewhere): those stay as they are, this is the sliders' own accent palette so a
-    // slider's thumb+capsule can use its own exact hue without recoloring anything else on the row.
-    const val SLIDER_LOW_BAND_COLOR = 0xFF004CC9.toInt()
-    const val SLIDER_MID_BAND_COLOR = 0xFFFFD500.toInt()
-    const val SLIDER_HEADROOM_COLOR = 0xFF9A118B.toInt()
+    // Per-band slider accent, taken directly from the dedicated
+    // slider_{dark_blue,light_blue,purple,yellow}.xml art's own capsule-outline stroke color --
+    // Low=dark blue, Mid=yellow, Headroom=purple, everything else=light blue (the default, when
+    // no accentColor is passed). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for title
+    // text/PEQ curves/diagram lines elsewhere): those stay as they are, this is the sliders' own
+    // accent palette so a slider's thumb+capsule+fill can use its own exact hue without
+    // recoloring anything else on the row.
+    const val SLIDER_LOW_BAND_COLOR = 0xFF1F4F9A.toInt()
+    const val SLIDER_MID_BAND_COLOR = 0xFFFFB000.toInt()
+    const val SLIDER_HEADROOM_COLOR = 0xFF8B56FF.toInt()
+    const val SLIDER_DEFAULT_COLOR = 0xFF63C7FF.toInt()
 
-    const val SLIDER_TRACK_HEIGHT_DP = 2.5f
-    private const val SLIDER_CAPSULE_HEIGHT_DP = 10f
-    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 2f
-    // Public so CrossoverDashboardBuilder's own inline slider setups (which don't go through
-    // styleSlider()) can use the exact same colours instead of drifting from them over time.
-    val SLIDER_TRACK_ACTIVE_COLOR = LIGHT_BLUE
-    // Same colour as the capsule fill -- the unfilled portion of the track is meant to
-    // disappear into the capsule background, so only the active (blue) progress reads visually.
-    val SLIDER_TRACK_INACTIVE_COLOR = Color.rgb(0x10, 0x13, 0x18)
+    const val SLIDER_TRACK_HEIGHT_DP = 15f
+    private const val SLIDER_CAPSULE_HEIGHT_DP = 21f
+    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 1.5f
+    // The groove sits inset within the outer capsule shell (see the reference art's own
+    // 15pt-radius shell vs. 8pt-radius groove, at the same relative proportion here), and gets
+    // its own thin inner highlight line 1dp further in again.
+    private const val SLIDER_GROOVE_MARGIN_DP = 3.5f
+    private const val SLIDER_GROOVE_STROKE_WIDTH_DP = 1f
+    private const val SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP = 1.5f
+    private val SLIDER_GROOVE_FILL_COLOR = Color.rgb(0x1B, 0x1B, 0x1D)
+    private val SLIDER_GROOVE_STROKE_COLOR = Color.rgb(0x31, 0x31, 0x34)
+    private val SLIDER_GROOVE_HIGHLIGHT_COLOR = Color.rgb(0x26, 0x26, 0x28)
+    // Fully transparent, not a dark fill colour: the groove drawn underneath (see
+    // SliderCapsuleDrawable) already supplies the "unfilled" look, so the real native track only
+    // needs to contribute the active (lit) portion on top of it.
+    val SLIDER_TRACK_INACTIVE_COLOR = Color.TRANSPARENT
     val SLIDER_HALO_COLOR = Color.argb(42, 70, 181, 232)
     const val SLIDER_HALO_RADIUS_DP = 4
 
@@ -319,22 +336,29 @@ object BmwDashboardSkin {
     // reach them.
     fun styleSlider(slider: Slider, accentColor: Int? = null) {
         val context = slider.context
+        val accent = accentColor ?: SLIDER_DEFAULT_COLOR
         slider.trackHeight = dpF(context, SLIDER_TRACK_HEIGHT_DP).roundToInt()
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.haloRadius = dp(context, SLIDER_HALO_RADIUS_DP)
-        // Track stays the standard blue regardless of [accentColor] -- only the handle itself
-        // recolors, per an explicit correction: an earlier pass also tinted the track, which
-        // read as "the whole slider changed color" rather than "this one has a colored handle."
-        slider.setTrackActiveTintList(ColorStateList.valueOf(SLIDER_TRACK_ACTIVE_COLOR))
+        // The active fill now tints per [accent] too (a lightened blend, approximating the
+        // reference art's gradient -- see the class doc above), not just the handle -- this
+        // reverses an earlier explicit correction that kept the track a fixed blue regardless of
+        // accent, because the new slider_{dark_blue,light_blue,purple,yellow}.xml reference art
+        // unambiguously shows the whole fill tinted, not just the thumb.
+        slider.setTrackActiveTintList(ColorStateList.valueOf(blend(accent, Color.WHITE, 0.2f)))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
         slider.setHaloTintList(ColorStateList.valueOf(SLIDER_HALO_COLOR))
-        slider.setCustomThumbDrawable(sliderThumbDrawable(context, accentColor))
+        // [accent] (resolved above, never null) is passed rather than the raw nullable
+        // [accentColor] -- every slider now gets a colored thumb+track+capsule, defaulting to
+        // SLIDER_DEFAULT_COLOR's light blue, matching how all 4 of the new reference art's own
+        // variants are colored presets with no neutral-grey option among them.
+        slider.setCustomThumbDrawable(sliderThumbDrawable(context, accent))
         // The capsule outline sits on the Slider's own background, not a separate wrapping view --
         // it draws a fixed-height pill centred within whatever bounds the Slider view ends up
         // with, so it stays aligned with Slider's own (also vertically-centred) track regardless
         // of the view's actual measured height.
-        slider.background = sliderCapsuleDrawable(context, accentColor)
+        slider.background = sliderCapsuleDrawable(context, accent)
         // The capsule's focus glow uses BlurMaskFilter, which silently no-ops on a hardware
         // layer -- without this the ring would still appear on focus, just as a crisp unblurred
         // outline instead of a soft glow. Matches the existing LAYER_TYPE_SOFTWARE usage for the
@@ -668,19 +692,38 @@ object BmwDashboardSkin {
      * currently is.
      *
      * [accentColor], when given, recolors just the unfocused border (see SLIDER_LOW_BAND_COLOR
-     * etc.) -- every other slider keeps the default LIGHT_BLUE border. The focus glow/ring stay
-     * LIGHT_BLUE_BRIGHT regardless: that's a focus-state indicator, not a band identity.
+     * etc.) -- every other slider keeps the default SLIDER_DEFAULT_COLOR border. The focus
+     * glow/ring stay LIGHT_BLUE_BRIGHT regardless: that's a focus-state indicator, not a band
+     * identity. Also draws the recessed groove + thin inner highlight line inset within the
+     * capsule -- the reference art's own bezel layers -- so Slider's real (now much taller, see
+     * SLIDER_TRACK_HEIGHT_DP) native track has a visible channel to sit inside of; the groove's
+     * own fill color is what shows through as the "unfilled" look, since the native track's
+     * inactive tint is fully transparent (see SLIDER_TRACK_INACTIVE_COLOR).
      */
     private class SliderCapsuleDrawable(context: Context, accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val capsuleHeight = SLIDER_CAPSULE_HEIGHT_DP * density
         private val borderWidth = SLIDER_CAPSULE_BORDER_WIDTH_DP * density
         private val cornerRadius = capsuleHeight / 2f
+        private val grooveMargin = SLIDER_GROOVE_MARGIN_DP * density
+        private val grooveStrokeWidth = SLIDER_GROOVE_STROKE_WIDTH_DP * density
+        private val grooveHighlightMargin = SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP * density
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_BACKGROUND_COLOR }
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = borderWidth
-            color = accentColor ?: LIGHT_BLUE
+            color = accentColor ?: SLIDER_DEFAULT_COLOR
+        }
+        private val grooveFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_GROOVE_FILL_COLOR }
+        private val grooveStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = grooveStrokeWidth
+            color = SLIDER_GROOVE_STROKE_COLOR
+        }
+        private val grooveHighlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = density
+            color = SLIDER_GROOVE_HIGHLIGHT_COLOR
         }
         private val focusGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -694,6 +737,8 @@ object BmwDashboardSkin {
             color = LIGHT_BLUE_BRIGHT
         }
         private val capsuleRect = RectF()
+        private val grooveRect = RectF()
+        private val grooveHighlightRect = RectF()
         private var focused = false
 
         override fun isStateful(): Boolean = true
@@ -712,11 +757,24 @@ object BmwDashboardSkin {
                 bounds.left + borderWidth / 2f, centerY - capsuleHeight / 2f + borderWidth / 2f,
                 bounds.right - borderWidth / 2f, centerY + capsuleHeight / 2f - borderWidth / 2f,
             )
+            grooveRect.set(capsuleRect)
+            grooveRect.inset(grooveMargin, grooveMargin)
+            grooveHighlightRect.set(grooveRect)
+            grooveHighlightRect.inset(grooveHighlightMargin, grooveHighlightMargin)
         }
 
         override fun draw(canvas: Canvas) {
             if (capsuleRect.isEmpty) return
             canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, fillPaint)
+            if (!grooveRect.isEmpty) {
+                val grooveRadius = grooveRect.height() / 2f
+                canvas.drawRoundRect(grooveRect, grooveRadius, grooveRadius, grooveFillPaint)
+                canvas.drawRoundRect(grooveRect, grooveRadius, grooveRadius, grooveStrokePaint)
+                if (!grooveHighlightRect.isEmpty) {
+                    val highlightRadius = grooveHighlightRect.height() / 2f
+                    canvas.drawRoundRect(grooveHighlightRect, highlightRadius, highlightRadius, grooveHighlightPaint)
+                }
+            }
             if (focused) {
                 canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusGlowPaint)
                 canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusRingPaint)
