@@ -100,12 +100,14 @@ class CrossoverTiltFragment : Fragment() {
                     80f, 200f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
                 )
                 addSliderRow(
                     "Highpass freq (LR4)", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
                     80f, 200f, 1f, "Hz",
                     mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                 )
             }
         }

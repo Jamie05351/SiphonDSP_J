@@ -240,10 +240,16 @@ class CrossoverDashboardBuilder(
         suffix: String,
         displayScale: Float = 1f,
         mirrorIndices: IntArray = intArrayOf(),
-        // Recolors this row's slider handle (see BmwDashboardSkin.styleSlider) and title text --
-        // used for the Low=blue/Mid=yellow band sliders. Track stays the standard blue regardless.
-        // null keeps the default grey thumb and off-white title.
+        // Recolors this row's title text -- used for the Low=blue/Mid=yellow band sliders' labels.
+        // null keeps the default off-white title.
         accentColor: Int? = null,
+        // Recolors this row's slider handle + capsule outline (see BmwDashboardSkin.styleSlider
+        // and SLIDER_LOW_BAND_COLOR/SLIDER_MID_BAND_COLOR/SLIDER_HEADROOM_COLOR) -- deliberately
+        // separate from [accentColor]: the dedicated slider art uses its own exact hues, distinct
+        // from the LIGHT_BLUE/MID_BAND_YELLOW used for title text elsewhere, and Headroom gets a
+        // slider accent (purple) with no title color at all. null keeps the default grey thumb
+        // and standard blue capsule border every other slider still uses.
+        sliderAccentColor: Int? = null,
     ) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -270,7 +276,7 @@ class CrossoverDashboardBuilder(
             valueTo = max
             stepSize = step
             value = snapToStep(values[index], min, max, step)
-            BmwDashboardSkin.styleSlider(this, accentColor)
+            BmwDashboardSkin.styleSlider(this, sliderAccentColor)
             addOnChangeListener { _, newValue, fromUser ->
                 if (fromUser) {
                     values[index] = newValue

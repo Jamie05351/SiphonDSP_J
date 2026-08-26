@@ -203,6 +203,15 @@ object BmwDashboardSkin {
     private val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
     private const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
 
+    // Per-band slider accent, taken directly from the dedicated slider_{blue,yellow,purple}
+    // art's own capsule-outline stroke color -- Low=blue, Mid=yellow, Headroom=purple (headroom
+    // only). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for title text/PEQ curves/diagram
+    // lines elsewhere): those stay as they are, this is the sliders' own accent palette so a
+    // slider's thumb+capsule can use its own exact hue without recoloring anything else on the row.
+    const val SLIDER_LOW_BAND_COLOR = 0xFF004CC9.toInt()
+    const val SLIDER_MID_BAND_COLOR = 0xFFFFD500.toInt()
+    const val SLIDER_HEADROOM_COLOR = 0xFF9A118B.toInt()
+
     const val SLIDER_TRACK_HEIGHT_DP = 2.5f
     private const val SLIDER_CAPSULE_HEIGHT_DP = 10f
     private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 2f
@@ -221,7 +230,7 @@ object BmwDashboardSkin {
     // those specific rows read as a distinct colored knob rather than the plain metal one every
     // other slider still uses.
     fun sliderThumbDrawable(context: Context, accentColor: Int? = null): Drawable = SliderThumbDrawable(context, accentColor)
-    fun sliderCapsuleDrawable(context: Context): Drawable = SliderCapsuleDrawable(context)
+    fun sliderCapsuleDrawable(context: Context, accentColor: Int? = null): Drawable = SliderCapsuleDrawable(context, accentColor)
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
@@ -276,7 +285,7 @@ object BmwDashboardSkin {
         // it draws a fixed-height pill centred within whatever bounds the Slider view ends up
         // with, so it stays aligned with Slider's own (also vertically-centred) track regardless
         // of the view's actual measured height.
-        slider.background = sliderCapsuleDrawable(context)
+        slider.background = sliderCapsuleDrawable(context, accentColor)
         // The capsule's focus glow uses BlurMaskFilter, which silently no-ops on a hardware
         // layer -- without this the ring would still appear on focus, just as a crisp unblurred
         // outline instead of a soft glow. Matches the existing LAYER_TYPE_SOFTWARE usage for the
@@ -609,8 +618,12 @@ object BmwDashboardSkin {
      * way pressing Tab does, but without ever touching the screen -- so touch-driven feedback
      * (the halo, a drag) never appears; this glow is the only visual sign of where that input
      * currently is.
+     *
+     * [accentColor], when given, recolors just the unfocused border (see SLIDER_LOW_BAND_COLOR
+     * etc.) -- every other slider keeps the default LIGHT_BLUE border. The focus glow/ring stay
+     * LIGHT_BLUE_BRIGHT regardless: that's a focus-state indicator, not a band identity.
      */
-    private class SliderCapsuleDrawable(context: Context) : Drawable() {
+    private class SliderCapsuleDrawable(context: Context, accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val capsuleHeight = SLIDER_CAPSULE_HEIGHT_DP * density
         private val borderWidth = SLIDER_CAPSULE_BORDER_WIDTH_DP * density
@@ -619,7 +632,7 @@ object BmwDashboardSkin {
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = borderWidth
-            color = LIGHT_BLUE
+            color = accentColor ?: LIGHT_BLUE
         }
         private val focusGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
