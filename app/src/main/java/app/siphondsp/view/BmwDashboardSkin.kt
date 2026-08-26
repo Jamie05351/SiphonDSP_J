@@ -158,14 +158,33 @@ object BmwDashboardSkin {
     const val SLIDER_TITLE_HEIGHT_DP = 40
     const val SLIDER_VALUE_HEIGHT_DP = 24
     const val SLIDER_VALUE_MIN_WIDTH_DP = 64
-    private const val SLIDER_BOX_CORNER_RADIUS_DP = 5f
-    private const val SLIDER_BOX_STROKE_WIDTH_DP = 1f
-    private val SLIDER_BOX_HIGHLIGHT_COLOR = Color.rgb(0x34, 0x3A, 0x40)
-    private val SLIDER_BOX_SHADOW_COLOR = Color.argb(128, 0, 0, 0)
-    private val SLIDER_BOX_DROP_SHADOW_COLOR = Color.argb(115, 0, 0, 0)
+    // Still referenced by SliderCapsuleDrawable below (the slider track's own capsule fill),
+    // independent of the value/title box family.
     private val SLIDER_BOX_BACKGROUND_COLOR = Color.rgb(0x10, 0x13, 0x18)
 
-    fun sliderBoxDrawable(context: Context, showBorder: Boolean = true): Drawable = SliderBoxDrawable(context, showBorder)
+    // "Glass box" value/title box background: recreates the user-supplied sidebar glass-panel
+    // artwork (glass_panel_1536x768.xml) at 50% overall opacity, so every value/title box across
+    // the app's DSP workspaces (Gains & Delay, Crossovers & Tilt, Routing) reads as the same
+    // fixture as the sidebar. Every color below is that vector's own color with its alpha channel
+    // halved. Built as a Canvas Drawable rather than reused directly as a VectorDrawable: that
+    // source vector has a fixed 1536x768 viewport with hardcoded pixel corner/rim geometry, and
+    // stretching it non-uniformly to fit boxes this small and this varied in aspect ratio would
+    // squash the rounded corners exactly like the sidebar bar-art squish bug this app already hit
+    // once. Drawing with a RectF keeps the corner radius correct at any size.
+    private const val GLASS_BOX_CORNER_RADIUS_DP = 5f
+    private const val GLASS_BOX_STROKE_WIDTH_DP = 1.25f
+    private val GLASS_FILL_TOP = Color.argb(0x80, 0x11, 0x13, 0x16)
+    private val GLASS_FILL_MID = Color.argb(0x80, 0x08, 0x0A, 0x0C)
+    private val GLASS_FILL_BOTTOM = Color.argb(0x80, 0x02, 0x02, 0x03)
+    private val GLASS_RIM_TOP = Color.argb(0x6B, 0xD4, 0xD6, 0xD8)
+    private val GLASS_RIM_MID = Color.argb(0x4A, 0x34, 0x38, 0x3D)
+    private val GLASS_RIM_BOTTOM = Color.argb(0x5E, 0xD9, 0xDB, 0xDD)
+    private val GLASS_SHEEN_NEAR = Color.argb(0x37, 0xFF, 0xFF, 0xFF)
+    private val GLASS_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
+    private val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x47, 0xFF, 0xFF, 0xFF)
+    private val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x39, 0xDE, 0xDE, 0xDE)
+
+    fun glassBoxDrawable(context: Context, showBorder: Boolean = true): Drawable = GlassBoxDrawable(context, showBorder)
 
     const val SLIDER_THUMB_WIDTH_DP = 36
     const val SLIDER_THUMB_HEIGHT_DP = 24
@@ -654,54 +673,64 @@ object BmwDashboardSkin {
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
-    /**
-     * The boxed title/value readout shared by every DSP workspace slider row: a darkened rounded
-     * rect (same visual language as the capsule) with a 1dp lit line along the top inner edge and
-     * a 1dp dark line along the bottom inner edge for the same emboss the thumb gets, plus a soft
-     * blurred drop shadow offset a hair below it. [showBorder] draws the accent-blue stroke on top
-     * -- the value box keeps it, the title box doesn't (fill/emboss/shadow only, no outline).
-     */
-    private class SliderBoxDrawable(context: Context, private val showBorder: Boolean) : Drawable() {
+    /** See [glassBoxDrawable]. */
+    private class GlassBoxDrawable(context: Context, private val showBorder: Boolean) : Drawable() {
         private val density = context.resources.displayMetrics.density
-        private val cornerRadius = SLIDER_BOX_CORNER_RADIUS_DP * density
-        private val strokeWidth = SLIDER_BOX_STROKE_WIDTH_DP * density
+        private val cornerRadius = GLASS_BOX_CORNER_RADIUS_DP * density
+        private val strokeWidth = GLASS_BOX_STROKE_WIDTH_DP * density
         private val edgeLineWidth = density
-        private val dropShadowOffset = density
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_BACKGROUND_COLOR }
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = this@SliderBoxDrawable.strokeWidth
-            color = LIGHT_BLUE
+            strokeWidth = this@GlassBoxDrawable.strokeWidth
         }
-        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_HIGHLIGHT_COLOR }
-        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_SHADOW_COLOR }
-        private val dropShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = SLIDER_BOX_DROP_SHADOW_COLOR
-            maskFilter = BlurMaskFilter(2f * density, BlurMaskFilter.Blur.NORMAL)
-        }
+        private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GLASS_BOX_TOP_GLINT_COLOR }
+        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GLASS_BOX_BOTTOM_GLINT_COLOR }
         private val boxRect = RectF()
-        private val dropShadowRect = RectF()
         private val clipPath = android.graphics.Path()
+        private val sheenPath = android.graphics.Path()
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
             boxRect.set(bounds)
-            // Without a border there's nothing to inset for -- the fill can use the view's full
-            // bounds instead of shrinking by half a (now nonexistent) stroke width.
             if (showBorder) boxRect.inset(strokeWidth / 2f, strokeWidth / 2f)
-            dropShadowRect.set(boxRect)
-            dropShadowRect.offset(0f, dropShadowOffset)
+            if (boxRect.isEmpty) return
             clipPath.reset()
             clipPath.addRoundRect(boxRect, cornerRadius, cornerRadius, android.graphics.Path.Direction.CW)
+
+            fillPaint.shader = LinearGradient(
+                boxRect.left, boxRect.top, boxRect.right, boxRect.bottom,
+                intArrayOf(GLASS_FILL_TOP, GLASS_FILL_MID, GLASS_FILL_BOTTOM),
+                floatArrayOf(0f, 0.4f, 1f), Shader.TileMode.CLAMP,
+            )
+            strokePaint.shader = LinearGradient(
+                boxRect.left, boxRect.top, boxRect.left, boxRect.bottom,
+                intArrayOf(GLASS_RIM_TOP, GLASS_RIM_MID, GLASS_RIM_BOTTOM),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+            )
+
+            // Diagonal light sweep in the top-left corner -- same placement as the source art's own
+            // "glass body" highlight quad, the one cue that reads as glass rather than a flat box.
+            sheenPath.reset()
+            sheenPath.moveTo(boxRect.left, boxRect.top)
+            sheenPath.lineTo(boxRect.left + boxRect.width() * 0.55f, boxRect.top)
+            sheenPath.lineTo(boxRect.left + boxRect.width() * 0.22f, boxRect.bottom)
+            sheenPath.lineTo(boxRect.left, boxRect.bottom)
+            sheenPath.close()
+            sheenPaint.shader = LinearGradient(
+                boxRect.left, boxRect.top, boxRect.left + boxRect.width() * 0.5f, boxRect.bottom,
+                GLASS_SHEEN_NEAR, GLASS_SHEEN_FAR, Shader.TileMode.CLAMP,
+            )
         }
 
         override fun draw(canvas: Canvas) {
             if (boxRect.isEmpty) return
-            canvas.drawRoundRect(dropShadowRect, cornerRadius, cornerRadius, dropShadowPaint)
             canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, fillPaint)
 
             canvas.save()
             canvas.clipPath(clipPath)
+            canvas.drawPath(sheenPath, sheenPaint)
             canvas.drawRect(boxRect.left, boxRect.top, boxRect.right, boxRect.top + edgeLineWidth, highlightPaint)
             canvas.drawRect(boxRect.left, boxRect.bottom - edgeLineWidth, boxRect.right, boxRect.bottom, shadowPaint)
             canvas.restore()
