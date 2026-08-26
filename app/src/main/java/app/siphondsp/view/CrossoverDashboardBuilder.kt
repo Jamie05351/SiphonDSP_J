@@ -21,7 +21,6 @@ import androidx.core.content.ContextCompat
 import app.siphondsp.R
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
@@ -197,8 +196,12 @@ class CrossoverDashboardBuilder(
                 minWidth = 0
                 minimumWidth = 0
                 setPadding(0, 0, 0, 0)
-                thumbTintList = checkedColorStateList(accentBlue, Color.rgb(170, 177, 184))
-                trackTintList = checkedColorStateList(Color.rgb(32, 78, 111), Color.rgb(45, 50, 57))
+                // null clears the default tint lists so the custom glass drawables' own colors
+                // show through unfiltered.
+                thumbTintList = null
+                trackTintList = null
+                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context)
+                trackDrawable = BmwDashboardSkin.glassSwitchTrackDrawable(context)
                 setOnCheckedChangeListener { _, checked ->
                     writeValue(index, mirrorIndices, if (checked) 1f else 0f)
                     onToggled()
@@ -206,18 +209,11 @@ class CrossoverDashboardBuilder(
             }
             controlSlot.addView(toggle)
         } else {
-            val group = MaterialButtonToggleGroup(context).apply {
-                isSingleSelection = true
-                isSelectionRequired = true
-            }
-            val off = segmentButton(offLabel)
-            val on = segmentButton(onLabel)
-            group.addView(off, LinearLayout.LayoutParams(dp(80), dp(34)))
-            group.addView(on, LinearLayout.LayoutParams(dp(80), dp(34)))
-            group.check(if (values[index] >= .5f) on.id else off.id)
-            group.addOnButtonCheckedListener { _, checkedId, isChecked ->
-                if (!isChecked) return@addOnButtonCheckedListener
-                writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
+            val group = buildGlassSegmentGroup(
+                offLabel, onLabel, values[index] >= .5f,
+                segmentWidth = dp(80), segmentHeight = dp(34),
+            ) { onSelected ->
+                writeValue(index, mirrorIndices, if (onSelected) 1f else 0f)
                 onToggled()
             }
             controlSlot.addView(group)
@@ -395,18 +391,11 @@ class CrossoverDashboardBuilder(
             gravity = Gravity.CENTER_VERTICAL
         }
         row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
-        val group = MaterialButtonToggleGroup(context).apply {
-            isSingleSelection = true
-            isSelectionRequired = true
-        }
-        val off = segmentButton("NORMAL")
-        val on = segmentButton("INVERT")
-        group.addView(off, LinearLayout.LayoutParams(0, dp(24), 1f))
-        group.addView(on, LinearLayout.LayoutParams(0, dp(24), 1f))
-        group.check(if (values[index] >= .5f) on.id else off.id)
-        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            writeValue(index, mirrorIndices, if (checkedId == on.id) 1f else 0f)
+        val group = buildGlassSegmentGroup(
+            "NORMAL", "INVERT", values[index] >= .5f,
+            segmentWidth = 0, segmentHeight = dp(24), segmentWeight = 1f,
+        ) { onSelected ->
+            writeValue(index, mirrorIndices, if (onSelected) 1f else 0f)
             onToggled()
         }
         row.addView(group, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
@@ -608,22 +597,55 @@ class CrossoverDashboardBuilder(
         setTextColor(Color.rgb(231, 235, 239))
     }
 
-    private fun segmentButton(textValue: String) = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-        id = View.generateViewId()
-        text = textValue
+    /** Two-way capsule toggle (NORMAL/INVERT polarity, or a custom off/on label pair) built from
+     *  plain TextViews rather than MaterialButtonToggleGroup + MaterialButton: the glass pill's
+     *  gradient+glow background needs a directly-set custom Drawable, and MaterialButtonToggleGroup
+     *  throws IllegalStateException ("Attempted to get ShapeAppearance from a MaterialButton which
+     *  has an overwritten background") the instant a child's .background is overwritten that way --
+     *  confirmed via crash, not a guess. A plain View has no such restriction, and single-selection
+     *  between exactly two segments is simple enough to hand-roll here instead. */
+    private fun buildGlassSegmentGroup(
+        offLabel: String,
+        onLabel: String,
+        initiallyOn: Boolean,
+        segmentWidth: Int,
+        segmentHeight: Int,
+        segmentWeight: Float = 0f,
+        onSelectionChanged: (onSelected: Boolean) -> Unit,
+    ): LinearLayout {
+        val group = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = BmwDashboardSkin.glassSegmentTrackDrawable(context)
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+        }
+        val off = glassSegmentView(offLabel)
+        val on = glassSegmentView(onLabel)
+
+        fun select(onSelected: Boolean) {
+            off.isSelected = !onSelected
+            off.setTextColor(if (onSelected) Color.rgb(180, 188, 197) else Color.WHITE)
+            on.isSelected = onSelected
+            on.setTextColor(if (onSelected) Color.WHITE else Color.rgb(180, 188, 197))
+        }
+        select(initiallyOn)
+        off.setOnClickListener { if (!off.isSelected) { select(false); onSelectionChanged(false) } }
+        on.setOnClickListener { if (!on.isSelected) { select(true); onSelectionChanged(true) } }
+
+        group.addView(off, LinearLayout.LayoutParams(segmentWidth, segmentHeight, segmentWeight))
+        group.addView(on, LinearLayout.LayoutParams(segmentWidth, segmentHeight, segmentWeight))
+        return group
+    }
+
+    private fun glassSegmentView(text: String) = TextView(context).apply {
+        this.text = text
         textSize = 10f
         isAllCaps = true
-        minHeight = 0
-        minimumHeight = 0
-        insetTop = 0
-        insetBottom = 0
-        cornerRadius = dp(6)
-        strokeWidth = dp(1)
+        gravity = Gravity.CENTER
+        isClickable = true
+        isFocusable = true
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(5), 0, dp(5), 0)
-        backgroundTintList = checkedColorStateList(Color.rgb(28, 70, 107), segmentIdle)
-        strokeColor = checkedColorStateList(accentBlue, segmentStroke)
-        setTextColor(checkedColorStateList(Color.WHITE, Color.rgb(180, 188, 197)))
+        background = BmwDashboardSkin.glassSegmentDrawable(context)
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
@@ -720,11 +742,6 @@ class CrossoverDashboardBuilder(
     }
 
     private fun tickParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-
-    private fun checkedColorStateList(checked: Int, unchecked: Int) = ColorStateList(
-        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-        intArrayOf(checked, unchecked),
-    )
 
     private fun updateValueBox(valueText: TextView, value: Float, suffix: String) {
         valueText.text = "${format.format(value)} $suffix".trim()
