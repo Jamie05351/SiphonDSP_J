@@ -634,10 +634,10 @@ class CrossoverDashboardBuilder(
         }
     }
 
-    /** Bold accent-coloured value reading in a darkened, embossed box at the end of a slider row
-     *  -- tap to edit. Same [BmwDashboardSkin.sliderBoxDrawable] the title box uses, so both read
-     *  as one family; [minimumWidth]/[minimumHeight] (not fixed layout dimensions) let it grow for
-     *  a longer reading while still meeting the spec's floor size for a short one. */
+    /** Bold accent-coloured value reading in a glass-panel box at the end of a slider row -- tap
+     *  to edit. Same [BmwDashboardSkin.glassBoxDrawable] the title box uses, so both read as one
+     *  family; [minimumWidth]/[minimumHeight] (not fixed layout dimensions) let it grow for a
+     *  longer reading while still meeting the spec's floor size for a short one. */
     private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
         textSize = 13f
         setTypeface(typeface, Typeface.BOLD)
@@ -648,11 +648,11 @@ class CrossoverDashboardBuilder(
         setPadding(dp(10), dp(2), dp(10), dp(2))
         minimumWidth = dp(BmwDashboardSkin.SLIDER_VALUE_MIN_WIDTH_DP)
         minimumHeight = dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)
-        background = BmwDashboardSkin.sliderBoxDrawable(context)
+        background = BmwDashboardSkin.glassBoxDrawable(context)
         updateValueBox(this, value, suffix)
     }
 
-    /** Boxed slider-row title -- same [BmwDashboardSkin.sliderBoxDrawable] language as
+    /** Boxed slider-row title -- same [BmwDashboardSkin.glassBoxDrawable] language as
      *  [createBoxedValueText] but with no border, left-aligned, regular weight. Its width is left
      *  to the caller: dashboardPanel sizes it (via pendingTitleBoxes) once the whole panel's
      *  titles are known, not fixed here. */
@@ -664,7 +664,7 @@ class CrossoverDashboardBuilder(
         setTextColor(color ?: Color.rgb(0xE7, 0xEB, 0xEF))
         gravity = Gravity.CENTER_VERTICAL or Gravity.START
         setPadding(dp(18), dp(3), dp(18), dp(3))
-        background = BmwDashboardSkin.sliderBoxDrawable(context, showBorder = false)
+        background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = false)
     }
 
     /** A larger boxed value reading with a small caption above it (e.g. "MID LEFT" / "0 ms") --
