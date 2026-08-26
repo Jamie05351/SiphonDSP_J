@@ -559,6 +559,53 @@ class CrossoverDashboardBuilder(
         addRow(row)
     }
 
+    /** Dropdown row variant for a selection that isn't itself a stored value (e.g. Output
+     *  all-pass's "which output am I editing" selector, which just changes which array slots the
+     *  *other* rows below it read/write) -- same PopupMenu-off-a-MaterialButton visual as
+     *  [addDropdownRow], driven by an explicit getter/setter instead of a fixed values[index]. */
+    fun addDropdownRow(label: String, options: List<String>, current: () -> Int, onSelected: (Int) -> Unit) {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP)
+        }
+        val titleBox = createBoxedTitleText(label)
+        row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
+        pendingTitleBoxes += titleBox
+
+        val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = options[current()]
+            textSize = 12f
+            isAllCaps = false
+            minHeight = dp(32)
+            insetTop = 0
+            insetBottom = 0
+            cornerRadius = dp(4)
+            strokeColor = ColorStateList.valueOf(segmentStroke)
+            backgroundTintList = ColorStateList.valueOf(segmentIdle)
+            setTextColor(Color.rgb(220, 226, 232))
+            icon = ContextCompat.getDrawable(context, R.drawable.ic_baseline_keyboard_arrow_down_24dp)
+            iconGravity = MaterialButton.ICON_GRAVITY_END
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setOnClickListener { anchor ->
+                val popup = PopupMenu(context, anchor)
+                options.forEachIndexed { i, optionLabel -> popup.menu.add(0, i, i, optionLabel) }
+                popup.setOnMenuItemClickListener { item ->
+                    onSelected(item.itemId)
+                    text = options[item.itemId]
+                    true
+                }
+                popup.show()
+            }
+        }
+        row.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
+            marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
+        })
+        row.addView(space(VALUE_WIDTH_DP))
+        addRow(row)
+    }
+
     private fun writeValue(index: Int, mirrorIndices: IntArray, value: Float) {
         values[index] = value
         mirrorIndices.forEach { values[it] = value }

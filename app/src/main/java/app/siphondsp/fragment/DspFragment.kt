@@ -88,9 +88,10 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
 
         // Primary BMW DSP shortcuts. Each card's background is one of the pre-built tile images
         // set directly in the XML, with a text label view drawn on top -- only the click targets
-        // are wired here. These open the same activities the old bottom bar icons did; Routing
-        // is a new entry that only used to be reachable via the DSP workspace sidebar. Settings
-        // moved back to the bottom bar's gear icon, so there's no System tile anymore.
+        // are wired here. These open the same activities the old bottom bar icons did. Settings
+        // moved back to the bottom bar's gear icon, so there's no System tile anymore. The former
+        // Routing card now opens the all-pass/measurements screen directly instead of the unused
+        // routing matrix -- see DspDestination.ROUTING.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
@@ -106,7 +107,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         shortcutsBinding.cardShortcutRouting.setOnClickListener {
             startActivity(
                 Intent(requireContext(), CrossoverTiltActivity::class.java)
-                    .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ROUTING),
+                    .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS),
             )
         }
         // Should show notice?
