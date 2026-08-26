@@ -129,22 +129,27 @@ class GainLimiterFragment : Fragment() {
             dashboardPanel("Gain", null) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
                 )
                 addSliderRow(
                     "Left Mid", NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .5f, "dB",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                 )
                 addSliderRow(
                     "Right Mid", NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .5f, "dB",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                 )
                 addSliderRow(
                     "Left Low", NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .5f, "dB",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
                 )
                 addSliderRow(
                     "Right Low", NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .5f, "dB",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
                 )
             }
         }
