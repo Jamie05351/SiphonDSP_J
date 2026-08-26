@@ -25,14 +25,19 @@ enum class DspDestination(
     val showInPrimaryNav: Boolean = true,
 ) {
     // Declaration order is display order (used directly by DspCrossNavBar.populate()) --
-    // matches the main tile grid's PEQ, Gains, Xovers, Compressor, Routing order
+    // matches the main tile grid's PEQ, Gains, Xovers, Compressor, All-pass order
     // (fragment_dsp_page_shortcuts.xml) rather than an arbitrary/functional grouping, so the
     // sidebar doesn't present a different sequence than the page the user navigated in from.
     PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
     GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
     COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    ROUTING(R.string.action_routing, R.string.sidebar_label_routing, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ROUTING),
+    // The routing matrix itself (diagram + per-band routing % sliders, MODE_ROUTING) is unused
+    // and no longer reachable from primary nav -- its RoutingFragment code is left in place, not
+    // deleted, in case it's wanted again. This 5th tile now opens straight to the "Measurements /
+    // routing" + "Output all-pass" screen (MODE_ALLPASS, OutputAllPassFragment) that used to
+    // only be reachable as a link from inside the routing matrix screen.
+    ROUTING(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {

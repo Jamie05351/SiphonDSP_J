@@ -2,6 +2,10 @@
 <resources>
     <string name="action_routing">Routing</string>
     <string name="action_output_allpass">Output all-pass</string>
+    <!-- Short label for the primary-nav tile that now opens the all-pass/measurements screen
+         directly (see DspDestination.ROUTING) - distinct from action_output_allpass, which
+         remains that screen's own toolbar title once opened. -->
+    <string name="action_allpass">All-pass</string>
     <string name="workspace_power">DSP power</string>
 
     <!-- Short labels for the sidebar nav tiles (DspCrossNavBar): the tile column is fixed-width,

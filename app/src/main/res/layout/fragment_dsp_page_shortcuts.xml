@@ -218,7 +218,7 @@
                     android:layout_height="match_parent"
                     android:scaleType="centerCrop"
                     android:src="@drawable/tile_routing"
-                    android:contentDescription="@string/action_routing" />
+                    android:contentDescription="@string/action_allpass" />
 
                 <TextView
                     style="@style/TextAppearance.SiphonDSP.TileLabel"
@@ -226,7 +226,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|start"
                     android:layout_margin="10dp"
-                    android:text="@string/tile_label_routing" />
+                    android:text="@string/tile_label_allpass" />
             </FrameLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

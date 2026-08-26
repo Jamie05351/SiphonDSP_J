@@ -17,6 +17,7 @@
     <string name="tile_label_xovers">XOVERS</string>
     <string name="tile_label_compressor">COMPRESSOR</string>
     <string name="tile_label_routing">ROUTING</string>
+    <string name="tile_label_allpass">ALL-PASS</string>
 
     <!-- Notification channels -->
     <string name="notification_group_service">Service</string>
