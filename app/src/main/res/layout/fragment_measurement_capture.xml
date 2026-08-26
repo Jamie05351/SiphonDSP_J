@@ -6,62 +6,81 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="24dp"
     tools:context=".fragment.MeasurementCaptureFragment">
 
-    <TextView
-        android:id="@+id/measurement_explainer"
+    <!-- Start/stop and export are the only controls on this screen - pinned outside the scroll
+         area below so they're always reachable regardless of content height, instead of getting
+         pushed off the bottom of the screen once the response view/readout appear post-capture
+         (there's no scrolling otherwise, and this screen's fixed-height chart plus readout text
+         can easily exceed a short car-head-unit display once both become visible). -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:text="@string/measurement_explainer"
-        android:textAppearance="?attr/textAppearanceBody2" />
-
-    <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        app:cardBackgroundColor="?attr/colorSurfaceVariant">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/measurement_status"
+                android:id="@+id/measurement_explainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textAppearance="?attr/textAppearanceBody1"
-                tools:text="Not capturing" />
+                android:layout_marginBottom="24dp"
+                android:text="@string/measurement_explainer"
+                android:textAppearance="?attr/textAppearanceBody2" />
 
-            <TextView
-                android:id="@+id/measurement_readout"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="?attr/colorSurfaceVariant">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/measurement_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBody1"
+                        tools:text="Not capturing" />
+
+                    <TextView
+                        android:id="@+id/measurement_readout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:visibility="gone"
+                        android:textAppearance="?attr/textAppearanceBody2"
+                        tools:text="Peak in -3.2 dB   Peak out -2.9 dB   Null test RMS -68.4 dB"
+                        tools:visibility="visible" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <app.siphondsp.view.MeasurementResponseView
+                android:id="@+id/measurement_response_view"
+                android:layout_width="match_parent"
+                android:layout_height="160dp"
+                android:layout_marginBottom="24dp"
                 android:visibility="gone"
-                android:textAppearance="?attr/textAppearanceBody2"
-                tools:text="Peak in -3.2 dB   Peak out -2.9 dB   Null test RMS -68.4 dB"
                 tools:visibility="visible" />
 
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <app.siphondsp.view.MeasurementResponseView
-        android:id="@+id/measurement_response_view"
-        android:layout_width="match_parent"
-        android:layout_height="160dp"
-        android:layout_marginBottom="24dp"
-        android:visibility="gone"
-        tools:visibility="visible" />
+    </androidx.core.widget.NestedScrollView>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/measurement_capture_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
+        android:layout_marginTop="16dp"
         android:text="@string/measurement_start_capture" />
 
     <com.google.android.material.button.MaterialButton
@@ -69,6 +88,8 @@
         style="?attr/materialButtonOutlinedStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="24dp"
         android:enabled="false"
         android:text="@string/measurement_export" />
 
