@@ -38,23 +38,21 @@ enum class DspDestination(
 object DspCrossNavBar {
     // The whole 5-tile bar -- each tile's own icon, plus which single tile reads as "selected"
     // (a cyan glow border, with that tile's icon recolored to match) -- is baked entirely into
-    // one of 5 whole-bar source images, picked by [current]. populate() draws no icon/label of
-    // its own; it only lays an invisible click-target/focus-ring row over each tile's measured
-    // bounds.
+    // one of 5 whole-bar source VectorDrawables, picked by [current]. populate() draws no
+    // icon/label of its own; it only lays an invisible click-target/focus-ring row over each
+    // tile's measured bounds.
     //
-    // This flat borderless-when-unlit art has no visible box outline to measure for the 4
-    // unselected tiles, so [rowWeights] is derived differently than a bezeled design would be:
-    // each tile's icon-glyph vertical center was located (via brightness, not the lit tile's
-    // color, so it works whether or not that tile happens to be the lit one) in a single
-    // reference render, and tile boundaries were placed at the midpoints between consecutive
-    // icon centers -- there's no visible gap between tiles in this design, so the gap weights
-    // below are 0. 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4,
-    // gap4, tile5, bottom margin. LinearLayout weights are proportions, not absolute values, so
-    // passing the raw measured pixel heights as weights reproduces the exact source proportions
-    // regardless of the sidebar's actual on-screen height on any given device.
+    // Unlike the earlier flat borderless design, this glass-tile art draws a visible rounded-rect
+    // box per tile with real empty space between tiles, so [rowWeights] is read directly off the
+    // source XML's own path coordinates (each tile rect's top/bottom V values, on the shared
+    // 1024x1536 viewport) rather than estimated from a rendered image -- exact, not measured.
+    // 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4, tile5,
+    // bottom margin. LinearLayout weights are proportions, not absolute values, so passing the
+    // raw viewport-unit heights as weights reproduces the exact source proportions regardless of
+    // the sidebar's actual on-screen height on any given device.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(16, 895, 0, 846, 0, 766, 0, 782, 0, 830, 165)
+    private val ROW_WEIGHTS = intArrayOf(153, 225, 29, 231, 27, 220, 25, 219, 27, 217, 163)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)

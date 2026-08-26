@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1024dp"
+    android:height="1536dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1536">
+
+    <!-- Android VectorDrawable recreation.
+         SVG effects such as blur, turbulence and advanced gradients are approximated here
+         for compatibility and predictable rendering. -->
+
+    <!-- Background -->
+    <path
+        android:fillColor="#FF090B0D"
+        android:pathData="M0,0 H1024 V1536 H0 Z"/>
+
+    <!-- The 120dp-wide sidebar is far narrower/taller than this art's native 1024x1536
+         canvas, so Android's whole-bar background stretch (independent X/Y scale to fill
+         the container, see DspCrossNavBar.populate()) squashes everything horizontally.
+         Pre-widening every element but the full-bleed background by scaleY/scaleX of the
+         final stretch cancels that out, so circles/rounded-rects render round again. Also
+         stretches the panel's own top/bottom margin (originally y=80..1448) out to the
+         full 0..1536 canvas, so the glass panel meets the container's top/bottom edges
+         instead of leaving a bare black gap there - a uniform affine remap of Y, so the
+         tile/gap boundaries DspCrossNavBar.ROW_WEIGHTS encodes as proportions of the total
+         stay correct without needing to change. -->
+    <group android:pivotX="512" android:scaleX="2.3611" android:scaleY="1.1228" android:translateY="-89.82">
+
+    <!-- Panel body -->
+    <path
+        android:fillColor="#FF030506"
+        android:strokeColor="#FF8D949A"
+        android:strokeWidth="4"
+        android:pathData="M352,80 H672 C696,80 716,100 716,124 V1404 C716,1428 696,1448 672,1448 H352 C328,1448 308,1428 308,1404 V124 C308,100 328,80 352,80 Z"/>
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#AAE3E7EA"
+        android:strokeWidth="1.5"
+        android:pathData="M354,93 H670 C689,93 704,108 704,127 V1401 C704,1420 689,1435 670,1435 H354 C335,1435 320,1420 320,1401 V127 C320,108 335,93 354,93 Z"/>
+
+    <!-- Tiles -->
+    <path
+        android:fillColor="#22171A1D"
+        android:strokeColor="#FF8D9398"
+        android:strokeWidth="2.25"
+        android:pathData="M393,143 H625 C638,143 649,154 649,167 V348 C649,361 638,372 625,372 H393 C380,372 369,361 369,348 V167 C369,154 380,143 393,143 Z"/>
+    <path
+        android:fillColor="#18121416"
+        android:strokeColor="#FF767C81"
+        android:strokeWidth="2.25"
+        android:pathData="M393,402 H625 C638,402 649,413 649,426 V610 C649,623 638,634 625,634 H393 C380,634 369,623 369,610 V426 C369,413 380,402 393,402 Z"/>
+    <path
+        android:fillColor="#18121416"
+        android:strokeColor="#FF767C81"
+        android:strokeWidth="2.25"
+        android:pathData="M393,661 H625 C638,661 649,672 649,685 V860 C649,873 638,884 625,884 H393 C380,884 369,873 369,860 V685 C369,672 380,661 393,661 Z"/>
+    <path
+        android:fillColor="#18121416"
+        android:strokeColor="#FF767C81"
+        android:strokeWidth="2.25"
+        android:pathData="M393,909 H625 C638,909 649,920 649,933 V1107 C649,1120 638,1131 625,1131 H393 C380,1131 369,1120 369,1107 V933 C369,920 380,909 393,909 Z"/>
+    <path
+        android:fillColor="#18121416"
+        android:strokeColor="#FF767C81"
+        android:strokeWidth="2.25"
+        android:pathData="M393,1158 H625 C638,1158 649,1169 649,1182 V1355 C649,1368 638,1379 625,1379 H393 C380,1379 369,1368 369,1355 V1182 C369,1169 380,1158 393,1158 Z"/>
+
+    <!-- Selected tile halo -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3355D8FF"
+        android:strokeWidth="10"
+        android:pathData="M393,143 H625 C638,143 649,154 649,167 V348 C649,361 638,372 625,372 H393 C380,372 369,361 369,348 V167 C369,154 380,143 393,143 Z"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF55D8FF"
+        android:strokeWidth="3"
+        android:pathData="M393,143 H625 C638,143 649,154 649,167 V348 C649,361 638,372 625,372 H393 C380,372 369,361 369,348 V167 C369,154 380,143 393,143 Z"/>
+
+    <!-- EQ -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF63DFFF" android:strokeWidth="5.2"
+        android:pathData="M444,315 V284 H458 V315 M444,273 V251 H458 V273
+                          M476,315 V282 H490 V315 M476,270 V239 H490 V270 M476,228 V207 H490 V228
+                          M508,315 V270 H522 V315
+                          M540,315 V283 H554 V315 M540,271 V240 H554 V271 M540,229 V210 H554 V229
+                          M572,315 V289 H586 V315 M572,278 V263 H586 V278"/>
+
+    <!-- Gain dial -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF92979B" android:strokeWidth="4.1"
+        android:pathData="M565,538 A55,55 0,1 1 455,538 A55,55 0,1 1 565,538 M510,538 L551,498"/>
+    <path android:fillColor="#FF8F9498"
+        android:pathData="M432,505 A4,4 0,1 1 440,505 A4,4 0,1 1 432,505
+                          M440,480 A4,4 0,1 1 448,480 A4,4 0,1 1 440,480
+                          M455,459 A4,4 0,1 1 463,459 A4,4 0,1 1 455,459
+                          M477,446 A4,4 0,1 1 485,446 A4,4 0,1 1 477,446
+                          M503,441 A4,4 0,1 1 511,441 A4,4 0,1 1 503,441
+                          M529,446 A4,4 0,1 1 537,446 A4,4 0,1 1 529,446
+                          M552,459 A4,4 0,1 1 560,459 A4,4 0,1 1 552,459
+                          M570,479 A4,4 0,1 1 578,479 A4,4 0,1 1 570,479
+                          M580,504 A4,4 0,1 1 588,504 A4,4 0,1 1 580,504"/>
+
+    <!-- Crossover -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF94999D" android:strokeWidth="4.8"
+        android:pathData="M434,733 C467,733 484,735 508,772 C531,808 548,818 588,818
+                          M434,818 C468,818 486,814 510,773 C532,736 550,733 588,733"/>
+
+    <!-- Compressor -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF858B90" android:strokeWidth="3.4"
+        android:pathData="M428,1057 L592,965
+                          M497,1010 A13,13 0,1 0 523,1010 A13,13 0,1 0 497,1010
+                          M510,997 V977 M510,1023 V1043
+                          M436,1038 V1018 M446,1045 V995 M456,1029 V980 M466,1048 V975
+                          M476,1028 V995 M486,1043 V971 M497,1022 V987 M523,1045 V1002
+                          M533,1026 V979 M543,1042 V970 M553,1022 V990 M563,1040 V977
+                          M574,1025 V966"/>
+
+    <!-- Routing -->
+    <path android:fillColor="#00000000" android:strokeColor="#FF858B90" android:strokeWidth="3.8"
+        android:pathData="M420,1222 A14,14 0,1 1 448,1222 A14,14 0,1 1 420,1222
+                          M420,1308 A14,14 0,1 1 448,1308 A14,14 0,1 1 420,1308
+                          M477,1214 H489 V1230 H477 Z
+                          M477,1300 H489 V1316 H477 Z
+                          M448,1222 H477
+                          M489,1222 H502 C514,1222 519,1227 519,1238 V1273 C519,1282 525,1287 535,1287
+                          M448,1308 H477
+                          M489,1308 H502 C514,1308 519,1303 519,1292
+                          M535,1287 V1265 V1242 C535,1226 543,1217 558,1217 H581
+                          M535,1265 H581
+                          M535,1287 C535,1306 543,1316 558,1316 H581
+                          M571,1205 L584,1217 L571,1229
+                          M571,1253 L584,1265 L571,1277
+                          M571,1304 L584,1316 L571,1328"/>
+
+    <!-- Glass sheen approximations -->
+    <path android:fillColor="#10FFFFFF"
+        android:pathData="M343,80 H574 L694,1448 H615 Z"/>
+    <path android:fillColor="#18FFFFFF"
+        android:pathData="M571,80 H626 L707,495 L681,520 Z"/>
+    <path android:fillColor="#13FFFFFF"
+        android:pathData="M314,1180 L354,1112 L421,1448 H348 Z"/>
+
+    </group>
+</vector>
