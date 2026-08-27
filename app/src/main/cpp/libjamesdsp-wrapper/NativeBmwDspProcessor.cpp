@@ -160,7 +160,7 @@ void NativeBmwDspProcessor::rebuildMidCrossover(){for(OutputId id:{OutputId::Mid
 void NativeBmwDspProcessor::updateDelays(){auto d=[this](float ms){return clampf(ms*sampleRate_*.001f,0,kDelayLineCapacity-1.f);};output(OutputId::LowLeft).delay.delay=d(p_.lowDelayL);output(OutputId::LowRight).delay.delay=d(p_.lowDelayR);output(OutputId::MidLeft).delay.delay=d(p_.midDelayL);output(OutputId::MidRight).delay.delay=d(p_.midDelayR);}
 void NativeBmwDspProcessor::rebuildLimiter(){float lookahead=clampf(kLimiterLookaheadMs*sampleRate_*.001f,0.f,static_cast<float>(kDelayLineCapacity-1));limiter_.delayL.delay=lookahead;limiter_.delayR.delay=lookahead;float attackSeconds=(kLimiterLookaheadMs*.001f)/5.f;limiter_.attackMix=1-std::exp(-1/(attackSeconds*sampleRate_));float releaseSeconds=.080f;limiter_.releaseMix=1-std::exp(-1/(releaseSeconds*sampleRate_));}
 void NativeBmwDspProcessor::rebuildTilt(){float g=p_.tiltAmount*.75f;makeLowShelf(tiltLoL1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoL2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiL1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiL2_,p_.tiltFreq,-g,sampleRate_);makeLowShelf(tiltLoR1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoR2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiR1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiR2_,p_.tiltFreq,-g,sampleRate_);}
-void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
+void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);makeLowPass(out.monoBassCompLp1,p_.monoBassFreq,BW,sampleRate_);makeLowPass(out.monoBassCompLp2,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
 void NativeBmwDspProcessor::rebuildPolarityAndMute(){for(std::size_t i=0;i<outputs_.size();++i){auto&out=outputs_[i];const auto&cfg=outputConfigs_[i];const bool isLow=i<=static_cast<std::size_t>(OutputId::LowRight);const bool measurementMuted=(p_.measurementMute==1&&isLow)||(p_.measurementMute==2&&!isLow);out.muted=cfg.muted||measurementMuted;out.polarityInverted=cfg.polarityInverted;}}
 void NativeBmwDspProcessor::rebuildAllPass(){for(auto&out:outputs_)for(std::size_t i=0;i<out.allPass.size();++i){out.allPass[i].rebuild(sampleRate_);out.allPassState[i].loadAllPass(out.allPass[i].coefficients);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));for(std::size_t i=0;i<outputDynamics_.size();++i){const auto&p=outputConfigs_[i].compressor;auto&s=outputDynamics_[i];s.attackMix=1-std::exp(-1/(p.attack*.001f*sampleRate_));s.releaseMix=1-std::exp(-1/(p.release*.001f*sampleRate_));}}
@@ -197,6 +197,21 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
 
  if(!p_.hpfPass){
   midL=processMidCrossover(midLeft,midL);midR=processMidCrossover(midRight,midR);
+  // Mono Bass's Low-side mono/stereo split-and-recombine is itself an allpass -- flat magnitude
+  // on its own, but it rotates phase, even for a perfectly correlated (mono) signal. Nothing
+  // else does the equivalent to Mid, so once Mono Bass is on, Low arrives at the Low/Mid sum
+  // carrying phase Mid doesn't have, and the two stop summing flat right at the crossover
+  // (confirmed both analytically and against the PEQ response graph -- a real dip at the
+  // crossover frequency, not just a theoretical concern). Applying the identical LP+HP allpass
+  // (same frequency/order as Low's own split, blended by the same amount) to Mid cancels that
+  // out: both bands pick up the same rotation, so they stay in phase with each other exactly
+  // like they do with Mono Bass off.
+  if(p_.monoBass){
+   float mbBlend=p_.monoBassBlend*.01f;
+   float compL=midLeft.monoBassCompLp2.run(midLeft.monoBassCompLp1.run(midL))*monoBassMakeupLin_+midLeft.monoBassCompHp2.run(midLeft.monoBassCompHp1.run(midL));
+   float compR=midRight.monoBassCompLp2.run(midRight.monoBassCompLp1.run(midR))*monoBassMakeupLin_+midRight.monoBassCompHp2.run(midRight.monoBassCompHp1.run(midR));
+   midL=midL*(1-mbBlend)+compL*mbBlend;midR=midR*(1-mbBlend)+compR*mbBlend;
+  }
   if(peqEnabled_){midL=midPeq_.processLeft(midL);midR=midPeq_.processRight(midR);}
   midL=midLeft.processAllPass(midL);midR=midRight.processAllPass(midR);
   midL=midLeft.delay.run(midL);midR=midRight.delay.run(midR);

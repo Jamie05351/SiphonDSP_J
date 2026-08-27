@@ -137,6 +137,12 @@ private:
         Biquad subsonic1;
         Biquad crossover1, crossover2;
         Biquad monoBassHpf1, monoBassHpf2;
+        // Mid-side-only: a LP+HP allpass (same frequency/order as the Low side's own mono-bass
+        // split) applied to Mid so it picks up the identical phase rotation Mono Bass's
+        // mono/stereo recombination puts on Low -- without this, Low and Mid stop summing flat
+        // at the Low/Mid crossover the instant Mono Bass is enabled. See processFrame and
+        // rebuildMonoBass for the full explanation.
+        Biquad monoBassCompLp1, monoBassCompLp2, monoBassCompHp1, monoBassCompHp2;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
         std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
@@ -150,6 +156,8 @@ private:
         void clearState() {
             subsonic1.clear(); crossover1.clear(); crossover2.clear();
             monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
+            monoBassCompLp1.clear(); monoBassCompLp2.clear();
+            monoBassCompHp1.clear(); monoBassCompHp2.clear();
             for (auto& section : allPassState) section.clear();
         }
     };
