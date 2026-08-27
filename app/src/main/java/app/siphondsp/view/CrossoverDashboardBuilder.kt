@@ -57,6 +57,11 @@ class CrossoverDashboardBuilder(
     fun dashboardPanel(
         title: String,
         subtitle: String? = null,
+        // Recolors the panel's own title text -- used for the All-pass workspace's per-output
+        // pages (Left Low/Right Low blue, Left Mid/Right Mid yellow), same Low/Mid band colors
+        // addSliderRow's accentColor already uses elsewhere. null keeps the default white title,
+        // unaffected for every other page's call site.
+        titleColor: Int? = null,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
         // Transparent, not its own copy of the photo background: the workspace root already
@@ -85,7 +90,7 @@ class CrossoverDashboardBuilder(
                 text = title
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.WHITE)
+                setTextColor(titleColor ?: Color.WHITE)
             })
         }
         if (!subtitle.isNullOrBlank()) {
@@ -135,8 +140,8 @@ class CrossoverDashboardBuilder(
         )
     }
 
-    fun sectionCard(title: String, subtitle: String? = null, build: CrossoverDashboardBuilder.() -> Unit) {
-        dashboardPanel(title, subtitle, build = build)
+    fun sectionCard(title: String, subtitle: String? = null, titleColor: Int? = null, build: CrossoverDashboardBuilder.() -> Unit) {
+        dashboardPanel(title, subtitle, titleColor, build = build)
     }
 
     /** Embeds an arbitrary view (e.g. an illustrative diagram) inside the current section card. */
@@ -150,13 +155,13 @@ class CrossoverDashboardBuilder(
         )
     }
 
-    fun sectionHeader(title: String) {
+    fun sectionHeader(title: String, accentColor: Int? = null) {
         if (currentContent.childCount > 2) currentContent.addView(space(8))
         currentContent.addView(TextView(context).apply {
             text = title
             textSize = 12.5f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(accentBlue)
+            setTextColor(accentColor ?: accentBlue)
             setPadding(0, dp(2), 0, dp(7))
         })
         currentContent.addView(View(context).apply {
@@ -173,6 +178,10 @@ class CrossoverDashboardBuilder(
         offLabel: String = "OFF",
         onLabel: String = "ON",
         mirrorIndices: IntArray = intArrayOf(),
+        // Recolors the toggle's own ON/selected indicator to match a colour-coded row (eg. the
+        // All-pass workspace's per-output Enabled switch). null keeps the default neutral blue,
+        // unaffected for every other call site.
+        accentColor: Int? = null,
         // Called after the value is written -- for callers whose other rows need to be rebuilt to
         // reflect this switch's new state (see the Gains & Delay Link L/R toggle).
         onToggled: () -> Unit = {},
@@ -200,7 +209,7 @@ class CrossoverDashboardBuilder(
                 // show through unfiltered.
                 thumbTintList = null
                 trackTintList = null
-                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context)
+                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context, accentColor)
                 trackDrawable = BmwDashboardSkin.glassSwitchTrackDrawable(context)
                 setOnCheckedChangeListener { _, checked ->
                     writeValue(index, mirrorIndices, if (checked) 1f else 0f)
@@ -212,6 +221,7 @@ class CrossoverDashboardBuilder(
             val group = buildGlassSegmentGroup(
                 offLabel, onLabel, values[index] >= .5f,
                 segmentWidth = dp(80), segmentHeight = dp(34),
+                accentColor = accentColor,
             ) { onSelected ->
                 writeValue(index, mirrorIndices, if (onSelected) 1f else 0f)
                 onToggled()
@@ -262,7 +272,14 @@ class CrossoverDashboardBuilder(
         // own boxed column (width finalized by dashboardPanel once every row's title in this
         // panel is known -- see pendingTitleBoxes), the slider fills whatever room is left, and
         // the value box sits at the very end -- never in the middle of the row.
-        val valueText = createBoxedValueText(values[index] * displayScale, suffix)
+        // A stored value can sit outside [min,max] after a row's range is narrowed post-release
+        // (eg. the All-pass Frequency slider's 20-20000Hz range shrinking to 20-1000Hz) -- without
+        // this, the value box kept showing the old raw number (eg. "16330 Hz") while the slider
+        // itself visually clamped to its new max, reading as two controls disagreeing. Clamping
+        // what's *displayed* here (not rewriting values[index] itself) is enough to keep them in
+        // sync; the stored value corrects for real the moment the user touches this row.
+        val displayValue = values[index].coerceIn(min, max)
+        val valueText = createBoxedValueText(displayValue * displayScale, suffix, accentColor)
         val titleBox = createBoxedTitleText(label, accentColor)
         topRow.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
         pendingTitleBoxes += titleBox
@@ -288,7 +305,7 @@ class CrossoverDashboardBuilder(
                 android.view.LayoutInflater.from(context),
                 label,
                 "${format.format(min * displayScale)}–${format.format(max * displayScale)}",
-                format.format(values[index] * displayScale),
+                format.format(displayValue * displayScale),
                 true,
                 suffix,
             ) { entered ->
@@ -509,8 +526,8 @@ class CrossoverDashboardBuilder(
     }
 
     /** Dropdown row: label + tap-to-open PopupMenu offering a fixed set of stored values (e.g.
-     *  Pultec's 20/30/60/100Hz frequency stops). Lifted from the old crossover slope selector,
-     *  which this replaced -- same PopupMenu-off-a-MaterialButton interaction, generalized. */
+     *  All-pass section order, 1st/2nd). Lifted from the old crossover slope selector, which
+     *  this replaced -- same PopupMenu-off-a-MaterialButton interaction, generalized. */
     fun addDropdownRow(label: String, index: Int, options: List<Pair<String, Float>>, mirrorIndices: IntArray = intArrayOf()) {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -546,53 +563,6 @@ class CrossoverDashboardBuilder(
                     val stored = options[item.itemId].second
                     writeValue(index, mirrorIndices, stored)
                     text = currentLabel()
-                    true
-                }
-                popup.show()
-            }
-        }
-        row.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
-            marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
-        })
-        row.addView(space(VALUE_WIDTH_DP))
-        addRow(row)
-    }
-
-    /** Dropdown row variant for a selection that isn't itself a stored value (e.g. Output
-     *  all-pass's "which output am I editing" selector, which just changes which array slots the
-     *  *other* rows below it read/write) -- same PopupMenu-off-a-MaterialButton visual as
-     *  [addDropdownRow], driven by an explicit getter/setter instead of a fixed values[index]. */
-    fun addDropdownRow(label: String, options: List<String>, current: () -> Int, onSelected: (Int) -> Unit) {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP)
-        }
-        val titleBox = createBoxedTitleText(label)
-        row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
-        pendingTitleBoxes += titleBox
-
-        val button = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = options[current()]
-            textSize = 12f
-            isAllCaps = false
-            minHeight = dp(32)
-            insetTop = 0
-            insetBottom = 0
-            cornerRadius = dp(4)
-            strokeColor = ColorStateList.valueOf(segmentStroke)
-            backgroundTintList = ColorStateList.valueOf(segmentIdle)
-            setTextColor(Color.rgb(220, 226, 232))
-            icon = ContextCompat.getDrawable(context, R.drawable.ic_baseline_keyboard_arrow_down_24dp)
-            iconGravity = MaterialButton.ICON_GRAVITY_END
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setOnClickListener { anchor ->
-                val popup = PopupMenu(context, anchor)
-                options.forEachIndexed { i, optionLabel -> popup.menu.add(0, i, i, optionLabel) }
-                popup.setOnMenuItemClickListener { item ->
-                    onSelected(item.itemId)
-                    text = options[item.itemId]
                     true
                 }
                 popup.show()
@@ -658,6 +628,7 @@ class CrossoverDashboardBuilder(
         segmentWidth: Int,
         segmentHeight: Int,
         segmentWeight: Float = 0f,
+        accentColor: Int? = null,
         onSelectionChanged: (onSelected: Boolean) -> Unit,
     ): LinearLayout {
         val group = LinearLayout(context).apply {
@@ -665,8 +636,8 @@ class CrossoverDashboardBuilder(
             background = BmwDashboardSkin.glassSegmentTrackDrawable(context)
             setPadding(dp(2), dp(2), dp(2), dp(2))
         }
-        val off = glassSegmentView(offLabel)
-        val on = glassSegmentView(onLabel)
+        val off = glassSegmentView(offLabel, accentColor)
+        val on = glassSegmentView(onLabel, accentColor)
 
         fun select(onSelected: Boolean) {
             off.isSelected = !onSelected
@@ -683,7 +654,7 @@ class CrossoverDashboardBuilder(
         return group
     }
 
-    private fun glassSegmentView(text: String) = TextView(context).apply {
+    private fun glassSegmentView(text: String, accentColor: Int? = null) = TextView(context).apply {
         this.text = text
         textSize = 10f
         isAllCaps = true
@@ -692,7 +663,7 @@ class CrossoverDashboardBuilder(
         isFocusable = true
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(5), 0, dp(5), 0)
-        background = BmwDashboardSkin.glassSegmentDrawable(context)
+        background = BmwDashboardSkin.glassSegmentDrawable(context, accentColor)
     }
 
     private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
@@ -712,23 +683,28 @@ class CrossoverDashboardBuilder(
     /** Bold accent-coloured value reading in a glass-panel box at the end of a slider row -- tap
      *  to edit. Same [BmwDashboardSkin.glassBoxDrawable] the title box uses, so both read as one
      *  family; [minimumWidth]/[minimumHeight] (not fixed layout dimensions) let it grow for a
-     *  longer reading while still meeting the spec's floor size for a short one. */
-    private fun createBoxedValueText(value: Float, suffix: String) = TextView(context).apply {
-        textSize = 13f
+     *  longer reading while still meeting the spec's floor size for a short one. [color] matches
+     *  this to a colour-coded row's title text and border (null keeps the default blue/neutral
+     *  border, unaffected for every uncoloured row) -- see [createBoxedTitleText]. Text size
+     *  matches the title box's 14sp: a smaller value reading was hard to read at a glance in a
+     *  car, and there's no reason for the number to read smaller than its own label. */
+    private fun createBoxedValueText(value: Float, suffix: String, color: Int? = null) = TextView(context).apply {
+        textSize = 14f
         setTypeface(typeface, Typeface.BOLD)
         isClickable = true
         isFocusable = true
-        setTextColor(accentBlue)
+        setTextColor(color ?: accentBlue)
         gravity = Gravity.CENTER
         setPadding(dp(10), dp(2), dp(10), dp(2))
         minimumWidth = dp(BmwDashboardSkin.SLIDER_VALUE_MIN_WIDTH_DP)
         minimumHeight = dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)
-        background = BmwDashboardSkin.glassBoxDrawable(context)
+        background = BmwDashboardSkin.glassBoxDrawable(context, accentColor = color)
         updateValueBox(this, value, suffix)
     }
 
     /** Boxed slider-row title -- same [BmwDashboardSkin.glassBoxDrawable] language as
-     *  [createBoxedValueText] but with no border, left-aligned, regular weight. Its width is left
+     *  [createBoxedValueText], with a border only when [color] is given (a colour-coded row) --
+     *  every other, uncoloured title box keeps its original no-border look. Its width is left
      *  to the caller: dashboardPanel sizes it (via pendingTitleBoxes) once the whole panel's
      *  titles are known, not fixed here. */
     private fun createBoxedTitleText(title: String, color: Int? = null) = TextView(context).apply {
@@ -739,7 +715,7 @@ class CrossoverDashboardBuilder(
         setTextColor(color ?: Color.rgb(0xE7, 0xEB, 0xEF))
         gravity = Gravity.CENTER_VERTICAL or Gravity.START
         setPadding(dp(18), dp(3), dp(18), dp(3))
-        background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = false)
+        background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = color != null, accentColor = color)
     }
 
     /** A larger boxed value reading with a small caption above it (e.g. "MID LEFT" / "0 ms") --

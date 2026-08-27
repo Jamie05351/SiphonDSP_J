@@ -9,24 +9,34 @@ import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
+import app.siphondsp.view.DspPager
 import kotlin.math.roundToInt
 
-/** Output all-pass workspace: the "Measurements / routing" toggles plus the two cascaded
- *  all-pass filter sections per output, rebuilt in the same glass-panel BMW dashboard style as
- *  every other workspace page (see CrossoverDashboardBuilder) rather than a plain
- *  PreferenceFragmentCompat list -- this used to be NativeBmwDspCardFragment's job, but that
- *  fragment is still needed as-is for its other home, the Settings page's inline card
- *  (DspFragment), which intentionally keeps the plain-preferences look shared by its neighbouring
- *  cards (Output Control, EQ, DDC, etc.), so it was left alone rather than restyled in place. */
+/** Output all-pass workspace: the two cascaded all-pass filter sections per output, rebuilt in
+ *  the same glass-panel BMW dashboard style as every other workspace page (see
+ *  CrossoverDashboardBuilder) rather than a plain PreferenceFragmentCompat list -- this used to
+ *  be NativeBmwDspCardFragment's job, but that fragment is still needed as-is for its other home,
+ *  the Settings page's inline card (DspFragment), which intentionally keeps the plain-preferences
+ *  look shared by its neighbouring cards (Output Control, EQ, DDC, etc.), so it was left alone
+ *  rather than restyled in place.
+ *
+ *  This workspace originally also carried a "Measurements / routing" page (LPF/HPF passthrough,
+ *  band mutes, channel isolation) copied out of that same Settings card -- removed again, since
+ *  that data already has a home there and didn't need a second, colour-coded copy the way the
+ *  all-pass sections themselves did (those had no other proper home; Settings' card is the only
+ *  other place that edits them too, just in its plain list style, not duplicated further here).
+ *
+ *  Paged like every other multi-section workspace here (Gains & Delay, Crossovers & Tilt,
+ *  Compressor) instead of one page sharing all 4 outputs behind a dropdown selector that swapped
+ *  the two all-pass sections shown below it -- that was the one screen in this app not following
+ *  the swipe-page pattern, and cycling through 4 outputs on a single dropdown meant losing your
+ *  scroll position every time. Each output now gets its own page, colour-coded the same Low=blue/
+ *  Mid=yellow way Gains & Delay and Crossovers & Tilt already are, so which output you're on reads
+ *  at a glance instead of off a dropdown label. */
 class OutputAllPassFragment : Fragment() {
     private lateinit var container: FrameLayout
-
-    // Which output's two all-pass sections are currently shown below -- purely a UI selection,
-    // not itself a stored DSP value, so it lives here rather than in the values array (see
-    // NativeBmwDspValues.INDEX_ALL_PASS's per-output layout). Resets to Low Left each time this
-    // screen is (re)entered, same as any other unsaved UI-only selection in this app.
-    private var selectedOutput = 0
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         this.container = FrameLayout(requireContext())
@@ -49,67 +59,64 @@ class OutputAllPassFragment : Fragment() {
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
 
-        val pageRoot = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(14))
+        fun page(build: CrossoverDashboardBuilder.() -> Unit): View {
+            val pageRoot = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(4), dp(2), dp(4), dp(8))
+            }
+            CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).build()
+            return NestedScrollView(requireContext()).apply {
+                // Deliberately NOT isFillViewport=true -- see CrossoverTiltFragment's identical
+                // page() helper for why: stretching a shorter-than-viewport page corrupts
+                // LinearLayout's measure pass for addSegmentedSwitchRow's MATCH_PARENT control
+                // slot and addSliderRow's weighted spacer, silently dropping rows after the first
+                // slider that follows a switch -- exactly the Enabled-switch-then-Frequency/Q-
+                // sliders shape every all-pass page below has.
+                addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
         }
 
-        CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).apply {
-            sectionCard("Measurements / routing") {
-                addSegmentedSwitchRow("LPF passthrough", null, NativeBmwDspValues.INDEX_LPF_PASS)
-                addSegmentedSwitchRow("HPF passthrough", null, NativeBmwDspValues.INDEX_HPF_PASS)
-                addSegmentedSwitchRow(
-                    "Mute low band", null, NativeBmwDspValues.INDEX_LOW_MUTE,
-                    mirrorIndices = intArrayOf(
-                        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_MUTE),
-                        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_MUTE),
-                    ),
-                )
-                addSegmentedSwitchRow(
-                    "Mute mid band", null, NativeBmwDspValues.INDEX_MID_MUTE,
-                    mirrorIndices = intArrayOf(
-                        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_MUTE),
-                        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE),
-                    ),
-                )
-                addDropdownRow("Channel isolation", NativeBmwDspValues.INDEX_CHANNEL_MUTE, listOf("Both" to 0f, "Mute L" to 1f, "Mute R" to 2f))
-                addDropdownRow("Measurement mute", NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, listOf("Off" to 0f, "Mute low" to 1f, "Mute mid" to 2f))
-            }
-
-            sectionCard(
-                "Output all-pass",
-                "Two cascaded all-pass filter sections per output, for phase/time alignment between bands",
+        // One page per physical output -- title, section-header, and both sliders all take the
+        // same band color, matching how Gains & Delay's channel cards and Crossovers & Tilt's
+        // frequency sliders are already colour-coded. The Enabled switch and Type dropdown stay
+        // neutral, same convention Crossovers & Tilt's own switches/dropdowns already follow.
+        fun outputPage(title: String, output: Int, bandColor: Int, sliderColor: Int): View = page {
+            dashboardPanel(
+                title,
+                "Two cascaded all-pass filter sections, for phase/time alignment between bands",
+                titleColor = bandColor,
             ) {
-                addDropdownRow("Output channel", OUTPUT_CHANNEL_LABELS, { selectedOutput }) { picked ->
-                    selectedOutput = picked
-                    rebuild()
-                }
-
                 repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
                     val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                        (selectedOutput * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-                    sectionHeader("Section ${section + 1}")
-                    addSegmentedSwitchRow("Enabled", null, base)
+                        (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+                    sectionHeader("Section ${section + 1}", accentColor = bandColor)
+                    addSegmentedSwitchRow("Enabled", null, base, accentColor = bandColor)
                     addDropdownRow("Type", base + 1, listOf("First order" to 1f, "Second order" to 2f))
-                    addSliderRow("Frequency", base + 2, 20f, 20000f, 1f, "Hz")
-                    addSliderRow("Q", base + 3, 0.1f, 30f, 0.01f, "")
+                    // 20Hz-20kHz (the full audio range) made this slider nearly unusable -- one
+                    // finger-width of drag covered thousands of Hz. All-pass sections here exist
+                    // for phase/time alignment near a crossover (both bands' crossover freq slider
+                    // is 80-200Hz, see CrossoverTiltFragment), so 20-1000Hz keeps that region --
+                    // plus real headroom above it -- comfortably spread across the slider's width.
+                    addSliderRow("Frequency", base + 2, 20f, 1000f, 1f, "Hz", accentColor = bandColor, sliderAccentColor = sliderColor)
+                    addSliderRow("Q", base + 3, 0.1f, 30f, 0.01f, "", accentColor = bandColor, sliderAccentColor = sliderColor)
                 }
             }
         }
 
         container.removeAllViews()
         container.addView(
-            NestedScrollView(requireContext()).apply {
-                isFillViewport = true
-                addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            },
+            DspPager.build(
+                requireContext(),
+                listOf(
+                    outputPage("Left Low", NativeBmwDspValues.OUTPUT_LOW_LEFT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                    outputPage("Right Low", NativeBmwDspValues.OUTPUT_LOW_RIGHT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                    outputPage("Left Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
+                    outputPage("Right Mid", NativeBmwDspValues.OUTPUT_MID_RIGHT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
+                ),
+            ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
-
-    companion object {
-        private val OUTPUT_CHANNEL_LABELS = listOf("Low Left", "Low Right", "Mid Left", "Mid Right")
-    }
 }

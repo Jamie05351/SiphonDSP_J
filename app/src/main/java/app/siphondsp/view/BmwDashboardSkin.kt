@@ -192,7 +192,12 @@ object BmwDashboardSkin {
     private val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x47, 0xFF, 0xFF, 0xFF)
     private val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x39, 0xDE, 0xDE, 0xDE)
 
-    fun glassBoxDrawable(context: Context, showBorder: Boolean = true): Drawable = GlassBoxDrawable(context, showBorder)
+    // accentColor, when given, tints the box's border to that exact color instead of the default
+    // neutral glass rim -- used to match a colour-coded slider row's title/value boxes to that
+    // row's own band colour (Low=blue/Mid=yellow) rather than leaving them neutral while the
+    // slider itself is colored.
+    fun glassBoxDrawable(context: Context, showBorder: Boolean = true, accentColor: Int? = null): Drawable =
+        GlassBoxDrawable(context, showBorder, accentColor)
 
     const val SLIDER_THUMB_WIDTH_DP = 36
     const val SLIDER_THUMB_HEIGHT_DP = 24
@@ -276,7 +281,11 @@ object BmwDashboardSkin {
     private val GLASS_SWITCH_THUMB_OFF_BORDER = Color.argb(0x50, 0xFF, 0xFF, 0xFF)
 
     fun glassSwitchTrackDrawable(context: Context): Drawable = GlassSwitchTrackDrawable(context)
-    fun glassSwitchThumbDrawable(context: Context): Drawable = GlassSwitchThumbDrawable(context)
+    // accentColor recolors just the thumb's ON-state glow/fill/border/ring (the track's own fill
+    // is state-independent -- see GlassSwitchTrackDrawable -- so it stays neutral either way) --
+    // used to color-code a switch row's toggle to match the rest of a colour-coded row (eg. the
+    // All-pass workspace's per-output Enabled switch).
+    fun glassSwitchThumbDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSwitchThumbDrawable(context, accentColor)
 
     // NORMAL/INVERT segmented polarity toggle (buildMiniToggleRow), recreated from the dedicated
     // glass_normal_invert_toggle.xml art -- a fully-rounded stadium capsule rather than
@@ -296,7 +305,9 @@ object BmwDashboardSkin {
     private val GLASS_SEGMENT_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
 
     fun glassSegmentTrackDrawable(context: Context): Drawable = GlassSegmentTrackDrawable(context)
-    fun glassSegmentDrawable(context: Context): Drawable = GlassSegmentDrawable(context)
+    // accentColor recolors the selected segment's gradient fill/glow/border -- same purpose as
+    // glassSwitchThumbDrawable's accentColor, for the two-way (eg. NORMAL/INVERT) toggle variant.
+    fun glassSegmentDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSegmentDrawable(context, accentColor)
 
     fun styleWorkspace(root: View) {
         root.background = brushedPanelDrawable(root.context)
@@ -869,25 +880,38 @@ object BmwDashboardSkin {
      *  on (matching the source art exactly), a flat neutral-grey circle when off -- the source art
      *  only supplied an "on" state, so off is extrapolated to match the app's existing grey-when-
      *  off convention rather than invented from nothing. */
-    private class GlassSwitchThumbDrawable(context: Context) : Drawable() {
+    private class GlassSwitchThumbDrawable(context: Context, private val accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val intrinsicSize = (GLASS_SWITCH_THUMB_SIZE_DP * density).roundToInt()
         private val glowWidth = 3f * density
         private val borderWidth = density
         private var checked = false
 
+        // accentColor swaps this thumb's fixed ON-state blue for that color, preserving each
+        // original color's own alpha (glow/border/ring are semi-transparent by design; recoloring
+        // via [blend] toward the accent -- same technique SliderThumbDrawable already uses --
+        // instead of a flat replacement would otherwise lose that translucency).
+        private fun tinted(original: Int) = accentColor?.let {
+            Color.argb(Color.alpha(original), Color.red(it), Color.green(it), Color.blue(it))
+        } ?: original
+        private val onFillNear = accentColor?.let { blend(it, Color.WHITE, 0.3f) } ?: GLASS_SWITCH_THUMB_ON_FILL_NEAR
+        private val onFillFar = accentColor ?: GLASS_SWITCH_THUMB_ON_FILL_FAR
+        private val onBorder = tinted(GLASS_SWITCH_THUMB_ON_BORDER)
+        private val onGlow = tinted(GLASS_SWITCH_THUMB_ON_GLOW)
+        private val onRing = tinted(GLASS_SWITCH_THUMB_ON_RING)
+
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = borderWidth }
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = glowWidth
-            color = GLASS_SWITCH_THUMB_ON_GLOW
+            color = onGlow
             maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
         }
         private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = density
-            color = GLASS_SWITCH_THUMB_ON_RING
+            color = onRing
         }
         private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -914,9 +938,9 @@ object BmwDashboardSkin {
             if (checked) {
                 fillPaint.shader = RadialGradient(
                     circleRect.centerX(), circleRect.top + circleRect.height() * 0.42f, circleRect.width() / 2f,
-                    GLASS_SWITCH_THUMB_ON_FILL_NEAR, GLASS_SWITCH_THUMB_ON_FILL_FAR, Shader.TileMode.CLAMP,
+                    onFillNear, onFillFar, Shader.TileMode.CLAMP,
                 )
-                borderPaint.color = GLASS_SWITCH_THUMB_ON_BORDER
+                borderPaint.color = onBorder
             } else {
                 fillPaint.shader = null
                 fillPaint.color = GLASS_SWITCH_THUMB_OFF_FILL
@@ -1008,21 +1032,31 @@ object BmwDashboardSkin {
      *  (the track drawable's own dark shell shows through), a glowing gradient pill with a
      *  diagonal glass sheen when selected -- matches the source art's selected-segment treatment
      *  exactly. */
-    private class GlassSegmentDrawable(context: Context) : Drawable() {
+    private class GlassSegmentDrawable(context: Context, private val accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val borderWidth = GLASS_SEGMENT_BORDER_WIDTH_DP * density
         private val glowWidth = GLASS_SEGMENT_GLOW_WIDTH_DP * density
         private var checked = false
+        // Same recoloring technique as GlassSwitchThumbDrawable: derive lit/mid/dark shades of
+        // accentColor for the fill gradient, and preserve each fixed color's own alpha for the
+        // (semi-transparent) glow.
+        private val fillNear = accentColor?.let { blend(it, Color.WHITE, 0.25f) } ?: GLASS_SEGMENT_FILL_NEAR
+        private val fillMid = accentColor ?: GLASS_SEGMENT_FILL_MID
+        private val fillFar = accentColor?.let { blend(it, Color.BLACK, 0.25f) } ?: GLASS_SEGMENT_FILL_FAR
+        private val borderColor = accentColor ?: GLASS_SEGMENT_BORDER_COLOR
+        private val glowColor = accentColor?.let {
+            Color.argb(Color.alpha(GLASS_SEGMENT_GLOW_COLOR), Color.red(it), Color.green(it), Color.blue(it))
+        } ?: GLASS_SEGMENT_GLOW_COLOR
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = borderWidth
-            color = GLASS_SEGMENT_BORDER_COLOR
+            color = borderColor
         }
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = glowWidth
-            color = GLASS_SEGMENT_GLOW_COLOR
+            color = glowColor
             maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
         }
         private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -1052,7 +1086,7 @@ object BmwDashboardSkin {
             if (segRect.isEmpty) return
             fillPaint.shader = LinearGradient(
                 segRect.left, segRect.top, segRect.right, segRect.bottom,
-                intArrayOf(GLASS_SEGMENT_FILL_NEAR, GLASS_SEGMENT_FILL_MID, GLASS_SEGMENT_FILL_FAR),
+                intArrayOf(fillNear, fillMid, fillFar),
                 floatArrayOf(0f, 0.18f, 1f), Shader.TileMode.CLAMP,
             )
             val corner = segRect.height() / 2f
@@ -1090,7 +1124,7 @@ object BmwDashboardSkin {
     }
 
     /** See [glassBoxDrawable]. */
-    private class GlassBoxDrawable(context: Context, private val showBorder: Boolean) : Drawable() {
+    private class GlassBoxDrawable(context: Context, private val showBorder: Boolean, private val accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val cornerRadius = GLASS_BOX_CORNER_RADIUS_DP * density
         private val strokeWidth = GLASS_BOX_STROKE_WIDTH_DP * density

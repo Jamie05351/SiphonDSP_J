@@ -34,9 +34,11 @@ enum class DspDestination(
     COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
     // The routing matrix itself (diagram + per-band routing % sliders, MODE_ROUTING) is unused
     // and no longer reachable from primary nav -- its RoutingFragment code is left in place, not
-    // deleted, in case it's wanted again. This 5th tile now opens straight to the "Measurements /
-    // routing" + "Output all-pass" screen (MODE_ALLPASS, OutputAllPassFragment) that used to
-    // only be reachable as a link from inside the routing matrix screen.
+    // deleted, in case it's wanted again. This 5th tile now opens straight to the per-output
+    // all-pass screen (MODE_ALLPASS, OutputAllPassFragment) that used to only be reachable as a
+    // link from inside the routing matrix screen (that link also carried a "Measurements /
+    // routing" page alongside it; that page was later dropped as a duplicate of the same rows
+    // already live in the Settings page's inline card).
     ROUTING(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
