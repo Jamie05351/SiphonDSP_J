@@ -11,9 +11,13 @@
 
 class NativeBmwDspProcessor {
 public:
-    // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
-    // never read in configure(); it only has to be included here so the array length check
-    // (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
+    // 139..142 were the Pultec-style bass boost/cut stage; the feature was removed (unused,
+    // native processing deleted below) but the slots are left inert rather than reclaimed, same
+    // as FIELD_CROSSOVER_LR4 -- shrinking the array would shift every index after it. They are
+    // simply never read in configure() now. 143 (INDEX_DELAY_LINKED) is UI-only -- see
+    // NativeBmwDspValues.kt -- and is intentionally never read in configure() either; it only
+    // has to be included here so the array length check (NativeBmwDspJni.cpp) accepts the array
+    // Kotlin actually sends.
     enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 144 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
@@ -78,7 +82,6 @@ private:
         DirtyCompState  = 1u << 7,
         DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
-        DirtyPultec     = 1u << 10,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -164,8 +167,6 @@ private:
         float tiltAmount=3,tiltFreq=550;
         bool monoBass=false;
         float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
-        bool pultec=false;
-        float pultecFreq=60,pultecBoost=0,pultecCut=0;
     } p_;
 
     static float dbToLin(float db);
@@ -192,7 +193,6 @@ private:
     void rebuildCompressorTiming();
     void rebuildLimiter();
     void rebuildMonoBass();
-    void rebuildPultec();
     void rebuildPolarityAndMute();
     void rebuildAllPass();
     void resetDynamics();
@@ -223,7 +223,6 @@ private:
     float monoBassMakeupLin_=1;
     Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
-    Biquad pultecBoostL_,pultecBoostR_,pultecCutL_,pultecCutR_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
 

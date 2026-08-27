@@ -191,11 +191,6 @@
     <string name="bmw_dsp_tilt_active">Tilt active</string>
     <string name="bmw_dsp_tilt_amount">Tilt amount</string>
     <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
-    <string name="bmw_dsp_pultec">Pultec</string>
-    <string name="bmw_dsp_pultec_active">Pultec active</string>
-    <string name="bmw_dsp_pultec_freq">Frequency</string>
-    <string name="bmw_dsp_pultec_boost">Boost</string>
-    <string name="bmw_dsp_pultec_cut">Cut</string>
     <string name="bmw_dsp_mono_bass">Mono bass</string>
     <string name="bmw_dsp_mono_bass_freq">Mono below</string>
     <string name="bmw_dsp_mono_bass_blend">Blend</string>

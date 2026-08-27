@@ -20,6 +20,9 @@ import kotlin.math.roundToInt
  * pages -- Crossovers, Tilt, and Mono Bass -- at the same section boundaries the single
  * scrolling panel used to have, so nothing about the content changed, only how it's paged.
  * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
+ * (A fourth Pultec-style bass EQ page briefly lived here between Tilt and Mono Bass; it was
+ * unused and has been removed -- see NativeBmwDspProcessor.h's kConfigSize comment for the now-
+ * inert config slots it left behind.)
  */
 class CrossoverTiltFragment : Fragment() {
     private lateinit var container: FrameLayout
@@ -132,31 +135,6 @@ class CrossoverTiltFragment : Fragment() {
             }
         }
 
-        val pultecPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_pultec), "Vintage-style bass boost + cut") {
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_pultec_active),
-                    null,
-                    NativeBmwDspValues.INDEX_PULTEC_ENABLED,
-                )
-                addDropdownRow(
-                    getString(R.string.bmw_dsp_pultec_freq),
-                    NativeBmwDspValues.INDEX_PULTEC_FREQ,
-                    listOf("20 Hz" to 20f, "30 Hz" to 30f, "60 Hz" to 60f, "100 Hz" to 100f),
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_pultec_boost),
-                    NativeBmwDspValues.INDEX_PULTEC_BOOST,
-                    0f, 8f, .1f, "dB",
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_pultec_cut),
-                    NativeBmwDspValues.INDEX_PULTEC_CUT,
-                    0f, 4f, .1f, "dB",
-                )
-            }
-        }
-
         val monoBassPage = page {
             dashboardPanel(getString(R.string.bmw_dsp_mono_bass), "Sum low frequencies to mono below a crossover") {
                 addSegmentedSwitchRow(
@@ -184,7 +162,7 @@ class CrossoverTiltFragment : Fragment() {
 
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, pultecPage, monoBassPage)),
+            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage)),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }
