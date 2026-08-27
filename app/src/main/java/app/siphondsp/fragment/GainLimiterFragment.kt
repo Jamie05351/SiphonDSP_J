@@ -85,8 +85,15 @@ class GainLimiterFragment : Fragment() {
                     title = "Left Mid",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_L, delayMin = 0f, delayMax = 2.8f,
-                    polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
-                    onPolarityChanged = ::rebuild,
+                    // Independent per physical driver, not per band -- a real reversed-polarity
+                    // fault can land on just one driver (see NativeBmwDspProcessor.cpp's own
+                    // "Deliberate final-output swap" comment for a documented example of exactly
+                    // that class of real-world wiring fault on this vehicle), and a shared,
+                    // mirrored Low/Mid-wide toggle can't compensate for that: flipping both sides
+                    // of a band together leaves their phase relative to *each other* unchanged.
+                    // Each card now owns its own FIELD_INVERT slot with no mirrorIndices.
+                    polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_INVERT),
+                    polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_MID_DELAY_R else null,
                     onDelayChanged = ::rebuild,
                 )
@@ -94,8 +101,8 @@ class GainLimiterFragment : Fragment() {
                     title = "Left Low",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_L, delayMin = 0f, delayMax = 2.8f,
-                    polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
-                    onPolarityChanged = ::rebuild,
+                    polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_INVERT),
+                    polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_R else null,
                     onDelayChanged = ::rebuild,
                 )
@@ -103,8 +110,8 @@ class GainLimiterFragment : Fragment() {
                     title = "Right Mid",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_R, delayMin = 0f, delayMax = 2.8f,
-                    polarityIndex = NativeBmwDspValues.INDEX_MID_INVERT, polarityMirror = midPair(NativeBmwDspValues.FIELD_INVERT),
-                    onPolarityChanged = ::rebuild,
+                    polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_INVERT),
+                    polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_MID_DELAY_L else null,
                     onDelayChanged = ::rebuild,
                 )
@@ -112,8 +119,8 @@ class GainLimiterFragment : Fragment() {
                     title = "Right Low",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_R, delayMin = 0f, delayMax = 2.8f,
-                    polarityIndex = NativeBmwDspValues.INDEX_LOW_INVERT, polarityMirror = lowPair(NativeBmwDspValues.FIELD_INVERT),
-                    onPolarityChanged = ::rebuild,
+                    polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT),
+                    polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_L else null,
                     onDelayChanged = ::rebuild,
                 )

@@ -429,11 +429,18 @@ class CrossoverDashboardBuilder(
         accentColor: Int,
         delayIndex: Int, delayMin: Float, delayMax: Float,
         polarityIndex: Int, polarityMirror: IntArray,
-        // Low/mid polarity is one value shared by both the Left and Right card of that band (see
-        // NativeBmwDspValues.INDEX_LOW_INVERT/INDEX_MID_INVERT), not 4 independent per-channel
-        // flags -- so toggling it on one card also needs the OTHER card sharing this same
-        // polarityIndex to update. Rebuilding the whole page is simpler and more robust than
-        // holding a second toggle-group reference to keep in sync by hand.
+        // Polarity is fully independent per physical driver -- each of the 4 cards passes its own
+        // outputIndex(output, FIELD_INVERT) slot with an empty polarityMirror, deliberately NOT
+        // mirrored to its band's other side. A real reversed-polarity wiring fault can land on
+        // just one driver (this codebase already has a documented example of exactly that class
+        // of real-world fault, see NativeBmwDspProcessor.cpp's "Deliberate final-output swap"
+        // comment), and flipping both sides of a band together can never compensate for that --
+        // it leaves their phase relative to *each other* completely unchanged. (This used to be
+        // one value shared by both the Left and Right card of a band -- INDEX_LOW_INVERT/
+        // INDEX_MID_INVERT, still kept as one-time migration seeds -- but that meant a single-
+        // driver wiring fault was simply unfixable from this screen. onPolarityChanged is no
+        // longer needed for keeping a sibling card in sync now that nothing is shared, but stays
+        // available for a caller with some other reason to react to a polarity edit.)
         onPolarityChanged: () -> Unit = {},
         // Delay is normally 4 fully independent values (unlike polarity above) -- this band's
         // OTHER side's delay index, only when the page's "Link L/R Delay" toggle is on; null
