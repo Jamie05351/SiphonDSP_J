@@ -185,6 +185,41 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         branchAcc.mul(transferRe, transferIm)
     }
 
+    /**
+     * Mid-side companion to [applyMonoBass]. Mono Bass's Low-side mono/stereo split-and-recombine
+     * is itself an allpass -- flat magnitude on its own, but it applies a real, frequency-
+     * dependent phase rotation, even to a perfectly correlated (mono) signal. Nothing else applies
+     * that same rotation to Mid, so once Mono Bass is on, Low arrives at the Low/Mid crossover
+     * carrying phase Mid doesn't have, and the two stop summing flat right there -- confirmed both
+     * analytically and against this very graph (a real dip at the crossover frequency, not just a
+     * theoretical concern). Applying the identical LP+HP transfer, blended by the same amount, to
+     * Mid's branch cancels that out: `mid *= (1-blend) + (LP*makeup + HP)*blend`, the same shape
+     * [applyMonoBass] uses for Low, reusing the *same* monoBassLpf/monoBassHpf cascades (already
+     * built at monoBassFreq) since the transfer function itself is identical -- only which branch
+     * it's multiplied into differs. Mirrors NativeBmwDspProcessor.cpp's Mid compensator in
+     * processFrame exactly.
+     */
+    private fun applyMonoBassCompensation(branchAcc: ComplexAcc, values: FloatArray, channel: BmwOutputChannel, cosW: Double, sinW: Double, cos2W: Double, sin2W: Double) {
+        if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] < .5f) return
+        val blend = values[NativeBmwDspValues.INDEX_MONO_BASS_BLEND].toDouble() * .01
+        if (blend <= 0.0) return
+        val makeupLin = dbToLinear(values[NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP].toDouble())
+
+        // Mono Bass's frequency reference is per-output (Low), but this transfer function only
+        // depends on monoBassFreq itself, which is shared/global -- so the Low-channel cascade
+        // for this same L/R side is exactly the right one to reuse here, no separate Mid-side
+        // cascade needed.
+        val lowChannelOrdinal = channel.ordinal
+        monoBassLpfAcc.setUnity()
+        monoBassLpf[lowChannelOrdinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassLpfAcc)
+        monoBassHpfAcc.setUnity()
+        monoBassHpf[lowChannelOrdinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassHpfAcc)
+
+        val transferRe = (1.0 - blend) + monoBassLpfAcc.re * makeupLin * blend + monoBassHpfAcc.re * blend
+        val transferIm = monoBassLpfAcc.im * makeupLin * blend + monoBassHpfAcc.im * blend
+        branchAcc.mul(transferRe, transferIm)
+    }
+
     private fun rebuildMidCascade(values: FloatArray, peq: BmwPeqState, channel: BmwOutputChannel) {
         val cascade = midCascade[channel.ordinal]
         cascade.clear()
@@ -321,6 +356,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.setFrom(pre)
                 midCascade[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                 if (!hpfPass) {
+                    applyMonoBassCompensation(branchAcc, values, channel, cosW[i], sinW[i], cos2W[i], sin2W[i])
                     midAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                     applyDelay(branchAcc, frequencies[i], midDelayMs.toDouble())
                     branchAcc.scale(dbToLinear(midGainDb.toDouble()))
