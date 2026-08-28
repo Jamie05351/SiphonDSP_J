@@ -1,14 +1,17 @@
 package app.siphondsp.view
 
-import app.siphondsp.model.ParametricEqBand
 import kotlin.math.exp
 import kotlin.math.ln
 
 object PeqGraphMath {
     const val MIN_FREQUENCY = 20.0
     const val MAX_FREQUENCY = 20_000.0
-    const val MIN_GAIN = -18.0
-    const val MAX_GAIN = 18.0
+    // Asymmetric on purpose: real-world tunes routinely run 8-10 dB of negative headroom, so the
+    // useful action is well below 0 dB. A -24..+6 window keeps those curves off the floor while
+    // still showing the occasional boost, instead of the old symmetric +-18 that wasted its top
+    // half and clipped everything interesting against the bottom edge.
+    const val MIN_GAIN = -24.0
+    const val MAX_GAIN = 6.0
 
     fun frequencyToFraction(
         frequency: Double,
@@ -51,18 +54,4 @@ object PeqGraphMath {
 
     fun fractionToGain(fraction: Float, minGain: Double = MIN_GAIN, maxGain: Double = MAX_GAIN): Double =
         maxGain - fraction.coerceIn(0f, 1f) * (maxGain - minGain)
-
-    fun draggedBand(
-        original: ParametricEqBand,
-        xFraction: Float,
-        yFraction: Float,
-        maximumFrequency: Double = MAX_FREQUENCY,
-    ) = ParametricEqBand(
-        fractionToFrequency(xFraction, MIN_FREQUENCY, maximumFrequency),
-        fractionToGain(yFraction),
-        original.q,
-        original.filterType,
-        original.channel,
-        original.uuid,
-    )
 }

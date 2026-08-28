@@ -13,6 +13,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
@@ -342,11 +343,7 @@ class ParametricEqualizerFragment : Fragment() {
                     val values = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES) ?: return
                     if (values.size != BmwSignalChain.VALUE_COUNT) return
                     nativeDspValues = values.copyOf()
-                    // Don't clobber an in-flight drag on this surface; setSystemValues() will
-                    // run again once the drag resolves via bindScope()/cancelDraft().
-                    if (!binding.equalizerSurface.hasActiveDraft()) {
-                        binding.equalizerSurface.setSystemValues(nativeDspValues)
-                    }
+                    binding.equalizerSurface.setSystemValues(nativeDspValues)
                 }
             }
         }
@@ -424,7 +421,7 @@ class ParametricEqualizerFragment : Fragment() {
                 else -> PeqScope.FULL
             }
             if (next != selectedScope) {
-                if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
+                if (editorActive) {
                     requireContext().toast("Confirm or cancel the active filter edit before switching scope")
                     binding.peqScopeGroup?.check(selectedScope.chipId)
                 } else {
@@ -442,10 +439,9 @@ class ParametricEqualizerFragment : Fragment() {
     /** Guard for ParametricEqualizerActivity's DspCrossNavBar.populate() call (the sidebar now
      *  lives at the activity level, alongside the toolbar, not inside this fragment -- see
      *  activity_parametric_eq.xml). Blocks switching to another DSP screen while there's an
-     *  unsaved filter edit or an in-flight graph drag, same guard as switching Full/Low/Mid
-     *  scope. */
+     *  unsaved filter edit, same guard as switching Full/Low/Mid scope. */
     fun canSwitchDspScreens(): Boolean {
-        if (editorActive || binding.equalizerSurface.hasActiveDraft()) {
+        if (editorActive) {
             requireContext().toast("Confirm or cancel the active filter edit before switching screens")
             return false
         }
@@ -511,32 +507,6 @@ class ParametricEqualizerFragment : Fragment() {
         history.reset(peqState)
         updateHistoryControls()
         bindScope()
-    }
-
-    /**
-     * Tilt is not part of BmwPeqState -- it lives in the separate 35-float native BMW DSP
-     * config array -- so this is deliberately a sibling of applyCandidate(), not routed
-     * through it or PeqStateHistory: folding tilt into PEQ undo/redo would make PEQ undo
-     * silently revert tilt changes too. Same transaction discipline as applyCandidate()
-     * though -- the surface only calls this once, on ACTION_UP of an actual drag.
-     */
-    private fun applyTiltCandidate(frequencyHz: Float, amountDb: Float): Boolean {
-        return try {
-            val clampedFreq = frequencyHz.coerceIn(200f, 2000f)
-            val clampedAmount = amountDb.coerceIn(-6f, 6f)
-            val applied = NativeBmwDspValues.update(requireContext()) { values ->
-                values[NativeBmwDspValues.INDEX_TILT_FREQ] = clampedFreq
-                values[NativeBmwDspValues.INDEX_TILT_AMOUNT] = clampedAmount
-            }
-            nativeDspValues = applied
-            binding.equalizerSurface.setSystemValues(applied)
-            Timber.d("tilt-drag committed frequency=$clampedFreq amount=$clampedAmount")
-            true
-        } catch (error: Exception) {
-            Timber.e(error, "tilt-drag commit failed")
-            requireContext().toast("Tilt change could not be saved; previous value kept")
-            false
-        }
     }
 
     private fun bandsForScope() = when (selectedScope) {
@@ -609,32 +579,11 @@ class ParametricEqualizerFragment : Fragment() {
             )
         }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
 
+        // Read-only graph now: a node tap just opens that filter in the numeric editor (only
+        // active-scope taps reach here). Dragging filters/tilt on the graph was removed -- it
+        // only ever nudged filters by accident; tilt is edited on its own numeric page.
         binding.equalizerSurface.onPointSelected = { uuid ->
             bandsForScope().firstOrNull { it.uuid == uuid }?.let(::selectBandForEditing)
-        }
-        binding.equalizerSurface.onDragCommitted = { draggedBand ->
-            val candidate = peqState.deepCopy()
-            val candidateBands = bandsForScope(candidate)
-            val index = candidateBands.indexOfFirst { it.uuid == draggedBand.uuid }
-            if (index < 0) {
-                binding.equalizerSurface.cancelDraft()
-                requireContext().toast("The selected filter no longer exists; graph edit cancelled")
-            } else {
-                candidateBands[index] = draggedBand
-                selectedBandByScope[selectedScope] = draggedBand.uuid
-                if (applyCandidate(candidate, "graph-drag")) {
-                    editorBandUuid = draggedBand.uuid
-                    binding.freqInput.value = draggedBand.frequency.toFloat()
-                    binding.gainInput.value = draggedBand.gain.toFloat()
-                } else {
-                    binding.equalizerSurface.cancelDraft()
-                }
-            }
-        }
-        binding.equalizerSurface.onTiltDragCommitted = { frequencyHz, amountDb ->
-            if (!applyTiltCandidate(frequencyHz, amountDb)) {
-                binding.equalizerSurface.cancelDraft()
-            }
         }
     }
 
@@ -1127,7 +1076,6 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     override fun onStop() {
-        binding.equalizerSurface.cancelDraft()
         if (editorActive) editorDiscard()
         super.onStop()
     }
@@ -1151,6 +1099,16 @@ class ParametricEqualizerFragment : Fragment() {
     private fun collapsePreview(collapsed: Boolean) {
         binding.equalizerSurface.isVisible = collapsed
         binding.previewTitle.text = getString(if (collapsed) R.string.peq_preview else R.string.peq_preview_collapsed)
+        // Portrait only: preview_card is now a weighted member of the vertical chain with
+        // edit_card (so the graph fills down to the screen). Hiding the graph therefore also has
+        // to drop the card's weight/height, or it keeps its large share of the column with just
+        // the title in it. Landscape re-parents preview_card into cards_pager with plain
+        // LayoutParams -- the cast fails there and this is a no-op, which is what we want.
+        (binding.previewCard.layoutParams as? ConstraintLayout.LayoutParams)?.let { lp ->
+            lp.height = if (collapsed) 0 else ViewGroup.LayoutParams.WRAP_CONTENT
+            lp.verticalWeight = if (collapsed) 1f else 0f
+            binding.previewCard.layoutParams = lp
+        }
     }
 
     private fun applyCandidate(
