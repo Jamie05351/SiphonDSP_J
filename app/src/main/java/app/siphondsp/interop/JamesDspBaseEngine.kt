@@ -64,13 +64,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val limiterThreshold = cache.get(R.string.key_limiter_threshold, -0.1f)
             val limiterRelease = cache.get(R.string.key_limiter_release, 60f)
 
-            cache.select(Constants.PREF_COMPANDER)
-            val compEnabled = cache.get(R.string.key_compander_enable, false)
-            val compTimeConst = cache.get(R.string.key_compander_timeconstant, 0.22f)
-            val compGranularity = cache.get(R.string.key_compander_granularity, 2f).toInt()
-            val compTfTransforms = cache.get(R.string.key_compander_tftransforms, "0").toInt()
-            val compResponse = cache.get(R.string.key_compander_response, "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0;0;0;0;0;0;0")
-
             cache.select(Constants.PREF_BASS)
             val bassEnabled = cache.get(R.string.key_bass_enable, false)
             val bassMaxGain = cache.get(R.string.key_bass_max_gain, 5f)
@@ -118,7 +111,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
 
                 val result = when (it) {
                     Constants.PREF_OUTPUT -> setOutputControl(limiterThreshold, limiterRelease, outputPostGain)
-                    Constants.PREF_COMPANDER -> setCompander(compEnabled, compTimeConst, compGranularity, compTfTransforms, compResponse)
                     Constants.PREF_BASS -> setBassBoost(bassEnabled, bassMaxGain)
                     Constants.PREF_EQ -> setMultiEqualizer(eqEnabled, eqFilterType, eqInterpolationMode, eqBands)
                     Constants.PREF_GEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)

@@ -93,20 +93,6 @@
         <item>1</item>
     </string-array>
 
-    <string-array name="compander_tf_transforms" translatable="false">
-        <item>@string/compander_tftransforms_stft</item>
-        <item>@string/compander_tftransforms_continuous_wavelet</item>
-        <item>@string/compander_tftransforms_undersampling</item>
-        <item>@string/compander_tftransforms_time_domain</item>
-    </string-array>
-
-    <string-array name="compander_tf_transforms_values" translatable="false">
-        <item>0</item>
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
-    </string-array>
-
     <string-array name="convolver_convolution_mode" translatable="false">
         <item>@string/convolver_convolution_mode_original</item>
         <item>@string/convolver_convolution_mode_shrink</item>

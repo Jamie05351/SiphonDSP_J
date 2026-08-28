@@ -20,10 +20,8 @@ import app.siphondsp.activity.LiveprogEditorActivity
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.liveprog.EelParser
-import app.siphondsp.preference.CompanderPreference
 import app.siphondsp.preference.EqualizerPreference
 import app.siphondsp.preference.FileLibraryPreference
-import app.siphondsp.preference.MaterialSeekbarPreference
 import app.siphondsp.preference.SwitchPreferenceGroup
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
@@ -33,7 +31,6 @@ import app.siphondsp.utils.preferences.Preferences
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import timber.log.Timber
-import kotlin.math.roundToInt
 
 
 class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
@@ -82,19 +79,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         requireContext().registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
 
         when(args.getInt(BUNDLE_XML_RES)) {
-            R.xml.dsp_compander_preferences -> {
-                findPreference<MaterialSeekbarPreference>(getString(R.string.key_compander_granularity))?.valueLabelOverride =
-                    fun(it: Float): String {
-                        return when(it.roundToInt()) {
-                            0 -> getString(R.string.compander_granularity_very_low)
-                            1 -> getString(R.string.compander_granularity_low)
-                            2 -> getString(R.string.compander_granularity_medium)
-                            3 -> getString(R.string.compander_granularity_high)
-                            4 -> getString(R.string.compander_granularity_extreme)
-                            else -> it.roundToInt().toString()
-                        }
-                    }
-            }
             R.xml.dsp_liveprog_preferences -> {
                 val liveprogParams = findPreference<Preference>(getString(R.string.key_liveprog_params))
                 val liveprogEdit = findPreference<Preference>(getString(R.string.key_liveprog_edit))
@@ -206,11 +190,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         when (preference) {
             is EqualizerPreference -> {
                 val dialogFragment = EqualizerDialogFragment.newInstance(preference.key)
-                dialogFragment.setTargetFragment(this, 0)
-                dialogFragment.show(parentFragmentManager, null)
-            }
-            is CompanderPreference -> {
-                val dialogFragment = CompanderDialogFragment.newInstance(preference.key)
                 dialogFragment.setTargetFragment(this, 0)
                 dialogFragment.show(parentFragmentManager, null)
             }
