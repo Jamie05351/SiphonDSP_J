@@ -32,12 +32,11 @@ enum class DspDestination(
     GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
     COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    // 5th tile. Historically the routing-matrix screen; that editor (diagram + per-band routing
-    // % sliders) was unused and has been removed. The tile keeps the ROUTING name for its
-    // sidebar-art keys but opens the per-output all-pass screen (MODE_ALLPASS,
-    // OutputAllPassFragment) directly. The Measurements / routing rows live in the Settings
-    // page's inline card (NativeBmwDspCardFragment).
-    ROUTING(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
+    // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
+    // the native chain). The Measurements / routing rows live in the Settings page's inline
+    // card (NativeBmwDspCardFragment).
+    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {
@@ -66,7 +65,7 @@ object DspCrossNavBar {
         DspDestination.GAINS_DELAY -> BarArt(R.drawable.sidebar_bar_gains, ROW_WEIGHTS)
         DspDestination.CROSSOVER_TILT -> BarArt(R.drawable.sidebar_bar_xover, ROW_WEIGHTS)
         DspDestination.COMPRESSOR -> BarArt(R.drawable.sidebar_bar_compressor, ROW_WEIGHTS)
-        DspDestination.ROUTING -> BarArt(R.drawable.sidebar_bar_routing, ROW_WEIGHTS)
+        DspDestination.ALLPASS -> BarArt(R.drawable.sidebar_bar_allpass, ROW_WEIGHTS)
     }
 
     private class WeightedChild(val view: View, val weightIndex: Int)

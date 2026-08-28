@@ -2,7 +2,6 @@ package app.siphondsp.fragment
 
 import android.animation.LayoutTransition
 import android.content.Intent
-import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -27,8 +26,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
 
-class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private val prefsApp: Preferences.App by inject()
+class DspFragment : Fragment() {
     private val prefsVar: Preferences.Var by inject()
 
     private lateinit var binding: FragmentDspBinding
@@ -36,16 +34,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        prefsApp.registerOnSharedPreferenceChangeListener(this)
-        super.onCreate(savedInstanceState)
-    }
-
-    override fun onDestroy() {
-        prefsApp.unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -89,9 +77,8 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         // Primary BMW DSP shortcuts. Each card's background is one of the pre-built tile images
         // set directly in the XML, with a text label view drawn on top -- only the click targets
         // are wired here. These open the same activities the old bottom bar icons did. Settings
-        // moved back to the bottom bar's gear icon, so there's no System tile anymore. The former
-        // Routing card now opens the all-pass/measurements screen directly instead of the unused
-        // routing matrix -- see DspDestination.ROUTING.
+        // moved back to the bottom bar's gear icon, so there's no System tile anymore. The 5th
+        // tile opens the all-pass screen directly -- see DspDestination.ALLPASS.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
@@ -104,7 +91,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         shortcutsBinding.cardShortcutCrossovers.setOnClickListener {
             startActivity(Intent(requireContext(), CrossoverTiltActivity::class.java))
         }
-        shortcutsBinding.cardShortcutRouting.setOnClickListener {
+        shortcutsBinding.cardShortcutAllpass.setOnClickListener {
             startActivity(
                 Intent(requireContext(), CrossoverTiltActivity::class.java)
                     .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS),
@@ -128,7 +115,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         settingsBinding.cardContainer.layoutTransition = transition
 
         childFragmentManager.beginTransaction()
-            .replace(R.id.card_device_profiles, DeviceProfilesCardFragment.newInstance())
             .replace(
                 R.id.card_output_control, PreferenceGroupFragment.newInstance(Constants.PREF_OUTPUT,
                     R.xml.dsp_output_control_preferences
@@ -138,25 +124,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                 R.id.card_convolver, PreferenceGroupFragment.newInstance(Constants.PREF_CONVOLVER,
                     R.xml.dsp_convolver_preferences
                 ))
-            .replace(
-                R.id.card_liveprog, PreferenceGroupFragment.newInstance(Constants.PREF_LIVEPROG,
-                    R.xml.dsp_liveprog_preferences
-                ))
             .commit()
-
-        // Load initial preferences
-        arrayOf(R.string.key_device_profiles_enable).forEach {
-            onSharedPreferenceChanged(null, getString(it))
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        when(key) {
-            getString(R.string.key_device_profiles_enable) -> {
-                (settingsBinding.cardDeviceProfiles.parent as ViewGroup).isVisible =
-                    prefsApp.get<Boolean>(R.string.key_device_profiles_enable)
-            }
-        }
     }
 
     private fun hideTranslationNotice() {

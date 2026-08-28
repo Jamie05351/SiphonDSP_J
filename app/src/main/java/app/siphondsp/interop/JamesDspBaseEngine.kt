@@ -9,17 +9,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.siphondsp.R
-import app.siphondsp.interop.structure.EelVmVariable
-import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ProcessorMessage
 import app.siphondsp.preference.FileLibraryPreference
-import app.siphondsp.utils.BiquadUtils
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
 import java.io.File
-import java.io.FileNotFoundException
-import java.io.FileReader
 
 abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : AutoCloseable {
     abstract var enabled: Boolean
@@ -64,26 +59,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val limiterThreshold = cache.get(R.string.key_limiter_threshold, -0.1f)
             val limiterRelease = cache.get(R.string.key_limiter_release, 60f)
 
-            cache.select(Constants.PREF_BASS)
-            val bassEnabled = cache.get(R.string.key_bass_enable, false)
-            val bassMaxGain = cache.get(R.string.key_bass_max_gain, 5f)
-
-            cache.select(Constants.PREF_REVERB)
-            val reverbEnabled = cache.get(R.string.key_reverb_enable, false)
-            val reverbPreset = cache.get(R.string.key_reverb_preset, "0").toInt()
-
-            cache.select(Constants.PREF_CROSSFEED)
-            val crossfeedEnabled = cache.get(R.string.key_crossfeed_enable, false)
-            val crossfeedMode = cache.get(R.string.key_crossfeed_mode, "0").toInt()
-
-            cache.select(Constants.PREF_TUBE)
-            val tubeEnabled = cache.get(R.string.key_tube_enable, false)
-            val tubeDrive = cache.get(R.string.key_tube_drive, 2f)
-
-            cache.select(Constants.PREF_LIVEPROG)
-            val liveProgEnabled = cache.get(R.string.key_liveprog_enable, false)
-            val liveprogFile = cache.get(R.string.key_liveprog_file, "")
-
             cache.select(Constants.PREF_CONVOLVER)
             val convolverEnabled = cache.get(R.string.key_convolver_enable, false)
             val convolverFile = cache.get(R.string.key_convolver_file, "")
@@ -96,11 +71,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
 
                 val result = when (it) {
                     Constants.PREF_OUTPUT -> setOutputControl(limiterThreshold, limiterRelease, outputPostGain)
-                    Constants.PREF_BASS -> setBassBoost(bassEnabled, bassMaxGain)
-                    Constants.PREF_REVERB -> setReverb(reverbEnabled, reverbPreset)
-                    Constants.PREF_CROSSFEED -> setCrossfeed(crossfeedEnabled, crossfeedMode)
-                    Constants.PREF_TUBE -> setVacuumTube(tubeEnabled, tubeDrive)
-                    Constants.PREF_LIVEPROG -> setLiveprog(liveProgEnabled, liveprogFile)
                     Constants.PREF_CONVOLVER -> setConvolver(convolverEnabled, convolverFile, convolverMode, convolverAdvImp)
                     else -> true
                 }
@@ -113,55 +83,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             cache.markChangesAsCommitted()
             Timber.i("Preferences synchronized")
         }
-    }
-
-    fun setMultiEqualizer(enable: Boolean, filterType: Int, interpolationMode: Int, bands: String): Boolean
-    {
-        val doubleArray = DoubleArray(30)
-        val array = bands.split(";")
-        for((i, str) in array.withIndex())
-        {
-            val number = str.toDoubleOrNull()
-            if(number == null) {
-                Timber.e("setFirEqualizer: malformed EQ string")
-                return false
-            }
-            doubleArray[i] = number
-        }
-
-        return setMultiEqualizerInternal(enable, filterType, interpolationMode, doubleArray)
-    }
-
-    fun setCompander(enable: Boolean, timeConstant: Float, granularity: Int, tfTransforms: Int, bands: String): Boolean
-    {
-        val doubleArray = DoubleArray(14)
-        val array = bands.split(";")
-        for((i, str) in array.withIndex())
-        {
-            val number = str.toDoubleOrNull()
-            if(number == null) {
-                Timber.e("setCompander: malformed string")
-                return false
-            }
-            doubleArray[i] = number
-        }
-
-        return setCompanderInternal(enable, timeConstant, granularity, tfTransforms, doubleArray)
-    }
-
-    fun setVdc(enable: Boolean, vdcPath: String): Boolean
-    {
-        val fullPath = FileLibraryPreference.createFullPathCompat(context, vdcPath)
-
-        if(!File(fullPath).exists() || File(fullPath).isDirectory) {
-            Timber.w("setVdc: file does not exist")
-            setVdcInternal(false, "")
-            return true /* non-critical */
-        }
-
-        return safeFileReader(fullPath)?.use {
-            setVdcInternal(enable, it.readText())
-        } ?: false
     }
 
     fun setConvolver(enable: Boolean, impulseResponsePath: String, optimizationMode: Int, waveEditStr: String): Boolean
@@ -228,152 +149,12 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
         return setConvolverInternal(true, imp, info[0], info[1], info[2])
     }
 
-    fun setGraphicEq(enable: Boolean, bands: String): Boolean
-    {
-        // Sanity check
-        if(!bands.contains("GraphicEQ:", true)) {
-            Timber.e("setGraphicEq: malformed string")
-            setGraphicEqInternal(false, "")
-            return false
-        }
-
-        return setGraphicEqInternal(enable, bands)
-    }
-
-    fun setGraphicEqCombined(
-        geqEnabled: Boolean, geqBands: String,
-        peqEnabled: Boolean, peqBandsStr: String,
-        peqPreamp: Float = 0f
-    ): Boolean {
-        // Parse PEQ bands and compute biquad magnitude response at 512 points
-        val peqBands = ParametricEqBandList()
-        peqBands.deserialize(peqBandsStr)
-        val hasPeqBands = peqEnabled && peqBands.isNotEmpty()
-        val peqResponse = if (hasPeqBands) {
-            BiquadUtils.computeCombinedResponse(peqBands, numPoints = 512)
-        } else null
-
-        val anyEnabled = geqEnabled || hasPeqBands
-        if (!anyEnabled) {
-            return setGraphicEqInternal(false, "")
-        }
-
-        // Apply preamp offset to PEQ response
-        val preampOffset = if (hasPeqBands) peqPreamp.toDouble() else 0.0
-
-        if (peqResponse != null && geqEnabled && geqBands.contains("GraphicEQ:", true)) {
-            // Both PEQ and GEQ enabled: merge magnitudes
-            val combined = mergeGeqWithPeq(geqBands, peqResponse, preampOffset)
-            return setGraphicEqInternal(true, combined)
-        } else if (peqResponse != null) {
-            // Only PEQ enabled
-            val peqString = BiquadUtils.toGraphicEqString(peqResponse, preampOffset)
-            return setGraphicEqInternal(true, peqString)
-        } else if (geqEnabled) {
-            // Only GEQ enabled
-            return setGraphicEq(geqEnabled, geqBands)
-        }
-
-        return setGraphicEqInternal(false, "")
-    }
-
-    private fun mergeGeqWithPeq(
-        geqBands: String,
-        peqResponse: List<Pair<Double, Double>>,
-        preampOffset: Double = 0.0
-    ): String {
-        // Parse GEQ nodes from "GraphicEQ: f1 g1; f2 g2; ..." string
-        val geqNodes = mutableListOf<Pair<Double, Double>>()
-        val content = geqBands.replace("GraphicEQ:", "").trim()
-        content.split(";").map { it.trim() }.filter { it.isNotBlank() }.forEach { s ->
-            val parts = s.split(" ").filter { it.isNotBlank() }
-            val freq = parts.getOrNull(0)?.toDoubleOrNull()
-            val gain = parts.getOrNull(1)?.toDoubleOrNull()
-            if (freq != null && gain != null) {
-                geqNodes.add(Pair(freq, gain))
-            }
-        }
-        geqNodes.sortBy { it.first }
-
-        // For each PEQ sample point, interpolate GEQ gain (log-linear) and sum
-        val sb = StringBuilder("GraphicEQ: ")
-        for ((peqFreq, peqGain) in peqResponse) {
-            val geqGain = interpolateGeq(geqNodes, peqFreq)
-            sb.append("${dfMergeFreq.format(peqFreq)} ${dfMergeGain.format(peqGain + geqGain + preampOffset)}; ")
-        }
-
-        return sb.toString()
-    }
-
-    private fun interpolateGeq(nodes: List<Pair<Double, Double>>, freq: Double): Double {
-        if (nodes.isEmpty()) return 0.0
-        if (freq <= nodes.first().first) return nodes.first().second
-        if (freq >= nodes.last().first) return nodes.last().second
-
-        // Find surrounding nodes and do log-linear interpolation
-        for (i in 0 until nodes.size - 1) {
-            val (f0, g0) = nodes[i]
-            val (f1, g1) = nodes[i + 1]
-            if (freq in f0..f1) {
-                if (f1 <= f0) return g0
-                val logF = kotlin.math.ln(freq)
-                val logF0 = kotlin.math.ln(f0)
-                val logF1 = kotlin.math.ln(f1)
-                val t = (logF - logF0) / (logF1 - logF0)
-                return g0 + t * (g1 - g0)
-            }
-        }
-        return 0.0
-    }
-
-    fun setLiveprog(enable: Boolean, path: String): Boolean
-    {
-        val fullPath = FileLibraryPreference.createFullPathCompat(context, path)
-
-        if(!File(fullPath).exists() || File(fullPath).isDirectory) {
-            Timber.w("setLiveprog: file does not exist")
-            return setLiveprogInternal(false, "", "")
-        }
-
-        return safeFileReader(fullPath)?.use {
-            val name = File(fullPath).name
-            setLiveprogInternal(enable, name, it.readText())
-        } ?: false
-    }
-
-    private fun safeFileReader(path: String) =
-        try { FileReader(path) }
-        catch (ex: FileNotFoundException) {
-            /* Exception may occur when old presets created with version <1.4.3 are swapped
-               between root, rootless, debug, or release builds due to path name differences. */
-            Timber.w(ex)
-            null
-        }
-
-    // Effect config
+    // Effect config -- only Output Control and Convolver remain; the generic JamesDSP effects
+    // (EQ / graphic EQ / compander / reverb / crossfeed / bass boost / stereo widen / tube /
+    // DDC / liveprog) were removed with their UI. The native Java_..._set* JNI impls are gone
+    // too; the underlying libjamesdsp DSP is still compiled in but unreachable.
     abstract fun setOutputControl(threshold: Float, release: Float, postGain: Float): Boolean
-    abstract fun setReverb(enable: Boolean, preset: Int): Boolean
-    abstract fun setCrossfeed(enable: Boolean, mode: Int): Boolean
-    abstract fun setCrossfeedCustom(enable: Boolean, fcut: Int, feed: Int): Boolean
-    abstract fun setBassBoost(enable: Boolean, maxGain: Float): Boolean
-    abstract fun setStereoEnhancement(enable: Boolean, level: Float): Boolean
-    abstract fun setVacuumTube(enable: Boolean, level: Float): Boolean
-
-    protected abstract fun setMultiEqualizerInternal(enable: Boolean, filterType: Int, interpolationMode: Int, bands: DoubleArray): Boolean
-    protected abstract fun setCompanderInternal(enable: Boolean, timeConstant: Float, granularity: Int, tfTransforms: Int, bands: DoubleArray): Boolean
-    protected abstract fun setVdcInternal(enable: Boolean, vdc: String): Boolean
     protected abstract fun setConvolverInternal(enable: Boolean, impulseResponse: FloatArray, irChannels: Int, irFrames: Int, irCrc: Int): Boolean
-    protected abstract fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean
-    protected abstract fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean
-
-    // Feature support
-    abstract fun supportsEelVmAccess(): Boolean
-    abstract fun supportsCustomCrossfeed(): Boolean
-
-    // EEL VM utilities
-    abstract fun enumerateEelVariables(): ArrayList<EelVmVariable>
-    abstract fun manipulateEelVariable(name: String, value: Float): Boolean
-    abstract fun freezeLiveprogExecution(freeze: Boolean)
 
     protected inner class DummyCallbacks : JamesDspWrapper.JamesDspCallbacks
     {
@@ -382,10 +163,5 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
         override fun onLiveprogResult(resultCode: Int, id: String, errorMessage: String?) {}
         override fun onVdcParseError() {}
         override fun onConvolverParseError(errorCode: ProcessorMessage.ConvolverErrorCode) {}
-    }
-
-    companion object {
-        private val dfMergeFreq = java.text.DecimalFormat("0.00", java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH))
-        private val dfMergeGain = java.text.DecimalFormat("0.000000", java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH))
     }
 }

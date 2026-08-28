@@ -31,7 +31,6 @@ import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.session.dump.DumpManager
 import app.siphondsp.session.root.RootSessionDatabase
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.ProfileManager
 import app.siphondsp.utils.RoutingObserver
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.isRoot
@@ -62,7 +61,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
     }
 
     private val prefs: Preferences.App by inject()
-    lateinit var profileManager: ProfileManager
 
     val rootSessionDatabase by lazy { RootSessionDatabase(this) }
     val isLegacyMode
@@ -153,9 +151,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             androidContext(this@MainApplication)
             modules(appModule)
         }
-
-        // Depends on Koin
-        profileManager = ProfileManager()
 
         if(!BuildConfig.FOSS_ONLY) {
             // Soft-disable crashlytics in debug mode by default on each launch

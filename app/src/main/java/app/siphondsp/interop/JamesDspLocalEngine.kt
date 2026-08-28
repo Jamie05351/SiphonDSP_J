@@ -3,7 +3,6 @@ package app.siphondsp.interop
 import android.content.Context
 import android.content.Intent
 import app.siphondsp.R
-import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
@@ -197,46 +196,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 JamesDspWrapper.setPostGain(it, postGain)
         }
 
-    override fun setReverb(enable: Boolean, preset: Int): Boolean =
-        withHandle(false) { JamesDspWrapper.setReverb(it, enable, preset) }
-
-    override fun setCrossfeed(enable: Boolean, mode: Int): Boolean =
-        withHandle(false) { JamesDspWrapper.setCrossfeed(it, enable, mode, 0, 0) }
-
-    override fun setCrossfeedCustom(enable: Boolean, fcut: Int, feed: Int): Boolean =
-        withHandle(false) { JamesDspWrapper.setCrossfeed(it, enable, 99, fcut, feed) }
-
-    override fun setBassBoost(enable: Boolean, maxGain: Float): Boolean =
-        withHandle(false) { JamesDspWrapper.setBassBoost(it, enable, maxGain) }
-
-    override fun setStereoEnhancement(enable: Boolean, level: Float): Boolean =
-        withHandle(false) { JamesDspWrapper.setStereoEnhancement(it, enable, level) }
-
-    override fun setVacuumTube(enable: Boolean, level: Float): Boolean =
-        withHandle(false) { JamesDspWrapper.setVacuumTube(it, enable, level) }
-
-    override fun setMultiEqualizerInternal(
-        enable: Boolean,
-        filterType: Int,
-        interpolationMode: Int,
-        bands: DoubleArray
-    ): Boolean = withHandle(false) {
-        JamesDspWrapper.setMultiEqualizer(it, enable, filterType, interpolationMode, bands)
-    }
-
-    override fun setCompanderInternal(
-        enable: Boolean,
-        timeConstant: Float,
-        granularity: Int,
-        tfTransforms: Int,
-        bands: DoubleArray
-    ): Boolean = withHandle(false) {
-        JamesDspWrapper.setCompander(it, enable, timeConstant, granularity, tfTransforms, bands)
-    }
-
-    override fun setVdcInternal(enable: Boolean, vdc: String): Boolean =
-        withHandle(false) { JamesDspWrapper.setVdc(it, enable, vdc) }
-
     override fun setConvolverInternal(
         enable: Boolean,
         impulseResponse: FloatArray,
@@ -247,26 +206,12 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
-        return synchronized(nativeLock) { refreshEqualizersLocked() }
-    }
-
+    // Re-push the BMW three-bank PEQ from disk to the running engine. Called from the
+    // sampleRate setter (a rate change invalidates the biquad coefficients).
     private fun refreshEqualizersLocked(): Boolean {
-        val current = handle
-        if (current == 0L) return false
-
-        val geqPrefs = context.getSharedPreferences(Constants.PREF_GEQ, Context.MODE_PRIVATE)
-
-        val geqEnabled = geqPrefs.getBoolean(context.getString(R.string.key_geq_enable), false)
-        val geqBands = geqPrefs.getString(
-            context.getString(R.string.key_geq_nodes),
-            Constants.DEFAULT_GEQ_INTERNAL,
-        ) ?: Constants.DEFAULT_GEQ_INTERNAL
-
-        val geqOk = JamesDspWrapper.setGraphicEq(current, geqEnabled, geqBands)
-        val peqOk = if (peqRestorePending) true
+        if (handle == 0L) return false
+        return if (peqRestorePending) true
         else configureNativeBmwPeqLocked(BmwPeqState.load(context), "preference-sync")
-        return geqOk && peqOk
     }
 
     private fun configureNativeBmwPeqLocked(state: BmwPeqState, source: String): Boolean {
@@ -309,22 +254,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             return false
         }
         return result
-    }
-
-    override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean =
-        withHandle(false) { JamesDspWrapper.setLiveprog(it, enable, name, script) }
-
-    override fun supportsEelVmAccess(): Boolean = true
-    override fun supportsCustomCrossfeed(): Boolean = true
-
-    override fun enumerateEelVariables(): ArrayList<EelVmVariable> =
-        withHandle(arrayListOf<EelVmVariable>()) { JamesDspWrapper.enumerateEelVariables(it) }
-
-    override fun manipulateEelVariable(name: String, value: Float): Boolean =
-        withHandle(false) { JamesDspWrapper.manipulateEelVariable(it, name, value) }
-
-    override fun freezeLiveprogExecution(freeze: Boolean) {
-        withHandle { JamesDspWrapper.freezeLiveprogExecution(it, freeze) }
     }
 
     private fun loadNativeBmwDspValues(): FloatArray = NativeBmwDspValues.load(context)

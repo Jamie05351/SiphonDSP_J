@@ -6,7 +6,6 @@ import android.util.AttributeSet
 import androidx.preference.ListPreference
 import androidx.preference.Preference.SummaryProvider
 import app.siphondsp.R
-import app.siphondsp.model.preset.Preset
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import timber.log.Timber
 import java.io.File
@@ -26,8 +25,7 @@ class FileLibraryPreference(context: Context, attrs: AttributeSet?) :
 
             summaryProvider = SummaryProvider<ListPreference> {
                 if(it.entry.isNullOrBlank())
-                    if(isLiveprog()) context.getString(R.string.liveprog_no_script_selected) else context.getString(
-                        R.string.filelibrary_no_file_selected)
+                    context.getString(R.string.filelibrary_no_file_selected)
                 else
                     it.entry
             }
@@ -94,51 +92,22 @@ class FileLibraryPreference(context: Context, attrs: AttributeSet?) :
     }
 
     fun hasCorrectExtension(it: String): Boolean {
-        return (isIrs() && hasIrsExtension(it)) ||
-                (isVdc() && hasVdcExtension(it)) ||
-                (isLiveprog() && hasLiveprogExtension(it)) ||
-                (isPreset() && hasPresetExtension(it))
+        return isIrs() && hasIrsExtension(it)
     }
 
-    fun hasValidContent(stream: InputStream): Boolean {
-        return if (isPreset())
-            Preset.validate(stream)
-        else
-            true
-    }
+    fun hasValidContent(stream: InputStream): Boolean = true
 
-    fun isLiveprog(): Boolean {
-        return type.lowercase() == "liveprog"
-    }
-    fun isVdc(): Boolean {
-        return type.lowercase() == "ddc"
-    }
     fun isIrs(): Boolean {
         return type.lowercase() == "convolver"
-    }
-    fun isPreset(): Boolean {
-        return type.lowercase() == "presets"
     }
 
     companion object {
         val types = mapOf(
             "Convolver" to listOf(".flac", ".wav", ".irs"),
-            "Liveprog" to listOf(".eel"),
-            "DDC" to listOf(".vdc"),
-            "Presets" to listOf(".tar")
         )
 
         fun hasIrsExtension(it: String): Boolean {
             return types["Convolver"]!!.any { ext -> it.endsWith(ext) }
-        }
-        fun hasLiveprogExtension(it: String): Boolean {
-            return types["Liveprog"]!!.any { ext -> it.endsWith(ext) }
-        }
-        fun hasVdcExtension(it: String): Boolean {
-            return types["DDC"]!!.any { ext -> it.endsWith(ext) }
-        }
-        fun hasPresetExtension(it: String): Boolean {
-            return types["Presets"]!!.any { ext -> it.endsWith(ext) }
         }
 
 

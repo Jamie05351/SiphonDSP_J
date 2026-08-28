@@ -46,7 +46,7 @@ class RoundedRipplePreferenceGroupAdapter(preferenceGroup: PreferenceGroup) : Pr
         /**
          * Int extra (a drawable res id) a Preference can set on itself via [Preference.getExtras]
          * to opt into a specific background instead of the default ripple_rounded/none behavior --
-         * used by LiveprogParamsFragment to render grouped-card borders around each section.
+         * used to render grouped-card borders around each preference section.
          */
         const val EXTRA_GROUP_BACKGROUND_RES = "grouped_card_background_res"
 

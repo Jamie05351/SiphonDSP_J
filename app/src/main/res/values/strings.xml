@@ -7,7 +7,6 @@
     <string name="action_gain_limiter">Gains &amp; Delay</string>
     <string name="action_compressor">Compressor</string>
     <string name="action_crossover_tilt">Crossovers &amp; Tilt</string>
-    <string name="action_presets">Presets</string>
     <string name="action_revert">Reset to defaults</string>
     <string name="action_blocked_apps">Excluded apps</string>
     <string name="action_measurement">Measurement</string>
@@ -16,7 +15,6 @@
     <string name="tile_label_gains">GAINS</string>
     <string name="tile_label_xovers">XOVERS</string>
     <string name="tile_label_compressor">COMPRESSOR</string>
-    <string name="tile_label_routing">ROUTING</string>
     <string name="tile_label_allpass">ALL-PASS</string>
 
     <!-- Notification channels -->
@@ -164,14 +162,6 @@
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
 
-    <string name="liveprog_enable">Live programmable DSP</string>
-    <string name="liveprog_file">Liveprog script</string>
-    <string name="liveprog_additional_params">Additional script parameters</string>
-    <string name="liveprog_additional_params_not_supported">Selected script has no customizable parameters</string>
-    <string name="liveprog_not_found">Script not found</string>
-    <string name="liveprog_no_script_selected">No script selected</string>
-    <string name="liveprog_edit_header">Edit selected script</string>
-    <string name="liveprog_edit">Open active script in built-in editor</string>
 
     <string name="output_control_header">Output control</string>
     <string name="output_limiter_threshold">Limiter threshold</string>
@@ -316,15 +306,6 @@
     <string name="audio_format_optimization_benchmark">Use benchmarks to optimize performance</string>
     <string name="audio_format_optimization_benchmark_summary">Increases performance of effects that use convolver modules</string>
     <string name="audio_format_optimization_benchmark_ongoing">Benchmark in progress…</string>
-    <string name="profiles_section_header">Device profiles</string>
-    <string name="profiles_summary">Per-device profiles, automatic switching</string>
-    <string name="profiles_enable">Per-device profiles</string>
-    <string name="profiles_enable_summary_on">Per-device profiles enabled</string>
-    <string name="profiles_enable_summary_off">Per-device profiles disabled</string>
-    <string name="profiles_info_title">What are per-device profiles?</string>
-    <string name="profiles_info">Tap to view documentation</string>
-    <string name="profiles_info_content">While this setting is enabled, each audio device is assigned a separate audio configuration. This app will automatically switch between device profiles when the output device changes. \n\nEach new device that is connected starts with a blank profile. You can then configure it or copy settings from another device profile.\n\nNote: Presets are only applied to the active profile while this feature is enabled. Inactive profiles remain untouched.</string>
-    <string name="profiles_manage_hint">Tap the \'Active device profile\' button on the main screen to copy or delete profiles.</string>
     <string name="app_behavior">App behavior</string>
     <string name="exclude_app_from_recents">Exclude app from recents</string>
     <string name="exclude_app_from_recents_off">Don\'t exclude app from recent tasks list</string>
@@ -432,28 +413,18 @@
     <string name="filelibrary_context_resample">Offline resample</string>
     <string name="filelibrary_context_duplicate">Duplicate</string>
     <string name="filelibrary_context_delete">Delete</string>
-    <string name="filelibrary_context_new_preset">New</string>
-    <string name="filelibrary_context_new_preset_long">New preset</string>
     <string name="filelibrary_unsupported_format_title">Unsupported file type</string>
     <string name="filelibrary_unsupported_format">The selected file has not have the correct file extension.</string>
     <string name="filelibrary_corrupted_title">Unsupported or corrupted file</string>
     <string name="filelibrary_corrupted">The selected file contains no useable data or is corrupted.</string>
-    <string name="filelibrary_file_too_new">The selected file was created with a newer version of this application and cannot be loaded. Please update this app to continue.</string>
     <string name="filelibrary_access_fail">Failed to access directory</string>
-    <string name="filelibrary_is_backup_not_preset">The selected file is a backup file, not a preset. Please go to the backup settings if you want to restore it.</string>
     <string name="filelibrary_no_file_selected">No file selected</string>
     <string name="filelibrary_new_file_name">New file name</string>
     <string name="filelibrary_file_exists">File exists already</string>
     <string name="filelibrary_resample_complete">Resampled to %1$dHz</string>
     <string name="filelibrary_resample_failed">Resampling failed. Corrupt input file?</string>
-    <string name="filelibrary_preset_overwritten">Preset \'%1$s\' overwritten</string>
-    <string name="filelibrary_preset_created">Preset \'%1$s\' created</string>
-    <string name="filelibrary_preset_save_failed">Failed to save preset</string>
     <string name="filelibrary_renamed">Renamed to \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' deleted</string>
-    <string name="filelibrary_preset_loaded">Preset \'%1$s\' loaded</string>
-    <string name="filelibrary_preset_load_failed">File \'%1$s\' is not compatible with this app</string>
-    <string name="filelibrary_no_presets">No presets saved. Tap \'Add\' to create a new one.</string>
 
     <!-- SiphonDSP engine messages -->
     <string name="message_vdc_corrupt">Selected VDC file is corrupt. Please choose another one.</string>
@@ -467,31 +438,9 @@
     <!-- AutoEQ GraphicEQ selector -->
 
     <!-- Customizable liveprog script parameters -->
-    <string name="title_activity_liveprog_params">Customizable script parameters</string>
     <string name="action_restore_defaults">Restore defaults</string>
 
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Script editor</string>
-    <string name="editor_find_and_replace">Find/replace…</string>
-    <string name="editor_docs">Help</string>
-    <string name="editor_open_fail">Script file does not exist or cannot be opened.</string>
-    <string name="editor_run">Save and run</string>
-    <string name="editor_save">Save</string>
-    <string name="editor_liveprog_enabled">Liveprog has been automatically turned on.</string>
-    <string name="editor_replace_all">Replace all</string>
-    <string name="editor_replacement">Replacement</string>
-    <string name="editor_find_next_match">Find next match</string>
-    <string name="editor_find_previous_match">Find previous match</string>
-    <string name="editor_search_keyword">Search</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP is not active</string>
-    <string name="editor_engine_down">Cannot run script because SiphonDSP is disabled. Please turn on SiphonDSP to execute scripts.</string>
-    <string name="editor_save_prompt_title">Save changes?</string>
-    <string name="editor_save_prompt">The current script has unsaved changes. Do you want to save your changes or discard them?</string>
-    <string name="editor_script_launched">Script launched</string>
-    <string name="editor_cannot_undo">Nothing to undo.</string>
-    <string name="editor_cannot_redo">Nothing to redo.</string>
-    <string name="editor_text_size">Text size</string>
 
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Excluded apps</string>
@@ -559,10 +508,8 @@
     <string name="revert_confirmation">Do you want to reset your current SiphonDSP preset to the default values?</string>
 
     <!-- File intent handler -->
-    <string name="intent_import_preset">Import preset</string>
     <string name="intent_import_irs">Import impulse response</string>
     <string name="intent_import_vdc">Import VDC file</string>
-    <string name="intent_import_liveprog">Import Liveprog script</string>
     <string name="intent_import_mode_add">Import only</string>
     <string name="intent_import_mode_select">Import and activate</string>
     <string name="intent_import_fail">Failed to import file \'%1$s\'</string>
@@ -616,12 +563,6 @@
     <string name="group_speaker">Internal speaker</string>
     <string name="group_usb">USB</string>
     <string name="group_unknown">Unknown</string>
-    <string name="device_profile_status">Active device profile</string>
-    <string name="device_profile_manage_copy">Copy profile…</string>
-    <string name="device_profile_manage_delete">Delete profiles…</string>
-    <string name="device_profile_manage_copy_select_no_target">No profiles to overwrite available</string>
-    <string name="device_profile_manage_copy_select">Select profile to copy</string>
-    <string name="device_profile_manage_paste_select">Select profiles to overwrite</string>
 
     <!-- Root version check -->
     <string name="version_mismatch_root">SiphonDSP magisk package requires an update</string>
