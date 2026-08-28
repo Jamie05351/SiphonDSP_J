@@ -75,6 +75,15 @@
         <item name="titleTextColor">?attr/colorOnSurface</item>
         <item name="subtitleTextColor">?attr/colorOnSurfaceVariant</item>
         <item name="navigationIconTint">?attr/colorOnSurface</item>
+        <!-- Slim, so the centred title fits the 36dp header_toolbar_height without vertical
+             clipping (the Material3 default is ~22sp, which needs a ~56dp bar). -->
+        <item name="titleTextAppearance">@style/TextAppearance.SiphonDSP.ToolbarTitle</item>
+    </style>
+
+    <style name="TextAppearance.SiphonDSP.ToolbarTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
     </style>
 
     <style name="Theme.SiphonDSP.BottomAppBar" parent="Widget.Material3.BottomAppBar">

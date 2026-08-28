@@ -19,7 +19,6 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
-import android.util.Base64
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -38,7 +37,6 @@ import androidx.core.graphics.green
 import androidx.core.graphics.red
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.databinding.DialogColorPickerBinding
 import app.siphondsp.databinding.DialogTextinputBinding
@@ -169,24 +167,11 @@ object ContextExtensions {
         }
     }
 
-    // Very simple & naive app cloner checks; please don't use multiple instances at once
-    private val PKGNAME_REFS = setOf("bWUudGltc2NobmVlYmVyZ2VyLnJvb3RsZXNzamFtZXNkc3A=",
-        "bWUudGltc2NobmVlYmVyZ2VyLnJvb3RsZXNzamFtZXNkc3AuZGVidWc=",
-        "YXBwLnNpcGhvbmRzcA==", "YXBwLnNpcGhvbmRzcC5kZWJ1Zw==",
-        "amFtZXMuZHNw", "amFtZXMuZHNwLmRlYnVn")
-    private val APPNAME_REFS = setOf("Um9vdGxlc3NKYW1lc0RTUA==", "U2lwaG9uRFNQ", "SmFtZXNEU1A=")
-    fun Context.check(): Int {
-        val appName = getAppName()
-        if(isPlugin()) return 0
-        if(PKGNAME_REFS.none { decode(it) == packageName }) return 1
-        if(APPNAME_REFS.none { decode(it) == appName }) return 2
-        if(!BuildConfig.DEBUG && packageName.contains("debug")) return 3
-        return 0
-    }
-
-    private fun decode(input: String): String {
-        return String(Base64.decode(input, 0), Charsets.UTF_8)
-    }
+    // Was an upstream JamesDSP anti-clone / anti-tamper gate: it hard-coded the allowed package
+    // ids and app names ("RootlessJamesDSP" / "SiphonDSP" / "JamesDSP") and made MainActivity
+    // quitGracefully() on anything else. Pointless for a personal fork, and it actively blocks
+    // renaming the app (return 2) or changing the applicationId (return 1). Neutered.
+    fun Context.check(): Int = 0
 
     fun Context.sendLocalBroadcast(intent: Intent) {
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
