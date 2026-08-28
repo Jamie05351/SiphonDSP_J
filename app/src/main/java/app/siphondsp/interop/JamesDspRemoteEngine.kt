@@ -7,7 +7,6 @@ import android.content.IntentFilter
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AudioEffectHidden
 import app.siphondsp.MainApplication
-import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.AudioEffectExtensions.getParameterInt
 import app.siphondsp.utils.extensions.AudioEffectExtensions.setParameter
@@ -22,7 +21,6 @@ import app.siphondsp.utils.extensions.crc
 import app.siphondsp.utils.extensions.toShort
 import timber.log.Timber
 import java.util.UUID
-import kotlin.math.roundToInt
 
 class JamesDspRemoteEngine(
     context: Context,
@@ -129,89 +127,14 @@ class JamesDspRemoteEngine(
         ) == AudioEffect.SUCCESS
     }
 
-    override fun setCompanderInternal(
-        enable: Boolean,
-        timeConstant: Float,
-        granularity: Int,
-        tfTransforms: Int,
-        bands: DoubleArray
-    ): Boolean {
-        return (effect.setParameterFloatArray(
-            115,
-            floatArrayOf(timeConstant, granularity.toFloat(), tfTransforms.toFloat()) + bands.map { it.toFloat() }
-        ) == AudioEffect.SUCCESS) and (effect.setParameter(1200, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setReverb(enable: Boolean, preset: Int): Boolean {
-        var ret = true
-        if (enable)
-            ret = effect.setParameter(128, preset.toShort()) == AudioEffect.SUCCESS
-        return ret and (effect.setParameter(1203, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setCrossfeed(enable: Boolean, mode: Int): Boolean {
-        var ret = true
-        if (enable)
-            ret = effect.setParameter(188, mode.toShort()) == AudioEffect.SUCCESS
-        return ret and (effect.setParameter(1208, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setCrossfeedCustom(enable: Boolean, fcut: Int, feed: Int): Boolean {
-        throw UnsupportedOperationException()
-    }
 
-    override fun setBassBoost(enable: Boolean, maxGain: Float): Boolean {
-        var ret = true
-        if (enable)
-            ret = effect.setParameter(112, maxGain.roundToInt().toShort()) == AudioEffect.SUCCESS
-        return ret and (effect.setParameter(1201, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setStereoEnhancement(enable: Boolean, level: Float): Boolean {
-        var ret = true
-        if (enable)
-            ret = effect.setParameter(137, level.roundToInt().toShort()) == AudioEffect.SUCCESS
-        return ret and (effect.setParameter(1204, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setVacuumTube(enable: Boolean, level: Float): Boolean {
-        var ret = true
-        if (enable)
-            ret = effect.setParameter(150, (level * 1000).roundToInt().toShort()) == AudioEffect.SUCCESS
-        return ret and (effect.setParameter(1206, enable.toShort()) == AudioEffect.SUCCESS)
-    }
 
-    override fun setMultiEqualizerInternal(
-        enable: Boolean,
-        filterType: Int,
-        interpolationMode: Int,
-        bands: DoubleArray,
-    ): Boolean {
-        var ret = true
 
-        if (enable) {
-            val properties = floatArrayOf(
-                filterType.toFloat(),
-                if(interpolationMode == 1) 1.0f else -1.0f
-            ) + bands.map { it.toFloat() }
-            ret = effect.setParameterFloatArray(116, properties) == AudioEffect.SUCCESS
-        }
-
-        return ret and (effect.setParameter(1202, enable.toShort()) == AudioEffect.SUCCESS)
-    }
-
-    override fun setVdcInternal(enable: Boolean, vdc: String): Boolean {
-        val prevCrc = this.ddcHash
-        val currentCrc = vdc.crc()
-
-        Timber.i("VDC hash before: $prevCrc, current: $currentCrc")
-        if (prevCrc != currentCrc && enable) {
-            effect.setParameterCharBuffer(12001, 10009, vdc)
-            effect.setParameter(25001, currentCrc) // Commit hash
-        }
-
-        return effect.setParameter(1212, enable.toShort()) == AudioEffect.SUCCESS
-    }
 
     override fun setConvolverInternal(
         enable: Boolean,
@@ -232,40 +155,9 @@ class JamesDspRemoteEngine(
         return effect.setParameter(1205, enable.toShort()) == AudioEffect.SUCCESS
     }
 
-    override fun setGraphicEqInternal(enable: Boolean, bands: String): Boolean {
-        val prevCrc = this.graphicEqHash
-        val currentCrc = bands.crc()
 
-        Timber.i("GraphicEQ hash before: $prevCrc, current: $currentCrc")
-        if (prevCrc != currentCrc && enable) {
-            effect.setParameterCharBuffer(12001, 10006, bands)
-            effect.setParameter(25000, currentCrc) // Commit hash
-        }
 
-        return effect.setParameter(1210, enable.toShort()) == AudioEffect.SUCCESS
-    }
 
-    override fun setLiveprogInternal(enable: Boolean, name: String, script: String): Boolean {
-        val prevCrc = this.liveprogHash
-        val currentCrc = script.crc()
-
-        Timber.i("Liveprog hash before: $prevCrc, current: $currentCrc")
-        if (prevCrc != currentCrc && enable) {
-            effect.setParameterCharBuffer(12001, 10010, script)
-            effect.setParameter(25002, currentCrc) // Commit hash
-        }
-
-        return effect.setParameter(1213, enable.toShort()) == AudioEffect.SUCCESS
-    }
-
-    // Feature support
-    override fun supportsEelVmAccess(): Boolean { return false }
-    override fun supportsCustomCrossfeed(): Boolean { return false }
-
-    // EEL VM utilities (unavailable)
-    override fun enumerateEelVariables(): ArrayList<EelVmVariable> { return arrayListOf() }
-    override fun manipulateEelVariable(name: String, value: Float): Boolean { return false }
-    override fun freezeLiveprogExecution(freeze: Boolean) {}
 
     // Status
     val pid: Int
@@ -282,12 +174,6 @@ class JamesDspRemoteEngine(
         get() = effect.getParameterInt(19999) ?: -1
     val allocatedBlockLength: Int
         get() = effect.getParameterInt(20000) ?: -1
-    val graphicEqHash: Int
-        get() = effect.getParameterInt(30000) ?: -1
-    val ddcHash: Int
-        get() = effect.getParameterInt(30001) ?: -1
-    val liveprogHash: Int
-        get() = effect.getParameterInt(30002) ?: -1
     val convolverHash: Int
         get() = effect.getParameterInt(30003) ?: -1
 

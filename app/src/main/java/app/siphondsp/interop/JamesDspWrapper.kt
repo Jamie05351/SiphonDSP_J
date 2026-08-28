@@ -1,6 +1,5 @@
 package app.siphondsp.interop
 
-import app.siphondsp.interop.structure.EelVmVariable
 import app.siphondsp.model.ProcessorMessage
 
 typealias JamesDspHandle = Long
@@ -39,21 +38,8 @@ object JamesDspWrapper {
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
     external fun setPostGain(self: JamesDspHandle, postGain: Float): Boolean
-    external fun setMultiEqualizer(self: JamesDspHandle, enable: Boolean, filterType: Int, interpolationMode: Int, bands: DoubleArray): Boolean
-    external fun setVdc(self: JamesDspHandle, enable: Boolean, vdcContents: String): Boolean
-    external fun setCompander(self: JamesDspHandle, enable: Boolean, timeConstant: Float, granularity: Int, tfResolution: Int, bands: DoubleArray): Boolean
-    external fun setReverb(self: JamesDspHandle, enable: Boolean, preset: Int): Boolean
     external fun setConvolver(self: JamesDspHandle, enable: Boolean, impulseResponse: FloatArray, irChannels: Int, irFrames: Int): Boolean
-    external fun setGraphicEq(self: JamesDspHandle, enable: Boolean, graphicEq: String): Boolean
-    external fun setCrossfeed(self: JamesDspHandle, enable: Boolean, mode: Int, customFcut: Int, customFeed: Int): Boolean
-    external fun setBassBoost(self: JamesDspHandle, enable: Boolean, maxGain: Float): Boolean
-    external fun setStereoEnhancement(self: JamesDspHandle, enable: Boolean, level: Float): Boolean
-    external fun setVacuumTube(self: JamesDspHandle, enable: Boolean, level: Float): Boolean
-    external fun setLiveprog(self: JamesDspHandle, enable: Boolean, id: String, liveprogContent: String): Boolean
 
-    external fun enumerateEelVariables(self: JamesDspHandle): ArrayList<EelVmVariable>
-    external fun manipulateEelVariable(self: JamesDspHandle, name: String, value: Float): Boolean
-    external fun freezeLiveprogExecution(self: JamesDspHandle, freeze: Boolean)
     external fun eelErrorCodeToString(errorCode: Int): String
 
     interface JamesDspCallbacks {

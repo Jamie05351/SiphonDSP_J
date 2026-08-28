@@ -85,31 +85,21 @@
 
     <!-- DSP -->
 
-    <string name="key_bass_enable" translatable="false">bass_enable</string>
-    <string name="key_bass_max_gain" translatable="false">bass_max_gain</string>
 
 
-    <string name="key_geq_enable" translatable="false">geq_enable</string>
-    <string name="key_geq_nodes" translatable="false">geq_nodes</string>
 
     <string name="key_peq_enable" translatable="false">peq_enable</string>
     <string name="key_peq_bands" translatable="false">peq_bands</string>
     <string name="key_peq_preamp" translatable="false">peq_preamp</string>
 
-    <string name="key_reverb_enable" translatable="false">reverb_enable</string>
-    <string name="key_reverb_preset" translatable="false">reverb_preset</string>
 
 
-    <string name="key_crossfeed_enable" translatable="false">bs2b_crossfeed_enable</string>
-    <string name="key_crossfeed_mode" translatable="false">bs2b_crossfeed_mode</string>
 
     <string name="key_convolver_enable" translatable="false">convolver_enable</string>
     <string name="key_convolver_file" translatable="false">convolver_file</string>
     <string name="key_convolver_mode" translatable="false">convolver_mode</string>
     <string name="key_convolver_adv_imp" translatable="false">convolver_adv_imp</string>
 
-    <string name="key_tube_enable" translatable="false">tube_enable</string>
-    <string name="key_tube_drive" translatable="false">tube_drive</string>
 
 
     <string name="key_liveprog_enable" translatable="false">liveprog_enable</string>
