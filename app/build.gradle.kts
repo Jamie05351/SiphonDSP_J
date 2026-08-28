@@ -31,7 +31,7 @@ android {
         versionCode = AndroidConfig.versionCode
         versionName = AndroidConfig.versionName
 
-        manifestPlaceholders["label"] = "SiphonDSP"
+        manifestPlaceholders["label"] = "J_DSP"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -104,7 +104,7 @@ android {
         create("rootless") {
             dimension = "version"
 
-            manifestPlaceholders["label"] = "SiphonDSP"
+            manifestPlaceholders["label"] = "J_DSP"
             applicationId = "app.siphondsp"
             AndroidConfig.minSdk = 29
             minSdk = AndroidConfig.minSdk
@@ -114,7 +114,7 @@ android {
         create("root") {
             dimension = "version"
 
-            manifestPlaceholders["label"] = "SiphonDSP"
+            manifestPlaceholders["label"] = "J_DSP"
             project.extensions.configure<BasePluginExtension>("base") {
                 archivesName.set("SiphonDSP-v${AndroidConfig.versionName}-${AndroidConfig.versionCode}")
             }

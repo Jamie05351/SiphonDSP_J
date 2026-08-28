@@ -3,9 +3,11 @@
     <dimen name="liveprog_group_spacing">12dp</dimen>
     <!-- A normal preference-row-sized break so adjacent BMW DSP cards read as fully separate. -->
     <dimen name="bmw_dsp_section_spacing">48dp</dimen>
-    <!-- Half the standard 56dp actionBarSize, freeing vertical space on small/landscape
-         head-unit displays. Applies only to top header toolbars, not the bottom app bar. -->
-    <dimen name="header_toolbar_height">28dp</dimen>
+    <!-- Deliberately short (vs. the standard 56dp actionBarSize) to free vertical space on
+         small/landscape head-unit displays. Applies only to top header toolbars, not the bottom
+         app bar. Paired with TextAppearance.SiphonDSP.ToolbarTitle (~15sp) so the centred title
+         fits; at 28dp with the default ~22sp title the text clipped top and bottom. -->
+    <dimen name="header_toolbar_height">36dp</dimen>
     <!-- BMW ///M stripe divider under the top banner; see view_m_stripe_divider.xml. -->
     <dimen name="m_stripe_height">3dp</dimen>
 </resources>
