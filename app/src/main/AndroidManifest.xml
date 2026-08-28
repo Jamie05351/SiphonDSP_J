@@ -88,14 +88,6 @@
                     the path unless it's explicitly matched.
                 -->
                 <data android:host="*" />
-                <data android:pathPattern=".*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.vdc" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.vdc" />
                 <data android:pathPattern=".*\\.irs" />
                 <data android:pathPattern=".*\\..*\\.irs" />
                 <data android:pathPattern=".*\\..*\\..*\\.irs" />

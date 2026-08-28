@@ -111,8 +111,6 @@
     <string name="key_reverb_enable" translatable="false">reverb_enable</string>
     <string name="key_reverb_preset" translatable="false">reverb_preset</string>
 
-    <string name="key_stereowide_enable" translatable="false">stereowide_enable</string>
-    <string name="key_stereowide_mode" translatable="false">stereowide_mode</string>
 
     <string name="key_crossfeed_enable" translatable="false">bs2b_crossfeed_enable</string>
     <string name="key_crossfeed_mode" translatable="false">bs2b_crossfeed_mode</string>
@@ -125,8 +123,6 @@
     <string name="key_tube_enable" translatable="false">tube_enable</string>
     <string name="key_tube_drive" translatable="false">tube_drive</string>
 
-    <string name="key_ddc_enable" translatable="false">ddc_enable</string>
-    <string name="key_ddc_file" translatable="false">ddc_file</string>
 
     <string name="key_liveprog_enable" translatable="false">liveprog_enable</string>
     <string name="key_liveprog_file" translatable="false">liveprog_file</string>

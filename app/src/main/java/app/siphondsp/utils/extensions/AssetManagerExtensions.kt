@@ -12,7 +12,6 @@ object AssetManagerExtensions {
         context.getExternalFilesDir(null)?.absolutePath?.let {
             try {
                 this.copyAssetDir("Convolver", it, force)
-                this.copyAssetDir("DDC", it, force)
                 this.copyAssetDir("Liveprog", it, force)
             }
             catch (ex: Exception) {

@@ -207,8 +207,6 @@
     <string name="convolver_convolution_mode_shrink">Shrink</string>
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
-    <string name="ddc_enable">ViPER-DDC</string>
-    <string name="ddc_file">DDC file</string>
 
     <string name="liveprog_enable">Live programmable DSP</string>
     <string name="liveprog_file">Liveprog script</string>
@@ -224,13 +222,6 @@
     <string name="output_limiter_release">Limiter release</string>
     <string name="output_control_postgain">Post gain</string>
 
-    <string name="stereowide_enable">Soundstage wideness</string>
-    <string name="stereowide_level">Wideness</string>
-    <string name="stereowide_level_none">None</string>
-    <string name="stereowide_level_very_wide">Very wide</string>
-    <string name="stereowide_level_wide">Wide</string>
-    <string name="stereowide_level_very_narrow">Very narrow</string>
-    <string name="stereowide_level_narrow">Narrow</string>
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>

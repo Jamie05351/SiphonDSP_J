@@ -95,23 +95,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                         }
                     }
             }
-            R.xml.dsp_stereowide_preferences -> {
-                findPreference<MaterialSeekbarPreference>(getString(R.string.key_stereowide_mode))?.valueLabelOverride =
-                    fun(it: Float): String {
-                        return if (it in 49.0..51.0)
-                            getString(R.string.stereowide_level_none)
-                        else if(it >= 60)
-                            getString(R.string.stereowide_level_very_wide)
-                        else if(it >= 51)
-                            getString(R.string.stereowide_level_wide)
-                        else if(it <= 40)
-                            getString(R.string.stereowide_level_very_narrow)
-                        else if(it <= 49)
-                            getString(R.string.stereowide_level_narrow)
-                        else
-                            it.toString()
-                    }
-            }
             R.xml.dsp_liveprog_preferences -> {
                 val liveprogParams = findPreference<Preference>(getString(R.string.key_liveprog_params))
                 val liveprogEdit = findPreference<Preference>(getString(R.string.key_liveprog_edit))

@@ -12,14 +12,12 @@ object Constants {
     const val PREF_COMPANDER = "dsp_compander"
     const val PREF_CONVOLVER = "dsp_convolver"
     const val PREF_CROSSFEED = "dsp_crossfeed"
-    const val PREF_DDC = "dsp_ddc"
     const val PREF_EQ = "dsp_equalizer"
     const val PREF_GEQ = "dsp_graphiceq"
     const val PREF_PEQ = "dsp_parametriceq"
     const val PREF_LIVEPROG = "dsp_liveprog"
     const val PREF_OUTPUT = "dsp_output_control"
     const val PREF_REVERB = "dsp_reverb"
-    const val PREF_STEREOWIDE = "dsp_stereowide"
     const val PREF_TUBE = "dsp_tube"
 
     // Default string values

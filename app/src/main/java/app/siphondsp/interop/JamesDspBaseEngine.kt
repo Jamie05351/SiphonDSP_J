@@ -94,10 +94,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val reverbEnabled = cache.get(R.string.key_reverb_enable, false)
             val reverbPreset = cache.get(R.string.key_reverb_preset, "0").toInt()
 
-            cache.select(Constants.PREF_STEREOWIDE)
-            val swEnabled = cache.get(R.string.key_stereowide_enable, false)
-            val swMode = cache.get(R.string.key_stereowide_mode, 60f)
-
             cache.select(Constants.PREF_CROSSFEED)
             val crossfeedEnabled = cache.get(R.string.key_crossfeed_enable, false)
             val crossfeedMode = cache.get(R.string.key_crossfeed_mode, "0").toInt()
@@ -105,10 +101,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             cache.select(Constants.PREF_TUBE)
             val tubeEnabled = cache.get(R.string.key_tube_enable, false)
             val tubeDrive = cache.get(R.string.key_tube_drive, 2f)
-
-            cache.select(Constants.PREF_DDC)
-            val ddcEnabled = cache.get(R.string.key_ddc_enable, false)
-            val ddcFile = cache.get(R.string.key_ddc_file, "")
 
             cache.select(Constants.PREF_LIVEPROG)
             val liveProgEnabled = cache.get(R.string.key_liveprog_enable, false)
@@ -132,10 +124,8 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
                     Constants.PREF_GEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
                     Constants.PREF_PEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
                     Constants.PREF_REVERB -> setReverb(reverbEnabled, reverbPreset)
-                    Constants.PREF_STEREOWIDE -> setStereoEnhancement(swEnabled, swMode)
                     Constants.PREF_CROSSFEED -> setCrossfeed(crossfeedEnabled, crossfeedMode)
                     Constants.PREF_TUBE -> setVacuumTube(tubeEnabled, tubeDrive)
-                    Constants.PREF_DDC -> setVdc(ddcEnabled, ddcFile)
                     Constants.PREF_LIVEPROG -> setLiveprog(liveProgEnabled, liveprogFile)
                     Constants.PREF_CONVOLVER -> setConvolver(convolverEnabled, convolverFile, convolverMode, convolverAdvImp)
                     else -> true
