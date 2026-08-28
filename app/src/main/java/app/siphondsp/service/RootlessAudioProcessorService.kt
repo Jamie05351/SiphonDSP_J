@@ -283,11 +283,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    // Preset loads, profile rotation, and backup restores all funnel through Preset.load(),
-    // which only broadcasts ACTION_PREFERENCES_UPDATED/ACTION_PRESET_LOADED -- neither of
+    // Backup restores broadcast ACTION_PREFERENCES_UPDATED/ACTION_PRESET_LOADED, neither of
     // which otherwise reaches the BMW DSP/PEQ engine state (syncWithPreferences() only knows
     // about the legacy dsp_*.xml namespaces). Re-read both stores from disk and push them to
-    // the running engine so a restored preset/profile/backup actually takes effect.
+    // the running engine so a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
         if (!engine.configureNativeBmwDsp(NativeBmwDspValues.load(this))) {
             Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")

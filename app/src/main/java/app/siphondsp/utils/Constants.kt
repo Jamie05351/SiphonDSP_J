@@ -8,20 +8,13 @@ object Constants {
     const val PREF_VAR = "variable"
 
     // DSP-relevant preference namespaces
-    const val PREF_BASS = "dsp_bass"
     const val PREF_CONVOLVER = "dsp_convolver"
-    const val PREF_CROSSFEED = "dsp_crossfeed"
-    const val PREF_GEQ = "dsp_graphiceq"
     const val PREF_PEQ = "dsp_parametriceq"
     const val PREF_LIVEPROG = "dsp_liveprog"
     const val PREF_OUTPUT = "dsp_output_control"
-    const val PREF_REVERB = "dsp_reverb"
-    const val PREF_TUBE = "dsp_tube"
 
     // Default string values
     const val DEFAULT_CONVOLVER_ADVIMP = "-80;-100;0;0;0;0"
-    const val DEFAULT_GEQ = "GraphicEQ: "
-    const val DEFAULT_GEQ_INTERNAL = "GraphicEQ: 0.0 0.0;"
     const val DEFAULT_PEQ = "PEQ: "
 
     // Intent actions
