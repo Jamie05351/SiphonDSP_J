@@ -86,48 +86,6 @@
     <!-- Main screen -->
     <string name="power_button_alt">Toggle audio processing</string>
 
-    <string name="compander_enable">Dynamic range compander</string>
-    <string name="compander_timeconstant">Time constant</string>
-    <string name="compander_granularity">Granularity</string>
-    <string name="compander_granularity_very_low">Very low</string>
-    <string name="compander_granularity_low">Low</string>
-    <string name="compander_granularity_medium">Medium</string>
-    <string name="compander_granularity_high">High</string>
-    <string name="compander_granularity_extreme">Extreme</string>
-    <string name="compander_tftransforms">Time-frequency transform</string>
-    <string name="compander_tftransforms_stft">Uniform (Short-time Fourier)</string>
-    <string name="compander_tftransforms_continuous_wavelet">Multiresolution (Continuous wavelet, incomplete dual frame)</string>
-    <string name="compander_tftransforms_undersampling">Pseudo multiresolution (Undersampling frame)</string>
-    <string name="compander_tftransforms_time_domain">Pseudo multiresolution (Time domain, zero latency)</string>
-    <string name="eq_enable">Multimodal equalizer</string>
-    <string name="eq_filter_type">Filter type</string>
-    <string name="eq_interpolator">Interpolator</string>
-    <string name="eq_filter_type_fir_minimum">FIR Minimum phase</string>
-    <string name="eq_filter_type_iir_4_order">IIR 4th order</string>
-    <string name="eq_filter_type_iir_6_order">IIR 6th order</string>
-    <string name="eq_filter_type_iir_8_order">IIR 8th order</string>
-    <string name="eq_filter_type_iir_10_order">IIR 10th order</string>
-    <string name="eq_filter_type_iir_12_order">IIR 12th order</string>
-    <string name="eq_interpolator_chip">Piecewise Cubic Hermite Interpolating Polynomial</string>
-    <string name="eq_interpolator_mha">Modified Hiroshi Akima spline</string>
-    <string name="eq_preset_acoustic">Acoustic</string>
-    <string name="eq_preset_bass">Bass</string>
-    <string name="eq_preset_beats">Beats</string>
-    <string name="eq_preset_classic">Classic</string>
-    <string name="eq_preset_clear">Clear</string>
-    <string name="eq_preset_deep">Deep</string>
-    <string name="eq_preset_dubstep">Dubstep</string>
-    <string name="eq_preset_electronic">Electronic</string>
-    <string name="eq_preset_flat">Flat</string>
-    <string name="eq_preset_hardstyle">Hardstyle</string>
-    <string name="eq_preset_hiphop">Hip-Hop</string>
-    <string name="eq_preset_jazz">Jazz</string>
-    <string name="eq_preset_metal">Metal</string>
-    <string name="eq_preset_movie">Movie</string>
-    <string name="eq_preset_pop">Pop</string>
-    <string name="eq_preset_rb">R&amp;B</string>
-    <string name="eq_preset_rock">Rock</string>
-    <string name="eq_preset_vocal">Vocal Booster</string>
 
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>
@@ -196,8 +154,6 @@
     <string name="bmw_dsp_mono_bass_blend">Blend</string>
     <string name="bmw_dsp_mono_bass_makeup">Makeup gain</string>
 
-    <string name="geq_enable">Arbitrary response equalizer</string>
-    <string name="geq_nodes">Magnitude response</string>
 
     <string name="convolver_enable">Convolver</string>
     <string name="convolver_impulse">Impulse response</string>
@@ -207,8 +163,6 @@
     <string name="convolver_convolution_mode_shrink">Shrink</string>
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
-    <string name="ddc_enable">ViPER-DDC</string>
-    <string name="ddc_file">DDC file</string>
 
     <string name="liveprog_enable">Live programmable DSP</string>
     <string name="liveprog_file">Liveprog script</string>
@@ -224,13 +178,6 @@
     <string name="output_limiter_release">Limiter release</string>
     <string name="output_control_postgain">Post gain</string>
 
-    <string name="stereowide_enable">Soundstage wideness</string>
-    <string name="stereowide_level">Wideness</string>
-    <string name="stereowide_level_none">None</string>
-    <string name="stereowide_level_very_wide">Very wide</string>
-    <string name="stereowide_level_wide">Wide</string>
-    <string name="stereowide_level_very_narrow">Very narrow</string>
-    <string name="stereowide_level_narrow">Narrow</string>
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
@@ -414,13 +361,6 @@
     <string name="misc_permission_restart_setup_summary">Grant missing optional permissions</string>
     <string name="misc_permission_header">Optional permissions</string>
     <string name="assets">Assets</string>
-    <string name="network_services">Network services</string>
-    <string name="network_autoeq_api_url">AutoEQ API backend URL</string>
-    <string name="network_invalid_url">Invalid URL format</string>
-    <string name="network_autoeq_conntest_running">Testing connection to server…</string>
-    <string name="network_autoeq_conntest_done">Connection test succeeded</string>
-    <string name="network_autoeq_conntest_fail">Connection test failed</string>
-    <string name="network_autoeq_conntest_fail_summary">Server did not respond correctly. Make sure the software at https://github.com/ThePBone/AutoEqApi is correctly set up on the server.\n\nNetwork error: %1$s\n\nDo you want to restore this setting to the default value?</string>
     <string name="about_settings">About</string>
     <string name="about_settings_summary">Credits, support, updates</string>
     <string name="privacy">Privacy</string>
@@ -522,38 +462,9 @@
     <string name="message_liveprog_compile_fail">Liveprog execution failed. Selected script is damaged. Please use the script editor for debugging.</string>
 
     <!-- GraphicEQ editor -->
-    <string name="title_activity_geq">Magnitude response</string>
-    <string name="geq_edit_as_string">Edit as string</string>
-    <string name="geq_autoeq">AutoEQ profiles</string>
     <string name="gep_add_node">Add</string>
-    <string name="geq_preview">Preview</string>
-    <string name="geq_preview_collapsed">Preview (tap to expand)</string>
-    <string name="geq_edit_hint">GraphicEQ nodes</string>
-    <string name="geq_reset">Reset</string>
-    <string name="geq_reset_confirm_title">Are you sure?</string>
-    <string name="geq_reset_confirm">Do you want to reset your GraphicEQ settings?</string>
-    <string name="geq_node_editor">Node editor</string>
-    <string name="geq_node_list">Node list</string>
-    <string name="geq_no_nodes_defined">No nodes defined</string>
-    <string name="geq_delete_node">Delete node</string>
-    <string name="geq_done_spaced">&#160;&#160;Done&#160;</string>
-    <string name="geq_done">Done</string>
-    <string name="geq_cancel_spaced">&#160;&#160;Discard&#160;</string>
-    <string name="geq_cancel">Discard</string>
-    <string name="geq_discard_changes_title">Discard changes and exit?</string>
-    <string name="geq_discard_changes">The values are not valid or empty. Your changes can\'t be saved.\nDo you want to discard your changes and exit?</string>
-    <string name="geq_frequeny_range">Value between 1Hz and 24000Hz</string>
-    <string name="geq_gain_range">Value between -32dB and 32dB</string>
-    <string name="geq_gain">Gain</string>
-    <string name="geq_frequency">Frequency</string>
 
     <!-- AutoEQ GraphicEQ selector -->
-    <string name="geq_api_network_error">Failed to connect to server. %1$s</string>
-    <string name="geq_api_network_error_details_code">Server responded with error code: %1$d</string>
-    <string name="autoeq_search">AutoEQ search</string>
-    <string name="autoeq_enter_model">Enter your headphone model…</string>
-    <string name="autoeq_partial_results_warning">Showing the first %1$d results. Please fine-tune your search to get more relevant results.</string>
-    <string name="autoeq_no_results">No results found</string>
 
     <!-- Customizable liveprog script parameters -->
     <string name="title_activity_liveprog_params">Customizable script parameters</string>

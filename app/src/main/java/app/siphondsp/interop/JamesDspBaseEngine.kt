@@ -64,39 +64,13 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val limiterThreshold = cache.get(R.string.key_limiter_threshold, -0.1f)
             val limiterRelease = cache.get(R.string.key_limiter_release, 60f)
 
-            cache.select(Constants.PREF_COMPANDER)
-            val compEnabled = cache.get(R.string.key_compander_enable, false)
-            val compTimeConst = cache.get(R.string.key_compander_timeconstant, 0.22f)
-            val compGranularity = cache.get(R.string.key_compander_granularity, 2f).toInt()
-            val compTfTransforms = cache.get(R.string.key_compander_tftransforms, "0").toInt()
-            val compResponse = cache.get(R.string.key_compander_response, "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0;0;0;0;0;0;0")
-
             cache.select(Constants.PREF_BASS)
             val bassEnabled = cache.get(R.string.key_bass_enable, false)
             val bassMaxGain = cache.get(R.string.key_bass_max_gain, 5f)
 
-            cache.select(Constants.PREF_EQ)
-            val eqEnabled = cache.get(R.string.key_eq_enable, false)
-            val eqFilterType = cache.get(R.string.key_eq_filter_type, "0").toInt()
-            val eqInterpolationMode = cache.get(R.string.key_eq_interpolation, "0").toInt()
-            val eqBands = cache.get(R.string.key_eq_bands, Constants.DEFAULT_EQ)
-
-            cache.select(Constants.PREF_GEQ)
-            val geqEnabled = cache.get(R.string.key_geq_enable, false)
-            val geqBands = cache.get(R.string.key_geq_nodes, Constants.DEFAULT_GEQ_INTERNAL)
-
-            cache.select(Constants.PREF_PEQ)
-            val peqEnabled = cache.get(R.string.key_peq_enable, false)
-            val peqBandsStr = cache.get(R.string.key_peq_bands, Constants.DEFAULT_PEQ)
-            val peqPreamp = cache.get(R.string.key_peq_preamp, 0f)
-
             cache.select(Constants.PREF_REVERB)
             val reverbEnabled = cache.get(R.string.key_reverb_enable, false)
             val reverbPreset = cache.get(R.string.key_reverb_preset, "0").toInt()
-
-            cache.select(Constants.PREF_STEREOWIDE)
-            val swEnabled = cache.get(R.string.key_stereowide_enable, false)
-            val swMode = cache.get(R.string.key_stereowide_mode, 60f)
 
             cache.select(Constants.PREF_CROSSFEED)
             val crossfeedEnabled = cache.get(R.string.key_crossfeed_enable, false)
@@ -105,10 +79,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             cache.select(Constants.PREF_TUBE)
             val tubeEnabled = cache.get(R.string.key_tube_enable, false)
             val tubeDrive = cache.get(R.string.key_tube_drive, 2f)
-
-            cache.select(Constants.PREF_DDC)
-            val ddcEnabled = cache.get(R.string.key_ddc_enable, false)
-            val ddcFile = cache.get(R.string.key_ddc_file, "")
 
             cache.select(Constants.PREF_LIVEPROG)
             val liveProgEnabled = cache.get(R.string.key_liveprog_enable, false)
@@ -126,16 +96,10 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
 
                 val result = when (it) {
                     Constants.PREF_OUTPUT -> setOutputControl(limiterThreshold, limiterRelease, outputPostGain)
-                    Constants.PREF_COMPANDER -> setCompander(compEnabled, compTimeConst, compGranularity, compTfTransforms, compResponse)
                     Constants.PREF_BASS -> setBassBoost(bassEnabled, bassMaxGain)
-                    Constants.PREF_EQ -> setMultiEqualizer(eqEnabled, eqFilterType, eqInterpolationMode, eqBands)
-                    Constants.PREF_GEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
-                    Constants.PREF_PEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
                     Constants.PREF_REVERB -> setReverb(reverbEnabled, reverbPreset)
-                    Constants.PREF_STEREOWIDE -> setStereoEnhancement(swEnabled, swMode)
                     Constants.PREF_CROSSFEED -> setCrossfeed(crossfeedEnabled, crossfeedMode)
                     Constants.PREF_TUBE -> setVacuumTube(tubeEnabled, tubeDrive)
-                    Constants.PREF_DDC -> setVdc(ddcEnabled, ddcFile)
                     Constants.PREF_LIVEPROG -> setLiveprog(liveProgEnabled, liveprogFile)
                     Constants.PREF_CONVOLVER -> setConvolver(convolverEnabled, convolverFile, convolverMode, convolverAdvImp)
                     else -> true

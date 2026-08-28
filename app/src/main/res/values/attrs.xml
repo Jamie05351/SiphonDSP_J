@@ -12,11 +12,6 @@
         <attr name="labelMinWidth" format="dimension" />
     </declare-styleable>
 
-    <declare-styleable name="EqualizerPreference">
-        <attr name="android:entries" />
-        <attr name="android:entryValues" />
-    </declare-styleable>
-
     <declare-styleable name="FileLibraryPreference">
         <attr name="type" format="string" />
     </declare-styleable>

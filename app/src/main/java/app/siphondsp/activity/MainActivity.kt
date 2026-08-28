@@ -721,13 +721,6 @@ class MainActivity : BaseActivity() {
                 key = R.string.key_liveprog_file
                 keyEnable = R.string.key_liveprog_enable
             }
-            name.endsWith(".vdc") -> {
-                titleRes = R.string.intent_import_vdc
-                subDir = "DDC"
-                namespace = Constants.PREF_DDC
-                key = R.string.key_ddc_file
-                keyEnable = R.string.key_ddc_enable
-            }
             name.endsWith(".irs") || name.endsWith(".wav") -> {
                 titleRes = R.string.intent_import_irs
                 subDir = "Convolver"
