@@ -86,35 +86,6 @@
     <!-- Main screen -->
     <string name="power_button_alt">Toggle audio processing</string>
 
-    <string name="eq_enable">Multimodal equalizer</string>
-    <string name="eq_filter_type">Filter type</string>
-    <string name="eq_interpolator">Interpolator</string>
-    <string name="eq_filter_type_fir_minimum">FIR Minimum phase</string>
-    <string name="eq_filter_type_iir_4_order">IIR 4th order</string>
-    <string name="eq_filter_type_iir_6_order">IIR 6th order</string>
-    <string name="eq_filter_type_iir_8_order">IIR 8th order</string>
-    <string name="eq_filter_type_iir_10_order">IIR 10th order</string>
-    <string name="eq_filter_type_iir_12_order">IIR 12th order</string>
-    <string name="eq_interpolator_chip">Piecewise Cubic Hermite Interpolating Polynomial</string>
-    <string name="eq_interpolator_mha">Modified Hiroshi Akima spline</string>
-    <string name="eq_preset_acoustic">Acoustic</string>
-    <string name="eq_preset_bass">Bass</string>
-    <string name="eq_preset_beats">Beats</string>
-    <string name="eq_preset_classic">Classic</string>
-    <string name="eq_preset_clear">Clear</string>
-    <string name="eq_preset_deep">Deep</string>
-    <string name="eq_preset_dubstep">Dubstep</string>
-    <string name="eq_preset_electronic">Electronic</string>
-    <string name="eq_preset_flat">Flat</string>
-    <string name="eq_preset_hardstyle">Hardstyle</string>
-    <string name="eq_preset_hiphop">Hip-Hop</string>
-    <string name="eq_preset_jazz">Jazz</string>
-    <string name="eq_preset_metal">Metal</string>
-    <string name="eq_preset_movie">Movie</string>
-    <string name="eq_preset_pop">Pop</string>
-    <string name="eq_preset_rb">R&amp;B</string>
-    <string name="eq_preset_rock">Rock</string>
-    <string name="eq_preset_vocal">Vocal Booster</string>
 
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>

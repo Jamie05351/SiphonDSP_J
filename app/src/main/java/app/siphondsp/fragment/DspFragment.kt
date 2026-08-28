@@ -133,10 +133,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                 R.id.card_output_control, PreferenceGroupFragment.newInstance(Constants.PREF_OUTPUT,
                     R.xml.dsp_output_control_preferences
                 ))
-            .replace(
-                R.id.card_eq, PreferenceGroupFragment.newInstance(Constants.PREF_EQ,
-                    R.xml.dsp_equalizer_preferences
-                ))
             .replace(R.id.card_bmw_dsp, NativeBmwDspCardFragment.newInstance())
             .replace(
                 R.id.card_convolver, PreferenceGroupFragment.newInstance(Constants.PREF_CONVOLVER,

@@ -20,7 +20,6 @@ import app.siphondsp.activity.LiveprogEditorActivity
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.liveprog.EelParser
-import app.siphondsp.preference.EqualizerPreference
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.preference.SwitchPreferenceGroup
 import app.siphondsp.utils.Constants
@@ -188,11 +187,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     @Suppress("DEPRECATION")
     override fun onDisplayPreferenceDialog(preference: Preference) {
         when (preference) {
-            is EqualizerPreference -> {
-                val dialogFragment = EqualizerDialogFragment.newInstance(preference.key)
-                dialogFragment.setTargetFragment(this, 0)
-                dialogFragment.show(parentFragmentManager, null)
-            }
             is FileLibraryPreference -> {
                 val dialogFragment = FileLibraryDialogFragment.newInstance(preference.key)
                 dialogFragment.setTargetFragment(this, 0)
