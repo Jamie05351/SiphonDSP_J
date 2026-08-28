@@ -15,7 +15,6 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
-import app.siphondsp.activity.GraphicEqualizerActivity
 import app.siphondsp.activity.LiveprogEditorActivity
 import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
@@ -141,13 +140,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 liveprogEdit?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), LiveprogEditorActivity::class.java)
                     intent.putExtra(LiveprogEditorActivity.EXTRA_TARGET_FILE, FileLibraryPreference.createFullPathNullCompat(requireContext(), liveprogFile?.value))
-                    startActivity(intent)
-                    true
-                }
-            }
-            R.xml.dsp_graphiceq_preferences -> {
-                findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
-                    val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
                     startActivity(intent)
                     true
                 }

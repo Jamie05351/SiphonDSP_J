@@ -3,14 +3,11 @@ package app.siphondsp.fragment.settings
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Patterns
 import androidx.core.content.ContextCompat
-import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.activity.OnboardingActivity
-import app.siphondsp.api.AutoEqClient
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.preference.IconPreference
 import app.siphondsp.preference.MaterialSwitchPreference
@@ -23,14 +20,12 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
-import java.util.Locale
 
 class SettingsMiscFragment : SettingsBaseFragment() {
 
     private val autoStartNotify by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_autostart_prompt_at_boot)) }
     private val repairAssets by lazy { findPreference<Preference>(getString(R.string.key_troubleshooting_repair_assets)) }
     private val crashReports by lazy { findPreference<Preference>(getString(R.string.key_share_crash_reports)) }
-    private val aeqApiUrl by lazy { findPreference<EditTextPreference>(getString(R.string.key_network_autoeq_api_url)) }
     private val debugDatabase by lazy { findPreference<Preference>(getString(R.string.key_debug_database)) }
     private val permSkipPrompt by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_skip_prompt)) }
     private val permAutoStart by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_auto_start)) }
@@ -53,44 +48,6 @@ class SettingsMiscFragment : SettingsBaseFragment() {
             true
         }
 
-        aeqApiUrl?.setOnPreferenceChangeListener { _, newValue ->
-            if (!Patterns.WEB_URL.matcher(newValue.toString().lowercase(Locale.ROOT)).matches()) {
-                requireContext().toast(R.string.network_invalid_url)
-                return@setOnPreferenceChangeListener false
-            }
-
-            // Verify URL by performing a connection test
-            try {
-                val client = AutoEqClient(requireContext(), 5, newValue.toString())
-                requireContext().toast(R.string.network_autoeq_conntest_running)
-
-                client.queryProfiles(
-                    "conntest",
-                    onResponse = { _, _ ->
-                        context?.toast(R.string.network_autoeq_conntest_done, false)
-                    },
-                    onFailure = { error ->
-                        context?.showYesNoAlert(
-                            getString(R.string.network_autoeq_conntest_fail),
-                            getString(R.string.network_autoeq_conntest_fail_summary, error)
-                        ) {
-                            if (it) {
-                                // Restore default URL if requested
-                                preferences.reset<String>(R.string.key_network_autoeq_api_url)
-                                aeqApiUrl?.text = preferences.getDefault(R.string.key_network_autoeq_api_url)
-                            }
-                        }
-                    }
-                )
-            }
-            catch(ex: IllegalArgumentException) {
-                // Handle invalid base url argument in retrofit
-                requireContext().toast(R.string.network_invalid_url)
-                return@setOnPreferenceChangeListener false
-            }
-
-            true
-        }
 
         permRestartSetup?.setOnPreferenceClickListener {
             startActivity(Intent(context, OnboardingActivity::class.java).apply {

@@ -68,15 +68,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val bassEnabled = cache.get(R.string.key_bass_enable, false)
             val bassMaxGain = cache.get(R.string.key_bass_max_gain, 5f)
 
-            cache.select(Constants.PREF_GEQ)
-            val geqEnabled = cache.get(R.string.key_geq_enable, false)
-            val geqBands = cache.get(R.string.key_geq_nodes, Constants.DEFAULT_GEQ_INTERNAL)
-
-            cache.select(Constants.PREF_PEQ)
-            val peqEnabled = cache.get(R.string.key_peq_enable, false)
-            val peqBandsStr = cache.get(R.string.key_peq_bands, Constants.DEFAULT_PEQ)
-            val peqPreamp = cache.get(R.string.key_peq_preamp, 0f)
-
             cache.select(Constants.PREF_REVERB)
             val reverbEnabled = cache.get(R.string.key_reverb_enable, false)
             val reverbPreset = cache.get(R.string.key_reverb_preset, "0").toInt()
@@ -106,8 +97,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
                 val result = when (it) {
                     Constants.PREF_OUTPUT -> setOutputControl(limiterThreshold, limiterRelease, outputPostGain)
                     Constants.PREF_BASS -> setBassBoost(bassEnabled, bassMaxGain)
-                    Constants.PREF_GEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
-                    Constants.PREF_PEQ -> setGraphicEqCombined(geqEnabled, geqBands, peqEnabled, peqBandsStr, peqPreamp)
                     Constants.PREF_REVERB -> setReverb(reverbEnabled, reverbPreset)
                     Constants.PREF_CROSSFEED -> setCrossfeed(crossfeedEnabled, crossfeedMode)
                     Constants.PREF_TUBE -> setVacuumTube(tubeEnabled, tubeDrive)
