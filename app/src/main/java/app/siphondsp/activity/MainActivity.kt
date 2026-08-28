@@ -29,7 +29,6 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -50,7 +49,6 @@ import app.siphondsp.fragment.LibraryLoadErrorFragment
 import app.siphondsp.interop.JamesDspRemoteEngine
 import app.siphondsp.interop.JamesDspWrapper
 import app.siphondsp.model.ProcessorMessage
-import app.siphondsp.model.preset.Preset
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.service.BaseAudioProcessorService
 import app.siphondsp.service.RootAudioProcessorService
@@ -221,22 +219,6 @@ class MainActivity : BaseActivity() {
                     }
                     else
                         startActivity(Intent(this, BlocklistActivity::class.java))
-                    true
-                }
-                R.id.action_presets -> {
-                    if (presetDialogHost == null) {
-                        Timber.d("Initialize preset dialog host")
-                        presetDialogHost = FakePresetFragment.newInstance()
-                        supportFragmentManager.beginTransaction()
-                            .add(R.id.dsp_fragment_container, presetDialogHost!!)
-                            .commitNow()
-                    }
-                    presetDialogHost?.pref?.refresh()
-
-                    val dialogFragment = FileLibraryDialogFragment.newInstance("presets")
-                    @Suppress("DEPRECATION")
-                    dialogFragment.setTargetFragment(presetDialogHost, 0)
-                    dialogFragment.show(supportFragmentManager, null)
                     true
                 }
                 R.id.action_revert -> {
@@ -700,27 +682,6 @@ class MainActivity : BaseActivity() {
         var key: Int? = null
         var keyEnable: Int? = null
         when {
-            name.endsWith(".tar") -> {
-                // Validate presets
-                StorageUtils.openInputStreamSafe(this, uri)?.use {
-                    if (!Preset.validate(it)) {
-                        Timber.e("File rejected due to invalid content")
-                        showAlert(R.string.filelibrary_corrupted_title,
-                            R.string.filelibrary_corrupted)
-                        return
-                    }
-                }
-
-                titleRes = R.string.intent_import_preset
-                subDir = "Presets"
-            }
-            name.endsWith(".eel") -> {
-                titleRes = R.string.intent_import_liveprog
-                subDir = "Liveprog"
-                namespace = Constants.PREF_LIVEPROG
-                key = R.string.key_liveprog_file
-                keyEnable = R.string.key_liveprog_enable
-            }
             name.endsWith(".irs") || name.endsWith(".wav") -> {
                 titleRes = R.string.intent_import_irs
                 subDir = "Convolver"
@@ -754,17 +715,7 @@ class MainActivity : BaseActivity() {
                     lifecycleScope.launch(Dispatchers.Default) {
                         delay(250L)
 
-                        if (name.endsWith(".tar")) {
-                            try {
-                                StorageUtils.openInputStreamSafe(this@MainActivity, uri)?.use {
-                                    Preset.load(this@MainActivity, it)
-                                }
-                            }
-                            catch (ex: Exception) {
-                                showAlert(getString(R.string.filelibrary_corrupted_title), ex.localizedMessage ?: "")
-                            }
-                        }
-                        else if (namespace != null && key != null && keyEnable != null)
+                        if (namespace != null && key != null && keyEnable != null)
                             @Suppress("DEPRECATION")
                             getSharedPreferences(namespace, MODE_MULTI_PROCESS)
                                 .edit()
@@ -793,25 +744,7 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    class FakePresetFragment : Fragment(), TargetFragment {
-        val pref by lazy {
-            FileLibraryPreference(requireContext(), null).apply {
-                this.type = "Presets"
-                this.key = "presets"
-            }
-        }
 
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : Preference?> findPreference(key: CharSequence): T? {
-            return pref as? T
-        }
-
-        companion object {
-            fun newInstance() = FakePresetFragment()
-        }
-    }
-
-    private var presetDialogHost: FakePresetFragment? = null
 
     companion object {
         const val EXTRA_FORCE_SHOW_CAPTURE_PROMPT = "ForceShowCapturePrompt"

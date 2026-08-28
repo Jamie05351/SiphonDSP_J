@@ -10,15 +10,11 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.annotation.XmlRes
 import androidx.preference.Preference
-import androidx.preference.Preference.SummaryProvider
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
-import app.siphondsp.activity.LiveprogEditorActivity
-import app.siphondsp.activity.LiveprogParamsActivity
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
-import app.siphondsp.liveprog.EelParser
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.preference.SwitchPreferenceGroup
 import app.siphondsp.utils.Constants
@@ -33,7 +29,6 @@ import timber.log.Timber
 
 class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private val prefsApp: Preferences.App by inject()
-    private val eelParser = EelParser()
     private var recyclerView: RecyclerView? = null
 
     private val listener =
@@ -76,75 +71,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
 
         requireContext().registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
 
-        when(args.getInt(BUNDLE_XML_RES)) {
-            R.xml.dsp_liveprog_preferences -> {
-                val liveprogParams = findPreference<Preference>(getString(R.string.key_liveprog_params))
-                val liveprogEdit = findPreference<Preference>(getString(R.string.key_liveprog_edit))
-                val liveprogFile = findPreference<FileLibraryPreference>(getString(R.string.key_liveprog_file))
-
-                fun updateLiveprog(newValue: String) {
-                    eelParser.load(FileLibraryPreference.createFullPathCompat(requireContext(), newValue))
-                    val count = eelParser.properties.size
-                    val filePresent = eelParser.contents != null
-                    val uiUpdate = {
-                        liveprogEdit?.isEnabled = filePresent
-
-                        liveprogParams?.isEnabled = count > 0
-
-                        try {
-                            liveprogParams?.summary = if (count > 0)
-                                resources.getQuantityString(R.plurals.custom_parameters, count, count)
-                            else
-                                getString(R.string.liveprog_additional_params_not_supported)
-                        }
-                        catch(ex: IllegalStateException) {
-                            /* Because this lambda is executed async, it is possible that it is called
-                               while the fragment is destroyed, leading to accessing a detached context */
-                            Timber.d(ex)
-                        }
-                    }
-
-                    if (recyclerView == null)
-                        // Recycler view doesn't exist yet, directly setup the preference
-                        uiUpdate()
-                    else
-                        // Recycler view does exist, queue on UI thread
-                        recyclerView!!.post(uiUpdate)
-                }
-
-                liveprogFile?.summaryProvider = SummaryProvider<FileLibraryPreference> {
-                    updateLiveprog(it.value)
-                    if(it.value == null || it.value.isBlank() || !eelParser.isFileLoaded) {
-                        getString(R.string.liveprog_no_script_selected)
-                    }
-                    else
-                        eelParser.description
-                }
-
-                FileLibraryPreference.createFullPathNullCompat(requireContext(), liveprogFile?.value)?.let {
-                    updateLiveprog(it)
-                }
-
-                liveprogFile?.setOnPreferenceChangeListener { _, newValue ->
-                    updateLiveprog(newValue as String)
-                    true
-                }
-
-                liveprogParams?.setOnPreferenceClickListener {
-                    val intent = Intent(requireContext(), LiveprogParamsActivity::class.java)
-                    intent.putExtra(LiveprogParamsActivity.EXTRA_TARGET_FILE, FileLibraryPreference.createFullPathNullCompat(requireContext(), liveprogFile?.value))
-                    startActivity(intent)
-                    true
-                }
-
-                liveprogEdit?.setOnPreferenceClickListener {
-                    val intent = Intent(requireContext(), LiveprogEditorActivity::class.java)
-                    intent.putExtra(LiveprogEditorActivity.EXTRA_TARGET_FILE, FileLibraryPreference.createFullPathNullCompat(requireContext(), liveprogFile?.value))
-                    startActivity(intent)
-                    true
-                }
-            }
-        }
 
         updateIconState()
 

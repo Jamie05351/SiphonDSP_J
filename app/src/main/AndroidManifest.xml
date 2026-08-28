@@ -104,14 +104,6 @@
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.wav" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\.eel" />
-                <data android:pathPattern=".*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.eel" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.eel" />
                 <data android:pathPattern=".*\\.tar" />
                 <data android:pathPattern=".*\\..*\\.tar" />
                 <data android:pathPattern=".*\\..*\\..*\\.tar" />
@@ -148,27 +140,6 @@
             android:exported="false"
             android:label="@string/title_activity_measurement_capture"
             android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.LiveprogParamsActivity"
-            android:exported="false"
-            android:label="@string/title_activity_liveprog_params"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.LiveprogEditorActivity"
-            android:exported="false"
-            android:label="@string/title_activity_liveprog_editor"
-            android:theme="@style/Theme.SiphonDSP"
-            android:windowSoftInputMode="adjustResize">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".activity.MainActivity" />

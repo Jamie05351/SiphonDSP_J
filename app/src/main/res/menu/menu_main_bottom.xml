@@ -2,13 +2,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="me.timschneebrger.siphondsp.activity.MainActivity">
-    <item
-        android:id="@+id/action_presets"
-        android:orderInCategory="100"
-        android:title="@string/action_presets"
-        android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_twotone_folder_special_24dp"
-        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_revert"

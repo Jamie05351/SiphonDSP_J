@@ -125,10 +125,6 @@ class DspFragment : Fragment() {
                 R.id.card_convolver, PreferenceGroupFragment.newInstance(Constants.PREF_CONVOLVER,
                     R.xml.dsp_convolver_preferences
                 ))
-            .replace(
-                R.id.card_liveprog, PreferenceGroupFragment.newInstance(Constants.PREF_LIVEPROG,
-                    R.xml.dsp_liveprog_preferences
-                ))
             .commit()
     }
 

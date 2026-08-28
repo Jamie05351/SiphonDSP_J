@@ -13,8 +13,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import android.widget.Filter
-import android.widget.Filterable
 import android.widget.ListAdapter
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,16 +25,12 @@ import androidx.core.view.isVisible
 import androidx.preference.DialogPreference.TargetFragment
 import androidx.preference.ListPreferenceDialogFragmentCompat
 import androidx.preference.Preference
-import com.google.android.material.chip.Chip
 import kotlinx.coroutines.*
 import app.siphondsp.BuildConfig
 import app.siphondsp.MainApplication
 import app.siphondsp.R
-import app.siphondsp.activity.LiveprogEditorActivity
 import app.siphondsp.databinding.DialogFilelibraryBinding
 import app.siphondsp.interop.JdspImpResToolbox
-import app.siphondsp.liveprog.EelParser
-import app.siphondsp.model.preset.Preset
 import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.utils.extensions.ContextExtensions.showAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
@@ -44,10 +38,13 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.storage.StorageUtils
 import timber.log.Timber
 import java.io.File
-import java.util.Locale
 import kotlin.math.roundToInt
 
 
+/**
+ * File picker for the Convolver's impulse-response library. (Historically also served the
+ * Liveprog script library and the generic-preset library -- both removed.)
+ */
 class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFragment {
 
     private val fileLibPreference by lazy {
@@ -59,54 +56,13 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
     private lateinit var importLauncher: ActivityResultLauncher<Intent>
     private lateinit var binding: DialogFilelibraryBinding
 
-    private val eelParser = EelParser()
     private val scriptScannerScope = CoroutineScope(Dispatchers.IO)
-    private var currentTag: String? = null
-    private var currentTagScripts: List<String>? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         dialog = super.onCreateDialog(savedInstanceState) as AlertDialog
         // Workaround to prevent the button from closing the dialog
         dialog.setOnShowListener {
-            if(fileLibPreference.isPreset() && dialog.listView.adapter.isEmpty) {
-                requireContext().toast(getString(R.string.filelibrary_no_presets))
-            }
-
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
-                if(fileLibPreference.isPreset()) {
-                    val popupMenu = PopupMenu(requireContext(), it)
-                    popupMenu.menuInflater.inflate(R.menu.menu_filelibrary_add_context, popupMenu.menu)
-
-                    popupMenu.setOnMenuItemClickListener { menuItem ->
-                        when (menuItem.itemId) {
-                            R.id.preset_import -> { import() }
-                            R.id.preset_new -> {
-                                showFileNamePrompt(
-                                    R.string.filelibrary_context_new_preset_long,
-                                    Preset("Untitled.tar").file(),
-                                    autofill = false,
-                                    allowOverwrite = true
-                                ) { file ->
-                                    val overwritten = file.exists()
-                                    val success = Preset(file.name).save()
-                                    if(overwritten && success)
-                                        requireContext().toast(getString(R.string.filelibrary_preset_overwritten, file.nameWithoutExtension))
-                                    else if(!overwritten && success)
-                                        requireContext().toast(getString(R.string.filelibrary_preset_created, file.nameWithoutExtension))
-                                    else
-                                        requireContext().toast(getString(R.string.filelibrary_preset_save_failed))
-
-                                    refresh()
-                                }
-                            }
-                        }
-                        true
-                    }
-                    popupMenu.show()
-                }
-                else
-                    import()
-            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { import() }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).isVisible = false
         }
 
@@ -118,10 +74,9 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
 
             val popupMenu = PopupMenu(requireContext(), view)
             popupMenu.menuInflater.inflate(R.menu.menu_filelibrary_context, popupMenu.menu)
-            popupMenu.menu.findItem(R.id.duplicate_selection).isVisible =
-                fileLibPreference.isLiveprog() || fileLibPreference.isPreset()
-            popupMenu.menu.findItem(R.id.edit_selection).isVisible = fileLibPreference.isLiveprog()
-            popupMenu.menu.findItem(R.id.overwrite_selection).isVisible = fileLibPreference.isPreset()
+            popupMenu.menu.findItem(R.id.duplicate_selection).isVisible = false
+            popupMenu.menu.findItem(R.id.edit_selection).isVisible = false
+            popupMenu.menu.findItem(R.id.overwrite_selection).isVisible = false
             popupMenu.menu.findItem(R.id.resample_selection).isVisible = fileLibPreference.isIrs()
 
             popupMenu.setOnMenuItemClickListener { menuItem ->
@@ -163,23 +118,6 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
                         }
                         refresh()
                     }
-                    R.id.overwrite_selection -> {
-                        if(fileLibPreference.isPreset()) {
-                            if(Preset(selectedFile.name).save())
-                                requireContext().toast(getString(R.string.filelibrary_preset_overwritten, name))
-                            else
-                                requireContext().toast(getString(R.string.filelibrary_preset_save_failed))
-                        }
-                        refresh()
-                    }
-                    R.id.edit_selection -> {
-                        if(fileLibPreference.isLiveprog()) {
-                            val intent = Intent(requireContext(), LiveprogEditorActivity::class.java)
-                            intent.putExtra(LiveprogEditorActivity.EXTRA_TARGET_FILE, selectedFile.absolutePath)
-                            startActivity(intent)
-                        }
-                        dismiss()
-                    }
                     R.id.rename_selection -> {
                         showFileNamePrompt(
                             R.string.filelibrary_context_rename,
@@ -200,17 +138,6 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
                         // If this file was active, we need to reset the selection to null
                         if (fileLibPreference.callChangeListener("")) {
                             fileLibPreference.value = ""
-                        }
-                    }
-                    R.id.duplicate_selection -> {
-                        showFileNamePrompt(
-                            R.string.filelibrary_context_duplicate,
-                            selectedFile,
-                            autofill = true,
-                            allowOverwrite = false
-                        ) {
-                            selectedFile.copyTo(it)
-                            refresh()
                         }
                     }
                     R.id.share_selection -> {
@@ -258,15 +185,6 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
                     requireContext().showAlert(R.string.filelibrary_unsupported_format_title,
                         R.string.filelibrary_unsupported_format)
                     return@let
-                }
-
-                StorageUtils.openInputStreamSafe(requireContext(), uri)?.use {
-                    if(!fileLibPreference.hasValidContent(it)) {
-                        Timber.e("File rejected due to invalid content")
-                        requireContext().showAlert(R.string.filelibrary_corrupted_title,
-                            R.string.filelibrary_corrupted)
-                        return@let
-                    }
                 }
 
                 val file = StorageUtils.importFile(requireContext(),
@@ -329,15 +247,10 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
     private fun refresh() {
         fileLibPreference.refresh()
         dialog.listView.adapter = createAdapter()
-
-        onTagClicked(currentTag, currentTagScripts)
         refreshSelection()
     }
 
     private fun refreshSelection() {
-        if (fileLibPreference.isPreset())
-            return
-
         val selectedIndex = (dialog.listView.adapter as? ListItemAdapter)?.indexOf(fileLibPreference.value) ?: -1
         if (selectedIndex >= 0) {
             dialog.listView.setItemChecked(selectedIndex, true)
@@ -348,86 +261,15 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
         }
     }
 
-    private fun onTagClicked(tag: String?, scripts: List<String>?) {
-        currentTag = tag
-        currentTagScripts = scripts
-        Timber.e(tag)
-        Timber.e(scripts?.joinToString(";"))
-
-        (dialog.listView.adapter as Filterable).filter.filter(scripts?.joinToString(";"))
-    }
-
-    private fun scanScriptMetadata() {
-        if(!fileLibPreference.isLiveprog())
-            return
-
-        scriptScannerScope.launch {
-            binding.tags.removeAllViews()
-
-            val untaggedScripts = mutableListOf<String>()
-            val foundTags = mutableMapOf<String /* tag */, MutableList<String> /* scripts */>()
-
-            fileLibPreference.entryValues.forEach { path ->
-                context?.let {
-                    eelParser.load(
-                        FileLibraryPreference.createFullPathCompat(it, path.toString()),
-                        skipProperties = true
-                    )
-                } ?: return@forEach
-
-                if(eelParser.tags.isEmpty())
-                    eelParser.fileName?.let(untaggedScripts::add)
-                eelParser.tags.forEach { tag ->
-                    val prettyfied = tag.lowercase()
-                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-                        .run { if(length <= 3) uppercase() else this }
-
-
-                    eelParser.fileName?.let {
-                        if (foundTags.containsKey(prettyfied))
-                            foundTags[prettyfied]?.add(it)
-                        else
-                            foundTags[prettyfied] = mutableListOf(it)
-                    }
-                }
-            }
-
-            if(untaggedScripts.isNotEmpty())
-                foundTags["Untagged"] = ((foundTags["Untagged"] ?: listOf()) + untaggedScripts).toMutableList()
-
-            withContext(Dispatchers.Main) {
-                val sorted = foundTags.entries
-                    .sortedWith(compareByDescending<Map.Entry<String, List<String>>> { it.value.size }
-                        .thenBy { it.key })
-
-                for((tag, scripts) in sorted) {
-                    binding.tags.addView(Chip(dialog.context, null,
-                        com.google.android.material.R.style.Widget_Material3_Chip_Assist_Elevated)
-                        .apply {
-                            text = tag
-                            isCheckable = true
-                            setOnClickListener { if(isChecked) onTagClicked(tag, scripts) }
-                        })
-                }
-                binding.tags.setOnCheckedStateChangeListener { _, checkedIds ->
-                    if(checkedIds.isEmpty())
-                        onTagClicked(null, null)
-                }
-            }
-        }
-    }
-
     @SuppressLint("PrivateResource")
     private fun createAdapter(): ListAdapter {
         return ListItemAdapter(
             requireContext(),
-            if (fileLibPreference.isPreset()) R.layout.item_preset_list
-            else com.google.android.material.R.layout.mtrl_alert_select_dialog_singlechoice,
+            com.google.android.material.R.layout.mtrl_alert_select_dialog_singlechoice,
             android.R.id.text1,
             fileLibPreference.entries.zip(fileLibPreference.entryValues){
                     a, b -> Entry(a, b)
             }.toTypedArray(),
-            fileLibPreference.isLiveprog()
         ) {
             refreshSelection()
         }
@@ -436,10 +278,7 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
     override fun onPrepareDialogBuilder(builder: AlertDialog.Builder) {
         super.onPrepareDialogBuilder(builder)
         binding = DialogFilelibraryBinding.inflate(layoutInflater)
-        binding.tags.isSingleSelection = true
-        binding.tags.layoutTransition = LayoutTransition().apply {
-            enableTransitionType(LayoutTransition.CHANGING)
-        }
+        binding.tags.isVisible = false
         binding.root.layoutTransition = LayoutTransition().apply {
             enableTransitionType(LayoutTransition.CHANGING)
         }
@@ -447,36 +286,14 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
         builder.setView(binding.root)
         builder.setNeutralButton(getString(R.string.action_import)) { _, _ -> }
 
-        if(fileLibPreference.isPreset()) {
-            builder.setNeutralButton(getString(R.string.add)) { _, _ -> }
-            builder.setNegativeButton(getString(R.string.close)) { _, _ -> }
-            builder.setTitle(getString(R.string.action_presets))
-        }
-
         builder.setAdapter(createAdapter()) { _, position ->
             val item = dialog.listView.adapter.getItem(position) as Entry
-            val name = item.name
-            val value = item.value
-
-            if(fileLibPreference.isPreset()) {
-                try {
-                    Preset(File(value.toString()).name).load()
-                    requireContext().toast(getString(R.string.filelibrary_preset_loaded, name))
-                }
-                catch (ex: Exception) {
-                    requireContext().showAlert(getString(R.string.filelibrary_corrupted_title),
-                        ex.localizedMessage ?: getString(R.string.filelibrary_preset_load_failed, name))
-                }
-            }
-
-            clickedEntryValue = value
+            clickedEntryValue = item.value
 
             // Simulate positive button press and dismiss
             this.onClick(dialog, DialogInterface.BUTTON_POSITIVE)
             dialog.dismiss()
         }
-
-        scanScriptMetadata()
     }
 
     private fun import() {
@@ -499,8 +316,8 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
 
     private inner class ListItemAdapter(
         context: Context, resource: Int, textViewResourceId: Int, val allItems: Array<Entry>,
-        val allowFilter: Boolean = false, val onFiltered: () -> Unit
-    ) : ArrayAdapter<Entry>(context, resource, textViewResourceId, allItems), Filterable {
+        val onFiltered: () -> Unit
+    ) : ArrayAdapter<Entry>(context, resource, textViewResourceId, allItems) {
         private var items: Array<Entry> = allItems
 
         fun indexOf(value: String): Int {
@@ -510,29 +327,6 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
         override fun getCount(): Int = items.size
         override fun getItem(position: Int): Entry = items[position]
         override fun getItemId(position: Int): Long = position.toLong()
-        override fun getFilter(): Filter {
-            return object : Filter() {
-                @Suppress("UNCHECKED_CAST")
-                override fun publishResults(charSequence: CharSequence?, filterResults: FilterResults) {
-                    items = filterResults.values as Array<Entry>
-                    notifyDataSetChanged()
-                    onFiltered.invoke()
-                }
-
-                override fun performFiltering(charSequence: CharSequence?): FilterResults {
-                    if(!allowFilter)
-                        return FilterResults().apply { values = allItems }
-
-                    val query = charSequence?.toString()?.split(";")
-                    return FilterResults().apply {
-                        values = if (query.isNullOrEmpty())
-                            allItems
-                        else
-                            allItems.filter { query.contains(it.name) }.toTypedArray()
-                    }
-                }
-            }
-        }
     }
 
     @Suppress("UNCHECKED_CAST")

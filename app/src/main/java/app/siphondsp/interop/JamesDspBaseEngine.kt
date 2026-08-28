@@ -80,10 +80,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val tubeEnabled = cache.get(R.string.key_tube_enable, false)
             val tubeDrive = cache.get(R.string.key_tube_drive, 2f)
 
-            cache.select(Constants.PREF_LIVEPROG)
-            val liveProgEnabled = cache.get(R.string.key_liveprog_enable, false)
-            val liveprogFile = cache.get(R.string.key_liveprog_file, "")
-
             cache.select(Constants.PREF_CONVOLVER)
             val convolverEnabled = cache.get(R.string.key_convolver_enable, false)
             val convolverFile = cache.get(R.string.key_convolver_file, "")
@@ -100,7 +96,6 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
                     Constants.PREF_REVERB -> setReverb(reverbEnabled, reverbPreset)
                     Constants.PREF_CROSSFEED -> setCrossfeed(crossfeedEnabled, crossfeedMode)
                     Constants.PREF_TUBE -> setVacuumTube(tubeEnabled, tubeDrive)
-                    Constants.PREF_LIVEPROG -> setLiveprog(liveProgEnabled, liveprogFile)
                     Constants.PREF_CONVOLVER -> setConvolver(convolverEnabled, convolverFile, convolverMode, convolverAdvImp)
                     else -> true
                 }
