@@ -2,7 +2,6 @@ package app.siphondsp.fragment
 
 import android.animation.LayoutTransition
 import android.content.Intent
-import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -27,8 +26,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
 
-class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private val prefsApp: Preferences.App by inject()
+class DspFragment : Fragment() {
     private val prefsVar: Preferences.Var by inject()
 
     private lateinit var binding: FragmentDspBinding
@@ -36,16 +34,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        prefsApp.registerOnSharedPreferenceChangeListener(this)
-        super.onCreate(savedInstanceState)
-    }
-
-    override fun onDestroy() {
-        prefsApp.unregisterOnSharedPreferenceChangeListener(this)
-        super.onDestroy()
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -128,7 +116,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         settingsBinding.cardContainer.layoutTransition = transition
 
         childFragmentManager.beginTransaction()
-            .replace(R.id.card_device_profiles, DeviceProfilesCardFragment.newInstance())
             .replace(
                 R.id.card_output_control, PreferenceGroupFragment.newInstance(Constants.PREF_OUTPUT,
                     R.xml.dsp_output_control_preferences
@@ -143,20 +130,6 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_liveprog_preferences
                 ))
             .commit()
-
-        // Load initial preferences
-        arrayOf(R.string.key_device_profiles_enable).forEach {
-            onSharedPreferenceChanged(null, getString(it))
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        when(key) {
-            getString(R.string.key_device_profiles_enable) -> {
-                (settingsBinding.cardDeviceProfiles.parent as ViewGroup).isVisible =
-                    prefsApp.get<Boolean>(R.string.key_device_profiles_enable)
-            }
-        }
     }
 
     private fun hideTranslationNotice() {
