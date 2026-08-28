@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -41,21 +42,17 @@ import kotlin.math.sin
 
 /**
  * The full-screen PEQ editor's unified BMW response visualiser -- shows the complete
- * modelled signal chain (via [BmwResponseCalculator]), draggable nodes for all three PEQ
- * banks simultaneously (only the active bank's nodes are draggable), and draggable tilt
- * handles. Intent-only: nothing here writes to SharedPreferences or configures the native
- * engine directly, everything flows back through [onDragCommitted]/[onTiltDragCommitted]
- * for the caller to validate and apply.
+ * modelled signal chain (via [BmwResponseCalculator]) and a numbered node for every band in
+ * all three PEQ banks. Read-only: nodes and tilt markers are not draggable (that only ever
+ * shifted filters by accident and was never used for real tuning); tapping a node pops a
+ * short-lived, auto-hiding info card for it and, for an active-bank node, calls
+ * [onPointSelected] so the caller can open it in the numeric editor.
  */
 class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context, attrs) {
     enum class ChannelDisplay { BOTH, LEFT, RIGHT }
     enum class DisplayMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
-    private enum class TiltHandle { PIVOT, AMOUNT }
 
     var onPointSelected: ((UUID) -> Unit)? = null
-    var onDragCommitted: ((ParametricEqBand) -> Unit)? = null
-    var onTiltDragCommitted: ((tiltFrequencyHz: Float, tiltAmountDb: Float) -> Unit)? = null
-    var onTiltDragPreview: ((tiltFrequencyHz: Float, tiltAmountDb: Float) -> Unit)? = null
 
     var showTiltHandles = false
         set(value) {
@@ -67,10 +64,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             field = value
             invalidate()
         }
-    // UNIFIED_SYSTEM only. Node dragging and tilt handles are only meaningful against the
-    // magnitude curve they were positioned on, so non-magnitude modes are read-only --
-    // enforced in onTouchEvent, independent of [interactive] below (which callers use for a
-    // different reason: a wholly static preview instance).
+    // Tapping a node only makes sense against the magnitude curve it sits on, so node taps are
+    // accepted in MAGNITUDE mode only -- enforced in onTouchEvent, independent of [interactive]
+    // below (which callers use for a different reason: a wholly static preview instance).
     var displayMode: DisplayMode = DisplayMode.MAGNITUDE
         set(value) {
             if (field == value) return
@@ -114,16 +110,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val spectrumDryYs = FloatArray(SPECTRUM_STEPS + 1)
     private val spectrumWetYs = FloatArray(SPECTRUM_STEPS + 1)
 
-    // --- Band-drag state (UNIFIED_SYSTEM always represents only the active bank's bands
-    // here, mirroring how the fragment already scopes committedBands/renderBands per bank) --
-    private var committedBands: List<ParametricEqBand> = emptyList()
+    // --- Band state (UNIFIED_SYSTEM: renderBands is only the active bank's bands, mirroring
+    // how the fragment already scopes bands per bank; the other two banks' bands live in
+    // allLowBandBands/allMidBandBands/allFullRangeBands below and are drawn read-only) --------
     private var renderBands: List<ParametricEqBand> = emptyList()
     private var selectedId: UUID? = null
-    private var draft: ParametricEqBand? = null
-    private var activePointerId = MotionEvent.INVALID_POINTER_ID
     private var downX = 0f
     private var downY = 0f
-    private var dragging = false
+    private var downConsumed = false
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var sampleRate = 48_000.0
     private var maximumFrequency = PeqGraphMath.MAX_FREQUENCY
@@ -184,32 +178,44 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         rightMeter.reset()
     }
 
-    // --- Node auto-hide: once bands are set (typed or dragged), node markers/labels stay
-    // visible briefly then fade out, leaving just the curve. Re-armed by any touch drag or by
-    // setBands()/setSystemState(), so it covers both drag edits and REW-value entry. ---------
-
-    private val nodeFadeHandler = Handler(Looper.getMainLooper())
-    private var lastNodeInteractionAtMs = 0L
-    private val nodeFadeTick = object : Runnable {
+    // --- Tapped-node info card: nodes themselves are always drawn now, but tapping one pops a
+    // small read-only detail card (filter type, freq/gain/Q, channel, which bank) that holds
+    // briefly then fades, so the graph doesn't stay cluttered with a card you're done reading.
+    private val infoFadeHandler = Handler(Looper.getMainLooper())
+    private var infoBand: ParametricEqBand? = null
+    private var infoBandBank: BmwPeqBank? = null
+    private var infoBandNumber = 0
+    private var infoShownAtMs = 0L
+    private val infoFadeTick = object : Runnable {
         override fun run() {
             invalidate()
-            if (nodeAlphaFraction() > 0f) nodeFadeHandler.postDelayed(this, 32L)
+            if (infoCardAlphaFraction() > 0f) infoFadeHandler.postDelayed(this, 32L)
+            else { infoBand = null; infoBandBank = null }
         }
     }
 
-    private fun noteNodeInteraction() {
-        lastNodeInteractionAtMs = SystemClock.uptimeMillis()
-        nodeFadeHandler.removeCallbacks(nodeFadeTick)
-        nodeFadeHandler.postDelayed(nodeFadeTick, 32L)
+    private fun showInfoCard(band: ParametricEqBand, bank: BmwPeqBank, number: Int) {
+        infoBand = band
+        infoBandBank = bank
+        infoBandNumber = number
+        infoShownAtMs = SystemClock.uptimeMillis()
+        infoFadeHandler.removeCallbacks(infoFadeTick)
+        infoFadeHandler.postDelayed(infoFadeTick, 32L)
     }
 
-    private fun nodeAlphaFraction(): Float {
-        if (draft != null || tiltDraft != null) return 1f
-        val sinceHold = SystemClock.uptimeMillis() - lastNodeInteractionAtMs - NODE_IDLE_HOLD_MS
+    private fun dismissInfoCard() {
+        infoFadeHandler.removeCallbacks(infoFadeTick)
+        infoBand = null
+        infoBandBank = null
+    }
+
+    private fun infoCardAlphaFraction(): Float {
+        if (infoBand == null) return 0f
+        val sinceHold = SystemClock.uptimeMillis() - infoShownAtMs - INFO_CARD_HOLD_MS
         return when {
             sinceHold <= 0L -> 1f
-            sinceHold >= NODE_FADE_DURATION_MS -> 0f
-            else -> 1f - sinceHold.toFloat() / NODE_FADE_DURATION_MS
+            sinceHold >= INFO_CARD_FADE_MS -> 0f
+            else -> 1f - sinceHold.toFloat() / INFO_CARD_FADE_MS
         }
     }
 
@@ -222,8 +228,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private var allMidBandBands: List<ParametricEqBand> = emptyList()
     private val calculator = BmwResponseCalculator(pointCount = SYSTEM_POINT_COUNT)
     private val curves = BmwResponseCurves(SYSTEM_POINT_COUNT)
-    private var tiltDraft: BmwGraphGestureMath.TiltValues? = null
-    private var tiltDragHandle: TiltHandle? = null
 
     // No solid background fill any more (see drawUnifiedSystem) -- the workspace's own designed
     // background shows through instead. bgBottomColor survives as nodeRingPaint's stroke colour
@@ -231,23 +235,27 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val bgBottomColor = Color.rgb(13, 13, 15)
     private val unifiedGridColor = Color.rgb(58, 60, 66)
     private val unifiedTextColor = Color.rgb(176, 178, 186)
-    private val bankColorFull = Color.rgb(230, 232, 238)
-    private val bankColorLow = Color.rgb(88, 164, 255)
-    private val bankColorMid = BmwDashboardSkin.MID_BAND_YELLOW
+    // Neon revision of the existing colour map: same identities (Full = white, Low = blue,
+    // Mid = yellow/amber, sum = white) but pushed to full-chroma so the thin sharp lines below
+    // actually read on the dark workspace instead of sitting there as dull grey-ish traces.
+    private val bankColorFull = Color.rgb(255, 255, 255)
+    private val bankColorLow = Color.rgb(0, 209, 255)
+    private val bankColorMid = Color.rgb(255, 224, 0)
     private val sumColor = Color.rgb(255, 255, 255)
 
-    // Per-band fill palette (FabFilter Pro-Q-style): each band gets its own colour, cycling by
-    // index within renderBands -- the same index drawActiveBankNodes already uses for its "1",
-    // "2", "3"... node labels, so a fill and its numbered node always match.
+    // Per-band palette (FabFilter Pro-Q-style): each band gets its own colour, cycling by index
+    // within its bank's band list -- the SAME colour is used for that band's node dot, its
+    // isolated-response overlay line, its shaded fill, and its tap-info card, so "this dot" and
+    // "this shape" are unmistakably the same filter. Neon, to match the line revision above.
     private val perBandPalette = intArrayOf(
-        Color.rgb(230, 76, 76),   // red
-        Color.rgb(158, 74, 230),  // violet
-        Color.rgb(74, 128, 230),  // blue
-        Color.rgb(96, 191, 96),   // green
-        Color.rgb(230, 158, 51),  // orange
-        Color.rgb(51, 191, 191),  // teal
-        Color.rgb(230, 102, 179), // pink
-        Color.rgb(191, 191, 51),  // olive
+        Color.rgb(255, 23, 68),   // red
+        Color.rgb(224, 64, 251),  // violet
+        Color.rgb(41, 121, 255),  // blue
+        Color.rgb(0, 230, 118),   // green
+        Color.rgb(255, 145, 0),   // orange
+        Color.rgb(0, 229, 255),   // cyan
+        Color.rgb(255, 64, 129),  // pink
+        Color.rgb(198, 255, 0),   // lime
     )
 
     private val unifiedGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -277,8 +285,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
     private val bandStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
+        strokeWidth = 1.1f * density
     }
+    // Scratch paint for the neon "bloom" under every curve: the real line is drawn thin and
+    // sharp, then this is stroked wide and translucent beneath it (configured per call in
+    // [strokeNeon]) so a 1px line still reads as glowing rather than hairline-faint.
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     // Reused, cleared-and-rebuilt-per-band scratch cascade/accumulator for drawPerBandFills --
     // avoids allocating a new BiquadCascade/ComplexAcc for every band on every frame.
     private val bandCascade = BiquadCascade(1)
@@ -290,30 +302,27 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private val lowBranchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * density
+        strokeWidth = 1.4f * density
         color = bankColorLow
-        alpha = 150
     }
     private val midBranchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * density
+        strokeWidth = 1.4f * density
         color = bankColorMid
-        alpha = 150
     }
     private val sumPaintSolid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3.2f * density
+        strokeWidth = 1.7f * density
         color = sumColor
     }
     private val sumPaintDashed = Paint(sumPaintSolid).apply {
-        alpha = 200
-        pathEffect = DashPathEffect(floatArrayOf(9f * density, 6f * density), 0f)
+        pathEffect = DashPathEffect(floatArrayOf(7f * density, 5f * density), 0f)
     }
     // MAGNITUDE_PHASE overlay: same colour family as the sum curve it accompanies, thinner and
     // dashed so it reads as an annotation on its own implicit degree scale, not a second sum.
     private val sumPhaseOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.6f * density
+        strokeWidth = 1.2f * density
         color = sumColor
         alpha = 170
         pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
@@ -334,13 +343,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
     private val unifiedOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = density
+        strokeWidth = 1.2f * density
         alpha = 90
     }
     private val unifiedOverlayDashEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
     private val nodeHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val nodeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val nodeDimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; alpha = 90 }
     private val nodeRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.4f * density
@@ -350,6 +358,20 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         color = Color.BLACK
         textAlign = Paint.Align.CENTER
         textSize = 9.5f * density
+    }
+    // Tapped-node info card (see drawInfoCard): a dark rounded panel, edged in that band's own
+    // palette colour, holding its type / freq / gain / Q / channel / bank for a few seconds.
+    private val infoCardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(18, 19, 22)
+    }
+    private val infoCardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.3f * density
+    }
+    private val infoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(232, 234, 240)
+        textSize = 10f * density
     }
     private val tiltHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -408,49 +430,31 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         selectedId: UUID? = this.selectedId,
         sampleRate: Double = this.sampleRate,
     ) {
-        committedBands = bands.toList()
-        renderBands = committedBands
-        draft = null
-        dragging = false
-        this.selectedId = selectedId?.takeIf { id -> committedBands.any { it.uuid == id } }
+        renderBands = bands.toList()
+        this.selectedId = selectedId?.takeIf { id -> renderBands.any { it.uuid == id } }
         this.sampleRate = sampleRate
         maximumFrequency = min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
+        dismissInfoCard()
         updateContentDescription()
-        noteNodeInteraction()
+        invalidate()
     }
 
     fun selectBand(id: UUID?) {
-        selectedId = id?.takeIf { candidate -> committedBands.any { it.uuid == candidate } }
+        selectedId = id?.takeIf { candidate -> renderBands.any { it.uuid == candidate } }
         updateContentDescription()
         invalidate()
     }
 
-    fun cancelDraft() {
-        draft = null
-        tiltDraft = null
-        tiltDragHandle = null
-        renderBands = committedBands
-        dragging = false
-        activePointerId = MotionEvent.INVALID_POINTER_ID
-        parent?.requestDisallowInterceptTouchEvent(false)
-        calculator.invalidateAll()
-        recomputeSystemResponse()
-        invalidate()
-    }
-
-    fun hasActiveDraft(): Boolean = draft != null || tiltDraft != null
-
     override fun onDetachedFromWindow() {
-        cancelDraft()
+        dismissInfoCard()
         stopSpectrum()
-        nodeFadeHandler.removeCallbacks(nodeFadeTick)
         super.onDetachedFromWindow()
     }
 
     /**
      * Full rebind for the surface: [values] is the 35-float native BMW DSP config array,
-     * [peq] the already-loaded three-bank PEQ state, [activeBank] which bank's nodes are
-     * draggable right now. The other two banks are stored read-only for display.
+     * [peq] the already-loaded three-bank PEQ state, [activeBank] which bank a tapped node
+     * reports back through [onPointSelected]. All three banks' nodes are drawn.
      */
     fun setSystemState(
         values: FloatArray,
@@ -466,8 +470,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         allFullRangeBands = peq.fullRangeBands.toList()
         allLowBandBands = peq.lowBandBands.toList()
         allMidBandBands = peq.midBandBands.toList()
-        tiltDraft = null
-        tiltDragHandle = null
 
         val activeBands = when (activeBank) {
             BmwPeqBank.FULL -> allFullRangeBands
@@ -487,34 +489,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     fun setSystemValues(values: FloatArray) {
         if (values.size != BmwSignalChain.VALUE_COUNT) return
         systemValues = values.copyOf()
-        tiltDraft = null
-        tiltDragHandle = null
         calculator.invalidateAll()
         recomputeSystemResponse()
         invalidate()
     }
 
-    private fun peqStateForDisplay(): BmwPeqState {
-        val activeList = ParametricEqBandList().apply { addAll(renderBands) }
-        return when (activeBank) {
-            BmwPeqBank.FULL -> peqState.copy(fullRangeBands = activeList)
-            BmwPeqBank.LOW -> peqState.copy(lowBandBands = activeList)
-            BmwPeqBank.MID -> peqState.copy(midBandBands = activeList)
-        }
-    }
-
-    private fun valuesForDisplay(): FloatArray {
-        val draft = tiltDraft ?: return systemValues
-        val copy = systemValues.copyOf()
-        copy[NativeBmwDspValues.INDEX_TILT_AMOUNT] = draft.amountDb
-        copy[NativeBmwDspValues.INDEX_TILT_FREQ] = draft.frequencyHz
-        return copy
-    }
-
     private fun recomputeSystemResponse() {
         val maxFreq = min(20_000.0, sampleRate * 0.5 * 0.999)
         calculator.configureAxis(sampleRate, 20.0, maxFreq)
-        calculator.compute(valuesForDisplay(), peqStateForDisplay(), curves)
+        calculator.compute(systemValues, peqState, curves)
         invalidate()
     }
 
@@ -523,135 +506,94 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     // --- Shared touch handling -----------------------------------------------------------
 
+    private class NodeHit(val band: ParametricEqBand, val bank: BmwPeqBank, val number: Int)
+
+    // Read-only now: a touch that lands on a node pops that node's info card (and, for an
+    // active-bank node, opens it in the numeric editor via onPointSelected). A touch that
+    // misses every node is not consumed, so it still bubbles to the parent (e.g. the preview
+    // card's tap-to-collapse). Dragging was removed entirely -- it only ever moved filters by
+    // accident -- so any real finger travel just cancels the pending tap.
+    private var pendingHit: NodeHit? = null
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!interactive) return false
         if (displayMode != DisplayMode.MAGNITUDE) return false
         if (event.pointerCount > 1) {
-            cancelDraft()
-            return true
+            pendingHit = null
+            downConsumed = false
+            return false
         }
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> return handleActionDown(event)
-            MotionEvent.ACTION_MOVE -> return handleActionMove(event)
-            MotionEvent.ACTION_UP -> return handleActionUp()
-            MotionEvent.ACTION_CANCEL -> {
-                cancelDraft()
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                pendingHit = hitTestAnyBank(event.x, event.y)
+                downConsumed = pendingHit != null
+                return downConsumed
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (downConsumed && hypot(event.x - downX, event.y - downY) >= touchSlop) {
+                    pendingHit = null
+                    downConsumed = false
+                }
+                return downConsumed
+            }
+            MotionEvent.ACTION_UP -> {
+                val hit = pendingHit
+                pendingHit = null
+                if (!downConsumed || hit == null) {
+                    downConsumed = false
+                    return false
+                }
+                downConsumed = false
+                openNodeInfo(hit)
+                performClick()
                 return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                pendingHit = null
+                downConsumed = false
+                return false
             }
         }
         return super.onTouchEvent(event)
     }
 
-    private fun handleActionDown(event: MotionEvent): Boolean {
-        noteNodeInteraction()
-        val hit = hitTest(event.x, event.y)
-        if (hit != null) {
-            selectedId = hit.uuid
-            draft = hit
-            tiltDraft = null
-            tiltDragHandle = null
-            activePointerId = event.getPointerId(0)
-            downX = event.x
-            downY = event.y
-            dragging = false
-            parent?.requestDisallowInterceptTouchEvent(true)
-            onPointSelected?.invoke(hit.uuid)
-            updateContentDescription()
-            invalidate()
-            return true
-        }
-        if (showTiltHandles && systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
-            val handle = hitTestTiltHandle(event.x, event.y)
-            if (handle != null) {
-                tiltDragHandle = handle
-                tiltDraft = currentTiltValues()
-                draft = null
-                activePointerId = event.getPointerId(0)
-                downX = event.x
-                downY = event.y
-                dragging = false
-                parent?.requestDisallowInterceptTouchEvent(true)
-                invalidate()
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun handleActionMove(event: MotionEvent): Boolean {
-        if ((draft == null && tiltDraft == null) || event.findPointerIndex(activePointerId) < 0) return false
-        val pointerIndex = event.findPointerIndex(activePointerId)
-        val x = event.getX(pointerIndex)
-        val y = event.getY(pointerIndex)
-        if (!dragging && hypot(x - downX, y - downY) >= touchSlop) dragging = true
-        if (!dragging) return true
-
-        if (draft != null) {
-            val original = committedBands.firstOrNull { it.uuid == selectedId } ?: return true
-            draft = PeqGraphMath.draggedBand(
-                original,
-                (x / width.coerceAtLeast(1)).coerceIn(0f, 1f),
-                (y / height.coerceAtLeast(1)).coerceIn(0f, 1f),
-                maximumFrequency,
-            )
-            renderBands = committedBands.map { if (it.uuid == selectedId) draft!! else it }
-            calculator.invalidateBank(activeBank)
-            recomputeSystemResponse()
-            updateContentDescription()
-        } else {
-            val handle = tiltDragHandle ?: return true
-            val base = tiltDraft ?: return true
-            val plotW = (plotRight() - plotLeft()).coerceAtLeast(1f)
-            val plotH = (plotBottom() - plotTop()).coerceAtLeast(1f)
-            val xFraction = ((x - plotLeft()) / plotW).coerceIn(0f, 1f)
-            val yFraction = ((y - plotTop()) / plotH).coerceIn(0f, 1f)
-            val updated = when (handle) {
-                TiltHandle.PIVOT -> BmwGraphGestureMath.draggedTiltFrequency(base, xFraction)
-                TiltHandle.AMOUNT -> BmwGraphGestureMath.draggedTiltAmount(base, yFraction)
-            }
-            tiltDraft = updated
-            onTiltDragPreview?.invoke(updated.frequencyHz, updated.amountDb)
-            calculator.invalidate(BmwResponseCalculator.Stage.TILT)
-            recomputeSystemResponse()
-        }
-        return true
-    }
-
-    private fun handleActionUp(): Boolean {
-        if (draft == null && tiltDraft == null) return false
-        noteNodeInteraction()
-        parent?.requestDisallowInterceptTouchEvent(false)
-        val wasDragging = dragging
-        activePointerId = MotionEvent.INVALID_POINTER_ID
-        dragging = false
-
-        if (draft != null) {
-            val committedDraft = draft
-            if (wasDragging && committedDraft != null) {
-                onDragCommitted?.invoke(committedDraft)
-            } else {
-                draft = null
-                renderBands = committedBands
-                recomputeSystemResponse()
-            }
-        } else {
-            val committedTilt = tiltDraft
-            if (wasDragging && committedTilt != null) {
-                onTiltDragCommitted?.invoke(committedTilt.frequencyHz, committedTilt.amountDb)
-            } else {
-                tiltDraft = null
-                tiltDragHandle = null
-                calculator.invalidate(BmwResponseCalculator.Stage.TILT)
-                recomputeSystemResponse()
-            }
-        }
-        performClick()
-        return true
+    private fun openNodeInfo(hit: NodeHit) {
+        selectedId = hit.band.uuid
+        showInfoCard(hit.band, hit.bank, hit.number)
+        if (hit.bank == activeBank) onPointSelected?.invoke(hit.band.uuid)
+        updateContentDescription()
+        invalidate()
     }
 
     override fun performClick(): Boolean {
         super.performClick()
         return true
+    }
+
+    /**
+     * Nearest node within [NODE_TOUCH_RADIUS_DP] across every bank currently drawn on screen:
+     * Low and Mid are always shown, Input Correction (FULL) only while it is the active bank.
+     * Numbers are 1-based within each bank, matching the node labels.
+     */
+    private fun hitTestAnyBank(x: Float, y: Float): NodeHit? {
+        val radius = NODE_TOUCH_RADIUS_DP * density
+        var best: NodeHit? = null
+        var bestDistance = Float.MAX_VALUE
+        fun consider(bands: List<ParametricEqBand>, bank: BmwPeqBank) {
+            bands.forEachIndexed { index, band ->
+                val distance = hypot(x - xForFrequency(band.frequency), y - yForGain(band.gain))
+                if (distance <= radius && distance < bestDistance) {
+                    bestDistance = distance
+                    best = NodeHit(band, bank, index + 1)
+                }
+            }
+        }
+        if (activeBank == BmwPeqBank.FULL) consider(allFullRangeBands, BmwPeqBank.FULL)
+        consider(allLowBandBands, BmwPeqBank.LOW)
+        consider(allMidBandBands, BmwPeqBank.MID)
+        return best
     }
 
     // --- Coordinate mapping ----------------------------------------------------------------
@@ -680,17 +622,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun yForPhaseDeg(deg: Double): Float = yForRange(deg, PHASE_MIN_DEG, PHASE_MAX_DEG)
     private fun yForGroupDelayMs(ms: Double): Float = yForRange(ms, GROUP_DELAY_MIN_MS, GROUP_DELAY_MAX_MS)
 
-    private fun hitTestTiltHandle(x: Float, y: Float): TiltHandle? {
-        val tilt = currentTiltValues()
-        val pivotX = xForFrequency(tilt.frequencyHz.toDouble())
-        val pivotY = yForGain(0.0)
-        val amountX = pivotX + 22f * density
-        val amountY = yForGain(tilt.amountDb.toDouble())
-        if (hypot(x - amountX, y - amountY) <= TILT_HANDLE_RADIUS_DP * density) return TiltHandle.AMOUNT
-        if (hypot(x - pivotX, y - pivotY) <= TILT_HANDLE_RADIUS_DP * density) return TiltHandle.PIVOT
-        return null
-    }
-
     // --- Drawing --------------------------------------------------------------------------
 
     override fun onDraw(canvas: Canvas) {
@@ -713,18 +644,21 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             DisplayMode.MAGNITUDE -> {
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
+                drawMonoBassRegion(canvas, left, right, top, bottom)
                 if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
-                drawActiveBankOverlays(canvas, left, right, top, bottom)
+                drawFilterOverlays(canvas, left, right)
                 drawPerBandFills(canvas, left, right)
                 drawSumCurve(canvas, left, right, top, bottom)
                 if (showTiltHandles) drawTiltHandles(canvas)
                 drawMultiBankNodes(canvas)
+                drawInfoCard(canvas, left, right, top, bottom)
                 if (showGainMeters) drawGainMeters(canvas, right, top, bottom)
             }
             DisplayMode.MAGNITUDE_PHASE -> {
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
+                drawMonoBassRegion(canvas, left, right, top, bottom)
                 if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawSumCurve(canvas, left, right, top, bottom)
@@ -769,7 +703,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawUnifiedGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f), zeroLine = 0f, toY = ::yForGain)
+        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(6f, 0f, -6f, -12f, -18f, -24f), zeroLine = 0f, toY = ::yForGain)
     }
 
     private fun drawPhaseGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -815,6 +749,56 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             .toDouble().coerceIn(20.0, maximumFrequency)
         if (midFreq <= lowFreq) return
         canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, crossoverShadePaint)
+    }
+
+    private fun monoBassActive(): Boolean =
+        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] >= .5f &&
+            systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] > 0f &&
+            systemValues[NativeBmwDspValues.INDEX_LPF_PASS] < .5f
+
+    private fun monoBassFrequency(): Double =
+        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_FREQ].toDouble().coerceIn(20.0, maximumFrequency)
+
+    /**
+     * Blend fraction (0..1) the two sum curves are pulled toward their L/R mean by, at [frequency]:
+     * full below the mono-bass corner, ramping back to 0 across the half-octave above it. This is a
+     * display-only cue -- [BmwResponseCalculator] still models the mono-bass low branch under an
+     * L=R assumption, so it can't actually show L/R polarity cancellation; visibly collapsing the
+     * L and R sum lines together where mono bass engages at least makes "the low end is mono here"
+     * unmissable on the graph. A full stereo mono-sum model is deferred (see the calculator).
+     */
+    private fun monoBassBlendAt(frequency: Double): Float {
+        if (!monoBassActive()) return 0f
+        val corner = monoBassFrequency()
+        val strength = (systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] * .01f).coerceIn(0f, 1f)
+        return when {
+            frequency <= corner -> strength
+            frequency >= corner * 1.5 -> 0f
+            else -> strength * (1f - ((frequency - corner) / (corner * 0.5)).toFloat())
+        }
+    }
+
+    private fun drawMonoBassRegion(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        if (!monoBassActive()) return
+        val cornerX = xForFrequency(monoBassFrequency()).coerceIn(left, right)
+        canvas.drawRect(left, top, cornerX, bottom, crossoverShadePaint)
+        canvas.drawLine(cornerX, top, cornerX, bottom, unifiedGridPaint)
+        val label = "MONO BASS ▸ ${monoBassFrequency().roundToInt()} Hz"
+        canvas.drawText(label, left + 6f * density, bottom - 6f * density, tiltLabelPaint)
+    }
+
+    /**
+     * Draws [path] as a neon line: a wide, translucent "bloom" pass of [paint]'s colour under a
+     * sharp core stroke of [paint] itself. Keeps the thin 1px lines readable on the dark
+     * workspace without a software-layer blur.
+     */
+    private fun strokeNeon(canvas: Canvas, path: Path, paint: Paint) {
+        glowPaint.color = paint.color
+        glowPaint.alpha = (Color.alpha(paint.color) * 0.16f).roundToInt()
+        glowPaint.strokeWidth = paint.strokeWidth * 3.4f
+        glowPaint.pathEffect = paint.pathEffect
+        canvas.drawPath(path, glowPaint)
+        canvas.drawPath(path, paint)
     }
 
     private fun drawUnifiedSpectrum(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -888,8 +872,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     /**
      * Each active-bank band's own contribution to the *actual* combined curve for this bank
-     * (cycling through [perBandPalette] by render-order index, same index [drawActiveBankNodes]
-     * numbers its nodes with) -- filled between the real curve (with this band included, exactly
+     * (cycling through [perBandPalette] by index within its bank's list, the same index
+     * [drawBankNodes] numbers its nodes with) -- filled between the real curve (with this band
+     * included, exactly
      * as already drawn by [drawBranchCurves]/[drawSumCurve]) and where that same curve would sit
      * with this one band's own dB contribution subtracted back out. The fill's own edge always
      * hugs the true curve's shape instead of a flat, context-free 0dB reference plane, the same
@@ -904,59 +889,61 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
      * before or after it in the chain.
      */
     private fun drawPerBandFills(canvas: Canvas, left: Float, right: Float) {
-        if (renderBands.isEmpty()) return
-        val referenceCurve = referenceCurveForActiveBank() ?: return
         val path = Path()
-        renderBands.forEachIndexed { index, band ->
-            bandCascade.clear()
-            bandCascade.addPeqBand(band, sampleRate)
-            path.rewind()
-            for (i in 0 until SYSTEM_POINT_COUNT) {
-                val fraction = i.toFloat() / (SYSTEM_POINT_COUNT - 1)
-                val frequency = curves.frequencies[i]
-                val w = 2.0 * PI * frequency / sampleRate
-                val cosW = cos(w)
-                val sinW = sin(w)
-                val cos2W = 2.0 * cosW * cosW - 1.0
-                val sin2W = 2.0 * sinW * cosW
-                bandAcc.setUnity()
-                bandCascade.accumulate(cosW, sinW, cos2W, sin2W, bandAcc)
-                val withBandDb = referenceCurve[i]
-                val withoutBandDb = withBandDb - bandAcc.magnitudeDb()
-                fillX[i] = left + fraction * (right - left)
-                fillTopY[i] = yForGain(withBandDb)
-                fillBottomY[i] = yForGain(withoutBandDb)
+        forEachVisibleBank { bank, bands ->
+            if (bands.isEmpty()) return@forEachVisibleBank
+            val referenceCurve = referenceCurveForBank(bank) ?: return@forEachVisibleBank
+            bands.forEachIndexed { index, band ->
+                bandCascade.clear()
+                bandCascade.addPeqBand(band, sampleRate)
+                path.rewind()
+                for (i in 0 until SYSTEM_POINT_COUNT) {
+                    val fraction = i.toFloat() / (SYSTEM_POINT_COUNT - 1)
+                    val frequency = curves.frequencies[i]
+                    val w = 2.0 * PI * frequency / sampleRate
+                    val cosW = cos(w)
+                    val sinW = sin(w)
+                    val cos2W = 2.0 * cosW * cosW - 1.0
+                    val sin2W = 2.0 * sinW * cosW
+                    bandAcc.setUnity()
+                    bandCascade.accumulate(cosW, sinW, cos2W, sin2W, bandAcc)
+                    val withBandDb = referenceCurve[i]
+                    val withoutBandDb = withBandDb - bandAcc.magnitudeDb()
+                    fillX[i] = left + fraction * (right - left)
+                    fillTopY[i] = yForGain(withBandDb)
+                    fillBottomY[i] = yForGain(withoutBandDb)
+                }
+                for (i in 0 until SYSTEM_POINT_COUNT) {
+                    if (i == 0) path.moveTo(fillX[i], fillTopY[i]) else path.lineTo(fillX[i], fillTopY[i])
+                }
+                for (i in SYSTEM_POINT_COUNT - 1 downTo 0) {
+                    path.lineTo(fillX[i], fillBottomY[i])
+                }
+                path.close()
+                val color = perBandPalette[index % perBandPalette.size]
+                // Paint.setColor() overwrites alpha along with RGB (Color.rgb()'s palette entries are
+                // fully opaque), so alpha has to be re-applied after color on every draw -- setting it
+                // once in the Paint initializer got silently clobbered the instant color was assigned
+                // here, which is why overlapping fills were reading as solid opaque blocks instead of
+                // blending together.
+                bandFillPaint.color = color
+                bandFillPaint.alpha = BAND_FILL_ALPHA
+                canvas.drawPath(path, bandFillPaint)
+                bandStrokePaint.color = color
+                bandStrokePaint.alpha = BAND_STROKE_ALPHA
+                canvas.drawPath(path, bandStrokePaint)
             }
-            for (i in 0 until SYSTEM_POINT_COUNT) {
-                if (i == 0) path.moveTo(fillX[i], fillTopY[i]) else path.lineTo(fillX[i], fillTopY[i])
-            }
-            for (i in SYSTEM_POINT_COUNT - 1 downTo 0) {
-                path.lineTo(fillX[i], fillBottomY[i])
-            }
-            path.close()
-            val color = perBandPalette[index % perBandPalette.size]
-            // Paint.setColor() overwrites alpha along with RGB (Color.rgb()'s palette entries are
-            // fully opaque), so alpha has to be re-applied after color on every draw -- setting it
-            // once in the Paint initializer got silently clobbered the instant color was assigned
-            // here, which is why overlapping fills were reading as solid opaque blocks instead of
-            // blending together.
-            bandFillPaint.color = color
-            bandFillPaint.alpha = BAND_FILL_ALPHA
-            canvas.drawPath(path, bandFillPaint)
-            bandStrokePaint.color = color
-            bandStrokePaint.alpha = BAND_STROKE_ALPHA
-            canvas.drawPath(path, bandStrokePaint)
         }
     }
 
     /**
-     * The real curve [drawPerBandFills] should hug for the bank currently being edited -- the
-     * same arithmetic L/R mean [drawSystemCurve] already draws for branch curves, so a fill's
-     * top edge sits exactly on top of the visible blue/orange/white line for that bank, not a
-     * separately-computed approximation of it.
+     * The real combined curve [drawPerBandFills] should hug for [bank] -- the same arithmetic
+     * L/R mean [drawSystemCurve] already draws for that bank's branch/pre-split line, so a
+     * fill's top edge sits exactly on the visible line for that bank, not a separately-computed
+     * approximation of it. Low and Mid are always available; Full only while it is active.
      */
-    private fun referenceCurveForActiveBank(): DoubleArray? {
-        val perChannel = when (activeBank) {
+    private fun referenceCurveForBank(bank: BmwPeqBank): DoubleArray? {
+        val perChannel = when (bank) {
             BmwPeqBank.FULL -> curves.preSplitDb
             BmwPeqBank.LOW -> curves.lowBranchDb
             BmwPeqBank.MID -> curves.midBranchDb
@@ -970,12 +957,25 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         return referenceCurveScratch
     }
 
+    /**
+     * Low Band and Mid Band are always visible so their filters stay on screen no matter which
+     * scope chip is selected; Input Correction (FULL) is only shown while it is the active bank.
+     * 1-based index within each list matches the node number and the tap-info card's "#n".
+     */
+    private inline fun forEachVisibleBank(action: (BmwPeqBank, List<ParametricEqBand>) -> Unit) {
+        if (activeBank == BmwPeqBank.FULL) action(BmwPeqBank.FULL, allFullRangeBands)
+        action(BmwPeqBank.LOW, allLowBandBands)
+        action(BmwPeqBank.MID, allMidBandBands)
+    }
+
     private fun drawSumCurve(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        val leftDb = curves.sumDb[BmwOutputChannel.LEFT.ordinal]
+        val rightDb = curves.sumDb[BmwOutputChannel.RIGHT.ordinal]
         if (channelDisplay != ChannelDisplay.RIGHT) {
-            drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid, ::yForGain)
+            drawSumChannelMonoAware(canvas, leftDb, rightDb, left, right, sumPaintSolid)
         }
         if (channelDisplay != ChannelDisplay.LEFT) {
-            drawSystemCurveForChannel(canvas, curves.sumDb[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed, ::yForGain)
+            drawSumChannelMonoAware(canvas, rightDb, leftDb, left, right, sumPaintDashed)
         }
     }
 
@@ -1007,7 +1007,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             val y = yForGroupDelayMs(avg)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        canvas.drawPath(path, sumPaintSolid)
+        strokeNeon(canvas, path, sumPaintSolid)
     }
 
     private fun drawSystemCurve(canvas: Canvas, perChannelValues: Array<DoubleArray>, left: Float, right: Float, paint: Paint, toY: (Double) -> Float) {
@@ -1023,7 +1023,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             val y = toY(avg)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        canvas.drawPath(path, paint)
+        strokeNeon(canvas, path, paint)
     }
 
     private fun drawSystemCurveForChannel(canvas: Canvas, values: DoubleArray, left: Float, right: Float, paint: Paint, toY: (Double) -> Float) {
@@ -1034,82 +1034,129 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             val y = toY(values[i])
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        canvas.drawPath(path, paint)
+        strokeNeon(canvas, path, paint)
     }
 
-    private fun drawActiveBankOverlays(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+    /**
+     * L/R sum for magnitude view: like [drawSystemCurveForChannel] but, where Mono Bass is
+     * engaged ([monoBassBlendAt]), each point is pulled toward the L/R mean so the solid-L and
+     * dashed-R lines visibly converge across the mono-bass region.
+     */
+    private fun drawSumChannelMonoAware(canvas: Canvas, self: DoubleArray, other: DoubleArray, left: Float, right: Float, paint: Paint) {
+        if (self.isEmpty()) return
+        val path = Path()
+        for (i in self.indices) {
+            val frequency = curves.frequencies.getOrElse(i) { maximumFrequency }
+            val blend = monoBassBlendAt(frequency)
+            val value = if (blend <= 0f) self[i] else self[i] + (((self[i] + other[i]) * 0.5) - self[i]) * blend
+            val x = left + (i.toFloat() / (self.size - 1).coerceAtLeast(1)) * (right - left)
+            val y = yForGain(value)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        strokeNeon(canvas, path, paint)
+    }
+
+    private fun drawFilterOverlays(canvas: Canvas, left: Float, right: Float) {
         if (!showIndividualFilters) return
-        renderBands.forEach { band ->
-            val response = BiquadUtils.computeCombinedResponse(
-                listOf(band), OVERLAY_POINT_COUNT, PeqGraphMath.MIN_FREQUENCY, maximumFrequency, sampleRate, band.channel,
-            )
-            if (response.isEmpty()) return@forEach
-            val path = Path()
-            response.forEachIndexed { index, (_, gain) ->
-                val x = left + (index.toFloat() / (response.size - 1).coerceAtLeast(1)) * (right - left)
-                val y = yForGain(gain)
-                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        forEachVisibleBank { bank, bands ->
+            bands.forEachIndexed { index, band ->
+                val response = BiquadUtils.computeCombinedResponse(
+                    listOf(band), OVERLAY_POINT_COUNT, PeqGraphMath.MIN_FREQUENCY, maximumFrequency, sampleRate, band.channel,
+                )
+                if (response.isEmpty()) return@forEachIndexed
+                val path = Path()
+                response.forEachIndexed { i, (_, gain) ->
+                    val x = left + (i.toFloat() / (response.size - 1).coerceAtLeast(1)) * (right - left)
+                    val y = yForGain(gain)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                // Same palette entry as this band's node dot, fill, and info card -- "this shape"
+                // and "this dot" are unmistakably one filter.
+                unifiedOverlayPaint.color = perBandPalette[index % perBandPalette.size]
+                unifiedOverlayPaint.alpha = if (band.uuid == selectedId && bank == activeBank) 235 else 130
+                unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) unifiedOverlayDashEffect else null
+                canvas.drawPath(path, unifiedOverlayPaint)
             }
-            unifiedOverlayPaint.color = colorForBand(band, activeBank)
-            unifiedOverlayPaint.alpha = if (band.uuid == selectedId) 200 else 70
-            unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) unifiedOverlayDashEffect else null
-            canvas.drawPath(path, unifiedOverlayPaint)
         }
     }
 
     private fun drawMultiBankNodes(canvas: Canvas) {
-        val nodeAlpha = (nodeAlphaFraction() * 255f).roundToInt()
-        if (nodeAlpha <= 0) return
-        if (activeBank != BmwPeqBank.FULL) drawInactiveBankNodes(canvas, allFullRangeBands, BmwPeqBank.FULL, nodeAlpha)
-        if (activeBank != BmwPeqBank.LOW) drawInactiveBankNodes(canvas, allLowBandBands, BmwPeqBank.LOW, nodeAlpha)
-        if (activeBank != BmwPeqBank.MID) drawInactiveBankNodes(canvas, allMidBandBands, BmwPeqBank.MID, nodeAlpha)
-        drawActiveBankNodes(canvas, nodeAlpha)
+        forEachVisibleBank { bank, bands -> drawBankNodes(canvas, bands, bank, emphasised = bank == activeBank) }
     }
 
-    private fun drawInactiveBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank, nodeAlpha: Int) {
-        bands.forEach { band ->
-            nodeDimPaint.color = colorForBand(band, bank)
-            nodeDimPaint.alpha = nodeDimPaint.alpha * nodeAlpha / 255
-            nodeRingPaint.alpha = nodeAlpha
+    private fun drawBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank, emphasised: Boolean) {
+        val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
+        bands.forEachIndexed { index, band ->
+            val color = perBandPalette[index % perBandPalette.size]
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
-            canvas.drawCircle(x, y, INACTIVE_NODE_RADIUS_DP * density, nodeDimPaint)
-            if (band.channel == ParametricEqChannel.RIGHT) {
-                canvas.drawCircle(x, y, INACTIVE_NODE_RADIUS_DP * density, nodeRingPaint)
+            val selected = emphasised && band.uuid == selectedId
+            val highlighted = selected || (infoBand?.uuid == band.uuid && infoBandBank == bank)
+            if (highlighted) {
+                nodeHaloPaint.color = color
+                nodeHaloPaint.alpha = 60
+                canvas.drawCircle(x, y, baseRadiusDp * density + 7f * density, nodeHaloPaint)
             }
-        }
-    }
-
-    private fun drawActiveBankNodes(canvas: Canvas, nodeAlpha: Int) {
-        renderBands.forEachIndexed { index, band ->
-            val color = colorForBand(band, activeBank)
+            val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * density
             nodeFillPaint.color = color
-            nodeFillPaint.alpha = nodeAlpha
-            nodeHaloPaint.color = color
-            nodeRingPaint.alpha = nodeAlpha
-            nodeTextPaint.alpha = nodeAlpha
-            val x = xForFrequency(band.frequency)
-            val y = yForGain(band.gain)
-            val selected = band.uuid == selectedId
-            if (selected) {
-                nodeHaloPaint.alpha = 60 * nodeAlpha / 255
-                canvas.drawCircle(x, y, ACTIVE_NODE_RADIUS_DP * density + 8f * density, nodeHaloPaint)
-            }
-            val radius = (if (selected) ACTIVE_NODE_RADIUS_DP + 1.5f else ACTIVE_NODE_RADIUS_DP) * density
+            nodeFillPaint.alpha = 255
             canvas.drawCircle(x, y, radius, nodeFillPaint)
             // Right-only bands get a dark ring on top of the fill -- same solid(L)/marked(R)
             // convention as the dashed R sum curve -- since color alone is hard to read at
             // this size for colorblind users and small screens.
             if (band.channel == ParametricEqChannel.RIGHT) {
+                nodeRingPaint.alpha = 255
                 canvas.drawCircle(x, y, radius, nodeRingPaint)
             }
+            nodeTextPaint.color =
+                if (ColorUtils.calculateLuminance(color) > 0.5) Color.BLACK else Color.WHITE
             val baseline = y - (nodeTextPaint.ascent() + nodeTextPaint.descent()) / 2
             canvas.drawText((index + 1).toString(), x, baseline, nodeTextPaint)
         }
     }
 
+    private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
+        BmwPeqBank.FULL -> "Input Correction"
+        BmwPeqBank.LOW -> "Low Band"
+        BmwPeqBank.MID -> "Mid Band"
+    }
+
+    private fun drawInfoCard(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        val band = infoBand ?: return
+        val bank = infoBandBank ?: return
+        val fraction = infoCardAlphaFraction()
+        if (fraction <= 0f) return
+        val a = (fraction * 255f).roundToInt()
+        val lines = arrayOf(
+            "#$infoBandNumber · ${band.filterType.displayLabel} · ${band.channel.displayLabel}",
+            "${band.frequency.roundToInt()} Hz · ${"%+.1f".format(band.gain)} dB · Q ${"%.2f".format(band.q)}",
+            "${bankLabel(bank)} band",
+        )
+        val pad = 8f * density
+        val lineHeight = infoTextPaint.textSize * 1.42f
+        val boxWidth = (lines.maxOf { infoTextPaint.measureText(it) } + pad * 2f).coerceAtMost(right - left)
+        val boxHeight = lineHeight * lines.size + pad * 2f
+        val nodeX = xForFrequency(band.frequency)
+        val nodeY = yForGain(band.gain)
+        val boxLeft = (nodeX - boxWidth / 2f).coerceIn(left, (right - boxWidth).coerceAtLeast(left))
+        val above = nodeY - 15f * density - boxHeight
+        val boxTop = if (above >= top) above else (nodeY + 15f * density).coerceAtMost(bottom - boxHeight)
+        val rect = RectF(boxLeft, boxTop, boxLeft + boxWidth, boxTop + boxHeight)
+        infoCardBgPaint.alpha = (a * 0.94f).roundToInt()
+        infoCardStrokePaint.color = perBandPalette[(infoBandNumber - 1).coerceAtLeast(0) % perBandPalette.size]
+        infoCardStrokePaint.alpha = a
+        infoTextPaint.alpha = a
+        canvas.drawRoundRect(rect, 6f * density, 6f * density, infoCardBgPaint)
+        canvas.drawRoundRect(rect, 6f * density, 6f * density, infoCardStrokePaint)
+        lines.forEachIndexed { i, text ->
+            canvas.drawText(text, boxLeft + pad, boxTop + pad + lineHeight * (i + 0.82f), infoTextPaint)
+        }
+    }
+
+    /** Static tilt markers -- pivot frequency (diamond) and tilt amount (circle). Read-only:
+     *  tilt is adjusted numerically on its own page now, not dragged here. */
     private fun drawTiltHandles(canvas: Canvas) {
-        val tilt = tiltDraft ?: currentTiltValues()
+        val tilt = currentTiltValues()
         val enabled = systemValues[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f
         val pivotX = xForFrequency(tilt.frequencyHz.toDouble())
         val pivotY = yForGain(0.0)
@@ -1120,7 +1167,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawLine(pivotX, amountY, amountX, amountY, paint)
         canvas.drawLine(pivotX, pivotY, pivotX, amountY, paint)
 
-        // Pivot: diamond marker (frequency-only drag).
         val r = TILT_HANDLE_DRAW_RADIUS_DP * density
         val diamond = Path().apply {
             moveTo(pivotX, pivotY - r)
@@ -1130,8 +1176,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             close()
         }
         canvas.drawPath(diamond, paint)
-
-        // Amount: circular marker (amount-only drag).
         canvas.drawCircle(amountX, amountY, r, paint)
 
         if (!enabled) {
@@ -1187,43 +1231,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawText("FULL", left, baseline, fullPaint)
         canvas.drawText("LOW", left + 38f * density, baseline, lowPaint)
         canvas.drawText("MID", left + 74f * density, baseline, midPaint)
-        canvas.drawText(
-            "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)",
-            left + 112f * density,
-            baseline,
-            unifiedLegendPaint,
-        )
-    }
-
-    private fun colorForBank(bank: BmwPeqBank): Int = when (bank) {
-        BmwPeqBank.FULL -> bankColorFull
-        BmwPeqBank.LOW -> bankColorLow
-        BmwPeqBank.MID -> bankColorMid
-    }
-
-    /**
-     * Bank color alone doesn't distinguish a band's channel, so a Left and a Right filter in
-     * the same bank used to render identically -- unreadable once a bank has independent L/R
-     * bands. Right-only bands get a lightened tint of the bank color (plus a dashed overlay
-     * line / dark ring on their node, applied by the callers) so channel is visible even
-     * without color vision; Left-only and Left+Right bands keep the plain bank color.
-     */
-    private fun colorForBand(band: ParametricEqBand, bank: BmwPeqBank): Int {
-        val base = colorForBank(bank)
-        return if (band.channel == ParametricEqChannel.RIGHT) {
-            ColorUtils.blendARGB(base, Color.WHITE, 0.4f)
+        val sumNote = if (monoBassActive()) {
+            "FINAL SUM (L solid / R dashed, mono below ${monoBassFrequency().roundToInt()} Hz)"
         } else {
-            base
+            "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)"
         }
-    }
-
-    private fun hitTest(x: Float, y: Float): ParametricEqBand? {
-        val radius = 24f * density
-        return renderBands.map { band ->
-            val pointX = xForFrequency(band.frequency)
-            val pointY = yForGain(band.gain)
-            band to hypot(x - pointX, y - pointY)
-        }.filter { it.second <= radius }.minByOrNull { it.second }?.first
+        canvas.drawText(sumNote, left + 112f * density, baseline, unifiedLegendPaint)
     }
 
     private fun updateContentDescription() {
@@ -1251,9 +1264,11 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val SYSTEM_POINT_COUNT = 192
         private const val OVERLAY_POINT_COUNT = 96
         private const val SPECTRUM_STEPS = 160
-        private const val INACTIVE_NODE_RADIUS_DP = 4.5f
+        // Non-active banks (always drawn now) sit a touch smaller than the active bank's so the
+        // bank you're actually editing still reads as the primary set.
+        private const val SECONDARY_NODE_RADIUS_DP = 6.5f
         private const val ACTIVE_NODE_RADIUS_DP = 8f
-        private const val TILT_HANDLE_RADIUS_DP = 20f
+        private const val NODE_TOUCH_RADIUS_DP = 22f
         private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
         private const val PHASE_MIN_DEG = -180.0
         private const val PHASE_MAX_DEG = 180.0
@@ -1264,15 +1279,13 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val METER_CEILING_DB = 0f
         // Low enough that 2-3 overlapping bands visibly blend into a mixed color instead of the
         // top-most one just opaquely covering the ones underneath.
-        private const val BAND_FILL_ALPHA = 55
-        private const val BAND_STROKE_ALPHA = 190
+        private const val BAND_FILL_ALPHA = 48
+        private const val BAND_STROKE_ALPHA = 170
 
-        // Total time nodes/labels stay visible after the last interaction before they're fully
-        // gone is HOLD + FADE (~10s), per explicit request to extend it well past the previous
-        // ~1.6s (1200 hold + 400 fade) -- kept the fade transition itself short so the last
-        // instant still reads as a fade-out, not an abrupt cut.
-        private const val NODE_IDLE_HOLD_MS = 9600L
-        private const val NODE_FADE_DURATION_MS = 400L
+        // Tap-info card: holds long enough to read, then a short fade so the last instant still
+        // reads as a fade-out rather than an abrupt cut. Nodes themselves no longer fade.
+        private const val INFO_CARD_HOLD_MS = 3600L
+        private const val INFO_CARD_FADE_MS = 500L
 
         private val FREQ_SCALE = doubleArrayOf(
             25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
