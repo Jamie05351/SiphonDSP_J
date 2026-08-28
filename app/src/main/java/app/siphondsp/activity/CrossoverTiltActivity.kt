@@ -22,9 +22,9 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
 
         val mode = intent.getStringExtra(EXTRA_WORKSPACE_MODE) ?: MODE_CROSSOVER
         val allPassMode = mode == MODE_ALLPASS
-        // DspDestination.ROUTING's primary-nav tile opens All-pass directly, so All-pass shares
+        // DspDestination.ALLPASS's primary-nav tile opens All-pass directly, so All-pass shares
         // its nav identity here rather than leaving a gap.
-        val current = if (allPassMode) DspDestination.ROUTING else DspDestination.CROSSOVER_TILT
+        val current = if (allPassMode) DspDestination.ALLPASS else DspDestination.CROSSOVER_TILT
         supportActionBar?.title = getString(
             if (allPassMode) R.string.action_output_allpass else R.string.action_crossover_tilt
         )

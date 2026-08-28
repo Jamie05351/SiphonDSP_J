@@ -196,7 +196,7 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_routing"
+            android:id="@+id/card_shortcut_allpass"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -217,7 +217,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:scaleType="centerCrop"
-                    android:src="@drawable/tile_routing"
+                    android:src="@drawable/tile_allpass"
                     android:contentDescription="@string/action_allpass" />
 
                 <TextView
