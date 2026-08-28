@@ -3,26 +3,25 @@ package app.siphondsp.fragment
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import androidx.preference.ListPreference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
-import androidx.preference.SwitchPreferenceCompat
 import androidx.preference.children
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
 import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.preference.MaterialSeekbarPreference
 
-/** Inline, expandable controls for the native BMW processor. */
+/** Inline, expandable controls for the native BMW processor -- just the Measurements / routing
+ *  rows now (LPF/HPF passthrough, band mutes, channel isolation, measurement mute). Gain
+ *  structure, Delay/polarity, Subsonic/crossovers, Tilt and the Output all-pass sections all
+ *  live on their own dedicated workspace screens. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
     private lateinit var menuPreferences: SharedPreferences
     // Guards re-entrant onSharedPreferenceChanged callbacks fired by our own editor.put*()
-    // calls below (writeValuesToMenu/writeAllPassToMenu run while onStart()'s listener is
-    // already registered) -- without this a menu refresh would immediately re-save and
-    // re-broadcast every key it just wrote.
+    // calls below (writeValuesToMenu runs while onStart()'s listener is already registered) --
+    // without this a menu refresh would immediately re-save and re-broadcast every key it just wrote.
     private var updatingMenu = false
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -69,10 +68,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (updatingMenu) return
-        if (key == "allpass_output") {
-            writeAllPassToMenu(NativeBmwDspValues.load(requireContext()))
-            return
-        }
         if (key in MUTE_KEYS) {
             val values = NativeBmwDspValues.load(requireContext())
             val muted = menuPreferences.getBoolean(key, false)
@@ -85,27 +80,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
                 values[NativeBmwDspValues.INDEX_MID_MUTE] = muteValue
                 values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
                 values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = muteValue
-            }
-            NativeBmwDspValues.save(requireContext(), values)
-            NativeBmwDspValues.broadcast(requireContext(), values)
-            return
-        }
-        if (key in ALL_PASS_KEYS) {
-            val values = NativeBmwDspValues.load(requireContext())
-            val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
-            val section = if (key!!.startsWith("allpass_1")) 0 else 1
-            val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-            values[base + when {
-                key.endsWith("enabled") -> 0
-                key.endsWith("order") -> 1
-                key.endsWith("frequency") -> 2
-                else -> 3
-            }] = when {
-                key.endsWith("enabled") -> if (menuPreferences.getBoolean(key, false)) 1f else 0f
-                key.endsWith("order") -> menuPreferences.getString(key, "2")?.toFloatOrNull() ?: 2f
-                key.endsWith("frequency") -> menuPreferences.getFloat(key, 150f)
-                else -> menuPreferences.getFloat(key, 0.71f)
             }
             NativeBmwDspValues.save(requireContext(), values)
             NativeBmwDspValues.broadcast(requireContext(), values)
@@ -135,39 +109,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
         editor.putBoolean("bmw_mute_low_band", values[NativeBmwDspValues.INDEX_LOW_MUTE] >= .5f)
         editor.putBoolean("bmw_mute_mid_band", values[NativeBmwDspValues.INDEX_MID_MUTE] >= .5f)
         editor.apply()
-        writeAllPassToMenu(values)
-        updatingMenu = false
-    }
-
-    private fun writeAllPassToMenu(values: FloatArray) {
-        updatingMenu = true
-        val output = menuPreferences.getString("allpass_output", "0")?.toIntOrNull()?.coerceIn(0, 3) ?: 0
-        val editor = menuPreferences.edit()
-        repeat(2) { section ->
-            val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-            val prefix = "allpass_${section + 1}_"
-            val enabled = values[base] >= .5f
-            val order = values[base + 1].toInt().toString()
-            val frequency = values[base + 2]
-            val q = values[base + 3]
-
-            editor.putBoolean(prefix + "enabled", enabled)
-            editor.putString(prefix + "order", order)
-            editor.putFloat(prefix + "frequency", frequency)
-            editor.putFloat(prefix + "q", q)
-
-            // editor.apply() alone doesn't refresh already-bound widgets -- a Preference only
-            // reads its persisted value once, at first bind. Without also setting these
-            // directly, switching the output channel silently keeps showing whichever channel's
-            // controls were last touched on screen, even though the correct per-channel values
-            // are (and always were) being saved/loaded underneath.
-            findPreference<SwitchPreferenceCompat>(prefix + "enabled")?.isChecked = enabled
-            findPreference<ListPreference>(prefix + "order")?.value = order
-            findPreference<MaterialSeekbarPreference>(prefix + "frequency")?.setValue(frequency)
-            findPreference<MaterialSeekbarPreference>(prefix + "q")?.setValue(q)
-        }
-        editor.apply()
         updatingMenu = false
     }
 
@@ -190,12 +131,10 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     companion object {
         private const val MENU_PREFS = "native_bmw_dsp_menu"
-        // Gain structure, Delay/polarity, Subsonic/crossovers and Tilt have all
-        // relocated to dedicated screens (GainLimiterFragment and CrossoverTiltFragment)
-        // -- only the "Measurements / routing" category (indices 1-4) still renders inline here.
-        // The master enable switch (index 0) was removed from this screen entirely --
-        // it was redundant with the app-level on/off, and NativeBmwDspValues.load()
-        // now forces index 0 on unconditionally, so there's nothing left to bind here.
+        // Only the "Measurements / routing" category (indices 1-4) renders inline here. Gain
+        // structure, Delay/polarity, Subsonic/crossovers, Tilt and Output all-pass have all
+        // relocated to dedicated screens. The master enable switch (index 0) was removed
+        // entirely -- NativeBmwDspValues.load() forces it on unconditionally now.
         private val BOOLEAN_INDEXES = setOf(1, 2)
         private val LIST_INDEXES = setOf(3, 4)
         private val KEY_TO_INDEX = linkedMapOf(
@@ -205,10 +144,6 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             "bmw_measurement_mute" to 4,
         )
         private val MUTE_KEYS = setOf("bmw_mute_low_band", "bmw_mute_mid_band")
-        private val ALL_PASS_KEYS = setOf(
-            "allpass_1_enabled", "allpass_1_order", "allpass_1_frequency", "allpass_1_q",
-            "allpass_2_enabled", "allpass_2_order", "allpass_2_frequency", "allpass_2_q",
-        )
 
         fun newInstance() = NativeBmwDspCardFragment()
     }

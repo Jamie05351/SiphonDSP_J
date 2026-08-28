@@ -46,9 +46,8 @@ class OutputAllPassFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Same reasoning as RoutingFragment: rebuild from disk on every resume so edits made
-        // elsewhere (the Settings page's own inline NativeBmwDspCardFragment editing this same
-        // data, a restored preset/profile/backup) aren't silently overwritten by a stale snapshot.
+        // Rebuild from disk on every resume so edits made elsewhere (a restored
+        // preset/profile/backup) aren't silently overwritten by a stale snapshot.
         if (::container.isInitialized) rebuild()
     }
 
