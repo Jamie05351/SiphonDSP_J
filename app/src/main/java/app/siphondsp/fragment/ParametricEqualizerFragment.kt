@@ -28,6 +28,7 @@ import app.siphondsp.adapter.ParametricEqBandAdapter
 import app.siphondsp.databinding.FragmentParametricEqBinding
 import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwSignalChain
+import app.siphondsp.model.ApoImportResult
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.BmwPeqState
@@ -40,6 +41,7 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.storage.StorageUtils
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
@@ -85,32 +87,161 @@ class ParametricEqualizerFragment : Fragment() {
         binding.chipFilterTools?.isEnabled = !editorActive
     }
 
-    private val importFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        try {
-            val text = requireContext().contentResolver.openInputStream(uri)
-                ?.use(::readImportText) ?: return@registerForActivityResult
-            val imported = ParametricEqBandList()
-            val result = imported.fromApoString(text)
-            val detail = if (result.skippedFilters > 0) {
-                "${result.skippedFilters} malformed or unsupported lines will be skipped."
-            } else {
-                "All ${imported.size} parsed filters are supported."
+    // One or more REW/APO ".txt" exports. A single file whose name isn't recognised falls back
+    // to the classic "import into the current bank" dialog; anything else is routed by filename
+    // (input / low_left / low_right / mid_left / mid_right -> bank + channel) in one shot.
+    private val importFileLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            handleApoImport(uris)
+        }
+
+    private data class ParsedApoFile(
+        val name: String,
+        val bands: ParametricEqBandList,
+        val result: ApoImportResult,
+    )
+
+    private data class RoutedApoImport(
+        val name: String,
+        val scope: PeqScope,
+        val channel: ParametricEqChannel,
+        val bands: ParametricEqBandList,
+        val preampDb: Double,
+        val skipped: Int,
+    )
+
+    /**
+     * Map a REW/APO export filename onto a (bank, channel). "input" / "correction" / "full" go
+     * to Input Correction as L+R; "low" / "mid" pick up a side from a left/right (or _l/_r,
+     * -l/-r) token in the name, otherwise L+R.
+     */
+    private fun routeApoFileName(name: String): Pair<PeqScope, ParametricEqChannel>? {
+        val base = name.substringBeforeLast('.').lowercase()
+        val side = when {
+            Regex("""(?:^|[ _.\-])(left|l)(?:$|[ _.\-])""").containsMatchIn(base) -> ParametricEqChannel.LEFT
+            Regex("""(?:^|[ _.\-])(right|r)(?:$|[ _.\-])""").containsMatchIn(base) -> ParametricEqChannel.RIGHT
+            else -> null
+        }
+        return when {
+            "input" in base || "correction" in base || "full" in base ->
+                PeqScope.FULL to ParametricEqChannel.LEFT_RIGHT
+            "low" in base -> PeqScope.LOW to (side ?: ParametricEqChannel.LEFT_RIGHT)
+            "mid" in base -> PeqScope.MID to (side ?: ParametricEqChannel.LEFT_RIGHT)
+            else -> null
+        }
+    }
+
+    private fun handleApoImport(uris: List<android.net.Uri>) {
+        val parsed = try {
+            uris.mapNotNull { uri ->
+                val name = StorageUtils.queryName(requireContext(), uri) ?: "file"
+                val text = requireContext().contentResolver.openInputStream(uri)
+                    ?.use(::readImportText) ?: return@mapNotNull null
+                val bands = ParametricEqBandList()
+                ParsedApoFile(name, bands, bands.fromApoString(text))
             }
-            AlertDialog.Builder(requireContext())
-                .setTitle("Import into ${selectedScope.label}")
-                .setMessage("$detail Choose how to apply the previewed filters.")
-                .setPositiveButton("Replace") { _, _ ->
-                    applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
-                }
-                .setNeutralButton("Append") { _, _ ->
-                    applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters)
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
         } catch (error: Exception) {
-            Timber.e(error, "Failed to import PEQ file")
+            Timber.e(error, "Failed to read import files")
             requireContext().toast(R.string.peq_import_error)
+            return
+        }
+        if (parsed.isEmpty()) return
+
+        val routed = LinkedHashMap<Pair<PeqScope, ParametricEqChannel>, RoutedApoImport>()
+        val unmatched = mutableListOf<String>()
+        parsed.forEach { file ->
+            val route = routeApoFileName(file.name)
+            if (route == null) {
+                unmatched += file.name
+            } else {
+                // last file wins if two map to the same bank+channel
+                routed[route] = RoutedApoImport(
+                    file.name, route.first, route.second, file.bands,
+                    file.result.preampDb, file.result.skippedFilters,
+                )
+            }
+        }
+
+        if (routed.isEmpty()) {
+            if (parsed.size == 1) {
+                promptSingleScopeImport(parsed[0].bands, parsed[0].result)
+            } else {
+                requireContext().toast(
+                    "No filenames recognised. Name them like input.txt / low_left.txt / mid_right.txt"
+                )
+            }
+            return
+        }
+
+        val channelSuffix = { c: ParametricEqChannel ->
+            when (c) {
+                ParametricEqChannel.LEFT -> " · L"
+                ParametricEqChannel.RIGHT -> " · R"
+                ParametricEqChannel.LEFT_RIGHT -> ""
+            }
+        }
+        val lines = routed.values.joinToString("\n") {
+            "${it.name} → ${it.scope.label}${channelSuffix(it.channel)}: ${it.bands.size}"
+        }
+        val skippedNote = if (unmatched.isEmpty()) "" else
+            "\n\nNot recognised, ignored: ${unmatched.joinToString(", ")}"
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Import REW filter set")
+            .setMessage("$lines$skippedNote\n\nReplace clears each affected bank first; Append adds to it.")
+            .setPositiveButton("Replace") { _, _ -> applyApoImport(routed.values.toList(), append = false) }
+            .setNeutralButton("Append") { _, _ -> applyApoImport(routed.values.toList(), append = true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun promptSingleScopeImport(imported: ParametricEqBandList, result: ApoImportResult) {
+        val detail = if (result.skippedFilters > 0) {
+            "${result.skippedFilters} malformed or unsupported lines will be skipped."
+        } else {
+            "All ${imported.size} parsed filters are supported."
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Import into ${selectedScope.label}")
+            .setMessage("$detail Choose how to apply the previewed filters.")
+            .setPositiveButton("Replace") { _, _ ->
+                applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
+            }
+            .setNeutralButton("Append") { _, _ ->
+                applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyApoImport(routed: List<RoutedApoImport>, append: Boolean) {
+        val candidate = peqState.deepCopy()
+        val touchedScopes = routed.map { it.scope }.distinct()
+        if (!append) touchedScopes.forEach { bandsForScope(candidate, it).clear() }
+
+        routed.forEach { r ->
+            val destination = bandsForScope(candidate, r.scope)
+            r.bands.forEach {
+                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID()))
+            }
+        }
+
+        val overflow = touchedScopes.firstOrNull { bandsForScope(candidate, it).size > BmwPeqState.MAX_BANDS }
+        if (overflow != null) {
+            requireContext().toast("${overflow.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters")
+            return
+        }
+
+        // Only the Input Correction file carries a meaningful preamp; per-branch files don't.
+        val fullPreamp = routed.firstOrNull { it.scope == PeqScope.FULL }?.preampDb
+        val finalCandidate = if (!append && fullPreamp != null) candidate.copy(preampDb = fullPreamp.toFloat()) else candidate
+
+        if (applyCandidate(finalCandidate, if (append) "rew-import-append" else "rew-import-replace")) {
+            val total = routed.sumOf { it.bands.size }
+            val skipped = routed.sumOf { it.skipped }
+            val base = "Imported $total filters into ${touchedScopes.size} bank(s)"
+            requireContext().toast(if (skipped > 0) "$base ($skipped lines skipped)" else base)
         }
     }
 
