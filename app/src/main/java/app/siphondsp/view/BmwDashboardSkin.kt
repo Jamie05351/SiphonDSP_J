@@ -228,16 +228,18 @@ object BmwDashboardSkin {
     private const val SLIDER_THUMB_TICK_SPACING_DP = 5f
     private const val SLIDER_THUMB_TICK_STROKE_WIDTH_DP = 0.75f
 
-    // Per-band slider accent, taken directly from the J_DSP_slider_master_style_4_colour pack's
-    // own accent hues -- Low=dark blue, Mid=yellow, Headroom=purple, everything else=cyan (the
-    // default, when no accentColor is passed). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for
+    // Per-band slider accent -- neon variants of the J_DSP_slider_master_style_4_colour pack's
+    // hues: Low=blue, Mid=yellow, Headroom=purple, everything else=cyan (the default, when no
+    // accentColor is passed). The pack's originals (#00266D / #FEF200 / #4632A5 / #009AED) read
+    // too dark on-device once the thumb gradient blends each toward black at its base, so these
+    // are lifted to high-value neon tones. Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for
     // title text/PEQ curves/diagram lines elsewhere): those stay as they are, this is the
     // sliders' own accent palette so a slider's thumb+capsule+fill can use its own exact hue
     // without recoloring anything else on the row.
-    const val SLIDER_LOW_BAND_COLOR = 0xFF00266D.toInt()
-    const val SLIDER_MID_BAND_COLOR = 0xFFFEF200.toInt()
-    const val SLIDER_HEADROOM_COLOR = 0xFF4632A5.toInt()
-    const val SLIDER_DEFAULT_COLOR = 0xFF009AED.toInt()
+    const val SLIDER_LOW_BAND_COLOR = 0xFF3D6BFF.toInt()
+    const val SLIDER_MID_BAND_COLOR = 0xFFFFE500.toInt()
+    const val SLIDER_HEADROOM_COLOR = 0xFFB14DFF.toInt()
+    const val SLIDER_DEFAULT_COLOR = 0xFF12CFFF.toInt()
 
     // Master art (viewport / 4): 18dp housing, 8.5dp inset groove, 6.5dp active fill. The active
     // fill is now slimmer than the groove it rides in, so the groove reads as a real channel the
@@ -269,13 +271,12 @@ object BmwDashboardSkin {
     fun sliderCapsuleDrawable(context: Context, accentColor: Int? = null): Drawable = SliderCapsuleDrawable(context, accentColor)
 
     // Round ON/OFF switch, recreated from the dedicated glass_toggle_on.xml art -- same glass-
-    // panel language as the slider capsule/glass box above. Only an ON state was supplied; the OFF
-    // thumb below (flat neutral grey, no glow) is extrapolated to match the existing app's grey-
-    // when-off convention rather than invented from nothing.
+    // panel language as the slider capsule/glass box above. The switch now carries a red/green
+    // status convention: OFF = neon-red shell border + red thumb, ON = neon-green shell border +
+    // green thumb (both the track's shell border and the thumb are stateful on state_checked).
     private const val GLASS_SWITCH_TRACK_WIDTH_DP = 50f
     private const val GLASS_SWITCH_TRACK_HEIGHT_DP = 26f
     private const val GLASS_SWITCH_TRACK_BORDER_WIDTH_DP = 1.3f
-    private val GLASS_SWITCH_SHELL_BORDER_COLOR = Color.rgb(0x2A, 0x2A, 0x2F)
     private val GLASS_SWITCH_TRACK_FILL_TOP = Color.rgb(0x11, 0x11, 0x11)
     private val GLASS_SWITCH_TRACK_FILL_MID = Color.rgb(0x09, 0x09, 0x09)
     private val GLASS_SWITCH_TRACK_FILL_BOTTOM = Color.BLACK
@@ -283,22 +284,27 @@ object BmwDashboardSkin {
     private val GLASS_SWITCH_TRACK_SHEEN_NEAR = Color.argb(0x61, 0xFF, 0xFF, 0xFF)
     private val GLASS_SWITCH_TRACK_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
 
+    // Neon red (OFF) / neon green (ON) status pair, shared by the switch's shell border and thumb.
+    private val GLASS_SWITCH_OFF_COLOR = Color.rgb(0xFF, 0x31, 0x31)
+    private val GLASS_SWITCH_ON_COLOR = Color.rgb(0x39, 0xFF, 0x14)
+
     private const val GLASS_SWITCH_THUMB_SIZE_DP = 22f
-    private val GLASS_SWITCH_THUMB_ON_FILL_NEAR = Color.rgb(0x27, 0xBD, 0xF4)
-    private val GLASS_SWITCH_THUMB_ON_FILL_FAR = Color.rgb(0x1E, 0xB1, 0xE7)
-    private val GLASS_SWITCH_THUMB_ON_BORDER = Color.argb(0x59, 0xDD, 0xF7, 0xFF)
-    private val GLASS_SWITCH_THUMB_ON_GLOW = Color.argb(0xA0, 0x25, 0xC2, 0xFF)
-    private val GLASS_SWITCH_THUMB_ON_RING = Color.argb(0xF5, 0x25, 0xC2, 0xFF)
+    private val GLASS_SWITCH_THUMB_ON_FILL_NEAR = blend(GLASS_SWITCH_ON_COLOR, Color.WHITE, 0.3f)
+    private val GLASS_SWITCH_THUMB_ON_FILL_FAR = GLASS_SWITCH_ON_COLOR
+    private val GLASS_SWITCH_THUMB_ON_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
+    private val GLASS_SWITCH_THUMB_ON_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
+    private val GLASS_SWITCH_THUMB_ON_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
     private val GLASS_SWITCH_THUMB_HIGHLIGHT = Color.argb(0x6B, 0xFF, 0xFF, 0xFF)
-    private val GLASS_SWITCH_THUMB_OFF_FILL = Color.rgb(0xAA, 0xB1, 0xB8)
-    private val GLASS_SWITCH_THUMB_OFF_BORDER = Color.argb(0x50, 0xFF, 0xFF, 0xFF)
+    private val GLASS_SWITCH_THUMB_OFF_FILL_NEAR = blend(GLASS_SWITCH_OFF_COLOR, Color.WHITE, 0.25f)
+    private val GLASS_SWITCH_THUMB_OFF_FILL_FAR = GLASS_SWITCH_OFF_COLOR
+    private val GLASS_SWITCH_THUMB_OFF_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
+    private val GLASS_SWITCH_THUMB_OFF_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
+    private val GLASS_SWITCH_THUMB_OFF_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
 
     fun glassSwitchTrackDrawable(context: Context): Drawable = GlassSwitchTrackDrawable(context)
-    // accentColor recolors just the thumb's ON-state glow/fill/border/ring (the track's own fill
-    // is state-independent -- see GlassSwitchTrackDrawable -- so it stays neutral either way) --
-    // used to color-code a switch row's toggle to match the rest of a colour-coded row (eg. the
-    // All-pass workspace's per-output Enabled switch).
-    fun glassSwitchThumbDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSwitchThumbDrawable(context, accentColor)
+    // The switch's red/green states are a fixed status convention now, so no accentColor hook --
+    // every ON/OFF switch reads the same regardless of which colour-coded row it sits in.
+    fun glassSwitchThumbDrawable(context: Context): Drawable = GlassSwitchThumbDrawable(context)
 
     // NORMAL/INVERT segmented polarity toggle (buildMiniToggleRow), recreated from the dedicated
     // glass_normal_invert_toggle.xml art -- a fully-rounded stadium capsule rather than
@@ -318,8 +324,9 @@ object BmwDashboardSkin {
     private val GLASS_SEGMENT_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
 
     fun glassSegmentTrackDrawable(context: Context): Drawable = GlassSegmentTrackDrawable(context)
-    // accentColor recolors the selected segment's gradient fill/glow/border -- same purpose as
-    // glassSwitchThumbDrawable's accentColor, for the two-way (eg. NORMAL/INVERT) toggle variant.
+    // accentColor recolors the selected segment's gradient fill/glow/border, for the two-way
+    // (eg. NORMAL/INVERT) toggle variant -- same blend-toward-accent technique SliderThumbDrawable
+    // uses. (The plain ON/OFF switch has no such hook: it's a fixed red/green status pair.)
     fun glassSegmentDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSegmentDrawable(context, accentColor)
 
     fun styleWorkspace(root: View) {
@@ -840,18 +847,19 @@ object BmwDashboardSkin {
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
-    /** See [glassSwitchTrackDrawable]. Shared shell for both on and off -- the source art only
-     *  shows one combined track, independent of thumb position. */
+    /** See [glassSwitchTrackDrawable]. Shared glass shell for both positions, except the outer
+     *  shell border, which is stateful on state_checked: neon green when on, neon red when off. */
     private class GlassSwitchTrackDrawable(context: Context) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val intrinsicW = (GLASS_SWITCH_TRACK_WIDTH_DP * density).roundToInt()
         private val intrinsicH = (GLASS_SWITCH_TRACK_HEIGHT_DP * density).roundToInt()
         private val borderWidth = GLASS_SWITCH_TRACK_BORDER_WIDTH_DP * density
+        private var checked = false
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val shellBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = borderWidth
-            color = GLASS_SWITCH_SHELL_BORDER_COLOR
+            color = GLASS_SWITCH_OFF_COLOR
         }
         private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -865,6 +873,17 @@ object BmwDashboardSkin {
 
         override fun getIntrinsicWidth() = intrinsicW
         override fun getIntrinsicHeight() = intrinsicH
+        override fun isStateful() = true
+
+        override fun onStateChange(state: IntArray): Boolean {
+            val wasChecked = checked
+            checked = state.contains(android.R.attr.state_checked)
+            if (checked != wasChecked) {
+                shellBorderPaint.color = if (checked) GLASS_SWITCH_ON_COLOR else GLASS_SWITCH_OFF_COLOR
+                invalidateSelf()
+            }
+            return checked != wasChecked
+        }
 
         override fun onBoundsChange(bounds: Rect) {
             super.onBoundsChange(bounds)
@@ -913,42 +932,27 @@ object BmwDashboardSkin {
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
-    /** See [glassSwitchThumbDrawable]. Stateful on state_checked: glowing radial-blue sphere when
-     *  on (matching the source art exactly), a flat neutral-grey circle when off -- the source art
-     *  only supplied an "on" state, so off is extrapolated to match the app's existing grey-when-
-     *  off convention rather than invented from nothing. */
-    private class GlassSwitchThumbDrawable(context: Context, private val accentColor: Int? = null) : Drawable() {
+    /** See [glassSwitchThumbDrawable]. Stateful on state_checked: a glowing neon-green sphere when
+     *  on, a glowing neon-red sphere when off -- same glass-sphere treatment either way (radial
+     *  fill, blurred outer glow, crisp ring, top highlight arc), only the hue changes, so the
+     *  switch reads as a live red/green status light rather than lit-vs-dead. */
+    private class GlassSwitchThumbDrawable(context: Context) : Drawable() {
         private val density = context.resources.displayMetrics.density
         private val intrinsicSize = (GLASS_SWITCH_THUMB_SIZE_DP * density).roundToInt()
         private val glowWidth = 3f * density
         private val borderWidth = density
         private var checked = false
 
-        // accentColor swaps this thumb's fixed ON-state blue for that color, preserving each
-        // original color's own alpha (glow/border/ring are semi-transparent by design; recoloring
-        // via [blend] toward the accent -- same technique SliderThumbDrawable already uses --
-        // instead of a flat replacement would otherwise lose that translucency).
-        private fun tinted(original: Int) = accentColor?.let {
-            Color.argb(Color.alpha(original), Color.red(it), Color.green(it), Color.blue(it))
-        } ?: original
-        private val onFillNear = accentColor?.let { blend(it, Color.WHITE, 0.3f) } ?: GLASS_SWITCH_THUMB_ON_FILL_NEAR
-        private val onFillFar = accentColor ?: GLASS_SWITCH_THUMB_ON_FILL_FAR
-        private val onBorder = tinted(GLASS_SWITCH_THUMB_ON_BORDER)
-        private val onGlow = tinted(GLASS_SWITCH_THUMB_ON_GLOW)
-        private val onRing = tinted(GLASS_SWITCH_THUMB_ON_RING)
-
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = borderWidth }
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = glowWidth
-            color = onGlow
             maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
         }
         private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = density
-            color = onRing
         }
         private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -972,17 +976,15 @@ object BmwDashboardSkin {
 
         private fun updatePaints() {
             if (circleRect.isEmpty) return
-            if (checked) {
-                fillPaint.shader = RadialGradient(
-                    circleRect.centerX(), circleRect.top + circleRect.height() * 0.42f, circleRect.width() / 2f,
-                    onFillNear, onFillFar, Shader.TileMode.CLAMP,
-                )
-                borderPaint.color = onBorder
-            } else {
-                fillPaint.shader = null
-                fillPaint.color = GLASS_SWITCH_THUMB_OFF_FILL
-                borderPaint.color = GLASS_SWITCH_THUMB_OFF_BORDER
-            }
+            val near = if (checked) GLASS_SWITCH_THUMB_ON_FILL_NEAR else GLASS_SWITCH_THUMB_OFF_FILL_NEAR
+            val far = if (checked) GLASS_SWITCH_THUMB_ON_FILL_FAR else GLASS_SWITCH_THUMB_OFF_FILL_FAR
+            fillPaint.shader = RadialGradient(
+                circleRect.centerX(), circleRect.top + circleRect.height() * 0.42f, circleRect.width() / 2f,
+                near, far, Shader.TileMode.CLAMP,
+            )
+            borderPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_BORDER else GLASS_SWITCH_THUMB_OFF_BORDER
+            glowPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_GLOW else GLASS_SWITCH_THUMB_OFF_GLOW
+            ringPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_RING else GLASS_SWITCH_THUMB_OFF_RING
             invalidateSelf()
         }
 
@@ -1004,16 +1006,11 @@ object BmwDashboardSkin {
         override fun draw(canvas: Canvas) {
             if (circleRect.isEmpty) return
             val r = circleRect.width() / 2f
-            if (checked) {
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r + glowWidth / 2f, glowPaint)
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, fillPaint)
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, ringPaint)
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, borderPaint)
-                canvas.drawPath(highlightPath, highlightPaint)
-            } else {
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, fillPaint)
-                canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, borderPaint)
-            }
+            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r + glowWidth / 2f, glowPaint)
+            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, fillPaint)
+            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, ringPaint)
+            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, borderPaint)
+            canvas.drawPath(highlightPath, highlightPaint)
         }
 
         override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
