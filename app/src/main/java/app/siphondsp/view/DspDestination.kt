@@ -42,23 +42,22 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
-    // The whole 5-tile bar -- each tile's own icon, plus which single tile reads as "selected"
-    // (a cyan glow border, with that tile's icon recolored to match) -- is baked entirely into
-    // one of 5 whole-bar source images (drawable-nodpi/sidebar_bar_*.png), picked by [current].
-    // populate() draws no icon/label of its own; it only lays an invisible click-target/focus-ring
-    // row over each tile's measured bounds.
+    // The whole sidebar -- the rounded panel frame plus its 5 inlaid tiles, each tile's own icon,
+    // and which single tile reads as "selected" (a cyan glow border, icon recolored to match) --
+    // is baked into one of 5 source images (drawable-nodpi/sidebar_bar_*.png), picked by
+    // [current]. populate() draws no icon/label of its own; it only lays an invisible
+    // click-target/focus-ring row over each tile's measured bounds.
     //
-    // The art is shown FIT_CENTER (aspect preserved, never stretched to the column) -- so the
-    // rounded panel frame hugs the 5 tiles at their natural proportions instead of being pulled
-    // out to a tall empty box the height of the whole sidebar column. The 5 PNGs are sliced from
-    // one supplied 5-up sheet and normalised to a shared 100x351 canvas (byte-identical framing),
-    // so a single [rowWeights] lines the click targets up on all 5. Weights are the 11 relative
-    // bands measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4,
-    // gap4, tile5, bottom margin -- applied to the art's *displayed* height (post-FIT_CENTER),
-    // not the column height, so they track the tiles regardless of the column's size on device.
+    // Rendered from the jdsp_*_selected.svg vector sources with only the full-canvas black
+    // backdrop stripped (the panel frame stays) at 1200px wide, cropped to the panel -> one
+    // shared 643x2982 canvas, byte-identical tile positions across all 5. Shown FIT_CENTER
+    // (aspect preserved, never stretched to the column). [rowWeights] are the 11 relative bands
+    // measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4,
+    // tile5, bottom margin -- applied to the art's *displayed* height (post-FIT_CENTER), not the
+    // column height, so the click targets track the tiles regardless of the column's size.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(18, 60, 7, 60, 7, 60, 7, 60, 7, 60, 4)
+    private val ROW_WEIGHTS = intArrayOf(68, 535, 39, 535, 39, 535, 39, 535, 39, 535, 84)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
