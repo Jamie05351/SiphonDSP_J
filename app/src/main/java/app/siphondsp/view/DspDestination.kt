@@ -1,8 +1,10 @@
 package app.siphondsp.view
 
 import android.content.Intent
+import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -42,22 +44,21 @@ enum class DspDestination(
 object DspCrossNavBar {
     // The whole 5-tile bar -- each tile's own icon, plus which single tile reads as "selected"
     // (a cyan glow border, with that tile's icon recolored to match) -- is baked entirely into
-    // one of 5 whole-bar source VectorDrawables, picked by [current]. populate() draws no
-    // icon/label of its own; it only lays an invisible click-target/focus-ring row over each
-    // tile's measured bounds.
+    // one of 5 whole-bar source images (drawable-nodpi/sidebar_bar_*.png), picked by [current].
+    // populate() draws no icon/label of its own; it only lays an invisible click-target/focus-ring
+    // row over each tile's measured bounds.
     //
-    // This glass-tile art draws a visible rounded-rect box per tile with real empty space between
-    // tiles, so [rowWeights] is read directly off the source XML's own path coordinates (each
-    // tile rect's top/bottom V values, on the shared 220x980 viewport -- identical across all 5
-    // JDSP_sidebar_vector_pack files) rather than estimated from a rendered image -- exact, not
-    // measured. Tiles sit at y 28..188, 216..376, 404..564, 592..752, 780..940 (180x160 boxes,
-    // 28-unit gaps). 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3,
-    // tile4, gap4, tile5, bottom margin. LinearLayout weights are proportions, not absolute
-    // values, so passing the raw viewport-unit heights as weights reproduces the exact source
-    // proportions regardless of the sidebar's actual on-screen height on any given device.
+    // The art is shown FIT_CENTER (aspect preserved, never stretched to the column) -- so the
+    // rounded panel frame hugs the 5 tiles at their natural proportions instead of being pulled
+    // out to a tall empty box the height of the whole sidebar column. The 5 PNGs are sliced from
+    // one supplied 5-up sheet and normalised to a shared 100x351 canvas (byte-identical framing),
+    // so a single [rowWeights] lines the click targets up on all 5. Weights are the 11 relative
+    // bands measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4,
+    // gap4, tile5, bottom margin -- applied to the art's *displayed* height (post-FIT_CENTER),
+    // not the column height, so they track the tiles regardless of the column's size on device.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(28, 160, 28, 160, 28, 160, 28, 160, 28, 160, 40)
+    private val ROW_WEIGHTS = intArrayOf(18, 60, 7, 60, 7, 60, 7, 60, 7, 60, 4)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
@@ -77,11 +78,33 @@ object DspCrossNavBar {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
+        container.background = null
         val art = barArt(current)
-        // A plain resource-referenced bitmap's default gravity is FILL, so this stretches to
-        // cover the container exactly like the old per-tile ImageView(FIT_XY) did -- View.background
-        // always paints behind every child added below regardless of container type.
-        container.background = ContextCompat.getDrawable(activity, art.res)
+
+        // The art and the click-target rows share one FrameLayout so the rows can sit *on top of*
+        // the art rather than stacked after it. The art is FIT_CENTER (aspect-preserving) so it is
+        // never stretched to the column -- it scales to whichever of width/height runs out first
+        // and centres in the rest.
+        val stack = FrameLayout(activity)
+        container.addView(
+            stack,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT),
+        )
+
+        val artView = ImageView(activity).apply {
+            setImageDrawable(ContextCompat.getDrawable(activity, art.res))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        stack.addView(
+            artView,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+        )
+
+        // Sized/positioned to the art's displayed rect in the post() below, not left MATCH_PARENT,
+        // so a tap in the column's empty margin above/below/beside the art doesn't hit a tile row.
+        val rows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        stack.addView(rows, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT))
 
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
         val weights = art.rowWeights
@@ -89,7 +112,7 @@ object DspCrossNavBar {
 
         fun addSpacer(weightIndex: Int) {
             val spacer = View(activity)
-            container.addView(spacer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+            rows.addView(spacer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
             children += WeightedChild(spacer, weightIndex)
         }
 
@@ -136,7 +159,7 @@ object DspCrossNavBar {
             // No icon/label overlay: the bar art's own tile already carries its icon (and, for
             // the current destination, its lit glow) baked in -- this row exists purely as the
             // invisible click target / focus-ring host over that tile, per its measured bounds.
-            container.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+            rows.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
             // Tile weight is at an odd index (1, 3, 5, 7, 9); the gap that follows it (2, 4, 6, 8)
             // sits between this tile and the next, so it's only added while a next tile remains.
             children += WeightedChild(row, index * 2 + 1)
@@ -148,24 +171,36 @@ object DspCrossNavBar {
         // Every child was added above with height=0 (a LinearLayout.LayoutParams default), not a
         // weight -- weights are wrong here because LinearLayout rounds each weighted child's
         // share to a whole pixel *independently*, and those small per-child rounding errors
-        // compound down 11 children (top margin, 5 tiles, 4 gaps, bottom margin), so icon/label
-        // content drifted visibly higher within its tile the further down the bar it sat. Instead,
-        // once the container has a real measured height (post, not before), each child's height is
-        // set explicitly from the *cumulative* weight fraction rounded to a pixel boundary -- the
+        // compound down 11 children (top margin, 5 tiles, 4 gaps, bottom margin), so the click
+        // targets drift out from under their tiles the further down the bar they sit. Instead,
+        // once the art has a real displayed rect (post, not before), each child's height is set
+        // explicitly from the *cumulative* weight fraction rounded to a pixel boundary -- the
         // running sum is always exact, so no drift can accumulate regardless of position.
         val totalWeight = weights.sum()
-        container.post {
-            val totalHeight = container.height
-            if (totalHeight <= 0) return@post
+        stack.post {
+            val drawable = artView.drawable ?: return@post
+            val iw = drawable.intrinsicWidth
+            val ih = drawable.intrinsicHeight
+            if (iw <= 0 || ih <= 0 || artView.width <= 0 || artView.height <= 0) return@post
+            // FIT_CENTER: uniform scale to the tighter of the two axes, then centre in the rest.
+            val scale = minOf(artView.width.toFloat() / iw, artView.height.toFloat() / ih)
+            val dispW = (iw * scale).toInt()
+            val dispH = (ih * scale).toInt()
+            if (dispH <= 0) return@post
+            (rows.layoutParams as FrameLayout.LayoutParams).apply {
+                width = dispW
+                height = dispH
+                gravity = Gravity.CENTER
+            }
             var cumulative = 0
             var previousBoundary = 0
             children.forEach { child ->
                 cumulative += weights[child.weightIndex]
-                val boundary = (totalHeight.toLong() * cumulative / totalWeight).toInt()
+                val boundary = (dispH.toLong() * cumulative / totalWeight).toInt()
                 (child.view.layoutParams as LinearLayout.LayoutParams).height = boundary - previousBoundary
                 previousBoundary = boundary
             }
-            container.requestLayout()
+            rows.requestLayout()
         }
 
         container.visibility = View.VISIBLE
