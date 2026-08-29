@@ -209,7 +209,7 @@ class CrossoverDashboardBuilder(
                 // show through unfiltered.
                 thumbTintList = null
                 trackTintList = null
-                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context, accentColor)
+                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context)
                 trackDrawable = BmwDashboardSkin.glassSwitchTrackDrawable(context)
                 setOnCheckedChangeListener { _, checked ->
                     writeValue(index, mirrorIndices, if (checked) 1f else 0f)
