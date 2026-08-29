@@ -137,15 +137,17 @@ object BmwDashboardSkin {
 
     // Single slider thumb/track/capsule shared by every DSP workspace slider (Gains/Delay,
     // Crossovers & Tilt, Mono Bass, Routing, Compressor). Recreates the user-supplied
-    // slider_{dark_blue,light_blue,purple,yellow}.xml reference art: a chunky recessed groove
-    // (outer capsule shell + inset bezel + thin highlight line) with the fill and thumb both
-    // tinted per accent. The groove/bezel layers are painted onto the Slider's own `background`
+    // J_DSP_slider_master_style_4_colour pack (slider_{cyan,dark_blue,yellow,purple}_vector.xml):
+    // a compact 18dp housing with an inset recessed groove (outer capsule shell + inset bezel +
+    // thin highlight line) and a slim 6.5dp value fill, with the fill and thumb both tinted per
+    // accent. The groove/bezel layers are painted onto the Slider's own `background`
     // (SliderCapsuleDrawable, below); the actual active/inactive fill stays Slider's real native
-    // track (just made much taller and recolored via trackColorActive/trackColorInactive) rather
-    // than hand-painted, deliberately -- Slider only exposes trackHeight/trackColorActive/
-    // trackColorInactive, not a pluggable track drawable, so repainting the live value-fill
-    // ourselves would need a Slider subclass reverse-engineering BaseSlider's internal
-    // padding/thumb-radius inset math to find the exact active/inactive split each frame, and any
+    // track (its height set from SLIDER_TRACK_HEIGHT_DP, recolored via trackColorActive/
+    // trackColorInactive) rather than hand-painted, deliberately -- Slider only exposes
+    // trackHeight/trackColorActive/trackColorInactive, not a pluggable track drawable, so
+    // repainting the live value-fill ourselves would need a Slider subclass reverse-engineering
+    // BaseSlider's internal padding/thumb-radius inset math to find the exact active/inactive
+    // split each frame, and any
     // drift from that math would visibly desync the fill's edge from the real thumb position. The
     // reference's own gradient gets approximated as a single lightened solid for the same reason
     // (trackColorActive only accepts a flat tint, not a Shader) -- reads correctly at the size
@@ -199,46 +201,57 @@ object BmwDashboardSkin {
     fun glassBoxDrawable(context: Context, showBorder: Boolean = true, accentColor: Int? = null): Drawable =
         GlassBoxDrawable(context, showBorder, accentColor)
 
+    // Compact "master style" geometry, taken from slider_{cyan,dark_blue,yellow,purple}_vector.xml
+    // (the 320x22dp master art, viewport 1280x88 -> divide by 4 for dp): a 36.5x18dp thumb whose
+    // body matches the 18dp housing height exactly rather than overhanging it, over a slim 6.5dp
+    // active fill -- replacing the earlier taller-thumb / 15dp-fill treatment that read as bulky.
     const val SLIDER_THUMB_WIDTH_DP = 36
-    const val SLIDER_THUMB_HEIGHT_DP = 24
-    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 5f
+    const val SLIDER_THUMB_HEIGHT_DP = 18
+    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 7.5f
     private const val SLIDER_THUMB_BORDER_WIDTH_DP = 1f
-    private val SLIDER_THUMB_BORDER_COLOR = Color.rgb(0x9A, 0x9D, 0xA1)
+    private val SLIDER_THUMB_BORDER_COLOR = Color.rgb(0x7A, 0x7A, 0x7A)
     // 3-stop vertical gradient: lit grey at top, mid grey centre, dark grey at bottom.
     private val thumbGradientTop = Color.rgb(0x77, 0x7B, 0x80)
     private val thumbGradientCenter = Color.rgb(0x51, 0x55, 0x5A)
     private val thumbGradientBottom = Color.rgb(0x32, 0x35, 0x3A)
     private val SLIDER_THUMB_HIGHLIGHT_COLOR = Color.argb(153, 0xC5, 0xC8, 0xCB) // 60%
     private val SLIDER_THUMB_SHADOW_COLOR = Color.argb(140, 0, 0, 0) // 55%
-    private const val SLIDER_THUMB_INSET_MARGIN_DP = 3f
-    private const val SLIDER_THUMB_INSET_CORNER_RADIUS_DP = 3f
-    private val SLIDER_THUMB_INSET_FILL_COLOR = Color.rgb(0x25, 0x28, 0x2D)
+    private const val SLIDER_THUMB_INSET_MARGIN_DP = 5.25f
+    private const val SLIDER_THUMB_INSET_CORNER_RADIUS_DP = 3.75f
+    private val SLIDER_THUMB_INSET_FILL_COLOR = Color.rgb(0x18, 0x18, 0x18)
     private val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
     private const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
+    // Three short accent grip ticks above and below the thumb's inset slot -- the master art's
+    // own thumb-face detail (viewport y15..23 above, y65..73 below -> 2dp long, ~5dp apart).
+    private const val SLIDER_THUMB_TICK_COUNT = 3
+    private const val SLIDER_THUMB_TICK_LENGTH_DP = 2f
+    private const val SLIDER_THUMB_TICK_SPACING_DP = 5f
+    private const val SLIDER_THUMB_TICK_STROKE_WIDTH_DP = 0.75f
 
-    // Per-band slider accent, taken directly from the dedicated
-    // slider_{dark_blue,light_blue,purple,yellow}.xml art's own capsule-outline stroke color --
-    // Low=dark blue, Mid=yellow, Headroom=purple, everything else=light blue (the default, when
-    // no accentColor is passed). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for title
-    // text/PEQ curves/diagram lines elsewhere): those stay as they are, this is the sliders' own
-    // accent palette so a slider's thumb+capsule+fill can use its own exact hue without
-    // recoloring anything else on the row.
-    const val SLIDER_LOW_BAND_COLOR = 0xFF1F4F9A.toInt()
-    const val SLIDER_MID_BAND_COLOR = 0xFFFFB000.toInt()
-    const val SLIDER_HEADROOM_COLOR = 0xFF8B56FF.toInt()
-    const val SLIDER_DEFAULT_COLOR = 0xFF63C7FF.toInt()
+    // Per-band slider accent, taken directly from the J_DSP_slider_master_style_4_colour pack's
+    // own accent hues -- Low=dark blue, Mid=yellow, Headroom=purple, everything else=cyan (the
+    // default, when no accentColor is passed). Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for
+    // title text/PEQ curves/diagram lines elsewhere): those stay as they are, this is the
+    // sliders' own accent palette so a slider's thumb+capsule+fill can use its own exact hue
+    // without recoloring anything else on the row.
+    const val SLIDER_LOW_BAND_COLOR = 0xFF00266D.toInt()
+    const val SLIDER_MID_BAND_COLOR = 0xFFFEF200.toInt()
+    const val SLIDER_HEADROOM_COLOR = 0xFF4632A5.toInt()
+    const val SLIDER_DEFAULT_COLOR = 0xFF009AED.toInt()
 
-    const val SLIDER_TRACK_HEIGHT_DP = 15f
-    private const val SLIDER_CAPSULE_HEIGHT_DP = 21f
-    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 1.5f
-    // The groove sits inset within the outer capsule shell (see the reference art's own
-    // 15pt-radius shell vs. 8pt-radius groove, at the same relative proportion here), and gets
-    // its own thin inner highlight line 1dp further in again.
-    private const val SLIDER_GROOVE_MARGIN_DP = 3.5f
+    // Master art (viewport / 4): 18dp housing, 8.5dp inset groove, 6.5dp active fill. The active
+    // fill is now slimmer than the groove it rides in, so the groove reads as a real channel the
+    // fill sits inside of rather than the fill packing the whole capsule top to bottom.
+    const val SLIDER_TRACK_HEIGHT_DP = 6.5f
+    private const val SLIDER_CAPSULE_HEIGHT_DP = 18f
+    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 1f
+    // The groove sits inset within the outer capsule shell (master art: 18dp shell, 8.5dp groove
+    // -> a 4.75dp margin each side), and gets its own thin inner highlight line 1dp further in.
+    private const val SLIDER_GROOVE_MARGIN_DP = 4.75f
     private const val SLIDER_GROOVE_STROKE_WIDTH_DP = 1f
     private const val SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP = 1.5f
-    private val SLIDER_GROOVE_FILL_COLOR = Color.rgb(0x1B, 0x1B, 0x1D)
-    private val SLIDER_GROOVE_STROKE_COLOR = Color.rgb(0x31, 0x31, 0x34)
+    private val SLIDER_GROOVE_FILL_COLOR = Color.rgb(0x07, 0x07, 0x07)
+    private val SLIDER_GROOVE_STROKE_COLOR = Color.rgb(0x2B, 0x2B, 0x2B)
     private val SLIDER_GROOVE_HIGHLIGHT_COLOR = Color.rgb(0x26, 0x26, 0x28)
     // Fully transparent, not a dark fill colour: the groove drawn underneath (see
     // SliderCapsuleDrawable) already supplies the "unfilled" look, so the real native track only
@@ -352,18 +365,17 @@ object BmwDashboardSkin {
         slider.thumbWidth = dp(context, SLIDER_THUMB_WIDTH_DP)
         slider.thumbHeight = dp(context, SLIDER_THUMB_HEIGHT_DP)
         slider.haloRadius = dp(context, SLIDER_HALO_RADIUS_DP)
-        // The active fill now tints per [accent] too (a lightened blend, approximating the
-        // reference art's gradient -- see the class doc above), not just the handle -- this
-        // reverses an earlier explicit correction that kept the track a fixed blue regardless of
-        // accent, because the new slider_{dark_blue,light_blue,purple,yellow}.xml reference art
-        // unambiguously shows the whole fill tinted, not just the thumb.
+        // The active fill tints per [accent] too (a lightened blend, approximating the master
+        // art's gradient -- see the class doc above), not just the handle: the master pack's
+        // slider_{cyan,dark_blue,yellow,purple}_vector.xml all show the whole value fill tinted,
+        // not just the thumb.
         slider.setTrackActiveTintList(ColorStateList.valueOf(blend(accent, Color.WHITE, 0.2f)))
         slider.setTrackInactiveTintList(ColorStateList.valueOf(SLIDER_TRACK_INACTIVE_COLOR))
         slider.setHaloTintList(ColorStateList.valueOf(SLIDER_HALO_COLOR))
         // [accent] (resolved above, never null) is passed rather than the raw nullable
         // [accentColor] -- every slider now gets a colored thumb+track+capsule, defaulting to
-        // SLIDER_DEFAULT_COLOR's light blue, matching how all 4 of the new reference art's own
-        // variants are colored presets with no neutral-grey option among them.
+        // SLIDER_DEFAULT_COLOR's cyan, matching how all 4 of the master pack's own variants are
+        // colored presets with no neutral-grey option among them.
         slider.setCustomThumbDrawable(sliderThumbDrawable(context, accent))
         // The capsule outline sits on the Slider's own background, not a separate wrapping view --
         // it draws a fixed-height pill centred within whatever bounds the Slider view ends up
@@ -573,9 +585,11 @@ object BmwDashboardSkin {
 
     /**
      * The unified slider thumb: a 3d-lit grey block (top/centre/bottom gradient, a thin outer
-     * border, a top-edge highlight and bottom-edge shadow line for the emboss, and a small darker
-     * inset "detail panel" centred within it) -- taller than the capsule it sits in and the track
-     * it rides on, so it always reads as the grabbable control rather than blending into either.
+     * border, a top-edge highlight and bottom-edge shadow line for the emboss, a small darker
+     * inset "detail panel" centred within it, and three short accent grip ticks above and below
+     * that panel) -- the master art's compact thumb, whose body matches the 18dp housing height
+     * exactly and stands clear of the now-slim 6.5dp active fill, so it still reads as the
+     * grabbable control without overhanging the capsule the way the earlier taller thumb did.
      */
     /** Linear per-channel blend of [from] toward [to] by [t] (0 = [from], 1 = [to]). */
     private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
@@ -617,6 +631,14 @@ object BmwDashboardSkin {
             strokeWidth = insetBorderWidth
             color = SLIDER_THUMB_INSET_BORDER_COLOR
         }
+        private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = SLIDER_THUMB_TICK_STROKE_WIDTH_DP * density
+            strokeCap = Paint.Cap.ROUND
+            color = accentColor ?: SLIDER_THUMB_BORDER_COLOR
+        }
+        private val tickLength = SLIDER_THUMB_TICK_LENGTH_DP * density
+        private val tickSpacing = SLIDER_THUMB_TICK_SPACING_DP * density
 
         private val bodyRect = RectF()
         private val insetRect = RectF()
@@ -655,6 +677,21 @@ object BmwDashboardSkin {
             if (!insetRect.isEmpty) {
                 canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetFillPaint)
                 canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetBorderPaint)
+
+                // Grip ticks: SLIDER_THUMB_TICK_COUNT short verticals centred in the band above
+                // the inset slot, mirrored in the band below it. Skipped if either band is too
+                // shallow to seat a full-length tick with a hair of breathing room.
+                val cx = bodyRect.centerX()
+                val topBandMid = (bodyRect.top + insetRect.top) / 2f
+                val bottomBandMid = (insetRect.bottom + bodyRect.bottom) / 2f
+                if (insetRect.top - bodyRect.top >= tickLength + density) {
+                    val firstX = cx - tickSpacing * (SLIDER_THUMB_TICK_COUNT - 1) / 2f
+                    for (i in 0 until SLIDER_THUMB_TICK_COUNT) {
+                        val x = firstX + i * tickSpacing
+                        canvas.drawLine(x, topBandMid - tickLength / 2f, x, topBandMid + tickLength / 2f, tickPaint)
+                        canvas.drawLine(x, bottomBandMid - tickLength / 2f, x, bottomBandMid + tickLength / 2f, tickPaint)
+                    }
+                }
             }
         }
 
@@ -706,10 +743,10 @@ object BmwDashboardSkin {
      * etc.) -- every other slider keeps the default SLIDER_DEFAULT_COLOR border. The focus
      * glow/ring stay LIGHT_BLUE_BRIGHT regardless: that's a focus-state indicator, not a band
      * identity. Also draws the recessed groove + thin inner highlight line inset within the
-     * capsule -- the reference art's own bezel layers -- so Slider's real (now much taller, see
-     * SLIDER_TRACK_HEIGHT_DP) native track has a visible channel to sit inside of; the groove's
-     * own fill color is what shows through as the "unfilled" look, since the native track's
-     * inactive tint is fully transparent (see SLIDER_TRACK_INACTIVE_COLOR).
+     * capsule -- the master art's own bezel layers -- as an 8.5dp channel for Slider's slim 6.5dp
+     * (see SLIDER_TRACK_HEIGHT_DP) native track to sit inside of; the groove's own fill color is
+     * what shows through as the "unfilled" look, since the native track's inactive tint is fully
+     * transparent (see SLIDER_TRACK_INACTIVE_COLOR).
      */
     private class SliderCapsuleDrawable(context: Context, accentColor: Int? = null) : Drawable() {
         private val density = context.resources.displayMetrics.density
