@@ -15,6 +15,13 @@
 .externalNativeBuild
 .cxx
 local.properties
+/.kotlin
+
+# Scratch output from local UI iteration on the emulator (screenshots,
+# uiautomator hierarchy dumps). Root-anchored: every real resource lives
+# under app/src/, so nothing legitimate sits at the repo root.
+/*.png
+/*.xml
 /hidden-refine-api/build/
 /app/src/main/cpp/libjamesdsp/Main/DSPManager/.idea
 /app/src/main/cpp/libjamesdsp/Main/DSPManager/DSPManager.iml
