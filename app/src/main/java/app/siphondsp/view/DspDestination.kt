@@ -46,19 +46,18 @@ object DspCrossNavBar {
     // icon/label of its own; it only lays an invisible click-target/focus-ring row over each
     // tile's measured bounds.
     //
-    // Unlike the earlier flat borderless design, this glass-tile art draws a visible rounded-rect
-    // box per tile with real empty space between tiles, so [rowWeights] is read directly off the
-    // source XML's own path coordinates (each tile rect's top/bottom V values, on the shared
-    // 1536-tall viewport -- the jdsp_sidebar_state_*.xml art's own outer canvas width varies
-    // slightly per file, but the tile Y coordinates that actually drive this are identical across
-    // all 5) rather than estimated from a rendered image -- exact, not measured. 11 relative
-    // weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4, tile5, bottom
-    // margin. LinearLayout weights are proportions, not absolute values, so passing the raw
-    // viewport-unit heights as weights reproduces the exact source proportions regardless of the
-    // sidebar's actual on-screen height on any given device.
+    // This glass-tile art draws a visible rounded-rect box per tile with real empty space between
+    // tiles, so [rowWeights] is read directly off the source XML's own path coordinates (each
+    // tile rect's top/bottom V values, on the shared 220x980 viewport -- identical across all 5
+    // JDSP_sidebar_vector_pack files) rather than estimated from a rendered image -- exact, not
+    // measured. Tiles sit at y 28..188, 216..376, 404..564, 592..752, 780..940 (180x160 boxes,
+    // 28-unit gaps). 11 relative weights: top margin, tile1, gap1, tile2, gap2, tile3, gap3,
+    // tile4, gap4, tile5, bottom margin. LinearLayout weights are proportions, not absolute
+    // values, so passing the raw viewport-unit heights as weights reproduces the exact source
+    // proportions regardless of the sidebar's actual on-screen height on any given device.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(74, 236, 48, 236, 48, 236, 48, 236, 48, 236, 90)
+    private val ROW_WEIGHTS = intArrayOf(28, 160, 28, 160, 28, 160, 28, 160, 28, 160, 40)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
