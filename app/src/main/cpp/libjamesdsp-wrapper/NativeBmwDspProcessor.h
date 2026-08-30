@@ -82,6 +82,7 @@ private:
         DirtyCompState  = 1u << 7,
         DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
+        DirtyMeasBus    = 1u << 10,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -202,6 +203,8 @@ private:
     void rebuildLimiter();
     void rebuildMonoBass();
     void rebuildPolarityAndMute();
+    // Option A measurement-mute bus brick-wall; rebuilt only on a DirtyMeasBus transition.
+    void rebuildMeasBus();
     void rebuildAllPass();
     void resetDynamics();
     OutputRuntime& output(NativeBmwRouting::OutputId id) { return outputs_[static_cast<std::size_t>(id)]; }
@@ -231,6 +234,16 @@ private:
     float monoBassMakeupLin_=1;
     Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
+    // Option A measurement-mute bus brick-wall. Inert unless p_.measurementMute != 0: the
+    // sections are only run by processFrame() while measBusActive_, and only (re)built by
+    // rebuildMeasBus() on a DirtyMeasBus transition -- never touched for the normal tuned
+    // output, so it adds no latency, no phase shift and no per-sample/coefficient cost when
+    // measurement mute is off. LR8 = 4 cascaded Butterworth Q=1/sqrt(2) sections (48 dB/oct),
+    // steeper than the LR4 crossovers; excluded-band phase is irrelevant (discarded).
+    static constexpr std::size_t kMeasBusSections = 4;
+    std::array<Biquad, kMeasBusSections> measBusL_{}, measBusR_{};
+    bool measBusActive_ = false;
+    bool measBusIsHighpass_ = true;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
 
