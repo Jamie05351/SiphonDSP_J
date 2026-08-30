@@ -128,14 +128,17 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  for(std::size_t out=0;out<nextOutputConfigs.size();++out){
   const auto&old=outputConfigs_[out];const auto&now=nextOutputConfigs[out];
   const bool low=out<=static_cast<std::size_t>(OutputId::LowRight);
-  if(changed(old.crossoverFreq,now.crossoverFreq))dirty|=low?DirtyLowXo:DirtyMidXo;
+  if(changed(old.crossoverFreq,now.crossoverFreq)){dirty|=low?DirtyLowXo:DirtyMidXo;
+   // meas-bus corner tracks the *opposite* band's crossover: rebuild it only if the
+   // crossover that just moved is the one the active mute mode actually uses.
+   if((next.measurementMute==1&&!low)||(next.measurementMute==2&&low))dirty|=DirtyMeasBus;}
   if(low&&(old.subsonicEnabled!=now.subsonicEnabled||changed(old.subsonicFreq,now.subsonicFreq)))dirty|=DirtySubsonic;
   if(old.muted!=now.muted||old.polarityInverted!=now.polarityInverted)dirty|=DirtyPolarity;
   if(changed(old.compressor.attack,now.compressor.attack)||changed(old.compressor.release,now.compressor.release))dirty|=DirtyCompTiming;
   if(old.compressor.enabled!=now.compressor.enabled)dirty|=DirtyCompState;
   if(changed(old.compressor.makeup,now.compressor.makeup))dirty|=DirtyGains;
  }
- if(next.measurementMute!=p_.measurementMute)dirty|=DirtyPolarity;
+ if(next.measurementMute!=p_.measurementMute)dirty|=DirtyPolarity|DirtyMeasBus;
 
  p_=next;routing_=nextRouting;outputs_=nextOutputs;outputConfigs_=nextOutputConfigs;applyDirty(dirty);return true;
 }
@@ -162,10 +165,32 @@ void NativeBmwDspProcessor::rebuildLimiter(){float lookahead=clampf(kLimiterLook
 void NativeBmwDspProcessor::rebuildTilt(){float g=p_.tiltAmount*.75f;makeLowShelf(tiltLoL1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoL2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiL1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiL2_,p_.tiltFreq,-g,sampleRate_);makeLowShelf(tiltLoR1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoR2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiR1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiR2_,p_.tiltFreq,-g,sampleRate_);}
 void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);makeLowPass(out.monoBassCompLp1,p_.monoBassFreq,BW,sampleRate_);makeLowPass(out.monoBassCompLp2,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
 void NativeBmwDspProcessor::rebuildPolarityAndMute(){for(std::size_t i=0;i<outputs_.size();++i){auto&out=outputs_[i];const auto&cfg=outputConfigs_[i];const bool isLow=i<=static_cast<std::size_t>(OutputId::LowRight);const bool measurementMuted=(p_.measurementMute==1&&isLow)||(p_.measurementMute==2&&!isLow);out.muted=cfg.muted||measurementMuted;out.polarityInverted=cfg.polarityInverted;}}
+void NativeBmwDspProcessor::rebuildMeasBus(){
+ // Option A: measurement-mute output-bus brick-wall. Only ever inserted into processFrame's
+ // signal path while p_.measurementMute != 0; all coefficient work happens here, on a
+ // measurementMute (or relevant crossover) transition via DirtyMeasBus -- never per sample.
+ // mute-low (==1) -> HPF the bus at the MID crossover (removes the sub-crossover skirt the
+ //                   external low/mid split would otherwise route to the woofer)
+ // mute-mid (==2) -> LPF the bus at the LOW crossover
+ // LR8 per side: 4x cascaded Butterworth Q=1/sqrt(2), 48 dB/oct.
+ measBusActive_=p_.measurementMute!=0;
+ measBusIsHighpass_=p_.measurementMute==1;
+ for(auto&b:measBusL_)b.clear();
+ for(auto&b:measBusR_)b.clear();
+ if(!measBusActive_)return;
+ const float fcL=measBusIsHighpass_?outputConfig(OutputId::MidLeft).crossoverFreq
+                                   :outputConfig(OutputId::LowLeft).crossoverFreq;
+ const float fcR=measBusIsHighpass_?outputConfig(OutputId::MidRight).crossoverFreq
+                                   :outputConfig(OutputId::LowRight).crossoverFreq;
+ for(std::size_t i=0;i<kMeasBusSections;++i){
+  if(measBusIsHighpass_){makeHighPass(measBusL_[i],fcL,BW,sampleRate_);makeHighPass(measBusR_[i],fcR,BW,sampleRate_);}
+  else{makeLowPass(measBusL_[i],fcL,BW,sampleRate_);makeLowPass(measBusR_[i],fcR,BW,sampleRate_);}
+ }
+}
 void NativeBmwDspProcessor::rebuildAllPass(){for(auto&out:outputs_)for(std::size_t i=0;i<out.allPass.size();++i){out.allPass[i].rebuild(sampleRate_);out.allPassState[i].loadAllPass(out.allPass[i].coefficients);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));for(std::size_t i=0;i<outputDynamics_.size();++i){const auto&p=outputConfigs_[i].compressor;auto&s=outputDynamics_[i];s.attackMix=1-std::exp(-1/(p.attack*.001f*sampleRate_));s.releaseMix=1-std::exp(-1/(p.release*.001f*sampleRate_));}}
-void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();}
-void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
+void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();}
+void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
 float NativeBmwDspProcessor::processChannelInput(float x,float&dcX,float&dcY){float y=x-dcX+dcR_*dcY;dcX=x;dcY=ftz(y);return dcY;}
 void NativeBmwDspProcessor::publishIdleMeter(CompressorState&s){if((++s.meterCounter&255u)==0){s.inputDb.store(-60);s.outputDb.store(-60);s.gainReductionDb.store(0);}}
 void NativeBmwDspProcessor::processCompressor(float&sample,const CompressorParams&p,CompressorState&s){float pk=std::fabs(sample);bool pub=(++s.meterCounter&255u)==0;float db=20*std::log10(std::max(pk,1e-12f));if(p.enabled){s.rmsPower=ftz(s.rmsPower+(pk*pk-s.rmsPower)*rmsMix_);s.peakEnv=pk>s.peakEnv?pk:ftz(s.peakEnv*peakRelease_);float det=std::max(std::sqrt(std::max(0.f,s.rmsPower)),s.peakEnv*.5f);db=20*std::log10(std::max(det,1e-12f));float over=db-p.threshold,slope=1-1/std::max(1.001f,p.ratio),gr=0,kh=p.knee*.5f;if(p.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p.knee);}}else if(over>0)gr=-over*slope;float target=dbToLin(gr),mix=target<s.gain?s.attackMix:s.releaseMix;s.gain=std::min(1.f,ftz(s.gain+(target-s.gain)*mix));sample*=s.gain*s.makeupLin;}else s.gain=1;if(pub){float red=-20*std::log10(std::max(s.gain,1e-12f));s.inputDb.store(clampf(db,-60,6));s.outputDb.store(clampf(db-red+(p.enabled?p.makeup:0),-60,6));s.gainReductionDb.store(clampf(red,0,60));}}
@@ -229,6 +254,14 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
  oL*=postGainL_;oR*=postGainR_;
  if(p_.channelMute==1)oL=0;if(p_.channelMute==2)oR=0;
  oL=ftz(oL);oR=ftz(oR);
+ // Option A measurement-mute bus brick-wall. Operates on logical L/R, AFTER the band sum,
+ // tilt, post-gain and ch_mute, but BEFORE processLimiter and BEFORE the deliberate L/R
+ // hardware swap below -- measBusL_ always filters the LowLeft/MidLeft chain. Fully bypassed
+ // (single branch, no state advanced) whenever measurement mute is off; see rebuildMeasBus().
+ if(measBusActive_){
+  for(std::size_t i=0;i<kMeasBusSections;++i){oL=measBusL_[i].run(oL);oR=measBusR_[i].run(oR);}
+  oL=ftz(oL);oR=ftz(oR);
+ }
  processLimiter(oL,oR);
  // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
  // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
