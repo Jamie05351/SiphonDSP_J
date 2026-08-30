@@ -65,9 +65,38 @@
 
     <style name="ThemeOverlay.SiphonDSP.Amoled" parent="" />
 
+    <!-- Pin every surface role the dialog and its children resolve against to the app's dark
+         Carbon tokens. Without this, an AlertDialog inflated from some activity/inflater contexts
+         falls back to the bare Material3 *light* palette for e.g. a filled TextInputLayout box,
+         which rendered as a near-white field on a dark dialog (visible in the PEQ "Gain" /
+         "Edit as string" dialogs). -->
     <style name="AppTheme.AlertDialogTheme" parent="@style/ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="dialogCornerRadius">28dp</item>
-        <item name="colorBackgroundFloating">?attr/colorSurface</item>
+        <item name="colorBackgroundFloating">@color/siphon_surface</item>
+        <item name="android:colorBackground">@color/siphon_background</item>
+        <item name="colorSurface">@color/siphon_surface</item>
+        <item name="colorOnSurface">@color/siphon_onSurface</item>
+        <item name="colorSurfaceVariant">@color/siphon_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/siphon_onSurfaceVariant</item>
+        <item name="colorSurfaceContainerLow">@color/siphon_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/siphon_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/siphon_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/siphon_surfaceContainerHigh</item>
+        <item name="colorOutline">@color/siphon_outline</item>
+        <item name="colorOutlineVariant">@color/siphon_outlineVariant</item>
+    </style>
+
+    <!-- Bespoke compact "glass" look for the Parametric EQ per-cell value/choice dialogs:
+         tighter than the stock MaterialAlertDialog (narrower window, 16dp padding, 20dp
+         corners) and always the dark gunmetal surface, to match BmwDashboardSkin's workspace
+         chrome rather than the default flat dialog palette. -->
+    <style name="ThemeOverlay.SiphonDSP.GlassDialog" parent="@style/AppTheme.AlertDialogTheme">
+        <item name="dialogCornerRadius">20dp</item>
+        <item name="dialogPreferredPadding">16dp</item>
+        <item name="colorSurface">@color/bmw_glass_dialog_surface</item>
+        <item name="colorBackgroundFloating">@color/bmw_glass_dialog_surface</item>
+        <item name="android:windowMinWidthMajor">46%</item>
+        <item name="android:windowMinWidthMinor">72%</item>
     </style>
 
     <style name="Theme.SiphonDSP.Toolbar" parent="Widget.Material3.Toolbar">

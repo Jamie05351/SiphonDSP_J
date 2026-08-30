@@ -13,6 +13,12 @@
          Widget.SiphonDSP.SliderValueBox in themes.xml). -->
     <color name="bmw_dsp_accent_blue">#46B5E8</color>
     <color name="bmw_dsp_value_box_background">#101318</color>
+    <!-- Elevated panel surface for the bespoke PEQ glass value/choice dialogs (see
+         ThemeOverlay.SiphonDSP.GlassDialog): a touch lighter than the near-black value box so
+         the dialog reads as a raised sheet, and the grey inner input field
+         (bmw_glass_dialog_field) sits one step above that again. -->
+    <color name="bmw_glass_dialog_surface">#1B1B21</color>
+    <color name="bmw_glass_dialog_field">#33333C</color>
 
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>

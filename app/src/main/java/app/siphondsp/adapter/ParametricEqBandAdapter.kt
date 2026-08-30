@@ -10,13 +10,26 @@ import androidx.databinding.ObservableArrayList
 import androidx.databinding.ObservableList
 import androidx.recyclerview.widget.RecyclerView
 import app.siphondsp.R
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
+import app.siphondsp.model.ParametricEqChannel
+import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 
+/**
+ * Each band row edits in place: Type/Channel/Frequency/Gain/Q are all independently tappable
+ * cells (see [onTypeClicked]/[onChannelClicked]/[onFrequencyClicked]/[onGainClicked]/
+ * [onQClicked]), styled with [BmwDashboardSkin.glassBoxDrawable] using [accentColor] so the
+ * table matches whichever scope card it's showing (Low=blue/Mid=yellow/Input Correction=null
+ * for the default neutral look). There is no separate add/edit panel any more -- a trailing
+ * "Add filter" row (see [onAddClicked]) is appended automatically as long as the scope has
+ * fewer than [BmwPeqState.MAX_BANDS] bands, and disappears once the cap is hit.
+ */
 class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
-    RecyclerView.Adapter<ParametricEqBandAdapter.ViewHolder>() {
+    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val dfFreq = DecimalFormat("0", DecimalFormatSymbols.getInstance())
     private val dfGain = DecimalFormat("0", DecimalFormatSymbols.getInstance())
@@ -28,16 +41,30 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         dfQ.maximumFractionDigits = 2
     }
 
-    var onItemsChanged: ((ParametricEqBandAdapter) -> Unit)? = null
-    var onItemClicked: ((ParametricEqBand, Int) -> Unit)? = null
-    var onDeleteClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    /** Null renders the default/neutral glass box; set per-scope (Low=blue/Mid=yellow) by the
+     *  fragment whenever the selected scope chip changes. */
+    var accentColor: Int? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            notifyDataSetChanged()
+        }
 
-    /** UUID of the band currently open in the editor, so its row can show a selection outline. */
+    var onItemsChanged: ((ParametricEqBandAdapter) -> Unit)? = null
+    var onDeleteClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onTypeClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onChannelClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onFrequencyClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onGainClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onQClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    var onAddClicked: (() -> Unit)? = null
+
+    /** UUID of the band a dialog is currently open for, so its row can show a selection outline. */
     var selectedUuid: java.util.UUID? = null
         set(value) {
             if (field == value) return
             field = value
-            notifyItemRangeChanged(0, itemCount)
+            notifyItemRangeChanged(0, bands.size)
         }
 
     private val callback = object : ObservableList.OnListChangedCallback<ObservableArrayList<ParametricEqBand>>() {
@@ -61,7 +88,9 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
             positionStart: Int,
             itemCount: Int,
         ) {
-            notifyItemRangeInserted(positionStart, itemCount)
+            // The add-row's position shifts down by one whenever the band count changes, so the
+            // whole tail (not just the inserted range) needs to be re-bound.
+            notifyItemRangeChanged(positionStart, (bands.size - positionStart) + 1)
             onItemsChanged()
         }
 
@@ -81,7 +110,9 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
             positionStart: Int,
             itemCount: Int,
         ) {
-            notifyItemRangeRemoved(positionStart, itemCount)
+            // Same tail-shift reasoning as onItemRangeInserted, plus the add-row may need to
+            // reappear if this removal brought the scope back under MAX_BANDS.
+            notifyItemRangeChanged(positionStart, (bands.size - positionStart) + 1)
             onItemsChanged()
         }
     }
@@ -90,7 +121,7 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         onItemsChanged?.invoke(this)
     }
 
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+    class BandViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val index: TextView = view.findViewById(R.id.index)
         val type: TextView = view.findViewById(R.id.type)
         val channel: TextView = view.findViewById(R.id.channel)
@@ -99,6 +130,11 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         val qFactor: TextView = view.findViewById(R.id.q_factor)
         val deleteButton: Button = view.findViewById(R.id.delete)
         val selectionOutline: View = view.findViewById(R.id.selection_outline)
+    }
+
+    class AddRowViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val root: View = view.findViewById(R.id.add_row_root)
+        val label: TextView = view.findViewById(R.id.add_row_label)
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
@@ -111,33 +147,101 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         super.onDetachedFromRecyclerView(recyclerView)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
-        ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_peq_band_list, parent, false))
+    /** True while the current scope still has room for another filter -- the only condition
+     *  that decides whether the trailing add row is shown at all. */
+    private fun hasAddRow() = bands.size < BmwPeqState.MAX_BANDS
+
+    override fun getItemViewType(position: Int) =
+        if (position < bands.size) VIEW_TYPE_BAND else VIEW_TYPE_ADD
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
+        if (viewType == VIEW_TYPE_ADD) {
+            AddRowViewHolder(
+                LayoutInflater.from(parent.context).inflate(R.layout.item_peq_band_list_add, parent, false)
+            )
+        } else {
+            BandViewHolder(
+                LayoutInflater.from(parent.context).inflate(R.layout.item_peq_band_list, parent, false)
+            )
+        }
 
     @SuppressLint("SetTextI18n")
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (holder is AddRowViewHolder) {
+            val boxDrawable = BmwDashboardSkin.glassBoxDrawable(holder.itemView.context, accentColor = accentColor)
+            holder.label.background = boxDrawable
+            holder.label.setTextColor(accentColor ?: BmwDashboardSkin.LIGHT_BLUE)
+            holder.root.setOnClickListener { onAddClicked?.invoke() }
+            return
+        }
+
+        holder as BandViewHolder
+        val context = holder.itemView.context
         holder.deleteButton.isEnabled = true
         val band = bands[position]
+        val accent = accentColor
+
+        val typeLabel = filterTypeLabel(context, band.filterType)
+        val channelLabel = channelLabel(context, band.channel)
         holder.index.text = "${position + 1}"
-        holder.type.text = band.filterType.displayLabel
-        holder.channel.text = band.channel.displayLabel
-        holder.itemView.contentDescription = "Filter ${position + 1}, ${band.filterType.displayLabel}, channel ${band.channel.displayLabel}"
+        holder.type.text = typeLabel
+        holder.channel.text = channelLabel
+        holder.itemView.contentDescription =
+            "Filter ${position + 1}, $typeLabel, channel $channelLabel"
         holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
         holder.gain.text = "${dfGain.format(band.gain)}dB"
         holder.qFactor.text = "Q${dfQ.format(band.q)}"
         holder.selectionOutline.visibility = if (band.uuid == selectedUuid) View.VISIBLE else View.INVISIBLE
 
+        // One glass-box background per cell, all sharing this row's accent color -- rebuilding
+        // per bind (rather than caching) since accentColor can change live when the scope chip
+        // is switched, and these boxes are cheap to draw.
+        listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach { cell ->
+            cell.background = BmwDashboardSkin.glassBoxDrawable(context, accentColor = accent)
+            cell.setTextColor(accent ?: BmwDashboardSkin.LIGHT_BLUE)
+        }
+
         holder.deleteButton.setOnClickListener {
-            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
+            holder.bindingAdapterPosition.takeIf { it >= 0 && it < bands.size }?.let { pos ->
                 bands.getOrNull(pos)?.let { onDeleteClicked?.invoke(it, pos) }
             }
         }
-        holder.itemView.setOnClickListener {
-            holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { pos ->
-                bands.getOrNull(pos)?.let { onItemClicked?.invoke(it, pos) }
+        holder.type.setOnClickListener { withBoundBand(holder) { b, pos -> onTypeClicked?.invoke(b, pos) } }
+        holder.channel.setOnClickListener { withBoundBand(holder) { b, pos -> onChannelClicked?.invoke(b, pos) } }
+        holder.freq.setOnClickListener { withBoundBand(holder) { b, pos -> onFrequencyClicked?.invoke(b, pos) } }
+        holder.gain.setOnClickListener { withBoundBand(holder) { b, pos -> onGainClicked?.invoke(b, pos) } }
+        holder.qFactor.setOnClickListener { withBoundBand(holder) { b, pos -> onQClicked?.invoke(b, pos) } }
+    }
+
+    private fun filterTypeLabel(context: android.content.Context, type: ParametricEqFilterType): String =
+        context.getString(
+            when (type) {
+                ParametricEqFilterType.PEAKING -> R.string.peq_filter_type_peaking
+                ParametricEqFilterType.LOW_SHELF -> R.string.peq_filter_type_low_shelf
+                ParametricEqFilterType.HIGH_SHELF -> R.string.peq_filter_type_high_shelf
+                ParametricEqFilterType.NOTCH -> R.string.peq_filter_type_notch
             }
+        )
+
+    private fun channelLabel(context: android.content.Context, channel: ParametricEqChannel): String =
+        context.getString(
+            when (channel) {
+                ParametricEqChannel.LEFT_RIGHT -> R.string.peq_channel_both
+                ParametricEqChannel.LEFT -> R.string.peq_channel_left
+                ParametricEqChannel.RIGHT -> R.string.peq_channel_right
+            }
+        )
+
+    private inline fun withBoundBand(holder: BandViewHolder, action: (ParametricEqBand, Int) -> Unit) {
+        holder.bindingAdapterPosition.takeIf { it >= 0 && it < bands.size }?.let { pos ->
+            bands.getOrNull(pos)?.let { action(it, pos) }
         }
     }
 
-    override fun getItemCount() = bands.size
+    override fun getItemCount() = bands.size + if (hasAddRow()) 1 else 0
+
+    companion object {
+        private const val VIEW_TYPE_BAND = 0
+        private const val VIEW_TYPE_ADD = 1
+    }
 }

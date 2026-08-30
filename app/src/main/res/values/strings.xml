@@ -91,6 +91,7 @@
     <string name="title_activity_crossover_tilt">Crossovers &amp; Tilt</string>
     <string name="peq_add_band">Add</string>
     <string name="peq_add_band_spaced">&#160;&#160;Add filter&#160;</string>
+    <string name="peq_add_filter_row">Add filter</string>
     <string name="peq_import">Import</string>
     <string name="peq_export">Export</string>
     <string name="peq_edit_as_string">Edit as string</string>
@@ -112,6 +113,10 @@
     <string name="peq_q_factor">Q Factor</string>
     <string name="peq_q_range">Value between 0.1 and 30.0</string>
     <string name="peq_filter_type">Filter type</string>
+    <string name="peq_channel">Channel</string>
+    <string name="peq_channel_both">Both</string>
+    <string name="peq_channel_left">Left</string>
+    <string name="peq_channel_right">Right</string>
     <string name="peq_filter_type_peaking">Peaking</string>
     <string name="peq_filter_type_low_shelf">Low shelf</string>
     <string name="peq_filter_type_high_shelf">High shelf</string>
