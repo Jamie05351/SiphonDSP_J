@@ -48,16 +48,20 @@ object DspCrossNavBar {
     // [current]. populate() draws no icon/label of its own; it only lays an invisible
     // click-target/focus-ring row over each tile's measured bounds.
     //
-    // Rendered from the jdsp_*_selected.svg vector sources with only the full-canvas black
-    // backdrop stripped (the panel frame stays) at 1200px wide, cropped to the panel -> one
-    // shared 643x2982 canvas, byte-identical tile positions across all 5. Shown FIT_CENTER
-    // (aspect preserved, never stretched to the column). [rowWeights] are the 11 relative bands
-    // measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4,
-    // tile5, bottom margin -- applied to the art's *displayed* height (post-FIT_CENTER), not the
-    // column height, so the click targets track the tiles regardless of the column's size.
+    // Rendered (librsvg) from the jdsp_*_selected SVG sources -- viewBox cropped tight to the
+    // panel frame, rasterised onto a 789x3520 canvas with no transparent margin (789 is exactly
+    // the panel's own aspect at 3520 tall), so the panel fills the art edge to edge and the
+    // ratio-locked column has no slack. Byte-identical tile positions across all 5. Shown
+    // FIT_CENTER (aspect preserved, never stretched to the column). [rowWeights] are the 11
+    // relative bands measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3,
+    // gap3, tile4, gap4, tile5, bottom margin -- applied to the art's *displayed* height
+    // (post-FIT_CENTER), not the column height, so the click targets track the tiles regardless
+    // of the column's size.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    private val ROW_WEIGHTS = intArrayOf(68, 535, 39, 535, 39, 535, 39, 535, 39, 535, 84)
+    // Derived from the SVG panel geometry at the 3520px render height (S = 3520/1293.927):
+    // tile faces 582px, inter-tile gaps 76/84/87/87px, top margin 128px, bottom margin 148px.
+    private val ROW_WEIGHTS = intArrayOf(128, 582, 76, 582, 84, 582, 87, 582, 87, 582, 148)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)
