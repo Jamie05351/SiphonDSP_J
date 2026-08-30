@@ -35,25 +35,22 @@
              removed in favor of MainActivity's bottom bar being the sole entry point for those;
              see DspWorkspaceActivity.setUpWorkspaceSidebarActions() for the panel background.
              Back navigation and the power toggle stay in the toolbar itself. -->
-        <!-- Flush against the top and bottom edges of the content area (no margins), so the
-             panel reads as a structural fixture built into the workspace.
-             Width is not a fixed dp. The bar art (drawable-nodpi/sidebar_bar_*.png) is a fixed
-             643x2982 canvas shown FIT_CENTER, and in landscape it is always height-constrained,
-             so its rendered width is exactly (column height * 643 / 2982). Pinning the column to
-             that same ratio makes it exactly as wide as the art, with no centering slack on
-             either side, so the art sits hard against the (6dp-inset) left edge and the divider
-             plus content pane butt straight up against the art instead of a 120dp box. The art
-             itself is not resized; only the dead padding around it is removed. constraintWidth_max
-             keeps the column sane on an unexpectedly tall/portrait viewport where the art would
-             instead be width-constrained. -->
+        <!-- Flush against all three edges (top, bottom, left) of the content area, so the panel
+             reads as a structural fixture built into the workspace.
+             Width is not a fixed dp. The bar art (drawable-nodpi/sidebar_bar_*.png) is a 789x3520
+             canvas cropped tight to the panel frame (no transparent margin), shown FIT_CENTER. In
+             landscape it is always height-constrained, so its rendered width is exactly
+             (column height * 789 / 3520). Pinning the column to that same ratio makes it exactly
+             as wide as the panel with no slack on either side: the panel sits hard against the
+             screen edge and the divider plus content pane butt straight up against it. No
+             marginStart, no padding, no constraintWidth_max; the head unit is the only target
+             and a width cap below the natural size would only reintroduce top/bottom letterbox. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginStart="6dp"
             android:orientation="vertical"
-            app:layout_constraintDimensionRatio="643:2982"
-            app:layout_constraintWidth_max="120dp"
+            app:layout_constraintDimensionRatio="789:3520"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent">
@@ -64,8 +61,6 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center_horizontal"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
                 android:visibility="gone" />
         </LinearLayout>
 
