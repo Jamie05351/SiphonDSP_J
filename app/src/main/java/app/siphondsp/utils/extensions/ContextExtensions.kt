@@ -28,6 +28,7 @@ import android.widget.Toast
 import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.StringRes
+import androidx.annotation.StyleRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
@@ -242,9 +243,13 @@ object ContextExtensions {
         value: String,
         isNumberInput: Boolean,
         suffix: String?,
+        @StyleRes dialogThemeResId: Int = 0,
         callback: ((String?) -> Unit)
     ) {
-        showInputAlert(layoutInflater, getString(title), getString(hint), value, isNumberInput, suffix, callback)
+        showInputAlert(
+            layoutInflater, getString(title), getString(hint), value, isNumberInput, suffix,
+            dialogThemeResId, callback,
+        )
     }
 
     fun Context.showInputAlert(
@@ -254,6 +259,7 @@ object ContextExtensions {
         value: String,
         isNumberInput: Boolean,
         suffix: String?,
+        @StyleRes dialogThemeResId: Int = 0,
         callback: ((String?) -> Unit)
     ) {
         val content = DialogTextinputBinding.inflate(layoutInflater)
@@ -264,7 +270,9 @@ object ContextExtensions {
 
         content.textInputLayout.suffixText = suffix
 
-        AlertDialog.Builder(this)
+        val builder =
+            if (dialogThemeResId != 0) AlertDialog.Builder(this, dialogThemeResId) else AlertDialog.Builder(this)
+        builder
             .setTitle(title)
             .setView(content.root)
             .setPositiveButton(android.R.string.ok) { inputDialog, _ ->

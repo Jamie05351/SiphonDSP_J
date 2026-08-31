@@ -231,6 +231,7 @@ class NativeBmwCompressorFragment : Fragment() {
                 formatPlain(slider.value),
                 true,
                 suffix,
+                R.style.AppTheme_AlertDialogTheme_Workspace,
             ) { entered ->
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
                 val raw = parsed.coerceIn(min, max)
