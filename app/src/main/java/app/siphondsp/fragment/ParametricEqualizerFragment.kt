@@ -642,6 +642,14 @@ class ParametricEqualizerFragment : Fragment() {
             onChannelClicked = { band, index -> showChannelPicker(band, index) }
             onFrequencyClicked = { band, index -> showFrequencyDialog(band, index) }
             onGainClicked = { band, index -> showGainDialog(band, index) }
+            onGainStep = { _, index, delta ->
+                commitBandEdit(index, "edit_gain_step") {
+                    ParametricEqBand(
+                        it.frequency, (it.gain + delta).coerceIn(-30.0, 30.0), it.q,
+                        it.filterType, it.channel, it.uuid,
+                    )
+                }
+            }
             onQClicked = { band, index -> showQDialog(band, index) }
             onAddClicked = { performAdd() }
         }
@@ -928,11 +936,7 @@ class ParametricEqualizerFragment : Fragment() {
         val channels = ParametricEqChannel.entries
         showPeqChoiceDialog(
             titleRes = R.string.peq_channel,
-            labels = listOf(
-                getString(R.string.peq_channel_both),
-                getString(R.string.peq_channel_left),
-                getString(R.string.peq_channel_right),
-            ),
+            labels = channels.map { it.displayLabel },
             currentIndex = channels.indexOf(band.channel),
         ) { picked ->
             val newChannel = channels.getOrNull(picked) ?: return@showPeqChoiceDialog

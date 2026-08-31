@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Sticky column header shown once above the band RecyclerView (see fragment_parametric_eq.xml,
+     both orientations). MUST mirror item_peq_band_list.xml exactly: same start/end padding, same
+     3dp+8dp leading selection spacer, same per-column layout_weight (CH 2.0 / FILTER 3.0 /
+     HZ 2.6 / dB 4.4 / Q 2.4), same 44dp trailing spacer under the delete button, or the labels
+     stop lining up with the values. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/band_list_header"
     android:layout_width="match_parent"
@@ -7,65 +12,74 @@
     android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
     android:paddingTop="6dp"
     android:paddingBottom="6dp"
+    android:baselineAligned="false"
     android:gravity="center_vertical">
 
     <View
         android:layout_width="3dp"
-        android:layout_height="0dp"
+        android:layout_height="1dp"
         android:layout_marginEnd="8dp" />
 
     <TextView
-        android:layout_width="24dp"
+        android:layout_width="22dp"
         android:layout_height="wrap_content"
         android:gravity="end"
         android:text="#"
         android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
-
-    <TextView
-        android:layout_width="64dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:text="Type"
-        android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
-
-    <TextView
-        android:layout_width="48dp"
-        android:layout_height="wrap_content"
-        android:text="Ch"
-        android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:textColor="?android:attr/textColorSecondary" />
 
     <TextView
         android:layout_width="0dp"
+        android:layout_weight="2.0"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:gravity="end"
-        android:text="Hz"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/peq_col_ch"
         android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:textColor="?android:attr/textColorSecondary" />
 
     <TextView
-        android:layout_width="56dp"
+        android:layout_width="0dp"
+        android:layout_weight="3.0"
         android:layout_height="wrap_content"
-        android:gravity="end"
-        android:text="dB"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/peq_col_filter"
         android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:textColor="?android:attr/textColorSecondary" />
 
     <TextView
-        android:layout_width="56dp"
+        android:layout_width="0dp"
+        android:layout_weight="2.6"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:gravity="end"
-        android:text="Q"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/peq_col_hz"
         android:textAppearance="?attr/textAppearanceLabelSmall"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:textColor="?android:attr/textColorSecondary" />
 
-    <!-- Placeholder to line up under the row's trailing delete icon button. -->
+    <TextView
+        android:layout_width="0dp"
+        android:layout_weight="4.4"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/peq_col_db"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?android:attr/textColorSecondary" />
+
+    <TextView
+        android:layout_width="0dp"
+        android:layout_weight="2.4"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/peq_col_q"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?android:attr/textColorSecondary" />
+
     <Space
-        android:layout_width="48dp"
-        android:layout_height="wrap_content" />
+        android:layout_width="44dp"
+        android:layout_height="1dp" />
 
 </LinearLayout>
