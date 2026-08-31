@@ -14,7 +14,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingHorizontal="18dp"
-        android:paddingTop="18dp"
+        android:paddingTop="8dp"
         android:paddingBottom="8dp">
 
         <LinearLayout
@@ -42,7 +42,7 @@
             android:id="@+id/compressor_visualizer_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="6dp"
             android:layout_marginBottom="6dp"
             app:cardCornerRadius="20dp"
             app:cardElevation="0dp"

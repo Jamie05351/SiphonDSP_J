@@ -641,6 +641,14 @@ class ParametricEqualizerFragment : Fragment() {
             onTypeClicked = { band, index -> showFilterTypePicker(band, index) }
             onChannelClicked = { band, index -> showChannelPicker(band, index) }
             onFrequencyClicked = { band, index -> showFrequencyDialog(band, index) }
+            onFrequencyStep = { _, index, factor ->
+                commitBandEdit(index, "edit_frequency_step") {
+                    ParametricEqBand(
+                        (it.frequency * factor).coerceIn(20.0, 20000.0), it.gain, it.q,
+                        it.filterType, it.channel, it.uuid,
+                    )
+                }
+            }
             onGainClicked = { band, index -> showGainDialog(band, index) }
             onGainStep = { _, index, delta ->
                 commitBandEdit(index, "edit_gain_step") {
@@ -651,6 +659,14 @@ class ParametricEqualizerFragment : Fragment() {
                 }
             }
             onQClicked = { band, index -> showQDialog(band, index) }
+            onQStep = { _, index, delta ->
+                commitBandEdit(index, "edit_q_step") {
+                    ParametricEqBand(
+                        it.frequency, it.gain, (it.q + delta).coerceIn(0.1, 30.0),
+                        it.filterType, it.channel, it.uuid,
+                    )
+                }
+            }
             onAddClicked = { performAdd() }
         }
         selectedBandByScope[selectedScope]?.let { uuid ->

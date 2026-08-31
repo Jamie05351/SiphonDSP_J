@@ -17,15 +17,17 @@ import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import kotlin.math.pow
 
 /**
  * Each band row is a set of columns lined up under item_peq_band_list_header.xml: Channel /
  * Type / Hz / dB / Q are plain tappable text (no box), each carrying its own value with the
- * unit shown once in the header. Channel/Type open a picker; Hz/Q and the dB number open the
- * value dialog; dB additionally has inline - / + steppers ([onGainStep], 0.5 dB, commit
- * immediately). [accentColor] tints the value text per scope (Low=blue/Mid=yellow/Input
- * Correction=null neutral). A trailing "Add filter" row ([onAddClicked]) is appended while the
- * scope has fewer than [BmwPeqState.MAX_BANDS] bands.
+ * unit shown once in the header. Channel/Type open a picker; the Hz, dB and Q numbers each open
+ * the value dialog and each also carry inline - / + steppers -- Hz steps by [FREQ_STEP_FACTOR]
+ * (1/24 octave, multiplicative) via [onFrequencyStep], dB by 0.5 via [onGainStep], Q by 0.1 via
+ * [onQStep], all committing immediately. [accentColor] tints the value text per scope
+ * (Low=blue/Mid=yellow/Input Correction=null neutral). A trailing "Add filter" row
+ * ([onAddClicked]) is appended while the scope has fewer than [BmwPeqState.MAX_BANDS] bands.
  */
 class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -56,8 +58,13 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     var onFrequencyClicked: ((ParametricEqBand, Int) -> Unit)? = null
     var onGainClicked: ((ParametricEqBand, Int) -> Unit)? = null
     var onQClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    /** Inline Hz stepper: factor is 1/[FREQ_STEP_FACTOR] (minus) or [FREQ_STEP_FACTOR] (plus),
+     *  applied multiplicatively so a tap moves the same musical interval at any frequency. */
+    var onFrequencyStep: ((ParametricEqBand, Int, Double) -> Unit)? = null
     /** Inline dB stepper: delta is -0.5 (minus button) or +0.5 (plus button). */
     var onGainStep: ((ParametricEqBand, Int, Double) -> Unit)? = null
+    /** Inline Q stepper: delta is -0.1 (minus button) or +0.1 (plus button). */
+    var onQStep: ((ParametricEqBand, Int, Double) -> Unit)? = null
     var onAddClicked: (() -> Unit)? = null
 
     /** UUID of the band a dialog is currently open for, so its row can show a selection outline. */
@@ -127,10 +134,14 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         val type: TextView = view.findViewById(R.id.type)
         val channel: TextView = view.findViewById(R.id.channel)
         val freq: TextView = view.findViewById(R.id.freq)
+        val freqMinus: View = view.findViewById(R.id.freq_minus)
+        val freqPlus: View = view.findViewById(R.id.freq_plus)
         val gain: TextView = view.findViewById(R.id.gain)
         val gainMinus: View = view.findViewById(R.id.gain_minus)
         val gainPlus: View = view.findViewById(R.id.gain_plus)
         val qFactor: TextView = view.findViewById(R.id.q_factor)
+        val qMinus: View = view.findViewById(R.id.q_minus)
+        val qPlus: View = view.findViewById(R.id.q_plus)
         val deleteButton: Button = view.findViewById(R.id.delete)
         val selectionOutline: View = view.findViewById(R.id.selection_outline)
     }
@@ -215,10 +226,14 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.type.setOnClickListener { withBoundBand(holder) { b, pos -> onTypeClicked?.invoke(b, pos) } }
         holder.channel.setOnClickListener { withBoundBand(holder) { b, pos -> onChannelClicked?.invoke(b, pos) } }
         holder.freq.setOnClickListener { withBoundBand(holder) { b, pos -> onFrequencyClicked?.invoke(b, pos) } }
+        holder.freqMinus.setOnClickListener { withBoundBand(holder) { b, pos -> onFrequencyStep?.invoke(b, pos, 1.0 / FREQ_STEP_FACTOR) } }
+        holder.freqPlus.setOnClickListener { withBoundBand(holder) { b, pos -> onFrequencyStep?.invoke(b, pos, FREQ_STEP_FACTOR) } }
         holder.gain.setOnClickListener { withBoundBand(holder) { b, pos -> onGainClicked?.invoke(b, pos) } }
         holder.gainMinus.setOnClickListener { withBoundBand(holder) { b, pos -> onGainStep?.invoke(b, pos, -0.5) } }
         holder.gainPlus.setOnClickListener { withBoundBand(holder) { b, pos -> onGainStep?.invoke(b, pos, 0.5) } }
         holder.qFactor.setOnClickListener { withBoundBand(holder) { b, pos -> onQClicked?.invoke(b, pos) } }
+        holder.qMinus.setOnClickListener { withBoundBand(holder) { b, pos -> onQStep?.invoke(b, pos, -0.1) } }
+        holder.qPlus.setOnClickListener { withBoundBand(holder) { b, pos -> onQStep?.invoke(b, pos, 0.1) } }
     }
 
     private fun filterTypeLabel(context: android.content.Context, type: ParametricEqFilterType): String =
@@ -242,5 +257,9 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     companion object {
         private const val VIEW_TYPE_BAND = 0
         private const val VIEW_TYPE_ADD = 1
+
+        /** One inline Hz stepper tap = 1/24 octave, applied as a multiplier so the perceived
+         *  interval is the same whether the band sits at 40 Hz or 4 kHz. */
+        val FREQ_STEP_FACTOR = 2.0.pow(1.0 / 24.0)
     }
 }

@@ -2,7 +2,7 @@
 <!-- Sticky column header shown once above the band RecyclerView (see fragment_parametric_eq.xml,
      both orientations). MUST mirror item_peq_band_list.xml exactly: same start/end padding, same
      3dp+8dp leading selection spacer, same per-column layout_weight (CH 2.0 / FILTER 3.0 /
-     HZ 2.6 / dB 4.4 / Q 2.4), same 44dp trailing spacer under the delete button, or the labels
+     HZ 4.4 / dB 4.4 / Q 4.4), same 44dp trailing spacer under the delete button, or the labels
      stop lining up with the values. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/band_list_header"
@@ -50,7 +50,7 @@
 
     <TextView
         android:layout_width="0dp"
-        android:layout_weight="2.6"
+        android:layout_weight="4.4"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:letterSpacing="0.08"
@@ -70,7 +70,7 @@
 
     <TextView
         android:layout_width="0dp"
-        android:layout_weight="2.4"
+        android:layout_weight="4.4"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:letterSpacing="0.08"
