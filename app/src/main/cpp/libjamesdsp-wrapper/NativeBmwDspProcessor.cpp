@@ -55,8 +55,10 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  next.midDelayL=clampf(v[21],0,2.8f);next.midDelayR=clampf(v[22],0,2.8f);next.lowDelayL=clampf(v[23],0,2.8f);next.lowDelayR=clampf(v[24],0,2.8f);
  next.tilt=v[25]>=.5f;next.tiltAmount=clampf(v[26],-6,6);next.tiltFreq=clampf(v[27],200,2000);
  next.monoBass=v[42]>=.5f;next.monoBassFreq=clampf(v[43],40,120);next.monoBassBlend=clampf(v[44],0,100);next.monoBassMakeup=clampf(v[45],-6,6);
- // v[139..142] were the Pultec-style bass boost/cut stage; removed (unused). Left unread, same
- // as v[base+1]/FIELD_CROSSOVER_LR4 above -- see NativeBmwDspProcessor.h's kConfigSize comment.
+ // v[139]: measurement-mute bus brick-wall stopband offset in octaves (see rebuildMeasBus()).
+ // v[140] is a Kotlin-only migration marker; v[141..142] were the Pultec bass stage, removed
+ // (unused) and left unread -- see NativeBmwDspProcessor.h's kConfigSize comment.
+ next.measBusStopbandOctaves=clampf(v[139],0,4);
 
  NativeBmwRouting::RoutingMatrix nextRouting;
  for(std::size_t out=0;out<NativeBmwRouting::kOutputCount;++out){
@@ -139,6 +141,7 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
   if(changed(old.compressor.makeup,now.compressor.makeup))dirty|=DirtyGains;
  }
  if(next.measurementMute!=p_.measurementMute)dirty|=DirtyPolarity|DirtyMeasBus;
+ if(changed(next.measBusStopbandOctaves,p_.measBusStopbandOctaves))dirty|=DirtyMeasBus;
 
  p_=next;routing_=nextRouting;outputs_=nextOutputs;outputConfigs_=nextOutputConfigs;applyDirty(dirty);return true;
 }
@@ -169,19 +172,29 @@ void NativeBmwDspProcessor::rebuildMeasBus(){
  // Option A: measurement-mute output-bus brick-wall. Only ever inserted into processFrame's
  // signal path while p_.measurementMute != 0; all coefficient work happens here, on a
  // measurementMute (or relevant crossover) transition via DirtyMeasBus -- never per sample.
- // mute-low (==1) -> HPF the bus at the MID crossover (removes the sub-crossover skirt the
+ // mute-low (==1) -> HPF the bus below the MID crossover (removes the sub-crossover skirt the
  //                   external low/mid split would otherwise route to the woofer)
- // mute-mid (==2) -> LPF the bus at the LOW crossover
+ // mute-mid (==2) -> LPF the bus above the LOW crossover
  // LR8 per side: 4x cascaded Butterworth Q=1/sqrt(2), 48 dB/oct.
+ //
+ // The corner is not placed on the crossover itself: sitting an LR8 exactly on the opposite
+ // band's crossover also chews ~12 dB out of the band that is still playing, right where its
+ // own transition lives, so an isolated measurement rolls off well short of the real acoustic
+ // crossover. measBusStopbandOctaves walks the corner that many octaves *into the stopband*
+ // (down for the HPF, up for the LPF) so the surviving band keeps its own transition region
+ // intact while the brick-wall still kills the deep residual skirt. 0 = original on-crossover
+ // behaviour.
  measBusActive_=p_.measurementMute!=0;
  measBusIsHighpass_=p_.measurementMute==1;
  for(auto&b:measBusL_)b.clear();
  for(auto&b:measBusR_)b.clear();
  if(!measBusActive_)return;
- const float fcL=measBusIsHighpass_?outputConfig(OutputId::MidLeft).crossoverFreq
-                                   :outputConfig(OutputId::LowLeft).crossoverFreq;
- const float fcR=measBusIsHighpass_?outputConfig(OutputId::MidRight).crossoverFreq
-                                   :outputConfig(OutputId::LowRight).crossoverFreq;
+ const float shift=std::exp2(measBusIsHighpass_?-p_.measBusStopbandOctaves:p_.measBusStopbandOctaves);
+ const float nyquistGuard=sampleRate_*0.45f;
+ const float fcL=clampf((measBusIsHighpass_?outputConfig(OutputId::MidLeft).crossoverFreq
+                                            :outputConfig(OutputId::LowLeft).crossoverFreq)*shift,10.f,nyquistGuard);
+ const float fcR=clampf((measBusIsHighpass_?outputConfig(OutputId::MidRight).crossoverFreq
+                                            :outputConfig(OutputId::LowRight).crossoverFreq)*shift,10.f,nyquistGuard);
  for(std::size_t i=0;i<kMeasBusSections;++i){
   if(measBusIsHighpass_){makeHighPass(measBusL_[i],fcL,BW,sampleRate_);makeHighPass(measBusR_[i],fcR,BW,sampleRate_);}
   else{makeLowPass(measBusL_[i],fcL,BW,sampleRate_);makeLowPass(measBusR_[i],fcR,BW,sampleRate_);}

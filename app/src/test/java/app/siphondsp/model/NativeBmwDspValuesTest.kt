@@ -138,4 +138,36 @@ class NativeBmwDspValuesTest {
         val expected = migratedDefaults().also { it[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f }
         assertArrayEquals(expected, values, 0f)
     }
+
+    @Test
+    fun loadSeedsMeasMuteStopbandOffsetOnConfigsSavedBeforeTheControlExisted() {
+        // A pre-control config: slot 139 still holds the leftover Pultec 0, marker at 140 unset.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES] = 0f
+            it[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(
+            NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES,
+            loaded[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES],
+            0f,
+        )
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadLeavesADeliberateZeroStopbandOffsetAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES] = 0f
+            it[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES], 0f)
+    }
 }
