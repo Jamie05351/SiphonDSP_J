@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Every cell (channel/type/freq/gain/q) is independently tappable: Channel/Type open a
+     tap-to-commit choice picker, Freq/Gain/Q open the numeric value dialog (see
+     ParametricEqBandAdapter + ParametricEqualizerFragment). Cell backgrounds are set at bind
+     time to BmwDashboardSkin.glassBoxDrawable(accentColor) so the row matches whichever scope
+     card it belongs to (Low=blue/Mid=yellow/Input Correction=default); this can't be done in
+     XML since the accent color is chosen per-scope at runtime, not per-layout.
+     Layout: Channel + Type (full words, so Type fits "High shelf") sit toward the left; a big
+     flexible gap then shoves the three equal Hz / dB / Q boxes into a tight cluster on the
+     right (small fixed gaps between them), just ahead of the delete button. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:attr/selectableItemBackground"
-    android:clickable="true"
-    android:focusable="true"
     android:minHeight="?android:attr/listPreferredItemHeightSmall"
     android:paddingStart="?android:attr/listPreferredItemPaddingStart"
     android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:baselineAligned="false"
     android:gravity="center_vertical">
 
     <View
@@ -21,60 +30,98 @@
 
     <TextView
         android:id="@+id/index"
-        android:layout_width="24dp"
+        android:layout_width="20dp"
         android:layout_height="wrap_content"
         android:gravity="end"
         android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:textColor="?android:attr/textColorSecondary" />
 
-    <TextView
-        android:id="@+id/type"
-        android:layout_width="64dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textAppearance="?attr/textAppearanceLabelMedium"
-        android:textColor="?attr/colorPrimary"/>
+    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
     <TextView
         android:id="@+id/channel"
-        android:layout_width="48dp"
+        android:layout_width="72dp"
         android:layout_height="wrap_content"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:minHeight="34dp"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:contentDescription="@string/peq_channel" />
+
+    <Space android:layout_width="10dp" android:layout_height="1dp" />
+
+    <TextView
+        android:id="@+id/type"
+        android:layout_width="112dp"
+        android:layout_height="wrap_content"
+        android:minHeight="34dp"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:contentDescription="@string/peq_filter_type" />
+
+    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="5" />
 
     <TextView
         android:id="@+id/freq"
-        android:layout_width="0dp"
+        android:layout_width="168dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:gravity="end"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textAppearance="?attr/textAppearanceTitleMedium"/>
+        android:minHeight="34dp"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:contentDescription="@string/peq_frequency" />
+
+    <Space android:layout_width="8dp" android:layout_height="1dp" />
 
     <TextView
         android:id="@+id/gain"
-        android:layout_width="56dp"
+        android:layout_width="168dp"
         android:layout_height="wrap_content"
-        android:gravity="end"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textAppearance="?attr/textAppearanceTitleMedium"/>
+        android:minHeight="34dp"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:contentDescription="@string/peq_gain" />
+
+    <Space android:layout_width="8dp" android:layout_height="1dp" />
 
     <TextView
         android:id="@+id/q_factor"
-        android:layout_width="56dp"
+        android:layout_width="168dp"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:gravity="end"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textAppearance="?attr/textAppearanceBodyMedium"
-        android:textColor="?android:attr/textColorSecondary"/>
+        android:minHeight="34dp"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:contentDescription="@string/peq_q_factor" />
+
+    <Space android:layout_width="12dp" android:layout_height="1dp" />
 
     <Button
         style="?attr/materialIconButtonStyle"

@@ -7,17 +7,23 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
+import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.annotation.StringRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.ViewPager2
@@ -25,6 +31,7 @@ import app.siphondsp.R
 import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.adapter.ParametricEqBandAdapter
+import app.siphondsp.databinding.DialogPeqChoiceBinding
 import app.siphondsp.databinding.FragmentParametricEqBinding
 import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwSignalChain
@@ -49,9 +56,13 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.ParametricEqSurface
 import app.siphondsp.view.StaticPagerAdapter
 import timber.log.Timber
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 import java.util.UUID
 import java.io.InputStream
 
@@ -66,25 +77,12 @@ class ParametricEqualizerFragment : Fragment() {
     private var pendingDiagnosticReport: String? = null
     private var peqDisplayMode = PeqDisplayMode.GRAPH
 
-    private var editorBandUuid: UUID? = null
-    private var editorActive = false
-        set(value) {
-            field = value
-            refreshActionChips()
-        }
+    /** Trims trailing zeros ("1.41", "1000", "0.1") for the value dialog's field + range caption. */
+    private val peqValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US))
 
     private fun refreshActionChips() {
-        binding.chipUndo?.isEnabled = !editorActive && history.canUndo
-        binding.chipRedo?.isEnabled = !editorActive && history.canRedo
-        binding.chipReset?.isEnabled = !editorActive
-        binding.chipEditString?.isEnabled = !editorActive
-        binding.chipImportFile?.isEnabled = !editorActive
-        binding.chipExportFile?.isEnabled = !editorActive
-        binding.chipPresetImport?.isEnabled = !editorActive
-        binding.chipPresetExport?.isEnabled = !editorActive
-        binding.chipBackupImport?.isEnabled = !editorActive
-        binding.chipBackupExport?.isEnabled = !editorActive
-        binding.chipFilterTools?.isEnabled = !editorActive
+        binding.chipUndo?.isEnabled = history.canUndo
+        binding.chipRedo?.isEnabled = history.canRedo
     }
 
     // One or more REW/APO ".txt" exports. A single file whose name isn't recognised falls back
@@ -502,43 +500,12 @@ class ParametricEqualizerFragment : Fragment() {
     ): View {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
         setUpCardsPager()
-        binding.qInput.min = 0.1f
         binding.equalizerSurface.showSpectrum = true
 
         binding.previewCard.setOnClickListener {
             if (resources.configuration.orientation != ORIENTATION_LANDSCAPE) {
                 collapsePreview(!binding.equalizerSurface.isVisible)
             }
-        }
-
-        binding.freqInput.customStepScale = { value, _ ->
-            when (value) {
-                in 0f..400f -> 10f
-                in 400f..600f -> 20f
-                in 600f..1000f -> 50f
-                in 1000f..5000f -> 100f
-                in 5000f..Float.MAX_VALUE -> 500f
-                else -> 10f
-            }
-        }
-
-        binding.qInput.customStepScale = { value, _ ->
-            when (value) {
-                in 0f..1f -> 0.05f
-                in 1f..5f -> 0.1f
-                in 5f..10f -> 0.5f
-                in 10f..Float.MAX_VALUE -> 1f
-                else -> 0.1f
-            }
-        }
-
-        binding.confirm.setOnClickListener { editorSave() }
-        binding.cancel.setOnClickListener { editorDiscard() }
-        binding.addBand?.setOnClickListener { performAdd() }
-        // Notch has no gain parameter (the graph shows a full null, depth is Q-only) -- hide
-        // the field rather than leave a control visible that silently does nothing.
-        binding.filterTypeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (isChecked) binding.gainInput.isVisible = checkedId != R.id.filter_notch
         }
 
         binding.bandList.layoutManager = LinearLayoutManager(requireContext())
@@ -552,14 +519,9 @@ class ParametricEqualizerFragment : Fragment() {
                 else -> PeqScope.FULL
             }
             if (next != selectedScope) {
-                if (editorActive) {
-                    requireContext().toast("Confirm or cancel the active filter edit before switching scope")
-                    binding.peqScopeGroup?.check(selectedScope.chipId)
-                } else {
-                    selectedScope = next
-                    Timber.d("Selected BMW PEQ scope=${selectedScope.label}")
-                    bindScope()
-                }
+                selectedScope = next
+                Timber.d("Selected BMW PEQ scope=${selectedScope.label}")
+                bindScope()
             }
         }
         configurePager()
@@ -571,13 +533,7 @@ class ParametricEqualizerFragment : Fragment() {
      *  lives at the activity level, alongside the toolbar, not inside this fragment -- see
      *  activity_parametric_eq.xml). Blocks switching to another DSP screen while there's an
      *  unsaved filter edit, same guard as switching Full/Low/Mid scope. */
-    fun canSwitchDspScreens(): Boolean {
-        if (editorActive) {
-            requireContext().toast("Confirm or cancel the active filter edit before switching screens")
-            return false
-        }
-        return true
-    }
+    fun canSwitchDspScreens(): Boolean = true
 
     /** Detaches edit_card/preview_card from the plain ConstraintLayout position the landscape
      *  layout declares them at (kept there purely so ViewBinding still generates their field
@@ -676,14 +632,18 @@ class ParametricEqualizerFragment : Fragment() {
         }
         binding.bandList.adapter = ParametricEqBandAdapter(bands).apply {
             selectedUuid = selectedBandByScope[selectedScope]
-            onItemClicked = { band, _ ->
-                selectBandForEditing(band)
-            }
+            accentColor = scopeAccent()
             onDeleteClicked = { _, index ->
                 val candidate = peqState.deepCopy()
                 bandsForScope(candidate).removeAt(index)
                 applyCandidate(candidate, "delete")
             }
+            onTypeClicked = { band, index -> showFilterTypePicker(band, index) }
+            onChannelClicked = { band, index -> showChannelPicker(band, index) }
+            onFrequencyClicked = { band, index -> showFrequencyDialog(band, index) }
+            onGainClicked = { band, index -> showGainDialog(band, index) }
+            onQClicked = { band, index -> showQDialog(band, index) }
+            onAddClicked = { performAdd() }
         }
         selectedBandByScope[selectedScope]?.let { uuid ->
             bands.indexOfFirst { it.uuid == uuid }.takeIf { it >= 0 }?.let(binding.bandList::scrollToPosition)
@@ -710,11 +670,16 @@ class ParametricEqualizerFragment : Fragment() {
             )
         }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
 
-        // Read-only graph now: a node tap just opens that filter in the numeric editor (only
-        // active-scope taps reach here). Dragging filters/tilt on the graph was removed -- it
-        // only ever nudged filters by accident; tilt is edited on its own numeric page.
+        // Read-only graph now: a node tap just highlights that filter's row on the band-list
+        // page (only active-scope taps reach here). Dragging filters/tilt on the graph was
+        // removed -- it only ever nudged filters by accident; tilt is edited on its own
+        // numeric page. There's no in-graph editor to open any more -- the graph and the band
+        // list are independent swipeable pages (see setUpCardsPager).
         binding.equalizerSurface.onPointSelected = { uuid ->
-            bandsForScope().firstOrNull { it.uuid == uuid }?.let(::selectBandForEditing)
+            bandsForScope().firstOrNull { it.uuid == uuid }?.let {
+                selectedBandByScope[selectedScope] = it.uuid
+                adapter.selectedUuid = it.uuid
+            }
         }
     }
 
@@ -789,19 +754,6 @@ class ParametricEqualizerFragment : Fragment() {
         popup.show()
     }
 
-    private fun selectBandForEditing(band: ParametricEqBand) {
-        editorBandUuid = band.uuid
-        selectedBandByScope[selectedScope] = band.uuid
-        binding.equalizerSurface.selectBand(band.uuid)
-        editorActive = true
-        binding.freqInput.value = band.frequency.toFloat()
-        binding.gainInput.value = band.gain.toFloat()
-        binding.qInput.value = band.q.toFloat()
-        setFilterTypeSelection(band.filterType)
-        setChannelSelection(band.channel)
-        updateViewState()
-    }
-
     /** Restores the pre-redesign horizontally-scrolling action-chip row (same row as the
      *  Full/Low/Mid scope chips) in place of the toolbar's 3-dot overflow menu -- same
      *  underlying functions as before, just triggered from chips instead of menu items. */
@@ -869,15 +821,172 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun performAdd() {
-        if (editorActive) return
-        editorBandUuid = null
-        editorActive = true
-        binding.freqInput.value = 1000f
-        binding.gainInput.value = 0f
-        binding.qInput.value = 1.41f
-        setFilterTypeSelection(ParametricEqFilterType.PEAKING)
-        setChannelSelection(ParametricEqChannel.LEFT_RIGHT)
-        updateViewState()
+        val candidate = peqState.deepCopy()
+        val list = bandsForScope(candidate)
+        val newBand = ParametricEqBand(
+            1000.0, 0.0, 1.41, ParametricEqFilterType.PEAKING, ParametricEqChannel.LEFT_RIGHT
+        )
+        list.add(newBand)
+        if (applyCandidate(candidate, "add")) {
+            selectedBandByScope[selectedScope] = newBand.uuid
+        }
+    }
+
+    /** Shared instant-commit path for every per-cell edit: deep-copy the state, swap the one
+     *  band at [index] in the active scope for [transform]'s result, and funnel it through
+     *  [applyCandidate] (validation + persistence + native push + undo history + bindScope). */
+    private fun commitBandEdit(index: Int, source: String, transform: (ParametricEqBand) -> ParametricEqBand) {
+        val candidate = peqState.deepCopy()
+        val list = bandsForScope(candidate)
+        if (index !in list.indices) return
+        val updated = transform(list[index])
+        list[index] = updated
+        if (applyCandidate(candidate, source)) {
+            selectedBandByScope[selectedScope] = updated.uuid
+        }
+    }
+
+    /** Per-scope cell accent, matching BmwDashboardSkin's app-wide Low=blue / Mid=yellow
+     *  convention; Input Correction stays neutral. Used for the band-row cells and the
+     *  tap-to-commit choice picker. */
+    private fun scopeAccent(): Int? = when (selectedScope) {
+        PeqScope.FULL -> null
+        PeqScope.LOW -> BmwDashboardSkin.LIGHT_BLUE
+        PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
+    }
+
+    private fun showFrequencyDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+        getString(R.string.peq_frequency), band.frequency, 20.0, 20000.0, "Hz",
+    ) { value ->
+        commitBandEdit(index, "edit_frequency") {
+            ParametricEqBand(value, it.gain, it.q, it.filterType, it.channel, it.uuid)
+        }
+    }
+
+    private fun showGainDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+        getString(R.string.peq_gain), band.gain, -30.0, 30.0, "dB",
+    ) { value ->
+        commitBandEdit(index, "edit_gain") {
+            ParametricEqBand(it.frequency, value, it.q, it.filterType, it.channel, it.uuid)
+        }
+    }
+
+    private fun showQDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+        getString(R.string.peq_q_factor), band.q, 0.1, 30.0, null,
+    ) { value ->
+        commitBandEdit(index, "edit_q") {
+            ParametricEqBand(it.frequency, it.gain, value, it.filterType, it.channel, it.uuid)
+        }
+    }
+
+    /**
+     * Numeric value editor -- the exact same [showInputAlert] dialog the Delay / Compressor
+     * pages use (grey field, compact "min-max" range hint, Cancel/OK). The entered text is
+     * parsed and clamped to [[min], [max]] on commit; one edit is one undo entry.
+     */
+    private fun showPeqValueDialog(
+        title: String,
+        current: Double,
+        min: Double,
+        max: Double,
+        suffix: String?,
+        onCommit: (Double) -> Unit,
+    ) {
+        requireContext().showInputAlert(
+            layoutInflater,
+            title,
+            "${peqValueFormat.format(min)}–${peqValueFormat.format(max)}",
+            peqValueFormat.format(current),
+            true,
+            suffix,
+        ) { entered ->
+            val parsed = entered?.toDoubleOrNull()?.coerceIn(min, max) ?: return@showInputAlert
+            onCommit(parsed)
+        }
+    }
+
+    private fun showFilterTypePicker(band: ParametricEqBand, index: Int) {
+        val types = ParametricEqFilterType.entries
+        showPeqChoiceDialog(
+            titleRes = R.string.peq_filter_type,
+            labels = listOf(
+                getString(R.string.peq_filter_type_peaking),
+                getString(R.string.peq_filter_type_low_shelf),
+                getString(R.string.peq_filter_type_high_shelf),
+                getString(R.string.peq_filter_type_notch),
+            ),
+            currentIndex = types.indexOf(band.filterType),
+        ) { picked ->
+            val newType = types.getOrNull(picked) ?: return@showPeqChoiceDialog
+            commitBandEdit(index, "edit_filter_type") {
+                ParametricEqBand(it.frequency, it.gain, it.q, newType, it.channel, it.uuid)
+            }
+        }
+    }
+
+    private fun showChannelPicker(band: ParametricEqBand, index: Int) {
+        val channels = ParametricEqChannel.entries
+        showPeqChoiceDialog(
+            titleRes = R.string.peq_channel,
+            labels = listOf(
+                getString(R.string.peq_channel_both),
+                getString(R.string.peq_channel_left),
+                getString(R.string.peq_channel_right),
+            ),
+            currentIndex = channels.indexOf(band.channel),
+        ) { picked ->
+            val newChannel = channels.getOrNull(picked) ?: return@showPeqChoiceDialog
+            commitBandEdit(index, "edit_channel") {
+                ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, newChannel, it.uuid)
+            }
+        }
+    }
+
+    /**
+     * Bespoke tap-to-commit choice list (see dialog_peq_choice.xml). Rows are glass boxes tinted
+     * with the current scope's accent; the current value is full-opacity, the rest dimmed.
+     * Tapping a row commits immediately and dismisses -- there is no OK button.
+     */
+    private fun showPeqChoiceDialog(
+        @StringRes titleRes: Int,
+        labels: List<String>,
+        currentIndex: Int,
+        onPick: (Int) -> Unit,
+    ) {
+        val ctx = requireContext()
+        val dialogBinding = DialogPeqChoiceBinding.inflate(layoutInflater)
+        val accent = scopeAccent()
+        val dialog = MaterialAlertDialogBuilder(ctx, R.style.ThemeOverlay_SiphonDSP_GlassDialog)
+            .setTitle(titleRes)
+            .setView(dialogBinding.root)
+            .create()
+        val density = resources.displayMetrics.density
+        val pad = (12 * density).toInt()
+        labels.forEachIndexed { i, label ->
+            val row = TextView(ctx).apply {
+                text = label
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setPadding(pad, pad, pad, pad)
+                background = BmwDashboardSkin.glassBoxDrawable(ctx, accentColor = accent)
+                setTextColor(accent ?: BmwDashboardSkin.LIGHT_BLUE)
+                alpha = if (i == currentIndex) 1f else 0.55f
+                isClickable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    onPick(i)
+                }
+            }
+            dialogBinding.choiceContainer.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = (6 * density).toInt() },
+            )
+        }
+        dialog.show()
     }
 
     private fun performImport() = importFileLauncher.launch(arrayOf("text/plain", "text/*"))
@@ -1116,99 +1225,9 @@ class ParametricEqualizerFragment : Fragment() {
         frequency, gain, q, filterType, channel, uuid,
     )
 
-    private fun getSelectedFilterType() = when (binding.filterTypeGroup.checkedButtonId) {
-        R.id.filter_low_shelf -> ParametricEqFilterType.LOW_SHELF
-        R.id.filter_high_shelf -> ParametricEqFilterType.HIGH_SHELF
-        R.id.filter_notch -> ParametricEqFilterType.NOTCH
-        else -> ParametricEqFilterType.PEAKING
-    }
-
-    private fun setFilterTypeSelection(type: ParametricEqFilterType) {
-        binding.filterTypeGroup.check(
-            when (type) {
-                ParametricEqFilterType.PEAKING -> R.id.filter_peaking
-                ParametricEqFilterType.LOW_SHELF -> R.id.filter_low_shelf
-                ParametricEqFilterType.HIGH_SHELF -> R.id.filter_high_shelf
-                ParametricEqFilterType.NOTCH -> R.id.filter_notch
-            }
-        )
-    }
-
-    private fun getSelectedChannel() = when (binding.channelGroup?.checkedButtonId) {
-        R.id.channel_left -> ParametricEqChannel.LEFT
-        R.id.channel_right -> ParametricEqChannel.RIGHT
-        else -> ParametricEqChannel.LEFT_RIGHT
-    }
-
-    private fun setChannelSelection(channel: ParametricEqChannel) {
-        binding.channelGroup?.check(
-            when (channel) {
-                ParametricEqChannel.LEFT_RIGHT -> R.id.channel_both
-                ParametricEqChannel.LEFT -> R.id.channel_left
-                ParametricEqChannel.RIGHT -> R.id.channel_right
-            }
-        )
-    }
-
     private fun updateViewState() {
-        val empty = adapter.bands.isEmpty()
-        // List pane stays visible regardless of edit state (see the split edit_card layout);
-        // only the editor pane's own visibility is gated by editorActive.
-        binding.emptyView.isVisible = empty
-        binding.bandList.isVisible = !empty
-        binding.bandListHeader?.root?.isVisible = !empty
-        binding.bandEdit.isVisible = editorActive
-        binding.bandDetailContextButtons.visibility = if (editorActive) View.VISIBLE else View.GONE
-        binding.addBand?.visibility = if (editorActive) View.GONE else View.VISIBLE
-        binding.editCardTitle.text = getString(if (editorActive) R.string.peq_band_editor else R.string.peq_band_list)
+        binding.editCardTitle.text = getString(R.string.peq_band_list)
         adapter.selectedUuid = selectedBandByScope[selectedScope]
-    }
-
-    private fun editorCanSave() = binding.freqInput.isCurrentValueValid() &&
-        binding.gainInput.isCurrentValueValid() && binding.qInput.isCurrentValueValid()
-
-    private fun editorDiscard() {
-        editorBandUuid = null
-        editorActive = false
-        updateViewState()
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
-    private fun editorSave() {
-        if (!editorCanSave()) {
-            requireContext().showYesNoAlert(R.string.peq_discard_changes_title, R.string.peq_discard_changes) {
-                if (it) editorDiscard()
-            }
-            return
-        }
-        val uuid = editorBandUuid ?: UUID.randomUUID()
-        val band = ParametricEqBand(
-            binding.freqInput.value.toDouble(),
-            binding.gainInput.value.toDouble(),
-            binding.qInput.value.toDouble(),
-            getSelectedFilterType(),
-            getSelectedChannel(),
-            uuid,
-        )
-        val candidate = peqState.deepCopy()
-        val candidateBands = bandsForScope(candidate)
-        val existingIndex = candidateBands.indexOfFirst { it.uuid == editorBandUuid }
-        if (existingIndex >= 0) {
-            candidateBands[existingIndex] = band
-        } else {
-            candidateBands.add(band)
-        }
-        if (applyCandidate(candidate, if (existingIndex >= 0) "edit" else "add")) {
-            selectedBandByScope[selectedScope] = band.uuid
-            editorBandUuid = null
-            editorActive = false
-            bindScope()
-        }
-    }
-
-    override fun onStop() {
-        if (editorActive) editorDiscard()
-        super.onStop()
     }
 
     override fun onDestroyView() {
@@ -1294,11 +1313,6 @@ class ParametricEqualizerFragment : Fragment() {
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         updateHistoryControls()
         return true
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        if (editorActive) editorDiscard()
-        super.onSaveInstanceState(outState)
     }
 
     companion object {
