@@ -41,6 +41,9 @@ object BmwDashboardSkin {
     const val LIGHT_BLUE_BRIGHT = 0xFF87CFF0.toInt()
     const val M_BLUE = 0xFF135BA7.toInt()
     const val M_RED = 0xFFE32B3B.toInt()
+    // Status green, paired with M_RED as a fixed convention: polarity NORMAL (vs INVERT) on the
+    // Gains & Delay channel cards, and the Output page's post-gain sliders.
+    const val M_GREEN = 0xFF3DDC84.toInt()
     // Mid-band accent, paired with LIGHT_BLUE for the app-wide Low=blue / Mid=yellow convention
     // (PEQ visualizer, Gains & Delay channel cards/sliders, Crossovers Lowpass/Highpass sliders).
     const val MID_BAND_YELLOW = 0xFFFFCA28.toInt()
