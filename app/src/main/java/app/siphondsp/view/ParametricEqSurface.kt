@@ -4,9 +4,11 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -80,27 +82,28 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private val density = resources.displayMetrics.density
 
-    // Dry (pre-DSP) reference trace -- dashed and faint so it reads as "before" rather than
-    // competing with the live wet trace drawn on top of it.
+    // Dry (pre-DSP) reference trace -- a solid, clearly readable line. It's the "before" anchor
+    // the eye holds the live wet trace against, so a barely-there dashed hint defeated the point;
+    // the wet trace is drawn brighter and with a glow on top, so this still reads as secondary.
     private val dryStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorSecondary)
+        color = themeColor(android.R.attr.textColorPrimary)
         style = Paint.Style.STROKE
-        strokeWidth = density
-        alpha = 130
-        pathEffect = DashPathEffect(floatArrayOf(4f * density, 4f * density), 0f)
+        strokeWidth = 1.6f * density
+        alpha = 205
     }
-    // Shaded gap between the dry and wet traces: green where the filters are adding energy at
-    // that frequency right now, amber where they're cutting it. This is what actually shows what
-    // the filters are doing to the live audio, rather than two independently overlaid lines.
+    // Shaded gap between the dry and wet traces: the app's brand green where the filters are
+    // adding energy at that frequency right now, brand red where they're cutting it. This is
+    // what actually shows what the filters are doing to the live audio, rather than two
+    // independently overlaid lines -- so it's drawn with real weight, not a faint wash.
     private val spectrumBoostFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(102, 210, 130)
+        color = BmwDashboardSkin.M_GREEN
         style = Paint.Style.FILL
-        alpha = 70
+        alpha = 125
     }
     private val spectrumCutFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(235, 140, 60)
+        color = BmwDashboardSkin.M_RED
         style = Paint.Style.FILL
-        alpha = 70
+        alpha = 125
     }
     private val spectrumStrokePath = Path()
     private val spectrumFillPath = Path()
@@ -330,11 +333,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     // Light blue (matches the app's accent colour) -- the grey used everywhere else in this
     // unified view reads as barely-visible background noise for a live spectrum trace.
     private val spectrumAccentColor = Color.rgb(79, 195, 247)
+    // Vertical gradient under the wet trace: accent near the trace fading to nothing toward the
+    // floor, so the fill gives the trace body without flattening into a solid slab. The shader is
+    // rebuilt in drawUnifiedSpectrum whenever the plot's top/bottom change.
     private val unifiedSpectrumFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = spectrumAccentColor
-        alpha = 40
+        color = spectrumAccentColor // fallback until the gradient shader is installed
     }
+    private var spectrumFillShaderTop = Float.NaN
+    private var spectrumFillShaderBottom = Float.NaN
     private val unifiedSpectrumStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.4f * density
@@ -829,9 +836,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         spectrumFillPath.lineTo(right, bottom)
         spectrumFillPath.close()
         drawSpectrumDelta(canvas, SPECTRUM_STEPS + 1)
+        if (top != spectrumFillShaderTop || bottom != spectrumFillShaderBottom) {
+            unifiedSpectrumFillPaint.shader = LinearGradient(
+                0f, top, 0f, bottom,
+                ColorUtils.setAlphaComponent(spectrumAccentColor, 150),
+                ColorUtils.setAlphaComponent(spectrumAccentColor, 0),
+                Shader.TileMode.CLAMP,
+            )
+            spectrumFillShaderTop = top
+            spectrumFillShaderBottom = bottom
+        }
         canvas.drawPath(spectrumFillPath, unifiedSpectrumFillPaint)
         canvas.drawPath(dryStrokePath, dryStrokePaint)
-        canvas.drawPath(spectrumStrokePath, unifiedSpectrumStrokePaint)
+        strokeNeon(canvas, spectrumStrokePath, unifiedSpectrumStrokePaint)
     }
 
     /**
@@ -1263,7 +1280,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     companion object {
         private const val SYSTEM_POINT_COUNT = 192
         private const val OVERLAY_POINT_COUNT = 96
-        private const val SPECTRUM_STEPS = 160
+        // Plot-point count across the log-frequency x-axis. Higher than it used to be because the
+        // trace is now bin-interpolated (SpectrumEngine.magnitudeDbAt) -- the extra points buy
+        // smoothness instead of just resampling the same coarse bins.
+        private const val SPECTRUM_STEPS = 240
         // Non-active banks (always drawn now) sit a touch smaller than the active bank's so the
         // bank you're actually editing still reads as the primary set.
         private const val SECONDARY_NODE_RADIUS_DP = 6.5f

@@ -71,13 +71,22 @@ class FFT(private val size: Int) {
      * @return Windowed samples as DoubleArray
      */
     fun applyWindow(input: FloatArray): DoubleArray {
+        val windowed = DoubleArray(input.size)
+        applyWindowInto(input, windowed)
+        return windowed
+    }
+
+    /**
+     * Allocation-free [applyWindow]: writes the windowed samples into [out], which must be the
+     * same length as [input]. For hot paths (live spectrum) that would otherwise allocate a
+     * fresh DoubleArray every frame.
+     */
+    fun applyWindowInto(input: FloatArray, out: DoubleArray) {
         ensureWindowInitialized(input.size)
         val window = wnd ?: error("Window failed to initialize")
-        val windowed = DoubleArray(input.size)
         for (i in input.indices) {
-            windowed[i] = input[i].toDouble() * window[i]
+            out[i] = input[i].toDouble() * window[i]
         }
-        return windowed
     }
 
     /**
@@ -87,6 +96,16 @@ class FFT(private val size: Int) {
      * @return Power spectrum (linear scale)
      */
     fun computePowerSpectrum(windowedInput: DoubleArray): DoubleArray {
+        val power = DoubleArray(size / 2 + 1)
+        computePowerSpectrumInto(windowedInput, power)
+        return power
+    }
+
+    /**
+     * Allocation-free [computePowerSpectrum]: writes the linear power spectrum into [outPower],
+     * which must have length `size / 2 + 1`.
+     */
+    fun computePowerSpectrumInto(windowedInput: DoubleArray, outPower: DoubleArray) {
         require(windowedInput.size == size) {
             "Input size ${windowedInput.size} doesn't match FFT size $size"
         }
@@ -97,15 +116,13 @@ class FFT(private val size: Int) {
         fft()
 
         val numBins = size / 2 + 1
-        val power = DoubleArray(numBins)
         val scaler = FFT_SCALE_FACTOR_NUMERATOR / (size.toDouble() * size.toDouble())
-        power[0] = (real[0] * real[0] + imag[0] * imag[0]) * scaler / 4.0
+        outPower[0] = (real[0] * real[0] + imag[0] * imag[0]) * scaler / 4.0
         for (i in 1 until numBins - 1) {
-            power[i] = (real[i] * real[i] + imag[i] * imag[i]) * scaler
+            outPower[i] = (real[i] * real[i] + imag[i] * imag[i]) * scaler
         }
         val nyquist = numBins - 1
-        power[nyquist] = (real[nyquist] * real[nyquist] + imag[nyquist] * imag[nyquist]) * scaler / 4.0
-        return power
+        outPower[nyquist] = (real[nyquist] * real[nyquist] + imag[nyquist] * imag[nyquist]) * scaler / 4.0
     }
 
     /**

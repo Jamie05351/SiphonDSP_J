@@ -1,7 +1,10 @@
 package app.siphondsp.audio
 
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.log10
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -23,11 +26,21 @@ import kotlin.math.sqrt
  * thread only runs while at least one graph is actually showing the overlay.
  */
 object SpectrumEngine {
-    private const val FFT_LEN = 2048
-    private const val HOP_LEN = 1024
+    // 16384-point window at 48 kHz -> ~2.9 Hz/bin, which finally puts real resolution in the
+    // bottom two octaves where the filters do the most work (2048 gave 23 Hz/bin -- barely a
+    // handful of points below 200 Hz). The FFT runs on the MIN_PRIORITY analyzer thread only
+    // while a graph is showing the overlay, so the extra cost never touches the audio path.
+    private const val FFT_LEN = 16384
+    private const val HOP_LEN = 2048
     const val FLOOR_DB = -80f
     const val CEILING_DB = 0f
     const val LEVEL_FLOOR_DB = -80f
+
+    // Fractional-octave magnitude smoothing (1/12 oct: half-width +/- 1/24 oct). Applied in the
+    // frequency domain per frame so the trace reads as an RTA-style envelope instead of raw FFT
+    // grass, while still keeping enough detail to see individual filter action.
+    private val SMOOTH_LO = 2.0.pow(-1.0 / 24.0)
+    private val SMOOTH_HI = 2.0.pow(1.0 / 24.0)
 
     private val fft = FFT(FFT_LEN).apply { initHannWindow(FFT_LEN) }
 
@@ -216,6 +229,13 @@ object SpectrumEngine {
         // Published as an immutable snapshot so the UI thread never observes a half-updated array.
         @Volatile private var publishedMagnitudeDb = workingMagnitudeDb.copyOf()
 
+        // Per-frame scratch, reused so the 8x larger window doesn't turn into 8x the garbage:
+        // one windowed-sample buffer, one linear power spectrum, and a prefix sum of that power
+        // used for the O(n) fractional-octave smoothing pass.
+        private val windowScratch = DoubleArray(FFT_LEN)
+        private val powerScratch = DoubleArray(FFT_LEN / 2 + 1)
+        private val powerPrefix = DoubleArray(FFT_LEN / 2 + 2)
+
         /** Downmixes interleaved stereo to mono and runs a hop-based STFT as the ring buffer fills. */
         fun feed(interleaved: FloatArray, length: Int, fft: FFT) {
             var i = 0
@@ -231,10 +251,17 @@ object SpectrumEngine {
         }
 
         private fun computeFrame(fft: FFT) {
-            val windowed = fft.applyWindow(analyzeBuffer)
-            val power = fft.computePowerSpectrum(windowed)
-            for (bin in power.indices) {
-                val db = (10.0 * log10(power[bin].coerceAtLeast(1e-18))).toFloat()
+            fft.applyWindowInto(analyzeBuffer, windowScratch)
+            fft.computePowerSpectrumInto(windowScratch, powerScratch)
+            val n = powerScratch.size
+            // Prefix sum of linear power -> any [lo, hi] bin band averages in O(1).
+            powerPrefix[0] = 0.0
+            for (i in 0 until n) powerPrefix[i + 1] = powerPrefix[i] + powerScratch[i]
+            for (bin in 0 until n) {
+                val lo = floor(bin * SMOOTH_LO).toInt().coerceIn(0, n - 1)
+                val hi = ceil(bin * SMOOTH_HI).toInt().coerceIn(lo, n - 1)
+                val avgPower = (powerPrefix[hi + 1] - powerPrefix[lo]) / (hi - lo + 1)
+                val db = (10.0 * log10(avgPower.coerceAtLeast(1e-18))).toFloat()
                 val prev = workingMagnitudeDb[bin]
                 // Rise fast (transients read immediately), decay slower (readable peaks).
                 workingMagnitudeDb[bin] = if (db > prev) prev + (db - prev) * 0.6f else prev * 0.90f + db * 0.10f
@@ -244,8 +271,16 @@ object SpectrumEngine {
 
         fun magnitudeDbAt(frequencyHz: Double, sampleRate: Int): Float {
             val snapshot = publishedMagnitudeDb
-            val bin = (frequencyHz * FFT_LEN / sampleRate).toInt().coerceIn(0, snapshot.size - 1)
-            return snapshot[bin].coerceIn(FLOOR_DB, CEILING_DB)
+            // Linear-interpolate between adjacent bins. On the plot's log x-axis the deep bass
+            // spreads only a handful of bins across many pixels, so nearest-bin snapping there
+            // visibly stair-steps the trace; interpolation smooths it without faking resolution.
+            val exactBin = (frequencyHz * FFT_LEN / sampleRate).toFloat()
+            if (exactBin <= 0f) return snapshot[0].coerceIn(FLOOR_DB, CEILING_DB)
+            val lo = exactBin.toInt()
+            if (lo >= snapshot.size - 1) return snapshot[snapshot.size - 1].coerceIn(FLOOR_DB, CEILING_DB)
+            val frac = exactBin - lo
+            val interpolated = snapshot[lo] + (snapshot[lo + 1] - snapshot[lo]) * frac
+            return interpolated.coerceIn(FLOOR_DB, CEILING_DB)
         }
 
         fun reset() {
