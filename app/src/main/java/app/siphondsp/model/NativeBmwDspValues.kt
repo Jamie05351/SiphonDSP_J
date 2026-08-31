@@ -165,7 +165,7 @@ object NativeBmwDspValues {
         -6f, 0f, 0f, -1f, -1f, 0f, 0f,
         1f, 32f,
         0f, 150f, 0f,
-        0f, 125f,
+        0f, 150f,
         0f, 0f,
         0f, 0f, 0f, 0f,
         1f, 3f, 550f,
@@ -186,9 +186,10 @@ object NativeBmwDspValues {
         // Low Right.
         150f, 0f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         // Mid Left: subsonic fields are retained for a uniform block but ignored by native.
-        125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        // XO Hz matches Low (both hand off at 150) -- the old 125 default left a 25 Hz gap.
+        150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
-        125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // 139: meas-mute stopband octaves. 140: migration marker (1 = seeded). 141..142 inert
         // (formerly Pultec boost/cut dB).
         1f, 1f, 0f, 0f,
