@@ -39,7 +39,7 @@ NativeBmwDspProcessor::NativeBmwDspProcessor(){
  outputs_[static_cast<std::size_t>(OutputId::MidRight)].isLeftSide=false;
  outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)]={150.f,true,true,32.f,false,false,{true,-12.f,2.f,8.f,40.f,250.f,1.5f}};
  outputConfigs_[static_cast<std::size_t>(OutputId::LowRight)]=outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)];
- outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)]={125.f,true,false,32.f,false,false,{false,-10.f,1.5f,6.f,10.f,180.f,0.f}};
+ outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)]={150.f,true,false,32.f,false,false,{false,-10.f,1.5f,6.f,10.f,180.f,0.f}};
  outputConfigs_[static_cast<std::size_t>(OutputId::MidRight)]=outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)];
  rebuildAll();
 }
