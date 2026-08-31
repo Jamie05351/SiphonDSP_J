@@ -308,6 +308,7 @@ class CrossoverDashboardBuilder(
                 format.format(displayValue * displayScale),
                 true,
                 suffix,
+                R.style.AppTheme_AlertDialogTheme_Workspace,
             ) { entered ->
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
                 // Material Slider requires its value to land on a stepSize-aligned multiple of
@@ -383,6 +384,7 @@ class CrossoverDashboardBuilder(
                 format.format(values[index]),
                 true,
                 suffix,
+                R.style.AppTheme_AlertDialogTheme_Workspace,
             ) { entered ->
                 val parsed = entered?.toFloatOrNull() ?: return@showInputAlert
                 val stored = parsed.coerceIn(min, max)

@@ -19,6 +19,9 @@
          (bmw_glass_dialog_field) sits one step above that again. -->
     <color name="bmw_glass_dialog_surface">#1B1B21</color>
     <color name="bmw_glass_dialog_field">#33333C</color>
+    <!-- 40%-alpha panel fill for alert dialogs on the DSP workspaces (see
+         AppTheme.AlertDialogTheme.Workspace); base RGB is siphon_surface (#141418). -->
+    <color name="bmw_workspace_dialog_surface">#66141418</color>
 
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>

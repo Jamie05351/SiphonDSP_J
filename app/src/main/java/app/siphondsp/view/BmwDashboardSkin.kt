@@ -173,26 +173,27 @@ object BmwDashboardSkin {
     private val SLIDER_BOX_BACKGROUND_COLOR = Color.rgb(0x10, 0x13, 0x18)
 
     // "Glass box" value/title box background: recreates the user-supplied sidebar glass-panel
-    // artwork (glass_panel_1536x768.xml) at 50% overall opacity, so every value/title box across
-    // the app's DSP workspaces (Gains & Delay, Crossovers & Tilt, Routing) reads as the same
-    // fixture as the sidebar. Every color below is that vector's own color with its alpha channel
-    // halved. Built as a Canvas Drawable rather than reused directly as a VectorDrawable: that
-    // source vector has a fixed 1536x768 viewport with hardcoded pixel corner/rim geometry, and
-    // stretching it non-uniformly to fit boxes this small and this varied in aspect ratio would
-    // squash the rounded corners exactly like the sidebar bar-art squish bug this app already hit
-    // once. Drawing with a RectF keeps the corner radius correct at any size.
+    // artwork (glass_panel_1536x768.xml) at 40% overall opacity, so every value/title box across
+    // the app's DSP workspaces (Gains & Delay, Crossovers & Tilt, Routing, Parametric EQ) reads
+    // as the same fixture as the sidebar. Every color below is that vector's own color with its
+    // alpha channel scaled to 40% (0.8x the earlier 50% pass). Built as a Canvas Drawable rather
+    // than reused directly as a VectorDrawable: that source vector has a fixed 1536x768 viewport
+    // with hardcoded pixel corner/rim geometry, and stretching it non-uniformly to fit boxes this
+    // small and this varied in aspect ratio would squash the rounded corners exactly like the
+    // sidebar bar-art squish bug this app already hit once. Drawing with a RectF keeps the corner
+    // radius correct at any size.
     private const val GLASS_BOX_CORNER_RADIUS_DP = 5f
     private const val GLASS_BOX_STROKE_WIDTH_DP = 1.25f
-    private val GLASS_FILL_TOP = Color.argb(0x80, 0x11, 0x13, 0x16)
-    private val GLASS_FILL_MID = Color.argb(0x80, 0x08, 0x0A, 0x0C)
-    private val GLASS_FILL_BOTTOM = Color.argb(0x80, 0x02, 0x02, 0x03)
-    private val GLASS_RIM_TOP = Color.argb(0x6B, 0xD4, 0xD6, 0xD8)
-    private val GLASS_RIM_MID = Color.argb(0x4A, 0x34, 0x38, 0x3D)
-    private val GLASS_RIM_BOTTOM = Color.argb(0x5E, 0xD9, 0xDB, 0xDD)
-    private val GLASS_SHEEN_NEAR = Color.argb(0x37, 0xFF, 0xFF, 0xFF)
+    private val GLASS_FILL_TOP = Color.argb(0x66, 0x11, 0x13, 0x16)
+    private val GLASS_FILL_MID = Color.argb(0x66, 0x08, 0x0A, 0x0C)
+    private val GLASS_FILL_BOTTOM = Color.argb(0x66, 0x02, 0x02, 0x03)
+    private val GLASS_RIM_TOP = Color.argb(0x56, 0xD4, 0xD6, 0xD8)
+    private val GLASS_RIM_MID = Color.argb(0x3B, 0x34, 0x38, 0x3D)
+    private val GLASS_RIM_BOTTOM = Color.argb(0x4B, 0xD9, 0xDB, 0xDD)
+    private val GLASS_SHEEN_NEAR = Color.argb(0x2C, 0xFF, 0xFF, 0xFF)
     private val GLASS_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
-    private val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x47, 0xFF, 0xFF, 0xFF)
-    private val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x39, 0xDE, 0xDE, 0xDE)
+    private val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x39, 0xFF, 0xFF, 0xFF)
+    private val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x2E, 0xDE, 0xDE, 0xDE)
 
     // accentColor, when given, tints the box's border to that exact color instead of the default
     // neutral glass rim -- used to match a colour-coded slider row's title/value boxes to that

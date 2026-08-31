@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 40%-alpha rounded panel for alert dialogs on the BMW DSP workspaces, set as
+     android:windowBackground in AppTheme.AlertDialogTheme.Workspace so the workspace shows
+     through the dialog. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/bmw_workspace_dialog_surface" />
+    <corners android:radius="28dp" />
+</shape>
