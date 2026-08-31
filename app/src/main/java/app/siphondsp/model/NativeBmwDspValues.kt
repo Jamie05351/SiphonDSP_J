@@ -15,8 +15,11 @@ object NativeBmwDspValues {
     // 0..85 are the original/native four-output config. 86 is a schema marker and
     // 87..138 are the independent per-output settings described below. 139..142 were the
     // Pultec-style bass boost/cut stage (global, post-routing); the feature was unused and has
-    // been removed, so these 4 slots are now inert -- left in place rather than reclaimed, same
-    // as OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_LR4, to avoid shifting every index after them.
+    // been removed. 139 and 140 have since been reclaimed in place (the trailing slots stay put
+    // rather than being renumbered, same as OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_LR4):
+    //   139 -> INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES (read natively)
+    //   140 -> INDEX_MEAS_MUTE_STOPBAND_MIGRATED, a one-time migration marker (Kotlin-only)
+    //   141..142 -> still inert.
     // 143 is the Gains & Delay "Link L/R Delay" toggle -- UI-only, never read natively (see
     // INDEX_DELAY_LINKED), stored here anyway so it persists/syncs the same way every other
     // toggle in this array does.
@@ -131,8 +134,18 @@ object NativeBmwDspValues {
     }
 
     // 139..142: formerly the Pultec-style bass boost/cut stage's enabled/freq/boost/cut. Removed
-    // (unused feature, no native processing left) -- indices left inert, see the SIZE comment
-    // above. No named constants remain since nothing reads or writes them anymore.
+    // (unused feature, no native processing left); 139/140 reclaimed below, 141/142 still inert.
+
+    // Measurement-mute bus brick-wall: octaves to walk the LR8 corner off the opposite band's
+    // crossover and into the stopband, so the band still playing keeps its own transition region
+    // for measurement. 0 == original on-crossover behaviour. Consumed natively (v[139]).
+    const val INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES = 139
+    const val DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES = 1f
+
+    // One-time marker: set to 1 once an existing saved config has had slot 139 seeded to the
+    // default above. Lets the new control ship with a non-zero default without a full schema
+    // version bump. Kotlin-only -- native never reads index 140.
+    const val INDEX_MEAS_MUTE_STOPBAND_MIGRATED = 140
 
     // UI-only: links Low Left/Right and Mid Left/Right delay editing together on the Gains &
     // Delay page. Native never reads this index -- see NativeBmwDspProcessor::configure(), which
@@ -176,8 +189,9 @@ object NativeBmwDspValues {
         125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
         125f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // Inert (formerly Pultec: enabled, freq Hz, boost dB, cut dB).
-        0f, 60f, 0f, 0f,
+        // 139: meas-mute stopband octaves. 140: migration marker (1 = seeded). 141..142 inert
+        // (formerly Pultec boost/cut dB).
+        1f, 1f, 0f, 0f,
         // Link L/R Delay (UI-only).
         0f,
     )
@@ -193,6 +207,7 @@ object NativeBmwDspValues {
         // historical value cannot strand the user in silence with no corresponding control.
         values[INDEX_ENABLED] = 1f
         migrateIndependentOutputsIfNeeded(store, values)
+        migrateMeasMuteStopbandIfNeeded(store, values)
         return values
     }
 
@@ -238,6 +253,20 @@ object NativeBmwDspValues {
         values[INDEX_OUTPUT_SCHEMA_VERSION] = OUTPUT_SCHEMA_VERSION
         val saved = store.save(values)
         Timber.i("BMW DSP migrated independent four-output config success=$saved")
+    }
+
+    /**
+     * Seed the measurement-mute stopband offset (index 139, reclaimed from the removed Pultec
+     * stage) on configs saved before the control existed -- their slot 139 holds a leftover 0,
+     * which would silently mean "corner exactly on the crossover". Runs once, then the marker at
+     * index 140 stops it so a later deliberate 0 is respected.
+     */
+    private fun migrateMeasMuteStopbandIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] == 1f) return
+        values[INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES] = DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES
+        values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
+        val saved = store.save(values)
+        Timber.i("BMW DSP seeded meas-mute stopband offset default success=$saved")
     }
 
     /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob. */

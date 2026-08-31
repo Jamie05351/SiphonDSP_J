@@ -7,5 +7,6 @@
 <SwitchPreferenceCompat android:key="bmw_mute_mid_band" android:title="Mute mid band" app:iconSpaceReserved="false"/>
 <ListPreference android:key="bmw_channel_isolation" android:title="Channel isolation" android:entries="@array/bmw_channel_isolation_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
 <ListPreference android:key="bmw_measurement_mute" android:title="Measurement mute" android:entries="@array/bmw_measurement_mute_entries" android:entryValues="@array/bmw_three_choice_values" app:useSimpleSummaryProvider="true" app:iconSpaceReserved="false"/>
+<app.siphondsp.preference.MaterialSeekbarPreference android:key="bmw_measurement_mute_stopband_octaves" android:title="Meas. mute stopband offset" android:summary="Octaves the brick-wall corner sits past the crossover. 0 = on the crossover." android:defaultValue="1.0" app:minValue="0" app:maxValue="4" app:precision="2" app:unit=" oct" app:updatesContinuously="false" app:showSeekBarValue="true" app:allowDividerAbove="false" app:iconSpaceReserved="false"/>
 </PreferenceCategory>
 </PreferenceScreen>

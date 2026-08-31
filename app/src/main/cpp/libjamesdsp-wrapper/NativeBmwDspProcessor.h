@@ -12,12 +12,19 @@
 class NativeBmwDspProcessor {
 public:
     // 139..142 were the Pultec-style bass boost/cut stage; the feature was removed (unused,
-    // native processing deleted below) but the slots are left inert rather than reclaimed, same
-    // as FIELD_CROSSOVER_LR4 -- shrinking the array would shift every index after it. They are
-    // simply never read in configure() now. 143 (INDEX_DELAY_LINKED) is UI-only -- see
-    // NativeBmwDspValues.kt -- and is intentionally never read in configure() either; it only
-    // has to be included here so the array length check (NativeBmwDspJni.cpp) accepts the array
-    // Kotlin actually sends.
+    // native processing deleted below) and the slots were left inert rather than reclaimed, same
+    // as FIELD_CROSSOVER_LR4 -- shrinking the array would shift every index after it.
+    //   139 -> reclaimed: measurement-mute bus brick-wall stopband offset, in octaves. 0 keeps
+    //          the LR8 corner exactly on the opposite band's crossover (original behaviour);
+    //          >0 walks it that many octaves into the stopband so the isolated band's own
+    //          transition region is left intact for measurement. Read in configure().
+    //   140 -> reclaimed: one-time "stopband offset migrated" marker, written by
+    //          NativeBmwDspValues.kt so an existing saved config picks up the new default.
+    //          Kotlin-only -- never read in configure().
+    //   141..142 -> still inert, never read.
+    // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
+    // never read in configure() either; it only has to be included here so the array length
+    // check (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
     enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 144 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
@@ -176,6 +183,9 @@ private:
         float tiltAmount=3,tiltFreq=550;
         bool monoBass=false;
         float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
+        // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
+        // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
+        float measBusStopbandOctaves=1;
     } p_;
 
     static float dbToLin(float db);

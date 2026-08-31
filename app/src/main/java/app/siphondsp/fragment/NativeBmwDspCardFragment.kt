@@ -14,7 +14,8 @@ import app.siphondsp.adapter.RoundedRipplePreferenceGroupAdapter
 import app.siphondsp.model.NativeBmwDspValues
 
 /** Inline, expandable controls for the native BMW processor -- just the Measurements / routing
- *  rows now (LPF/HPF passthrough, band mutes, channel isolation, measurement mute). Gain
+ *  rows now (LPF/HPF passthrough, band mutes, channel isolation, measurement mute + its
+ *  stopband offset). Gain
  *  structure, Delay/polarity, Subsonic/crossovers, Tilt and the Output all-pass sections all
  *  live on their own dedicated workspace screens. */
 class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.OnSharedPreferenceChangeListener {
@@ -131,10 +132,11 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     companion object {
         private const val MENU_PREFS = "native_bmw_dsp_menu"
-        // Only the "Measurements / routing" category (indices 1-4) renders inline here. Gain
-        // structure, Delay/polarity, Subsonic/crossovers, Tilt and Output all-pass have all
-        // relocated to dedicated screens. The master enable switch (index 0) was removed
-        // entirely -- NativeBmwDspValues.load() forces it on unconditionally now.
+        // Only the "Measurements / routing" category renders inline here (indices 1-4 plus the
+        // meas-mute stopband slider at 139). Gain structure, Delay/polarity, Subsonic/crossovers,
+        // Tilt and Output all-pass have all relocated to dedicated screens. The master enable
+        // switch (index 0) was removed entirely -- NativeBmwDspValues.load() forces it on
+        // unconditionally now.
         private val BOOLEAN_INDEXES = setOf(1, 2)
         private val LIST_INDEXES = setOf(3, 4)
         private val KEY_TO_INDEX = linkedMapOf(
@@ -142,6 +144,9 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
             "bmw_hpf_passthrough" to 2,
             "bmw_channel_isolation" to 3,
             "bmw_measurement_mute" to 4,
+            // Float slider -- neither BOOLEAN_INDEXES nor LIST_INDEXES, so it round-trips through
+            // getFloat/putFloat like any MaterialSeekbarPreference.
+            "bmw_measurement_mute_stopband_octaves" to NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES,
         )
         private val MUTE_KEYS = setOf("bmw_mute_low_band", "bmw_mute_mid_band")
 

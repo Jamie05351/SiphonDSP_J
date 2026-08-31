@@ -280,6 +280,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         val hpfPass = values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f
         val bothBypassed = lpfPass && hpfPass
         val channelMuteMode = values[NativeBmwDspValues.INDEX_CHANNEL_MUTE].toInt()
+        // measurementMute only zeroes the excluded branch here. The native engine also drops an
+        // LR8 brick-wall on the summed bus (NativeBmwDspProcessor::rebuildMeasBus, offset by
+        // INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES); that is a measurement-only artefact of the
+        // external low/mid split and is deliberately not reproduced on this tuning graph.
         val measurementMute = values[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE].toInt()
         val headroomLinear = dbToLinear(values[NativeBmwDspValues.INDEX_HEADROOM].toDouble())
         val preampLinear = if (peq.enabled) dbToLinear(peq.preampDb.toDouble()) else 1.0
