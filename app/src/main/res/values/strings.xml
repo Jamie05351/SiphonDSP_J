@@ -124,6 +124,10 @@
     <string name="peq_col_q">Q</string>
     <string name="peq_gain_decrease">Decrease gain</string>
     <string name="peq_gain_increase">Increase gain</string>
+    <string name="peq_frequency_decrease">Decrease frequency</string>
+    <string name="peq_frequency_increase">Increase frequency</string>
+    <string name="peq_q_decrease">Decrease Q</string>
+    <string name="peq_q_increase">Increase Q</string>
     <string name="peq_filter_type_peaking">Peaking</string>
     <string name="peq_filter_type_low_shelf">Low shelf</string>
     <string name="peq_filter_type_high_shelf">High shelf</string>
