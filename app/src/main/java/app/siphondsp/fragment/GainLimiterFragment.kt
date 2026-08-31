@@ -17,10 +17,9 @@ import kotlin.math.roundToInt
 
 /**
  * Dedicated Gains & Delay workspace using the shared BMW dashboard skin. Swipes between two
- * pages: the car/speaker diagram with per-channel Delay and Polarity cards, and a Gain page
- * (Headroom plus the 4 channel gains) as full horizontal sliders in the same style as every
- * other DSP workspace slider -- gain used to live as a mini-slider inside each channel card and
- * Headroom as a vertical fader docked to the page header, both replaced by this dedicated page.
+ * pages: the car/speaker diagram with per-channel Delay, Polarity and Gain cards (the Left Low
+ * card also carries the global Link L/R Delay toggle), and an Output page with Headroom and the
+ * post-gain L/R sliders.
  */
 class GainLimiterFragment : Fragment() {
     private lateinit var container: FrameLayout
@@ -49,15 +48,6 @@ class GainLimiterFragment : Fragment() {
             NativeBmwDspValues.save(requireContext(), updated)
             NativeBmwDspValues.broadcast(requireContext(), updated)
         }
-        fun lowPair(field: Int) = intArrayOf(
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, field),
-        )
-        fun midPair(field: Int) = intArrayOf(
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, field),
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
-        )
-
         fun page(build: CrossoverDashboardBuilder.() -> Unit): View {
             val pageRoot = LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.VERTICAL
@@ -74,17 +64,14 @@ class GainLimiterFragment : Fragment() {
             // subtitle wasn't telling the user anything the page itself doesn't already -- both
             // just cost rows of vertical space this page can't spare.
             dashboardPanel("", null) {
-                addSegmentedSwitchRow(
-                    "Link L/R Delay",
-                    null,
-                    NativeBmwDspValues.INDEX_DELAY_LINKED,
-                    onToggled = ::rebuild,
-                )
                 val linked = values[NativeBmwDspValues.INDEX_DELAY_LINKED] >= .5f
                 val midLeft = addChannelCard(
                     title = "Left Mid",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    strokeColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_L, delayMin = 0f, delayMax = 2.8f,
+                    gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_L, gainMin = -6f, gainMax = 0f,
+                    gainSliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                     // Independent per physical driver, not per band -- a real reversed-polarity
                     // fault can land on just one driver (see NativeBmwDspProcessor.cpp's own
                     // "Deliberate final-output swap" comment for a documented example of exactly
@@ -100,16 +87,26 @@ class GainLimiterFragment : Fragment() {
                 val lowLeft = addChannelCard(
                     title = "Left Low",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    strokeColor = BmwDashboardSkin.M_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_L, delayMin = 0f, delayMax = 2.8f,
+                    gainIndex = NativeBmwDspValues.INDEX_LOW_GAIN_L, gainMin = -6f, gainMax = 0f,
+                    gainSliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
                     polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_INVERT),
                     polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_R else null,
                     onDelayChanged = ::rebuild,
+                    // The global Link L/R Delay toggle lives here now, at the bottom of the
+                    // left-hand Low card, rather than as its own header row above the diagram.
+                    delayLinkToggleIndex = NativeBmwDspValues.INDEX_DELAY_LINKED,
+                    onDelayLinkToggled = ::rebuild,
                 )
                 val midRight = addChannelCard(
                     title = "Right Mid",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    strokeColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     delayIndex = NativeBmwDspValues.INDEX_MID_DELAY_R, delayMin = 0f, delayMax = 2.8f,
+                    gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_R, gainMin = -6f, gainMax = 0f,
+                    gainSliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                     polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_INVERT),
                     polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_MID_DELAY_L else null,
@@ -118,52 +115,41 @@ class GainLimiterFragment : Fragment() {
                 val lowRight = addChannelCard(
                     title = "Right Low",
                     accentColor = BmwDashboardSkin.LIGHT_BLUE,
+                    strokeColor = BmwDashboardSkin.M_BLUE,
                     delayIndex = NativeBmwDspValues.INDEX_LOW_DELAY_R, delayMin = 0f, delayMax = 2.8f,
+                    gainIndex = NativeBmwDspValues.INDEX_LOW_GAIN_R, gainMin = -6f, gainMax = 0f,
+                    gainSliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
                     polarityIndex = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT),
                     polarityMirror = intArrayOf(),
                     delayLinkedIndex = if (linked) NativeBmwDspValues.INDEX_LOW_DELAY_L else null,
                     onDelayChanged = ::rebuild,
                 )
-                addChannelDiagramSection(
-                    midLeft, lowLeft, midRight, lowRight,
-                    midLeftColor = BmwDashboardSkin.MID_BAND_YELLOW, lowLeftColor = BmwDashboardSkin.LIGHT_BLUE,
-                    midRightColor = BmwDashboardSkin.MID_BAND_YELLOW, lowRightColor = BmwDashboardSkin.LIGHT_BLUE,
-                )
+                addChannelDiagramSection(midLeft, lowLeft, midRight, lowRight)
             }
         }
 
-        val gainPage = page {
-            dashboardPanel("Gain", null) {
+        val outputPage = page {
+            dashboardPanel("Output", null) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_DEFAULT_COLOR,
                 )
                 addSliderRow(
-                    "Left Mid", NativeBmwDspValues.INDEX_MID_GAIN_L, -6f, 0f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
+                    "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f, 6f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.M_GREEN,
+                    sliderAccentColor = BmwDashboardSkin.M_GREEN,
                 )
                 addSliderRow(
-                    "Right Mid", NativeBmwDspValues.INDEX_MID_GAIN_R, -6f, 0f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
-                )
-                addSliderRow(
-                    "Left Low", NativeBmwDspValues.INDEX_LOW_GAIN_L, -6f, 0f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
-                )
-                addSliderRow(
-                    "Right Low", NativeBmwDspValues.INDEX_LOW_GAIN_R, -6f, 0f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
+                    "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f, 6f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.M_GREEN,
+                    sliderAccentColor = BmwDashboardSkin.M_GREEN,
                 )
             }
         }
 
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(diagramPage, gainPage)),
+            DspPager.build(requireContext(), listOf(diagramPage, outputPage)),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }
