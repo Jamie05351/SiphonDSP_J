@@ -1,0 +1,64 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="203dp" android:height="834dp"
+    android:viewportWidth="203" android:viewportHeight="834">
+
+  <!-- panel body, edge to edge -->
+  <path android:fillColor="#FF15191E" android:pathData="M18.00,0.00 h167.00 a18.00,18.00 0 0 1 18.00,18.00 v798.00 a18.00,18.00 0 0 1 -18.00,18.00 h-167.00 a18.00,18.00 0 0 1 -18.00,-18.00 v-798.00 a18.00,18.00 0 0 1 18.00,-18.00 z"/>
+  <path android:strokeColor="#5A4A5361" android:strokeWidth="2" android:pathData="M18.00,1.50 h167.00 a16.50,16.50 0 0 1 16.50,16.50 v798.00 a16.50,16.50 0 0 1 -16.50,16.50 h-167.00 a16.50,16.50 0 0 1 -16.50,-16.50 v-798.00 a16.50,16.50 0 0 1 16.50,-16.50 z"/>
+  <path android:strokeColor="#22FFFFFF" android:strokeWidth="1" android:pathData="M14,4 L189,4"/>
+
+  <!-- tile 1: peq -->
+  <path android:fillColor="#FF0A0D11" android:pathData="M42.50,20.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#552F3843" android:strokeWidth="1.4" android:pathData="M42.50,21.00 h118.00 a15.00,15.00 0 0 1 15.00,15.00 v114.00 a15.00,15.00 0 0 1 -15.00,15.00 h-118.00 a15.00,15.00 0 0 1 -15.00,-15.00 v-114.00 a15.00,15.00 0 0 1 15.00,-15.00 z"/>
+  <group android:translateX="58.30" android:translateY="49.80" android:scaleX="3.6" android:scaleY="3.6">
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.9" android:strokeLineCap="round" android:pathData="M6,4 L6,20"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.9" android:strokeLineCap="round" android:pathData="M12,4 L12,20"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.9" android:strokeLineCap="round" android:pathData="M18,4 L18,20"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M3.3,8.6 h5.4 v2.8 h-5.4z"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M9.3,13.6 h5.4 v2.8 h-5.4z"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M15.3,5.6 h5.4 v2.8 h-5.4z"/>
+  </group>
+
+  <!-- tile 2: gains -->
+  <path android:fillColor="#FF0A0D11" android:pathData="M42.50,182.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#552F3843" android:strokeWidth="1.4" android:pathData="M42.50,183.00 h118.00 a15.00,15.00 0 0 1 15.00,15.00 v114.00 a15.00,15.00 0 0 1 -15.00,15.00 h-118.00 a15.00,15.00 0 0 1 -15.00,-15.00 v-114.00 a15.00,15.00 0 0 1 15.00,-15.00 z"/>
+  <group android:translateX="58.30" android:translateY="211.80" android:scaleX="3.6" android:scaleY="3.6">
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:pathData="M5.5,17.8 A8.2,8.2 0 1 1 18.5,17.8"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:pathData="M12,10 L12,4.2"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M12,10 m-2,0 a2,2 0 1 0 4,0 a2,2 0 1 0 -4,0"/>
+  </group>
+
+  <!-- tile 3: xover (selected) -->
+  <path android:fillColor="#FF0A0D11" android:pathData="M42.50,344.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#2246B5E8" android:strokeWidth="16" android:pathData="M42.50,344.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#4746B5E8" android:strokeWidth="8" android:pathData="M42.50,344.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#FF46B5E8" android:strokeWidth="3.5" android:pathData="M42.50,344.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <group android:translateX="58.30" android:translateY="373.80" android:scaleX="3.6" android:scaleY="3.6">
+    <path android:strokeColor="#FF46B5E8" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M3,8 C8,8 10,8 12,12 C14,16 16,16 21,16"/>
+    <path android:strokeColor="#FF46B5E8" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M3,16 C8,16 10,16 12,12 C14,8 16,8 21,8"/>
+    <path android:fillColor="#FF46B5E8" android:pathData="M12,12 m-1.7,0 a1.7,1.7 0 1 0 3.4,0 a1.7,1.7 0 1 0 -3.4,0"/>
+  </group>
+
+  <!-- tile 4: compressor -->
+  <path android:fillColor="#FF0A0D11" android:pathData="M42.50,506.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#552F3843" android:strokeWidth="1.4" android:pathData="M42.50,507.00 h118.00 a15.00,15.00 0 0 1 15.00,15.00 v114.00 a15.00,15.00 0 0 1 -15.00,15.00 h-118.00 a15.00,15.00 0 0 1 -15.00,-15.00 v-114.00 a15.00,15.00 0 0 1 15.00,-15.00 z"/>
+  <group android:translateX="58.30" android:translateY="535.80" android:scaleX="3.6" android:scaleY="3.6">
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M4,7 L4,17"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M20,7 L20,17"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M5.5,12 L8,12"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M16,12 L18.5,12"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8,12 L9.6,6 L12,18 L14,9 L16,12"/>
+  </group>
+
+  <!-- tile 5: allpass -->
+  <path android:fillColor="#FF0A0D11" android:pathData="M42.50,668.00 h118.00 a16.00,16.00 0 0 1 16.00,16.00 v114.00 a16.00,16.00 0 0 1 -16.00,16.00 h-118.00 a16.00,16.00 0 0 1 -16.00,-16.00 v-114.00 a16.00,16.00 0 0 1 16.00,-16.00 z"/>
+  <path android:strokeColor="#552F3843" android:strokeWidth="1.4" android:pathData="M42.50,669.00 h118.00 a15.00,15.00 0 0 1 15.00,15.00 v114.00 a15.00,15.00 0 0 1 -15.00,15.00 h-118.00 a15.00,15.00 0 0 1 -15.00,-15.00 v-114.00 a15.00,15.00 0 0 1 15.00,-15.00 z"/>
+  <group android:translateX="58.30" android:translateY="697.80" android:scaleX="3.6" android:scaleY="3.6">
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M3,13 C6,13 6,8 9,8 C12,8 12,13 15,13 C18,13 18,8 21,8"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15,17 C18,17 18,12 21,12"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M21,12 l-3.3,-2 l0.4,4.2 z"/>
+    <path android:strokeColor="#FFC6C5CE" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M9,17 C6,17 6,12 3,12"/>
+    <path android:fillColor="#FFC6C5CE" android:pathData="M3,12 l3.3,-2 l-0.4,4.2 z"/>
+  </group>
+
+</vector>
