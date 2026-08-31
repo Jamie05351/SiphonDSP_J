@@ -117,6 +117,13 @@
     <string name="peq_channel_both">Both</string>
     <string name="peq_channel_left">Left</string>
     <string name="peq_channel_right">Right</string>
+    <string name="peq_col_ch">CH</string>
+    <string name="peq_col_filter">FILTER</string>
+    <string name="peq_col_hz">HZ</string>
+    <string name="peq_col_db">dB</string>
+    <string name="peq_col_q">Q</string>
+    <string name="peq_gain_decrease">Decrease gain</string>
+    <string name="peq_gain_increase">Increase gain</string>
     <string name="peq_filter_type_peaking">Peaking</string>
     <string name="peq_filter_type_low_shelf">Low shelf</string>
     <string name="peq_filter_type_high_shelf">High shelf</string>

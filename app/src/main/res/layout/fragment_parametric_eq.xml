@@ -194,6 +194,15 @@
                 android:layout_height="1dp"
                 android:background="?android:attr/listDivider" />
 
+            <include
+                android:id="@+id/band_list_header"
+                layout="@layout/item_peq_band_list_header" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="?android:attr/listDivider" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/band_list"
                 android:layout_width="match_parent"

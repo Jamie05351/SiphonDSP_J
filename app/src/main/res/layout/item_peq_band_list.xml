@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Every cell (channel/type/freq/gain/q) is independently tappable: Channel/Type open a
-     tap-to-commit choice picker, Freq/Gain/Q open the numeric value dialog (see
-     ParametricEqBandAdapter + ParametricEqualizerFragment). Cell backgrounds are set at bind
-     time to BmwDashboardSkin.glassBoxDrawable(accentColor) so the row matches whichever scope
-     card it belongs to (Low=blue/Mid=yellow/Input Correction=default); this can't be done in
-     XML since the accent color is chosen per-scope at runtime, not per-layout.
-     Layout: Channel + Type (full words, so Type fits "High shelf") sit toward the left; a big
-     flexible gap then shoves the three equal Hz / dB / Q boxes into a tight cluster on the
-     right (small fixed gaps between them), just ahead of the delete button. -->
+<!-- One band row. Columns line up under item_peq_band_list_header.xml: the two files MUST keep
+     the same start/end padding, the same leading selection spacer, and the same per-column
+     layout_weight values (CH 2.0 / FILTER 3.0 / HZ 2.6 / dB 4.4 / Q 2.4) or the header labels
+     drift off their columns.
+     Cells are plain tappable text (no glass-box background) so the numbers read cleanly at a
+     glance; the unit lives in the header, not baked into each value. Channel/Type/Hz/Q open a
+     picker or the value dialog on tap. dB has inline - / + steppers (0.5 dB, commit immediately)
+     AND the number itself opens the dialog for a precise value. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -15,8 +14,8 @@
     android:minHeight="?android:attr/listPreferredItemHeightSmall"
     android:paddingStart="?android:attr/listPreferredItemPaddingStart"
     android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
     android:baselineAligned="false"
     android:gravity="center_vertical">
 
@@ -30,104 +29,142 @@
 
     <TextView
         android:id="@+id/index"
-        android:layout_width="20dp"
+        android:layout_width="22dp"
         android:layout_height="wrap_content"
         android:gravity="end"
         android:textAppearance="?attr/textAppearanceBodyMedium"
         android:textColor="?android:attr/textColorSecondary" />
 
-    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-
     <TextView
         android:id="@+id/channel"
-        android:layout_width="72dp"
+        android:layout_width="0dp"
+        android:layout_weight="2.0"
         android:layout_height="wrap_content"
-        android:minHeight="34dp"
+        android:minHeight="40dp"
         android:gravity="center"
         android:clickable="true"
         android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:paddingHorizontal="6dp"
         android:textSize="16sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_channel" />
 
-    <Space android:layout_width="10dp" android:layout_height="1dp" />
-
     <TextView
         android:id="@+id/type"
-        android:layout_width="112dp"
+        android:layout_width="0dp"
+        android:layout_weight="3.0"
         android:layout_height="wrap_content"
-        android:minHeight="34dp"
+        android:minHeight="40dp"
         android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
         android:clickable="true"
         android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:paddingHorizontal="6dp"
         android:textSize="16sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_filter_type" />
 
-    <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="5" />
-
     <TextView
         android:id="@+id/freq"
-        android:layout_width="168dp"
+        android:layout_width="0dp"
+        android:layout_weight="2.6"
         android:layout_height="wrap_content"
-        android:minHeight="34dp"
+        android:minHeight="40dp"
         android:gravity="center"
         android:clickable="true"
         android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:paddingHorizontal="6dp"
         android:textSize="16sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_frequency" />
 
-    <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-    <TextView
-        android:id="@+id/gain"
-        android:layout_width="168dp"
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_weight="4.4"
         android:layout_height="wrap_content"
-        android:minHeight="34dp"
-        android:gravity="center"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:contentDescription="@string/peq_gain" />
+        android:orientation="horizontal"
+        android:gravity="center">
 
-    <Space android:layout_width="8dp" android:layout_height="1dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/gain_minus"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="40dp"
+            android:minHeight="40dp"
+            android:padding="0dp"
+            app:iconSize="20dp"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:icon="@drawable/ic_twotone_remove_24dp"
+            android:contentDescription="@string/peq_gain_decrease" />
+
+        <TextView
+            android:id="@+id/gain"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="52dp"
+            android:minHeight="40dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="6dp"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:contentDescription="@string/peq_gain" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/gain_plus"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="40dp"
+            android:minHeight="40dp"
+            android:padding="0dp"
+            app:iconSize="20dp"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:icon="@drawable/ic_baseline_add_24dp"
+            android:contentDescription="@string/peq_gain_increase" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/q_factor"
-        android:layout_width="168dp"
+        android:layout_width="0dp"
+        android:layout_weight="2.4"
         android:layout_height="wrap_content"
-        android:minHeight="34dp"
+        android:minHeight="40dp"
         android:gravity="center"
         android:clickable="true"
         android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
+        android:background="?attr/selectableItemBackground"
+        android:paddingHorizontal="6dp"
         android:textSize="16sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_q_factor" />
 
-    <Space android:layout_width="12dp" android:layout_height="1dp" />
-
-    <Button
+    <com.google.android.material.button.MaterialButton
         style="?attr/materialIconButtonStyle"
         android:id="@+id/delete"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:minWidth="44dp"
+        android:minHeight="44dp"
+        android:padding="0dp"
+        app:iconSize="22dp"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
         android:contentDescription="@string/peq_delete_band"
         android:tooltipText="@string/peq_delete_band"
         app:icon="@drawable/ic_twotone_delete_24dp" />

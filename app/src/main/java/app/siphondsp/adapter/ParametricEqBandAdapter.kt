@@ -13,20 +13,19 @@ import app.siphondsp.R
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
-import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 
 /**
- * Each band row edits in place: Type/Channel/Frequency/Gain/Q are all independently tappable
- * cells (see [onTypeClicked]/[onChannelClicked]/[onFrequencyClicked]/[onGainClicked]/
- * [onQClicked]), styled with [BmwDashboardSkin.glassBoxDrawable] using [accentColor] so the
- * table matches whichever scope card it's showing (Low=blue/Mid=yellow/Input Correction=null
- * for the default neutral look). There is no separate add/edit panel any more -- a trailing
- * "Add filter" row (see [onAddClicked]) is appended automatically as long as the scope has
- * fewer than [BmwPeqState.MAX_BANDS] bands, and disappears once the cap is hit.
+ * Each band row is a set of columns lined up under item_peq_band_list_header.xml: Channel /
+ * Type / Hz / dB / Q are plain tappable text (no box), each carrying its own value with the
+ * unit shown once in the header. Channel/Type open a picker; Hz/Q and the dB number open the
+ * value dialog; dB additionally has inline - / + steppers ([onGainStep], 0.5 dB, commit
+ * immediately). [accentColor] tints the value text per scope (Low=blue/Mid=yellow/Input
+ * Correction=null neutral). A trailing "Add filter" row ([onAddClicked]) is appended while the
+ * scope has fewer than [BmwPeqState.MAX_BANDS] bands.
  */
 class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -57,6 +56,8 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     var onFrequencyClicked: ((ParametricEqBand, Int) -> Unit)? = null
     var onGainClicked: ((ParametricEqBand, Int) -> Unit)? = null
     var onQClicked: ((ParametricEqBand, Int) -> Unit)? = null
+    /** Inline dB stepper: delta is -0.5 (minus button) or +0.5 (plus button). */
+    var onGainStep: ((ParametricEqBand, Int, Double) -> Unit)? = null
     var onAddClicked: (() -> Unit)? = null
 
     /** UUID of the band a dialog is currently open for, so its row can show a selection outline. */
@@ -127,6 +128,8 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         val channel: TextView = view.findViewById(R.id.channel)
         val freq: TextView = view.findViewById(R.id.freq)
         val gain: TextView = view.findViewById(R.id.gain)
+        val gainMinus: View = view.findViewById(R.id.gain_minus)
+        val gainPlus: View = view.findViewById(R.id.gain_plus)
         val qFactor: TextView = view.findViewById(R.id.q_factor)
         val deleteButton: Button = view.findViewById(R.id.delete)
         val selectionOutline: View = view.findViewById(R.id.selection_outline)
@@ -182,23 +185,26 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         val accent = accentColor
 
         val typeLabel = filterTypeLabel(context, band.filterType)
-        val channelLabel = channelLabel(context, band.channel)
+        val channelLabel = band.channel.displayLabel
+        val freqText = dfFreq.format(band.frequency)
+        val gainText = dfGain.format(band.gain)
+        val qText = dfQ.format(band.q)
         holder.index.text = "${position + 1}"
         holder.type.text = typeLabel
         holder.channel.text = channelLabel
+        // Values carry no unit -- HZ / dB / Q live in the sticky column header. Keep the units
+        // in the row's spoken description so the list still reads correctly with TalkBack.
         holder.itemView.contentDescription =
-            "Filter ${position + 1}, $typeLabel, channel $channelLabel"
-        holder.freq.text = "${dfFreq.format(band.frequency)}Hz"
-        holder.gain.text = "${dfGain.format(band.gain)}dB"
-        holder.qFactor.text = "Q${dfQ.format(band.q)}"
+            "Filter ${position + 1}, $typeLabel, channel $channelLabel, " +
+                "$freqText hertz, $gainText decibels, Q $qText"
+        holder.freq.text = freqText
+        holder.gain.text = gainText
+        holder.qFactor.text = qText
         holder.selectionOutline.visibility = if (band.uuid == selectedUuid) View.VISIBLE else View.INVISIBLE
 
-        // One glass-box background per cell, all sharing this row's accent color -- rebuilding
-        // per bind (rather than caching) since accentColor can change live when the scope chip
-        // is switched, and these boxes are cheap to draw.
-        listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach { cell ->
-            cell.background = BmwDashboardSkin.glassBoxDrawable(context, accentColor = accent)
-            cell.setTextColor(accent ?: BmwDashboardSkin.LIGHT_BLUE)
+        val valueColor = accent ?: BmwDashboardSkin.LIGHT_BLUE
+        listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach {
+            it.setTextColor(valueColor)
         }
 
         holder.deleteButton.setOnClickListener {
@@ -210,6 +216,8 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.channel.setOnClickListener { withBoundBand(holder) { b, pos -> onChannelClicked?.invoke(b, pos) } }
         holder.freq.setOnClickListener { withBoundBand(holder) { b, pos -> onFrequencyClicked?.invoke(b, pos) } }
         holder.gain.setOnClickListener { withBoundBand(holder) { b, pos -> onGainClicked?.invoke(b, pos) } }
+        holder.gainMinus.setOnClickListener { withBoundBand(holder) { b, pos -> onGainStep?.invoke(b, pos, -0.5) } }
+        holder.gainPlus.setOnClickListener { withBoundBand(holder) { b, pos -> onGainStep?.invoke(b, pos, 0.5) } }
         holder.qFactor.setOnClickListener { withBoundBand(holder) { b, pos -> onQClicked?.invoke(b, pos) } }
     }
 
@@ -220,15 +228,6 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
                 ParametricEqFilterType.LOW_SHELF -> R.string.peq_filter_type_low_shelf
                 ParametricEqFilterType.HIGH_SHELF -> R.string.peq_filter_type_high_shelf
                 ParametricEqFilterType.NOTCH -> R.string.peq_filter_type_notch
-            }
-        )
-
-    private fun channelLabel(context: android.content.Context, channel: ParametricEqChannel): String =
-        context.getString(
-            when (channel) {
-                ParametricEqChannel.LEFT_RIGHT -> R.string.peq_channel_both
-                ParametricEqChannel.LEFT -> R.string.peq_channel_left
-                ParametricEqChannel.RIGHT -> R.string.peq_channel_right
             }
         )
 
