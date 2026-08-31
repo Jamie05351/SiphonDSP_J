@@ -467,7 +467,10 @@ class CrossoverDashboardBuilder(
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            // Tight vertical padding/gaps: the card now carries 3-4 rows (Delay, Polarity, Gain,
+            // plus Link L/R on Left Low) and both stacked cards in a column still have to fit the
+            // page without scrolling.
+            setPadding(dp(12), dp(5), dp(12), dp(5))
         }
 
         content.addView(TextView(context).apply {
@@ -476,14 +479,14 @@ class CrossoverDashboardBuilder(
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentColor)
         })
-        content.addView(vspace(6))
+        content.addView(vspace(3))
         content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms", delayLinkedIndex, onDelayChanged))
-        content.addView(vspace(4))
+        content.addView(vspace(2))
         content.addView(buildMiniToggleRow("POL", polarityIndex, polarityMirror, onPolarityChanged))
-        content.addView(vspace(4))
+        content.addView(vspace(2))
         content.addView(buildMiniSliderRow("GAIN", gainIndex, gainMin, gainMax, 0.5f, "dB", accentColor, gainSliderAccentColor))
         if (delayLinkToggleIndex != null) {
-            content.addView(vspace(4))
+            content.addView(vspace(2))
             content.addView(buildMiniSwitchRow("LINK L/R", delayLinkToggleIndex, onDelayLinkToggled))
         }
 
@@ -491,9 +494,12 @@ class CrossoverDashboardBuilder(
         return card
     }
 
-    /** Compact [label][slider][boxed value] row for [addChannelCard]'s in-card Gain control --
-     *  the drag-slider counterpart to [buildMiniValueRow], sized to sit inside a channel card
-     *  rather than fill a full workspace row. */
+    /** [label][slider][value] Gain row for [addChannelCard], geometrically identical to
+     *  [buildMiniValueRow]'s Delay row: same [ROW_LABEL_WIDTH_DP] label, the control filling the
+     *  same weight-1 span the Delay value box occupies (so the card keeps its exact width), and
+     *  the same 24dp control height as the Polarity toggle so the card gains one row, not extra
+     *  bulk. The current dB reading is a plain right-aligned number tucked into that same span --
+     *  tap it for the precise-entry dialog. */
     private fun buildMiniSliderRow(
         label: String,
         index: Int,
@@ -509,8 +515,16 @@ class CrossoverDashboardBuilder(
             gravity = Gravity.CENTER_VERTICAL
         }
         row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
-        val displayValue = values[index].coerceIn(min, max)
-        val valueText = createBoxedValueText(displayValue, suffix, accentColor)
+
+        val valueText = TextView(context).apply {
+            textSize = 11f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            setTextColor(accentColor ?: accentBlue)
+            updateValueBox(this, values[index].coerceIn(min, max), suffix)
+        }
         val slider = Slider(context).apply {
             valueFrom = min
             valueTo = max
@@ -543,11 +557,15 @@ class CrossoverDashboardBuilder(
                 onChanged(values)
             }
         }
-        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(8)
-            marginEnd = dp(8)
-        })
-        row.addView(valueText)
+        // The label + (slider + value) together span exactly the Delay row's label + value box --
+        // the weight-1 group replaces the weight-1 value box, no change to the row or card width.
+        val group = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(slider, LinearLayout.LayoutParams(0, dp(24), 1f))
+            addView(valueText, LinearLayout.LayoutParams(dp(40), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
+        }
+        row.addView(group, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         return row
     }
 
@@ -579,28 +597,43 @@ class CrossoverDashboardBuilder(
         return row
     }
 
-    /** The overhead car render across the full page width, then the 4 [addChannelCard] views laid
-     *  out as a 2x2 grid beneath it -- mid pair on the top row, low pair on the bottom row,
-     *  matching both the physical door-mid/underseat-low layout and the speaker positions baked
-     *  into R.drawable.bmw_gains_delay_car (which now carries its own speakers and connector art,
-     *  so no lines or markers are drawn on top). */
+    /** The 4 [addChannelCard] views flanking the overhead car render -- left column (mid above
+     *  low) | car image | right column -- unchanged in width and position from before, so each
+     *  card still sits next to its own speaker and the whole page fits without scrolling. The new
+     *  R.drawable.bmw_gains_delay_car carries its own speakers and connector art, so no lines or
+     *  markers are drawn on top (the old ChannelConnectorRow is gone). */
     fun addChannelDiagramSection(midLeft: View, lowLeft: View, midRight: View, lowRight: View) {
+        val leftColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        leftColumn.addView(midLeft, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        leftColumn.addView(vspace(6))
+        leftColumn.addView(lowLeft, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        val rightColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        rightColumn.addView(midRight, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        rightColumn.addView(vspace(6))
+        rightColumn.addView(lowRight, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
         val carImage = ImageView(context).apply {
             setImageResource(R.drawable.bmw_gains_delay_car)
             adjustViewBounds = true
-            maxHeight = dp(CAR_DIAGRAM_MAX_HEIGHT_DP)
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        addCustomView(carImage, topMarginDp = 2, bottomMarginDp = 6)
 
-        fun gridRow(left: View, right: View) = LinearLayout(context).apply {
+        val innerRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(9) })
-            addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(9) })
+            gravity = Gravity.CENTER_VERTICAL
         }
+        innerRow.addView(
+            leftColumn,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginEnd = dp(4) },
+        )
+        innerRow.addView(carImage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CAR_DIAGRAM_WIDTH_DP.toFloat()))
+        innerRow.addView(
+            rightColumn,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginStart = dp(4) },
+        )
 
-        addCustomView(gridRow(midLeft, midRight), topMarginDp = 0, bottomMarginDp = 10)
-        addCustomView(gridRow(lowLeft, lowRight), topMarginDp = 0, bottomMarginDp = 4)
+        addCustomView(innerRow, topMarginDp = 4, bottomMarginDp = 4)
     }
 
     private fun smallLabel(text: String) = TextView(context).apply {
@@ -875,6 +908,11 @@ class CrossoverDashboardBuilder(
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
         private const val ROW_LABEL_WIDTH_DP = 46
-        private const val CAR_DIAGRAM_MAX_HEIGHT_DP = 300
+        // innerRow weights: card | car | card. The car render stays the focal point but its
+        // column is only as wide as the image actually needs at this height -- the slack that
+        // used to letterbox it goes to the flanking cards instead, so their in-card sliders
+        // read at a usable width.
+        private const val CHANNEL_CARD_WIDTH_DP = 264
+        private const val CAR_DIAGRAM_WIDTH_DP = 612
     }
 }
