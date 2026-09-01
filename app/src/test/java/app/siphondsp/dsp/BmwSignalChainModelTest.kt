@@ -107,6 +107,23 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun fullRangePeqDeliversItsFullRequestedGainAtCentre() {
+        // A moderate-Q peaking band must land its whole nominal dB at its centre frequency --
+        // no hidden scaling. -6 dB in => ~-6 dB out at 1 kHz, +12 in => ~+12 out at 250 Hz.
+        for ((freq, gainDb) in listOf(250.0 to 12.0, 1_000.0 to -6.0, 4_000.0 to -18.0)) {
+            val baseline = compute(baseValues())
+            val filtered = compute(baseValues(), peqWith(full = listOf(band(freq, gainDb, q = 1.0))))
+            val i = nearestIndex(freq)
+            assertEquals(
+                "full-bank peaking at $freq Hz",
+                gainDb,
+                filtered.sumDb[0][i] - baseline.sumDb[0][i],
+                0.25,
+            )
+        }
+    }
+
+    @Test
     fun lowBandPeqAffectsOnlyLowBranch() {
         val baseline = compute(baseValues())
         val filtered = compute(baseValues(), peqWith(low = listOf(band(80.0, -12.0))))
