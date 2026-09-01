@@ -60,6 +60,32 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  // (unused) and left unread -- see NativeBmwDspProcessor.h's kConfigSize comment.
  next.measBusStopbandOctaves=clampf(v[139],0,4);
 
+ // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
+ // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
+ next.mbcEnabled=v[144]>=.5f;
+ next.mbcMix=clampf(v[145],0,100)*.01f;
+ next.mbcXo[0]=clampf(v[146],20,2000);
+ next.mbcXo[1]=clampf(v[147],40,8000);
+ next.mbcXo[2]=clampf(v[148],80,20000);
+ for(int b=0;b<4;++b){
+  const std::size_t base=149+b*8;
+  auto&mb=next.mbcBand[b];
+  mb.enabled=v[base]>=.5f;
+  mb.threshold=clampf(v[base+1],-48,0);
+  mb.ratio=clampf(v[base+2],1,20);
+  mb.knee=clampf(v[base+3],0,24);
+  mb.attack=clampf(v[base+4],1,200);
+  mb.release=clampf(v[base+5],20,1000);
+  mb.makeup=clampf(v[base+6],0,12);
+  mb.stereoLink=v[base+7]>=.5f;
+ }
+ next.busLimLowEnabled=v[182]>=.5f;
+ next.busLimLowThreshDb=clampf(v[183],-24,0);
+ next.busLimLowReleaseMs=clampf(v[184],20,800);
+ next.busLimMidEnabled=v[185]>=.5f;
+ next.busLimMidThreshDb=clampf(v[186],-24,0);
+ next.busLimMidReleaseMs=clampf(v[187],20,800);
+
  NativeBmwRouting::RoutingMatrix nextRouting;
  for(std::size_t out=0;out<NativeBmwRouting::kOutputCount;++out){
   const float fromLeft=v[46+out*2],fromRight=v[47+out*2];
@@ -143,6 +169,22 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  if(next.measurementMute!=p_.measurementMute)dirty|=DirtyPolarity|DirtyMeasBus;
  if(changed(next.measBusStopbandOctaves,p_.measBusStopbandOctaves))dirty|=DirtyMeasBus;
 
+ // MBC: coefficient/gain-computer changes -> DirtyMbc (rebuild filters + timing + makeup);
+ // enable or stereo-link flips -> DirtyMbcState (reset detector cells so a re-enabled band
+ // starts from unity, and stale unlinked-[1] state can't leak in).
+ if(changed(next.mbcMix,p_.mbcMix))dirty|=DirtyMbc;
+ for(int i=0;i<3;++i)if(changed(next.mbcXo[i],p_.mbcXo[i]))dirty|=DirtyMbc;
+ if(next.mbcEnabled!=p_.mbcEnabled)dirty|=DirtyMbcState;
+ for(int b=0;b<4;++b){
+  const auto&o=p_.mbcBand[b];const auto&n=next.mbcBand[b];
+  if(changed(o.threshold,n.threshold)||changed(o.ratio,n.ratio)||changed(o.knee,n.knee)||
+     changed(o.attack,n.attack)||changed(o.release,n.release)||changed(o.makeup,n.makeup))dirty|=DirtyMbc;
+  if(o.enabled!=n.enabled||o.stereoLink!=n.stereoLink)dirty|=DirtyMbcState;
+ }
+ // Bus limiter: threshold is read live per sample, so only enable/release need a rebuild.
+ if(next.busLimLowEnabled!=p_.busLimLowEnabled||next.busLimMidEnabled!=p_.busLimMidEnabled||
+    changed(next.busLimLowReleaseMs,p_.busLimLowReleaseMs)||changed(next.busLimMidReleaseMs,p_.busLimMidReleaseMs))dirty|=DirtyBusLimiter;
+
  p_=next;routing_=nextRouting;outputs_=nextOutputs;outputConfigs_=nextOutputConfigs;applyDirty(dirty);return true;
 }
 
@@ -150,6 +192,10 @@ void NativeBmwDspProcessor::makeLowPass(Biquad&q,float fc,float Q,float sr){floa
 void NativeBmwDspProcessor::makeHighPass(Biquad&q,float fc,float Q,float sr){float w=2*PI*clampf(fc,20,sr*.49f)/sr,c=std::cos(w),s=std::sin(w),a=s/(2*Q),d=1+a;q.b0=((1+c)*.5f)/d;q.b1=(-(1+c))/d;q.b2=q.b0;q.a1=(-2*c)/d;q.a2=(1-a)/d;q.clear();}
 void NativeBmwDspProcessor::makeLowShelf(Biquad&q,float fc,float g,float sr){float A=std::pow(10.f,g/40.f),w=2*PI*fc/sr,c=std::cos(w),s=std::sin(w),a=s/(2*BW),r=std::sqrt(A),iv=1/((A+1)+(A-1)*c+2*r*a);q.b0=A*((A+1)-(A-1)*c+2*r*a)*iv;q.b1=2*A*((A-1)-(A+1)*c)*iv;q.b2=A*((A+1)-(A-1)*c-2*r*a)*iv;q.a1=-2*((A-1)+(A+1)*c)*iv;q.a2=((A+1)+(A-1)*c-2*r*a)*iv;q.clear();}
 void NativeBmwDspProcessor::makeHighShelf(Biquad&q,float fc,float g,float sr){float A=std::pow(10.f,g/40.f),w=2*PI*fc/sr,c=std::cos(w),s=std::sin(w),a=s/(2*BW),r=std::sqrt(A),iv=1/((A+1)-(A-1)*c+2*r*a);q.b0=A*((A+1)+(A-1)*c+2*r*a)*iv;q.b1=-2*A*((A-1)+(A+1)*c)*iv;q.b2=A*((A+1)+(A-1)*c-2*r*a)*iv;q.a1=2*((A-1)-(A+1)*c)*iv;q.a2=((A+1)-(A-1)*c-2*r*a)*iv;q.clear();}
+// RBJ 2nd-order all-pass, Q = 1/sqrt(2). Numerator is the reversed denominator -- unity
+// magnitude everywhere, -360 deg phase sweep through fc. Matches
+// NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC tree.
+void NativeBmwDspProcessor::makeAllPass2(Biquad&q,float fc,float sr){float w=2*PI*clampf(fc,20,sr*.49f)/sr,c=std::cos(w),s=std::sin(w),a=s/(2*BW),d=1+a;q.b0=(1-a)/d;q.b1=(-2*c)/d;q.b2=1.f;q.a1=(-2*c)/d;q.a2=(1-a)/d;q.clear();}
 bool NativeBmwDspProcessor::makePeq(Biquad&q,double f,double g,double Q,int type,float sr){if(!std::isfinite(f)||!std::isfinite(g)||!std::isfinite(Q)||f<20||f>=sr*.5||Q<.1||Q>30||type<0||type>3)return false;double A=std::pow(10.,g/40.),w=2.*PI*f/sr,c=std::cos(w),s=std::sin(w),a=s/(2*Q),b0,b1,b2,a0,a1,a2;if(type==0){b0=1+a*A;b1=-2*c;b2=1-a*A;a0=1+a/A;a1=-2*c;a2=1-a/A;}else if(type==3){b0=1;b1=-2*c;b2=1;a0=1+a;a1=-2*c;a2=1-a;}else{double r=std::sqrt(A),t=2*r*a;if(type==1){b0=A*((A+1)-(A-1)*c+t);b1=2*A*((A-1)-(A+1)*c);b2=A*((A+1)-(A-1)*c-t);a0=(A+1)+(A-1)*c+t;a1=-2*((A-1)+(A+1)*c);a2=(A+1)+(A-1)*c-t;}else{b0=A*((A+1)+(A-1)*c+t);b1=-2*A*((A-1)+(A+1)*c);b2=A*((A+1)+(A-1)*c-t);a0=(A+1)-(A-1)*c+t;a1=2*((A-1)-(A+1)*c);a2=(A+1)-(A-1)*c-t;}}if(!std::isfinite(a0)||std::fabs(a0)<1e-15)return false;q.b0=b0/a0;q.b1=b1/a0;q.b2=b2/a0;q.a1=a1/a0;q.a2=a2/a0;q.clear();return true;}
 bool NativeBmwDspProcessor::configurePeq(bool enabled,float preampDb,const double*full,std::size_t fullCount,const double*low,std::size_t lowCount,const double*mid,std::size_t midCount){if(!std::isfinite(preampDb)||preampDb<-30||preampDb>12)return false;std::lock_guard<std::mutex> lock(stateMutex_);auto build=[this](const double*v,std::size_t n,PeqBank&b){if(n%5||n/5>16||(n&&v==nullptr))return false;PeqBank x;for(std::size_t i=0;i<n;i+=5){int type=static_cast<int>(v[i+3]);Biquad q;if(!makePeq(q,v[i],v[i+1],v[i+2],type,sampleRate_))return false;int ch=static_cast<int>(v[i+4]);if(ch<0||ch>2)return false;if(type!=3&&std::fabs(v[i+1])<1e-9)continue;if(ch!=2)x.left[x.leftCount++]=q;if(ch!=1)x.right[x.rightCount++]=q;}b=x;return true;};PeqBank f,l,m;if(!build(full,fullCount,f)||!build(low,lowCount,l)||!build(mid,midCount,m))return false;auto save=[](auto&target,std::size_t&count,const double*source,std::size_t sourceCount){target.fill(0);if(sourceCount>0)std::copy_n(source,sourceCount,target.begin());count=sourceCount;};save(inputPeqValues_,inputPeqValueCount_,full,fullCount);save(lowPeqValues_,lowPeqValueCount_,low,lowCount);save(midPeqValues_,midPeqValueCount_,mid,midCount);inputPeq_=f;lowPeq_=l;midPeq_=m;peqEnabled_=enabled;peqPreampDb_=preampDb;peqPreamp_=dbToLin(preampDb);return true;}
 
@@ -165,6 +211,37 @@ void NativeBmwDspProcessor::rebuildLowCrossover(){for(OutputId id:{OutputId::Low
 void NativeBmwDspProcessor::rebuildMidCrossover(){for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);const auto&cfg=outputConfig(id);makeHighPass(out.crossover1,cfg.crossoverFreq,BW,sampleRate_);makeHighPass(out.crossover2,cfg.crossoverFreq,BW,sampleRate_);}}
 void NativeBmwDspProcessor::updateDelays(){auto d=[this](float ms){return clampf(ms*sampleRate_*.001f,0,kDelayLineCapacity-1.f);};output(OutputId::LowLeft).delay.delay=d(p_.lowDelayL);output(OutputId::LowRight).delay.delay=d(p_.lowDelayR);output(OutputId::MidLeft).delay.delay=d(p_.midDelayL);output(OutputId::MidRight).delay.delay=d(p_.midDelayR);}
 void NativeBmwDspProcessor::rebuildLimiter(){float lookahead=clampf(kLimiterLookaheadMs*sampleRate_*.001f,0.f,static_cast<float>(kDelayLineCapacity-1));limiter_.delayL.delay=lookahead;limiter_.delayR.delay=lookahead;float attackSeconds=(kLimiterLookaheadMs*.001f)/5.f;limiter_.attackMix=1-std::exp(-1/(attackSeconds*sampleRate_));float releaseSeconds=.080f;limiter_.releaseMix=1-std::exp(-1/(releaseSeconds*sampleRate_));}
+void NativeBmwDspProcessor::rebuildMbc(){
+ // LR4 tree crossovers + the all-pass compensators for the lower bands. Splits are forced
+ // monotonic with a little headroom so a mis-ordered config can't collapse a band to nothing.
+ const float f0=clampf(p_.mbcXo[0],20.f,sampleRate_*.45f);
+ const float f1=clampf(p_.mbcXo[1],f0*1.05f,sampleRate_*.45f);
+ const float f2=clampf(p_.mbcXo[2],f1*1.05f,sampleRate_*.45f);
+ for(auto&t:mbc_){
+  makeLowPass(t.lp0a,f0,BW,sampleRate_);makeLowPass(t.lp0b,f0,BW,sampleRate_);
+  makeHighPass(t.hp0a,f0,BW,sampleRate_);makeHighPass(t.hp0b,f0,BW,sampleRate_);
+  makeLowPass(t.lp1a,f1,BW,sampleRate_);makeLowPass(t.lp1b,f1,BW,sampleRate_);
+  makeHighPass(t.hp1a,f1,BW,sampleRate_);makeHighPass(t.hp1b,f1,BW,sampleRate_);
+  makeLowPass(t.lp2a,f2,BW,sampleRate_);makeLowPass(t.lp2b,f2,BW,sampleRate_);
+  makeHighPass(t.hp2a,f2,BW,sampleRate_);makeHighPass(t.hp2b,f2,BW,sampleRate_);
+  // band 0 (below f0) picks up the phase of the f1 and f2 splits; band 1 (f0..f1) that of f2.
+  makeAllPass2(t.apB0X1,f1,sampleRate_);
+  makeAllPass2(t.apB0X2,f2,sampleRate_);
+  makeAllPass2(t.apB1X2,f2,sampleRate_);
+ }
+ mbcMix_=clampf(p_.mbcMix,0.f,1.f);
+ for(int b=0;b<4;++b){
+  mbcMakeupLin_[b]=dbToLin(p_.mbcBand[b].makeup);
+  mbcAttackMix_[b]=1-std::exp(-1/(std::max(1.f,p_.mbcBand[b].attack)*.001f*sampleRate_));
+  mbcReleaseMix_[b]=1-std::exp(-1/(std::max(1.f,p_.mbcBand[b].release)*.001f*sampleRate_));
+ }
+}
+void NativeBmwDspProcessor::resetMbcState(){for(auto&t:mbc_)t.clear();for(auto&row:mbcCell_)for(auto&c:row){c.rms=0;c.peak=0;c.gain=1;}}
+void NativeBmwDspProcessor::rebuildBusLimiter(){
+ busLimAttackMix_=1-std::exp(-1/(.001f*sampleRate_));
+ busLimLowReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimLowReleaseMs)*.001f*sampleRate_));
+ busLimMidReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimMidReleaseMs)*.001f*sampleRate_));
+}
 void NativeBmwDspProcessor::rebuildTilt(){float g=p_.tiltAmount*.75f;makeLowShelf(tiltLoL1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoL2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiL1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiL2_,p_.tiltFreq,-g,sampleRate_);makeLowShelf(tiltLoR1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoR2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiR1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiR2_,p_.tiltFreq,-g,sampleRate_);}
 void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);makeLowPass(out.monoBassCompLp1,p_.monoBassFreq,BW,sampleRate_);makeLowPass(out.monoBassCompLp2,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
 void NativeBmwDspProcessor::rebuildPolarityAndMute(){for(std::size_t i=0;i<outputs_.size();++i){auto&out=outputs_[i];const auto&cfg=outputConfigs_[i];const bool isLow=i<=static_cast<std::size_t>(OutputId::LowRight);const bool measurementMuted=(p_.measurementMute==1&&isLow)||(p_.measurementMute==2&&!isLow);out.muted=cfg.muted||measurementMuted;out.polarityInverted=cfg.polarityInverted;}}
@@ -202,12 +279,73 @@ void NativeBmwDspProcessor::rebuildMeasBus(){
 }
 void NativeBmwDspProcessor::rebuildAllPass(){for(auto&out:outputs_)for(std::size_t i=0;i<out.allPass.size();++i){out.allPass[i].rebuild(sampleRate_);out.allPassState[i].loadAllPass(out.allPass[i].coefficients);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));for(std::size_t i=0;i<outputDynamics_.size();++i){const auto&p=outputConfigs_[i].compressor;auto&s=outputDynamics_[i];s.attackMix=1-std::exp(-1/(p.attack*.001f*sampleRate_));s.releaseMix=1-std::exp(-1/(p.release*.001f*sampleRate_));}}
-void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();}
-void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
+void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();if(d&DirtyMbc)rebuildMbc();if(d&DirtyMbcState)resetMbcState();if(d&DirtyBusLimiter)rebuildBusLimiter();}
+void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMbc();rebuildBusLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();resetMbcState();busLimLowGain_=busLimMidGain_=1.f;updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
 float NativeBmwDspProcessor::processChannelInput(float x,float&dcX,float&dcY){float y=x-dcX+dcR_*dcY;dcX=x;dcY=ftz(y);return dcY;}
 void NativeBmwDspProcessor::publishIdleMeter(CompressorState&s){if((++s.meterCounter&255u)==0){s.inputDb.store(-60);s.outputDb.store(-60);s.gainReductionDb.store(0);}}
 void NativeBmwDspProcessor::processCompressor(float&sample,const CompressorParams&p,CompressorState&s){float pk=std::fabs(sample);bool pub=(++s.meterCounter&255u)==0;float db=20*std::log10(std::max(pk,1e-12f));if(p.enabled){s.rmsPower=ftz(s.rmsPower+(pk*pk-s.rmsPower)*rmsMix_);s.peakEnv=pk>s.peakEnv?pk:ftz(s.peakEnv*peakRelease_);float det=std::max(std::sqrt(std::max(0.f,s.rmsPower)),s.peakEnv*.5f);db=20*std::log10(std::max(det,1e-12f));float over=db-p.threshold,slope=1-1/std::max(1.001f,p.ratio),gr=0,kh=p.knee*.5f;if(p.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p.knee);}}else if(over>0)gr=-over*slope;float target=dbToLin(gr),mix=target<s.gain?s.attackMix:s.releaseMix;s.gain=std::min(1.f,ftz(s.gain+(target-s.gain)*mix));sample*=s.gain*s.makeupLin;}else s.gain=1;if(pub){float red=-20*std::log10(std::max(s.gain,1e-12f));s.inputDb.store(clampf(db,-60,6));s.outputDb.store(clampf(db-red+(p.enabled?p.makeup:0),-60,6));s.gainReductionDb.store(clampf(red,0,60));}}
 void NativeBmwDspProcessor::processLimiter(float&l,float&r){float pk=std::max(std::fabs(l),std::fabs(r));float target=pk>kLimiterCeilingLin?kLimiterCeilingLin/pk:1.f;float mix=target<limiter_.gain?limiter_.attackMix:limiter_.releaseMix;limiter_.gain=std::min(1.f,ftz(limiter_.gain+(target-limiter_.gain)*mix));float dl=limiter_.delayL.run(l),dr=limiter_.delayR.run(r);l=ftz(dl*limiter_.gain);r=ftz(dr*limiter_.gain);}
+
+// RMS+peak detector and soft-knee gain computer -- deliberately identical math to
+// processCompressor's per-output path (rmsMix_/peakRelease_ are shared), just factored out so
+// a stereo-linked band can feed it one combined level. Returns the smoothed linear gain (<=1).
+float NativeBmwDspProcessor::mbcBandGain(float peakAbs,const MbcBandParams&p,MbcCell&s,int band){
+ s.rms=ftz(s.rms+(peakAbs*peakAbs-s.rms)*rmsMix_);
+ s.peak=peakAbs>s.peak?peakAbs:ftz(s.peak*peakRelease_);
+ float det=std::max(std::sqrt(std::max(0.f,s.rms)),s.peak*.5f);
+ float db=20*std::log10(std::max(det,1e-12f));
+ float over=db-p.threshold,slope=1-1/std::max(1.001f,p.ratio),gr=0,kh=p.knee*.5f;
+ if(p.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p.knee);}}
+ else if(over>0)gr=-over*slope;
+ float target=dbToLin(gr),mix=target<s.gain?mbcAttackMix_[band]:mbcReleaseMix_[band];
+ s.gain=std::min(1.f,ftz(s.gain+(target-s.gain)*mix));
+ return s.gain;
+}
+void NativeBmwDspProcessor::processMbc(float&l,float&r){
+ if(!p_.mbcEnabled)return;
+ const float dryL=l,dryR=r;
+ float band[2][4];
+ for(int ch=0;ch<2;++ch){
+  auto&t=mbc_[ch];
+  const float x=ch==0?l:r;
+  const float low0=t.lp0b.run(t.lp0a.run(x));
+  const float rest0=t.hp0b.run(t.hp0a.run(x));
+  const float low1=t.lp1b.run(t.lp1a.run(rest0));
+  const float rest1=t.hp1b.run(t.hp1a.run(rest0));
+  const float low2=t.lp2b.run(t.lp2a.run(rest1));
+  const float high2=t.hp2b.run(t.hp2a.run(rest1));
+  band[ch][0]=t.apB0X2.run(t.apB0X1.run(low0));
+  band[ch][1]=t.apB1X2.run(low1);
+  band[ch][2]=low2;
+  band[ch][3]=high2;
+ }
+ float wetL=0,wetR=0;
+ for(int b=0;b<4;++b){
+  const auto&bp=p_.mbcBand[b];
+  float sL=band[0][b],sR=band[1][b];
+  if(bp.enabled){
+   if(bp.stereoLink){
+    const float g=mbcBandGain(std::max(std::fabs(sL),std::fabs(sR)),bp,mbcCell_[0][b],b);
+    sL*=g;sR*=g;
+   }else{
+    sL*=mbcBandGain(std::fabs(sL),bp,mbcCell_[0][b],b);
+    sR*=mbcBandGain(std::fabs(sR),bp,mbcCell_[1][b],b);
+   }
+   sL*=mbcMakeupLin_[b];sR*=mbcMakeupLin_[b];
+  }
+  wetL+=sL;wetR+=sR;
+ }
+ l=ftz(dryL*(1.f-mbcMix_)+wetL*mbcMix_);
+ r=ftz(dryR*(1.f-mbcMix_)+wetR*mbcMix_);
+}
+void NativeBmwDspProcessor::processBusLimiter(float&l,float&r,float thresholdDb,float&gain,float releaseMix){
+ const float ceil=dbToLin(thresholdDb);
+ const float pk=std::max(std::fabs(l),std::fabs(r));
+ const float target=pk>ceil?ceil/pk:1.f;
+ const float mix=target<gain?busLimAttackMix_:releaseMix;
+ gain=std::min(1.f,ftz(gain+(target-gain)*mix));
+ l=ftz(l*gain);r=ftz(r*gain);
+}
 float NativeBmwDspProcessor::processLowCrossover(OutputRuntime&out,const OutputConfig&cfg,float sample){if(cfg.subsonicEnabled)sample=out.subsonic1.run(sample);sample=out.crossover1.run(sample);sample=out.crossover2.run(sample);return sample;}
 float NativeBmwDspProcessor::processMidCrossover(OutputRuntime&out,float sample){sample=out.crossover1.run(sample);sample=out.crossover2.run(sample);return sample;}
 
@@ -216,6 +354,9 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
  float sL=processChannelInput(l,leftDcX_,leftDcY_),sR=processChannelInput(r,rightDcX_,rightDcY_);
  if(peqEnabled_){sL=inputPeq_.processLeft(sL*peqPreamp_);sR=inputPeq_.processRight(sR*peqPreamp_);}
  sL*=headroom_;sR*=headroom_;
+ // Pre-crossover multiband compressor: full-range stereo, before any band split. No-op branch
+ // while disabled (how it ships).
+ processMbc(sL,sR);
  const auto routed=routing_.process({sL,sR});
  float lowL=routed[static_cast<std::size_t>(OutputId::LowLeft)],lowR=routed[static_cast<std::size_t>(OutputId::LowRight)];
  float midL=routed[static_cast<std::size_t>(OutputId::MidLeft)],midR=routed[static_cast<std::size_t>(OutputId::MidRight)];
@@ -230,6 +371,9 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
   lowL=lowLeft.delay.run(lowL);lowR=lowRight.delay.run(lowR);
   if(!lowLeft.muted)processCompressor(lowL,lowLeftCfg.compressor,dynamics(OutputId::LowLeft));else publishIdleMeter(dynamics(OutputId::LowLeft));
   if(!lowRight.muted)processCompressor(lowR,lowRightCfg.compressor,dynamics(OutputId::LowRight));else publishIdleMeter(dynamics(OutputId::LowRight));
+  // Per-bus brick-wall limiter (stereo-linked), right before the driver gain. No-op while
+  // disabled; independent of the per-output processCompressor path above.
+  if(p_.busLimLowEnabled)processBusLimiter(lowL,lowR,p_.busLimLowThreshDb,busLimLowGain_,busLimLowReleaseMix_);
   lowL*=lowLeft.gain;lowR*=lowRight.gain;
  }else{publishIdleMeter(dynamics(OutputId::LowLeft));publishIdleMeter(dynamics(OutputId::LowRight));}
 
@@ -255,6 +399,7 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
   midL=midLeft.delay.run(midL);midR=midRight.delay.run(midR);
   if(!midLeft.muted)processCompressor(midL,midLeftCfg.compressor,dynamics(OutputId::MidLeft));else publishIdleMeter(dynamics(OutputId::MidLeft));
   if(!midRight.muted)processCompressor(midR,midRightCfg.compressor,dynamics(OutputId::MidRight));else publishIdleMeter(dynamics(OutputId::MidRight));
+  if(p_.busLimMidEnabled)processBusLimiter(midL,midR,p_.busLimMidThreshDb,busLimMidGain_,busLimMidReleaseMix_);
   midL*=midLeft.gain;midR*=midRight.gain;
  }else{publishIdleMeter(dynamics(OutputId::MidLeft));publishIdleMeter(dynamics(OutputId::MidRight));}
 

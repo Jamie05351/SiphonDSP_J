@@ -419,7 +419,10 @@ class ParametricEqualizerFragment : Fragment() {
                     .setPositiveButton("Restore") { _, _ ->
                         if (applyCandidate(candidate, "private-backup-restore")) {
                             backup.nativeDspValues?.let { values ->
-                                val restored = values.toFloatArray()
+                                // An older backup carries a shorter, position-encoded array; pad
+                                // it forward so the new MBC/limiter indices land on their
+                                // shipped defaults instead of tripping save()'s size check.
+                                val restored = NativeBmwDspValues.padToCurrentSize(values.toFloatArray())
                                 NativeBmwDspValues.save(requireContext(), restored)
                                 NativeBmwDspValues.broadcast(requireContext(), restored)
                             }

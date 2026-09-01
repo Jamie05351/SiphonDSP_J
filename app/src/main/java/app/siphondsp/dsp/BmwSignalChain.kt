@@ -59,10 +59,12 @@ object BmwSignalChain {
      * - Extended: 46 values (added routing matrix)
      * - Extended: 139 values (extended routing, all-pass, compressor per output)
      * - Extended: 143 values (added the Pultec-style bass boost/cut stage)
-     * - Current: 144 values (added the UI-only Link L/R Delay toggle)
-     * - The Pultec stage was later removed as unused; the count did not shrink back down. Two
-     *   of its 4 slots were since reclaimed in place (139 = meas-mute stopband octaves,
-     *   140 = a migration marker); 141..142 stay inert.
+     * - Extended: 144 values (added the UI-only Link L/R Delay toggle)
+     * - Current: 192 values (added the pre-crossover multiband compressor + per-bus output
+     *   limiter block at 144..187; 188..191 reserved inert)
+     * - The Pultec stage was removed as unused; the count did not shrink back down. Two of its
+     *   4 slots were since reclaimed in place (139 = meas-mute stopband octaves, 140 = a
+     *   migration marker); 141..142 stay inert.
      *
      * The dual-band compressor extension grew this array from 35 to 42+ values.
      * Leaving the response model at 35 caused setSystemState() and BMW update
