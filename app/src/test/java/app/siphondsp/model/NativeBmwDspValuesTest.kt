@@ -33,6 +33,21 @@ class NativeBmwDspValuesTest {
 
     private fun migratedDefaults() = NativeBmwDspValues.DEFAULTS.copyOf().also { values ->
         seedIndependentOutputs(values)
+        seedMbc(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateMbcIfNeeded]: block reseeded from DEFAULTS, enables
+     *  forced off, marker claimed. DEFAULTS already ships the block disabled, so on a fresh
+     *  config this only flips the marker. */
+    private fun seedMbc(values: FloatArray) {
+        NativeBmwDspValues.DEFAULTS.copyInto(
+            values, NativeBmwDspValues.INDEX_MBC_ENABLED,
+            NativeBmwDspValues.INDEX_MBC_ENABLED, NativeBmwDspValues.SIZE,
+        )
+        values[NativeBmwDspValues.INDEX_MBC_ENABLED] = 0f
+        values[NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED] = 0f
+        values[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED] = 0f
+        values[NativeBmwDspValues.INDEX_MBC_MIGRATED] = 1f
     }
 
     private fun seedIndependentOutputs(values: FloatArray) {
@@ -84,6 +99,7 @@ class NativeBmwDspValuesTest {
         val expected = NativeBmwDspValues.DEFAULTS.copyOf().also {
             it[0] = 1f; it[1] = 2f; it[2] = 3f
             seedIndependentOutputs(it)
+            seedMbc(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -169,5 +185,88 @@ class NativeBmwDspValuesTest {
         val loaded = NativeBmwDspValues.load(context)
 
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES], 0f)
+    }
+
+    @Test
+    fun loadSeedsMbcBlockDisabledOnConfigsSavedBeforeItExisted() {
+        // A pre-MBC config: the block sits at leftover values and the marker is unset. Even if
+        // a stray "enabled" made it into the array, load() must bring the feature back OFF and
+        // claim the marker.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MBC_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MBC_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MBC_ENABLED], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED], 0f)
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MBC_MIGRATED], 0f)
+        // Crossover splits + band layout come back at their shipped defaults.
+        assertEquals(120f, loaded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
+        assertEquals(500f, loaded[NativeBmwDspValues.INDEX_MBC_XO_1], 0f)
+        assertEquals(4000f, loaded[NativeBmwDspValues.INDEX_MBC_XO_2], 0f)
+        assertEquals(
+            1f,
+            loaded[NativeBmwDspValues.mbcBandIndex(0, NativeBmwDspValues.MBC_FIELD_STEREO_LINK)],
+            0f,
+        )
+    }
+
+    @Test
+    fun loadLeavesMbcSettingsAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MBC_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MBC_MIX] = 60f
+            it[NativeBmwDspValues.mbcBandIndex(2, NativeBmwDspValues.MBC_FIELD_THRESHOLD)] = -14f
+            it[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MBC_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MBC_ENABLED], 0f)
+        assertEquals(60f, loaded[NativeBmwDspValues.INDEX_MBC_MIX], 0f)
+        assertEquals(
+            -14f,
+            loaded[NativeBmwDspValues.mbcBandIndex(2, NativeBmwDspValues.MBC_FIELD_THRESHOLD)],
+            0f,
+        )
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED], 0f)
+    }
+
+    @Test
+    fun saveLoadRoundTripsWithMbcAndLimiterValuesSet() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MBC_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MBC_XO_1] = 550f
+            it[NativeBmwDspValues.mbcBandIndex(1, NativeBmwDspValues.MBC_FIELD_RATIO)] = 3.5f
+            it[NativeBmwDspValues.mbcBandIndex(3, NativeBmwDspValues.MBC_FIELD_STEREO_LINK)] = 0f
+            it[NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD] = -1.5f
+        }
+
+        NativeBmwDspValues.save(context, values)
+
+        assertArrayEquals(values, NativeBmwDspValues.load(context), 0f)
+    }
+
+    @Test
+    fun padToCurrentSizeFillsNewTrailingIndicesFromDefaults() {
+        val legacy = FloatArray(144) { index -> NativeBmwDspValues.DEFAULTS[index] }
+        legacy[NativeBmwDspValues.INDEX_HEADROOM] = -4.5f
+        legacy[NativeBmwDspValues.INDEX_DELAY_LINKED] = 1f
+
+        val padded = NativeBmwDspValues.padToCurrentSize(legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, padded.size)
+        assertEquals(-4.5f, padded[NativeBmwDspValues.INDEX_HEADROOM], 0f)
+        assertEquals(1f, padded[NativeBmwDspValues.INDEX_DELAY_LINKED], 0f)
+        assertEquals(0f, padded[NativeBmwDspValues.INDEX_MBC_ENABLED], 0f)
+        assertEquals(120f, padded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
+        assertEquals(100f, padded[NativeBmwDspValues.INDEX_MBC_MIX], 0f)
     }
 }

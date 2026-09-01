@@ -12,9 +12,11 @@ data class PrivatePeqBackup(
     val state: BmwPeqPreset,
     val graphDisplay: GraphDisplay = GraphDisplay(),
     val savedPresets: List<BmwPeqPreset> = emptyList(),
-    // Added in version 2: the full 42-float BMW DSP array backing Gains & Delay, Compressor,
-    // and Crossovers & Tilt (see NativeBmwDspValues) -- null on older backups, which only ever
-    // captured PEQ bands via [state]. Kept separate from [state]/[BmwPeqPreset] rather than
+    // Added in version 2: the full BMW DSP array (NativeBmwDspValues.SIZE floats) backing Gains
+    // & Delay, Compressor, and Crossovers & Tilt (see NativeBmwDspValues) -- null on older
+    // backups, which only ever captured PEQ bands via [state]. A backup written by an older
+    // schema carries a shorter array; the restore path pads it forward. Kept separate from
+    // [state]/[BmwPeqPreset] rather than
     // folding it in there, since BmwPeqPreset is also used standalone for the unrelated
     // PEQ-only preset import/export flow that shouldn't suddenly carry gain/crossover data too.
     val nativeDspValues: List<Float>? = null,
@@ -49,8 +51,13 @@ data class PrivatePeqBackup(
             "Backup contains an invalid graph channel display"
         }
         nativeDspValues?.let { values ->
-            require(values.size == NativeBmwDspValues.SIZE) {
-                "Backup's BMW DSP array has ${values.size} values, expected ${NativeBmwDspValues.SIZE}"
+            // Accept a shorter array from a backup written by an older schema (e.g. pre-MBC
+            // 144-value builds) and let the restore path pad it forward from DEFAULTS -- see
+            // NativeBmwDspValues.padToCurrentSize. Only a longer-than-current or absurdly short
+            // array is a hard reject.
+            require(values.size in NativeBmwDspValues.MIN_RESTORABLE_SIZE..NativeBmwDspValues.SIZE) {
+                "Backup's BMW DSP array has ${values.size} values, expected " +
+                    "${NativeBmwDspValues.MIN_RESTORABLE_SIZE}..${NativeBmwDspValues.SIZE}"
             }
         }
         return state.toState()

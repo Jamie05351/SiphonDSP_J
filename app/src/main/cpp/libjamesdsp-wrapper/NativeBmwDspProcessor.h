@@ -25,7 +25,16 @@ public:
     // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
     // never read in configure() either; it only has to be included here so the array length
     // check (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 144 };
+    //
+    // 144..191 -- pre-crossover multiband compressor (MBC) + per-bus output limiter, added in
+    // the 144 -> 192 growth. Indices match NativeBmwDspValues.INDEX_MBC_* / INDEX_BUS_LIMITER_*:
+    //   144      MBC global enable            145      MBC dry/wet mix (percent)
+    //   146..148 MBC crossover splits (Hz)    149..180 4 bands x 8 params
+    //   181      Kotlin-only migration marker -- never read here
+    //   182..184 Low-bus limiter  (enable, threshold dBFS, release ms)
+    //   185..187 Mid-bus limiter  (enable, threshold dBFS, release ms)
+    //   188..191 reserved, never read
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 192 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     enum : std::size_t {
@@ -90,6 +99,10 @@ private:
         DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
         DirtyMeasBus    = 1u << 10,
+        DirtyMbc        = 1u << 11, // crossover-tree coefficients (split freqs) -- clears filter state
+        DirtyMbcTiming  = 1u << 12, // attack/release/makeup/mix scalars only -- no filter touch
+        DirtyMbcState   = 1u << 13, // reset detector cells + tree state (enable / stereo-link flip)
+        DirtyBusLimiter = 1u << 14,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -175,6 +188,30 @@ private:
         float attackMix=1,releaseMix=1;
         void clear();
     };
+    // Pre-crossover multiband compressor -------------------------------------------------------
+    struct MbcBandParams {
+        bool enabled=false;
+        float threshold=-24,ratio=2,knee=6,attack=15,release=150,makeup=0;
+        // true (default): one gain cell driven by max(|L|,|R|) -- keeps the stereo image put.
+        // false: independent L/R detection + gain for this band.
+        bool stereoLink=true;
+    };
+    // One channel's 4-way Linkwitz-Riley split tree. Serial: split @ f0, then the high side
+    // @ f1, then that high side @ f2. Each LP/HP is LR4 = two cascaded Butterworth biquads.
+    // ap* are 2nd-order all-passes that put the already-separated lower bands through the same
+    // phase the later crossovers impart, so the four bands sum back to flat magnitude (an
+    // all-pass overall) -- same fix pattern as Mono Bass's Mid-side compensation.
+    struct MbcTree {
+        Biquad lp0a,lp0b,hp0a,hp0b,lp1a,lp1b,hp1a,hp1b,lp2a,lp2b,hp2a,hp2b;
+        Biquad apB0X1,apB0X2,apB1X2;
+        void clear(){
+            lp0a.clear();lp0b.clear();hp0a.clear();hp0b.clear();
+            lp1a.clear();lp1b.clear();hp1a.clear();hp1b.clear();
+            lp2a.clear();lp2b.clear();hp2a.clear();hp2b.clear();
+            apB0X1.clear();apB0X2.clear();apB1X2.clear();
+        }
+    };
+    struct MbcCell { float rms=0,peak=0,gain=1; };
     struct Params {
         bool enabled=true,lpfPass=false,hpfPass=false,tilt=true;
         int channelMute=0,measurementMute=0;
@@ -186,6 +223,16 @@ private:
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves=1;
+        // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
+        bool mbcEnabled=false;
+        float mbcMix=1.f;                 // 0..1 dry/wet (v[145] is percent)
+        float mbcXo[3]={120.f,500.f,4000.f};
+        MbcBandParams mbcBand[4];
+        // Per-bus output limiter (v[182..187]). Additive to -- not a replacement for -- the
+        // per-output processCompressor path. Ships disabled.
+        bool busLimLowEnabled=false,busLimMidEnabled=false;
+        float busLimLowThreshDb=-3.f,busLimLowReleaseMs=120.f;
+        float busLimMidThreshDb=-3.f,busLimMidReleaseMs=120.f;
     } p_;
 
     static float dbToLin(float db);
@@ -193,6 +240,7 @@ private:
     static void makeHighPass(Biquad& q,float fc,float Q,float sr);
     static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
     static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
+    static void makeAllPass2(Biquad& q,float fc,float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
     float processChannelInput(float x, float& dcX, float& dcY);
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
@@ -200,6 +248,15 @@ private:
     void processFrame(float& l,float& r);
     void processCompressor(float& sample,const CompressorParams& params,CompressorState& state);
     void processLimiter(float& left,float& right);
+    // Pre-crossover multiband compressor: splits the post-headroom stereo bus into 4 bands,
+    // compresses each, sums flat, blends dry/wet. No-op (single branch) while p_.mbcEnabled
+    // is false, which is how it ships. Runs before routing_.process in processFrame.
+    void processMbc(float& left,float& right);
+    float mbcBandGain(float peakAbs,const MbcBandParams& p,MbcCell& cell,int band);
+    // Brick-wall (infinite ratio, fixed-fast attack) limiter for one output bus. threshold in
+    // dBFS, one stereo-linked gain follower. No lookahead -- the master limiter downstream
+    // already carries that. No-op branch while the bus's enable is false.
+    void processBusLimiter(float& left,float& right,float thresholdDb,float& gain,float releaseMix);
     void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
@@ -211,6 +268,10 @@ private:
     void rebuildTilt();
     void rebuildCompressorTiming();
     void rebuildLimiter();
+    void rebuildMbc();        // split-frequency filter coefficients (+ calls rebuildMbcTiming)
+    void rebuildMbcTiming();  // dry/wet mix, per-band makeup + attack/release smoothing coeffs
+    void resetMbcState();
+    void rebuildBusLimiter();
     void rebuildMonoBass();
     void rebuildPolarityAndMute();
     // Option A measurement-mute bus brick-wall; rebuilt only on a DirtyMeasBus transition.
@@ -256,6 +317,20 @@ private:
     bool measBusIsHighpass_ = true;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;
+
+    // Pre-crossover multiband compressor state. mbc_[0] = left chain, mbc_[1] = right chain.
+    // mbcCell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band]
+    // is used (fed by max(|L|,|R|)); unlinked uses [0]=left, [1]=right. mbcMix_ is 0..1.
+    std::array<MbcTree, 2> mbc_{};
+    MbcCell mbcCell_[2][4]{};
+    float mbcMix_ = 1.f;
+    float mbcMakeupLin_[4] = {1.f,1.f,1.f,1.f};
+    float mbcAttackMix_[4] = {0.f,0.f,0.f,0.f};
+    float mbcReleaseMix_[4] = {0.f,0.f,0.f,0.f};
+    // Per-bus output limiters (Low, Mid). Fixed ~1 ms attack shared; release per bus.
+    float busLimAttackMix_ = 1.f;
+    float busLimLowReleaseMix_ = 0.f, busLimMidReleaseMix_ = 0.f;
+    float busLimLowGain_ = 1.f, busLimMidGain_ = 1.f;
 
     // Capture state -- see startCapture()/stopCapture()/exportCaptureWav(). The buffers and
     // captureEnabled_ are protected by stateMutex_ like everything else here (including from

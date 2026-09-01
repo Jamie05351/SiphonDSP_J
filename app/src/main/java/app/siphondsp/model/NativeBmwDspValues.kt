@@ -23,7 +23,12 @@ object NativeBmwDspValues {
     // 143 is the Gains & Delay "Link L/R Delay" toggle -- UI-only, never read natively (see
     // INDEX_DELAY_LINKED), stored here anyway so it persists/syncs the same way every other
     // toggle in this array does.
-    const val SIZE = 144
+    //
+    // 144..191 are the pre-crossover multiband compressor (MBC) + per-bus output limiter block,
+    // added in the 144 -> 192 growth. The store keys entries by index, so an older 144-value
+    // save just leaves 144..191 at their DEFAULTS; migrateMbcIfNeeded() claims the marker and
+    // force-clears the enables. See the INDEX_MBC_* / INDEX_BUS_LIMITER_* section lower down.
+    const val SIZE = 192
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -152,6 +157,58 @@ object NativeBmwDspValues {
     // only consumes 0..142.
     const val INDEX_DELAY_LINKED = 143
 
+    // ---------------------------------------------------------------------------------------
+    // Pre-crossover multiband compressor (MBC) -- indices 144..181. New in the 144 -> 192
+    // schema growth. Operates on the full-range stereo bus AFTER headroom and BEFORE the
+    // routing matrix / band crossovers (see NativeBmwDspProcessor::processFrame). Four bands
+    // split by three Linkwitz-Riley 24 dB/oct crossovers and reconstructed flat via all-pass
+    // compensation on the already-split lower bands -- same principle as the mono-bass
+    // all-pass fix. Ships DISABLED; the metering JNI and the UI land in later PRs.
+    const val INDEX_MBC_ENABLED = 144
+    const val INDEX_MBC_MIX = 145 // dry/wet blend, percent 0..100 (100 = fully processed)
+    const val INDEX_MBC_XO_0 = 146 // band 0 | band 1 split, Hz
+    const val INDEX_MBC_XO_1 = 147 // band 1 | band 2 split, Hz
+    const val INDEX_MBC_XO_2 = 148 // band 2 | band 3 split, Hz
+
+    const val INDEX_MBC_BANDS = 149
+    const val MBC_BAND_COUNT = 4
+    const val MBC_BAND_WIDTH = 8
+    const val MBC_FIELD_ENABLED = 0
+    const val MBC_FIELD_THRESHOLD = 1
+    const val MBC_FIELD_RATIO = 2
+    const val MBC_FIELD_KNEE = 3
+    const val MBC_FIELD_ATTACK = 4
+    const val MBC_FIELD_RELEASE = 5
+    const val MBC_FIELD_MAKEUP = 6
+    const val MBC_FIELD_STEREO_LINK = 7 // 1 = detector on max(|L|,|R|), one gain cell drives both
+
+    fun mbcBandIndex(band: Int, field: Int): Int {
+        require(band in 0 until MBC_BAND_COUNT) { "Invalid MBC band $band" }
+        require(field in 0 until MBC_BAND_WIDTH) { "Invalid MBC band field $field" }
+        return INDEX_MBC_BANDS + band * MBC_BAND_WIDTH + field
+    }
+
+    // One-time marker: 1 once an existing saved config has had the MBC + limiter block
+    // (144..191) seeded to its shipped-disabled defaults. Lets the block ship without a schema
+    // *version* bump and guarantees the feature stays off for existing users even if a later
+    // build flips a default on. Kotlin-only -- native never reads index 181.
+    const val INDEX_MBC_MIGRATED = 181
+
+    // Per-bus output limiter (Low bus, Mid bus) -- indices 182..187. A brand-new native stage,
+    // distinct from and additive to the legacy per-output processCompressor path, which is left
+    // untouched. Ships DISABLED; the "Driver protection" UI card wires it up in a later PR.
+    // threshold in dBFS, release in ms; native uses a fixed-fast attack and an infinite
+    // (brick-wall) ratio.
+    const val INDEX_BUS_LIMITER_LOW_ENABLED = 182
+    const val INDEX_BUS_LIMITER_LOW_THRESHOLD = 183
+    const val INDEX_BUS_LIMITER_LOW_RELEASE = 184
+    const val INDEX_BUS_LIMITER_MID_ENABLED = 185
+    const val INDEX_BUS_LIMITER_MID_THRESHOLD = 186
+    const val INDEX_BUS_LIMITER_MID_RELEASE = 187
+
+    // 188..191 reserved, inert (never read natively) -- headroom for the metering/UI PRs so
+    // they don't each need their own schema growth.
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -195,6 +252,21 @@ object NativeBmwDspValues {
         1f, 1f, 0f, 0f,
         // Link L/R Delay (UI-only).
         0f,
+        // --- Multiband compressor (144..181), ships DISABLED ---
+        0f, // 144 enabled
+        100f, // 145 dry/wet mix %
+        120f, 500f, 4000f, // 146..148 crossover splits: sub|warmth|body|air
+        // Per band: enabled, threshold dBFS, ratio, knee dB, attack ms, release ms, makeup dB, stereoLink.
+        0f, -24f, 2f, 6f, 15f, 150f, 0f, 1f, // 149..156 band 0 -- sub / boom (< 120 Hz)
+        0f, -20f, 2f, 6f, 20f, 180f, 0f, 1f, // 157..164 band 1 -- warmth / boxiness (120..500)
+        0f, -18f, 2f, 6f, 15f, 150f, 0f, 1f, // 165..172 band 2 -- body / honk (500..4k)
+        0f, -24f, 2f, 6f, 5f, 80f, 0f, 1f, // 173..180 band 3 -- presence / air (> 4k)
+        0f, // 181 MBC/limiter migration marker (0 = seed the block on next load)
+        // --- Per-bus output limiter (182..187), ships DISABLED ---
+        0f, -3f, 120f, // 182..184 Low bus: enabled, threshold dBFS, release ms
+        0f, -3f, 120f, // 185..187 Mid bus: enabled, threshold dBFS, release ms
+        // 188..191 reserved, inert.
+        0f, 0f, 0f, 0f,
     )
 
     init {
@@ -209,12 +281,27 @@ object NativeBmwDspValues {
         values[INDEX_ENABLED] = 1f
         migrateIndependentOutputsIfNeeded(store, values)
         migrateMeasMuteStopbandIfNeeded(store, values)
+        migrateMbcIfNeeded(store, values)
         return values
     }
 
     fun save(context: Context, values: FloatArray) {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
         store(context).save(values)
+    }
+
+    /** Oldest [nativeDspValues] array length a [PrivatePeqBackup] restore will still accept. */
+    const val MIN_RESTORABLE_SIZE = 139
+
+    /**
+     * Pad a position-encoded config array from an older/shorter schema up to [SIZE], filling the
+     * new trailing indices from [DEFAULTS]. A no-op when [values] is already [SIZE] long. Used by
+     * the private-backup restore path; the array is dense and position-encoded, so a straight
+     * tail copy from [DEFAULTS] is the correct fill.
+     */
+    fun padToCurrentSize(values: FloatArray): FloatArray {
+        if (values.size >= SIZE) return values
+        return DEFAULTS.copyOf().also { padded -> values.copyInto(padded, endIndex = values.size) }
     }
 
     private fun store(context: Context) = NativeBmwDspStore(context.noBackupFilesDir)
@@ -268,6 +355,26 @@ object NativeBmwDspValues {
         values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
         val saved = store.save(values)
         Timber.i("BMW DSP seeded meas-mute stopband offset default success=$saved")
+    }
+
+    /**
+     * Seed the multiband-compressor + per-bus-limiter block (indices 144..191, added in the
+     * 144 -> 192 growth) on configs saved before it existed. The index-keyed [NativeBmwDspStore]
+     * already backfills missing indices from [DEFAULTS] on load, so this mostly just claims the
+     * marker at index 181 -- but it also (re)seeds the whole block from [DEFAULTS] and
+     * force-clears every MBC/limiter enable, so the feature stays OFF for existing users even if
+     * a future build ships it enabled by default. Runs once, then the marker stops it. Mirrors
+     * [migrateMeasMuteStopbandIfNeeded].
+     */
+    private fun migrateMbcIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_MBC_MIGRATED] == 1f) return
+        DEFAULTS.copyInto(values, INDEX_MBC_ENABLED, INDEX_MBC_ENABLED, SIZE)
+        values[INDEX_MBC_ENABLED] = 0f
+        values[INDEX_BUS_LIMITER_LOW_ENABLED] = 0f
+        values[INDEX_BUS_LIMITER_MID_ENABLED] = 0f
+        values[INDEX_MBC_MIGRATED] = 1f
+        val saved = store.save(values)
+        Timber.i("BMW DSP seeded multiband compressor + bus limiter block disabled success=$saved")
     }
 
     /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob. */
