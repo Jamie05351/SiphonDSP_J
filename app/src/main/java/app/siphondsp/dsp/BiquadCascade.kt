@@ -76,7 +76,8 @@ internal class BiquadCascade(maxSections: Int) {
 
     private fun addShelf(fc: Double, gainDb: Double, sampleRate: Double, high: Boolean) {
         val a = Math.pow(10.0, gainDb / 40.0)
-        val w = 2.0 * PI * fc / sampleRate
+        // fc clamp matches addLowPass/addHighPass and NativeBmwDspProcessor::makeLowShelf/makeHighShelf.
+        val w = 2.0 * PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate
         val c = cos(w)
         val s = sin(w)
         val alpha = s / (2.0 * BUTTERWORTH_Q)

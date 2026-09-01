@@ -110,6 +110,7 @@ private:
         DirtyMbcTiming  = 1u << 12, // attack/release/makeup/mix scalars only -- no filter touch
         DirtyMbcState   = 1u << 13, // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
+        DirtyMonoBassGain = 1u << 15, // Mono Bass makeup dB -> monoBassMakeupLin_ scalar only, no filter-state clear
         DirtyAll        = 0xffffffffu,
     };
 
@@ -287,6 +288,7 @@ private:
     void resetMbcState();
     void rebuildBusLimiter();
     void rebuildMonoBass();
+    void rebuildMonoBassGain();  // monoBassMakeupLin_ only -- no biquad rebuild / state clear
     void rebuildPolarityAndMute();
     // Option A measurement-mute bus brick-wall; rebuilt only on a DirtyMeasBus transition.
     void rebuildMeasBus();
