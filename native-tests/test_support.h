@@ -6,6 +6,7 @@
 #include "doctest/doctest.h"
 
 #include "NativeBmwDspProcessor.h"
+#include "NativeBmwDspSchema.h"
 
 #include <array>
 #include <cmath>
@@ -16,9 +17,9 @@ namespace nbtest {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr float kSampleRate = 48000.0f;
-constexpr std::size_t kConfigSize = 192;  // == NativeBmwDspProcessor::kConfigSize / NativeBmwDspValues.SIZE
+constexpr std::size_t kConfigSize = nbschema::kSize;  // == NativeBmwDspValues.SIZE
 static_assert(kConfigSize == NativeBmwDspProcessor::kConfigSize,
-              "native-tests config size is out of step with NativeBmwDspProcessor::kConfigSize");
+              "NativeBmwDspSchema.h kSize is out of step with NativeBmwDspProcessor::kConfigSize");
 
 // --- config -------------------------------------------------------------------------------
 

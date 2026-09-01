@@ -37,6 +37,7 @@ add_executable(native_tests
     mono_bass_test.cpp
     limiter_test.cpp
     mbc_test.cpp
+    schema_agreement_test.cpp
 )
 
 target_include_directories(native_tests PRIVATE
