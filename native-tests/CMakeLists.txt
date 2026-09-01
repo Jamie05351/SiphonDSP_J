@@ -22,6 +22,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # configure() actually run their std::isfinite() guards, so never build the code under test
 # with -ffast-math here (see app/src/main/cpp/CMakeLists.txt for why the app dropped -Ofast).
 add_compile_options(-O2 -g -Wall -Wextra -fno-fast-math)
+# NativeBmwDspProcessor.cpp packs several statements per line; GCC's -Wmisleading-indentation
+# then fires on the app code, not the tests. Reformatting that file is its own task -- silence
+# it here so a test run's output is about the tests.
+add_compile_options(-Wno-misleading-indentation)
 
 set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/libjamesdsp-wrapper)
 
