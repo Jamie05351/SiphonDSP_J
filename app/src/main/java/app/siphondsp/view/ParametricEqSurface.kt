@@ -246,10 +246,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val bankColorMid = Color.rgb(255, 224, 0)
     private val sumColor = Color.rgb(255, 255, 255)
 
-    // Per-band palette (FabFilter Pro-Q-style): each band gets its own colour, cycling by index
-    // within its bank's band list -- the SAME colour is used for that band's node dot, its
-    // isolated-response overlay line, its shaded fill, and its tap-info card, so "this dot" and
-    // "this shape" are unmistakably the same filter. Neon, to match the line revision above.
+    // Per-band palette (FabFilter Pro-Q-style): each filter gets its own colour, cycling by its
+    // GLOBAL number (Input Correction, then Low, then Mid -- see bankNumberOffset), so no two
+    // filters on the graph share a colour until there are more than perBandPalette.size of them.
+    // The SAME colour is used for that filter's node dot, its isolated-response overlay line,
+    // its shaded fill, and its tap-info card, so "this dot" and "this shape" are unmistakably the
+    // same filter. Neon, to match the line revision above.
     private val perBandPalette = intArrayOf(
         Color.rgb(255, 23, 68),   // red
         Color.rgb(224, 64, 251),  // violet
@@ -312,6 +314,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         style = Paint.Style.STROKE
         strokeWidth = 1.4f * density
         color = bankColorMid
+    }
+    // Right-channel branch curves: same colour, dashed -- matches the solid-L / dashed-R
+    // convention the sum curve and the right-only band nodes already use.
+    private val lowBranchPaintDashed = Paint(lowBranchPaint).apply {
+        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
+    }
+    private val midBranchPaintDashed = Paint(midBranchPaint).apply {
+        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
     }
     private val sumPaintSolid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -580,24 +590,24 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     /**
-     * Nearest node within [NODE_TOUCH_RADIUS_DP] across every bank currently drawn on screen:
-     * Low and Mid are always shown, Input Correction (FULL) only while it is the active bank.
-     * Numbers are 1-based within each bank, matching the node labels.
+     * Nearest node within [NODE_TOUCH_RADIUS_DP] across all three banks (all always drawn).
+     * Numbers are the global 1-based filter number ([bankNumberOffset]), matching the labels.
      */
     private fun hitTestAnyBank(x: Float, y: Float): NodeHit? {
         val radius = NODE_TOUCH_RADIUS_DP * density
         var best: NodeHit? = null
         var bestDistance = Float.MAX_VALUE
         fun consider(bands: List<ParametricEqBand>, bank: BmwPeqBank) {
+            val numberOffset = bankNumberOffset(bank)
             bands.forEachIndexed { index, band ->
                 val distance = hypot(x - xForFrequency(band.frequency), y - yForGain(band.gain))
                 if (distance <= radius && distance < bestDistance) {
                     bestDistance = distance
-                    best = NodeHit(band, bank, index + 1)
+                    best = NodeHit(band, bank, numberOffset + index + 1)
                 }
             }
         }
-        if (activeBank == BmwPeqBank.FULL) consider(allFullRangeBands, BmwPeqBank.FULL)
+        consider(allFullRangeBands, BmwPeqBank.FULL)
         consider(allLowBandBands, BmwPeqBank.LOW)
         consider(allMidBandBands, BmwPeqBank.MID)
         return best
@@ -883,15 +893,32 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawBranchCurves(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawSystemCurve(canvas, curves.lowBranchDb, left, right, lowBranchPaint, ::yForGain)
-        drawSystemCurve(canvas, curves.midBranchDb, left, right, midBranchPaint, ::yForGain)
+        drawBranchChannelPair(canvas, curves.lowBranchDb, left, right, lowBranchPaint, lowBranchPaintDashed)
+        drawBranchChannelPair(canvas, curves.midBranchDb, left, right, midBranchPaint, midBranchPaintDashed)
+    }
+
+    /** A branch's Low/Mid magnitude curve drawn per channel -- L solid, R dashed -- honouring
+     *  the L/R/Both channel-display toggle, the same separation the sum curve shows. */
+    private fun drawBranchChannelPair(
+        canvas: Canvas,
+        perChannelValues: Array<DoubleArray>,
+        left: Float,
+        right: Float,
+        solid: Paint,
+        dashed: Paint,
+    ) {
+        if (channelDisplay != ChannelDisplay.RIGHT) {
+            drawSystemCurveForChannel(canvas, perChannelValues[BmwOutputChannel.LEFT.ordinal], left, right, solid, ::yForGain)
+        }
+        if (channelDisplay != ChannelDisplay.LEFT) {
+            drawSystemCurveForChannel(canvas, perChannelValues[BmwOutputChannel.RIGHT.ordinal], left, right, dashed, ::yForGain)
+        }
     }
 
     /**
-     * Each active-bank band's own contribution to the *actual* combined curve for this bank
-     * (cycling through [perBandPalette] by index within its bank's list, the same index
-     * [drawBankNodes] numbers its nodes with) -- filled between the real curve (with this band
-     * included, exactly
+     * Each band's own contribution to the *actual* combined curve for its bank (in its global
+     * [perBandPalette] colour, the same one [drawBankNodes] gives its node) -- filled between the
+     * real curve (with this band included, exactly
      * as already drawn by [drawBranchCurves]/[drawSumCurve]) and where that same curve would sit
      * with this one band's own dB contribution subtracted back out. The fill's own edge always
      * hugs the true curve's shape instead of a flat, context-free 0dB reference plane, the same
@@ -937,7 +964,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                     path.lineTo(fillX[i], fillBottomY[i])
                 }
                 path.close()
-                val color = perBandPalette[index % perBandPalette.size]
+                val color = perBandPalette[(bankNumberOffset(bank) + index) % perBandPalette.size]
                 // Paint.setColor() overwrites alpha along with RGB (Color.rgb()'s palette entries are
                 // fully opaque), so alpha has to be re-applied after color on every draw -- setting it
                 // once in the Paint initializer got silently clobbered the instant color was assigned
@@ -954,10 +981,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     /**
-     * The real combined curve [drawPerBandFills] should hug for [bank] -- the same arithmetic
-     * L/R mean [drawSystemCurve] already draws for that bank's branch/pre-split line, so a
-     * fill's top edge sits exactly on the visible line for that bank, not a separately-computed
-     * approximation of it. Low and Mid are always available; Full only while it is active.
+     * The real combined curve [drawPerBandFills] should hug for [bank] -- the primary channel
+     * curve [drawBranchChannelPair]/[drawSystemCurve] draws for that bank's branch/pre-split
+     * line (left for Both/Left, right for Right), so a fill's top edge sits exactly on the
+     * visible line for that bank. All three banks are always available.
      */
     private fun referenceCurveForBank(bank: BmwPeqBank): DoubleArray? {
         val perChannel = when (bank) {
@@ -965,22 +992,33 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             BmwPeqBank.LOW -> curves.lowBranchDb
             BmwPeqBank.MID -> curves.midBranchDb
         }
-        val leftValues = perChannel[BmwOutputChannel.LEFT.ordinal]
-        val rightValues = perChannel[BmwOutputChannel.RIGHT.ordinal]
-        if (leftValues.size != SYSTEM_POINT_COUNT) return null
-        for (i in 0 until SYSTEM_POINT_COUNT) {
-            referenceCurveScratch[i] = (leftValues[i] + rightValues[i]) * 0.5
-        }
+        val channelIndex =
+            if (channelDisplay == ChannelDisplay.RIGHT) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal
+        val values = perChannel[channelIndex]
+        if (values.size != SYSTEM_POINT_COUNT) return null
+        for (i in 0 until SYSTEM_POINT_COUNT) referenceCurveScratch[i] = values[i]
         return referenceCurveScratch
     }
 
     /**
-     * Low Band and Mid Band are always visible so their filters stay on screen no matter which
-     * scope chip is selected; Input Correction (FULL) is only shown while it is the active bank.
-     * 1-based index within each list matches the node number and the tap-info card's "#n".
+     * 1-based global filter number in draw order -- Input Correction, then Low Band, then Mid
+     * Band -- so every filter on the graph has a unique number and a unique [perBandPalette]
+     * colour, instead of each bank restarting at 1/red.
+     */
+    private fun bankNumberOffset(bank: BmwPeqBank): Int = when (bank) {
+        BmwPeqBank.FULL -> 0
+        BmwPeqBank.LOW -> allFullRangeBands.size
+        BmwPeqBank.MID -> allFullRangeBands.size + allLowBandBands.size
+    }
+
+    /**
+     * All three banks' filters stay on screen no matter which scope chip is selected, so nothing
+     * disappears when you switch scope; the active bank is still emphasised (brighter overlays,
+     * bigger nodes). Global filter numbers ([bankNumberOffset]) match the node labels and the
+     * tap-info card's "#n".
      */
     private inline fun forEachVisibleBank(action: (BmwPeqBank, List<ParametricEqBand>) -> Unit) {
-        if (activeBank == BmwPeqBank.FULL) action(BmwPeqBank.FULL, allFullRangeBands)
+        action(BmwPeqBank.FULL, allFullRangeBands)
         action(BmwPeqBank.LOW, allLowBandBands)
         action(BmwPeqBank.MID, allMidBandBands)
     }
@@ -1089,7 +1127,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 }
                 // Same palette entry as this band's node dot, fill, and info card -- "this shape"
                 // and "this dot" are unmistakably one filter.
-                unifiedOverlayPaint.color = perBandPalette[index % perBandPalette.size]
+                unifiedOverlayPaint.color = perBandPalette[(bankNumberOffset(bank) + index) % perBandPalette.size]
                 unifiedOverlayPaint.alpha = if (band.uuid == selectedId && bank == activeBank) 235 else 130
                 unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) unifiedOverlayDashEffect else null
                 canvas.drawPath(path, unifiedOverlayPaint)
@@ -1103,8 +1141,9 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private fun drawBankNodes(canvas: Canvas, bands: List<ParametricEqBand>, bank: BmwPeqBank, emphasised: Boolean) {
         val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
+        val numberOffset = bankNumberOffset(bank)
         bands.forEachIndexed { index, band ->
-            val color = perBandPalette[index % perBandPalette.size]
+            val color = perBandPalette[(numberOffset + index) % perBandPalette.size]
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             val selected = emphasised && band.uuid == selectedId
@@ -1128,7 +1167,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             nodeTextPaint.color =
                 if (ColorUtils.calculateLuminance(color) > 0.5) Color.BLACK else Color.WHITE
             val baseline = y - (nodeTextPaint.ascent() + nodeTextPaint.descent()) / 2
-            canvas.drawText((index + 1).toString(), x, baseline, nodeTextPaint)
+            canvas.drawText((numberOffset + index + 1).toString(), x, baseline, nodeTextPaint)
         }
     }
 
@@ -1261,7 +1300,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         contentDescription = if (band == null) {
             "Interactive parametric equalizer graph, ${renderBands.size} filters"
         } else {
-            val number = renderBands.indexOfFirst { it.uuid == band.uuid } + 1
+            val number = bankNumberOffset(activeBank) + renderBands.indexOfFirst { it.uuid == band.uuid } + 1
             "Selected filter $number, ${band.filterType.displayLabel}, " +
                 "${band.frequency.toInt()} hertz, ${"%.1f".format(band.gain)} decibels, " +
                 "Q ${"%.2f".format(band.q)}, ${band.channel.displayLabel}"
