@@ -1,5 +1,6 @@
 package app.siphondsp.model
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -126,17 +127,40 @@ class NativeBmwSchemaAgreementTest {
         assertEquals(NativeBmwDspValues.SIZE, headerConstants.getValue("kSize"))
     }
 
-    private fun locateHeader(): File {
-        val rel = "app/src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h"
+    @Test
+    fun nativeTestDefaultConfigMatchesKotlinDefaults() {
+        // native-tests/test_support.h hand-transcribes NativeBmwDspValues.DEFAULTS for the
+        // host-side DSP tests -- a fourth copy of the array that nothing else guards. Parse its
+        // defaultConfig() braced initializer and require it element-for-element.
+        val src = locate("native-tests/test_support.h", "../native-tests/test_support.h").readText()
+        val block = Regex("""return \{\{(.*?)\}\};""", RegexOption.DOT_MATCHES_ALL)
+            .find(src)?.groupValues?.get(1) ?: error("defaultConfig() initializer not found")
+        val parsed = block
+            .replace(Regex("//[^\n]*"), "")
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { it.removeSuffix("f").toFloat() }
+            .toFloatArray()
+        assertEquals("defaultConfig() length", NativeBmwDspValues.DEFAULTS.size, parsed.size)
+        assertArrayEquals(NativeBmwDspValues.DEFAULTS, parsed, 0f)
+    }
+
+    private fun locateHeader(): File =
+        locate(
+            "app/src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h",
+            "src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h",
+        )
+
+    private fun locate(vararg rels: String): File {
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
-            val candidate = File(dir, rel)
-            if (candidate.isFile) return candidate
-            // also allow user.dir already being the app module
-            val fromModule = File(dir, "src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h")
-            if (fromModule.isFile) return fromModule
+            for (rel in rels) {
+                val candidate = File(dir, rel)
+                if (candidate.isFile) return candidate
+            }
             dir = dir.parentFile
         }
-        error("could not locate $rel from ${System.getProperty("user.dir")}")
+        error("could not locate ${rels.joinToString()} from ${System.getProperty("user.dir")}")
     }
 }

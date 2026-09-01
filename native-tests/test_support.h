@@ -81,8 +81,8 @@ inline std::array<float, kConfigSize> defaultConfig() {
         0.f,
         // 182..187 Low bus / Mid bus limiter x [enabled, threshold dBFS, release ms]
         0.f, -3.f, 120.f, 0.f, -3.f, 120.f,
-        // 188..191 legacy-comp-disabled marker + 3 reserved
-        0.f, 0.f, 0.f, 0.f,
+        // 188 legacy-comp-disabled marker; 189..191 master limiter enabled, threshold dBFS, migrated
+        0.f, 1.f, -1.f, 1.f,
     }};
 }
 
