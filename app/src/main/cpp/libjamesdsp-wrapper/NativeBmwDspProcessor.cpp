@@ -245,6 +245,7 @@ void NativeBmwDspProcessor::rebuildMbcTiming(){
 void NativeBmwDspProcessor::resetMbcState(){for(auto&t:mbc_)t.clear();for(auto&row:mbcCell_)for(auto&c:row){c.rms=0;c.peak=0;c.gain=1;c.lastDetectorDb=-60.f;}for(auto&m:mbcMeter_){m.inputDb.store(-60.f);m.outputDb.store(-60.f);m.gainReductionDb.store(0.f);}mbcMeterCounter_=0;}
 void NativeBmwDspProcessor::rebuildBusLimiter(){
  busLimAttackMix_=1-std::exp(-1/(.001f*sampleRate_));
+ busLimLowGrDb_.store(0.f);busLimMidGrDb_.store(0.f);
  busLimLowReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimLowReleaseMs)*.001f*sampleRate_));
  busLimMidReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimMidReleaseMs)*.001f*sampleRate_));
 }
@@ -286,7 +287,7 @@ void NativeBmwDspProcessor::rebuildMeasBus(){
 void NativeBmwDspProcessor::rebuildAllPass(){for(auto&out:outputs_)for(std::size_t i=0;i<out.allPass.size();++i){out.allPass[i].rebuild(sampleRate_);out.allPassState[i].loadAllPass(out.allPass[i].coefficients);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));for(std::size_t i=0;i<outputDynamics_.size();++i){const auto&p=outputConfigs_[i].compressor;auto&s=outputDynamics_[i];s.attackMix=1-std::exp(-1/(p.attack*.001f*sampleRate_));s.releaseMix=1-std::exp(-1/(p.release*.001f*sampleRate_));}}
 void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();if(d&DirtyMbc)rebuildMbc();if(d&DirtyMbcTiming)rebuildMbcTiming();if(d&DirtyMbcState)resetMbcState();if(d&DirtyBusLimiter)rebuildBusLimiter();}
-void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMbc();rebuildBusLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();resetMbcState();busLimLowGain_=busLimMidGain_=1.f;updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
+void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMbc();rebuildBusLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();resetMbcState();busLimLowGain_=busLimMidGain_=1.f;busLimLowGrDb_.store(0.f);busLimMidGrDb_.store(0.f);updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
 float NativeBmwDspProcessor::processChannelInput(float x,float&dcX,float&dcY){float y=x-dcX+dcR_*dcY;dcX=x;dcY=ftz(y);return dcY;}
 void NativeBmwDspProcessor::publishIdleMeter(CompressorState&s){if((++s.meterCounter&255u)==0){s.inputDb.store(-60);s.outputDb.store(-60);s.gainReductionDb.store(0);}}
 void NativeBmwDspProcessor::processCompressor(float&sample,const CompressorParams&p,CompressorState&s){float pk=std::fabs(sample);bool pub=(++s.meterCounter&255u)==0;float db=20*std::log10(std::max(pk,1e-12f));if(p.enabled){s.rmsPower=ftz(s.rmsPower+(pk*pk-s.rmsPower)*rmsMix_);s.peakEnv=pk>s.peakEnv?pk:ftz(s.peakEnv*peakRelease_);float det=std::max(std::sqrt(std::max(0.f,s.rmsPower)),s.peakEnv*.5f);db=20*std::log10(std::max(det,1e-12f));float over=db-p.threshold,slope=1-1/std::max(1.001f,p.ratio),gr=0,kh=p.knee*.5f;if(p.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p.knee);}}else if(over>0)gr=-over*slope;float target=dbToLin(gr),mix=target<s.gain?s.attackMix:s.releaseMix;s.gain=std::min(1.f,ftz(s.gain+(target-s.gain)*mix));sample*=s.gain*s.makeupLin;}else s.gain=1;if(pub){float red=-20*std::log10(std::max(s.gain,1e-12f));s.inputDb.store(clampf(db,-60,6));s.outputDb.store(clampf(db-red+(p.enabled?p.makeup:0),-60,6));s.gainReductionDb.store(clampf(red,0,60));}}
@@ -363,12 +364,13 @@ void NativeBmwDspProcessor::processMbc(float&l,float&r){
  l=ftz(dryL*(1.f-mbcMix_)+wetL*mbcMix_);
  r=ftz(dryR*(1.f-mbcMix_)+wetR*mbcMix_);
 }
-void NativeBmwDspProcessor::processBusLimiter(float&l,float&r,float thresholdDb,float&gain,float releaseMix){
+void NativeBmwDspProcessor::processBusLimiter(float&l,float&r,float thresholdDb,float&gain,float releaseMix,std::atomic<float>&grMeterDb){
  const float ceilingLin=dbToLin(thresholdDb);
  const float pk=std::max(std::fabs(l),std::fabs(r));
  const float target=pk>ceilingLin?ceilingLin/pk:1.f;
  const float mix=target<gain?busLimAttackMix_:releaseMix;
  gain=std::min(1.f,ftz(gain+(target-gain)*mix));
+ grMeterDb.store(-20.f*std::log10(std::max(gain,1e-12f)),std::memory_order_relaxed);
  l=ftz(l*gain);r=ftz(r*gain);
 }
 float NativeBmwDspProcessor::processLowCrossover(OutputRuntime&out,const OutputConfig&cfg,float sample){if(cfg.subsonicEnabled)sample=out.subsonic1.run(sample);sample=out.crossover1.run(sample);sample=out.crossover2.run(sample);return sample;}
@@ -398,7 +400,7 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
   if(!lowRight.muted)processCompressor(lowR,lowRightCfg.compressor,dynamics(OutputId::LowRight));else publishIdleMeter(dynamics(OutputId::LowRight));
   // Per-bus brick-wall limiter (stereo-linked), right before the driver gain. No-op while
   // disabled; independent of the per-output processCompressor path above.
-  if(p_.busLimLowEnabled)processBusLimiter(lowL,lowR,p_.busLimLowThreshDb,busLimLowGain_,busLimLowReleaseMix_);
+  if(p_.busLimLowEnabled)processBusLimiter(lowL,lowR,p_.busLimLowThreshDb,busLimLowGain_,busLimLowReleaseMix_,busLimLowGrDb_);
   lowL*=lowLeft.gain;lowR*=lowRight.gain;
  }else{publishIdleMeter(dynamics(OutputId::LowLeft));publishIdleMeter(dynamics(OutputId::LowRight));}
 
@@ -424,7 +426,7 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
   midL=midLeft.delay.run(midL);midR=midRight.delay.run(midR);
   if(!midLeft.muted)processCompressor(midL,midLeftCfg.compressor,dynamics(OutputId::MidLeft));else publishIdleMeter(dynamics(OutputId::MidLeft));
   if(!midRight.muted)processCompressor(midR,midRightCfg.compressor,dynamics(OutputId::MidRight));else publishIdleMeter(dynamics(OutputId::MidRight));
-  if(p_.busLimMidEnabled)processBusLimiter(midL,midR,p_.busLimMidThreshDb,busLimMidGain_,busLimMidReleaseMix_);
+  if(p_.busLimMidEnabled)processBusLimiter(midL,midR,p_.busLimMidThreshDb,busLimMidGain_,busLimMidReleaseMix_,busLimMidGrDb_);
   midL*=midLeft.gain;midR*=midRight.gain;
  }else{publishIdleMeter(dynamics(OutputId::MidLeft));publishIdleMeter(dynamics(OutputId::MidRight));}
 
@@ -472,6 +474,11 @@ void NativeBmwDspProcessor::readMbcMeter(float*v,std::size_t n)const{
   v[b*3+1]=active?m.outputDb.load():-60.f;
   v[b*3+2]=active?m.gainReductionDb.load():0.f;
  }
+}
+void NativeBmwDspProcessor::readBusLimiterMeter(float*v,std::size_t n)const{
+ if(!v||n<2)return;
+ v[0]=p_.busLimLowEnabled?busLimLowGrDb_.load(std::memory_order_relaxed):0.f;
+ v[1]=p_.busLimMidEnabled?busLimMidGrDb_.load(std::memory_order_relaxed):0.f;
 }
 
 void NativeBmwDspProcessor::startCapture() {

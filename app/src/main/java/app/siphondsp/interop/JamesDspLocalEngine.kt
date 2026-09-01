@@ -273,6 +273,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwMbcMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
 
+    /** 2 floats: [lowBusGrDb, midBusGrDb] -- per-bus limiter gain reduction. */
+    fun nativeBmwBusLimiterMeter(): FloatArray? =
+        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwBusLimiterMeter(it) }
+
     fun startNativeBmwCapture() = withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
 
     fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }

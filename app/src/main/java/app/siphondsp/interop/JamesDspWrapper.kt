@@ -34,6 +34,8 @@ object JamesDspWrapper {
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. Null when the native
     // handle is gone; all-idle (-60/-60/0) while the multiband compressor is disabled.
     external fun getNativeBmwMbcMeter(self: JamesDspHandle): FloatArray?
+    // 2 floats: [lowBusGrDb, midBusGrDb] -- per-bus limiter gain reduction; 0 for a disabled bus.
+    external fun getNativeBmwBusLimiterMeter(self: JamesDspHandle): FloatArray?
     external fun startNativeBmwCapture(self: JamesDspHandle)
     external fun stopNativeBmwCapture(self: JamesDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: JamesDspHandle): Long

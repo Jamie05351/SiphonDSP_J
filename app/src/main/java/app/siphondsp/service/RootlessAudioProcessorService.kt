@@ -852,6 +852,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeBmwMbcMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwMbcMeter()
 
+        fun nativeBmwBusLimiterMeter(): FloatArray? =
+            activeInstance?.engine?.nativeBmwBusLimiterMeter()
+
         fun startNativeBmwCapture(): Boolean {
             val service = activeInstance ?: return false
             service.engine.startNativeBmwCapture()
