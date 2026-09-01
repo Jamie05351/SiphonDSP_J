@@ -212,6 +212,7 @@ TEST_CASE("kBusLimLowEnabled / kBusLimLowThreshold slots") {
     auto lowBusGr = [](float enabled, float threshold) {
         NativeBmwDspProcessor proc;
         auto c = defaultConfig();
+        c[sch::kHeadroom] = 0.f;  // default -6 dB would drop 60 Hz under a -3 dBFS ceiling
         c[sch::kTiltEnabled] = 0.f;
         c[sch::kOutputConfigBase + 0 * sch::kOutputConfigWidth + sch::kOutCompressor] = 0.f;
         c[sch::kOutputConfigBase + 1 * sch::kOutputConfigWidth + sch::kOutCompressor] = 0.f;
