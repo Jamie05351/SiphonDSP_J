@@ -200,6 +200,41 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun loadSeedsMasterLimiterOnConfigsSavedBeforeTheControlExisted() {
+        // Pre-control config: slots 189/190 hold leftover 0s, marker 191 unset. Leftover 0 at
+        // 189 would read as "limiter bypassed" -- must be seeded back on.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] = 0f
+            it[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD] = 0f
+            it[NativeBmwDspValues.INDEX_MASTER_LIMITER_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED], 0f)
+        assertEquals(
+            NativeBmwDspValues.DEFAULT_MASTER_LIMITER_THRESHOLD_DB,
+            loaded[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD],
+            0f,
+        )
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MASTER_LIMITER_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadLeavesADeliberatelyBypassedMasterLimiterAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] = 0f
+            it[NativeBmwDspValues.INDEX_MASTER_LIMITER_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED], 0f)
+    }
+
+    @Test
     fun loadSeedsMbcBlockDisabledOnConfigsSavedBeforeItExisted() {
         // A pre-MBC config: the block sits at leftover values and the marker is unset. Even if
         // a stray "enabled" made it into the array, load() must bring the feature back OFF and

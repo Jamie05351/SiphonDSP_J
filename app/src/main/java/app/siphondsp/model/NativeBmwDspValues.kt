@@ -214,8 +214,13 @@ object NativeBmwDspValues {
     // themselves, this marker just gates the one-time flip. See migrateDisableLegacyCompressorIfNeeded.
     const val INDEX_LEGACY_COMP_DISABLED_MIGRATED = 188
 
-    // 189..191 reserved, inert (never read natively) -- headroom for later PRs so they don't
-    // each need their own schema growth.
+    // Master brick-wall limiter on the summed output (indices 189..191). Was a fixed -1 dBFS
+    // ceiling with no controls; now enable + threshold. enable == 0 is a TRUE bypass -- nothing
+    // constrains the output. Native reads 189/190; 191 is the one-time seed marker.
+    const val INDEX_MASTER_LIMITER_ENABLED = 189
+    const val INDEX_MASTER_LIMITER_THRESHOLD = 190
+    const val INDEX_MASTER_LIMITER_MIGRATED = 191
+    const val DEFAULT_MASTER_LIMITER_THRESHOLD_DB = -1f
 
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
@@ -274,8 +279,8 @@ object NativeBmwDspValues {
         0f, -3f, 120f, // 182..184 Low bus: enabled, threshold dBFS, release ms
         0f, -3f, 120f, // 185..187 Mid bus: enabled, threshold dBFS, release ms
         // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
-        // 189..191 reserved, inert.
-        0f, 0f, 0f, 0f,
+        // 189..191: master limiter enabled, threshold dBFS, migrated marker.
+        0f, 1f, -1f, 1f,
     )
 
     init {
@@ -292,7 +297,24 @@ object NativeBmwDspValues {
         migrateMeasMuteStopbandIfNeeded(store, values)
         migrateMbcIfNeeded(store, values)
         migrateDisableLegacyCompressorIfNeeded(store, values)
+        migrateMasterLimiterIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed the master-limiter enable + threshold (indices 189/190, reclaimed from the reserved
+     * run) on configs saved before the control existed. Their slot 189 holds a leftover 0, which
+     * reads as "limiter bypassed" -- silently removing the -1 dBFS safety ceiling every one of
+     * those users has always had. Runs once; the 191 marker then stops it so a deliberate off is
+     * respected.
+     */
+    private fun migrateMasterLimiterIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_MASTER_LIMITER_MIGRATED] == 1f) return
+        values[INDEX_MASTER_LIMITER_ENABLED] = 1f
+        values[INDEX_MASTER_LIMITER_THRESHOLD] = DEFAULT_MASTER_LIMITER_THRESHOLD_DB
+        values[INDEX_MASTER_LIMITER_MIGRATED] = 1f
+        val saved = store.save(values)
+        Timber.i("BMW DSP seeded master limiter enable/threshold default success=$saved")
     }
 
     fun save(context: Context, values: FloatArray) {

@@ -97,6 +97,9 @@ class NativeBmwSchemaAgreementTest {
         "kBusLimMidEnabled" to NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
         "kBusLimMidThreshold" to NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD,
         "kBusLimMidRelease" to NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE,
+
+        "kMasterLimiterEnabled" to NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
+        "kMasterLimiterThreshold" to NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD,
     )
 
     @Test

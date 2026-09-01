@@ -1,6 +1,8 @@
 package app.siphondsp.fragment
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,19 +12,42 @@ import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.DspPager
+import app.siphondsp.view.MbcBandGrMeter
 import kotlin.math.roundToInt
 
 /**
  * Dedicated Gains & Delay workspace using the shared BMW dashboard skin. Swipes between two
  * pages: the car/speaker diagram with per-channel Delay, Polarity and Gain cards (the Left Low
- * card also carries the global Link L/R Delay toggle), and an Output page with Headroom and the
- * post-gain L/R sliders.
+ * card also carries the global Link L/R Delay toggle), and an Output page with Headroom, the
+ * post-gain L/R sliders and the master limiter (enable + threshold + a live GR meter).
  */
 class GainLimiterFragment : Fragment() {
     private lateinit var container: FrameLayout
+    private val handler = Handler(Looper.getMainLooper())
+    private var limiterMeter: MbcBandGrMeter? = null
+
+    private val meterTick = object : Runnable {
+        override fun run() {
+            RootlessAudioProcessorService.nativeBmwMasterLimiterMeter()?.let { m ->
+                limiterMeter?.setGainReductionDb(m[0])
+            }
+            handler.postDelayed(this, 33L)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        handler.post(meterTick)
+    }
+
+    override fun onStop() {
+        handler.removeCallbacks(meterTick)
+        super.onStop()
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -128,6 +153,7 @@ class GainLimiterFragment : Fragment() {
             }
         }
 
+        val limiterGrMeter = MbcBandGrMeter(requireContext()).also { limiterMeter = it }
         val outputPage = page {
             dashboardPanel("Output", null) {
                 addSliderRow(
@@ -144,6 +170,18 @@ class GainLimiterFragment : Fragment() {
                     accentColor = BmwDashboardSkin.M_GREEN,
                     sliderAccentColor = BmwDashboardSkin.M_GREEN,
                 )
+                sectionHeader("Limiter", BmwDashboardSkin.M_BLUE)
+                addSegmentedSwitchRow(
+                    "Limiter",
+                    "Brick-wall ceiling on the summed output. Off = true bypass.",
+                    NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
+                )
+                addSliderRow(
+                    "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f, 0f, .5f, "dB",
+                    accentColor = BmwDashboardSkin.M_BLUE,
+                    sliderAccentColor = BmwDashboardSkin.M_BLUE,
+                )
+                addCustomView(limiterGrMeter)
             }
         }
 

@@ -36,6 +36,8 @@ object JamesDspWrapper {
     external fun getNativeBmwMbcMeter(self: JamesDspHandle): FloatArray?
     // 2 floats: [lowBusGrDb, midBusGrDb] -- per-bus limiter gain reduction; 0 for a disabled bus.
     external fun getNativeBmwBusLimiterMeter(self: JamesDspHandle): FloatArray?
+    // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
+    external fun getNativeBmwMasterLimiterMeter(self: JamesDspHandle): FloatArray?
     external fun startNativeBmwCapture(self: JamesDspHandle)
     external fun stopNativeBmwCapture(self: JamesDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: JamesDspHandle): Long
