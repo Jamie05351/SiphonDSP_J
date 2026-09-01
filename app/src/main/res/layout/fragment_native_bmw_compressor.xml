@@ -1,36 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A pinned CompressorSurface (pre-crossover multiband-compressor visualiser: live spectrum,
-     the four crossover-band regions, per-band threshold lines and the applied gain-reduction
-     curve) sits above a slim master strip (MBC enable + mix, built in
-     NativeBmwCompressorFragment) and the DspPager of 4 band pages + a Driver-protection page. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!-- The pre-crossover multiband-compressor screen is now a single full-bleed DspPager.
+     Page 1 is the CompressorSurface visualiser plus the MBC master strip (see
+     page_compressor_visualiser.xml), pages 2 to 5 are the four band pages, and page 6 is the
+     Driver-protection page. All pages are built in NativeBmwCompressorFragment. The visualiser
+     used to be a pinned card here, but on a short head-unit display that left the band pages
+     almost no room, so it became the first page instead and every page now gets the full
+     content area. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/compressor_slider_pager_container"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/compressor_surface_card"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        app:cardCornerRadius="20dp">
-
-        <app.siphondsp.view.CompressorSurface
-            android:id="@+id/compressor_surface"
-            android:layout_width="match_parent"
-            android:layout_height="200dp" />
-    </com.google.android.material.card.MaterialCardView>
-
-    <FrameLayout
-        android:id="@+id/compressor_master_container"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="8dp" />
-
-    <FrameLayout
-        android:id="@+id/compressor_slider_pager_container"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-</LinearLayout>
+    android:layout_height="match_parent" />
