@@ -40,7 +40,8 @@ public:
     enum : std::size_t {
         kRoutingValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kInputCount,
         kAllPassValueWidth = 4,
-        kAllPassValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
+        kAllPassValueCount = NativeBmwRouting::kOutputCount *
+                             NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
         kOutputConfigBase = 87,
         kOutputConfigWidth = 13,
     };
@@ -65,9 +66,8 @@ public:
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
     bool configure(const float* values, std::size_t count);
-    bool configurePeq(bool enabled, float preampDb,
-                      const double* fullBands, std::size_t fullValueCount,
-                      const double* lowBands, std::size_t lowValueCount,
+    bool configurePeq(bool enabled, float preampDb, const double* fullBands,
+                      std::size_t fullValueCount, const double* lowBands, std::size_t lowValueCount,
                       const double* midBands, std::size_t midValueCount);
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
@@ -90,71 +90,74 @@ public:
     // Writes 2 float32 WAV files (raw input, final output) from whatever's been captured so far
     // and fills `result` with peak/null-test readings computed from that same data. Safe to call
     // whether or not capture is still running (reads only up to captureFrameCount() frames).
-    bool exportCaptureWav(const char* rawInPath, const char* outPath, CaptureExportResult& result) const;
+    bool exportCaptureWav(const char* rawInPath, const char* outPath,
+                          CaptureExportResult& result) const;
 
 private:
     enum Dirty : uint32_t {
-        DirtyNone       = 0,
-        DirtyGains      = 1u << 0,
-        DirtySubsonic   = 1u << 1,
-        DirtyLowXo      = 1u << 2,
-        DirtyMidXo      = 1u << 3,
-        DirtyDelays     = 1u << 4,
-        DirtyTilt       = 1u << 5,
+        DirtyNone = 0,
+        DirtyGains = 1u << 0,
+        DirtySubsonic = 1u << 1,
+        DirtyLowXo = 1u << 2,
+        DirtyMidXo = 1u << 3,
+        DirtyDelays = 1u << 4,
+        DirtyTilt = 1u << 5,
         DirtyCompTiming = 1u << 6,
-        DirtyCompState  = 1u << 7,
-        DirtyMonoBass   = 1u << 8,
-        DirtyPolarity   = 1u << 9,
-        DirtyMeasBus    = 1u << 10,
-        DirtyMbc        = 1u << 11, // crossover-tree coefficients (split freqs) -- clears filter state
-        DirtyMbcTiming  = 1u << 12, // attack/release/makeup/mix scalars only -- no filter touch
-        DirtyMbcState   = 1u << 13, // reset detector cells + tree state (enable / stereo-link flip)
+        DirtyCompState = 1u << 7,
+        DirtyMonoBass = 1u << 8,
+        DirtyPolarity = 1u << 9,
+        DirtyMeasBus = 1u << 10,
+        DirtyMbc = 1u << 11,  // crossover-tree coefficients (split freqs) -- clears filter state
+        DirtyMbcTiming = 1u << 12,  // attack/release/makeup/mix scalars only -- no filter touch
+        DirtyMbcState = 1u << 13,   // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
-        DirtyMonoBassGain = 1u << 15, // Mono Bass makeup dB -> monoBassMakeupLin_ scalar only, no filter-state clear
-        DirtyAll        = 0xffffffffu,
+        DirtyMonoBassGain =
+            1u
+            << 15,  // Mono Bass makeup dB -> monoBassMakeupLin_ scalar only, no filter-state clear
+        DirtyAll = 0xffffffffu,
     };
 
     struct Biquad {
-        float b0=1,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0;
+        float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
         float run(float x);
         void clear();
         void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
     };
     struct Delay {
-        std::array<float,kDelayLineCapacity> data{};
-        unsigned write=0;
-        float delay=0;
+        std::array<float, kDelayLineCapacity> data{};
+        unsigned write = 0;
+        float delay = 0;
         float run(float x);
         void clear();
     };
     struct PeqBank {
         std::array<Biquad, kMaxPeqSectionsPerChannel> left{};
         std::array<Biquad, kMaxPeqSectionsPerChannel> right{};
-        std::size_t leftCount=0,rightCount=0;
+        std::size_t leftCount = 0, rightCount = 0;
         float processLeft(float sample);
         float processRight(float sample);
         void clear();
     };
     struct CompressorParams {
-        bool enabled=false;
-        float threshold=-12,ratio=2,knee=8,attack=40,release=250,makeup=0;
+        bool enabled = false;
+        float threshold = -12, ratio = 2, knee = 8, attack = 40, release = 250, makeup = 0;
     };
     struct CompressorState {
-        float gain=1,rmsPower=0,peakEnv=0,attackMix=0,releaseMix=0,makeupLin=1;
+        float gain = 1, rmsPower = 0, peakEnv = 0, attackMix = 0, releaseMix = 0, makeupLin = 1;
         std::atomic<float> inputDb{-60.0f};
         std::atomic<float> outputDb{-60.0f};
         std::atomic<float> gainReductionDb{0.0f};
-        uint32_t meterCounter=0;
+        uint32_t meterCounter = 0;
     };
     struct OutputConfig {
-        float crossoverFreq=150;
+        float crossoverFreq = 150;
         // Always LR4 now -- the 18dB/oct (BW3) option was removed. This field is read (and
         // forced true) but no longer branched on; see rebuildLowCrossover/processLowCrossover.
-        bool crossoverLr4=true;
-        bool subsonicEnabled=false;
-        float subsonicFreq=32;
-        bool muted=false;
-        bool polarityInverted=false;
+        bool crossoverLr4 = true;
+        bool subsonicEnabled = false;
+        float subsonicFreq = 32;
+        bool muted = false;
+        bool polarityInverted = false;
         CompressorParams compressor{};
     };
     struct OutputRuntime {
@@ -174,35 +177,45 @@ private:
         // per-channel high-passed half lives here. See processFrame and rebuildMonoBass.
         Biquad monoBassCompHp1, monoBassCompHp2;
         Delay delay;
-        std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
+        std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>
+            allPass{};
         std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
 
         float processAllPass(float sample) {
             for (std::size_t i = 0; i < allPass.size(); ++i) {
-                if (allPass[i].enabled) sample = allPassState[i].run(sample);
+                if (allPass[i].enabled) {
+                    sample = allPassState[i].run(sample);
+                }
             }
             return sample;
         }
         void clearState() {
-            subsonic1.clear(); crossover1.clear(); crossover2.clear();
-            monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
-            monoBassCompHp1.clear(); monoBassCompHp2.clear();
-            for (auto& section : allPassState) section.clear();
+            subsonic1.clear();
+            crossover1.clear();
+            crossover2.clear();
+            monoBassHpf1.clear();
+            monoBassHpf2.clear();
+            delay.clear();
+            monoBassCompHp1.clear();
+            monoBassCompHp2.clear();
+            for (auto& section : allPassState) {
+                section.clear();
+            }
         }
     };
     struct Limiter {
-        Delay delayL,delayR;
-        float gain=1;
-        float attackMix=1,releaseMix=1;
+        Delay delayL, delayR;
+        float gain = 1;
+        float attackMix = 1, releaseMix = 1;
         void clear();
     };
     // Pre-crossover multiband compressor -------------------------------------------------------
     struct MbcBandParams {
-        bool enabled=false;
-        float threshold=-24,ratio=2,knee=6,attack=15,release=150,makeup=0;
+        bool enabled = false;
+        float threshold = -24, ratio = 2, knee = 6, attack = 15, release = 150, makeup = 0;
         // true (default): one gain cell driven by max(|L|,|R|) -- keeps the stereo image put.
         // false: independent L/R detection + gain for this band.
-        bool stereoLink=true;
+        bool stereoLink = true;
     };
     // One channel's 4-way Linkwitz-Riley split tree. Serial: split @ f0, then the high side
     // @ f1, then that high side @ f2. Each LP/HP is LR4 = two cascaded Butterworth biquads.
@@ -210,16 +223,29 @@ private:
     // phase the later crossovers impart, so the four bands sum back to flat magnitude (an
     // all-pass overall) -- same fix pattern as Mono Bass's Mid-side compensation.
     struct MbcTree {
-        Biquad lp0a,lp0b,hp0a,hp0b,lp1a,lp1b,hp1a,hp1b,lp2a,lp2b,hp2a,hp2b;
-        Biquad apB0X1,apB0X2,apB1X2;
-        void clear(){
-            lp0a.clear();lp0b.clear();hp0a.clear();hp0b.clear();
-            lp1a.clear();lp1b.clear();hp1a.clear();hp1b.clear();
-            lp2a.clear();lp2b.clear();hp2a.clear();hp2b.clear();
-            apB0X1.clear();apB0X2.clear();apB1X2.clear();
+        Biquad lp0a, lp0b, hp0a, hp0b, lp1a, lp1b, hp1a, hp1b, lp2a, lp2b, hp2a, hp2b;
+        Biquad apB0X1, apB0X2, apB1X2;
+        void clear() {
+            lp0a.clear();
+            lp0b.clear();
+            hp0a.clear();
+            hp0b.clear();
+            lp1a.clear();
+            lp1b.clear();
+            hp1a.clear();
+            hp1b.clear();
+            lp2a.clear();
+            lp2b.clear();
+            hp2a.clear();
+            hp2b.clear();
+            apB0X1.clear();
+            apB0X2.clear();
+            apB1X2.clear();
         }
     };
-    struct MbcCell { float rms=0,peak=0,gain=1,lastDetectorDb=-60.f; };
+    struct MbcCell {
+        float rms = 0, peak = 0, gain = 1, lastDetectorDb = -60.f;
+    };
     // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMbcMeter()
     // can be polled from the UI thread -- mirrors CompressorState's meter atomics.
     struct MbcBandMeter {
@@ -228,50 +254,53 @@ private:
         std::atomic<float> gainReductionDb{0.f};
     };
     struct Params {
-        bool enabled=true,lpfPass=false,hpfPass=false,tilt=true;
-        int channelMute=0,measurementMute=0;
-        float headroom=-6,lowGainL=0,lowGainR=0,midGainL=-1,midGainR=-1,postGainL=0,postGainR=0;
-        float midDelayL=0,midDelayR=0,lowDelayL=0,lowDelayR=0;
-        float tiltAmount=3,tiltFreq=550;
-        bool monoBass=false;
-        float monoBassFreq=80,monoBassBlend=100,monoBassMakeup=0;
+        bool enabled = true, lpfPass = false, hpfPass = false, tilt = true;
+        int channelMute = 0, measurementMute = 0;
+        float headroom = -6, lowGainL = 0, lowGainR = 0, midGainL = -1, midGainR = -1,
+              postGainL = 0, postGainR = 0;
+        float midDelayL = 0, midDelayR = 0, lowDelayL = 0, lowDelayR = 0;
+        float tiltAmount = 3, tiltFreq = 550;
+        bool monoBass = false;
+        float monoBassFreq = 80, monoBassBlend = 100, monoBassMakeup = 0;
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
-        float measBusStopbandOctaves=1;
+        float measBusStopbandOctaves = 1;
         // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
-        bool mbcEnabled=false;
-        float mbcMix=1.f;                 // 0..1 dry/wet (v[145] is percent)
-        float mbcXo[3]={120.f,500.f,4000.f};
+        bool mbcEnabled = false;
+        float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)
+        float mbcXo[3] = {120.f, 500.f, 4000.f};
         MbcBandParams mbcBand[4];
         // Per-bus output limiter (v[182..187]). Additive to -- not a replacement for -- the
         // per-output processCompressor path. Ships disabled.
-        bool busLimLowEnabled=false,busLimMidEnabled=false;
-        float busLimLowThreshDb=-3.f,busLimLowReleaseMs=120.f;
-        float busLimMidThreshDb=-3.f,busLimMidReleaseMs=120.f;
+        bool busLimLowEnabled = false, busLimMidEnabled = false;
+        float busLimLowThreshDb = -3.f, busLimLowReleaseMs = 120.f;
+        float busLimMidThreshDb = -3.f, busLimMidReleaseMs = 120.f;
     } p_;
 
     static float dbToLin(float db);
-    static void makeLowPass(Biquad& q,float fc,float Q,float sr);
-    static void makeHighPass(Biquad& q,float fc,float Q,float sr);
-    static void makeLowShelf(Biquad& q,float fc,float gain,float sr);
-    static void makeHighShelf(Biquad& q,float fc,float gain,float sr);
-    static void makeAllPass2(Biquad& q,float fc,float sr);
-    static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type, float sampleRate);
+    static void makeLowPass(Biquad& q, float fc, float Q, float sr);
+    static void makeHighPass(Biquad& q, float fc, float Q, float sr);
+    static void makeLowShelf(Biquad& q, float fc, float gain, float sr);
+    static void makeHighShelf(Biquad& q, float fc, float gain, float sr);
+    static void makeAllPass2(Biquad& q, float fc, float sr);
+    static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type,
+                        float sampleRate);
     float processChannelInput(float x, float& dcX, float& dcY);
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     float processMidCrossover(OutputRuntime& out, float sample);
-    void processFrame(float& l,float& r);
-    void processCompressor(float& sample,const CompressorParams& params,CompressorState& state);
-    void processLimiter(float& left,float& right);
+    void processFrame(float& l, float& r);
+    void processCompressor(float& sample, const CompressorParams& params, CompressorState& state);
+    void processLimiter(float& left, float& right);
     // Pre-crossover multiband compressor: splits the post-headroom stereo bus into 4 bands,
     // compresses each, sums flat, blends dry/wet. No-op (single branch) while p_.mbcEnabled
     // is false, which is how it ships. Runs before routing_.process in processFrame.
-    void processMbc(float& left,float& right);
-    float mbcBandGain(float peakAbs,const MbcBandParams& p,MbcCell& cell,int band);
+    void processMbc(float& left, float& right);
+    float mbcBandGain(float peakAbs, const MbcBandParams& p, MbcCell& cell, int band);
     // Brick-wall (infinite ratio, fixed-fast attack) limiter for one output bus. threshold in
     // dBFS, one stereo-linked gain follower. No lookahead -- the master limiter downstream
     // already carries that. No-op branch while the bus's enable is false.
-    void processBusLimiter(float& left,float& right,float thresholdDb,float& gain,float releaseMix,std::atomic<float>& grMeterDb);
+    void processBusLimiter(float& left, float& right, float thresholdDb, float& gain,
+                           float releaseMix, std::atomic<float>& grMeterDb);
     void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
@@ -294,37 +323,49 @@ private:
     void rebuildMeasBus();
     void rebuildAllPass();
     void resetDynamics();
-    OutputRuntime& output(NativeBmwRouting::OutputId id) { return outputs_[static_cast<std::size_t>(id)]; }
-    const OutputRuntime& output(NativeBmwRouting::OutputId id) const { return outputs_[static_cast<std::size_t>(id)]; }
-    OutputConfig& outputConfig(NativeBmwRouting::OutputId id) { return outputConfigs_[static_cast<std::size_t>(id)]; }
-    const OutputConfig& outputConfig(NativeBmwRouting::OutputId id) const { return outputConfigs_[static_cast<std::size_t>(id)]; }
-    CompressorState& dynamics(NativeBmwRouting::OutputId id) { return outputDynamics_[static_cast<std::size_t>(id)]; }
-    const CompressorState& dynamics(NativeBmwRouting::OutputId id) const { return outputDynamics_[static_cast<std::size_t>(id)]; }
+    OutputRuntime& output(NativeBmwRouting::OutputId id) {
+        return outputs_[static_cast<std::size_t>(id)];
+    }
+    const OutputRuntime& output(NativeBmwRouting::OutputId id) const {
+        return outputs_[static_cast<std::size_t>(id)];
+    }
+    OutputConfig& outputConfig(NativeBmwRouting::OutputId id) {
+        return outputConfigs_[static_cast<std::size_t>(id)];
+    }
+    const OutputConfig& outputConfig(NativeBmwRouting::OutputId id) const {
+        return outputConfigs_[static_cast<std::size_t>(id)];
+    }
+    CompressorState& dynamics(NativeBmwRouting::OutputId id) {
+        return outputDynamics_[static_cast<std::size_t>(id)];
+    }
+    const CompressorState& dynamics(NativeBmwRouting::OutputId id) const {
+        return outputDynamics_[static_cast<std::size_t>(id)];
+    }
 
     std::array<OutputRuntime, NativeBmwRouting::kOutputCount> outputs_{};
     std::array<OutputConfig, NativeBmwRouting::kOutputCount> outputConfigs_{};
     std::array<CompressorState, NativeBmwRouting::kOutputCount> outputDynamics_{};
     NativeBmwRouting::RoutingMatrix routing_{};
-    float leftDcX_=0,leftDcY_=0,rightDcX_=0,rightDcY_=0;
-    PeqBank inputPeq_,lowPeq_,midPeq_;
-    bool peqEnabled_=false;
-    float peqPreampDb_=0,peqPreamp_=1;
+    float leftDcX_ = 0, leftDcY_ = 0, rightDcX_ = 0, rightDcY_ = 0;
+    PeqBank inputPeq_, lowPeq_, midPeq_;
+    bool peqEnabled_ = false;
+    float peqPreampDb_ = 0, peqPreamp_ = 1;
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> inputPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> lowPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> midPeqValues_{};
-    std::size_t inputPeqValueCount_=0,lowPeqValueCount_=0,midPeqValueCount_=0;
-    float sampleRate_=48000.0f,dcR_=0.0f;
-    float headroom_=1,postGainL_=1,postGainR_=1;
-    float rmsMix_=0,peakRelease_=0;
+    std::size_t inputPeqValueCount_ = 0, lowPeqValueCount_ = 0, midPeqValueCount_ = 0;
+    float sampleRate_ = 48000.0f, dcR_ = 0.0f;
+    float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
+    float rmsMix_ = 0, peakRelease_ = 0;
     Limiter limiter_;
     // Low mono-sum LR4 low-pass, and the matching Mid mono-sum low-pass the Mid compensation
     // feeds so both bands run the identical mono-bass transfer (flat crossover sum for stereo
     // content, not only for L==R). See processFrame's Mono Bass blocks.
-    Biquad monoBassLpf1_,monoBassLpf2_;
-    Biquad monoBassMidLp1_,monoBassMidLp2_;
-    float monoBassMakeupLin_=1;
-    Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
-    Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
+    Biquad monoBassLpf1_, monoBassLpf2_;
+    Biquad monoBassMidLp1_, monoBassMidLp2_;
+    float monoBassMakeupLin_ = 1;
+    Biquad tiltLoL1_, tiltLoL2_, tiltHiL1_, tiltHiL2_;
+    Biquad tiltLoR1_, tiltLoR2_, tiltHiR1_, tiltHiR2_;
     // Option A measurement-mute bus brick-wall. Inert unless p_.measurementMute != 0: the
     // sections are only run by processFrame() while measBusActive_, and only (re)built by
     // rebuildMeasBus() on a DirtyMeasBus transition -- never touched for the normal tuned
@@ -346,9 +387,9 @@ private:
     std::array<MbcBandMeter, 4> mbcMeter_{};
     uint32_t mbcMeterCounter_ = 0;
     float mbcMix_ = 1.f;
-    float mbcMakeupLin_[4] = {1.f,1.f,1.f,1.f};
-    float mbcAttackMix_[4] = {0.f,0.f,0.f,0.f};
-    float mbcReleaseMix_[4] = {0.f,0.f,0.f,0.f};
+    float mbcMakeupLin_[4] = {1.f, 1.f, 1.f, 1.f};
+    float mbcAttackMix_[4] = {0.f, 0.f, 0.f, 0.f};
+    float mbcReleaseMix_[4] = {0.f, 0.f, 0.f, 0.f};
     // Per-bus output limiters (Low, Mid). Fixed ~1 ms attack shared; release per bus.
     float busLimAttackMix_ = 1.f;
     float busLimLowReleaseMix_ = 0.f, busLimMidReleaseMix_ = 0.f;
@@ -372,7 +413,9 @@ private:
     // processFrame() (rawIn) and once after (out). No-ops (single branch) when capture is off or
     // the buffer's already full, so this is cheap on every frame regardless.
     void captureTapIn(float l, float r) {
-        if (!captureEnabled_) return;
+        if (!captureEnabled_) {
+            return;
+        }
         const std::size_t i = captureWriteIndex_.load(std::memory_order_relaxed);
         if (i < captureCapacity_) {
             captureRawInL_[i] = l;
@@ -380,14 +423,20 @@ private:
         }
     }
     void captureTapOut(float l, float r) {
-        if (!captureEnabled_) return;
+        if (!captureEnabled_) {
+            return;
+        }
         const std::size_t i = captureWriteIndex_.load(std::memory_order_relaxed);
-        if (i >= captureCapacity_) return;
+        if (i >= captureCapacity_) {
+            return;
+        }
         captureOutL_[i] = l;
         captureOutR_[i] = r;
         const std::size_t next = i + 1;
         captureWriteIndex_.store(next, std::memory_order_relaxed);
-        if (next >= captureCapacity_) captureEnabled_ = false;
+        if (next >= captureCapacity_) {
+            captureEnabled_ = false;
+        }
     }
 
     std::mutex stateMutex_;

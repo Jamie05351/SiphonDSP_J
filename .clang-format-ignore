@@ -1,0 +1,16 @@
+# Inherited / vendored native code -- not restyled by the project .clang-format.
+# (See .clang-format; upstream JamesDSP is slated for removal in a later cleanup stage.)
+app/src/main/cpp/libjamesdsp/**
+app/src/main/cpp/libjdspimptoolbox/**
+app/src/main/cpp/libcrashlytics-connector/**
+app/src/main/cpp/libjamesdsp-wrapper/JamesDspWrapper.cpp
+app/src/main/cpp/libjamesdsp-wrapper/JamesDspWrapper.h
+app/src/main/cpp/libjamesdsp-wrapper/JamesDspWrapperHardened.cpp
+app/src/main/cpp/libjamesdsp-wrapper/EelVmVariable.cpp
+app/src/main/cpp/libjamesdsp-wrapper/EelVmVariable.h
+app/src/main/cpp/libjamesdsp-wrapper/JArrayList.cpp
+app/src/main/cpp/libjamesdsp-wrapper/JArrayList.h
+app/src/main/cpp/libjamesdsp-wrapper/IJavaObject.h
+app/src/main/cpp/libjamesdsp-wrapper/EELStdOutExtension.c
+app/src/main/cpp/libjamesdsp-wrapper/EELStdOutExtension.h
+native-tests/third_party/**
