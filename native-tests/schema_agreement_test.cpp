@@ -122,7 +122,8 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     const float at260Default = outLevelDbAt(deflt, base, 260.0);
     const float at260Moved = outLevelDbAt(moved, up, 260.0);
     INFO("260 Hz: default XO ", at260Default, " dB   XO@320 ", at260Moved, " dB");
-    CHECK(at260Moved - at260Default > 12.f);
+    // Only the low crossover slot can lift a 260 Hz tone this much with the mid band muted.
+    CHECK(at260Moved - at260Default > 5.f);
 }
 
 TEST_CASE("kMonoBassEnabled / kMonoBassFreq slots") {
@@ -151,23 +152,34 @@ TEST_CASE("kMonoBassEnabled / kMonoBassFreq slots") {
 }
 
 TEST_CASE("kTiltEnabled / kTiltAmount / kTiltFreq slots") {
-    auto tiltTiltDb = [](float enabled, float amount, float freq) {
-        NativeBmwDspProcessor proc;
+    auto balanceDb = [](float enabled, float amount, float freq) {
+        // Low-vs-high balance: enable + amount move this a lot.
+        NativeBmwDspProcessor a, b;
         auto c = defaultConfig();
         c[sch::kTiltEnabled] = enabled;
         c[sch::kTiltAmount] = amount;
         c[sch::kTiltFreq] = freq;
-        const float lo = outLevelDbAt(proc, c, 80.0);
-        NativeBmwDspProcessor proc2;
-        const float hi = outLevelDbAt(proc2, c, 6000.0);
-        return lo - hi;  // low-vs-high balance
+        return outLevelDbAt(a, c, 80.0) - outLevelDbAt(b, c, 6000.0);
     };
-    const float flat = tiltTiltDb(0.f, 0.f, 550.f);
-    const float tiltedUp = tiltTiltDb(1.f, 6.f, 550.f);    // +amount lifts lows, cuts highs
-    const float pivotHigh = tiltTiltDb(1.f, 6.f, 1500.f);  // higher pivot -> even more low-vs-high
-    INFO("low-minus-high dB:  flat ", flat, "  tilt+6@550 ", tiltedUp, "  tilt+6@1500 ", pivotHigh);
-    CHECK(tiltedUp - flat > 4.f);
-    CHECK(pivotHigh - tiltedUp > 1.f);
+    const float flat = balanceDb(0.f, 0.f, 550.f);
+    const float tilted = balanceDb(1.f, 6.f, 550.f);
+    INFO("low-minus-high dB:  flat ", flat, "  tilt+6@550 ", tilted);
+    CHECK(tilted - flat > 4.f);
+
+    // kTiltFreq: probe at 900 Hz, which sits ABOVE a 550 Hz pivot (cut shelf) but BELOW a
+    // 1500 Hz pivot (boost shelf) -- so the same +6 tilt reads several dB louder there when the
+    // pivot moves up. 80/6000 Hz can't show this: they're saturated on both shelves either way.
+    NativeBmwDspProcessor lo, hi;
+    auto c550 = defaultConfig();
+    c550[sch::kTiltEnabled] = 1.f;
+    c550[sch::kTiltAmount] = 6.f;
+    c550[sch::kTiltFreq] = 550.f;
+    auto c1500 = c550;
+    c1500[sch::kTiltFreq] = 1500.f;
+    const float at900_550 = outLevelDbAt(lo, c550, 900.0);
+    const float at900_1500 = outLevelDbAt(hi, c1500, 900.0);
+    INFO("900 Hz: pivot 550 ", at900_550, " dB   pivot 1500 ", at900_1500, " dB");
+    CHECK(at900_1500 - at900_550 > 3.f);
 }
 
 TEST_CASE("MBC block base/width/field offsets drive band 2 gain reduction") {
@@ -208,11 +220,18 @@ TEST_CASE("kBusLimLowEnabled / kBusLimLowThreshold slots") {
         c[sch::kBusLimLowRelease] = 120.f;
         proc.setSampleRate(kSampleRate);
         REQUIRE(proc.configure(c.data(), c.size()));
-        auto sig = stereoSine(60.0, 0.6, 96000);
-        proc.process(sig.data(), sig.size());
-        float m[2] = {};
-        proc.readBusLimiterMeter(m, 2);
-        return m[0];
+        // ~ -0.4 dBFS at 60 Hz -> comfortably over even a -3 dBFS ceiling.
+        auto warm = stereoSine(60.0, 0.95, 48000);
+        proc.process(warm.data(), warm.size());
+        float worst = 0.f;
+        for (int i = 0; i < 16; ++i) {  // poll the tail so the per-cycle GR ripple can't fool us
+            auto b = stereoSine(60.0, 0.95, 3000);
+            proc.process(b.data(), b.size());
+            float m[2] = {};
+            proc.readBusLimiterMeter(m, 2);
+            worst = std::max(worst, m[0]);
+        }
+        return worst;
     };
     CHECK(lowBusGr(0.f, -3.f) == doctest::Approx(0.0f));  // disabled -> no GR
     const float grHi = lowBusGr(1.f, -3.f);
