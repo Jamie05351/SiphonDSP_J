@@ -99,9 +99,10 @@ private:
         DirtyMonoBass   = 1u << 8,
         DirtyPolarity   = 1u << 9,
         DirtyMeasBus    = 1u << 10,
-        DirtyMbc        = 1u << 11,
-        DirtyMbcState   = 1u << 12,
-        DirtyBusLimiter = 1u << 13,
+        DirtyMbc        = 1u << 11, // crossover-tree coefficients (split freqs) -- clears filter state
+        DirtyMbcTiming  = 1u << 12, // attack/release/makeup/mix scalars only -- no filter touch
+        DirtyMbcState   = 1u << 13, // reset detector cells + tree state (enable / stereo-link flip)
+        DirtyBusLimiter = 1u << 14,
         DirtyAll        = 0xffffffffu,
     };
 
@@ -267,7 +268,8 @@ private:
     void rebuildTilt();
     void rebuildCompressorTiming();
     void rebuildLimiter();
-    void rebuildMbc();
+    void rebuildMbc();        // split-frequency filter coefficients (+ calls rebuildMbcTiming)
+    void rebuildMbcTiming();  // dry/wet mix, per-band makeup + attack/release smoothing coeffs
     void resetMbcState();
     void rebuildBusLimiter();
     void rebuildMonoBass();

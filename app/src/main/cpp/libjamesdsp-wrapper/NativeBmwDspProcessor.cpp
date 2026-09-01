@@ -169,16 +169,17 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  if(next.measurementMute!=p_.measurementMute)dirty|=DirtyPolarity|DirtyMeasBus;
  if(changed(next.measBusStopbandOctaves,p_.measBusStopbandOctaves))dirty|=DirtyMeasBus;
 
- // MBC: coefficient/gain-computer changes -> DirtyMbc (rebuild filters + timing + makeup);
- // enable or stereo-link flips -> DirtyMbcState (reset detector cells so a re-enabled band
- // starts from unity, and stale unlinked-[1] state can't leak in).
- if(changed(next.mbcMix,p_.mbcMix))dirty|=DirtyMbc;
+ // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, clears tree state, same cost as
+ // the band crossovers). mix/makeup/attack/release -> DirtyMbcTiming (scalars only, no click).
+ // threshold/ratio/knee are read live in mbcBandGain() and need no rebuild. enable or
+ // stereo-link flips -> DirtyMbcState (reset cells + tree so a re-enabled band starts clean
+ // and stale unlinked-[1] state can't leak in).
+ if(changed(next.mbcMix,p_.mbcMix))dirty|=DirtyMbcTiming;
  for(int i=0;i<3;++i)if(changed(next.mbcXo[i],p_.mbcXo[i]))dirty|=DirtyMbc;
  if(next.mbcEnabled!=p_.mbcEnabled)dirty|=DirtyMbcState;
  for(int b=0;b<4;++b){
   const auto&o=p_.mbcBand[b];const auto&n=next.mbcBand[b];
-  if(changed(o.threshold,n.threshold)||changed(o.ratio,n.ratio)||changed(o.knee,n.knee)||
-     changed(o.attack,n.attack)||changed(o.release,n.release)||changed(o.makeup,n.makeup))dirty|=DirtyMbc;
+  if(changed(o.attack,n.attack)||changed(o.release,n.release)||changed(o.makeup,n.makeup))dirty|=DirtyMbcTiming;
   if(o.enabled!=n.enabled||o.stereoLink!=n.stereoLink)dirty|=DirtyMbcState;
  }
  // Bus limiter: threshold is read live per sample, so only enable/release need a rebuild.
@@ -229,6 +230,11 @@ void NativeBmwDspProcessor::rebuildMbc(){
   makeAllPass2(t.apB0X2,f2,sampleRate_);
   makeAllPass2(t.apB1X2,f2,sampleRate_);
  }
+ rebuildMbcTiming();
+}
+void NativeBmwDspProcessor::rebuildMbcTiming(){
+ // threshold/ratio/knee are read live in mbcBandGain() -- only these smoothing scalars are
+ // precomputed, and none of it touches the crossover filter state.
  mbcMix_=clampf(p_.mbcMix,0.f,1.f);
  for(int b=0;b<4;++b){
   mbcMakeupLin_[b]=dbToLin(p_.mbcBand[b].makeup);
@@ -279,7 +285,7 @@ void NativeBmwDspProcessor::rebuildMeasBus(){
 }
 void NativeBmwDspProcessor::rebuildAllPass(){for(auto&out:outputs_)for(std::size_t i=0;i<out.allPass.size();++i){out.allPass[i].rebuild(sampleRate_);out.allPassState[i].loadAllPass(out.allPass[i].coefficients);}}
 void NativeBmwDspProcessor::rebuildCompressorTiming(){rmsMix_=1-std::exp(-1/(.050f*sampleRate_));peakRelease_=std::exp(-1/(.080f*sampleRate_));for(std::size_t i=0;i<outputDynamics_.size();++i){const auto&p=outputConfigs_[i].compressor;auto&s=outputDynamics_[i];s.attackMix=1-std::exp(-1/(p.attack*.001f*sampleRate_));s.releaseMix=1-std::exp(-1/(p.release*.001f*sampleRate_));}}
-void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();if(d&DirtyMbc)rebuildMbc();if(d&DirtyMbcState)resetMbcState();if(d&DirtyBusLimiter)rebuildBusLimiter();}
+void NativeBmwDspProcessor::applyDirty(uint32_t d){if(d&DirtyGains)rebuildGains();if(d&DirtySubsonic)rebuildSubsonic();if(d&DirtyLowXo)rebuildLowCrossover();if(d&DirtyMidXo)rebuildMidCrossover();if(d&DirtyDelays)updateDelays();if(d&DirtyTilt)rebuildTilt();if(d&DirtyCompTiming)rebuildCompressorTiming();if(d&DirtyCompState)resetDynamics();if(d&DirtyMonoBass)rebuildMonoBass();if(d&DirtyPolarity)rebuildPolarityAndMute();if(d&DirtyMeasBus)rebuildMeasBus();if(d&DirtyMbc)rebuildMbc();if(d&DirtyMbcTiming)rebuildMbcTiming();if(d&DirtyMbcState)resetMbcState();if(d&DirtyBusLimiter)rebuildBusLimiter();}
 void NativeBmwDspProcessor::rebuildAll(){dcR_=std::exp(-2*PI*10/sampleRate_);rebuildGains();rebuildSubsonic();rebuildLowCrossover();rebuildMidCrossover();rebuildTilt();rebuildCompressorTiming();rebuildLimiter();rebuildMbc();rebuildBusLimiter();rebuildMonoBass();rebuildPolarityAndMute();rebuildMeasBus();rebuildAllPass();leftDcX_=leftDcY_=rightDcX_=rightDcY_=0;for(auto&out:outputs_)out.clearState();limiter_.clear();resetMbcState();busLimLowGain_=busLimMidGain_=1.f;updateDelays();resetDynamics();configurePeq(peqEnabled_,peqPreampDb_,inputPeqValues_.data(),inputPeqValueCount_,lowPeqValues_.data(),lowPeqValueCount_,midPeqValues_.data(),midPeqValueCount_);}
 float NativeBmwDspProcessor::processChannelInput(float x,float&dcX,float&dcY){float y=x-dcX+dcR_*dcY;dcX=x;dcY=ftz(y);return dcY;}
 void NativeBmwDspProcessor::publishIdleMeter(CompressorState&s){if((++s.meterCounter&255u)==0){s.inputDb.store(-60);s.outputDb.store(-60);s.gainReductionDb.store(0);}}
