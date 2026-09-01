@@ -57,6 +57,19 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCompressorMeter(JNIEnv* e
     return result;
 }
 
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMbcMeter(JNIEnv* env,jobject,jlong self)
+{
+    if(env == nullptr || self == 0) return nullptr;
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if(processor == nullptr) return nullptr;
+    float values[12];processor->readMbcMeter(values,12);
+    jfloatArray result=env->NewFloatArray(12);
+    if(result != nullptr) env->SetFloatArrayRegion(result,0,12,values);
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env,jobject,jlong self)
 {

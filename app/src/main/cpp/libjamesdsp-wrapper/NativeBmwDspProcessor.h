@@ -73,6 +73,10 @@ public:
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
     void readCompressorMeter(float* values, std::size_t count) const;
+    // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. All-idle (-60/-60/0)
+    // while the multiband compressor is disabled. Lock-free, same discipline as
+    // readCompressorMeter -- reads atomics published by processMbc().
+    void readMbcMeter(float* values, std::size_t count) const;
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
@@ -211,7 +215,14 @@ private:
             apB0X1.clear();apB0X2.clear();apB1X2.clear();
         }
     };
-    struct MbcCell { float rms=0,peak=0,gain=1; };
+    struct MbcCell { float rms=0,peak=0,gain=1,lastDetectorDb=-60.f; };
+    // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMbcMeter()
+    // can be polled from the UI thread -- mirrors CompressorState's meter atomics.
+    struct MbcBandMeter {
+        std::atomic<float> inputDb{-60.f};
+        std::atomic<float> outputDb{-60.f};
+        std::atomic<float> gainReductionDb{0.f};
+    };
     struct Params {
         bool enabled=true,lpfPass=false,hpfPass=false,tilt=true;
         int channelMute=0,measurementMute=0;
@@ -323,6 +334,8 @@ private:
     // is used (fed by max(|L|,|R|)); unlinked uses [0]=left, [1]=right. mbcMix_ is 0..1.
     std::array<MbcTree, 2> mbc_{};
     MbcCell mbcCell_[2][4]{};
+    std::array<MbcBandMeter, 4> mbcMeter_{};
+    uint32_t mbcMeterCounter_ = 0;
     float mbcMix_ = 1.f;
     float mbcMakeupLin_[4] = {1.f,1.f,1.f,1.f};
     float mbcAttackMix_[4] = {0.f,0.f,0.f,0.f};

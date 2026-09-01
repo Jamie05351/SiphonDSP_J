@@ -31,6 +31,9 @@ object JamesDspWrapper {
     ): Boolean
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
     external fun getNativeBmwCompressorMeter(self: JamesDspHandle): FloatArray?
+    // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. Null when the native
+    // handle is gone; all-idle (-60/-60/0) while the multiband compressor is disabled.
+    external fun getNativeBmwMbcMeter(self: JamesDspHandle): FloatArray?
     external fun startNativeBmwCapture(self: JamesDspHandle)
     external fun stopNativeBmwCapture(self: JamesDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: JamesDspHandle): Long
