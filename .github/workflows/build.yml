@@ -136,6 +136,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: ./gradlew :app:test${{ matrix.gradle_variant }}DebugUnitTest :app:lint${{ matrix.gradle_variant }}Preview
 
+      - name: Run native DSP unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/native-tests --parallel
+          ctest --test-dir build/native-tests --output-on-failure
+
       - name: Verify native libraries are packaged
         shell: bash
         run: |
