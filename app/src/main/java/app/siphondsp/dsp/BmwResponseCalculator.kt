@@ -187,17 +187,20 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
     /**
      * Mid-side companion to [applyMonoBass]. Mono Bass's Low-side mono/stereo split-and-recombine
-     * is itself an allpass -- flat magnitude on its own, but it applies a real, frequency-
-     * dependent phase rotation, even to a perfectly correlated (mono) signal. Nothing else applies
-     * that same rotation to Mid, so once Mono Bass is on, Low arrives at the Low/Mid crossover
-     * carrying phase Mid doesn't have, and the two stop summing flat right there -- confirmed both
-     * analytically and against this very graph (a real dip at the crossover frequency, not just a
-     * theoretical concern). Applying the identical LP+HP transfer, blended by the same amount, to
-     * Mid's branch cancels that out: `mid *= (1-blend) + (LP*makeup + HP)*blend`, the same shape
-     * [applyMonoBass] uses for Low, reusing the *same* monoBassLpf/monoBassHpf cascades (already
-     * built at monoBassFreq) since the transfer function itself is identical -- only which branch
-     * it's multiplied into differs. Mirrors NativeBmwDspProcessor.cpp's Mid compensator in
-     * processFrame exactly.
+     * reshapes Low's magnitude (with makeup != 0 dB) and phase, so unless Mid gets the identical
+     * treatment the two stop summing flat at the Low/Mid crossover the instant Mono Bass is on --
+     * a real dip, confirmed analytically and against this graph. Native (NativeBmwDspProcessor.cpp)
+     * cancels it by re-running the exact recombination on Mid: the low/makeup half fed the Mid
+     * *mono sum* `(midL+midR)/2`, the high half per channel, same blend -- identical to applying
+     * Mono Bass once pre-split, so the crossover stays flat for stereo content too, not only for
+     * L==R.
+     *
+     * This calculator is a single-reference model (`L == R`, see [applyMonoBass]), so `(midL+midR)/2`
+     * collapses to the per-channel `branchAcc` value and the whole thing is still the single
+     * complex multiply `mid *= (1-blend) + (LP*makeup + HP)*blend` -- the same transfer
+     * [applyMonoBass] applies to Low, reusing the same monoBassLpf/monoBassHpf cascades. The
+     * native per-channel-vs-mono-sum distinction only shows up on genuinely stereo input, which
+     * this reference curve doesn't represent, so no functional change is needed here.
      */
     private fun applyMonoBassCompensation(branchAcc: ComplexAcc, values: FloatArray, channel: BmwOutputChannel, cosW: Double, sinW: Double, cos2W: Double, sin2W: Double) {
         if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] < .5f) return

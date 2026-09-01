@@ -165,12 +165,13 @@ private:
         Biquad subsonic1;
         Biquad crossover1, crossover2;
         Biquad monoBassHpf1, monoBassHpf2;
-        // Mid-side-only: a LP+HP allpass (same frequency/order as the Low side's own mono-bass
-        // split) applied to Mid so it picks up the identical phase rotation Mono Bass's
-        // mono/stereo recombination puts on Low -- without this, Low and Mid stop summing flat
-        // at the Low/Mid crossover the instant Mono Bass is enabled. See processFrame and
-        // rebuildMonoBass for the full explanation.
-        Biquad monoBassCompLp1, monoBassCompLp2, monoBassCompHp1, monoBassCompHp2;
+        // Mid compensation: Mid re-runs the EXACT Low-side mono-bass recombination on its own
+        // band so it picks up the identical magnitude + phase Mono Bass puts on Low -- otherwise
+        // Low and Mid stop summing flat at the Low/Mid crossover the instant Mono Bass is
+        // enabled. The low/makeup half is fed the Mid *mono sum* (monoBassMidLp1_/2_ below), so
+        // this holds for genuinely stereo content and not just for L==R material; only the
+        // per-channel high-passed half lives here. See processFrame and rebuildMonoBass.
+        Biquad monoBassCompHp1, monoBassCompHp2;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput> allPass{};
         std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
@@ -184,7 +185,6 @@ private:
         void clearState() {
             subsonic1.clear(); crossover1.clear(); crossover2.clear();
             monoBassHpf1.clear(); monoBassHpf2.clear(); delay.clear();
-            monoBassCompLp1.clear(); monoBassCompLp2.clear();
             monoBassCompHp1.clear(); monoBassCompHp2.clear();
             for (auto& section : allPassState) section.clear();
         }
@@ -315,7 +315,11 @@ private:
     float headroom_=1,postGainL_=1,postGainR_=1;
     float rmsMix_=0,peakRelease_=0;
     Limiter limiter_;
+    // Low mono-sum LR4 low-pass, and the matching Mid mono-sum low-pass the Mid compensation
+    // feeds so both bands run the identical mono-bass transfer (flat crossover sum for stereo
+    // content, not only for L==R). See processFrame's Mono Bass blocks.
     Biquad monoBassLpf1_,monoBassLpf2_;
+    Biquad monoBassMidLp1_,monoBassMidLp2_;
     float monoBassMakeupLin_=1;
     Biquad tiltLoL1_,tiltLoL2_,tiltHiL1_,tiltHiL2_;
     Biquad tiltLoR1_,tiltLoR2_,tiltHiR1_,tiltHiR2_;
