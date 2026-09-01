@@ -158,14 +158,11 @@ object BmwDashboardSkin {
     // numbers picked by eye to match the reference's proportions against this app's existing row
     // heights, same as every other pixel spec in this codebase, meant to be refined on-device.
     const val SLIDER_ROW_MIN_HEIGHT_DP = 28
-    // Used only by CrossoverDashboardBuilder's own slider rows (Gains & Delay, Crossovers & Tilt,
-    // Routing) -- Compressor's XML rows hardcode their own marginStart directly in
-    // page_compressor_band.xml (currently 0dp) rather than referencing this constant, so the two
-    // can differ without touching each other. Safe regardless of title-box width now: every title
-    // box in a group is sized to match its longest sibling (see CrossoverDashboardBuilder's
-    // pendingTitleBoxes and NativeBmwCompressorFragment.resizeTitleBoxesToLongest()), so this gap
-    // no longer needs to be 0 to avoid the "different title widths -> different slider lengths"
-    // problem that briefly motivated zeroing it.
+    // Used by CrossoverDashboardBuilder's slider rows (Gains & Delay, Crossovers & Tilt, Routing,
+    // and now the multiband Compressor). Safe regardless of title-box width: every title box in a
+    // group is sized to match its longest sibling (see CrossoverDashboardBuilder's
+    // pendingTitleBoxes), so this gap no longer needs to be 0 to avoid the "different title
+    // widths -> different slider lengths" problem that briefly motivated zeroing it.
     const val SLIDER_TITLE_GAP_DP = 75
     const val SLIDER_VALUE_GAP_DP = 24
     const val SLIDER_TITLE_HEIGHT_DP = 40
@@ -395,16 +392,15 @@ object BmwDashboardSkin {
         slider.background = sliderCapsuleDrawable(context, accent)
         // The capsule's focus glow uses BlurMaskFilter, which silently no-ops on a hardware
         // layer -- without this the ring would still appear on focus, just as a crisp unblurred
-        // outline instead of a soft glow. Matches the existing LAYER_TYPE_SOFTWARE usage for the
-        // same reason in NativeBmwCompressorView/CompressorGrTraceView.
+        // outline instead of a soft glow.
         slider.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
     }
 
     // No fill: lets the workspace's designed background (and its "M" watermark) show through
     // behind the card, same reasoning as CrossoverDashboardBuilder's dashboardPanel and
     // crossoverBandCard. A live-visualizer view inside a styled card (ParametricEqSurface,
-    // NativeBmwCompressorView, CompressorGrTraceView) still paints its own solid background every
-    // frame regardless -- only the card's own body becomes see-through.
+    // CompressorSurface) still paints its own solid background every frame regardless -- only
+    // the card's own body becomes see-through.
     fun styleCard(card: MaterialCardView) {
         card.radius = dp(card.context, 7).toFloat()
         card.cardElevation = 0f

@@ -206,8 +206,16 @@ object NativeBmwDspValues {
     const val INDEX_BUS_LIMITER_MID_THRESHOLD = 186
     const val INDEX_BUS_LIMITER_MID_RELEASE = 187
 
-    // 188..191 reserved, inert (never read natively) -- headroom for the metering/UI PRs so
-    // they don't each need their own schema growth.
+    // One-time marker: 1 once the legacy per-output compressor (INDEX_LOW/MID_COMPRESSOR_* and
+    // the per-output FIELD_COMPRESSOR_ENABLED slots, still run by NativeBmwDspProcessor's
+    // processCompressor) has been force-disabled. The multiband compressor + per-bus limiters
+    // replace it, and its editing UI was retired, so leaving it enabled-by-default would be a
+    // hidden, uncontrollable dynamics stage. Kotlin-only -- native still reads the enable slots
+    // themselves, this marker just gates the one-time flip. See migrateDisableLegacyCompressorIfNeeded.
+    const val INDEX_LEGACY_COMP_DISABLED_MIGRATED = 188
+
+    // 189..191 reserved, inert (never read natively) -- headroom for later PRs so they don't
+    // each need their own schema growth.
 
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
@@ -265,7 +273,8 @@ object NativeBmwDspValues {
         // --- Per-bus output limiter (182..187), ships DISABLED ---
         0f, -3f, 120f, // 182..184 Low bus: enabled, threshold dBFS, release ms
         0f, -3f, 120f, // 185..187 Mid bus: enabled, threshold dBFS, release ms
-        // 188..191 reserved, inert.
+        // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
+        // 189..191 reserved, inert.
         0f, 0f, 0f, 0f,
     )
 
@@ -282,6 +291,7 @@ object NativeBmwDspValues {
         migrateIndependentOutputsIfNeeded(store, values)
         migrateMeasMuteStopbandIfNeeded(store, values)
         migrateMbcIfNeeded(store, values)
+        migrateDisableLegacyCompressorIfNeeded(store, values)
         return values
     }
 
@@ -375,6 +385,26 @@ object NativeBmwDspValues {
         values[INDEX_MBC_MIGRATED] = 1f
         val saved = store.save(values)
         Timber.i("BMW DSP seeded multiband compressor + bus limiter block disabled success=$saved")
+    }
+
+    /**
+     * Force the legacy per-output compressor off, once. It is superseded by the multiband
+     * compressor + per-bus limiters and its editing screens were retired, so an existing
+     * config that still has the Low bus compressor enabled (the historical default) would keep
+     * a hidden, now-uncontrollable dynamics stage running. Clears both the legacy scalar enable
+     * slots and every per-output FIELD_COMPRESSOR_ENABLED, then sets the marker at index 188.
+     * Mirrors [migrateMeasMuteStopbandIfNeeded].
+     */
+    private fun migrateDisableLegacyCompressorIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_LEGACY_COMP_DISABLED_MIGRATED] == 1f) return
+        values[INDEX_LOW_COMPRESSOR_ENABLED] = 0f
+        values[INDEX_MID_COMPRESSOR_ENABLED] = 0f
+        for (output in 0 until OUTPUT_COUNT) {
+            values[outputIndex(output, FIELD_COMPRESSOR_ENABLED)] = 0f
+        }
+        values[INDEX_LEGACY_COMP_DISABLED_MIGRATED] = 1f
+        val saved = store.save(values)
+        Timber.i("BMW DSP force-disabled legacy per-output compressor success=$saved")
     }
 
     /** One-time pickup of the pre-[NativeBmwDspStore] SharedPreferences blob. */

@@ -34,6 +34,17 @@ class NativeBmwDspValuesTest {
     private fun migratedDefaults() = NativeBmwDspValues.DEFAULTS.copyOf().also { values ->
         seedIndependentOutputs(values)
         seedMbc(values)
+        seedLegacyCompDisabled(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateDisableLegacyCompressorIfNeeded]. */
+    private fun seedLegacyCompDisabled(values: FloatArray) {
+        values[NativeBmwDspValues.INDEX_LOW_COMPRESSOR_ENABLED] = 0f
+        values[NativeBmwDspValues.INDEX_MID_COMPRESSOR_ENABLED] = 0f
+        for (output in 0 until NativeBmwDspValues.OUTPUT_COUNT) {
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_COMPRESSOR_ENABLED)] = 0f
+        }
+        values[NativeBmwDspValues.INDEX_LEGACY_COMP_DISABLED_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateMbcIfNeeded]: block reseeded from DEFAULTS, enables
@@ -100,6 +111,7 @@ class NativeBmwDspValuesTest {
             it[0] = 1f; it[1] = 2f; it[2] = 3f
             seedIndependentOutputs(it)
             seedMbc(it)
+            seedLegacyCompDisabled(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -237,6 +249,44 @@ class NativeBmwDspValuesTest {
             0f,
         )
         assertEquals(1f, loaded[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED], 0f)
+    }
+
+    @Test
+    fun loadForceDisablesTheLegacyPerOutputCompressorOnce() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_LOW_COMPRESSOR_ENABLED] = 1f
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_COMPRESSOR_ENABLED)] = 1f
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_COMPRESSOR_ENABLED)] = 1f
+            it[NativeBmwDspValues.INDEX_LEGACY_COMP_DISABLED_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_LOW_COMPRESSOR_ENABLED], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MID_COMPRESSOR_ENABLED], 0f)
+        for (output in 0 until NativeBmwDspValues.OUTPUT_COUNT) {
+            assertEquals(
+                0f,
+                loaded[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_COMPRESSOR_ENABLED)],
+                0f,
+            )
+        }
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_LEGACY_COMP_DISABLED_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadLeavesLegacyCompressorAloneOnceItsMarkerIsSet() {
+        // Marker already set: a later deliberate re-enable (whatever sets it) must survive.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_LOW_COMPRESSOR_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_LEGACY_COMP_DISABLED_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_LOW_COMPRESSOR_ENABLED], 0f)
     }
 
     @Test
