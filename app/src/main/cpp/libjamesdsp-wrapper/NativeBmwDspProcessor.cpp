@@ -178,9 +178,9 @@ bool NativeBmwDspProcessor::configure(const float*v,std::size_t n){
  for(int i=0;i<3;++i)if(changed(next.mbcXo[i],p_.mbcXo[i]))dirty|=DirtyMbc;
  if(next.mbcEnabled!=p_.mbcEnabled)dirty|=DirtyMbcState;
  for(int b=0;b<4;++b){
-  const auto&o=p_.mbcBand[b];const auto&n=next.mbcBand[b];
-  if(changed(o.attack,n.attack)||changed(o.release,n.release)||changed(o.makeup,n.makeup))dirty|=DirtyMbcTiming;
-  if(o.enabled!=n.enabled||o.stereoLink!=n.stereoLink)dirty|=DirtyMbcState;
+  const auto&cur=p_.mbcBand[b];const auto&nxt=next.mbcBand[b];
+  if(changed(cur.attack,nxt.attack)||changed(cur.release,nxt.release)||changed(cur.makeup,nxt.makeup))dirty|=DirtyMbcTiming;
+  if(cur.enabled!=nxt.enabled||cur.stereoLink!=nxt.stereoLink)dirty|=DirtyMbcState;
  }
  // Bus limiter: threshold is read live per sample, so only enable/release need a rebuild.
  if(next.busLimLowEnabled!=p_.busLimLowEnabled||next.busLimMidEnabled!=p_.busLimMidEnabled||
@@ -345,9 +345,9 @@ void NativeBmwDspProcessor::processMbc(float&l,float&r){
  r=ftz(dryR*(1.f-mbcMix_)+wetR*mbcMix_);
 }
 void NativeBmwDspProcessor::processBusLimiter(float&l,float&r,float thresholdDb,float&gain,float releaseMix){
- const float ceil=dbToLin(thresholdDb);
+ const float ceilingLin=dbToLin(thresholdDb);
  const float pk=std::max(std::fabs(l),std::fabs(r));
- const float target=pk>ceil?ceil/pk:1.f;
+ const float target=pk>ceilingLin?ceilingLin/pk:1.f;
  const float mix=target<gain?busLimAttackMix_:releaseMix;
  gain=std::min(1.f,ftz(gain+(target-gain)*mix));
  l=ftz(l*gain);r=ftz(r*gain);
