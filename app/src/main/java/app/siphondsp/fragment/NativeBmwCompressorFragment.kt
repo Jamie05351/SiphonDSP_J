@@ -23,10 +23,14 @@ import app.siphondsp.view.MbcBandGrMeter
 import kotlin.math.roundToInt
 
 /**
- * The pre-crossover multiband compressor screen: a pinned [CompressorSurface] visualiser, a
- * slim master strip (MBC enable + dry/wet mix), then a [DspPager] of four band pages
- * (enable, threshold, ratio, knee, attack, release, makeup, stereo-link + a compact GR meter)
- * and a Driver-protection page (per-bus brick-wall limiters).
+ * The pre-crossover multiband compressor screen: a full-bleed [DspPager] whose first page is
+ * the [CompressorSurface] visualiser plus a slim master strip (MBC enable + dry/wet mix),
+ * followed by four band pages (enable, threshold, ratio, knee, attack, release, makeup,
+ * stereo-link + a compact GR meter) and a Driver-protection page (per-bus brick-wall limiters).
+ *
+ * The visualiser used to be a pinned card above the pager, but on a short head-unit display
+ * that left each band page almost no room; giving it its own page lets every page use the full
+ * content area.
  *
  * Every control writes straight into the [NativeBmwDspValues] array via
  * [CrossoverDashboardBuilder], the same index-driven card/slider builder the other DSP
@@ -35,8 +39,7 @@ import kotlin.math.roundToInt
  */
 class NativeBmwCompressorFragment : Fragment() {
 
-    private lateinit var surface: CompressorSurface
-    private lateinit var masterContainer: FrameLayout
+    private var surface: CompressorSurface? = null
     private lateinit var pagerContainer: FrameLayout
 
     private val handler = Handler(Looper.getMainLooper())
@@ -47,7 +50,7 @@ class NativeBmwCompressorFragment : Fragment() {
     private val meterTick = object : Runnable {
         override fun run() {
             RootlessAudioProcessorService.nativeBmwMbcMeter()?.let { meter ->
-                surface.setMbcMeter(meter)
+                surface?.setMbcMeter(meter)
                 for (band in bandGrMeters.indices) {
                     bandGrMeters[band]?.setGainReductionDb(meter[band * 3 + 2])
                 }
@@ -64,9 +67,6 @@ class NativeBmwCompressorFragment : Fragment() {
         inflater.inflate(R.layout.fragment_native_bmw_compressor, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        surface = view.findViewById(R.id.compressor_surface)
-        BmwDashboardSkin.styleCard(view.findViewById(R.id.compressor_surface_card))
-        masterContainer = view.findViewById(R.id.compressor_master_container)
         pagerContainer = view.findViewById(R.id.compressor_slider_pager_container)
     }
 
@@ -89,11 +89,39 @@ class NativeBmwCompressorFragment : Fragment() {
         val onChanged: (FloatArray) -> Unit = { updated ->
             NativeBmwDspValues.save(ctx, updated)
             NativeBmwDspValues.broadcast(ctx, updated)
-            surface.setSystemValues(updated)
+            surface?.setSystemValues(updated)
         }
-        surface.setSystemValues(values)
 
-        masterContainer.removeAllViews()
+        val splits = CompressorSurfaceMath.splitFrequencies(values)
+        bandGrMeters.fill(null)
+        lowBusGrMeter = null
+        midBusGrMeter = null
+        surface = null
+
+        val pages = buildList {
+            add(buildVisualiserPage(ctx, values, onChanged))
+            for (band in 0 until NativeBmwDspValues.MBC_BAND_COUNT) {
+                add(buildBandPage(ctx, band, splits, values, onChanged))
+            }
+            add(buildDriverPage(ctx, values, onChanged))
+        }
+
+        pagerContainer.removeAllViews()
+        pagerContainer.addView(DspPager.build(ctx, pages))
+    }
+
+    /** Page 1: the pinned-no-more [CompressorSurface] plus the slim MBC enable + mix strip. */
+    private fun buildVisualiserPage(
+        ctx: Context,
+        values: FloatArray,
+        onChanged: (FloatArray) -> Unit,
+    ): View {
+        val page = layoutInflater.inflate(R.layout.page_compressor_visualiser, pagerContainer, false)
+        val surfaceView = page.findViewById<CompressorSurface>(R.id.compressor_surface)
+        BmwDashboardSkin.styleCard(page.findViewById(R.id.compressor_surface_card))
+        surface = surfaceView
+        surfaceView.setSystemValues(values)
+
         val masterRoot = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(2), dp(4), dp(2))
@@ -106,18 +134,8 @@ class NativeBmwCompressorFragment : Fragment() {
             )
             addSliderRow("Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f, 100f, 1f, "%")
         }
-        masterContainer.addView(masterRoot)
-
-        val splits = CompressorSurfaceMath.splitFrequencies(values)
-        bandGrMeters.fill(null)
-        lowBusGrMeter = null
-        midBusGrMeter = null
-        val pages = (0 until NativeBmwDspValues.MBC_BAND_COUNT).map { band ->
-            buildBandPage(ctx, band, splits, values, onChanged)
-        } + buildDriverPage(ctx, values, onChanged)
-
-        pagerContainer.removeAllViews()
-        pagerContainer.addView(DspPager.build(ctx, pages))
+        page.findViewById<FrameLayout>(R.id.compressor_master_container).addView(masterRoot)
+        return page
     }
 
     private fun buildBandPage(
