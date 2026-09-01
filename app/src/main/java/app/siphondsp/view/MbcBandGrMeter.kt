@@ -8,10 +8,11 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * Compact per-band gain-reduction meter for the multiband-compressor band pages: a thin
- * horizontal track with a bar that grows from the right as reduction increases, plus a
- * slow-decaying peak-hold tick. Fed [setGainReductionDb] from the fragment's meter tick
- * (readMbcMeter). Display-only.
+ * Compact gain-reduction meter used on the multiband-compressor screen -- one per band page and
+ * one per bus on the Driver-protection page. A thin horizontal track with a bar that grows from
+ * the right as reduction increases, plus a slow-decaying peak-hold tick. Fed
+ * [setGainReductionDb] from the fragment's meter tick (readMbcMeter / readBusLimiterMeter).
+ * Display-only.
  */
 class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 

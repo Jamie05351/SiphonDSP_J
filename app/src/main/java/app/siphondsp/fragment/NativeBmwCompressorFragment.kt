@@ -41,6 +41,8 @@ class NativeBmwCompressorFragment : Fragment() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val bandGrMeters = arrayOfNulls<MbcBandGrMeter>(NativeBmwDspValues.MBC_BAND_COUNT)
+    private var lowBusGrMeter: MbcBandGrMeter? = null
+    private var midBusGrMeter: MbcBandGrMeter? = null
 
     private val meterTick = object : Runnable {
         override fun run() {
@@ -49,6 +51,10 @@ class NativeBmwCompressorFragment : Fragment() {
                 for (band in bandGrMeters.indices) {
                     bandGrMeters[band]?.setGainReductionDb(meter[band * 3 + 2])
                 }
+            }
+            RootlessAudioProcessorService.nativeBmwBusLimiterMeter()?.let { meter ->
+                lowBusGrMeter?.setGainReductionDb(meter[0])
+                midBusGrMeter?.setGainReductionDb(meter[1])
             }
             handler.postDelayed(this, 33L)
         }
@@ -104,6 +110,8 @@ class NativeBmwCompressorFragment : Fragment() {
 
         val splits = CompressorSurfaceMath.splitFrequencies(values)
         bandGrMeters.fill(null)
+        lowBusGrMeter = null
+        midBusGrMeter = null
         val pages = (0 until NativeBmwDspValues.MBC_BAND_COUNT).map { band ->
             buildBandPage(ctx, band, splits, values, onChanged)
         } + buildDriverPage(ctx, values, onChanged)
@@ -161,6 +169,8 @@ class NativeBmwCompressorFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(2), dp(4), dp(8))
         }
+        val lowMeter = MbcBandGrMeter(ctx).also { lowBusGrMeter = it }
+        val midMeter = MbcBandGrMeter(ctx).also { midBusGrMeter = it }
         CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel(
             "Driver protection",
             "Brick-wall limiter on each output bus, right before the driver gain.",
@@ -169,10 +179,12 @@ class NativeBmwCompressorFragment : Fragment() {
             addSegmentedSwitchRow("Limiter active", null, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED)
             addSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD, -24f, 0f, .5f, "dB")
             addSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_RELEASE, 20f, 800f, 5f, "ms")
+            addCustomView(lowMeter)
             sectionHeader("Mid bus", BmwDashboardSkin.MID_BAND_YELLOW)
             addSegmentedSwitchRow("Limiter active", null, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED)
             addSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, -24f, 0f, .5f, "dB")
             addSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE, 20f, 800f, 5f, "ms")
+            addCustomView(midMeter)
         }
         return NestedScrollView(ctx).apply {
             addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))

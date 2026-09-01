@@ -77,6 +77,9 @@ public:
     // while the multiband compressor is disabled. Lock-free, same discipline as
     // readCompressorMeter -- reads atomics published by processMbc().
     void readMbcMeter(float* values, std::size_t count) const;
+    // 2 floats: [lowBusGrDb, midBusGrDb] -- gain reduction of the per-bus brick-wall limiters.
+    // 0 for a bus whose limiter is disabled. Lock-free; published by processBusLimiter().
+    void readBusLimiterMeter(float* values, std::size_t count) const;
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
@@ -267,7 +270,7 @@ private:
     // Brick-wall (infinite ratio, fixed-fast attack) limiter for one output bus. threshold in
     // dBFS, one stereo-linked gain follower. No lookahead -- the master limiter downstream
     // already carries that. No-op branch while the bus's enable is false.
-    void processBusLimiter(float& left,float& right,float thresholdDb,float& gain,float releaseMix);
+    void processBusLimiter(float& left,float& right,float thresholdDb,float& gain,float releaseMix,std::atomic<float>& grMeterDb);
     void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
@@ -344,6 +347,8 @@ private:
     float busLimAttackMix_ = 1.f;
     float busLimLowReleaseMix_ = 0.f, busLimMidReleaseMix_ = 0.f;
     float busLimLowGain_ = 1.f, busLimMidGain_ = 1.f;
+    // Published gain reduction (dB, >= 0) of each per-bus limiter, for readBusLimiterMeter().
+    std::atomic<float> busLimLowGrDb_{0.f}, busLimMidGrDb_{0.f};
 
     // Capture state -- see startCapture()/stopCapture()/exportCaptureWav(). The buffers and
     // captureEnabled_ are protected by stateMutex_ like everything else here (including from
