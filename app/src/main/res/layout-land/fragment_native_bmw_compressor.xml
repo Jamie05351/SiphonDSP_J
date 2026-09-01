@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Landscape mirror of fragment_native_bmw_compressor.xml: the pinned CompressorSurface sits
-     above the band pager here too, just shorter since landscape has less vertical room. The
-     per-band page (layout-land/page_compressor_band.xml) keeps its own left/right split below. -->
+<!-- Landscape mirror of fragment_native_bmw_compressor.xml: the pinned CompressorSurface,
+     the MBC master strip and the DspPager (4 band pages + Driver-protection), just with a
+     shorter surface since landscape has less vertical room. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -20,6 +20,12 @@
             android:layout_width="match_parent"
             android:layout_height="128dp" />
     </com.google.android.material.card.MaterialCardView>
+
+    <FrameLayout
+        android:id="@+id/compressor_master_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="6dp" />
 
     <FrameLayout
         android:id="@+id/compressor_slider_pager_container"
