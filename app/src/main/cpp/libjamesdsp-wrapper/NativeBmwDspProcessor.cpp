@@ -250,7 +250,7 @@ void NativeBmwDspProcessor::rebuildBusLimiter(){
  busLimMidReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimMidReleaseMs)*.001f*sampleRate_));
 }
 void NativeBmwDspProcessor::rebuildTilt(){float g=p_.tiltAmount*.75f;makeLowShelf(tiltLoL1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoL2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiL1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiL2_,p_.tiltFreq,-g,sampleRate_);makeLowShelf(tiltLoR1_,p_.tiltFreq,g,sampleRate_);makeLowShelf(tiltLoR2_,p_.tiltFreq,g,sampleRate_);makeHighShelf(tiltHiR1_,p_.tiltFreq,-g,sampleRate_);makeHighShelf(tiltHiR2_,p_.tiltFreq,-g,sampleRate_);}
-void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);makeLowPass(out.monoBassCompLp1,p_.monoBassFreq,BW,sampleRate_);makeLowPass(out.monoBassCompLp2,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
+void NativeBmwDspProcessor::rebuildMonoBass(){makeLowPass(monoBassLpf1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassLpf2_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassMidLp1_,p_.monoBassFreq,BW,sampleRate_);makeLowPass(monoBassMidLp2_,p_.monoBassFreq,BW,sampleRate_);for(OutputId id:{OutputId::LowLeft,OutputId::LowRight}){auto&out=output(id);makeHighPass(out.monoBassHpf1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassHpf2,p_.monoBassFreq,BW,sampleRate_);}for(OutputId id:{OutputId::MidLeft,OutputId::MidRight}){auto&out=output(id);makeHighPass(out.monoBassCompHp1,p_.monoBassFreq,BW,sampleRate_);makeHighPass(out.monoBassCompHp2,p_.monoBassFreq,BW,sampleRate_);}monoBassMakeupLin_=dbToLin(p_.monoBassMakeup);}
 void NativeBmwDspProcessor::rebuildPolarityAndMute(){for(std::size_t i=0;i<outputs_.size();++i){auto&out=outputs_[i];const auto&cfg=outputConfigs_[i];const bool isLow=i<=static_cast<std::size_t>(OutputId::LowRight);const bool measurementMuted=(p_.measurementMute==1&&isLow)||(p_.measurementMute==2&&!isLow);out.muted=cfg.muted||measurementMuted;out.polarityInverted=cfg.polarityInverted;}}
 void NativeBmwDspProcessor::rebuildMeasBus(){
  // Option A: measurement-mute output-bus brick-wall. Only ever inserted into processFrame's
@@ -406,19 +406,25 @@ void NativeBmwDspProcessor::processFrame(float&l,float&r){
 
  if(!p_.hpfPass){
   midL=processMidCrossover(midLeft,midL);midR=processMidCrossover(midRight,midR);
-  // Mono Bass's Low-side mono/stereo split-and-recombine is itself an allpass -- flat magnitude
-  // on its own, but it rotates phase, even for a perfectly correlated (mono) signal. Nothing
-  // else does the equivalent to Mid, so once Mono Bass is on, Low arrives at the Low/Mid sum
-  // carrying phase Mid doesn't have, and the two stop summing flat right at the crossover
-  // (confirmed both analytically and against the PEQ response graph -- a real dip at the
-  // crossover frequency, not just a theoretical concern). Applying the identical LP+HP allpass
-  // (same frequency/order as Low's own split, blended by the same amount) to Mid cancels that
-  // out: both bands pick up the same rotation, so they stay in phase with each other exactly
-  // like they do with Mono Bass off.
+  // Mono Bass's Low-side mono/stereo split-and-recombine (below) rotates phase and -- with
+  // makeup != 0 dB -- reshapes magnitude, and it does so differently for the mono and the
+  // stereo (side) parts of the signal because the low half runs on (lowL+lowR)/2, not the
+  // per-channel sample. Nothing else does that to Mid, so once Mono Bass is on Low reaches the
+  // Low/Mid sum shaped in a way Mid isn't and the two stop summing flat right at the crossover
+  // -- a real, audible dip, worst on wide/stereo bass.
+  //
+  // Fix: Mid re-runs the EXACT same recombination on its own band -- the low/makeup half fed
+  // the Mid *mono sum* (midL+midR)/2, the high half per channel, same blend. Because every
+  // stage is linear, applying the identical operation to both bands post-split is the same as
+  // applying Mono Bass once pre-split, so Low and Mid stay summing flat for stereo content too,
+  // not only for L==R. (The old version ran the low half on the per-channel Mid sample, which
+  // only matched Low when L==R.)
   if(p_.monoBass){
    float mbBlend=p_.monoBassBlend*.01f;
-   float compL=midLeft.monoBassCompLp2.run(midLeft.monoBassCompLp1.run(midL))*monoBassMakeupLin_+midLeft.monoBassCompHp2.run(midLeft.monoBassCompHp1.run(midL));
-   float compR=midRight.monoBassCompLp2.run(midRight.monoBassCompLp1.run(midR))*monoBassMakeupLin_+midRight.monoBassCompHp2.run(midRight.monoBassCompHp1.run(midR));
+   float midMono=(midL+midR)*.5f;
+   float midMonoFiltered=monoBassMidLp2_.run(monoBassMidLp1_.run(midMono))*monoBassMakeupLin_;
+   float compL=midMonoFiltered+midLeft.monoBassCompHp2.run(midLeft.monoBassCompHp1.run(midL));
+   float compR=midMonoFiltered+midRight.monoBassCompHp2.run(midRight.monoBassCompHp1.run(midR));
    midL=midL*(1-mbBlend)+compL*mbBlend;midR=midR*(1-mbBlend)+compR*mbBlend;
   }
   if(peqEnabled_){midL=midPeq_.processLeft(midL);midR=midPeq_.processRight(midR);}

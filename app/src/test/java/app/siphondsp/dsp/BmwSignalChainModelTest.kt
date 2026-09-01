@@ -198,6 +198,56 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun monoBassWithUnityMakeupLeavesTheSummedResponseFlat() {
+        // Mono Bass's Low recombination + the Mid compensation must cancel on the summed
+        // response: with 0 dB makeup the whole thing is a pure allpass, so enabling it may not
+        // move the crossover sum by more than rounding. (This is the invariant the compensation
+        // exists to preserve; the native Mid path was reworked to feed its low half the Mid mono
+        // sum so it also holds for stereo input -- which this L==R reference model can't show,
+        // but the mono-response cancellation checked here is unchanged by that rework.)
+        val baseline = compute(baseValues().also { it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 0f })
+        val monoBass = compute(
+            baseValues().also {
+                it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = 80f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] = 100f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP] = 0f
+            },
+        )
+        for (channel in 0..1) {
+            for (i in baseline.sumDb[channel].indices) {
+                assertEquals(
+                    "sum at ${curves.frequencies[i].toInt()} Hz ch$channel",
+                    baseline.sumDb[channel][i],
+                    monoBass.sumDb[channel][i],
+                    1e-3,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun monoBassMakeupLiftsTheSumOnlyBelowItsFrequency() {
+        val baseline = compute(baseValues().also { it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 0f })
+        val boosted = compute(
+            baseValues().also {
+                it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = 80f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] = 100f
+                it[NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP] = 4f
+            },
+        )
+        // Untouched an octave or more above the mono frequency...
+        for (i in nearestIndex(300.0)..nearestIndex(5_000.0)) {
+            assertEquals(baseline.sumDb[0][i], boosted.sumDb[0][i], 0.05)
+        }
+        // ...lifted toward the makeup gain well below it (short of the full 4 dB because the
+        // mono low-pass is already below unity by 45 Hz, and subsonic is rolling in).
+        val lowDelta = boosted.sumDb[0][nearestIndex(45.0)] - baseline.sumDb[0][nearestIndex(45.0)]
+        assertTrue("expected a sub-80 Hz lift, got $lowDelta dB", lowDelta > 2.5)
+    }
+
+    @Test
     fun postGainIsAppliedLastToTheSumOnly() {
         val baseline = compute(baseValues())
         val raised = compute(baseValues().also { it[10] += 4f; it[11] += 4f })
