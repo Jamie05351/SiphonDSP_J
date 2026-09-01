@@ -242,7 +242,7 @@ void NativeBmwDspProcessor::rebuildMbcTiming(){
   mbcReleaseMix_[b]=1-std::exp(-1/(std::max(1.f,p_.mbcBand[b].release)*.001f*sampleRate_));
  }
 }
-void NativeBmwDspProcessor::resetMbcState(){for(auto&t:mbc_)t.clear();for(auto&row:mbcCell_)for(auto&c:row){c.rms=0;c.peak=0;c.gain=1;}}
+void NativeBmwDspProcessor::resetMbcState(){for(auto&t:mbc_)t.clear();for(auto&row:mbcCell_)for(auto&c:row){c.rms=0;c.peak=0;c.gain=1;c.lastDetectorDb=-60.f;}for(auto&m:mbcMeter_){m.inputDb.store(-60.f);m.outputDb.store(-60.f);m.gainReductionDb.store(0.f);}mbcMeterCounter_=0;}
 void NativeBmwDspProcessor::rebuildBusLimiter(){
  busLimAttackMix_=1-std::exp(-1/(.001f*sampleRate_));
  busLimLowReleaseMix_=1-std::exp(-1/(std::max(20.f,p_.busLimLowReleaseMs)*.001f*sampleRate_));
@@ -300,6 +300,7 @@ float NativeBmwDspProcessor::mbcBandGain(float peakAbs,const MbcBandParams&p,Mbc
  s.peak=peakAbs>s.peak?peakAbs:ftz(s.peak*peakRelease_);
  float det=std::max(std::sqrt(std::max(0.f,s.rms)),s.peak*.5f);
  float db=20*std::log10(std::max(det,1e-12f));
+ s.lastDetectorDb=db;
  float over=db-p.threshold,slope=1-1/std::max(1.001f,p.ratio),gr=0,kh=p.knee*.5f;
  if(p.knee>0){if(over>=kh)gr=-over*slope;else if(over>-kh){float x=over+kh;gr=-slope*x*x/(2*p.knee);}}
  else if(over>0)gr=-over*slope;
@@ -325,19 +326,37 @@ void NativeBmwDspProcessor::processMbc(float&l,float&r){
   band[ch][2]=low2;
   band[ch][3]=high2;
  }
+ const bool publishMeter=(++mbcMeterCounter_&255u)==0;
  float wetL=0,wetR=0;
  for(int b=0;b<4;++b){
   const auto&bp=p_.mbcBand[b];
   float sL=band[0][b],sR=band[1][b];
+  float meterDb,reductionDb;
   if(bp.enabled){
+   float gWorst;
    if(bp.stereoLink){
     const float g=mbcBandGain(std::max(std::fabs(sL),std::fabs(sR)),bp,mbcCell_[0][b],b);
     sL*=g;sR*=g;
+    meterDb=mbcCell_[0][b].lastDetectorDb;gWorst=g;
    }else{
-    sL*=mbcBandGain(std::fabs(sL),bp,mbcCell_[0][b],b);
-    sR*=mbcBandGain(std::fabs(sR),bp,mbcCell_[1][b],b);
+    const float gL=mbcBandGain(std::fabs(sL),bp,mbcCell_[0][b],b);
+    const float gR=mbcBandGain(std::fabs(sR),bp,mbcCell_[1][b],b);
+    sL*=gL;sR*=gR;
+    meterDb=std::max(mbcCell_[0][b].lastDetectorDb,mbcCell_[1][b].lastDetectorDb);gWorst=std::min(gL,gR);
    }
    sL*=mbcMakeupLin_[b];sR*=mbcMakeupLin_[b];
+   reductionDb=-20.f*std::log10(std::max(gWorst,1e-12f));
+  }else{
+   // Disabled band: meter still shows the band's input level (no reduction), same spirit as
+   // processCompressor's idle publish.
+   meterDb=20.f*std::log10(std::max(std::max(std::fabs(sL),std::fabs(sR)),1e-12f));
+   reductionDb=0.f;
+  }
+  if(publishMeter){
+   auto&m=mbcMeter_[b];
+   m.inputDb.store(clampf(meterDb,-60.f,6.f));
+   m.gainReductionDb.store(clampf(reductionDb,0.f,60.f));
+   m.outputDb.store(clampf(meterDb-reductionDb+(bp.enabled?bp.makeup:0.f),-60.f,6.f));
   }
   wetL+=sL;wetR+=sR;
  }
@@ -444,6 +463,16 @@ const float* NativeBmwDspProcessor::process(const float*s,std::size_t n){if(!s)r
 const int16_t* NativeBmwDspProcessor::process(const int16_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=32768.f,invScale=1.f/scale;auto*w=const_cast<int16_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;captureTapIn(l,r);processFrame(l,r);captureTapOut(l,r);w[i]=clampInt<int16_t>(l*scale);w[i+1]=clampInt<int16_t>(r*scale);}return s;}
 const int32_t* NativeBmwDspProcessor::process(const int32_t*s,std::size_t n){if(!s)return s;std::lock_guard<std::mutex> lock(stateMutex_);if(!p_.enabled)return s;constexpr float scale=2147483648.f,invScale=1.f/scale;auto*w=const_cast<int32_t*>(s);for(std::size_t i=0;i+1<n;i+=2){float l=static_cast<float>(w[i])*invScale,r=static_cast<float>(w[i+1])*invScale;captureTapIn(l,r);processFrame(l,r);captureTapOut(l,r);w[i]=clampInt<int32_t>(l*scale);w[i+1]=clampInt<int32_t>(r*scale);}return s;}
 void NativeBmwDspProcessor::readCompressorMeter(float*v,std::size_t n)const{if(!v||n<6)return;const auto&ll=dynamics(OutputId::LowLeft);const auto&lr=dynamics(OutputId::LowRight);const auto&ml=dynamics(OutputId::MidLeft);const auto&mr=dynamics(OutputId::MidRight);v[0]=std::max(ll.inputDb.load(),lr.inputDb.load());v[1]=std::max(ll.outputDb.load(),lr.outputDb.load());v[2]=std::max(ll.gainReductionDb.load(),lr.gainReductionDb.load());v[3]=std::max(ml.inputDb.load(),mr.inputDb.load());v[4]=std::max(ml.outputDb.load(),mr.outputDb.load());v[5]=std::max(ml.gainReductionDb.load(),mr.gainReductionDb.load());}
+void NativeBmwDspProcessor::readMbcMeter(float*v,std::size_t n)const{
+ if(!v||n<12)return;
+ const bool active=p_.mbcEnabled;
+ for(int b=0;b<4;++b){
+  const auto&m=mbcMeter_[b];
+  v[b*3+0]=active?m.inputDb.load():-60.f;
+  v[b*3+1]=active?m.outputDb.load():-60.f;
+  v[b*3+2]=active?m.gainReductionDb.load():0.f;
+ }
+}
 
 void NativeBmwDspProcessor::startCapture() {
     std::lock_guard<std::mutex> lock(stateMutex_);

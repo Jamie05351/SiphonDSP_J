@@ -269,6 +269,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCompressorMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
+    /** 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. See getNativeBmwMbcMeter. */
+    fun nativeBmwMbcMeter(): FloatArray? =
+        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
+
     fun startNativeBmwCapture() = withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
 
     fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }
