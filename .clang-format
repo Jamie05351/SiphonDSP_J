@@ -1,0 +1,28 @@
+# Formatting standard for this project's hand-written native code (the NativeBmw* /
+# NativeBmwRouting sources under app/src/main/cpp/libjamesdsp-wrapper/).
+#
+# The vendored upstream JamesDSP C/C++ (app/src/main/cpp/libjamesdsp/**, the large
+# JamesDspWrapper*.cpp) is excluded via .clang-format-ignore -- it is inherited code slated
+# for removal, not ours to restyle.
+#
+#   clang-format -i app/src/main/cpp/libjamesdsp-wrapper/NativeBmw*.cpp \
+#                   app/src/main/cpp/libjamesdsp-wrapper/NativeBmw*.h \
+#                   app/src/main/cpp/libjamesdsp-wrapper/NativeBmwRouting.h
+
+BasedOnStyle: Google
+ColumnLimit: 100
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Left
+DerivePointerAlignment: false
+SortIncludes: Never
+ReflowComments: false
+InsertBraces: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+IndentCaseLabels: true
+SpaceAfterTemplateKeyword: false

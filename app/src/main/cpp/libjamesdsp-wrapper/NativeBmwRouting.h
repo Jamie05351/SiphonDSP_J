@@ -92,17 +92,20 @@ struct AllPassSection {
     BiquadCoefficients coefficients{};
 
     bool isValid(float sampleRate) const {
-        return std::isfinite(sampleRate) && sampleRate >= 8000.0f &&
-               std::isfinite(frequencyHz) && frequencyHz >= 20.0f &&
-               frequencyHz < sampleRate * 0.5f &&
-               std::isfinite(q) && q >= 0.1f && q <= 30.0f;
+        return std::isfinite(sampleRate) && sampleRate >= 8000.0f && std::isfinite(frequencyHz) &&
+               frequencyHz >= 20.0f && frequencyHz < sampleRate * 0.5f && std::isfinite(q) &&
+               q >= 0.1f && q <= 30.0f;
     }
 
     /** Returns false (and resets to identity) on invalid frequency/Q/sample rate. */
     bool rebuild(float sampleRate) {
         coefficients = {};
-        if (!enabled) return true;
-        if (!isValid(sampleRate)) return false;
+        if (!enabled) {
+            return true;
+        }
+        if (!isValid(sampleRate)) {
+            return false;
+        }
 
         constexpr float pi = 3.14159265358979323846f;
         const float omega = 2.0f * pi * frequencyHz / sampleRate;
@@ -110,9 +113,13 @@ struct AllPassSection {
         if (!secondOrder) {
             const float tangent = std::tan(omega * 0.5f);
             const float denom = tangent + 1.0f;
-            if (!std::isfinite(denom) || std::fabs(denom) < 1.0e-12f) return false;
+            if (!std::isfinite(denom) || std::fabs(denom) < 1.0e-12f) {
+                return false;
+            }
             const float a = (tangent - 1.0f) / denom;
-            if (!std::isfinite(a)) return false;
+            if (!std::isfinite(a)) {
+                return false;
+            }
             coefficients.b0 = a;
             coefficients.b1 = 1.0f;
             coefficients.b2 = 0.0f;
@@ -125,7 +132,9 @@ struct AllPassSection {
         const float sine = std::sin(omega);
         const float alpha = sine / (2.0f * q);
         const float a0 = 1.0f + alpha;
-        if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12f) return false;
+        if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12f) {
+            return false;
+        }
 
         // RBJ second-order all-pass: numerator is reversed denominator.
         coefficients.b0 = (1.0f - alpha) / a0;
@@ -144,16 +153,16 @@ struct AllPassSection {
 
 /** Reconstruct the existing final stereo output after per-output processing. */
 inline StereoFrame sumToStereo(const std::array<float, kOutputCount>& outputs) {
-    const float left = outputs[static_cast<std::size_t>(OutputId::LowLeft)]
-        + outputs[static_cast<std::size_t>(OutputId::MidLeft)];
-    const float right = outputs[static_cast<std::size_t>(OutputId::LowRight)]
-        + outputs[static_cast<std::size_t>(OutputId::MidRight)];
+    const float left = outputs[static_cast<std::size_t>(OutputId::LowLeft)] +
+                       outputs[static_cast<std::size_t>(OutputId::MidLeft)];
+    const float right = outputs[static_cast<std::size_t>(OutputId::LowRight)] +
+                        outputs[static_cast<std::size_t>(OutputId::MidRight)];
     return {
         std::isfinite(left) ? left : 0.0f,
         std::isfinite(right) ? right : 0.0f,
     };
 }
 
-} // namespace NativeBmwRouting
+}  // namespace NativeBmwRouting
 
 #endif
