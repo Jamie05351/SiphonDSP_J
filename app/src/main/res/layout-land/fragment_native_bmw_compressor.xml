@@ -1,8 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- See fragment_native_bmw_compressor.xml (portrait) for the full rationale. Landscape's per-
-     band page (layout-land/page_compressor_band.xml) has its own left/right split built in, so
-     this fragment-level layout is just the full-bleed pager, same as portrait. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/compressor_slider_pager_container"
+<!-- Landscape mirror of fragment_native_bmw_compressor.xml: the pinned CompressorSurface sits
+     above the band pager here too, just shorter since landscape has less vertical room. The
+     per-band page (layout-land/page_compressor_band.xml) keeps its own left/right split below. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/compressor_surface_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="6dp"
+        app:cardCornerRadius="18dp">
+
+        <app.siphondsp.view.CompressorSurface
+            android:id="@+id/compressor_surface"
+            android:layout_width="match_parent"
+            android:layout_height="128dp" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <FrameLayout
+        android:id="@+id/compressor_slider_pager_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

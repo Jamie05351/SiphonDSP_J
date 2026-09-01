@@ -1,5 +1,9 @@
 package app.siphondsp.fragment
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,12 +17,17 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.model.NativeBmwCompressorState
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.utils.Constants
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorGrTraceView
+import app.siphondsp.view.CompressorSurface
 import app.siphondsp.view.DspPager
 import app.siphondsp.view.NativeBmwCompressorView
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.slider.Slider
 import java.util.Locale
@@ -70,7 +79,18 @@ class NativeBmwCompressorFragment : Fragment() {
     private lateinit var state: NativeBmwCompressorState
     private lateinit var lowControls: BandControls
     private lateinit var midControls: BandControls
+    private lateinit var surface: CompressorSurface
     private val handler = Handler(Looper.getMainLooper())
+
+    // The pinned multiband-compressor visualiser reads its band splits / thresholds / enables
+    // from the NativeBmwDspValues array; keep it fed as other screens edit that config.
+    private val dspValuesReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Constants.ACTION_NATIVE_BMW_DSP_UPDATED) return
+            val values = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES) ?: return
+            if (::surface.isInitialized) surface.setSystemValues(values)
+        }
+    }
     private var bindingState = false
     private var pendingPersist = false
     private var lastPersistMs = 0L
@@ -89,6 +109,7 @@ class NativeBmwCompressorFragment : Fragment() {
                 lowControls.meterText.text = "Native engine is not running"
                 midControls.meterText.text = "Native engine is not running"
             }
+            RootlessAudioProcessorService.nativeBmwMbcMeter()?.let(surface::setMbcMeter)
             handler.postDelayed(this, 33L)
         }
     }
@@ -114,6 +135,10 @@ class NativeBmwCompressorFragment : Fragment() {
         // sliders -- is inflated at runtime from the same page_compressor_band.xml, one instance
         // per band, so swiping the pager moves the whole band view at once instead of just the
         // sliders underneath a fixed header.
+        surface = view.findViewById(R.id.compressor_surface)
+        BmwDashboardSkin.styleCard(view.findViewById(R.id.compressor_surface_card))
+        surface.setSystemValues(NativeBmwDspValues.load(requireContext()))
+
         val pagerContainer = view.findViewById<FrameLayout>(R.id.compressor_slider_pager_container)
         val lowPage = layoutInflater.inflate(R.layout.page_compressor_band, pagerContainer, false)
         val midPage = layoutInflater.inflate(R.layout.page_compressor_band, pagerContainer, false)
@@ -163,11 +188,25 @@ class NativeBmwCompressorFragment : Fragment() {
         titles.forEach { it.layoutParams = it.layoutParams.apply { width = boxWidth } }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requireContext().registerLocalReceiver(
+            dspValuesReceiver,
+            IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED),
+        )
+    }
+
+    override fun onDestroy() {
+        requireContext().unregisterLocalReceiver(dspValuesReceiver)
+        super.onDestroy()
+    }
+
     override fun onStart() {
         super.onStart()
         state = NativeBmwCompressorState.load(requireContext())
         bindBandFromState(Band.LOW)
         bindBandFromState(Band.MID)
+        surface.setSystemValues(NativeBmwDspValues.load(requireContext()))
         lowControls.grTrace.reset()
         midControls.grTrace.reset()
         lowControls.visualizer.resetHistory()
