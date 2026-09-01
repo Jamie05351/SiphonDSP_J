@@ -1,9 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Each band's complete view (title, enable switch, visualizer, GR trace, meter, and all 6
-     parameter sliders) lives on its own page (page_compressor_band.xml), inflated twice by
-     NativeBmwCompressorFragment and paged via DspPager. Swiping moves the whole band view at
-     once, so there's a large non-slider touch area (the visualizer) to start the swipe from. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/compressor_slider_pager_container"
+<!-- A pinned CompressorSurface (pre-crossover multiband-compressor visualiser: live spectrum,
+     the four crossover-band regions, per-band threshold lines and the applied gain-reduction
+     curve) sits above the band pager. Each band's page (page_compressor_band.xml) is still
+     inflated twice by NativeBmwCompressorFragment and paged via DspPager below. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/compressor_surface_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        app:cardCornerRadius="20dp">
+
+        <app.siphondsp.view.CompressorSurface
+            android:id="@+id/compressor_surface"
+            android:layout_width="match_parent"
+            android:layout_height="200dp" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <FrameLayout
+        android:id="@+id/compressor_slider_pager_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>
