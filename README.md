@@ -1,118 +1,115 @@
-# SiphonDSP
+# J_DSP
 
-<p align="center">
-  <img alt="RootlessJamesDSP icon" width="96" src="img/icons/web/icon-192.png">
-</p>
+Private BMW factory-DSP tuning suite for Android. Fork of
+[RootlessJamesDSP](https://github.com/timschneeb/RootlessJamesDSP), stripped of the
+general effect stack and rebuilt around a purpose-made output-tuning core.
 
-<p align="center">
-  <strong>Rootless, system-wide JamesDSP audio processing for Android.</strong>
-</p>
+Display label **J_DSP**, package `app.siphondsp` (`.debug` suffix on debug builds),
+arm64-v8a only. Not the upstream Play/F-Droid app — build from this repo.
 
-<p align="center">
-  <a href="https://github.com/Lost-Saint/RootlessJamesDSP/blob/master/LICENSE">
-    <img alt="License" src="https://img.shields.io/github/license/Lost-Saint/RootlessJamesDSP">
-  </a>
-</p>
+## What it is
 
-It uses Android internal audio capture to route app audio through [libjamesdsp](https://github.com/james34602/JamesDSPManager), so it can provide real DSP effects without depending only on Android's built-in `audiofx` effects.
+J_DSP keeps RootlessJamesDSP's audio path — Android internal audio capture routed
+through a JNI DSP core and back out through `AudioTrack` — but replaces the effect
+chain with a single tuning suite aimed at driving a BMW factory amplifier from an
+Android head unit (developed against a 1280×480 landscape unit).
 
-This fork is not the upstream Google Play or F-Droid build. Install builds from this repository only if you trust this fork and understand the rootless capture limitations below.
+The general JamesDSP features are gone: graphic EQ, AutoEQ, compander, liveprog/EEL,
+stereo widen, DDC, device profiles, and the generic preset system have all been
+removed. What survives from upstream is the capture→process→playback service,
+session tracking / app blocklist, the Convolver (dormant), and the settings and
+backup scaffolding.
 
-<p align="center">
-  <img alt="Screenshot" width="250" src="img/screenshot1.png">
-  <img alt="Screenshot" width="250" src="img/screenshot7.png">
-</p>
+## Tuning suite
 
-## Status
+All processing runs in a custom native core (`NativeBmwDspProcessor`), configured
+from Kotlin through one flat float array. Workspace screens:
 
-This project keeps the upstream SiphonDSP package structure but has collapsed the build flavors down to the single rootless configuration that ever shipped, while carrying fork-specific UI and theme changes. The package id is:
+- **Parametric EQ** — three-bank PEQ (Full Range pre-crossover, Low Band and Mid
+  Band post-crossover), up to 16 peaking/shelf filters per bank, per-filter Left /
+  Right / both targeting, drag-to-edit graph with undo/redo, import/export, presets.
+  See [docs/THREE_BANK_PEQ.md](docs/THREE_BANK_PEQ.md).
+- **Crossovers & Tilt** — LR4 low/mid split, subsonic HPF on the low branch,
+  tonality tilt (amount + pivot).
+- **Gains & Delay** — per-channel delay, polarity and gain across four car cards,
+  L/R delay link, and an Output page with headroom, post gain, and the master
+  limiter (enable + threshold + gain-reduction meter; off = true bypass).
+- **Compressor** — four-band pre-crossover multiband compressor with a live
+  transfer-curve visualiser, plus per-bus limiters.
+- **All-pass** — up to two all-pass sections per output for phase alignment.
+- **Measurement capture** — records the processed output to WAV for offline
+  measurement.
+
+Save/restore is `PrivatePeqBackup` / `BmwPeqPreset` only.
+
+### Signal path
 
 ```text
-app.siphondsp
+stereo capture (L, R)
+  → DC blocker
+  → input-correction preamp + Full Range PEQ (Left/Right)
+  → headroom
+  → routing matrix (Front L/R → Low L/R, Mid L/R)
+  → per output: subsonic LR4 HPF (low only) → crossover LPF/HPF
+  → mono-bass blend (low outputs)
+  → per-band PEQ (Low / Mid banks)
+  → per-output all-pass → delay
+  → per-band multiband compressor → per-bus limiter
+  → per-output gain / polarity / mute
+  → sum: Final L = Low L + Mid L, Final R = Low R + Mid R
+  → tilt → post gain → channel mute → master limiter
+  → deliberate L/R swap
 ```
 
-## Features
+The internal "Left"/"Right" chains are named for the L-suffixed config indices, not
+the physical output side — `processFrame` ends `l = oR; r = oL`, so the
+internal-left chain lands on the physical right output. This is intentional; do not
+"fix" it. Full detail in
+[docs/NATIVE_BMW_OUTPUT_ARCHITECTURE.md](docs/NATIVE_BMW_OUTPUT_ARCHITECTURE.md).
 
-- System-wide JamesDSP processing without root
-- Shizuku or ADB based setup flow
-- Presets, backup/restore, IRS/DDC/Liveprog support
-- Graphic EQ, parametric EQ, convolver, bass, compressor, reverb, crossfeed, tube, stereo wide, and other JamesDSP modules
-- Android 15+ compatibility path for media projection restrictions
+## Running it
 
-## Limitations
+Audio routing is still RootlessJamesDSP's: grant the app internal-audio-capture
+through Shizuku or ADB (or run the root variant). Caveats that still apply:
 
-Rootless processing is based on Android internal audio capture. That means:
-
-- Apps that block internal audio capture remain unprocessed, such as stock Spotify, Google Chrome, and SoundCloud.
-- Some audio effect apps cannot coexist with it, especially apps using Android's `DynamicsProcessing` API.
-- Audio latency is higher than a native/root audio effect.
-- Hardware-accelerated playback or fast tracks can interfere with routing on some devices.
-- Android 15 and newer may require disabling screen share protection in Developer options, or granting the required projection permission through Shizuku/ADB when prompted by the app.
-
-Apps commonly reported to work include YouTube, YouTube Music, Amazon Music, Deezer, Poweramp, Substreamer, Twitch, Apple Music, Vinyl Music Player, and patched Spotify/ReVanced builds.
-
-## Spotify And Unsupported Apps
-
-Spotify blocks internal audio capture by default. To process Spotify audio, patch Spotify with ReVanced:
-
-1. Install [ReVanced Manager](https://github.com/revanced/revanced-manager/releases).
-2. Install the unpatched Spotify APK.
-3. Open ReVanced Manager, select Spotify, and enable the `Remove screen capture restriction` patch.
-4. Patch and install the generated APK.
-5. Start Spotify again and enable RootlessJamesDSP processing.
-
-The same universal patch can sometimes help other apps that block capture, but it cannot fix apps that use native AAudio playback or strong anti-tamper checks.
+- Apps that block internal capture stay unprocessed.
+- Latency is higher than a native/root audio effect.
+- Android 15+ may need screen-share protection disabled in Developer options, or the
+  projection permission granted through Shizuku/ADB.
 
 ## Building
 
-Requirements:
-
-- JDK 17
-- Android SDK with the compile SDK used by the project
-- Android NDK and CMake, installed through Android Studio or `sdkmanager`
-
-Useful build commands:
+Requirements: JDK 17, Android SDK (compile SDK 37), Android NDK + CMake (via Android
+Studio or `sdkmanager`).
 
 ```bash
-# Debug APK
-./gradlew :app:assembleDebug
-
-# Preview APK (release build type, preview flag)
-./gradlew :app:assemblePreview
+./gradlew :app:assembleDebug      # debug APK
+./gradlew :app:assemblePreview    # release build type, preview flag
 ```
 
-Generated APKs are written under:
+APKs land under `app/build/outputs/apk/<buildType>/`.
 
-```text
-app/build/outputs/apk/
+## Tests
+
+```bash
+./gradlew :app:testDebugUnitTest    # ~135 JVM tests (Kotlin + BmwResponseCalculator)
+./scripts/run-native-tests.sh       # host-side per-sample C++ tests (cmake + C++17, doctest/ctest)
 ```
 
-## BMW three-bank PEQ
+The native suite links the real `NativeBmwDspProcessor.cpp` on the host — no
+NDK/JNI — and covers the compressor detectors, limiters, mono-bass recombination and
+Kotlin↔C++ schema agreement. Both run in CI on every push/PR. See
+[native-tests/README.md](native-tests/README.md).
 
-See [Three-bank parametric EQ](docs/THREE_BANK_PEQ.md) for signal flow, graph
-editing, undo/redo, copy tools, presets, import/export, limits, migration, and
-troubleshooting.
+Private build and recovery flow: [PRIVATE_BUILD_AND_RECOVERY.md](PRIVATE_BUILD_AND_RECOVERY.md).
 
-Private builds and recovery steps are documented in
-[PRIVATE_BUILD_AND_RECOVERY.md](PRIVATE_BUILD_AND_RECOVERY.md).
+## Upstream & credits
 
-## Upstream
-
-This fork is based on SiphonDSP by Tim Schneeberger:
-
-- Upstream repository: <https://github.com/timschneeb/RootlessJamesDSP>
-- Original rootless implementation: SiphonDSP
-- DSP engine: [JamesDSP / libjamesdsp](https://github.com/james34602/JamesDSPManager) by [James Fung](https://github.com/james34602)
-
-Please report fork-specific issues in this repository. For upstream SiphonDSP behavior, check the upstream project first.
-
-## Credits
-
-- [RootlessJamesDSP](https://github.com/timschneeb/RootlessJamesDSP) for the Android app, rootless routing implementation, UI foundation, and build structure
-- [JamesDSP](https://github.com/james34602/JamesDSPManager) for the DSP engine
-- Tachiyomi for the theming and backup system foundations used upstream
-- RootlessJamesDSP translators and contributors
+Fork of [RootlessJamesDSP](https://github.com/timschneeb/RootlessJamesDSP) by Tim
+Schneeberger — rootless routing, UI foundation, backup and theming scaffolding. DSP
+engine: [JamesDSP / libjamesdsp](https://github.com/james34602/JamesDSPManager) by
+James Fung. Theming and backup foundations from Tachiyomi, via upstream.
 
 ## License
 
-This project follows the upstream license. See [LICENSE](LICENSE).
+GPL-3.0, following upstream. See [LICENSE](LICENSE).
