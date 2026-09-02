@@ -92,8 +92,9 @@ object DspPager {
         else box.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
     }
 
-    private val TOGGLE_ON_GREEN_FILL = Color.argb(0xF0, 0x39, 0xFF, 0x14)
-    private val UNSELECTED_FILL = Color.argb(0x66, 0x10, 0x12, 0x16)
+    // 50% opacity so the photo background reads through the box -- glassier than a near-opaque fill.
+    private val TOGGLE_ON_GREEN_FILL = Color.argb(0x80, 0x39, 0xFF, 0x14)
+    private val UNSELECTED_FILL = Color.argb(0x80, 0x10, 0x12, 0x16)
     private val UNSELECTED_STROKE = Color.argb(0x66, 0x8A, 0x93, 0x9E)
     private val UNSELECTED_TEXT = Color.argb(0xB0, 0x9A, 0xA1, 0xAB)
 
