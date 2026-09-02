@@ -116,7 +116,11 @@ class CrossoverTiltFragment : Fragment() {
         }
 
         val tiltPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_tilt_section), "Spectral tilt around a pivot frequency") {
+            dashboardPanel(
+                getString(R.string.bmw_dsp_tilt_section),
+                "Spectral tilt around a pivot frequency",
+                titleColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
+            ) {
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_tilt_active),
                     null,
@@ -126,11 +130,15 @@ class CrossoverTiltFragment : Fragment() {
                     getString(R.string.bmw_dsp_tilt_amount),
                     NativeBmwDspValues.INDEX_TILT_AMOUNT,
                     -6f, 6f, .1f, "dB",
+                    accentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
                 )
                 addSliderRow(
                     getString(R.string.bmw_dsp_tilt_pivot),
                     NativeBmwDspValues.INDEX_TILT_FREQ,
                     200f, 2000f, 1f, "Hz",
+                    accentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
                 )
             }
         }
