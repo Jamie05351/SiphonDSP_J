@@ -164,7 +164,7 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
             CrashlyticsImpl.setCustomKey("buildType", BuildConfig.BUILD_TYPE)
             CrashlyticsImpl.setCustomKey("buildCommit", BuildConfig.COMMIT_SHA)
-            CrashlyticsImpl.setCustomKey("flavor", BuildConfig.FLAVOR)
+            CrashlyticsImpl.setCustomKey("flavor", "rootlessFull")
             try {
                 CrashlyticsImpl.setCustomKey(
                     "language",

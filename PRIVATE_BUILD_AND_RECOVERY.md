@@ -25,17 +25,17 @@ Requirements:
 Private installable preview:
 
 ```bash
-./gradlew :app:assembleRootlessFullPreview
+./gradlew :app:assemblePreview
 ```
 
 Output:
 
 ```text
-app/build/outputs/apk/rootlessFull/preview/
+app/build/outputs/apk/preview/
 ```
 
 The GitHub pull-request workflow builds the same Preview variant, runs the
-existing `testRootlessFullDebugUnitTest` task, runs Preview lint, verifies the
+existing `testDebugUnitTest` task, runs Preview lint, verifies the
 packaged ARM64 native library, and uploads:
 
 ```text

@@ -25,7 +25,7 @@ This fork is not the upstream Google Play or F-Droid build. Install builds from 
 
 ## Status
 
-This project currently keeps the upstream SiphonDSP package structure and build flavors, while carrying fork-specific UI and theme changes. The default rootless package id is still:
+This project keeps the upstream SiphonDSP package structure but has collapsed the build flavors down to the single rootless configuration that ever shipped, while carrying fork-specific UI and theme changes. The package id is:
 
 ```text
 app.siphondsp
@@ -74,14 +74,11 @@ Requirements:
 Useful build commands:
 
 ```bash
-# Rootless debug APK
-./gradlew :app:assembleRootlessFullDebug
+# Debug APK
+./gradlew :app:assembleDebug
 
-# Rootless F-Droid-style debug APK without Firebase dependencies
-./gradlew :app:assembleRootlessFdroidDebug
-
-# Rooted JamesDSP/Magisk-compatible debug APK
-./gradlew :app:assembleRootFullDebug
+# Preview APK (release build type, preview flag)
+./gradlew :app:assemblePreview
 ```
 
 Generated APKs are written under:
@@ -98,10 +95,6 @@ troubleshooting.
 
 Private builds and recovery steps are documented in
 [PRIVATE_BUILD_AND_RECOVERY.md](PRIVATE_BUILD_AND_RECOVERY.md).
-
-## Using Root
-
-The main focus of this fork is the rootless build. A rooted/Magisk-compatible flavor still exists, but it follows the upstream SiphonDSP behavior and may not receive the same testing. See [BUILD_ROOT.md](BUILD_ROOT.md) for details.
 
 ## Upstream
 

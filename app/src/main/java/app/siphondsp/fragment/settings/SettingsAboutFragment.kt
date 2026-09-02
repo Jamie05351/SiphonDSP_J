@@ -44,7 +44,7 @@ class SettingsAboutFragment : SettingsBaseFragment() {
         else
             "Release"
 
-        buildInfo?.summary = "$type build (${BuildConfig.FLAVOR_dependencies}) @${BuildConfig.COMMIT_SHA} (compiled at ${BuildConfig.BUILD_TIME})"
+        buildInfo?.summary = "$type build (full) @${BuildConfig.COMMIT_SHA} (compiled at ${BuildConfig.BUILD_TIME})"
 
         googlePlay?.isVisible = !isRoot()
         selfCheckUpdates?.isVisible = isRoot()

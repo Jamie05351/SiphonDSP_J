@@ -1,5 +1,5 @@
 object AndroidConfig {
-    var minSdk = 29
+    const val minSdk = 29
 
     const val compileSdk = 37
     const val targetSdk = 36
