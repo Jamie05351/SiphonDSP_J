@@ -101,6 +101,10 @@ inline constexpr int kBusLimMidEnabled = 185;
 inline constexpr int kBusLimMidThreshold = 186;
 inline constexpr int kBusLimMidRelease = 187;
 
+// --- master brick-wall limiter (189/190; 191 is a Kotlin-only migration marker) ------------
+inline constexpr int kMasterLimiterEnabled = 189;
+inline constexpr int kMasterLimiterThreshold = 190;
+
 }  // namespace nbschema
 
 #endif  // SIPHONDSP_NATIVE_BMW_DSP_SCHEMA_H

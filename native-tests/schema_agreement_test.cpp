@@ -241,3 +241,39 @@ TEST_CASE("kBusLimLowEnabled / kBusLimLowThreshold slots") {
     CHECK(grHi > 1.f);
     CHECK(grLo > grHi + 2.f);  // lower threshold -> more reduction
 }
+
+TEST_CASE("kMasterLimiterEnabled / kMasterLimiterThreshold slots") {
+    auto run = [](float enabled, float threshold) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[sch::kHeadroom] = 0.f;
+        c[sch::kTiltEnabled] = 0.f;
+        c[sch::kPostGainL] = c[sch::kPostGainR] = 6.f;  // drive well past any ceiling
+        c[sch::kMasterLimiterEnabled] = enabled;
+        c[sch::kMasterLimiterThreshold] = threshold;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto warm = stereoSine(220.0, 0.9, 48000);
+        proc.process(warm.data(), warm.size());
+        auto win = stereoSine(220.0, 0.9, 32000);
+        proc.process(win.data(), win.size());
+        float m[1] = {};
+        proc.readMasterLimiterMeter(m, 1);
+        struct R {
+            float peak, gr;
+        };
+        return R{peakAbs(win), m[0]};
+    };
+
+    const auto off = run(0.f, -6.f);
+    const auto on6 = run(1.f, -6.f);   // ceiling ~0.501
+    const auto on1 = run(1.f, -1.f);   // ceiling ~0.891
+
+    INFO("bypass peak ", off.peak, " GR ", off.gr, " | on@-6 peak ", on6.peak, " GR ", on6.gr,
+         " | on@-1 peak ", on1.peak, " GR ", on1.gr);
+    CHECK(off.gr == doctest::Approx(0.0f));   // bypassed -> meter idle
+    CHECK(off.peak > 1.0f);                   // bypassed -> nothing holds the level
+    CHECK(on6.gr > 3.f);                      // enabled -> limiting, meter live
+    CHECK(on6.peak < 0.6f);                   // held near the -6 dBFS ceiling
+    CHECK(on1.peak > on6.peak + 0.2f);        // a higher threshold lets more through
+}

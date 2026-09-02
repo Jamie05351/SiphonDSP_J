@@ -80,6 +80,9 @@ public:
     // 2 floats: [lowBusGrDb, midBusGrDb] -- gain reduction of the per-bus brick-wall limiters.
     // 0 for a bus whose limiter is disabled. Lock-free; published by processBusLimiter().
     void readBusLimiterMeter(float* values, std::size_t count) const;
+    // 1 float: gain reduction (dB, >= 0) of the master brick-wall limiter on the summed output.
+    // 0 while the limiter is bypassed. Lock-free; published by processLimiter().
+    void readMasterLimiterMeter(float* values, std::size_t count) const;
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
@@ -114,6 +117,7 @@ private:
         DirtyMonoBassGain =
             1u
             << 15,  // Mono Bass makeup dB -> monoBassMakeupLin_ scalar only, no filter-state clear
+        DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyAll = 0xffffffffu,
     };
 
@@ -275,6 +279,11 @@ private:
         bool busLimLowEnabled = false, busLimMidEnabled = false;
         float busLimLowThreshDb = -3.f, busLimLowReleaseMs = 120.f;
         float busLimMidThreshDb = -3.f, busLimMidReleaseMs = 120.f;
+        // Master brick-wall limiter on the summed output. enabled == false is a true bypass
+        // (processLimiter is not called); the threshold defaults to -1 dBFS, the fixed ceiling
+        // this stage always used before it was made adjustable.
+        bool limiterEnabled = true;
+        float limiterThreshDb = -1.f;
     } p_;
 
     static float dbToLin(float db);
@@ -377,7 +386,13 @@ private:
     bool measBusActive_ = false;
     bool measBusIsHighpass_ = true;
     static constexpr float kLimiterLookaheadMs = 5.f;
-    static constexpr float kLimiterCeilingLin = 0.891251f;
+    static constexpr float kLimiterCeilingLin = 0.891251f;  // -1 dBFS -- the default threshold
+    // Live ceiling = dbToLin(p_.limiterThreshDb), refreshed by rebuildLimiter().
+    float limiterCeilingLin_ = kLimiterCeilingLin;
+    // Published gain reduction (dB, >= 0) of the master limiter, for readMasterLimiterMeter().
+    // Stored every 256 frames from processLimiter(), same discipline as the MBC meter.
+    std::atomic<float> masterLimiterGrDb_{0.f};
+    uint32_t limiterMeterCounter_ = 0;
 
     // Pre-crossover multiband compressor state. mbc_[0] = left chain, mbc_[1] = right chain.
     // mbcCell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band]

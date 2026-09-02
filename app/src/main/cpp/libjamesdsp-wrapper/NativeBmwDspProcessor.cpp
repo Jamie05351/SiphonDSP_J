@@ -179,6 +179,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.busLimMidEnabled = v[185] >= .5f;
     next.busLimMidThreshDb = clampf(v[186], -24, 0);
     next.busLimMidReleaseMs = clampf(v[187], 20, 800);
+    // v[189/190]: master limiter enable + threshold dBFS (v[191] is a Kotlin-only migration
+    // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
+    next.limiterEnabled = v[189] >= .5f;
+    next.limiterThreshDb = clampf(v[190], -12, 0);
 
     NativeBmwRouting::RoutingMatrix nextRouting;
     for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
@@ -348,6 +352,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         changed(next.busLimLowReleaseMs, p_.busLimLowReleaseMs) ||
         changed(next.busLimMidReleaseMs, p_.busLimMidReleaseMs)) {
         dirty |= DirtyBusLimiter;
+    }
+    // Master limiter: enable is checked live in processFrame; only the threshold -> ceiling
+    // scalar needs a (cheap, state-free) recompute.
+    if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
+        dirty |= DirtyLimiter;
     }
 
     p_ = next;
@@ -591,6 +600,8 @@ void NativeBmwDspProcessor::rebuildLimiter() {
     limiter_.attackMix = 1 - std::exp(-1 / (attackSeconds * sampleRate_));
     float releaseSeconds = .080f;
     limiter_.releaseMix = 1 - std::exp(-1 / (releaseSeconds * sampleRate_));
+    limiterCeilingLin_ = dbToLin(clampf(p_.limiterThreshDb, -12.f, 0.f));
+    masterLimiterGrDb_.store(0.f);
 }
 void NativeBmwDspProcessor::rebuildMbc() {
     // LR4 tree crossovers + the all-pass compensators for the lower bands. Splits are forced
@@ -815,6 +826,9 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyBusLimiter) {
         rebuildBusLimiter();
     }
+    if (d & DirtyLimiter) {
+        rebuildLimiter();
+    }
 }
 void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = std::exp(-2 * PI * 10 / sampleRate_);
@@ -836,6 +850,8 @@ void NativeBmwDspProcessor::rebuildAll() {
         out.clearState();
     }
     limiter_.clear();
+    masterLimiterGrDb_.store(0.f);
+    limiterMeterCounter_ = 0;
     resetMbcState();
     busLimLowGain_ = busLimMidGain_ = 1.f;
     busLimLowGrDb_.store(0.f);
@@ -895,12 +911,16 @@ void NativeBmwDspProcessor::processCompressor(float& sample, const CompressorPar
 }
 void NativeBmwDspProcessor::processLimiter(float& l, float& r) {
     float pk = std::max(std::fabs(l), std::fabs(r));
-    float target = pk > kLimiterCeilingLin ? kLimiterCeilingLin / pk : 1.f;
+    float target = pk > limiterCeilingLin_ ? limiterCeilingLin_ / pk : 1.f;
     float mix = target < limiter_.gain ? limiter_.attackMix : limiter_.releaseMix;
     limiter_.gain = std::min(1.f, ftz(limiter_.gain + (target - limiter_.gain) * mix));
     float dl = limiter_.delayL.run(l), dr = limiter_.delayR.run(r);
     l = ftz(dl * limiter_.gain);
     r = ftz(dr * limiter_.gain);
+    if ((++limiterMeterCounter_ & 255u) == 0) {
+        masterLimiterGrDb_.store(-20.f * std::log10(std::max(limiter_.gain, 1e-12f)),
+                                 std::memory_order_relaxed);
+    }
 }
 
 // RMS+peak detector and soft-knee gain computer -- deliberately identical math to
@@ -1203,7 +1223,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         oL = ftz(oL);
         oR = ftz(oR);
     }
-    processLimiter(oL, oR);
+    // Master brick-wall limiter. enabled == false is a true bypass: the stage is skipped
+    // entirely and nothing constrains the summed output level.
+    if (p_.limiterEnabled) {
+        processLimiter(oL, oR);
+    }
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap
@@ -1304,6 +1328,12 @@ void NativeBmwDspProcessor::readBusLimiterMeter(float* v, std::size_t n) const {
     }
     v[0] = p_.busLimLowEnabled ? busLimLowGrDb_.load(std::memory_order_relaxed) : 0.f;
     v[1] = p_.busLimMidEnabled ? busLimMidGrDb_.load(std::memory_order_relaxed) : 0.f;
+}
+void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) const {
+    if (!v || n < 1) {
+        return;
+    }
+    v[0] = p_.limiterEnabled ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
 }
 
 void NativeBmwDspProcessor::startCapture() {

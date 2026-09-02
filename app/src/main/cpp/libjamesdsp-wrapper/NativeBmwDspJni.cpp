@@ -139,6 +139,26 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwBusLimiterMeter(JNIEnv* e
     return result;
 }
 
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv* env, jobject,
+                                                                          jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if (processor == nullptr) {
+        return nullptr;
+    }
+    float values[1];
+    processor->readMasterLimiterMeter(values, 1);
+    jfloatArray result = env->NewFloatArray(1);
+    if (result != nullptr) {
+        env->SetFloatArrayRegion(result, 0, 1, values);
+    }
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
