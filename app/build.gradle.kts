@@ -27,6 +27,8 @@ android {
     }
 
     defaultConfig {
+        applicationId = "app.siphondsp"
+        minSdk = AndroidConfig.minSdk
         targetSdk = AndroidConfig.targetSdk
         versionCode = AndroidConfig.versionCode
         versionName = AndroidConfig.versionName
@@ -40,6 +42,10 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime()}\"")
         buildConfigField("boolean", "PREVIEW", "false")
         buildConfigField("boolean", "PLUGIN", "false")
+        // Formerly the rootless/full flavor pair -- the only combination that ever shipped, now
+        // the sole configuration. isRootless()/isRoot()/isPlugin() still read these constants.
+        buildConfigField("boolean", "ROOTLESS", "true")
+        buildConfigField("boolean", "FOSS_ONLY", "false")
 
         externalNativeBuild {
             cmake {
@@ -88,51 +94,10 @@ android {
         }
     }
 
-    flavorDimensions += "version"
-    flavorDimensions += "dependencies"
-    productFlavors {
-        create("fdroid") {
-            dimension = "dependencies"
-            buildConfigField("boolean", "FOSS_ONLY", "true")
-            android.defaultConfig.externalNativeBuild.cmake.arguments += "-DNO_CRASHLYTICS=1"
-        }
-        create("full") {
-            dimension = "dependencies"
-            buildConfigField("boolean", "FOSS_ONLY", "false")
-        }
-
-        create("rootless") {
-            dimension = "version"
-
-            manifestPlaceholders["label"] = "J_DSP"
-            applicationId = "app.siphondsp"
-            AndroidConfig.minSdk = 29
-            minSdk = AndroidConfig.minSdk
-            buildConfigField("boolean", "ROOTLESS", "true")
-            buildConfigField("boolean", "PLUGIN", "false")
-        }
-        create("root") {
-            dimension = "version"
-
-            manifestPlaceholders["label"] = "J_DSP"
-            project.extensions.configure<BasePluginExtension>("base") {
-                archivesName.set("SiphonDSP-v${AndroidConfig.versionName}-${AndroidConfig.versionCode}")
-            }
-            applicationId = "james.dsp"
-            AndroidConfig.minSdk = 26
-            minSdk = AndroidConfig.minSdk
-            buildConfigField("boolean", "ROOTLESS", "false")
-            buildConfigField("boolean", "PLUGIN", "false")
-        }
-        create("plugin") {
-            dimension = "version"
-
-            AndroidConfig.minSdk = 26
-            minSdk = AndroidConfig.minSdk
-            buildConfigField("boolean", "ROOTLESS", "false")
-            buildConfigField("boolean", "PLUGIN", "true")
-        }
-    }
+    // Product flavors removed: only the rootless x full combination ever shipped. The other
+    // `version` modes (root, plugin) and the FOSS `fdroid` build are gone; their flavor source
+    // sets folded into src/main (RootShellImpl/UpdateManager from rootless, CrashlyticsImpl from
+    // full). See buildConfigField ROOTLESS/FOSS_ONLY/PLUGIN in defaultConfig above.
 
     sourceSets {
         // Use different app icon for non-release builds
@@ -185,13 +150,11 @@ android {
 
 // Hooks to upload native symbols to crashlytics automatically
 afterEvaluate {
-    getTasksByName("bundleRootlessFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootlessFullRelease")
-    getTasksByName("bundleRootFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootFullRelease")
-    getTasksByName("assembleRootlessFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootlessFullRelease")
-    getTasksByName("assembleRootFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootFullRelease")
-
-    getTasksByName("assembleRootlessFullPreview", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootlessFullRelease")
-    getTasksByName("assembleRootFullPreview", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootFullRelease")
+    val uploadRelease = "uploadCrashlyticsSymbolFileRelease"
+    getTasksByName("bundleRelease", false).firstOrNull()?.finalizedBy(uploadRelease)
+    getTasksByName("assembleRelease", false).firstOrNull()?.finalizedBy(uploadRelease)
+    // preview initWith(release) but keeps the release build type name for the symbol upload task.
+    getTasksByName("assemblePreview", false).firstOrNull()?.finalizedBy(uploadRelease)
 }
 
 dependencies {
@@ -224,10 +187,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
 
     // Firebase
-    "fullImplementation"(platform("com.google.firebase:firebase-bom:34.15.0"))
-    "fullImplementation"("com.google.firebase:firebase-analytics")
-    "fullImplementation"("com.google.firebase:firebase-crashlytics")
-    "fullImplementation"("com.google.firebase:firebase-crashlytics-ndk")
+    implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-crashlytics-ndk")
 
     // Web API client
     implementation("com.google.code.gson:gson:2.14.0")
@@ -258,9 +221,6 @@ dependencies {
 
     // Used for backup file access
     implementation("com.github.tachiyomiorg:unifile:17bec43")
-
-    // Root APIs
-    "rootImplementation"("com.github.topjohnwu.libsu:core:6.0.0")
 
     // Hidden APIs
     implementation("dev.rikka.tools.refine:runtime:${AndroidConfig.rikkaRefineVersion}")

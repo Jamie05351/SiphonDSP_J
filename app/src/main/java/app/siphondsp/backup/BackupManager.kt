@@ -68,7 +68,7 @@ class BackupManager(private val context: Context): KoinComponent {
             Tar.Composer(file.openOutputStream().sink().gzip().buffer().outputStream()).use { c ->
                 c.metadata = mutableMapOf(
                     META_MIN_VERSION_CODE to BuildConfig.VERSION_CODE.toString(),
-                    META_FLAVOR to BuildConfig.FLAVOR,
+                    META_FLAVOR to "rootlessFull",
                     META_IS_BACKUP to true.toString(),
                     META_HAS_DEVICE_PROFILES to false.toString()
                 )

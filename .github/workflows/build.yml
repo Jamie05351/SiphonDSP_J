@@ -20,18 +20,12 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.name }} APKs
+    name: Build APKs
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: RootlessFull
-            gradle_variant: RootlessFull
-            output_flavor: rootlessFull
-            branch_build_type: Preview
-            tag_build_type: Release
+    env:
+      BRANCH_BUILD_TYPE: Preview
+      TAG_BUILD_TYPE: Release
 
     steps:
       - name: Checkout
@@ -53,13 +47,13 @@ jobs:
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            BUILD_TYPE="${{ matrix.tag_build_type }}"
+            BUILD_TYPE="${TAG_BUILD_TYPE}"
           else
-            BUILD_TYPE="${{ matrix.branch_build_type }}"
+            BUILD_TYPE="${BRANCH_BUILD_TYPE}"
           fi
           OUTPUT_TYPE="$(echo "$BUILD_TYPE" | tr '[:upper:]' '[:lower:]')"
-          echo "GRADLE_TASK=:app:assemble${{ matrix.gradle_variant }}${BUILD_TYPE}" >> "$GITHUB_ENV"
-          echo "OUTPUT_DIR=app/build/outputs/apk/${{ matrix.output_flavor }}/${OUTPUT_TYPE}" >> "$GITHUB_ENV"
+          echo "GRADLE_TASK=:app:assemble${BUILD_TYPE}" >> "$GITHUB_ENV"
+          echo "OUTPUT_DIR=app/build/outputs/apk/${OUTPUT_TYPE}" >> "$GITHUB_ENV"
           echo "OUTPUT_TYPE=${OUTPUT_TYPE}" >> "$GITHUB_ENV"
 
       - name: Stamp unique CI build version
@@ -134,7 +128,7 @@ jobs:
 
       - name: Run Android unit tests and lint
         if: github.event_name == 'pull_request'
-        run: ./gradlew :app:test${{ matrix.gradle_variant }}DebugUnitTest :app:lint${{ matrix.gradle_variant }}Preview
+        run: ./gradlew :app:testDebugUnitTest :app:lintPreview
 
       - name: Run native DSP unit tests
         shell: bash
@@ -165,7 +159,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ${{ matrix.name }}JamesDSP-${{ env.OUTPUT_TYPE }}-apks
+          name: SiphonDSP-${{ env.OUTPUT_TYPE }}-apks
           path: ${{ env.OUTPUT_DIR }}/*.apk
           if-no-files-found: error
 

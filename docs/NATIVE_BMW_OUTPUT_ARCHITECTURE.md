@@ -80,11 +80,11 @@ state. It never partially applies a bad update.
 
 ## Validation
 
-- `:app:testRootlessFullDebugUnitTest` -- 139 tests, all passing (113 pre-existing + 26 new
+- `:app:testDebugUnitTest` -- 139 tests, all passing (113 pre-existing + 26 new
   covering routing identity/reconstruction/no-crossfeed, all-pass unity magnitude, all-pass
   phase behaviour and centre-frequency crossing, invalid frequency/Q rejection, disabled
   all-pass as identity, and old-save-file routing/all-pass migration).
-- `:app:assembleRootlessFullDebug` -- builds clean, including the native CMake/NDK arm64
+- `:app:assembleDebug` -- builds clean, including the native CMake/NDK arm64
   build.
 - Existing `BmwSignalChainModelTest` suite (pre-existing behavioural regression tests for the
   response model) still passes unmodified in behaviour, only widened to the new 86-value
