@@ -240,7 +240,13 @@ object BmwDashboardSkin {
     const val SLIDER_LOW_BAND_COLOR = 0xFF3D6BFF.toInt()
     const val SLIDER_MID_BAND_COLOR = 0xFFFFE500.toInt()
     const val SLIDER_HEADROOM_COLOR = 0xFFB14DFF.toInt()
+    // Post-sum tonality tilt: a burnt orange, distinct from the Mid band's pure yellow.
+    const val SLIDER_TILT_COLOR = 0xFFCC5A1E.toInt()
     const val SLIDER_DEFAULT_COLOR = 0xFF12CFFF.toInt()
+
+    // The exact neon green the ON/OFF glass switch lights up with -- reused by the page-toggle
+    // strip so a selected page reads as "on" in the same language.
+    const val TOGGLE_ON_GREEN = 0xFF39FF14.toInt()
 
     // Master art (viewport / 4): 18dp housing, 8.5dp inset groove, 6.5dp active fill. The active
     // fill is now slimmer than the groove it rides in, so the groove reads as a real channel the

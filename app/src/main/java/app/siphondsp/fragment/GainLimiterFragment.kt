@@ -158,7 +158,8 @@ class GainLimiterFragment : Fragment() {
             dashboardPanel("Output", null) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_DEFAULT_COLOR,
+                    accentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
                 )
                 addSliderRow(
                     "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f, 6f, .5f, "dB",
