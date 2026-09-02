@@ -44,24 +44,23 @@ enum class DspDestination(
 object DspCrossNavBar {
     // The whole sidebar -- the rounded panel frame plus its 5 inlaid tiles, each tile's own icon,
     // and which single tile reads as "selected" (a cyan glow border, icon recolored to match) --
-    // is baked into one of 5 source images (drawable-nodpi/sidebar_bar_*.png), picked by
-    // [current]. populate() draws no icon/label of its own; it only lays an invisible
+    // is baked into one of 5 source images (drawable-{m,h,xh,xxh,xxxh}dpi/sidebar_bar_*.png),
+    // picked by [current]. populate() draws no icon/label of its own; it only lays an invisible
     // click-target/focus-ring row over each tile's measured bounds.
     //
-    // Rendered (librsvg) from the jdsp_*_selected SVG sources -- viewBox cropped tight to the
-    // panel frame, rasterised onto a 789x3520 canvas with no transparent margin (789 is exactly
-    // the panel's own aspect at 3520 tall), so the panel fills the art edge to edge and the
-    // ratio-locked column has no slack. Byte-identical tile positions across all 5. Shown
-    // FIT_CENTER (aspect preserved, never stretched to the column). [rowWeights] are the 11
-    // relative bands measured off that canvas -- top margin, tile1, gap1, tile2, gap2, tile3,
-    // gap3, tile4, gap4, tile5, bottom margin -- applied to the art's *displayed* height
-    // (post-FIT_CENTER), not the column height, so the click targets track the tiles regardless
-    // of the column's size.
+    // Art is the sidebar_icons_full_package655 export -- one whole-bar PNG per selected destination
+    // (all 5 tiles + panel baked in, one tile lit cyan), cropped tight to the panel frame so it
+    // fills the art edge to edge. Byte-identical tile positions across all 5. Shown FIT_CENTER
+    // (aspect preserved, never stretched to the column). [rowWeights] are the 11 relative bands --
+    // top margin, tile1, gap1, tile2, gap2, tile3, gap3, tile4, gap4, tile5, bottom margin --
+    // applied to the art's *displayed* height (post-FIT_CENTER), not the column height, so the
+    // click targets track the tiles regardless of the column's size.
     private class BarArt(@DrawableRes val res: Int, val rowWeights: IntArray)
 
-    // Derived from the SVG panel geometry at the 3520px render height (S = 3520/1293.927):
-    // tile faces 582px, inter-tile gaps 76/84/87/87px, top margin 128px, bottom margin 148px.
-    private val ROW_WEIGHTS = intArrayOf(128, 582, 76, 582, 84, 582, 87, 582, 87, 582, 148)
+    // Measured off the package655 SVG geometry: panel y 90..1650, five 300x230 tiles (rx 34) with
+    // tops at 165/450/735/1020/1305 -- so tile boxes are 230 tall, inter-tile gaps 55. The art is
+    // cropped to the panel, leaving a 76 top margin (panel top -> tile1) and 116 bottom margin.
+    private val ROW_WEIGHTS = intArrayOf(76, 230, 55, 230, 55, 230, 55, 230, 55, 230, 116)
 
     private fun barArt(current: DspDestination): BarArt = when (current) {
         DspDestination.PARAMETRIC_EQ -> BarArt(R.drawable.sidebar_bar_peq, ROW_WEIGHTS)

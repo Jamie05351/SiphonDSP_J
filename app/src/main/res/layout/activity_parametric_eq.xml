@@ -37,10 +37,10 @@
              Back navigation and the power toggle stay in the toolbar itself. -->
         <!-- Flush against all three edges (top, bottom, left) of the content area, so the panel
              reads as a structural fixture built into the workspace.
-             Width is not a fixed dp. The bar art (drawable-nodpi/sidebar_bar_*.png) is a 789x3520
-             canvas cropped tight to the panel frame (no transparent margin), shown FIT_CENTER. In
+             Width is not a fixed dp. The bar art (drawable-*/sidebar_bar_*.png) is cropped tight
+             to the panel frame (no transparent margin; ~714x3258 at xxxhdpi), shown FIT_CENTER. In
              landscape it is always height-constrained, so its rendered width is exactly
-             (column height * 789 / 3520). Pinning the column to that same ratio makes it exactly
+             (column height * 714 / 3258). Pinning the column to that same ratio makes it exactly
              as wide as the panel with no slack on either side: the panel sits hard against the
              screen edge and the divider plus content pane butt straight up against it. No
              marginStart, no padding, no constraintWidth_max; the head unit is the only target
@@ -50,7 +50,7 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:orientation="vertical"
-            app:layout_constraintDimensionRatio="203:834"
+            app:layout_constraintDimensionRatio="714:3258"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent">
