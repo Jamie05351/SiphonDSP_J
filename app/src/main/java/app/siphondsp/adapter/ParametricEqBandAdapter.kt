@@ -220,19 +220,23 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.gain.text = gainText
         holder.qFactor.text = qText
 
-        // The row you're working on is filled solid with the per-scope accent (see
+        // The row you're working on is filled with the per-scope accent at 50% opacity (see
         // ParametricEqualizerFragment: any cell tap or -/+ step selects that band). The thin
         // left outline is superseded by the fill, so it stays hidden.
         val isSelected = band.uuid == selectedUuid
         holder.selectionOutline.visibility = View.INVISIBLE
-        val fill = accent ?: BmwDashboardSkin.LIGHT_BLUE
+        val accentFill = accent ?: BmwDashboardSkin.LIGHT_BLUE
+        val fill = ColorUtils.setAlphaComponent(accentFill, 0x80)
         if (isSelected) holder.itemView.setBackgroundColor(fill) else holder.itemView.background = null
 
-        val valueColor = if (isSelected) contrastOn(fill) else (accent ?: BmwDashboardSkin.LIGHT_BLUE)
+        // Contrast is judged against the fill composited over the near-black list background,
+        // not the raw accent, since at 50% both blue and yellow darken considerably.
+        val onFill = contrastOn(ColorUtils.compositeColors(fill, Color.BLACK))
+        val valueColor = if (isSelected) onFill else accentFill
         listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach {
             it.setTextColor(valueColor)
         }
-        holder.index.setTextColor(if (isSelected) contrastOn(fill) else INDEX_COLOR)
+        holder.index.setTextColor(if (isSelected) onFill else INDEX_COLOR)
         // -/+ steppers track the value colour so they stay legible on the solid highlight fill.
         val stepperTint = ColorStateList.valueOf(valueColor)
         listOf(
