@@ -81,8 +81,8 @@ class ParametricEqualizerFragment : Fragment() {
     private val peqValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US))
 
     private fun refreshActionChips() {
-        binding.chipUndo?.isEnabled = history.canUndo
-        binding.chipRedo?.isEnabled = history.canRedo
+        binding.chipUndo.isEnabled = history.canUndo
+        binding.chipRedo.isEnabled = history.canRedo
     }
 
     // One or more REW/APO ".txt" exports. A single file whose name isn't recognised falls back
@@ -515,7 +515,7 @@ class ParametricEqualizerFragment : Fragment() {
         configureGraph()
         configureActionChips()
         loadBands(savedInstanceState)
-        binding.peqScopeGroup?.setOnCheckedStateChangeListener { _, checkedIds ->
+        binding.peqScopeGroup.setOnCheckedStateChangeListener { _, checkedIds ->
             val next = when (checkedIds.firstOrNull()) {
                 R.id.peq_scope_low -> PeqScope.LOW
                 R.id.peq_scope_mid -> PeqScope.MID
@@ -795,19 +795,19 @@ class ParametricEqualizerFragment : Fragment() {
      *  Full/Low/Mid scope chips) in place of the toolbar's 3-dot overflow menu -- same
      *  underlying functions as before, just triggered from chips instead of menu items. */
     private fun configureActionChips() {
-        binding.chipUndo?.setOnClickListener { performUndo() }
-        binding.chipRedo?.setOnClickListener { performRedo() }
-        binding.chipReset?.setOnClickListener { performReset() }
-        binding.chipEditString?.setOnClickListener { performEditAsString() }
-        binding.chipImportFile?.setOnClickListener { performImport() }
-        binding.chipExportFile?.setOnClickListener { performExport() }
-        binding.chipPresetImport?.setOnClickListener { performPresetImport() }
-        binding.chipPresetExport?.setOnClickListener { performPresetExport() }
-        binding.chipBackupImport?.setOnClickListener { performBackupImport() }
-        binding.chipBackupExport?.setOnClickListener { performBackupExport() }
-        binding.chipFilterTools?.setOnClickListener { showFilterTools(it) }
-        binding.chipDiagnostics?.setOnClickListener { showDiagnosticReport() }
-        binding.chipGraphOptions?.setOnClickListener { showGraphOptionsPopup(it) }
+        binding.chipUndo.setOnClickListener { performUndo() }
+        binding.chipRedo.setOnClickListener { performRedo() }
+        binding.chipReset.setOnClickListener { performReset() }
+        binding.chipEditString.setOnClickListener { performEditAsString() }
+        binding.chipImportFile.setOnClickListener { performImport() }
+        binding.chipExportFile.setOnClickListener { performExport() }
+        binding.chipPresetImport.setOnClickListener { performPresetImport() }
+        binding.chipPresetExport.setOnClickListener { performPresetExport() }
+        binding.chipBackupImport.setOnClickListener { performBackupImport() }
+        binding.chipBackupExport.setOnClickListener { performBackupExport() }
+        binding.chipFilterTools.setOnClickListener { showFilterTools(it) }
+        binding.chipDiagnostics.setOnClickListener { showDiagnosticReport() }
+        binding.chipGraphOptions.setOnClickListener { showGraphOptionsPopup(it) }
         refreshActionChips()
     }
 
