@@ -1,14 +1,17 @@
 package app.siphondsp.adapter
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import androidx.databinding.ObservableArrayList
 import androidx.databinding.ObservableList
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import app.siphondsp.R
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
@@ -134,21 +137,21 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         val type: TextView = view.findViewById(R.id.type)
         val channel: TextView = view.findViewById(R.id.channel)
         val freq: TextView = view.findViewById(R.id.freq)
-        val freqMinus: View = view.findViewById(R.id.freq_minus)
-        val freqPlus: View = view.findViewById(R.id.freq_plus)
+        val freqMinus: MaterialButton = view.findViewById(R.id.freq_minus)
+        val freqPlus: MaterialButton = view.findViewById(R.id.freq_plus)
         val gain: TextView = view.findViewById(R.id.gain)
-        val gainMinus: View = view.findViewById(R.id.gain_minus)
-        val gainPlus: View = view.findViewById(R.id.gain_plus)
+        val gainMinus: MaterialButton = view.findViewById(R.id.gain_minus)
+        val gainPlus: MaterialButton = view.findViewById(R.id.gain_plus)
         val qFactor: TextView = view.findViewById(R.id.q_factor)
-        val qMinus: View = view.findViewById(R.id.q_minus)
-        val qPlus: View = view.findViewById(R.id.q_plus)
-        val deleteButton: Button = view.findViewById(R.id.delete)
+        val qMinus: MaterialButton = view.findViewById(R.id.q_minus)
+        val qPlus: MaterialButton = view.findViewById(R.id.q_plus)
+        val deleteButton: MaterialButton = view.findViewById(R.id.delete)
         val selectionOutline: View = view.findViewById(R.id.selection_outline)
     }
 
     class AddRowViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val root: View = view.findViewById(R.id.add_row_root)
-        val label: TextView = view.findViewById(R.id.add_row_label)
+        val button: MaterialButton = view.findViewById(R.id.add_row_button)
     }
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
@@ -182,9 +185,14 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         if (holder is AddRowViewHolder) {
-            val boxDrawable = BmwDashboardSkin.glassBoxDrawable(holder.itemView.context, accentColor = accentColor)
-            holder.label.background = boxDrawable
-            holder.label.setTextColor(accentColor ?: BmwDashboardSkin.LIGHT_BLUE)
+            // Same solid-accent template as a selected band row: filled with the per-scope accent
+            // (neutral blue when the scope has none), foreground colour picked for contrast.
+            val fill = accentColor ?: BmwDashboardSkin.LIGHT_BLUE
+            val fg = contrastOn(fill)
+            holder.button.backgroundTintList = ColorStateList.valueOf(fill)
+            holder.button.setTextColor(fg)
+            holder.button.iconTint = ColorStateList.valueOf(fg)
+            holder.button.setOnClickListener { onAddClicked?.invoke() }
             holder.root.setOnClickListener { onAddClicked?.invoke() }
             return
         }
@@ -211,12 +219,28 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.freq.text = freqText
         holder.gain.text = gainText
         holder.qFactor.text = qText
-        holder.selectionOutline.visibility = if (band.uuid == selectedUuid) View.VISIBLE else View.INVISIBLE
 
-        val valueColor = accent ?: BmwDashboardSkin.LIGHT_BLUE
+        // The row you're working on is filled solid with the per-scope accent (see
+        // ParametricEqualizerFragment: any cell tap or -/+ step selects that band). The thin
+        // left outline is superseded by the fill, so it stays hidden.
+        val isSelected = band.uuid == selectedUuid
+        holder.selectionOutline.visibility = View.INVISIBLE
+        val fill = accent ?: BmwDashboardSkin.LIGHT_BLUE
+        if (isSelected) holder.itemView.setBackgroundColor(fill) else holder.itemView.background = null
+
+        val valueColor = if (isSelected) contrastOn(fill) else (accent ?: BmwDashboardSkin.LIGHT_BLUE)
         listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach {
             it.setTextColor(valueColor)
         }
+        holder.index.setTextColor(if (isSelected) contrastOn(fill) else INDEX_COLOR)
+        // -/+ steppers track the value colour so they stay legible on the solid highlight fill.
+        val stepperTint = ColorStateList.valueOf(valueColor)
+        listOf(
+            holder.freqMinus, holder.freqPlus, holder.gainMinus,
+            holder.gainPlus, holder.qMinus, holder.qPlus,
+        ).forEach { it.iconTint = stepperTint }
+        // Delete stays red on its own; the icon-button style keeps no background of its own.
+        holder.deleteButton.iconTint = ColorStateList.valueOf(BmwDashboardSkin.M_RED)
 
         holder.deleteButton.setOnClickListener {
             holder.bindingAdapterPosition.takeIf { it >= 0 && it < bands.size }?.let { pos ->
@@ -257,6 +281,13 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     companion object {
         private const val VIEW_TYPE_BAND = 0
         private const val VIEW_TYPE_ADD = 1
+
+        /** Neutral grey for the "#" index column, matching the header's textColorSecondary. */
+        private val INDEX_COLOR = Color.rgb(0x9A, 0xA1, 0xAB)
+
+        /** Black or white -- whichever reads better on top of [fill] (a solid accent). */
+        private fun contrastOn(fill: Int): Int =
+            if (ColorUtils.calculateLuminance(fill) > 0.5) Color.rgb(0x0A, 0x0B, 0x0E) else Color.WHITE
 
         /** One inline Hz stepper tap = 1/24 octave, applied as a multiplier so the perceived
          *  interval is the same whether the band sits at 40 Hz or 4 kHz. */

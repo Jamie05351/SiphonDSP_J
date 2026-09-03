@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Trailing row shown only while the current scope has fewer than
      BmwPeqState.MAX_BANDS filters (see ParametricEqBandAdapter.getItemCount/getItemViewType).
-     Tapping it adds a new default band and this row shifts down to sit after it; once the
-     scope hits the cap, the adapter simply stops emitting this item and the list ends on the
-     last real band row. -->
+     Tapping the button adds a new default band and this row shifts down to sit after it; once
+     the scope hits the cap, the adapter simply stops emitting this item and the list ends on
+     the last real band row.
+     The leading spacers (3dp + 8dp margin, then 22dp) mirror item_peq_band_list.xml's selection
+     bar + index column, and the button carries weight 5.0 (CH 2.0 + FILTER 3.0) so it sits
+     directly under those two columns; the trailing weight-13.2 filler + 44dp Space cover the
+     Hz/dB/Q cells and the delete button. The button's solid fill + white text are applied in
+     ParametricEqBandAdapter.onBindViewHolder (colour is the per-scope accent). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/add_row_root"
@@ -12,26 +17,48 @@
     android:minHeight="?android:attr/listPreferredItemHeightSmall"
     android:paddingStart="?android:attr/listPreferredItemPaddingStart"
     android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp"
-    android:gravity="center_vertical"
-    android:clickable="true"
-    android:focusable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
+    android:baselineAligned="false"
+    android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/add_row_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:minHeight="30dp"
-        android:gravity="center"
-        android:paddingTop="3dp"
-        android:paddingBottom="3dp"
-        android:textSize="16sp"
+    <View
+        android:layout_width="3dp"
+        android:layout_height="1dp"
+        android:layout_marginEnd="8dp" />
+
+    <Space
+        android:layout_width="22dp"
+        android:layout_height="1dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/add_row_button"
+        style="?attr/materialButtonStyle"
+        android:layout_width="0dp"
+        android:layout_weight="5.0"
+        android:layout_height="36dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingHorizontal="8dp"
+        android:textSize="13sp"
         android:textStyle="bold"
-        android:drawablePadding="8dp"
-        app:drawableStartCompat="@drawable/ic_baseline_add_24dp"
+        android:textAllCaps="false"
+        android:letterSpacing="0"
+        app:iconSize="18dp"
+        app:iconGravity="textStart"
+        app:iconPadding="4dp"
+        app:icon="@drawable/ic_baseline_add_24dp"
         android:text="@string/peq_add_filter_row" />
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_weight="13.2"
+        android:layout_height="1dp" />
+
+    <Space
+        android:layout_width="44dp"
+        android:layout_height="1dp" />
 
 </LinearLayout>

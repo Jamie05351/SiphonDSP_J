@@ -618,8 +618,14 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    private fun bindScope() {
+    private fun bindScope(preserveScroll: Boolean = false) {
         val bands = bandsForScope()
+        // A per-cell -/+ edit funnels through applyCandidate -> bindScope, which swaps in a fresh
+        // adapter; without this the RecyclerView snaps back to the top (or jumps to the focused
+        // stepper's row) on every tap. Capture the layout manager's scroll anchor before the swap
+        // and restore it after, and skip the scroll-to-selected below.
+        val layoutManager = binding.bandList.layoutManager as? LinearLayoutManager
+        val savedScroll = if (preserveScroll) layoutManager?.onSaveInstanceState() else null
         val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
         binding.equalizerSurface.setSystemState(
             nativeDspValues,
@@ -672,8 +678,12 @@ class ParametricEqualizerFragment : Fragment() {
             }
             onAddClicked = { performAdd() }
         }
-        selectedBandByScope[selectedScope]?.let { uuid ->
-            bands.indexOfFirst { it.uuid == uuid }.takeIf { it >= 0 }?.let(binding.bandList::scrollToPosition)
+        if (savedScroll != null) {
+            layoutManager?.onRestoreInstanceState(savedScroll)
+        } else {
+            selectedBandByScope[selectedScope]?.let { uuid ->
+                bands.indexOfFirst { it.uuid == uuid }.takeIf { it >= 0 }?.let(binding.bandList::scrollToPosition)
+            }
         }
         updateViewState()
     }
@@ -868,9 +878,11 @@ class ParametricEqualizerFragment : Fragment() {
         if (index !in list.indices) return
         val updated = transform(list[index])
         list[index] = updated
-        if (applyCandidate(candidate, source)) {
-            selectedBandByScope[selectedScope] = updated.uuid
-        }
+        // Select this band before the commit so bindScope() paints its solid-fill highlight on
+        // the row being stepped; the UUID is carried through the transform so it stays valid even
+        // if applyCandidate rejects the edit.
+        selectedBandByScope[selectedScope] = updated.uuid
+        applyCandidate(candidate, source, preserveScroll = true)
     }
 
     /** Per-scope cell accent, matching BmwDashboardSkin's app-wide Low=blue / Mid=yellow
@@ -1288,6 +1300,7 @@ class ParametricEqualizerFragment : Fragment() {
         rawCandidate: BmwPeqState,
         source: String,
         recordHistory: Boolean = true,
+        preserveScroll: Boolean = false,
     ): Boolean {
         // PEQ has no enable/disable control anymore -- it's always live -- so every candidate
         // funnelled through here (band edits, preset import, backup restore, etc.) is coerced on
@@ -1332,7 +1345,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
         peqState = candidate
         if (recordHistory) history.commit(candidate)
-        bindScope()
+        bindScope(preserveScroll)
         requireContext().sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         updateHistoryControls()
         return true
