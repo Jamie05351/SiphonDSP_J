@@ -6,12 +6,11 @@ import kotlin.math.ln
 object PeqGraphMath {
     const val MIN_FREQUENCY = 20.0
     const val MAX_FREQUENCY = 20_000.0
-    // Asymmetric on purpose: real-world tunes routinely run 8-10 dB of negative headroom, so the
-    // useful action is well below 0 dB. A -24..+6 window keeps those curves off the floor while
-    // still showing the occasional boost, instead of the old symmetric +-18 that wasted its top
-    // half and clipped everything interesting against the bottom edge.
-    const val MIN_GAIN = -24.0
-    const val MAX_GAIN = 6.0
+    // Asymmetric on purpose: real-world tunes lean on cut more than boost, so the window still
+    // runs a little deeper below 0 dB than above it. A -18..+12 span keeps the cut curves off the
+    // floor while leaving enough room up top for boosted shelves and the tilt's high side.
+    const val MIN_GAIN = -18.0
+    const val MAX_GAIN = 12.0
 
     fun frequencyToFraction(
         frequency: Double,

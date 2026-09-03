@@ -13,14 +13,14 @@ class PeqGraphMathTest {
     }
 
     @Test
-    fun gainAxisIsAsymmetricMinus24ToPlus6() {
-        assertEquals(-24.0, PeqGraphMath.MIN_GAIN, 0.0)
-        assertEquals(6.0, PeqGraphMath.MAX_GAIN, 0.0)
+    fun gainAxisIsAsymmetricMinus18ToPlus12() {
+        assertEquals(-18.0, PeqGraphMath.MIN_GAIN, 0.0)
+        assertEquals(12.0, PeqGraphMath.MAX_GAIN, 0.0)
         // Fraction 0 = top of plot = MAX_GAIN, fraction 1 = bottom = MIN_GAIN.
-        assertEquals(6.0, PeqGraphMath.fractionToGain(0f), 1e-9)
-        assertEquals(-24.0, PeqGraphMath.fractionToGain(1f), 1e-9)
-        assertEquals(0f, PeqGraphMath.gainToFraction(6.0), 1e-6f)
-        assertEquals(1f, PeqGraphMath.gainToFraction(-24.0), 1e-6f)
+        assertEquals(12.0, PeqGraphMath.fractionToGain(0f), 1e-9)
+        assertEquals(-18.0, PeqGraphMath.fractionToGain(1f), 1e-9)
+        assertEquals(0f, PeqGraphMath.gainToFraction(12.0), 1e-6f)
+        assertEquals(1f, PeqGraphMath.gainToFraction(-18.0), 1e-6f)
     }
 
     @Test
