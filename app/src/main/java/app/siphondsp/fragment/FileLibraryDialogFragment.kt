@@ -173,7 +173,7 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
             if (result.resultCode != Activity.RESULT_OK)
                 return@registerForActivityResult
 
-            result?.data?.data?.let { uri ->
+            result.data?.data?.let { uri ->
                 val correctType = fileLibPreference.hasCorrectExtension(
                     StorageUtils.queryName(
                         requireContext(),

@@ -73,7 +73,7 @@ class DumpManager constructor(val context: Context): KoinComponent {
                 {
                     dump = it.value.dump(context)
                 }
-                if(dump != null && dump!!.sessions.isNotEmpty())
+                if(dump != null && dump.sessions.isNotEmpty())
                 {
                     return dump
                 }
