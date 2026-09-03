@@ -33,7 +33,7 @@
         android:layout_width="22dp"
         android:layout_height="wrap_content"
         android:gravity="end"
-        android:textSize="18sp"
+        android:textSize="15sp"
         android:textColor="?android:attr/textColorSecondary" />
 
     <TextView
@@ -47,7 +47,7 @@
         android:focusable="true"
         android:background="?attr/selectableItemBackground"
         android:paddingHorizontal="6dp"
-        android:textSize="18sp"
+        android:textSize="15sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_channel" />
 
@@ -64,7 +64,7 @@
         android:focusable="true"
         android:background="?attr/selectableItemBackground"
         android:paddingHorizontal="6dp"
-        android:textSize="18sp"
+        android:textSize="15sp"
         android:textStyle="bold"
         android:contentDescription="@string/peq_filter_type" />
 
@@ -74,37 +74,6 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/freq_minus"
-            style="?attr/materialIconButtonStyle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="44dp"
-            android:minHeight="44dp"
-            android:padding="0dp"
-            app:iconSize="26dp"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp"
-            app:icon="@drawable/ic_twotone_remove_24dp"
-            android:contentDescription="@string/peq_frequency_decrease" />
-
-        <TextView
-            android:id="@+id/freq"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="52dp"
-            android:minHeight="40dp"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="6dp"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:contentDescription="@string/peq_frequency" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/freq_plus"
@@ -121,17 +90,24 @@
             app:iconPadding="0dp"
             app:icon="@drawable/ic_baseline_add_24dp"
             android:contentDescription="@string/peq_frequency_increase" />
-    </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_weight="4.4"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
+        <TextView
+            android:id="@+id/freq"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="52dp"
+            android:minHeight="40dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="6dp"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:contentDescription="@string/peq_frequency" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/gain_minus"
+            android:id="@+id/freq_minus"
             style="?attr/materialIconButtonStyle"
             android:layout_width="44dp"
             android:layout_height="44dp"
@@ -144,22 +120,15 @@
             app:iconGravity="textStart"
             app:iconPadding="0dp"
             app:icon="@drawable/ic_twotone_remove_24dp"
-            android:contentDescription="@string/peq_gain_decrease" />
+            android:contentDescription="@string/peq_frequency_decrease" />
+    </LinearLayout>
 
-        <TextView
-            android:id="@+id/gain"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="52dp"
-            android:minHeight="40dp"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="6dp"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:contentDescription="@string/peq_gain" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_weight="4.4"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/gain_plus"
@@ -176,17 +145,24 @@
             app:iconPadding="0dp"
             app:icon="@drawable/ic_baseline_add_24dp"
             android:contentDescription="@string/peq_gain_increase" />
-    </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_weight="4.4"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center">
+        <TextView
+            android:id="@+id/gain"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="52dp"
+            android:minHeight="40dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="6dp"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:contentDescription="@string/peq_gain" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/q_minus"
+            android:id="@+id/gain_minus"
             style="?attr/materialIconButtonStyle"
             android:layout_width="44dp"
             android:layout_height="44dp"
@@ -199,22 +175,15 @@
             app:iconGravity="textStart"
             app:iconPadding="0dp"
             app:icon="@drawable/ic_twotone_remove_24dp"
-            android:contentDescription="@string/peq_q_decrease" />
+            android:contentDescription="@string/peq_gain_decrease" />
+    </LinearLayout>
 
-        <TextView
-            android:id="@+id/q_factor"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="52dp"
-            android:minHeight="40dp"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="6dp"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:contentDescription="@string/peq_q_factor" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_weight="4.4"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/q_plus"
@@ -231,6 +200,37 @@
             app:iconPadding="0dp"
             app:icon="@drawable/ic_baseline_add_24dp"
             android:contentDescription="@string/peq_q_increase" />
+
+        <TextView
+            android:id="@+id/q_factor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="52dp"
+            android:minHeight="40dp"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="6dp"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:contentDescription="@string/peq_q_factor" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/q_minus"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="44dp"
+            android:minHeight="44dp"
+            android:padding="0dp"
+            app:iconSize="26dp"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:icon="@drawable/ic_twotone_remove_24dp"
+            android:contentDescription="@string/peq_q_decrease" />
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
