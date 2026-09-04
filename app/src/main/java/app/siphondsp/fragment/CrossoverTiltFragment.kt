@@ -122,11 +122,9 @@ class CrossoverTiltFragment : Fragment() {
         }
 
         val tiltPage = page {
-            dashboardPanel(
-                getString(R.string.bmw_dsp_tilt_section),
-                "Spectral tilt around a pivot frequency",
-                titleColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
-            ) {
+            // Plain white title, no subtitle -- matches the Crossovers page's own header format
+            // (see "Subsonic Protection"/"Crossovers") rather than the old tint-and-blurb style.
+            dashboardPanel(getString(R.string.bmw_dsp_tilt_section), null) {
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_tilt_active),
                     null,
@@ -150,9 +148,10 @@ class CrossoverTiltFragment : Fragment() {
         }
 
         val monoBassPage = page {
-            dashboardPanel(getString(R.string.bmw_dsp_mono_bass), "Sum low frequencies to mono below a crossover") {
+            // No subtitle -- matches the Crossovers/Tilt pages' own header format.
+            dashboardPanel(getString(R.string.bmw_dsp_mono_bass), null) {
                 addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_mono_bass),
+                    getString(R.string.bmw_dsp_mono_bass_active),
                     null,
                     NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
                 )

@@ -228,8 +228,8 @@ object BmwDashboardSkin {
     const val SLIDER_LOW_BAND_COLOR = 0xFF3D6BFF.toInt()
     const val SLIDER_MID_BAND_COLOR = 0xFFFFE500.toInt()
     const val SLIDER_HEADROOM_COLOR = 0xFFB14DFF.toInt()
-    // Post-sum tonality tilt: a burnt orange, distinct from the Mid band's pure yellow.
-    const val SLIDER_TILT_COLOR = 0xFFCC5A1E.toInt()
+    // Tonality Tilt: a bright neon orange, distinct from the Mid band's pure yellow.
+    const val SLIDER_TILT_COLOR = 0xFFFF6A00.toInt()
     const val SLIDER_DEFAULT_COLOR = 0xFF12CFFF.toInt()
 
     // The exact neon green the ON/OFF glass switch lights up with -- reused by the page-toggle
