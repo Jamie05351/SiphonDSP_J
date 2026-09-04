@@ -4,21 +4,9 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.BitmapShader
-import android.graphics.BlurMaskFilter
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.LinearGradient
-import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.RadialGradient
-import android.graphics.Rect
-import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.Drawable.ConstantState
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -71,7 +59,7 @@ object BmwDashboardSkin {
     // sidebar's unselected vs. selected tile fills, so the selected tile's darker backing makes it
     // visibly "pop" against the lighter unselected ones instead of both reading the same shade.
     private const val UNSELECTED_TILE_BRIGHTNESS = 1.7f
-    private const val SELECTED_TILE_BRIGHTNESS = 0.55f
+    internal const val SELECTED_TILE_BRIGHTNESS = 0.55f
 
     fun brushedPanelDrawable(context: Context): Drawable = PhotoBrushedMetalDrawable(context)
 
@@ -93,7 +81,7 @@ object BmwDashboardSkin {
     // blurred a small patch into a flat, washed-out smear -- confirmed on-device (not visible on a
     // lower-res emulator render). Using nearly the whole photo needs much less magnification to
     // cover the same bounds, so the grain stays sharp.
-    private fun loadPlainMetalBitmap(context: Context): Bitmap {
+    internal fun loadPlainMetalBitmap(context: Context): Bitmap {
         plainMetalBitmap?.let { return it }
         synchronized(this) {
             plainMetalBitmap?.let { return it }
@@ -108,7 +96,7 @@ object BmwDashboardSkin {
     // The DSP workspace full-screen background: a dedicated asset (distinct from
     // bmw_workspace_texture, which stays reserved for the sidebar tiles) so this can be swapped
     // without affecting tile rendering -- decoded once and reused across every workspace Activity.
-    private fun loadWorkspaceBackgroundBitmap(context: Context): Bitmap {
+    internal fun loadWorkspaceBackgroundBitmap(context: Context): Bitmap {
         workspaceBackgroundBitmap?.let { return it }
         synchronized(this) {
             workspaceBackgroundBitmap?.let { return it }
@@ -170,7 +158,7 @@ object BmwDashboardSkin {
     const val SLIDER_VALUE_MIN_WIDTH_DP = 64
     // Still referenced by SliderCapsuleDrawable below (the slider track's own capsule fill),
     // independent of the value/title box family.
-    private val SLIDER_BOX_BACKGROUND_COLOR = Color.rgb(0x10, 0x13, 0x18)
+    internal val SLIDER_BOX_BACKGROUND_COLOR = Color.rgb(0x10, 0x13, 0x18)
 
     // "Glass box" value/title box background: recreates the user-supplied sidebar glass-panel
     // artwork (glass_panel_1536x768.xml) at 40% overall opacity, so every value/title box across
@@ -182,18 +170,18 @@ object BmwDashboardSkin {
     // small and this varied in aspect ratio would squash the rounded corners exactly like the
     // sidebar bar-art squish bug this app already hit once. Drawing with a RectF keeps the corner
     // radius correct at any size.
-    private const val GLASS_BOX_CORNER_RADIUS_DP = 5f
-    private const val GLASS_BOX_STROKE_WIDTH_DP = 1.25f
-    private val GLASS_FILL_TOP = Color.argb(0x66, 0x11, 0x13, 0x16)
-    private val GLASS_FILL_MID = Color.argb(0x66, 0x08, 0x0A, 0x0C)
-    private val GLASS_FILL_BOTTOM = Color.argb(0x66, 0x02, 0x02, 0x03)
-    private val GLASS_RIM_TOP = Color.argb(0x56, 0xD4, 0xD6, 0xD8)
-    private val GLASS_RIM_MID = Color.argb(0x3B, 0x34, 0x38, 0x3D)
-    private val GLASS_RIM_BOTTOM = Color.argb(0x4B, 0xD9, 0xDB, 0xDD)
-    private val GLASS_SHEEN_NEAR = Color.argb(0x2C, 0xFF, 0xFF, 0xFF)
-    private val GLASS_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
-    private val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x39, 0xFF, 0xFF, 0xFF)
-    private val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x2E, 0xDE, 0xDE, 0xDE)
+    internal const val GLASS_BOX_CORNER_RADIUS_DP = 5f
+    internal const val GLASS_BOX_STROKE_WIDTH_DP = 1.25f
+    internal val GLASS_FILL_TOP = Color.argb(0x66, 0x11, 0x13, 0x16)
+    internal val GLASS_FILL_MID = Color.argb(0x66, 0x08, 0x0A, 0x0C)
+    internal val GLASS_FILL_BOTTOM = Color.argb(0x66, 0x02, 0x02, 0x03)
+    internal val GLASS_RIM_TOP = Color.argb(0x56, 0xD4, 0xD6, 0xD8)
+    internal val GLASS_RIM_MID = Color.argb(0x3B, 0x34, 0x38, 0x3D)
+    internal val GLASS_RIM_BOTTOM = Color.argb(0x4B, 0xD9, 0xDB, 0xDD)
+    internal val GLASS_SHEEN_NEAR = Color.argb(0x2C, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_BOX_TOP_GLINT_COLOR = Color.argb(0x39, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_BOX_BOTTOM_GLINT_COLOR = Color.argb(0x2E, 0xDE, 0xDE, 0xDE)
 
     // accentColor, when given, tints the box's border to that exact color instead of the default
     // neutral glass rim -- used to match a colour-coded slider row's title/value boxes to that
@@ -208,26 +196,26 @@ object BmwDashboardSkin {
     // active fill -- replacing the earlier taller-thumb / 15dp-fill treatment that read as bulky.
     const val SLIDER_THUMB_WIDTH_DP = 36
     const val SLIDER_THUMB_HEIGHT_DP = 18
-    private const val SLIDER_THUMB_CORNER_RADIUS_DP = 7.5f
-    private const val SLIDER_THUMB_BORDER_WIDTH_DP = 1f
-    private val SLIDER_THUMB_BORDER_COLOR = Color.rgb(0x7A, 0x7A, 0x7A)
+    internal const val SLIDER_THUMB_CORNER_RADIUS_DP = 7.5f
+    internal const val SLIDER_THUMB_BORDER_WIDTH_DP = 1f
+    internal val SLIDER_THUMB_BORDER_COLOR = Color.rgb(0x7A, 0x7A, 0x7A)
     // 3-stop vertical gradient: lit grey at top, mid grey centre, dark grey at bottom.
-    private val thumbGradientTop = Color.rgb(0x77, 0x7B, 0x80)
-    private val thumbGradientCenter = Color.rgb(0x51, 0x55, 0x5A)
-    private val thumbGradientBottom = Color.rgb(0x32, 0x35, 0x3A)
-    private val SLIDER_THUMB_HIGHLIGHT_COLOR = Color.argb(153, 0xC5, 0xC8, 0xCB) // 60%
-    private val SLIDER_THUMB_SHADOW_COLOR = Color.argb(140, 0, 0, 0) // 55%
-    private const val SLIDER_THUMB_INSET_MARGIN_DP = 5.25f
-    private const val SLIDER_THUMB_INSET_CORNER_RADIUS_DP = 3.75f
-    private val SLIDER_THUMB_INSET_FILL_COLOR = Color.rgb(0x18, 0x18, 0x18)
-    private val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
-    private const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
+    internal val thumbGradientTop = Color.rgb(0x77, 0x7B, 0x80)
+    internal val thumbGradientCenter = Color.rgb(0x51, 0x55, 0x5A)
+    internal val thumbGradientBottom = Color.rgb(0x32, 0x35, 0x3A)
+    internal val SLIDER_THUMB_HIGHLIGHT_COLOR = Color.argb(153, 0xC5, 0xC8, 0xCB) // 60%
+    internal val SLIDER_THUMB_SHADOW_COLOR = Color.argb(140, 0, 0, 0) // 55%
+    internal const val SLIDER_THUMB_INSET_MARGIN_DP = 5.25f
+    internal const val SLIDER_THUMB_INSET_CORNER_RADIUS_DP = 3.75f
+    internal val SLIDER_THUMB_INSET_FILL_COLOR = Color.rgb(0x18, 0x18, 0x18)
+    internal val SLIDER_THUMB_INSET_BORDER_COLOR = Color.rgb(0x11, 0x13, 0x17)
+    internal const val SLIDER_THUMB_INSET_BORDER_WIDTH_DP = 1f
     // Three short accent grip ticks above and below the thumb's inset slot -- the master art's
     // own thumb-face detail (viewport y15..23 above, y65..73 below -> 2dp long, ~5dp apart).
-    private const val SLIDER_THUMB_TICK_COUNT = 3
-    private const val SLIDER_THUMB_TICK_LENGTH_DP = 2f
-    private const val SLIDER_THUMB_TICK_SPACING_DP = 5f
-    private const val SLIDER_THUMB_TICK_STROKE_WIDTH_DP = 0.75f
+    internal const val SLIDER_THUMB_TICK_COUNT = 3
+    internal const val SLIDER_THUMB_TICK_LENGTH_DP = 2f
+    internal const val SLIDER_THUMB_TICK_SPACING_DP = 5f
+    internal const val SLIDER_THUMB_TICK_STROKE_WIDTH_DP = 0.75f
 
     // Per-band slider accent -- neon variants of the J_DSP_slider_master_style_4_colour pack's
     // hues: Low=blue, Mid=yellow, Headroom=purple, everything else=cyan (the default, when no
@@ -252,16 +240,16 @@ object BmwDashboardSkin {
     // fill is now slimmer than the groove it rides in, so the groove reads as a real channel the
     // fill sits inside of rather than the fill packing the whole capsule top to bottom.
     const val SLIDER_TRACK_HEIGHT_DP = 6.5f
-    private const val SLIDER_CAPSULE_HEIGHT_DP = 18f
-    private const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 1f
+    internal const val SLIDER_CAPSULE_HEIGHT_DP = 18f
+    internal const val SLIDER_CAPSULE_BORDER_WIDTH_DP = 1f
     // The groove sits inset within the outer capsule shell (master art: 18dp shell, 8.5dp groove
     // -> a 4.75dp margin each side), and gets its own thin inner highlight line 1dp further in.
-    private const val SLIDER_GROOVE_MARGIN_DP = 4.75f
-    private const val SLIDER_GROOVE_STROKE_WIDTH_DP = 1f
-    private const val SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP = 1.5f
-    private val SLIDER_GROOVE_FILL_COLOR = Color.rgb(0x07, 0x07, 0x07)
-    private val SLIDER_GROOVE_STROKE_COLOR = Color.rgb(0x2B, 0x2B, 0x2B)
-    private val SLIDER_GROOVE_HIGHLIGHT_COLOR = Color.rgb(0x26, 0x26, 0x28)
+    internal const val SLIDER_GROOVE_MARGIN_DP = 4.75f
+    internal const val SLIDER_GROOVE_STROKE_WIDTH_DP = 1f
+    internal const val SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP = 1.5f
+    internal val SLIDER_GROOVE_FILL_COLOR = Color.rgb(0x07, 0x07, 0x07)
+    internal val SLIDER_GROOVE_STROKE_COLOR = Color.rgb(0x2B, 0x2B, 0x2B)
+    internal val SLIDER_GROOVE_HIGHLIGHT_COLOR = Color.rgb(0x26, 0x26, 0x28)
     // Fully transparent, not a dark fill colour: the groove drawn underneath (see
     // SliderCapsuleDrawable) already supplies the "unfilled" look, so the real native track only
     // needs to contribute the active (lit) portion on top of it.
@@ -281,32 +269,32 @@ object BmwDashboardSkin {
     // panel language as the slider capsule/glass box above. The switch now carries a red/green
     // status convention: OFF = neon-red shell border + red thumb, ON = neon-green shell border +
     // green thumb (both the track's shell border and the thumb are stateful on state_checked).
-    private const val GLASS_SWITCH_TRACK_WIDTH_DP = 50f
-    private const val GLASS_SWITCH_TRACK_HEIGHT_DP = 26f
-    private const val GLASS_SWITCH_TRACK_BORDER_WIDTH_DP = 1.3f
-    private val GLASS_SWITCH_TRACK_FILL_TOP = Color.rgb(0x11, 0x11, 0x11)
-    private val GLASS_SWITCH_TRACK_FILL_MID = Color.rgb(0x09, 0x09, 0x09)
-    private val GLASS_SWITCH_TRACK_FILL_BOTTOM = Color.BLACK
-    private val GLASS_SWITCH_TRACK_RIM_COLOR = Color.argb(0x6B, 0xF5, 0xF5, 0xF5)
-    private val GLASS_SWITCH_TRACK_SHEEN_NEAR = Color.argb(0x61, 0xFF, 0xFF, 0xFF)
-    private val GLASS_SWITCH_TRACK_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
+    internal const val GLASS_SWITCH_TRACK_WIDTH_DP = 50f
+    internal const val GLASS_SWITCH_TRACK_HEIGHT_DP = 26f
+    internal const val GLASS_SWITCH_TRACK_BORDER_WIDTH_DP = 1.3f
+    internal val GLASS_SWITCH_TRACK_FILL_TOP = Color.rgb(0x11, 0x11, 0x11)
+    internal val GLASS_SWITCH_TRACK_FILL_MID = Color.rgb(0x09, 0x09, 0x09)
+    internal val GLASS_SWITCH_TRACK_FILL_BOTTOM = Color.BLACK
+    internal val GLASS_SWITCH_TRACK_RIM_COLOR = Color.argb(0x6B, 0xF5, 0xF5, 0xF5)
+    internal val GLASS_SWITCH_TRACK_SHEEN_NEAR = Color.argb(0x61, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_SWITCH_TRACK_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
 
     // Neon red (OFF) / neon green (ON) status pair, shared by the switch's shell border and thumb.
-    private val GLASS_SWITCH_OFF_COLOR = Color.rgb(0xFF, 0x31, 0x31)
-    private val GLASS_SWITCH_ON_COLOR = Color.rgb(0x39, 0xFF, 0x14)
+    internal val GLASS_SWITCH_OFF_COLOR = Color.rgb(0xFF, 0x31, 0x31)
+    internal val GLASS_SWITCH_ON_COLOR = Color.rgb(0x39, 0xFF, 0x14)
 
-    private const val GLASS_SWITCH_THUMB_SIZE_DP = 22f
-    private val GLASS_SWITCH_THUMB_ON_FILL_NEAR = blend(GLASS_SWITCH_ON_COLOR, Color.WHITE, 0.3f)
-    private val GLASS_SWITCH_THUMB_ON_FILL_FAR = GLASS_SWITCH_ON_COLOR
-    private val GLASS_SWITCH_THUMB_ON_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
-    private val GLASS_SWITCH_THUMB_ON_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
-    private val GLASS_SWITCH_THUMB_ON_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
-    private val GLASS_SWITCH_THUMB_HIGHLIGHT = Color.argb(0x6B, 0xFF, 0xFF, 0xFF)
-    private val GLASS_SWITCH_THUMB_OFF_FILL_NEAR = blend(GLASS_SWITCH_OFF_COLOR, Color.WHITE, 0.25f)
-    private val GLASS_SWITCH_THUMB_OFF_FILL_FAR = GLASS_SWITCH_OFF_COLOR
-    private val GLASS_SWITCH_THUMB_OFF_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
-    private val GLASS_SWITCH_THUMB_OFF_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
-    private val GLASS_SWITCH_THUMB_OFF_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
+    internal const val GLASS_SWITCH_THUMB_SIZE_DP = 22f
+    internal val GLASS_SWITCH_THUMB_ON_FILL_NEAR = blend(GLASS_SWITCH_ON_COLOR, Color.WHITE, 0.3f)
+    internal val GLASS_SWITCH_THUMB_ON_FILL_FAR = GLASS_SWITCH_ON_COLOR
+    internal val GLASS_SWITCH_THUMB_ON_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
+    internal val GLASS_SWITCH_THUMB_ON_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
+    internal val GLASS_SWITCH_THUMB_ON_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
+    internal val GLASS_SWITCH_THUMB_HIGHLIGHT = Color.argb(0x6B, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_SWITCH_THUMB_OFF_FILL_NEAR = blend(GLASS_SWITCH_OFF_COLOR, Color.WHITE, 0.25f)
+    internal val GLASS_SWITCH_THUMB_OFF_FILL_FAR = GLASS_SWITCH_OFF_COLOR
+    internal val GLASS_SWITCH_THUMB_OFF_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
+    internal val GLASS_SWITCH_THUMB_OFF_GLOW = Color.argb(0xA0, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
+    internal val GLASS_SWITCH_THUMB_OFF_RING = Color.argb(0xF5, Color.red(GLASS_SWITCH_OFF_COLOR), Color.green(GLASS_SWITCH_OFF_COLOR), Color.blue(GLASS_SWITCH_OFF_COLOR))
 
     fun glassSwitchTrackDrawable(context: Context): Drawable = GlassSwitchTrackDrawable(context)
     // The switch's red/green states are a fixed status convention now, so no accentColor hook --
@@ -316,19 +304,19 @@ object BmwDashboardSkin {
     // NORMAL/INVERT segmented polarity toggle (buildMiniToggleRow), recreated from the dedicated
     // glass_normal_invert_toggle.xml art -- a fully-rounded stadium capsule rather than
     // segmentButton's previous small-corner-radius rectangle.
-    private const val GLASS_SEGMENT_BORDER_WIDTH_DP = 1.3f
-    private const val GLASS_SEGMENT_GLOW_WIDTH_DP = 3f
-    private val GLASS_SEGMENT_TRACK_BORDER_COLOR = Color.rgb(0x3E, 0x43, 0x52)
-    private val GLASS_SEGMENT_TRACK_RIM_COLOR = Color.argb(0x29, 0xF0, 0xF0, 0xF0)
-    private val GLASS_SEGMENT_TRACK_FILL_NEAR = Color.rgb(0x0B, 0x0C, 0x10)
-    private val GLASS_SEGMENT_TRACK_FILL_FAR = Color.BLACK
-    private val GLASS_SEGMENT_FILL_NEAR = Color.rgb(0x4A, 0xA9, 0xD8)
-    private val GLASS_SEGMENT_FILL_MID = Color.rgb(0x0D, 0x5D, 0x85)
-    private val GLASS_SEGMENT_FILL_FAR = Color.rgb(0x0A, 0x4F, 0x73)
-    private val GLASS_SEGMENT_BORDER_COLOR = Color.rgb(0x31, 0xD2, 0xFF)
-    private val GLASS_SEGMENT_GLOW_COLOR = Color.argb(0x50, 0x31, 0xD2, 0xFF)
-    private val GLASS_SEGMENT_SHEEN_NEAR = Color.argb(0x54, 0xFF, 0xFF, 0xFF)
-    private val GLASS_SEGMENT_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
+    internal const val GLASS_SEGMENT_BORDER_WIDTH_DP = 1.3f
+    internal const val GLASS_SEGMENT_GLOW_WIDTH_DP = 3f
+    internal val GLASS_SEGMENT_TRACK_BORDER_COLOR = Color.rgb(0x3E, 0x43, 0x52)
+    internal val GLASS_SEGMENT_TRACK_RIM_COLOR = Color.argb(0x29, 0xF0, 0xF0, 0xF0)
+    internal val GLASS_SEGMENT_TRACK_FILL_NEAR = Color.rgb(0x0B, 0x0C, 0x10)
+    internal val GLASS_SEGMENT_TRACK_FILL_FAR = Color.BLACK
+    internal val GLASS_SEGMENT_FILL_NEAR = Color.rgb(0x4A, 0xA9, 0xD8)
+    internal val GLASS_SEGMENT_FILL_MID = Color.rgb(0x0D, 0x5D, 0x85)
+    internal val GLASS_SEGMENT_FILL_FAR = Color.rgb(0x0A, 0x4F, 0x73)
+    internal val GLASS_SEGMENT_BORDER_COLOR = Color.rgb(0x31, 0xD2, 0xFF)
+    internal val GLASS_SEGMENT_GLOW_COLOR = Color.argb(0x50, 0x31, 0xD2, 0xFF)
+    internal val GLASS_SEGMENT_SHEEN_NEAR = Color.argb(0x54, 0xFF, 0xFF, 0xFF)
+    internal val GLASS_SEGMENT_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
 
     fun glassSegmentTrackDrawable(context: Context): Drawable = GlassSegmentTrackDrawable(context)
     // accentColor recolors the selected segment's gradient fill/glow/border, for the two-way
@@ -497,7 +485,7 @@ object BmwDashboardSkin {
         )
     }
 
-    private fun dp(context: Context, value: Int) =
+    internal fun dp(context: Context, value: Int) =
         (value * context.resources.displayMetrics.density).roundToInt()
 
     // Fractional dp -> px, for sub-pixel spec values (2.5dp track height, 1.5dp capsule gap,
@@ -506,838 +494,10 @@ object BmwDashboardSkin {
     // not an Int pixel count.
     private fun dpF(context: Context, value: Float) = value * context.resources.displayMetrics.density
 
-    /**
-     * Renders the DSP workspace's designed background image: a center-cropped cover fill,
-     * independent of the container's own aspect ratio.
-     */
-    private class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
-        private val fillBitmap = loadWorkspaceBackgroundBitmap(context)
-
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            isFilterBitmap = true
-            shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-        }
-        private val fillMatrix = Matrix()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            if (bounds.width() <= 0 || bounds.height() <= 0) return
-
-            val scale = maxOf(bounds.width().toFloat() / fillBitmap.width, bounds.height().toFloat() / fillBitmap.height)
-            val dx = (bounds.width() - fillBitmap.width * scale) / 2f
-            val dy = (bounds.height() - fillBitmap.height * scale) / 2f
-            fillMatrix.setScale(scale, scale)
-            fillMatrix.postTranslate(bounds.left + dx, bounds.top + dy)
-            (fillPaint.shader as BitmapShader).setLocalMatrix(fillMatrix)
-        }
-
-        override fun draw(canvas: Canvas) {
-            canvas.drawRect(bounds, fillPaint)
-        }
-
-        override fun setAlpha(alpha: Int) {
-            fillPaint.alpha = alpha
-        }
-
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-            fillPaint.colorFilter = colorFilter
-        }
-
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
-    }
-
-    /** Plain brushed-metal fill for small sidebar tiles -- see [metalTileDrawable]. Draws its own
-     *  optional stroke ([strokeColor]) rather than relying on MaterialButton's built-in stroke:
-     *  assigning a custom `background` drawable to a MaterialButton replaces its whole internal
-     *  background stack (fill + stroke together), so `MaterialButton.strokeColor` silently stops
-     *  drawing anything once `background` is overridden like this -- the stroke has to be part of
-     *  this drawable itself. */
-    private class MetalTileDrawable(context: Context, brightness: Float, private val strokeColor: Int? = null) : Drawable() {
-        private val bitmap = loadPlainMetalBitmap(context)
-        private val cornerRadiusPx = dp(context, 6).toFloat()
-        private val strokeWidthPx = dp(context, 1).toFloat()
-        private val rect = RectF()
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            isFilterBitmap = true
-            shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setScale(brightness, brightness, brightness, 1f) })
-        }
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-        }
-        private val matrix = Matrix()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            rect.set(bounds)
-            if (strokeColor != null) rect.inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
-            if (bounds.width() <= 0 || bounds.height() <= 0) return
-            val scale = maxOf(bounds.width().toFloat() / bitmap.width, bounds.height().toFloat() / bitmap.height)
-            val dx = (bounds.width() - bitmap.width * scale) / 2f
-            val dy = (bounds.height() - bitmap.height * scale) / 2f
-            matrix.setScale(scale, scale)
-            matrix.postTranslate(bounds.left + dx, bounds.top + dy)
-            (paint.shader as BitmapShader).setLocalMatrix(matrix)
-        }
-
-        override fun draw(canvas: Canvas) {
-            canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
-            if (strokeColor != null) {
-                strokePaint.color = strokeColor
-                canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, strokePaint)
-            }
-        }
-
-        override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /**
-     * The unified slider thumb: a 3d-lit grey block (top/centre/bottom gradient, a thin outer
-     * border, a top-edge highlight and bottom-edge shadow line for the emboss, a small darker
-     * inset "detail panel" centred within it, and three short accent grip ticks above and below
-     * that panel) -- the master art's compact thumb, whose body matches the 18dp housing height
-     * exactly and stands clear of the now-slim 6.5dp active fill, so it still reads as the
-     * grabbable control without overhanging the capsule the way the earlier taller thumb did.
-     */
     /** Linear per-channel blend of [from] toward [to] by [t] (0 = [from], 1 = [to]). */
-    private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
+    internal fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
         (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt(),
         (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt(),
         (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).roundToInt(),
     )
-
-    private class SliderThumbDrawable(private val context: Context, private val accentColor: Int? = null) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        // Border/highlight/shadow stay the neutral metal colors regardless of [accentColor] --
-        // just the face gradient AND the inset centre panel recolor. The inset panel is the
-        // biggest flat area at this thumb's actual rendered size (the gradient face is mostly a
-        // thin margin around it), so leaving it grey read as "a grey handle with a colored rim"
-        // instead of a colored handle -- coloring it too is what actually makes the whole thumb
-        // read as blue/yellow at a glance.
-        private val gradientTop = accentColor?.let { blend(it, Color.WHITE, 0.35f) } ?: thumbGradientTop
-        private val gradientCenter = accentColor ?: thumbGradientCenter
-        private val gradientBottom = accentColor?.let { blend(it, Color.BLACK, 0.45f) } ?: thumbGradientBottom
-        private val insetColor = accentColor?.let { blend(it, Color.BLACK, 0.25f) } ?: SLIDER_THUMB_INSET_FILL_COLOR
-        private val cornerRadius = SLIDER_THUMB_CORNER_RADIUS_DP * density
-        private val borderWidth = SLIDER_THUMB_BORDER_WIDTH_DP * density
-        private val insetMargin = SLIDER_THUMB_INSET_MARGIN_DP * density
-        private val insetCornerRadius = SLIDER_THUMB_INSET_CORNER_RADIUS_DP * density
-        private val insetBorderWidth = SLIDER_THUMB_INSET_BORDER_WIDTH_DP * density
-        private val edgeLineWidth = density // 1dp highlight/shadow lines
-
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = SLIDER_THUMB_BORDER_COLOR
-        }
-        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_HIGHLIGHT_COLOR }
-        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_THUMB_SHADOW_COLOR }
-        private val insetFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = insetColor }
-        private val insetBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = insetBorderWidth
-            color = SLIDER_THUMB_INSET_BORDER_COLOR
-        }
-        private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = SLIDER_THUMB_TICK_STROKE_WIDTH_DP * density
-            strokeCap = Paint.Cap.ROUND
-            color = accentColor ?: SLIDER_THUMB_BORDER_COLOR
-        }
-        private val tickLength = SLIDER_THUMB_TICK_LENGTH_DP * density
-        private val tickSpacing = SLIDER_THUMB_TICK_SPACING_DP * density
-
-        private val bodyRect = RectF()
-        private val insetRect = RectF()
-        private val clipPath = android.graphics.Path()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            if (bounds.height() <= 0) return
-            bodyRect.set(bounds)
-            bodyRect.inset(borderWidth / 2f, borderWidth / 2f)
-            fillPaint.shader = LinearGradient(
-                0f, bodyRect.top, 0f, bodyRect.bottom,
-                intArrayOf(gradientTop, gradientCenter, gradientBottom),
-                floatArrayOf(0f, 0.5f, 1f),
-                Shader.TileMode.CLAMP,
-            )
-            clipPath.reset()
-            clipPath.addRoundRect(bodyRect, cornerRadius, cornerRadius, android.graphics.Path.Direction.CW)
-            insetRect.set(bodyRect)
-            insetRect.inset(insetMargin, insetMargin)
-        }
-
-        override fun draw(canvas: Canvas) {
-            canvas.drawRoundRect(bodyRect, cornerRadius, cornerRadius, fillPaint)
-
-            // Emboss: a thin lit line along the top edge, a thin dark line along the bottom edge,
-            // both clipped to the thumb's own rounded silhouette so they don't spill past it.
-            canvas.save()
-            canvas.clipPath(clipPath)
-            canvas.drawRect(bodyRect.left, bodyRect.top, bodyRect.right, bodyRect.top + edgeLineWidth, highlightPaint)
-            canvas.drawRect(bodyRect.left, bodyRect.bottom - edgeLineWidth, bodyRect.right, bodyRect.bottom, shadowPaint)
-            canvas.restore()
-
-            canvas.drawRoundRect(bodyRect, cornerRadius, cornerRadius, borderPaint)
-
-            if (!insetRect.isEmpty) {
-                canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetFillPaint)
-                canvas.drawRoundRect(insetRect, insetCornerRadius, insetCornerRadius, insetBorderPaint)
-
-                // Grip ticks: SLIDER_THUMB_TICK_COUNT short verticals centred in the band above
-                // the inset slot, mirrored in the band below it. Skipped if either band is too
-                // shallow to seat a full-length tick with a hair of breathing room.
-                val cx = bodyRect.centerX()
-                val topBandMid = (bodyRect.top + insetRect.top) / 2f
-                val bottomBandMid = (insetRect.bottom + bodyRect.bottom) / 2f
-                if (insetRect.top - bodyRect.top >= tickLength + density) {
-                    val firstX = cx - tickSpacing * (SLIDER_THUMB_TICK_COUNT - 1) / 2f
-                    for (i in 0 until SLIDER_THUMB_TICK_COUNT) {
-                        val x = firstX + i * tickSpacing
-                        canvas.drawLine(x, topBandMid - tickLength / 2f, x, topBandMid + tickLength / 2f, tickPaint)
-                        canvas.drawLine(x, bottomBandMid - tickLength / 2f, x, bottomBandMid + tickLength / 2f, tickPaint)
-                    }
-                }
-            }
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        // No-op, deliberately: BaseSlider applies its theme's default thumbTintList to whatever
-        // drawable setCustomThumbDrawable() is given, by computing a PorterDuff ColorFilter from
-        // it and calling setColorFilter() -- which, if honored, silently flattens this drawable's
-        // own gradientTop/Center/Bottom (grey by default, or the accent color) to one flat theme
-        // color. There's no public API to clear BaseSlider's thumbTintList from the outside
-        // (setThumbTintList() requires non-null), so this drawable instead just refuses any
-        // externally-imposed tint -- it's fully self-colored already, it never needs one.
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
-
-        // Drawable.getConstantState() returns null unless a subclass provides one.
-        // BaseSlider.setCustomThumbDrawable() calls getConstantState().newDrawable() internally
-        // (to make per-thumb-index copies), so without this it NPEs the instant a Slider using
-        // this thumb is created -- GradientDrawable (the old thumb) has this built in already,
-        // which is why that path never hit it. newDrawable() MUST forward accentColor -- it used
-        // to construct a plain SliderThumbDrawable(context), silently reconstructing every accented
-        // thumb back to the default grey gradient the instant BaseSlider asked for its "real" copy.
-        private val constantState = object : ConstantState() {
-            override fun newDrawable(): Drawable = SliderThumbDrawable(context, accentColor)
-            override fun getChangingConfigurations(): Int = 0
-        }
-
-        override fun getConstantState(): ConstantState = constantState
-    }
-
-    /**
-     * The pill-shaped outline wrapping a slider's track: a fixed [SLIDER_CAPSULE_HEIGHT_DP]-tall
-     * capsule centred vertically within whatever bounds the host Slider view actually ends up
-     * with (which is usually taller, since Material enforces its own minimum touch-target height)
-     * -- set as the Slider's own `background`, so it always shares the exact same vertical centre
-     * as Slider's own internally-drawn track, no separate alignment bookkeeping needed. The
-     * capsule interior is left transparent (just the border+fill drawn) so Slider's own track and
-     * thumb paint on top of it undisturbed.
-     *
-     * [isStateful]/[onStateChange] make this react to the Slider's own focused state -- Android
-     * propagates a View's state (focused, pressed, etc.) to its `background` drawable
-     * automatically, no listener needed. A hardware D-pad/rotary controller (e.g. a car's iDrive
-     * wheel wired in through a CAN-to-Android adapter) moves Android focus between views the same
-     * way pressing Tab does, but without ever touching the screen -- so touch-driven feedback
-     * (the halo, a drag) never appears; this glow is the only visual sign of where that input
-     * currently is.
-     *
-     * [accentColor], when given, recolors just the unfocused border (see SLIDER_LOW_BAND_COLOR
-     * etc.) -- every other slider keeps the default SLIDER_DEFAULT_COLOR border. The focus
-     * glow/ring stay LIGHT_BLUE_BRIGHT regardless: that's a focus-state indicator, not a band
-     * identity. Also draws the recessed groove + thin inner highlight line inset within the
-     * capsule -- the master art's own bezel layers -- as an 8.5dp channel for Slider's slim 6.5dp
-     * (see SLIDER_TRACK_HEIGHT_DP) native track to sit inside of; the groove's own fill color is
-     * what shows through as the "unfilled" look, since the native track's inactive tint is fully
-     * transparent (see SLIDER_TRACK_INACTIVE_COLOR).
-     */
-    private class SliderCapsuleDrawable(context: Context, accentColor: Int? = null) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val capsuleHeight = SLIDER_CAPSULE_HEIGHT_DP * density
-        private val borderWidth = SLIDER_CAPSULE_BORDER_WIDTH_DP * density
-        private val cornerRadius = capsuleHeight / 2f
-        private val grooveMargin = SLIDER_GROOVE_MARGIN_DP * density
-        private val grooveStrokeWidth = SLIDER_GROOVE_STROKE_WIDTH_DP * density
-        private val grooveHighlightMargin = SLIDER_GROOVE_HIGHLIGHT_MARGIN_DP * density
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_BOX_BACKGROUND_COLOR }
-        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = accentColor ?: SLIDER_DEFAULT_COLOR
-        }
-        private val grooveFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SLIDER_GROOVE_FILL_COLOR }
-        private val grooveStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = grooveStrokeWidth
-            color = SLIDER_GROOVE_STROKE_COLOR
-        }
-        private val grooveHighlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = density
-            color = SLIDER_GROOVE_HIGHLIGHT_COLOR
-        }
-        private val focusGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = LIGHT_BLUE_BRIGHT
-            maskFilter = BlurMaskFilter(4f * density, BlurMaskFilter.Blur.NORMAL)
-        }
-        private val focusRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = LIGHT_BLUE_BRIGHT
-        }
-        private val capsuleRect = RectF()
-        private val grooveRect = RectF()
-        private val grooveHighlightRect = RectF()
-        private var focused = false
-
-        override fun isStateful(): Boolean = true
-
-        override fun onStateChange(state: IntArray): Boolean {
-            val wasFocused = focused
-            focused = state.contains(android.R.attr.state_focused)
-            if (focused != wasFocused) invalidateSelf()
-            return focused != wasFocused
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            val centerY = bounds.top + bounds.height() / 2f
-            capsuleRect.set(
-                bounds.left + borderWidth / 2f, centerY - capsuleHeight / 2f + borderWidth / 2f,
-                bounds.right - borderWidth / 2f, centerY + capsuleHeight / 2f - borderWidth / 2f,
-            )
-            grooveRect.set(capsuleRect)
-            grooveRect.inset(grooveMargin, grooveMargin)
-            grooveHighlightRect.set(grooveRect)
-            grooveHighlightRect.inset(grooveHighlightMargin, grooveHighlightMargin)
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (capsuleRect.isEmpty) return
-            canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, fillPaint)
-            if (!grooveRect.isEmpty) {
-                val grooveRadius = grooveRect.height() / 2f
-                canvas.drawRoundRect(grooveRect, grooveRadius, grooveRadius, grooveFillPaint)
-                canvas.drawRoundRect(grooveRect, grooveRadius, grooveRadius, grooveStrokePaint)
-                if (!grooveHighlightRect.isEmpty) {
-                    val highlightRadius = grooveHighlightRect.height() / 2f
-                    canvas.drawRoundRect(grooveHighlightRect, highlightRadius, highlightRadius, grooveHighlightPaint)
-                }
-            }
-            if (focused) {
-                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusGlowPaint)
-                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, focusRingPaint)
-            } else {
-                canvas.drawRoundRect(capsuleRect, cornerRadius, cornerRadius, borderPaint)
-            }
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha; borderPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-            fillPaint.colorFilter = colorFilter
-            borderPaint.colorFilter = colorFilter
-        }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [glassSwitchTrackDrawable]. Shared glass shell for both positions, except the outer
-     *  shell border, which is stateful on state_checked: neon green when on, neon red when off. */
-    private class GlassSwitchTrackDrawable(context: Context) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val intrinsicW = (GLASS_SWITCH_TRACK_WIDTH_DP * density).roundToInt()
-        private val intrinsicH = (GLASS_SWITCH_TRACK_HEIGHT_DP * density).roundToInt()
-        private val borderWidth = GLASS_SWITCH_TRACK_BORDER_WIDTH_DP * density
-        private var checked = false
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val shellBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = GLASS_SWITCH_OFF_COLOR
-        }
-        private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth * 0.75f
-            color = GLASS_SWITCH_TRACK_RIM_COLOR
-        }
-        private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val trackRect = RectF()
-        private val sheenPath = android.graphics.Path()
-        private val clipPath = android.graphics.Path()
-
-        override fun getIntrinsicWidth() = intrinsicW
-        override fun getIntrinsicHeight() = intrinsicH
-        override fun isStateful() = true
-
-        override fun onStateChange(state: IntArray): Boolean {
-            val wasChecked = checked
-            checked = state.contains(android.R.attr.state_checked)
-            if (checked != wasChecked) {
-                shellBorderPaint.color = if (checked) GLASS_SWITCH_ON_COLOR else GLASS_SWITCH_OFF_COLOR
-                invalidateSelf()
-            }
-            return checked != wasChecked
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            trackRect.set(bounds)
-            trackRect.inset(borderWidth / 2f, borderWidth / 2f)
-            if (trackRect.isEmpty) return
-            val corner = trackRect.height() / 2f
-            fillPaint.shader = LinearGradient(
-                trackRect.left, trackRect.top, trackRect.right, trackRect.bottom,
-                intArrayOf(GLASS_SWITCH_TRACK_FILL_TOP, GLASS_SWITCH_TRACK_FILL_MID, GLASS_SWITCH_TRACK_FILL_BOTTOM),
-                floatArrayOf(0f, 0.28f, 1f), Shader.TileMode.CLAMP,
-            )
-            clipPath.reset()
-            clipPath.addRoundRect(trackRect, corner, corner, android.graphics.Path.Direction.CW)
-
-            // A static diagonal glass sheen over the track's left third -- same placement/spirit
-            // as the source art's own highlight, independent of thumb position.
-            val w = trackRect.width()
-            sheenPath.reset()
-            sheenPath.moveTo(trackRect.left + w * 0.06f, trackRect.top)
-            sheenPath.lineTo(trackRect.left + w * 0.30f, trackRect.top)
-            sheenPath.lineTo(trackRect.left + w * 0.20f, trackRect.bottom)
-            sheenPath.lineTo(trackRect.left, trackRect.bottom)
-            sheenPath.close()
-            sheenPaint.shader = LinearGradient(
-                trackRect.left + w * 0.06f, trackRect.top, trackRect.left + w * 0.20f, trackRect.bottom,
-                GLASS_SWITCH_TRACK_SHEEN_NEAR, GLASS_SWITCH_TRACK_SHEEN_FAR, Shader.TileMode.CLAMP,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (trackRect.isEmpty) return
-            val corner = trackRect.height() / 2f
-            canvas.drawRoundRect(trackRect, corner, corner, fillPaint)
-            canvas.save()
-            canvas.clipPath(clipPath)
-            canvas.drawPath(sheenPath, sheenPaint)
-            canvas.restore()
-            canvas.drawRoundRect(trackRect, corner, corner, rimPaint)
-            canvas.drawRoundRect(trackRect, corner, corner, shellBorderPaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [glassSwitchThumbDrawable]. Stateful on state_checked: a glowing neon-green sphere when
-     *  on, a glowing neon-red sphere when off -- same glass-sphere treatment either way (radial
-     *  fill, blurred outer glow, crisp ring, top highlight arc), only the hue changes, so the
-     *  switch reads as a live red/green status light rather than lit-vs-dead. */
-    private class GlassSwitchThumbDrawable(context: Context) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val intrinsicSize = (GLASS_SWITCH_THUMB_SIZE_DP * density).roundToInt()
-        private val glowWidth = 3f * density
-        private val borderWidth = density
-        private var checked = false
-
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = borderWidth }
-        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = glowWidth
-            maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
-        }
-        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = density
-        }
-        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1.6f * density
-            strokeCap = Paint.Cap.ROUND
-            color = GLASS_SWITCH_THUMB_HIGHLIGHT
-        }
-        private val circleRect = RectF()
-        private val highlightPath = android.graphics.Path()
-
-        override fun getIntrinsicWidth() = intrinsicSize
-        override fun getIntrinsicHeight() = intrinsicSize
-        override fun isStateful() = true
-
-        override fun onStateChange(state: IntArray): Boolean {
-            val wasChecked = checked
-            checked = state.contains(android.R.attr.state_checked)
-            if (checked != wasChecked) updatePaints()
-            return checked != wasChecked
-        }
-
-        private fun updatePaints() {
-            if (circleRect.isEmpty) return
-            val near = if (checked) GLASS_SWITCH_THUMB_ON_FILL_NEAR else GLASS_SWITCH_THUMB_OFF_FILL_NEAR
-            val far = if (checked) GLASS_SWITCH_THUMB_ON_FILL_FAR else GLASS_SWITCH_THUMB_OFF_FILL_FAR
-            fillPaint.shader = RadialGradient(
-                circleRect.centerX(), circleRect.top + circleRect.height() * 0.42f, circleRect.width() / 2f,
-                near, far, Shader.TileMode.CLAMP,
-            )
-            borderPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_BORDER else GLASS_SWITCH_THUMB_OFF_BORDER
-            glowPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_GLOW else GLASS_SWITCH_THUMB_OFF_GLOW
-            ringPaint.color = if (checked) GLASS_SWITCH_THUMB_ON_RING else GLASS_SWITCH_THUMB_OFF_RING
-            invalidateSelf()
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            val inset = glowWidth
-            circleRect.set(bounds)
-            circleRect.inset(inset, inset)
-            if (circleRect.isEmpty) return
-            updatePaints()
-            val r = circleRect.width() / 2f
-            highlightPath.reset()
-            highlightPath.addArc(
-                RectF(circleRect.centerX() - r * 0.55f, circleRect.top + r * 0.15f, circleRect.centerX() + r * 0.55f, circleRect.top + r * 1.1f),
-                200f, 70f,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (circleRect.isEmpty) return
-            val r = circleRect.width() / 2f
-            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r + glowWidth / 2f, glowPaint)
-            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, fillPaint)
-            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, ringPaint)
-            canvas.drawCircle(circleRect.centerX(), circleRect.centerY(), r, borderPaint)
-            canvas.drawPath(highlightPath, highlightPaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [glassSegmentTrackDrawable]. The dark capsule shell a NORMAL/INVERT toggle group sits
-     *  in -- shared, unaffected by which segment is checked. */
-    private class GlassSegmentTrackDrawable(context: Context) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val borderWidth = GLASS_SEGMENT_BORDER_WIDTH_DP * density
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = GLASS_SEGMENT_TRACK_BORDER_COLOR
-        }
-        private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth * 0.6f
-            color = GLASS_SEGMENT_TRACK_RIM_COLOR
-        }
-        private val trackRect = RectF()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            trackRect.set(bounds)
-            trackRect.inset(borderWidth / 2f, borderWidth / 2f)
-            if (trackRect.isEmpty) return
-            fillPaint.shader = LinearGradient(
-                trackRect.left, trackRect.top, trackRect.right, trackRect.bottom,
-                GLASS_SEGMENT_TRACK_FILL_NEAR, GLASS_SEGMENT_TRACK_FILL_FAR, Shader.TileMode.CLAMP,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (trackRect.isEmpty) return
-            val corner = trackRect.height() / 2f
-            canvas.drawRoundRect(trackRect, corner, corner, fillPaint)
-            canvas.drawRoundRect(trackRect, corner, corner, rimPaint)
-            canvas.drawRoundRect(trackRect, corner, corner, borderPaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [glassSegmentDrawable]. Stateful on state_selected: fully transparent when unselected
-     *  (the track drawable's own dark shell shows through), a glowing gradient pill with a
-     *  diagonal glass sheen when selected -- matches the source art's selected-segment treatment
-     *  exactly. */
-    private class GlassSegmentDrawable(context: Context, private val accentColor: Int? = null) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val borderWidth = GLASS_SEGMENT_BORDER_WIDTH_DP * density
-        private val glowWidth = GLASS_SEGMENT_GLOW_WIDTH_DP * density
-        private var checked = false
-        // Same recoloring technique as GlassSwitchThumbDrawable: derive lit/mid/dark shades of
-        // accentColor for the fill gradient, and preserve each fixed color's own alpha for the
-        // (semi-transparent) glow.
-        private val fillNear = accentColor?.let { blend(it, Color.WHITE, 0.25f) } ?: GLASS_SEGMENT_FILL_NEAR
-        private val fillMid = accentColor ?: GLASS_SEGMENT_FILL_MID
-        private val fillFar = accentColor?.let { blend(it, Color.BLACK, 0.25f) } ?: GLASS_SEGMENT_FILL_FAR
-        private val borderColor = accentColor ?: GLASS_SEGMENT_BORDER_COLOR
-        private val glowColor = accentColor?.let {
-            Color.argb(Color.alpha(GLASS_SEGMENT_GLOW_COLOR), Color.red(it), Color.green(it), Color.blue(it))
-        } ?: GLASS_SEGMENT_GLOW_COLOR
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = borderWidth
-            color = borderColor
-        }
-        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = glowWidth
-            color = glowColor
-            maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
-        }
-        private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val segRect = RectF()
-        private val sheenPath = android.graphics.Path()
-        private val clipPath = android.graphics.Path()
-
-        override fun isStateful() = true
-
-        // Keyed off state_selected (View.isSelected), not state_checked -- this backs a plain
-        // TextView (see CrossoverDashboardBuilder.glassSegmentView), not a MaterialButton. A
-        // MaterialButton was tried first and rejected: MaterialButtonToggleGroup throws
-        // IllegalStateException ("Attempted to get ShapeAppearance from a MaterialButton which has
-        // an overwritten background") the moment a child's .background is set directly, which this
-        // drawable's gradient+glow rendering requires.
-        override fun onStateChange(state: IntArray): Boolean {
-            val wasChecked = checked
-            checked = state.contains(android.R.attr.state_selected)
-            if (checked != wasChecked) invalidateSelf()
-            return checked != wasChecked
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            segRect.set(bounds)
-            segRect.inset(borderWidth / 2f, borderWidth / 2f)
-            if (segRect.isEmpty) return
-            fillPaint.shader = LinearGradient(
-                segRect.left, segRect.top, segRect.right, segRect.bottom,
-                intArrayOf(fillNear, fillMid, fillFar),
-                floatArrayOf(0f, 0.18f, 1f), Shader.TileMode.CLAMP,
-            )
-            val corner = segRect.height() / 2f
-            clipPath.reset()
-            clipPath.addRoundRect(segRect, corner, corner, android.graphics.Path.Direction.CW)
-            val w = segRect.width()
-            sheenPath.reset()
-            sheenPath.moveTo(segRect.left + w * 0.12f, segRect.top)
-            sheenPath.lineTo(segRect.left + w * 0.42f, segRect.top)
-            sheenPath.lineTo(segRect.left + w * 0.30f, segRect.bottom)
-            sheenPath.lineTo(segRect.left, segRect.bottom)
-            sheenPath.close()
-            sheenPaint.shader = LinearGradient(
-                segRect.left + w * 0.12f, segRect.top, segRect.left + w * 0.30f, segRect.bottom,
-                GLASS_SEGMENT_SHEEN_NEAR, GLASS_SEGMENT_SHEEN_FAR, Shader.TileMode.CLAMP,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (!checked || segRect.isEmpty) return
-            val corner = segRect.height() / 2f
-            canvas.drawRoundRect(segRect, corner, corner, glowPaint)
-            canvas.drawRoundRect(segRect, corner, corner, fillPaint)
-            canvas.save()
-            canvas.clipPath(clipPath)
-            canvas.drawPath(sheenPath, sheenPaint)
-            canvas.restore()
-            canvas.drawRoundRect(segRect, corner, corner, borderPaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [glassBoxDrawable]. */
-    private class GlassBoxDrawable(context: Context, private val showBorder: Boolean, private val accentColor: Int? = null) : Drawable() {
-        private val density = context.resources.displayMetrics.density
-        private val cornerRadius = GLASS_BOX_CORNER_RADIUS_DP * density
-        private val strokeWidth = GLASS_BOX_STROKE_WIDTH_DP * density
-        private val edgeLineWidth = density
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = this@GlassBoxDrawable.strokeWidth
-        }
-        private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GLASS_BOX_TOP_GLINT_COLOR }
-        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GLASS_BOX_BOTTOM_GLINT_COLOR }
-        private val boxRect = RectF()
-        private val clipPath = android.graphics.Path()
-        private val sheenPath = android.graphics.Path()
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            boxRect.set(bounds)
-            if (showBorder) boxRect.inset(strokeWidth / 2f, strokeWidth / 2f)
-            if (boxRect.isEmpty) return
-            clipPath.reset()
-            clipPath.addRoundRect(boxRect, cornerRadius, cornerRadius, android.graphics.Path.Direction.CW)
-
-            fillPaint.shader = LinearGradient(
-                boxRect.left, boxRect.top, boxRect.right, boxRect.bottom,
-                intArrayOf(GLASS_FILL_TOP, GLASS_FILL_MID, GLASS_FILL_BOTTOM),
-                floatArrayOf(0f, 0.4f, 1f), Shader.TileMode.CLAMP,
-            )
-            strokePaint.shader = LinearGradient(
-                boxRect.left, boxRect.top, boxRect.left, boxRect.bottom,
-                intArrayOf(GLASS_RIM_TOP, GLASS_RIM_MID, GLASS_RIM_BOTTOM),
-                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
-            )
-
-            // Diagonal light sweep in the top-left corner -- same placement as the source art's own
-            // "glass body" highlight quad, the one cue that reads as glass rather than a flat box.
-            sheenPath.reset()
-            sheenPath.moveTo(boxRect.left, boxRect.top)
-            sheenPath.lineTo(boxRect.left + boxRect.width() * 0.55f, boxRect.top)
-            sheenPath.lineTo(boxRect.left + boxRect.width() * 0.22f, boxRect.bottom)
-            sheenPath.lineTo(boxRect.left, boxRect.bottom)
-            sheenPath.close()
-            sheenPaint.shader = LinearGradient(
-                boxRect.left, boxRect.top, boxRect.left + boxRect.width() * 0.5f, boxRect.bottom,
-                GLASS_SHEEN_NEAR, GLASS_SHEEN_FAR, Shader.TileMode.CLAMP,
-            )
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (boxRect.isEmpty) return
-            canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, fillPaint)
-
-            canvas.save()
-            canvas.clipPath(clipPath)
-            canvas.drawPath(sheenPath, sheenPaint)
-            canvas.drawRect(boxRect.left, boxRect.top, boxRect.right, boxRect.top + edgeLineWidth, highlightPaint)
-            canvas.drawRect(boxRect.left, boxRect.bottom - edgeLineWidth, boxRect.right, boxRect.bottom, shadowPaint)
-            canvas.restore()
-
-            if (showBorder) canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, strokePaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /**
-     * The sidebar's selected-tile background: a darker brushed-metal fill (vs. the lighter fill
-     * unselected tiles get, via [metalTileDrawable]) so the tile itself visibly "pops", plus a
-     * blurred glow ring drawn behind a crisp bright stroke so the border visibly radiates instead
-     * of just being outlined.
-     */
-    private class IlluminatedTileDrawable(context: Context) : Drawable() {
-        private val corner = dp(context, 6).toFloat()
-        private val strokeWidthPx = dp(context, 2).toFloat()
-        private val metalBitmap = loadPlainMetalBitmap(context)
-        private val fillRect = RectF()
-        private val matrix = Matrix()
-        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            isFilterBitmap = true
-            shader = BitmapShader(metalBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply {
-                setScale(SELECTED_TILE_BRIGHTNESS, SELECTED_TILE_BRIGHTNESS, SELECTED_TILE_BRIGHTNESS, 1f)
-            })
-        }
-        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = LIGHT_BLUE_BRIGHT
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-            maskFilter = BlurMaskFilter(dp(context, 5).toFloat(), BlurMaskFilter.Blur.NORMAL)
-        }
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = LIGHT_BLUE_BRIGHT
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            fillRect.set(bounds)
-            if (bounds.width() <= 0 || bounds.height() <= 0) return
-            val scale = maxOf(bounds.width().toFloat() / metalBitmap.width, bounds.height().toFloat() / metalBitmap.height)
-            val dx = (bounds.width() - metalBitmap.width * scale) / 2f
-            val dy = (bounds.height() - metalBitmap.height * scale) / 2f
-            matrix.setScale(scale, scale)
-            matrix.postTranslate(bounds.left + dx, bounds.top + dy)
-            (fillPaint.shader as BitmapShader).setLocalMatrix(matrix)
-        }
-
-        override fun draw(canvas: Canvas) {
-            canvas.drawRoundRect(fillRect, corner, corner, fillPaint)
-
-            val strokeRect = RectF(bounds).apply {
-                inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
-            }
-            canvas.drawRoundRect(strokeRect, corner, corner, glowPaint)
-            canvas.drawRoundRect(strokeRect, corner, corner, strokePaint)
-        }
-
-        override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
-
-    /** See [sidebarTileFocusRingDrawable]. */
-    private class TileFocusRingDrawable(context: Context) : Drawable() {
-        private val corner = dp(context, 6).toFloat()
-        private val strokeWidthPx = dp(context, 2).toFloat()
-        private val strokeRect = RectF()
-        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = LIGHT_BLUE_BRIGHT
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-            maskFilter = BlurMaskFilter(dp(context, 5).toFloat(), BlurMaskFilter.Blur.NORMAL)
-        }
-        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = LIGHT_BLUE_BRIGHT
-            style = Paint.Style.STROKE
-            strokeWidth = strokeWidthPx
-        }
-        private var focused = false
-
-        override fun isStateful(): Boolean = true
-
-        override fun onStateChange(state: IntArray): Boolean {
-            val wasFocused = focused
-            focused = state.contains(android.R.attr.state_focused)
-            if (focused != wasFocused) invalidateSelf()
-            return focused != wasFocused
-        }
-
-        override fun onBoundsChange(bounds: Rect) {
-            super.onBoundsChange(bounds)
-            strokeRect.set(bounds)
-            strokeRect.inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
-        }
-
-        override fun draw(canvas: Canvas) {
-            if (!focused || strokeRect.isEmpty) return
-            canvas.drawRoundRect(strokeRect, corner, corner, glowPaint)
-            canvas.drawRoundRect(strokeRect, corner, corner, strokePaint)
-        }
-
-        override fun setAlpha(alpha: Int) { glowPaint.alpha = alpha; strokePaint.alpha = alpha }
-        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-            glowPaint.colorFilter = colorFilter
-            strokePaint.colorFilter = colorFilter
-        }
-        @Deprecated("Deprecated in Android")
-        override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-    }
 }
