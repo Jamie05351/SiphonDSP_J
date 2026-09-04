@@ -594,6 +594,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
      * Numbers are the global 1-based filter number ([bankNumberOffset]), matching the labels.
      */
     private fun hitTestAnyBank(x: Float, y: Float): NodeHit? {
+        refreshGeometry()
         val radius = NODE_TOUCH_RADIUS_DP * density
         var best: NodeHit? = null
         var bestDistance = Float.MAX_VALUE
@@ -620,24 +621,20 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun plotTop(): Float = paddingTop + padTop
     private fun plotBottom(): Float = height - paddingBottom - padBottom
 
-    private fun xForFrequency(frequency: Double): Float {
-        val fraction = PeqGraphMath.frequencyToFraction(frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
-        return plotLeft() + fraction * (plotRight() - plotLeft())
+    // Rebuilt (see refreshGeometry) at the top of every draw pass and every hit-test -- the only
+    // two entry points that read plot coordinates -- so the per-call mappers below stay
+    // allocation-free in the tight draw loops.
+    private var geometry = PeqPlotGeometry(0f, 0f, 0f, 0f, maximumFrequency)
+
+    private fun refreshGeometry() {
+        geometry = PeqPlotGeometry(plotLeft(), plotRight(), plotTop(), plotBottom(), maximumFrequency)
     }
 
-    private fun yForGain(gain: Double): Float {
-        val fraction = PeqGraphMath.gainToFraction(gain)
-        return plotTop() + fraction * (plotBottom() - plotTop())
-    }
-
-    private fun yForRange(value: Double, min: Double, max: Double): Float {
-        val clamped = value.coerceIn(min, max)
-        val fraction = (max - clamped) / (max - min)
-        return plotTop() + fraction.toFloat() * (plotBottom() - plotTop())
-    }
-
-    private fun yForPhaseDeg(deg: Double): Float = yForRange(deg, PHASE_MIN_DEG, PHASE_MAX_DEG)
-    private fun yForGroupDelayMs(ms: Double): Float = yForRange(ms, GROUP_DELAY_MIN_MS, GROUP_DELAY_MAX_MS)
+    private fun xForFrequency(frequency: Double): Float = geometry.xForFrequency(frequency)
+    private fun yForGain(gain: Double): Float = geometry.yForGain(gain)
+    private fun yForRange(value: Double, min: Double, max: Double): Float = geometry.yForRange(value, min, max)
+    private fun yForPhaseDeg(deg: Double): Float = geometry.yForPhaseDeg(deg)
+    private fun yForGroupDelayMs(ms: Double): Float = geometry.yForGroupDelayMs(ms)
 
     // --- Drawing --------------------------------------------------------------------------
 
@@ -647,6 +644,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawUnifiedSystem(canvas: Canvas) {
+        refreshGeometry()
         val left = plotLeft()
         val right = plotRight()
         val top = plotTop()
@@ -1329,10 +1327,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val ACTIVE_NODE_RADIUS_DP = 8f
         private const val NODE_TOUCH_RADIUS_DP = 22f
         private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
-        private const val PHASE_MIN_DEG = -180.0
-        private const val PHASE_MAX_DEG = 180.0
-        private const val GROUP_DELAY_MIN_MS = -2.0
-        private const val GROUP_DELAY_MAX_MS = 10.0
 
         private const val METER_FLOOR_DB = -50f
         private const val METER_CEILING_DB = 0f
