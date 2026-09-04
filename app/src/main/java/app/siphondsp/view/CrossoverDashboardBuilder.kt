@@ -147,20 +147,33 @@ class CrossoverDashboardBuilder(
         )
     }
 
-    fun sectionHeader(title: String, accentColor: Int? = null) {
+    fun sectionHeader(
+        title: String,
+        accentColor: Int? = null,
+        // 12.5f (the small accent-colored sub-group label, eg. Compressor's "Low bus"/"Mid bus")
+        // by default. Pass 18f to match a panel's own dashboardPanel() title instead -- for a
+        // header that's splitting one page into named groups at page-title weight rather than
+        // sub-group weight (see the Crossovers page's "Subsonic Protection"/"Crossovers" headers).
+        textSize: Float = 12.5f,
+        // The divider rule under the title -- on for the small accent-colored style's existing
+        // call sites, off for a page-title-weight header standing on its own.
+        showDivider: Boolean = true,
+    ) {
         if (currentContent.childCount > 2) currentContent.addView(space(8))
         currentContent.addView(TextView(context).apply {
             text = title
-            textSize = 12.5f
+            this.textSize = textSize
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentColor ?: accentBlue)
             setPadding(0, dp(2), 0, dp(7))
         })
-        currentContent.addView(View(context).apply {
-            setBackgroundColor(divider)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-            bottomMargin = dp(4)
-        })
+        if (showDivider) {
+            currentContent.addView(View(context).apply {
+                setBackgroundColor(divider)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                bottomMargin = dp(4)
+            })
+        }
     }
 
     fun addSegmentedSwitchRow(
@@ -177,9 +190,13 @@ class CrossoverDashboardBuilder(
         // Called after the value is written -- for callers whose other rows need to be rebuilt to
         // reflect this switch's new state (see the Gains & Delay Link L/R toggle).
         onToggled: () -> Unit = {},
+        // Bumps the title's text size above the default row-label size -- for a switch row that's
+        // standing in as its own section heading (see the Output page's Limiter row) rather than
+        // sitting alongside a separate sectionHeader(). null keeps every other call site's default.
+        titleTextSize: Float? = null,
     ) {
         val row = createRow()
-        row.addView(labelBlock(title, subtitle), labelParams())
+        row.addView(labelBlock(title, subtitle, titleTextSize), labelParams())
 
         // Left-aligned to sit directly under the label column, at the same horizontal offset
         // addSliderRow's slider starts at (label column + 14dp), rather than hugging the row's
@@ -729,9 +746,9 @@ class CrossoverDashboardBuilder(
 
     private fun labelParams() = LinearLayout.LayoutParams(dp(LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT)
 
-    private fun singleLineLabel(label: String) = TextView(context).apply {
+    private fun singleLineLabel(label: String, size: Float = 13f) = TextView(context).apply {
         text = label
-        textSize = 13f
+        textSize = size
         maxLines = 1
         ellipsize = android.text.TextUtils.TruncateAt.END
         setTextColor(Color.rgb(231, 235, 239))
@@ -794,9 +811,9 @@ class CrossoverDashboardBuilder(
         background = BmwDashboardSkin.glassSegmentDrawable(context, accentColor)
     }
 
-    private fun labelBlock(title: String, subtitle: String?) = LinearLayout(context).apply {
+    private fun labelBlock(title: String, subtitle: String?, titleTextSize: Float? = null) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        addView(singleLineLabel(title))
+        addView(singleLineLabel(title, titleTextSize ?: 13f))
         if (!subtitle.isNullOrBlank()) {
             addView(TextView(context).apply {
                 text = subtitle
