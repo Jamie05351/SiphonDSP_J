@@ -720,7 +720,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawUnifiedGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(6f, 0f, -6f, -12f, -18f, -24f), zeroLine = 0f, toY = ::yForGain)
+        drawUnifiedGridLines(canvas, left, right, top, bottom, floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f), zeroLine = 0f, toY = ::yForGain)
     }
 
     private fun drawPhaseGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
