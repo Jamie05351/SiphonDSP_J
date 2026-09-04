@@ -1,5 +1,6 @@
 package app.siphondsp.fragment
 
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -83,6 +84,10 @@ class CrossoverTiltFragment : Fragment() {
             // Blank title/subtitle: the toolbar already shows "Crossovers & Tilt", so repeating
             // it here just wastes vertical space (same reasoning Gains & Delay's page uses).
             dashboardPanel("", null) {
+                // Page-title-weight headers (18f, no divider) matching dashboardPanel()'s own
+                // title style -- see [Gains & Delay]'s "Output"/"Limiter" headers -- splitting
+                // this one page into its two control groups.
+                sectionHeader("Subsonic Protection", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_subsonic_lr4),
                     null,
@@ -95,6 +100,7 @@ class CrossoverTiltFragment : Fragment() {
                     20f, 60f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                 )
+                sectionHeader("Crossovers", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 // Both crossovers are LR4-only now (the 18dB/oct option was removed -- the
                 // mid-band highpass was already secretly LR4-only at the native layer, so this
                 // just makes the low-band one match instead of exposing a slope choice for it).
