@@ -107,7 +107,13 @@ class NativeBmwCompressorFragment : Fragment() {
         }
 
         pagerContainer.removeAllViews()
-        pagerContainer.addView(DspPager.build(ctx, pages))
+        pagerContainer.addView(
+            DspPager.build(
+                ctx,
+                pages,
+                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
+            ),
+        )
     }
 
     /** Page 1: the pinned-no-more [CompressorSurface] plus the slim MBC enable + mix strip. */

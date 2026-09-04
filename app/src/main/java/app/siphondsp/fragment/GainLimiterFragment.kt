@@ -188,7 +188,11 @@ class GainLimiterFragment : Fragment() {
 
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(diagramPage, outputPage)),
+            DspPager.build(
+                requireContext(),
+                listOf(diagramPage, outputPage),
+                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
+            ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }

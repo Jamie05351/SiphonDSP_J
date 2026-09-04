@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
+import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
@@ -112,6 +113,7 @@ class OutputAllPassFragment : Fragment() {
                     outputPage("Left Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
                     outputPage("Right Mid", NativeBmwDspValues.OUTPUT_MID_RIGHT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
                 ),
+                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
