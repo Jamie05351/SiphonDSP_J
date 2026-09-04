@@ -142,44 +142,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             if (field == value) return
             field = value
             if (isAttachedToWindow) {
-                if (value) startSpectrum() else stopSpectrum()
+                if (value) spectrumTicker.start() else spectrumTicker.stop()
             }
         }
-    private val spectrumHandler = Handler(Looper.getMainLooper())
-    private var spectrumActive = false
-    private val levelScratch = FloatArray(4)
-    private val leftMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
-    private val rightMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
-    private val spectrumTick = object : Runnable {
-        override fun run() {
-            if (showGainMeters) updateGainMeters()
-            invalidate()
-            spectrumHandler.postDelayed(this, 33L)
-        }
-    }
 
-    private fun updateGainMeters() {
-        SpectrumEngine.channelLevelsInto(levelScratch)
-        val now = System.currentTimeMillis()
-        leftMeter.update(levelScratch[0], levelScratch[1], now)
-        rightMeter.update(levelScratch[2], levelScratch[3], now)
-    }
-
-    private fun startSpectrum() {
-        if (spectrumActive) return
-        spectrumActive = true
-        SpectrumEngine.acquire()
-        spectrumHandler.post(spectrumTick)
-    }
-
-    private fun stopSpectrum() {
-        if (!spectrumActive) return
-        spectrumActive = false
-        spectrumHandler.removeCallbacks(spectrumTick)
-        SpectrumEngine.release()
-        leftMeter.reset()
-        rightMeter.reset()
-    }
+    private val spectrumTicker = SpectrumTicker(
+        onTick = ::invalidate,
+        gainMetersEnabled = { showGainMeters },
+    )
 
     // --- Tapped-node info card: nodes themselves are always drawn now, but tapping one pops a
     // small read-only detail card (filter type, freq/gain/Q, channel, which bank) that holds
@@ -436,7 +406,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (showSpectrum) startSpectrum()
+        if (showSpectrum) spectrumTicker.start()
     }
 
 
@@ -464,7 +434,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onDetachedFromWindow() {
         dismissInfoCard()
-        stopSpectrum()
+        spectrumTicker.stop()
         super.onDetachedFromWindow()
     }
 
@@ -660,7 +630,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
                 drawMonoBassRegion(canvas, left, right, top, bottom)
-                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawFilterOverlays(canvas, left, right)
                 drawPerBandFills(canvas, left, right)
@@ -674,7 +644,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
                 drawMonoBassRegion(canvas, left, right, top, bottom)
-                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawSumCurve(canvas, left, right, top, bottom)
                 drawSumPhaseOverlay(canvas, left, right)
@@ -698,8 +668,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val gap = 4f * density
         val leftBarX = plotRight + 5f * density
         val rightBarX = leftBarX + barWidth + gap
-        drawMeterBar(canvas, leftBarX, top, bottom, barWidth, leftMeter)
-        drawMeterBar(canvas, rightBarX, top, bottom, barWidth, rightMeter)
+        drawMeterBar(canvas, leftBarX, top, bottom, barWidth, spectrumTicker.leftMeter)
+        drawMeterBar(canvas, rightBarX, top, bottom, barWidth, spectrumTicker.rightMeter)
         canvas.drawText("L", leftBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
         canvas.drawText("R", rightBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
     }
