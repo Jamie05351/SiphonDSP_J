@@ -12,16 +12,25 @@ import androidx.viewpager2.widget.ViewPager2
 import kotlin.math.roundToInt
 
 /**
- * Wraps a fixed set of pre-built page views in a [ViewPager2] with a numbered page-toggle strip
- * pinned top-right, directly under the tri-colour stripe -- for the DSP workspace screens that
- * page their sections (Gains & Delay, Crossovers & Tilt, Compressor, All-pass; the Parametric EQ
- * screen builds its own pager and is deliberately not routed through here). Tap a number to jump;
- * horizontal swipe still works. Selected box lights green (the same neon as the ON/OFF switch),
- * its number stays white; unselected boxes and numbers are greyed. Hand-rolled to match the rest
- * of this dashboard chrome.
+ * Wraps a fixed set of pre-built page views in a [ViewPager2] with a numbered page-toggle strip,
+ * top-right -- for the DSP workspace screens that page their sections (Gains & Delay, Crossovers
+ * & Tilt, Compressor, All-pass; the Parametric EQ screen builds its own pager and is deliberately
+ * not routed through here). Tap a number to jump; horizontal swipe still works. Selected box's
+ * border and number light green (the same neon as the ON/OFF switch), no fill -- unselected boxes
+ * and numbers are greyed. Hand-rolled to match the rest of this dashboard chrome.
+ *
+ * [toggleContainer], when given, is where the toggle row docks instead of the pager's own root --
+ * callers pass the activity's `R.id.dsp_page_toggle_slot` (see activity_parametric_eq.xml) so the
+ * numbers sit in their own row above the tri-colour stripe, not inside the scrolling content.
+ * null keeps the toggle pinned atop the pager itself, same as before.
  */
 object DspPager {
-    fun build(context: Context, pages: List<View>, onPageSelected: (Int) -> Unit = {}): View {
+    fun build(
+        context: Context,
+        pages: List<View>,
+        onPageSelected: (Int) -> Unit = {},
+        toggleContainer: ViewGroup? = null,
+    ): View {
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -69,7 +78,15 @@ object DspPager {
                     onPageSelected(position)
                 }
             })
-            root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            if (toggleContainer != null) {
+                // The slot itself is wrap_content-width (see activity_parametric_eq.xml) so it
+                // doesn't add to the toolbar's own fixed height -- match its width here too
+                // (not MATCH_PARENT) so the two don't fight over sizing the row.
+                toggleContainer.removeAllViews()
+                toggleContainer.addView(toggleRow, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            } else {
+                root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            }
         }
 
         root.addView(viewPager, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -80,20 +97,20 @@ object DspPager {
         val selected = box.isSelected
         box.background = GradientDrawable().apply {
             cornerRadius = dp(context, 5).toFloat()
-            setColor(if (selected) TOGGLE_ON_GREEN_FILL else UNSELECTED_FILL)
+            // No fill on the selected box any more -- just its border and number light green;
+            // the workspace background shows through, same as unselected (which was never filled
+            // solid either).
+            setColor(if (selected) Color.TRANSPARENT else UNSELECTED_FILL)
             setStroke(
                 dp(context, 1),
                 if (selected) BmwDashboardSkin.TOGGLE_ON_GREEN else UNSELECTED_STROKE,
             )
         }
-        box.setTextColor(if (selected) Color.WHITE else UNSELECTED_TEXT)
-        // White numeral on neon green needs a hair of shadow to stay legible.
-        if (selected) box.setShadowLayer(dp(context, 2).toFloat(), 0f, 0f, Color.argb(0xAA, 0, 0, 0))
-        else box.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+        box.setTextColor(if (selected) BmwDashboardSkin.TOGGLE_ON_GREEN else UNSELECTED_TEXT)
+        box.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
     }
 
     // 50% opacity so the photo background reads through the box -- glassier than a near-opaque fill.
-    private val TOGGLE_ON_GREEN_FILL = Color.argb(0x80, 0x39, 0xFF, 0x14)
     private val UNSELECTED_FILL = Color.argb(0x80, 0x10, 0x12, 0x16)
     private val UNSELECTED_STROKE = Color.argb(0x66, 0x8A, 0x93, 0x9E)
     private val UNSELECTED_TEXT = Color.argb(0xB0, 0x9A, 0xA1, 0xAB)

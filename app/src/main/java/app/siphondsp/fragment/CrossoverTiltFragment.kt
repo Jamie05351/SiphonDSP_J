@@ -170,7 +170,11 @@ class CrossoverTiltFragment : Fragment() {
 
         container.removeAllViews()
         container.addView(
-            DspPager.build(requireContext(), listOf(crossoversPage, tiltPage, monoBassPage)),
+            DspPager.build(
+                requireContext(),
+                listOf(crossoversPage, tiltPage, monoBassPage),
+                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
+            ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }

@@ -715,11 +715,19 @@ internal class GlassBoxDrawable(context: Context, private val showBorder: Boolea
             intArrayOf(BmwDashboardSkin.GLASS_FILL_TOP, BmwDashboardSkin.GLASS_FILL_MID, BmwDashboardSkin.GLASS_FILL_BOTTOM),
             floatArrayOf(0f, 0.4f, 1f), Shader.TileMode.CLAMP,
         )
-        strokePaint.shader = LinearGradient(
-            boxRect.left, boxRect.top, boxRect.left, boxRect.bottom,
-            intArrayOf(BmwDashboardSkin.GLASS_RIM_TOP, BmwDashboardSkin.GLASS_RIM_MID, BmwDashboardSkin.GLASS_RIM_BOTTOM),
-            floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
-        )
+        // accentColor, when given, tints the border to that flat colour instead of the neutral
+        // glass rim (a non-null shader would otherwise win over Paint.color, so it's cleared).
+        if (accentColor != null) {
+            strokePaint.shader = null
+            strokePaint.color = accentColor
+        } else {
+            strokePaint.color = Color.WHITE
+            strokePaint.shader = LinearGradient(
+                boxRect.left, boxRect.top, boxRect.left, boxRect.bottom,
+                intArrayOf(BmwDashboardSkin.GLASS_RIM_TOP, BmwDashboardSkin.GLASS_RIM_MID, BmwDashboardSkin.GLASS_RIM_BOTTOM),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP,
+            )
+        }
 
         // Diagonal light sweep in the top-left corner -- same placement as the source art's own
         // "glass body" highlight quad, the one cue that reads as glass rather than a flat box.

@@ -11,15 +11,35 @@
         android:fitsSystemWindows="true"
         app:liftOnScroll="false">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Theme.SiphonDSP.Toolbar"
+        <!-- The toggle slot below is a sibling overlay on top of the toolbar, not a row after
+             it, so it shares the toolbar's own 36dp height instead of adding one: the header's
+             total height (toolbar + stripe) is unchanged from before DspPager routed here. -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="@dimen/header_toolbar_height"
-            android:paddingEnd="24dp"
-            app:contentInsetEnd="24dp"
-            app:contentInsetEndWithActions="24dp"
-            app:titleCentered="true" />
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                style="@style/Theme.SiphonDSP.Toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/header_toolbar_height"
+                android:paddingEnd="24dp"
+                app:contentInsetEnd="24dp"
+                app:contentInsetEndWithActions="24dp"
+                app:titleCentered="true" />
+
+            <!-- DspPager's numbered page toggle (Gains & Delay, Crossovers & Tilt, Compressor,
+                 All-pass) docks here when a fragment provides it, floating over the toolbar just
+                 left of its power icon, above the tri-colour stripe below. Empty/gone on
+                 screens that don't page (e.g. the Parametric EQ screen, which builds its own
+                 pager). -->
+            <FrameLayout
+                android:id="@+id/dsp_page_toggle_slot"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="64dp" />
+        </FrameLayout>
 
         <include layout="@layout/view_m_stripe_divider" />
     </com.google.android.material.appbar.AppBarLayout>
