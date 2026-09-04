@@ -176,6 +176,76 @@ class CrossoverDashboardBuilder(
         }
     }
 
+    /** A header row: the panel-title-weight label on the left, with one or two compact glass
+     *  ON/OFF switches packed inline on the right -- for a page whose master enable (and
+     *  optionally a second switch) belongs at header height rather than its own separate switch
+     *  row (see the Compressor Band pages' "Band N" header, carrying both the band's own enable
+     *  switch and its Stereo link switch). Call with a blank dashboardPanel() title so this row
+     *  is the page's only header. */
+    fun titleRowWithSwitches(
+        title: String,
+        enabledIndex: Int,
+        enabledMirror: IntArray = intArrayOf(),
+        onEnabledToggled: () -> Unit = {},
+        // A second switch (with its own label) packed further along the same row -- null skips it.
+        secondLabel: String? = null,
+        secondIndex: Int? = null,
+        secondMirror: IntArray = intArrayOf(),
+        onSecondToggled: () -> Unit = {},
+    ) {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2), 0, dp(10))
+        }
+        row.addView(
+            TextView(context).apply {
+                text = title
+                textSize = 18f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(Color.WHITE)
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        row.addView(glassSwitch(enabledIndex, enabledMirror, title, onEnabledToggled))
+
+        if (secondLabel != null && secondIndex != null) {
+            row.addView(
+                singleLineLabel(secondLabel),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = dp(20)
+                    marginEnd = dp(10)
+                },
+            )
+            row.addView(glassSwitch(secondIndex, secondMirror, secondLabel, onSecondToggled))
+        }
+
+        currentContent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** The plain glass ON/OFF MaterialSwitch shared by [addSegmentedSwitchRow] (its default
+     *  OFF/ON case) and [titleRowWithSwitches] -- same BmwDashboardSkin glass thumb/track art,
+     *  same value-write-on-toggle wiring. */
+    private fun glassSwitch(index: Int, mirrorIndices: IntArray, contentDescription: String, onToggled: () -> Unit) =
+        MaterialSwitch(context).apply {
+            isChecked = values[index] >= .5f
+            this.contentDescription = contentDescription
+            showText = false
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(0, 0, 0, 0)
+            // null clears the default tint lists so the custom glass drawables' own colors show
+            // through unfiltered.
+            thumbTintList = null
+            trackTintList = null
+            thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context)
+            trackDrawable = BmwDashboardSkin.glassSwitchTrackDrawable(context)
+            setOnCheckedChangeListener { _, checked ->
+                writeValue(index, mirrorIndices, if (checked) 1f else 0f)
+                onToggled()
+            }
+        }
+
     fun addSegmentedSwitchRow(
         title: String,
         subtitle: String?,
@@ -207,25 +277,7 @@ class CrossoverDashboardBuilder(
         }
 
         if (offLabel == "OFF" && onLabel == "ON") {
-            val toggle = MaterialSwitch(context).apply {
-                isChecked = values[index] >= .5f
-                contentDescription = title
-                showText = false
-                minWidth = 0
-                minimumWidth = 0
-                setPadding(0, 0, 0, 0)
-                // null clears the default tint lists so the custom glass drawables' own colors
-                // show through unfiltered.
-                thumbTintList = null
-                trackTintList = null
-                thumbDrawable = BmwDashboardSkin.glassSwitchThumbDrawable(context)
-                trackDrawable = BmwDashboardSkin.glassSwitchTrackDrawable(context)
-                setOnCheckedChangeListener { _, checked ->
-                    writeValue(index, mirrorIndices, if (checked) 1f else 0f)
-                    onToggled()
-                }
-            }
-            controlSlot.addView(toggle)
+            controlSlot.addView(glassSwitch(index, mirrorIndices, title, onToggled))
         } else {
             val group = buildGlassSegmentGroup(
                 offLabel, onLabel, values[index] >= .5f,

@@ -16,7 +16,6 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorSurface
-import app.siphondsp.view.CompressorSurfaceMath
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.DspPager
 import app.siphondsp.view.MbcBandGrMeter
@@ -92,7 +91,6 @@ class NativeBmwCompressorFragment : Fragment() {
             surface?.setSystemValues(updated)
         }
 
-        val splits = CompressorSurfaceMath.splitFrequencies(values)
         bandGrMeters.fill(null)
         lowBusGrMeter = null
         midBusGrMeter = null
@@ -101,7 +99,7 @@ class NativeBmwCompressorFragment : Fragment() {
         val pages = buildList {
             add(buildVisualiserPage(ctx, values, onChanged))
             for (band in 0 until NativeBmwDspValues.MBC_BAND_COUNT) {
-                add(buildBandPage(ctx, band, splits, values, onChanged))
+                add(buildBandPage(ctx, band, values, onChanged))
             }
             add(buildDriverPage(ctx, values, onChanged))
         }
@@ -147,7 +145,6 @@ class NativeBmwCompressorFragment : Fragment() {
     private fun buildBandPage(
         ctx: Context,
         band: Int,
-        splits: DoubleArray,
         values: FloatArray,
         onChanged: (FloatArray) -> Unit,
     ): View {
@@ -157,15 +154,19 @@ class NativeBmwCompressorFragment : Fragment() {
         }
         val meter = MbcBandGrMeter(ctx)
         bandGrMeters[band] = meter
-        val (lowHz, highHz) = CompressorSurfaceMath.bandRange(band, splits)
 
         fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
-        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel(
-            "Band ${band + 1}",
-            "${lowHz.roundToInt()}–${highHz.roundToInt()} Hz",
-        ) {
-            addSegmentedSwitchRow("Band active", null, idx(NativeBmwDspValues.MBC_FIELD_ENABLED))
+        // Blank dashboardPanel title/subtitle: the frequency-range subheading was dropped, and
+        // the band's own title now lives in titleRowWithSwitches below, alongside its enable and
+        // Stereo link switches.
+        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("", null) {
+            titleRowWithSwitches(
+                "Band ${band + 1}",
+                enabledIndex = idx(NativeBmwDspValues.MBC_FIELD_ENABLED),
+                secondLabel = "Stereo link",
+                secondIndex = idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK),
+            )
             addCustomView(meter)
             addSliderRow("Threshold", idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD), -48f, 0f, .5f, "dB")
             addSliderRow("Ratio", idx(NativeBmwDspValues.MBC_FIELD_RATIO), 1f, 20f, .1f, ":1")
@@ -173,11 +174,6 @@ class NativeBmwCompressorFragment : Fragment() {
             addSliderRow("Attack", idx(NativeBmwDspValues.MBC_FIELD_ATTACK), 1f, 200f, 1f, "ms")
             addSliderRow("Release", idx(NativeBmwDspValues.MBC_FIELD_RELEASE), 20f, 1000f, 5f, "ms")
             addSliderRow("Makeup", idx(NativeBmwDspValues.MBC_FIELD_MAKEUP), 0f, 12f, .1f, "dB")
-            addSegmentedSwitchRow(
-                "Stereo link",
-                "Detect on max(L,R), one gain cell for both.",
-                idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK),
-            )
         }
         return NestedScrollView(ctx).apply {
             addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
