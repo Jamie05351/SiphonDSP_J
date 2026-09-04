@@ -14,6 +14,7 @@ import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Drawable.ConstantState
 // Every design token these drawables read, the dp()/blend() helpers and the two bitmap loaders
@@ -394,6 +395,29 @@ internal class GlassSwitchTrackDrawable(context: Context) : Drawable() {
         color = BmwDashboardSkin.GLASS_SWITCH_TRACK_RIM_COLOR
     }
     private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // ON/OFF label revealed in the track's own "unlit" half -- whichever side the thumb (a
+    // separate drawable this track knows nothing about) isn't currently resting on. Same status
+    // colour as the shell border, updated together on the same state_checked transition.
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        // Same 14sp the title/value glass boxes use (CrossoverDashboardBuilder's
+        // createBoxedTitleText/createBoxedValueText) -- density-scaled the same way every other
+        // dp measurement in this file is, since Paint.textSize on a raw Canvas draw is px, not sp.
+        textSize = 14f * density
+        letterSpacing = 0.03f
+        color = BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR
+    }
+    // Blurred copy of labelPaint, drawn underneath it -- gives the text the same glow the border
+    // gets, rather than sitting flat against a glowing pill.
+    private val labelGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textSize = 14f * density
+        letterSpacing = 0.03f
+        maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
+        color = BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR
+    }
     private val trackRect = RectF()
     private val sheenPath = android.graphics.Path()
     private val clipPath = android.graphics.Path()
@@ -406,7 +430,10 @@ internal class GlassSwitchTrackDrawable(context: Context) : Drawable() {
         val wasChecked = checked
         checked = state.contains(android.R.attr.state_checked)
         if (checked != wasChecked) {
-            shellBorderPaint.color = if (checked) BmwDashboardSkin.GLASS_SWITCH_ON_COLOR else BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR
+            val statusColor = if (checked) BmwDashboardSkin.GLASS_SWITCH_ON_COLOR else BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR
+            shellBorderPaint.color = statusColor
+            labelPaint.color = statusColor
+            labelGlowPaint.color = statusColor
             invalidateSelf()
         }
         return checked != wasChecked
@@ -449,6 +476,13 @@ internal class GlassSwitchTrackDrawable(context: Context) : Drawable() {
         canvas.clipPath(clipPath)
         canvas.drawPath(sheenPath, sheenPaint)
         canvas.restore()
+        // Thumb slides right when checked (ON), left when unchecked (OFF) -- the label sits in
+        // the quarter of the track the thumb has vacated, not under where it currently rests.
+        val label = if (checked) "ON" else "OFF"
+        val labelX = trackRect.left + trackRect.width() * if (checked) 0.27f else 0.73f
+        val labelY = trackRect.centerY() - (labelPaint.descent() + labelPaint.ascent()) / 2f
+        canvas.drawText(label, labelX, labelY, labelGlowPaint)
+        canvas.drawText(label, labelX, labelY, labelPaint)
         canvas.drawRoundRect(trackRect, corner, corner, rimPaint)
         canvas.drawRoundRect(trackRect, corner, corner, shellBorderPaint)
     }
