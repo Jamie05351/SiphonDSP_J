@@ -36,15 +36,16 @@ class CrossoverDashboardBuilder(
     private lateinit var currentContent: LinearLayout
 
     // Every addSliderRow() call within the *current* dashboardPanel appends here; once that
-    // panel's build() lambda returns, dashboardPanel sizes every title box (and the matching tick
-    // -row spacer that has to align under it) to whatever the single longest title in the group
-    // actually needs -- not a fixed dp guess -- so every row in that group still lines up, but the
-    // column is only as wide as it needs to be for its own labels (Gains' 5 short labels don't
-    // reserve the same width Compressor's "Makeup gain" needs).
+    // panel's build() lambda returns, dashboardPanel sizes every title box to whatever the single
+    // longest title in the group actually needs -- not a fixed dp guess -- so every row in that
+    // group still lines up, but the column is only as wide as it needs to be for its own labels
+    // (Gains' 5 short labels don't reserve the same width Compressor's "Makeup gain" needs).
     private val pendingTitleBoxes = mutableListOf<TextView>()
-    private val pendingTitleSpacers = mutableListOf<View>()
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
+    // Slider-row title text and value-box number: bright white now -- the row's colour identity
+    // moved onto the title/value box borders (tinted to the slider's own accent) instead.
+    private val boxTextColor = Color.WHITE
     private val valueBoxBackground = Color.rgb(16, 19, 24)
     private val segmentIdle = Color.rgb(20, 23, 28)
     private val segmentStroke = Color.rgb(67, 73, 82)
@@ -102,23 +103,17 @@ class CrossoverDashboardBuilder(
 
         currentContent = content
         pendingTitleBoxes.clear()
-        pendingTitleSpacers.clear()
         build()
 
-        // Every addSliderRow() in this panel queued its title box and tick-row spacer above --
-        // now that the whole panel's title strings are known, size all of them to whichever one
-        // actually needs the most room, so every row's title column (and therefore its slider's
-        // start x) lines up without hand-picking a width per page.
+        // Every addSliderRow() in this panel queued its title box above -- now that the whole
+        // panel's title strings are known, size all of them to whichever one actually needs the
+        // most room, so every row's title column (and therefore its slider's start x) lines up
+        // without hand-picking a width per page.
         if (pendingTitleBoxes.isNotEmpty()) {
             val padding = dp(18) * 2
             val maxTextWidth = pendingTitleBoxes.maxOf { it.paint.measureText(it.text.toString()) }
             val boxWidth = maxTextWidth.roundToInt() + padding
             pendingTitleBoxes.forEach { (it.layoutParams as LinearLayout.LayoutParams).width = boxWidth }
-            // The tick-row spacer stands in for the title box *and* the gap beside it (the
-            // slider's own marginStart), so the tick labels line up under where the slider
-            // actually starts, not just under the title box's own right edge.
-            val spacerWidth = boxWidth + dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
-            pendingTitleSpacers.forEach { (it.layoutParams as LinearLayout.LayoutParams).width = spacerWidth }
         }
 
         card.addView(content)
@@ -275,8 +270,12 @@ class CrossoverDashboardBuilder(
         // what's *displayed* here (not rewriting values[index] itself) is enough to keep them in
         // sync; the stored value corrects for real the moment the user touches this row.
         val displayValue = values[index].coerceIn(min, max)
-        val valueText = createBoxedValueText(displayValue * displayScale, suffix, accentColor)
-        val titleBox = createBoxedTitleText(label, accentColor)
+        // The title + value box borders and the value box's right-pinned unit all take this row's
+        // own slider colour -- the accent the handle/capsule is drawn in -- so the boxes read as
+        // belonging to that slider; falls back to accentColor, then the default cyan.
+        val sliderColor = sliderAccentColor ?: accentColor ?: BmwDashboardSkin.SLIDER_DEFAULT_COLOR
+        val valueText = createBoxedValueText(displayValue * displayScale, suffix, sliderColor)
+        val titleBox = createBoxedTitleText(label, sliderColor)
         topRow.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
         pendingTitleBoxes += titleBox
 
@@ -330,20 +329,13 @@ class CrossoverDashboardBuilder(
             marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
             marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
         })
-        topRow.addView(valueText)
+        // Explicit width so the value box's own number(weight 1)/unit(wrap) split has a fixed
+        // span to centre the number within -- a weighted child in a wrap_content parent collapses.
+        topRow.addView(
+            valueText,
+            LinearLayout.LayoutParams(dp(VALUE_WIDTH_DP), dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)),
+        )
         container.addView(topRow)
-
-        val tickRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        // Placeholder width, 0 until dashboardPanel finalizes it alongside the title boxes above
-        // -- has to match whatever width they end up at so the tick labels stay under the slider.
-        val titleSpacer = View(context).apply { layoutParams = LinearLayout.LayoutParams(0, dp(1)) }
-        tickRow.addView(titleSpacer)
-        pendingTitleSpacers += titleSpacer
-        tickRow.addView(tickLabel(format.format(min * displayScale), Gravity.START), tickParams())
-        tickRow.addView(tickLabel(format.format((min + max) / 2f * displayScale), Gravity.CENTER_HORIZONTAL), tickParams())
-        tickRow.addView(tickLabel(format.format(max * displayScale), Gravity.END), tickParams())
-        tickRow.addView(space(VALUE_WIDTH_DP + BmwDashboardSkin.SLIDER_VALUE_GAP_DP))
-        container.addView(tickRow)
 
         currentContent.addView(container, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
@@ -363,6 +355,7 @@ class CrossoverDashboardBuilder(
         min: Float,
         max: Float,
         suffix: String,
+        unitColor: Int,
         linkedIndex: Int? = null,
         onLinked: () -> Unit = {},
     ): View {
@@ -371,7 +364,7 @@ class CrossoverDashboardBuilder(
             gravity = Gravity.CENTER_VERTICAL
         }
         row.addView(smallLabel(label), LinearLayout.LayoutParams(dp(ROW_LABEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
-        val valueText = createBoxedValueText(values[index], suffix)
+        val valueText = createBoxedValueText(values[index], suffix, unitColor)
         valueText.setOnClickListener {
             context.showInputAlert(
                 android.view.LayoutInflater.from(context),
@@ -480,7 +473,7 @@ class CrossoverDashboardBuilder(
             setTextColor(accentColor)
         })
         content.addView(vspace(3))
-        content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms", delayLinkedIndex, onDelayChanged))
+        content.addView(buildMiniValueRow("DELAY", delayIndex, delayMin, delayMax, "ms", accentColor, delayLinkedIndex, onDelayChanged))
         content.addView(vspace(2))
         content.addView(buildMiniToggleRow("POL", polarityIndex, polarityMirror, onPolarityChanged))
         content.addView(vspace(2))
@@ -653,7 +646,7 @@ class CrossoverDashboardBuilder(
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = dp(BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP)
         }
-        val titleBox = createBoxedTitleText(label)
+        val titleBox = createBoxedTitleText(label, BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
         row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
         pendingTitleBoxes += titleBox
 
@@ -804,42 +797,49 @@ class CrossoverDashboardBuilder(
         }
     }
 
-    /** Bold accent-coloured value reading in a glass-panel box at the end of a slider row -- tap
-     *  to edit. Same [BmwDashboardSkin.glassBoxDrawable] the title box uses, so both read as one
-     *  family; [minimumWidth]/[minimumHeight] (not fixed layout dimensions) let it grow for a
-     *  longer reading while still meeting the spec's floor size for a short one. [color] matches
-     *  this to a colour-coded row's title text and border (null keeps the default blue/neutral
-     *  border, unaffected for every uncoloured row) -- see [createBoxedTitleText]. Text size
-     *  matches the title box's 14sp: a smaller value reading was hard to read at a glance in a
-     *  car, and there's no reason for the number to read smaller than its own label. */
-    private fun createBoxedValueText(value: Float, suffix: String, color: Int? = null) = TextView(context).apply {
-        textSize = 14f
-        setTypeface(typeface, Typeface.BOLD)
-        isClickable = true
-        isFocusable = true
-        setTextColor(color ?: accentBlue)
-        gravity = Gravity.CENTER
-        setPadding(dp(10), dp(2), dp(10), dp(2))
-        minimumWidth = dp(BmwDashboardSkin.SLIDER_VALUE_MIN_WIDTH_DP)
-        minimumHeight = dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)
-        background = BmwDashboardSkin.glassBoxDrawable(context, accentColor = color)
-        updateValueBox(this, value, suffix)
-    }
+    /** The value reading in a glass-panel box at the end of a slider row -- tap to edit. Two
+     *  children: the number, bold white, centred in the box; and the unit ([suffix]) pinned to
+     *  the box's right border. Both the box border and the unit take [sliderColor] -- the row's
+     *  own slider (handle/capsule) colour. */
+    private fun createBoxedValueText(value: Float, suffix: String, sliderColor: Int) =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            minimumWidth = dp(BmwDashboardSkin.SLIDER_VALUE_MIN_WIDTH_DP)
+            minimumHeight = dp(BmwDashboardSkin.SLIDER_VALUE_HEIGHT_DP)
+            background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = true, accentColor = sliderColor)
+            addView(TextView(context).apply {
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                maxLines = 1
+                gravity = Gravity.CENTER
+                setTextColor(boxTextColor)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            addView(TextView(context).apply {
+                text = suffix
+                textSize = 11f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+                setTextColor(sliderColor)
+                setPadding(dp(2), 0, dp(8), 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            updateValueBox(this, value, suffix)
+        }
 
-    /** Boxed slider-row title -- same [BmwDashboardSkin.glassBoxDrawable] language as
-     *  [createBoxedValueText], with a border only when [color] is given (a colour-coded row) --
-     *  every other, uncoloured title box keeps its original no-border look. Its width is left
-     *  to the caller: dashboardPanel sizes it (via pendingTitleBoxes) once the whole panel's
-     *  titles are known, not fixed here. */
-    private fun createBoxedTitleText(title: String, color: Int? = null) = TextView(context).apply {
+    /** Boxed slider-row title -- bold white text, border always drawn and tinted to [sliderColor]
+     *  (the row's own slider colour). Its width is left to the caller: dashboardPanel sizes it
+     *  (via pendingTitleBoxes) once the whole panel's titles are known, not fixed here. */
+    private fun createBoxedTitleText(title: String, sliderColor: Int) = TextView(context).apply {
         text = title
         textSize = 14f
         maxLines = 1
         ellipsize = android.text.TextUtils.TruncateAt.END
-        setTextColor(color ?: Color.rgb(0xE7, 0xEB, 0xEF))
+        setTextColor(boxTextColor)
         gravity = Gravity.CENTER_VERTICAL or Gravity.START
         setPadding(dp(18), dp(3), dp(18), dp(3))
-        background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = color != null, accentColor = color)
+        background = BmwDashboardSkin.glassBoxDrawable(context, showBorder = true, accentColor = sliderColor)
     }
 
     /** A larger boxed value reading with a small caption above it (e.g. "MID LEFT" / "0 ms") --
@@ -880,18 +880,14 @@ class CrossoverDashboardBuilder(
         (box.getChildAt(1) as TextView).text = "${format.format(value)} $suffix".trim()
     }
 
-    /** Min/center/max reading below a slider's track, aligned under it. */
-    private fun tickLabel(text: String, alignment: Int) = TextView(context).apply {
-        this.text = text
-        textSize = 10f
-        gravity = alignment
-        setTextColor(Color.rgb(124, 132, 142))
-    }
-
-    private fun tickParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-
+    // Plain "12.5 dB" text -- the channel-card GAIN row's inline reading (no box, no split unit).
     private fun updateValueBox(valueText: TextView, value: Float, suffix: String) {
         valueText.text = "${format.format(value)} $suffix".trim()
+    }
+
+    // The slider-row value box (see createBoxedValueText): number child centred, unit child fixed.
+    private fun updateValueBox(box: LinearLayout, value: Float, @Suppress("UNUSED_PARAMETER") suffix: String) {
+        (box.getChildAt(0) as TextView).text = format.format(value)
     }
 
     private fun space(widthDp: Int) = View(context).apply {

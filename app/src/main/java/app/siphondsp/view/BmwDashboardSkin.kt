@@ -153,8 +153,8 @@ object BmwDashboardSkin {
     // widths -> different slider lengths" problem that briefly motivated zeroing it.
     const val SLIDER_TITLE_GAP_DP = 75
     const val SLIDER_VALUE_GAP_DP = 24
-    const val SLIDER_TITLE_HEIGHT_DP = 40
-    const val SLIDER_VALUE_HEIGHT_DP = 24
+    const val SLIDER_TITLE_HEIGHT_DP = 30
+    const val SLIDER_VALUE_HEIGHT_DP = 30
     const val SLIDER_VALUE_MIN_WIDTH_DP = 64
     // Still referenced by SliderCapsuleDrawable below (the slider track's own capsule fill),
     // independent of the value/title box family.
