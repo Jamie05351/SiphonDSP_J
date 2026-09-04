@@ -7,23 +7,18 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
-import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.annotation.StringRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.ViewPager2
@@ -31,7 +26,6 @@ import app.siphondsp.R
 import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.adapter.ParametricEqBandAdapter
-import app.siphondsp.databinding.DialogPeqChoiceBinding
 import app.siphondsp.databinding.FragmentParametricEqBinding
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.ParametricEqBand
@@ -57,9 +51,6 @@ import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.ParametricEqSurface
 import app.siphondsp.view.StaticPagerAdapter
 import timber.log.Timber
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 import java.util.UUID
 
 class ParametricEqualizerFragment : Fragment() {
@@ -81,8 +72,7 @@ class ParametricEqualizerFragment : Fragment() {
             this@ParametricEqualizerFragment.applyCandidate(candidate, source)
     })
 
-    /** Trims trailing zeros ("1.41", "1000", "0.1") for the value dialog's field + range caption. */
-    private val peqValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US))
+    private fun dialogs() = PeqDialogs(requireContext(), layoutInflater)
 
     private fun refreshActionChips() {
         binding.chipUndo.isEnabled = history.canUndo
@@ -665,7 +655,7 @@ class ParametricEqualizerFragment : Fragment() {
         PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
     }
 
-    private fun showFrequencyDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showFrequencyDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_frequency), band.frequency, 20.0, 20000.0, "Hz",
     ) { value ->
         commitBandEdit(index, "edit_frequency") {
@@ -673,7 +663,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    private fun showGainDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showGainDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_gain), band.gain, -30.0, 30.0, "dB",
     ) { value ->
         commitBandEdit(index, "edit_gain") {
@@ -681,7 +671,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    private fun showQDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showQDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_q_factor), band.q, 0.1, 30.0, null,
     ) { value ->
         commitBandEdit(index, "edit_q") {
@@ -689,35 +679,9 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    /**
-     * Numeric value editor -- the exact same [showInputAlert] dialog the Delay / Compressor
-     * pages use (grey field, compact "min-max" range hint, Cancel/OK). The entered text is
-     * parsed and clamped to [[min], [max]] on commit; one edit is one undo entry.
-     */
-    private fun showPeqValueDialog(
-        title: String,
-        current: Double,
-        min: Double,
-        max: Double,
-        suffix: String?,
-        onCommit: (Double) -> Unit,
-    ) {
-        requireContext().showInputAlert(
-            layoutInflater,
-            title,
-            "${peqValueFormat.format(min)}–${peqValueFormat.format(max)}",
-            peqValueFormat.format(current),
-            true,
-            suffix,
-        ) { entered ->
-            val parsed = entered?.toDoubleOrNull()?.coerceIn(min, max) ?: return@showInputAlert
-            onCommit(parsed)
-        }
-    }
-
     private fun showFilterTypePicker(band: ParametricEqBand, index: Int) {
         val types = ParametricEqFilterType.entries
-        showPeqChoiceDialog(
+        dialogs().showChoice(
             titleRes = R.string.peq_filter_type,
             labels = listOf(
                 getString(R.string.peq_filter_type_peaking),
@@ -726,8 +690,9 @@ class ParametricEqualizerFragment : Fragment() {
                 getString(R.string.peq_filter_type_notch),
             ),
             currentIndex = types.indexOf(band.filterType),
+            accentColor = scopeAccent(),
         ) { picked ->
-            val newType = types.getOrNull(picked) ?: return@showPeqChoiceDialog
+            val newType = types.getOrNull(picked) ?: return@showChoice
             commitBandEdit(index, "edit_filter_type") {
                 ParametricEqBand(it.frequency, it.gain, it.q, newType, it.channel, it.uuid)
             }
@@ -736,63 +701,17 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun showChannelPicker(band: ParametricEqBand, index: Int) {
         val channels = ParametricEqChannel.entries
-        showPeqChoiceDialog(
+        dialogs().showChoice(
             titleRes = R.string.peq_channel,
             labels = channels.map { it.displayLabel },
             currentIndex = channels.indexOf(band.channel),
+            accentColor = scopeAccent(),
         ) { picked ->
-            val newChannel = channels.getOrNull(picked) ?: return@showPeqChoiceDialog
+            val newChannel = channels.getOrNull(picked) ?: return@showChoice
             commitBandEdit(index, "edit_channel") {
                 ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, newChannel, it.uuid)
             }
         }
-    }
-
-    /**
-     * Bespoke tap-to-commit choice list (see dialog_peq_choice.xml). Rows are glass boxes tinted
-     * with the current scope's accent; the current value is full-opacity, the rest dimmed.
-     * Tapping a row commits immediately and dismisses -- there is no OK button.
-     */
-    private fun showPeqChoiceDialog(
-        @StringRes titleRes: Int,
-        labels: List<String>,
-        currentIndex: Int,
-        onPick: (Int) -> Unit,
-    ) {
-        val ctx = requireContext()
-        val dialogBinding = DialogPeqChoiceBinding.inflate(layoutInflater)
-        val accent = scopeAccent()
-        val dialog = MaterialAlertDialogBuilder(ctx, R.style.ThemeOverlay_SiphonDSP_GlassDialog)
-            .setTitle(titleRes)
-            .setView(dialogBinding.root)
-            .create()
-        val density = resources.displayMetrics.density
-        val pad = (12 * density).toInt()
-        labels.forEachIndexed { i, label ->
-            val row = TextView(ctx).apply {
-                text = label
-                textSize = 16f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(pad, pad, pad, pad)
-                background = BmwDashboardSkin.glassBoxDrawable(ctx, accentColor = accent)
-                setTextColor(accent ?: BmwDashboardSkin.LIGHT_BLUE)
-                alpha = if (i == currentIndex) 1f else 0.55f
-                isClickable = true
-                setOnClickListener {
-                    dialog.dismiss()
-                    onPick(i)
-                }
-            }
-            dialogBinding.choiceContainer.addView(
-                row,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = (6 * density).toInt() },
-            )
-        }
-        dialog.show()
     }
 
     private fun performImport() = importFileLauncher.launch(arrayOf("text/plain", "text/*"))
