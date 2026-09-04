@@ -297,17 +297,13 @@ class ParametricEqualizerFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             uri ?: return@registerForActivityResult
             try {
-                val graphPrefs =
-                    requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+                val graphPrefs = PeqGraphPreferences(requireContext())
                 val backup = PrivatePeqBackup(
                     createdAtEpochMs = System.currentTimeMillis(),
                     state = BmwPeqPreset.fromState(peqState, name = "Jamie private PEQ backup"),
                     graphDisplay = PrivatePeqBackup.GraphDisplay(
-                        graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true),
-                        graphPrefs.getString(
-                            GRAPH_CHANNEL,
-                            ParametricEqSurface.ChannelDisplay.BOTH.name,
-                        ) ?: ParametricEqSurface.ChannelDisplay.BOTH.name,
+                        graphPrefs.showIndividualFilters,
+                        graphPrefs.channelDisplayName,
                     ),
                     // Full BMW DSP state (Gains & Delay, Compressor, Crossovers & Tilt), not
                     // just PEQ bands -- see PrivatePeqBackup.nativeDspValues.
@@ -358,15 +354,10 @@ class ParametricEqualizerFragment : Fragment() {
                                 NativeBmwDspValues.save(requireContext(), restored)
                                 NativeBmwDspValues.broadcast(requireContext(), restored)
                             }
-                            val graphPrefs = requireContext()
-                                .getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-                            graphPrefs.edit()
-                                .putBoolean(
-                                    GRAPH_SHOW_OVERLAYS,
-                                    backup.graphDisplay.showIndividualFilters,
-                                )
-                                .putString(GRAPH_CHANNEL, backup.graphDisplay.channelDisplay)
-                                .apply()
+                            PeqGraphPreferences(requireContext()).writeBackupGraphDisplay(
+                                backup.graphDisplay.showIndividualFilters,
+                                backup.graphDisplay.channelDisplay,
+                            )
                             binding.equalizerSurface.showIndividualFilters =
                                 backup.graphDisplay.showIndividualFilters
                             binding.equalizerSurface.channelDisplay =
@@ -493,9 +484,10 @@ class ParametricEqualizerFragment : Fragment() {
      *  swiping does the same job; cards_pager is the only way to switch. Portrait has no
      *  cards_pager -- no-op there. */
     private fun configurePager() {
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         peqDisplayMode = runCatching {
-            PeqDisplayMode.valueOf(graphPrefs.getString(GRAPH_DISPLAY_MODE, PeqDisplayMode.GRAPH.name)!!)
+            PeqDisplayMode.valueOf(
+                PeqGraphPreferences(requireContext()).listModeName ?: PeqDisplayMode.GRAPH.name
+            )
         }.getOrDefault(PeqDisplayMode.GRAPH)
 
         binding.cardsPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
@@ -509,8 +501,7 @@ class ParametricEqualizerFragment : Fragment() {
     private fun setDisplayMode(mode: PeqDisplayMode, smoothScroll: Boolean) {
         if (peqDisplayMode == mode) return
         peqDisplayMode = mode
-        requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-            .edit().putString(GRAPH_DISPLAY_MODE, mode.name).apply()
+        PeqGraphPreferences(requireContext()).listModeName = mode.name
         applyDisplayMode(smoothScroll)
     }
 
@@ -618,19 +609,10 @@ class ParametricEqualizerFragment : Fragment() {
         // editing, but the drag-to-adjust handles stay directly on this graph too.
         binding.equalizerSurface.showTiltHandles = true
         binding.equalizerSurface.showGainMeters = true
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-        binding.equalizerSurface.showIndividualFilters =
-            graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true)
-        binding.equalizerSurface.channelDisplay = runCatching {
-            ParametricEqSurface.ChannelDisplay.valueOf(
-                graphPrefs.getString(GRAPH_CHANNEL, ParametricEqSurface.ChannelDisplay.BOTH.name)!!
-            )
-        }.getOrDefault(ParametricEqSurface.ChannelDisplay.BOTH)
-        binding.equalizerSurface.displayMode = runCatching {
-            ParametricEqSurface.DisplayMode.valueOf(
-                graphPrefs.getString(GRAPH_RESPONSE_MODE, ParametricEqSurface.DisplayMode.MAGNITUDE.name)!!
-            )
-        }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
+        val graphPrefs = PeqGraphPreferences(requireContext())
+        binding.equalizerSurface.showIndividualFilters = graphPrefs.showIndividualFilters
+        binding.equalizerSurface.channelDisplay = graphPrefs.channelDisplay
+        binding.equalizerSurface.displayMode = graphPrefs.responseMode
 
         // Read-only graph now: a node tap just highlights that filter's row on the band-list
         // page (only active-scope taps reach here). Dragging filters/tilt on the graph was
@@ -646,7 +628,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun showGraphOptionsPopup(anchor: View) {
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+        val graphPrefs = PeqGraphPreferences(requireContext())
         val popup = PopupMenu(requireContext(), anchor)
         popup.menu.add(Menu.NONE, GRAPH_MENU_OVERLAYS, Menu.NONE, "Show individual filters")
             .setCheckable(true)
@@ -681,9 +663,7 @@ class ParametricEqualizerFragment : Fragment() {
             when (item.itemId) {
                 GRAPH_MENU_OVERLAYS -> {
                     binding.equalizerSurface.showIndividualFilters = !item.isChecked
-                    graphPrefs.edit()
-                        .putBoolean(GRAPH_SHOW_OVERLAYS, binding.equalizerSurface.showIndividualFilters)
-                        .apply()
+                    graphPrefs.showIndividualFilters = binding.equalizerSurface.showIndividualFilters
                     true
                 }
                 GRAPH_MENU_BOTH, GRAPH_MENU_LEFT, GRAPH_MENU_RIGHT -> {
@@ -692,9 +672,7 @@ class ParametricEqualizerFragment : Fragment() {
                         GRAPH_MENU_RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
                         else -> ParametricEqSurface.ChannelDisplay.BOTH
                     }
-                    graphPrefs.edit()
-                        .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
-                        .apply()
+                    graphPrefs.channelDisplay = binding.equalizerSurface.channelDisplay
                     bindScope()
                     true
                 }
@@ -705,9 +683,7 @@ class ParametricEqualizerFragment : Fragment() {
                         GRAPH_MENU_MODE_GROUP_DELAY -> ParametricEqSurface.DisplayMode.GROUP_DELAY
                         else -> ParametricEqSurface.DisplayMode.MAGNITUDE
                     }
-                    graphPrefs.edit()
-                        .putString(GRAPH_RESPONSE_MODE, binding.equalizerSurface.displayMode.name)
-                        .apply()
+                    graphPrefs.responseMode = binding.equalizerSurface.displayMode
                     true
                 }
                 else -> false
@@ -1230,13 +1206,6 @@ class ParametricEqualizerFragment : Fragment() {
         const val STATE_BANDS = "bands"
         // Lowest sample rate RootlessAudioProcessorService ever opens the recorder at.
         private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
-        private const val GRAPH_PREFS = "peq_graph_display"
-        private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
-        private const val GRAPH_CHANNEL = "channel_display"
-        private const val GRAPH_DISPLAY_MODE = "peq_display_mode"
-        // Unrelated to GRAPH_DISPLAY_MODE above (that's the Graph/List PeqDisplayMode toggle) --
-        // this persists ParametricEqSurface.DisplayMode (Magnitude/Phase/Group Delay).
-        private const val GRAPH_RESPONSE_MODE = "response_display_mode"
         private const val GRAPH_MENU_OVERLAYS = 1
         private const val GRAPH_MENU_BOTH = 2
         private const val GRAPH_MENU_LEFT = 3
