@@ -766,32 +766,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, crossoverShadePaint)
     }
 
-    private fun monoBassActive(): Boolean =
-        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] >= .5f &&
-            systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] > 0f &&
-            systemValues[NativeBmwDspValues.INDEX_LPF_PASS] < .5f
+    // Mono-bass display-cue math lives in MonoBassCue now (pure, tested); these stay as the
+    // in-view names the draw code and legend already call.
+    private fun monoBassActive(): Boolean = MonoBassCue.isActive(systemValues)
 
-    private fun monoBassFrequency(): Double =
-        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_FREQ].toDouble().coerceIn(20.0, maximumFrequency)
+    private fun monoBassFrequency(): Double = MonoBassCue.frequency(systemValues, maximumFrequency)
 
-    /**
-     * Blend fraction (0..1) the two sum curves are pulled toward their L/R mean by, at [frequency]:
-     * full below the mono-bass corner, ramping back to 0 across the half-octave above it. This is a
-     * display-only cue -- [BmwResponseCalculator] still models the mono-bass low branch under an
-     * L=R assumption, so it can't actually show L/R polarity cancellation; visibly collapsing the
-     * L and R sum lines together where mono bass engages at least makes "the low end is mono here"
-     * unmissable on the graph. A full stereo mono-sum model is deferred (see the calculator).
-     */
-    private fun monoBassBlendAt(frequency: Double): Float {
-        if (!monoBassActive()) return 0f
-        val corner = monoBassFrequency()
-        val strength = (systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] * .01f).coerceIn(0f, 1f)
-        return when {
-            frequency <= corner -> strength
-            frequency >= corner * 1.5 -> 0f
-            else -> strength * (1f - ((frequency - corner) / (corner * 0.5)).toFloat())
-        }
-    }
+    private fun monoBassBlendAt(frequency: Double): Float =
+        MonoBassCue.blendAt(systemValues, frequency, maximumFrequency)
 
     private fun drawMonoBassRegion(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         if (!monoBassActive()) return
