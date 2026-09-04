@@ -3,7 +3,6 @@ package app.siphondsp.view
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -82,29 +81,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     private val density = resources.displayMetrics.density
 
-    // Dry (pre-DSP) reference trace -- a solid, clearly readable line. It's the "before" anchor
-    // the eye holds the live wet trace against, so a barely-there dashed hint defeated the point;
-    // the wet trace is drawn brighter and with a glow on top, so this still reads as secondary.
-    private val dryStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = themeColor(android.R.attr.textColorPrimary)
-        style = Paint.Style.STROKE
-        strokeWidth = 1.6f * density
-        alpha = 205
-    }
-    // Shaded gap between the dry and wet traces: the app's brand green where the filters are
-    // adding energy at that frequency right now, brand red where they're cutting it. This is
-    // what actually shows what the filters are doing to the live audio, rather than two
-    // independently overlaid lines -- so it's drawn with real weight, not a faint wash.
-    private val spectrumBoostFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = BmwDashboardSkin.M_GREEN
-        style = Paint.Style.FILL
-        alpha = 125
-    }
-    private val spectrumCutFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = BmwDashboardSkin.M_RED
-        style = Paint.Style.FILL
-        alpha = 125
-    }
+    // Every configured Paint / colour / palette this view draws with (see PeqSurfacePaints),
+    // reached below as paints.<name>. The two theme colours are resolved here once and handed in.
+    private val paints = PeqSurfacePaints(
+        density,
+        themeTextColor = themeColor(android.R.attr.textColorPrimary),
+        themeAccentColor = themeColor(android.R.attr.colorAccent),
+    )
+
     private val spectrumStrokePath = Path()
     private val spectrumFillPath = Path()
     private val dryStrokePath = Path()
@@ -142,44 +126,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             if (field == value) return
             field = value
             if (isAttachedToWindow) {
-                if (value) startSpectrum() else stopSpectrum()
+                if (value) spectrumTicker.start() else spectrumTicker.stop()
             }
         }
-    private val spectrumHandler = Handler(Looper.getMainLooper())
-    private var spectrumActive = false
-    private val levelScratch = FloatArray(4)
-    private val leftMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
-    private val rightMeter = PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB)
-    private val spectrumTick = object : Runnable {
-        override fun run() {
-            if (showGainMeters) updateGainMeters()
-            invalidate()
-            spectrumHandler.postDelayed(this, 33L)
-        }
-    }
 
-    private fun updateGainMeters() {
-        SpectrumEngine.channelLevelsInto(levelScratch)
-        val now = System.currentTimeMillis()
-        leftMeter.update(levelScratch[0], levelScratch[1], now)
-        rightMeter.update(levelScratch[2], levelScratch[3], now)
-    }
-
-    private fun startSpectrum() {
-        if (spectrumActive) return
-        spectrumActive = true
-        SpectrumEngine.acquire()
-        spectrumHandler.post(spectrumTick)
-    }
-
-    private fun stopSpectrum() {
-        if (!spectrumActive) return
-        spectrumActive = false
-        spectrumHandler.removeCallbacks(spectrumTick)
-        SpectrumEngine.release()
-        leftMeter.reset()
-        rightMeter.reset()
-    }
+    private val spectrumTicker = SpectrumTicker(
+        onTick = ::invalidate,
+        gainMetersEnabled = { showGainMeters },
+    )
 
     // --- Tapped-node info card: nodes themselves are always drawn now, but tapping one pops a
     // small read-only detail card (filter type, freq/gain/Q, channel, which bank) that holds
@@ -232,70 +186,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val calculator = BmwResponseCalculator(pointCount = SYSTEM_POINT_COUNT)
     private val curves = BmwResponseCurves(SYSTEM_POINT_COUNT)
 
-    // No solid background fill any more (see drawUnifiedSystem) -- the workspace's own designed
-    // background shows through instead. bgBottomColor survives as nodeRingPaint's stroke colour
-    // below, a leftover dark tone that still reads correctly against either background.
-    private val bgBottomColor = Color.rgb(13, 13, 15)
-    private val unifiedGridColor = Color.rgb(58, 60, 66)
-    private val unifiedTextColor = Color.rgb(176, 178, 186)
-    // Neon revision of the existing colour map: same identities (Full = white, Low = blue,
-    // Mid = yellow/amber, sum = white) but pushed to full-chroma so the thin sharp lines below
-    // actually read on the dark workspace instead of sitting there as dull grey-ish traces.
-    private val bankColorFull = Color.rgb(255, 255, 255)
-    private val bankColorLow = Color.rgb(0, 209, 255)
-    private val bankColorMid = Color.rgb(255, 224, 0)
-    private val sumColor = Color.rgb(255, 255, 255)
-
-    // Per-band palette (FabFilter Pro-Q-style): each filter gets its own colour, cycling by its
-    // GLOBAL number (Input Correction, then Low, then Mid -- see bankNumberOffset), so no two
-    // filters on the graph share a colour until there are more than perBandPalette.size of them.
-    // The SAME colour is used for that filter's node dot, its isolated-response overlay line,
-    // its shaded fill, and its tap-info card, so "this dot" and "this shape" are unmistakably the
-    // same filter. Neon, to match the line revision above.
-    private val perBandPalette = intArrayOf(
-        Color.rgb(255, 23, 68),   // red
-        Color.rgb(224, 64, 251),  // violet
-        Color.rgb(41, 121, 255),  // blue
-        Color.rgb(0, 230, 118),   // green
-        Color.rgb(255, 145, 0),   // orange
-        Color.rgb(0, 229, 255),   // cyan
-        Color.rgb(255, 64, 129),  // pink
-        Color.rgb(198, 255, 0),   // lime
-    )
-
-    private val unifiedGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = density
-        color = unifiedGridColor
-    }
-    private val unifiedZeroPaint = Paint(unifiedGridPaint).apply { strokeWidth = 1.6f * density; alpha = 200 }
-    private val unifiedLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = unifiedTextColor
-        textSize = 9.5f * density
-    }
-    private val unifiedLegendPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = unifiedTextColor
-        textSize = 10.5f * density
-    }
-    private val crossoverShadePaint = Paint().apply {
-        style = Paint.Style.FILL
-        color = unifiedTextColor
-        alpha = 18
-    }
-    // Per-band filled region + its outline (see drawPerBandFills) -- color AND alpha are both
-    // set per band on every draw call (setColor() overwrites alpha too), so nothing meaningful
-    // is configured here beyond style/stroke width.
-    private val bandFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
-    private val bandStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.1f * density
-    }
-    // Scratch paint for the neon "bloom" under every curve: the real line is drawn thin and
-    // sharp, then this is stroked wide and translucent beneath it (configured per call in
-    // [strokeNeon]) so a 1px line still reads as glowing rather than hairline-faint.
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     // Reused, cleared-and-rebuilt-per-band scratch cascade/accumulator for drawPerBandFills --
     // avoids allocating a new BiquadCascade/ComplexAcc for every band on every frame.
     private val bandCascade = BiquadCascade(1)
@@ -304,124 +194,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private val fillTopY = FloatArray(SYSTEM_POINT_COUNT)
     private val fillBottomY = FloatArray(SYSTEM_POINT_COUNT)
     private val referenceCurveScratch = DoubleArray(SYSTEM_POINT_COUNT)
-
-    private val lowBranchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        color = bankColorLow
-    }
-    private val midBranchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        color = bankColorMid
-    }
-    // Right-channel branch curves: same colour, dashed -- matches the solid-L / dashed-R
-    // convention the sum curve and the right-only band nodes already use.
-    private val lowBranchPaintDashed = Paint(lowBranchPaint).apply {
-        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
-    }
-    private val midBranchPaintDashed = Paint(midBranchPaint).apply {
-        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
-    }
-    private val sumPaintSolid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.7f * density
-        color = sumColor
-    }
-    private val sumPaintDashed = Paint(sumPaintSolid).apply {
-        pathEffect = DashPathEffect(floatArrayOf(7f * density, 5f * density), 0f)
-    }
-    // MAGNITUDE_PHASE overlay: same colour family as the sum curve it accompanies, thinner and
-    // dashed so it reads as an annotation on its own implicit degree scale, not a second sum.
-    private val sumPhaseOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.2f * density
-        color = sumColor
-        alpha = 170
-        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
-    }
-    // Light blue (matches the app's accent colour) -- the grey used everywhere else in this
-    // unified view reads as barely-visible background noise for a live spectrum trace.
-    private val spectrumAccentColor = Color.rgb(79, 195, 247)
-    // Vertical gradient under the wet trace: accent near the trace fading to nothing toward the
-    // floor, so the fill gives the trace body without flattening into a solid slab. The shader is
-    // rebuilt in drawUnifiedSpectrum whenever the plot's top/bottom change.
-    private val unifiedSpectrumFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = spectrumAccentColor // fallback until the gradient shader is installed
-    }
-    private var spectrumFillShaderTop = Float.NaN
-    private var spectrumFillShaderBottom = Float.NaN
-    private val unifiedSpectrumStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        color = spectrumAccentColor
-        alpha = 190
-    }
-    private val unifiedOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.2f * density
-        alpha = 90
-    }
-    private val unifiedOverlayDashEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
-    private val nodeHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val nodeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val nodeRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        color = bgBottomColor
-    }
-    private val nodeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.BLACK
-        textAlign = Paint.Align.CENTER
-        textSize = 9.5f * density
-    }
-    // Tapped-node info card (see drawInfoCard): a dark rounded panel, edged in that band's own
-    // palette colour, holding its type / freq / gain / Q / channel / bank for a few seconds.
-    private val infoCardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = Color.rgb(18, 19, 22)
-    }
-    private val infoCardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.3f * density
-    }
-    private val infoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(232, 234, 240)
-        textSize = 10f * density
-    }
-    private val tiltHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = themeColor(android.R.attr.colorAccent)
-    }
-    private val tiltHandleDimPaint = Paint(tiltHandlePaint).apply { alpha = 100 }
-    private val tiltLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = unifiedTextColor
-        textAlign = Paint.Align.LEFT
-        textSize = 9.5f * density
-    }
-    private val meterTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = unifiedGridColor
-    }
-    private val meterRmsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = bankColorLow
-    }
-    private val meterPeakPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        color = sumColor
-    }
-    private val meterHoldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = sumColor
-    }
-    private val meterLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = unifiedTextColor
-        textAlign = Paint.Align.CENTER
-        textSize = 8.5f * density
-    }
 
     private val padLeft = 34f * density
     private val padTop = 16f * density
@@ -436,7 +208,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (showSpectrum) startSpectrum()
+        if (showSpectrum) spectrumTicker.start()
     }
 
 
@@ -464,7 +236,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     override fun onDetachedFromWindow() {
         dismissInfoCard()
-        stopSpectrum()
+        spectrumTicker.stop()
         super.onDetachedFromWindow()
     }
 
@@ -594,6 +366,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
      * Numbers are the global 1-based filter number ([bankNumberOffset]), matching the labels.
      */
     private fun hitTestAnyBank(x: Float, y: Float): NodeHit? {
+        refreshGeometry()
         val radius = NODE_TOUCH_RADIUS_DP * density
         var best: NodeHit? = null
         var bestDistance = Float.MAX_VALUE
@@ -620,24 +393,20 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     private fun plotTop(): Float = paddingTop + padTop
     private fun plotBottom(): Float = height - paddingBottom - padBottom
 
-    private fun xForFrequency(frequency: Double): Float {
-        val fraction = PeqGraphMath.frequencyToFraction(frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
-        return plotLeft() + fraction * (plotRight() - plotLeft())
+    // Rebuilt (see refreshGeometry) at the top of every draw pass and every hit-test -- the only
+    // two entry points that read plot coordinates -- so the per-call mappers below stay
+    // allocation-free in the tight draw loops.
+    private var geometry = PeqPlotGeometry(0f, 0f, 0f, 0f, maximumFrequency)
+
+    private fun refreshGeometry() {
+        geometry = PeqPlotGeometry(plotLeft(), plotRight(), plotTop(), plotBottom(), maximumFrequency)
     }
 
-    private fun yForGain(gain: Double): Float {
-        val fraction = PeqGraphMath.gainToFraction(gain)
-        return plotTop() + fraction * (plotBottom() - plotTop())
-    }
-
-    private fun yForRange(value: Double, min: Double, max: Double): Float {
-        val clamped = value.coerceIn(min, max)
-        val fraction = (max - clamped) / (max - min)
-        return plotTop() + fraction.toFloat() * (plotBottom() - plotTop())
-    }
-
-    private fun yForPhaseDeg(deg: Double): Float = yForRange(deg, PHASE_MIN_DEG, PHASE_MAX_DEG)
-    private fun yForGroupDelayMs(ms: Double): Float = yForRange(ms, GROUP_DELAY_MIN_MS, GROUP_DELAY_MAX_MS)
+    private fun xForFrequency(frequency: Double): Float = geometry.xForFrequency(frequency)
+    private fun yForGain(gain: Double): Float = geometry.yForGain(gain)
+    private fun yForRange(value: Double, min: Double, max: Double): Float = geometry.yForRange(value, min, max)
+    private fun yForPhaseDeg(deg: Double): Float = geometry.yForPhaseDeg(deg)
+    private fun yForGroupDelayMs(ms: Double): Float = geometry.yForGroupDelayMs(ms)
 
     // --- Drawing --------------------------------------------------------------------------
 
@@ -647,6 +416,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun drawUnifiedSystem(canvas: Canvas) {
+        refreshGeometry()
         val left = plotLeft()
         val right = plotRight()
         val top = plotTop()
@@ -662,7 +432,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
                 drawMonoBassRegion(canvas, left, right, top, bottom)
-                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawFilterOverlays(canvas, left, right)
                 drawPerBandFills(canvas, left, right)
@@ -676,7 +446,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
                 drawMonoBassRegion(canvas, left, right, top, bottom)
-                if (showSpectrum && spectrumActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
+                if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawSumCurve(canvas, left, right, top, bottom)
                 drawSumPhaseOverlay(canvas, left, right)
@@ -700,23 +470,23 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val gap = 4f * density
         val leftBarX = plotRight + 5f * density
         val rightBarX = leftBarX + barWidth + gap
-        drawMeterBar(canvas, leftBarX, top, bottom, barWidth, leftMeter)
-        drawMeterBar(canvas, rightBarX, top, bottom, barWidth, rightMeter)
-        canvas.drawText("L", leftBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
-        canvas.drawText("R", rightBarX + barWidth / 2f, bottom + 15f * density, meterLabelPaint)
+        drawMeterBar(canvas, leftBarX, top, bottom, barWidth, spectrumTicker.leftMeter)
+        drawMeterBar(canvas, rightBarX, top, bottom, barWidth, spectrumTicker.rightMeter)
+        canvas.drawText("L", leftBarX + barWidth / 2f, bottom + 15f * density, paints.meterLabelPaint)
+        canvas.drawText("R", rightBarX + barWidth / 2f, bottom + 15f * density, paints.meterLabelPaint)
     }
 
     private fun drawMeterBar(canvas: Canvas, x: Float, top: Float, bottom: Float, width: Float, meter: PeakHoldMeter) {
-        canvas.drawRect(x, top, x + width, bottom, meterTrackPaint)
+        canvas.drawRect(x, top, x + width, bottom, paints.meterTrackPaint)
         val rmsFraction = PeakHoldMeter.fractionFor(meter.rmsDb, METER_FLOOR_DB, METER_CEILING_DB)
         val rmsY = bottom - rmsFraction * (bottom - top)
-        canvas.drawRect(x, rmsY, x + width, bottom, meterRmsPaint)
+        canvas.drawRect(x, rmsY, x + width, bottom, paints.meterRmsPaint)
         val peakFraction = PeakHoldMeter.fractionFor(meter.peakDb, METER_FLOOR_DB, METER_CEILING_DB)
         val peakY = bottom - peakFraction * (bottom - top)
-        canvas.drawLine(x, peakY, x + width, peakY, meterPeakPaint)
+        canvas.drawLine(x, peakY, x + width, peakY, paints.meterPeakPaint)
         val holdFraction = PeakHoldMeter.fractionFor(meter.holdDb, METER_FLOOR_DB, METER_CEILING_DB)
         val holdY = (bottom - holdFraction * (bottom - top)).coerceIn(top, bottom - 1.5f * density)
-        canvas.drawRect(x, holdY - 1.5f * density, x + width, holdY + 1.5f * density, meterHoldPaint)
+        canvas.drawRect(x, holdY - 1.5f * density, x + width, holdY + 1.5f * density, paints.meterHoldPaint)
     }
 
     private fun drawUnifiedGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -743,14 +513,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     ) {
         lines.forEach { value ->
             val y = toY(value.toDouble())
-            canvas.drawLine(left, y, right, y, if (value == zeroLine) unifiedZeroPaint else unifiedGridPaint)
-            canvas.drawText("${value.toInt()}", 4f * density, y + 3f * density, unifiedLabelPaint)
+            canvas.drawLine(left, y, right, y, if (value == zeroLine) paints.unifiedZeroPaint else paints.unifiedGridPaint)
+            canvas.drawText("${value.toInt()}", 4f * density, y + 3f * density, paints.unifiedLabelPaint)
         }
         FREQ_SCALE.forEach { frequency ->
             val x = xForFrequency(frequency)
-            canvas.drawLine(x, top, x, bottom, unifiedGridPaint)
+            canvas.drawLine(x, top, x, bottom, paints.unifiedGridPaint)
             val label = frequency.prettyNumberFormat()
-            canvas.drawText(label, x - unifiedLabelPaint.measureText(label) / 2f, bottom + 15f * density, unifiedLabelPaint)
+            canvas.drawText(label, x - paints.unifiedLabelPaint.measureText(label) / 2f, bottom + 15f * density, paints.unifiedLabelPaint)
         }
     }
 
@@ -765,43 +535,25 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val midFreq = values[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)]
             .toDouble().coerceIn(20.0, maximumFrequency)
         if (midFreq <= lowFreq) return
-        canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, crossoverShadePaint)
+        canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, paints.crossoverShadePaint)
     }
 
-    private fun monoBassActive(): Boolean =
-        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] >= .5f &&
-            systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] > 0f &&
-            systemValues[NativeBmwDspValues.INDEX_LPF_PASS] < .5f
+    // Mono-bass display-cue math lives in MonoBassCue now (pure, tested); these stay as the
+    // in-view names the draw code and legend already call.
+    private fun monoBassActive(): Boolean = MonoBassCue.isActive(systemValues)
 
-    private fun monoBassFrequency(): Double =
-        systemValues[NativeBmwDspValues.INDEX_MONO_BASS_FREQ].toDouble().coerceIn(20.0, maximumFrequency)
+    private fun monoBassFrequency(): Double = MonoBassCue.frequency(systemValues, maximumFrequency)
 
-    /**
-     * Blend fraction (0..1) the two sum curves are pulled toward their L/R mean by, at [frequency]:
-     * full below the mono-bass corner, ramping back to 0 across the half-octave above it. This is a
-     * display-only cue -- [BmwResponseCalculator] still models the mono-bass low branch under an
-     * L=R assumption, so it can't actually show L/R polarity cancellation; visibly collapsing the
-     * L and R sum lines together where mono bass engages at least makes "the low end is mono here"
-     * unmissable on the graph. A full stereo mono-sum model is deferred (see the calculator).
-     */
-    private fun monoBassBlendAt(frequency: Double): Float {
-        if (!monoBassActive()) return 0f
-        val corner = monoBassFrequency()
-        val strength = (systemValues[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] * .01f).coerceIn(0f, 1f)
-        return when {
-            frequency <= corner -> strength
-            frequency >= corner * 1.5 -> 0f
-            else -> strength * (1f - ((frequency - corner) / (corner * 0.5)).toFloat())
-        }
-    }
+    private fun monoBassBlendAt(frequency: Double): Float =
+        MonoBassCue.blendAt(systemValues, frequency, maximumFrequency)
 
     private fun drawMonoBassRegion(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
         if (!monoBassActive()) return
         val cornerX = xForFrequency(monoBassFrequency()).coerceIn(left, right)
-        canvas.drawRect(left, top, cornerX, bottom, crossoverShadePaint)
-        canvas.drawLine(cornerX, top, cornerX, bottom, unifiedGridPaint)
+        canvas.drawRect(left, top, cornerX, bottom, paints.crossoverShadePaint)
+        canvas.drawLine(cornerX, top, cornerX, bottom, paints.unifiedGridPaint)
         val label = "MONO BASS ▸ ${monoBassFrequency().roundToInt()} Hz"
-        canvas.drawText(label, left + 6f * density, bottom - 6f * density, tiltLabelPaint)
+        canvas.drawText(label, left + 6f * density, bottom - 6f * density, paints.tiltLabelPaint)
     }
 
     /**
@@ -810,11 +562,11 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
      * workspace without a software-layer blur.
      */
     private fun strokeNeon(canvas: Canvas, path: Path, paint: Paint) {
-        glowPaint.color = paint.color
-        glowPaint.alpha = (Color.alpha(paint.color) * 0.16f).roundToInt()
-        glowPaint.strokeWidth = paint.strokeWidth * 3.4f
-        glowPaint.pathEffect = paint.pathEffect
-        canvas.drawPath(path, glowPaint)
+        paints.glowPaint.color = paint.color
+        paints.glowPaint.alpha = (Color.alpha(paint.color) * 0.16f).roundToInt()
+        paints.glowPaint.strokeWidth = paint.strokeWidth * 3.4f
+        paints.glowPaint.pathEffect = paint.pathEffect
+        canvas.drawPath(path, paints.glowPaint)
         canvas.drawPath(path, paint)
     }
 
@@ -846,19 +598,19 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         spectrumFillPath.lineTo(right, bottom)
         spectrumFillPath.close()
         drawSpectrumDelta(canvas, SPECTRUM_STEPS + 1)
-        if (top != spectrumFillShaderTop || bottom != spectrumFillShaderBottom) {
-            unifiedSpectrumFillPaint.shader = LinearGradient(
+        if (top != paints.spectrumFillShaderTop || bottom != paints.spectrumFillShaderBottom) {
+            paints.unifiedSpectrumFillPaint.shader = LinearGradient(
                 0f, top, 0f, bottom,
-                ColorUtils.setAlphaComponent(spectrumAccentColor, 150),
-                ColorUtils.setAlphaComponent(spectrumAccentColor, 0),
+                ColorUtils.setAlphaComponent(paints.spectrumAccentColor, 150),
+                ColorUtils.setAlphaComponent(paints.spectrumAccentColor, 0),
                 Shader.TileMode.CLAMP,
             )
-            spectrumFillShaderTop = top
-            spectrumFillShaderBottom = bottom
+            paints.spectrumFillShaderTop = top
+            paints.spectrumFillShaderBottom = bottom
         }
-        canvas.drawPath(spectrumFillPath, unifiedSpectrumFillPaint)
-        canvas.drawPath(dryStrokePath, dryStrokePaint)
-        strokeNeon(canvas, spectrumStrokePath, unifiedSpectrumStrokePaint)
+        canvas.drawPath(spectrumFillPath, paints.unifiedSpectrumFillPaint)
+        canvas.drawPath(dryStrokePath, paints.dryStrokePaint)
+        strokeNeon(canvas, spectrumStrokePath, paints.unifiedSpectrumStrokePaint)
     }
 
     /**
@@ -889,12 +641,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         for (i in startIndex + 1..endIndex) deltaFillPath.lineTo(spectrumXs[i], spectrumWetYs[i])
         for (i in endIndex downTo startIndex) deltaFillPath.lineTo(spectrumXs[i], spectrumDryYs[i])
         deltaFillPath.close()
-        canvas.drawPath(deltaFillPath, if (boost) spectrumBoostFillPaint else spectrumCutFillPaint)
+        canvas.drawPath(deltaFillPath, if (boost) paints.spectrumBoostFillPaint else paints.spectrumCutFillPaint)
     }
 
     private fun drawBranchCurves(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        drawBranchChannelPair(canvas, curves.lowBranchDb, left, right, lowBranchPaint, lowBranchPaintDashed)
-        drawBranchChannelPair(canvas, curves.midBranchDb, left, right, midBranchPaint, midBranchPaintDashed)
+        drawBranchChannelPair(canvas, curves.lowBranchDb, left, right, paints.lowBranchPaint, paints.lowBranchPaintDashed)
+        drawBranchChannelPair(canvas, curves.midBranchDb, left, right, paints.midBranchPaint, paints.midBranchPaintDashed)
     }
 
     /** A branch's Low/Mid magnitude curve drawn per channel -- L solid, R dashed -- honouring
@@ -917,7 +669,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     /**
      * Each band's own contribution to the *actual* combined curve for its bank (in its global
-     * [perBandPalette] colour, the same one [drawBankNodes] gives its node) -- filled between the
+     * [paints.perBandPalette] colour, the same one [drawBankNodes] gives its node) -- filled between the
      * real curve (with this band included, exactly
      * as already drawn by [drawBranchCurves]/[drawSumCurve]) and where that same curve would sit
      * with this one band's own dB contribution subtracted back out. The fill's own edge always
@@ -964,18 +716,18 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                     path.lineTo(fillX[i], fillBottomY[i])
                 }
                 path.close()
-                val color = perBandPalette[(bankNumberOffset(bank) + index) % perBandPalette.size]
+                val color = paints.perBandPalette[(bankNumberOffset(bank) + index) % paints.perBandPalette.size]
                 // Paint.setColor() overwrites alpha along with RGB (Color.rgb()'s palette entries are
                 // fully opaque), so alpha has to be re-applied after color on every draw -- setting it
                 // once in the Paint initializer got silently clobbered the instant color was assigned
                 // here, which is why overlapping fills were reading as solid opaque blocks instead of
                 // blending together.
-                bandFillPaint.color = color
-                bandFillPaint.alpha = BAND_FILL_ALPHA
-                canvas.drawPath(path, bandFillPaint)
-                bandStrokePaint.color = color
-                bandStrokePaint.alpha = BAND_STROKE_ALPHA
-                canvas.drawPath(path, bandStrokePaint)
+                paints.bandFillPaint.color = color
+                paints.bandFillPaint.alpha = BAND_FILL_ALPHA
+                canvas.drawPath(path, paints.bandFillPaint)
+                paints.bandStrokePaint.color = color
+                paints.bandStrokePaint.alpha = BAND_STROKE_ALPHA
+                canvas.drawPath(path, paints.bandStrokePaint)
             }
         }
     }
@@ -1002,7 +754,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
 
     /**
      * 1-based global filter number in draw order -- Input Correction, then Low Band, then Mid
-     * Band -- so every filter on the graph has a unique number and a unique [perBandPalette]
+     * Band -- so every filter on the graph has a unique number and a unique [paints.perBandPalette]
      * colour, instead of each bank restarting at 1/red.
      */
     private fun bankNumberOffset(bank: BmwPeqBank): Int = when (bank) {
@@ -1027,27 +779,27 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val leftDb = curves.sumDb[BmwOutputChannel.LEFT.ordinal]
         val rightDb = curves.sumDb[BmwOutputChannel.RIGHT.ordinal]
         if (channelDisplay != ChannelDisplay.RIGHT) {
-            drawSumChannelMonoAware(canvas, leftDb, rightDb, left, right, sumPaintSolid)
+            drawSumChannelMonoAware(canvas, leftDb, rightDb, left, right, paints.sumPaintSolid)
         }
         if (channelDisplay != ChannelDisplay.LEFT) {
-            drawSumChannelMonoAware(canvas, rightDb, leftDb, left, right, sumPaintDashed)
+            drawSumChannelMonoAware(canvas, rightDb, leftDb, left, right, paints.sumPaintDashed)
         }
     }
 
     /** Sum phase overlaid on the magnitude graph in MAGNITUDE_PHASE mode -- its own implicit
      *  -180..180 degree scale sharing the plot area, not the dB gridlines shown alongside it. */
     private fun drawSumPhaseOverlay(canvas: Canvas, left: Float, right: Float) {
-        drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPhaseOverlayPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+        drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, paints.sumPhaseOverlayPaint) { yForPhaseDeg(Math.toDegrees(it)) }
     }
 
     private fun drawPhaseCurves(canvas: Canvas, left: Float, right: Float) {
-        drawSystemCurve(canvas, curves.lowBranchPhase, left, right, lowBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
-        drawSystemCurve(canvas, curves.midBranchPhase, left, right, midBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+        drawSystemCurve(canvas, curves.lowBranchPhase, left, right, paints.lowBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
+        drawSystemCurve(canvas, curves.midBranchPhase, left, right, paints.midBranchPaint) { yForPhaseDeg(Math.toDegrees(it)) }
         if (channelDisplay != ChannelDisplay.RIGHT) {
-            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, sumPaintSolid) { yForPhaseDeg(Math.toDegrees(it)) }
+            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.LEFT.ordinal], left, right, paints.sumPaintSolid) { yForPhaseDeg(Math.toDegrees(it)) }
         }
         if (channelDisplay != ChannelDisplay.LEFT) {
-            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.RIGHT.ordinal], left, right, sumPaintDashed) { yForPhaseDeg(Math.toDegrees(it)) }
+            drawSystemCurveForChannel(canvas, curves.sumPhase[BmwOutputChannel.RIGHT.ordinal], left, right, paints.sumPaintDashed) { yForPhaseDeg(Math.toDegrees(it)) }
         }
     }
 
@@ -1062,7 +814,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             val y = yForGroupDelayMs(avg)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        strokeNeon(canvas, path, sumPaintSolid)
+        strokeNeon(canvas, path, paints.sumPaintSolid)
     }
 
     private fun drawSystemCurve(canvas: Canvas, perChannelValues: Array<DoubleArray>, left: Float, right: Float, paint: Paint, toY: (Double) -> Float) {
@@ -1127,10 +879,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                 }
                 // Same palette entry as this band's node dot, fill, and info card -- "this shape"
                 // and "this dot" are unmistakably one filter.
-                unifiedOverlayPaint.color = perBandPalette[(bankNumberOffset(bank) + index) % perBandPalette.size]
-                unifiedOverlayPaint.alpha = if (band.uuid == selectedId && bank == activeBank) 235 else 130
-                unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) unifiedOverlayDashEffect else null
-                canvas.drawPath(path, unifiedOverlayPaint)
+                paints.unifiedOverlayPaint.color = paints.perBandPalette[(bankNumberOffset(bank) + index) % paints.perBandPalette.size]
+                paints.unifiedOverlayPaint.alpha = if (band.uuid == selectedId && bank == activeBank) 235 else 130
+                paints.unifiedOverlayPaint.pathEffect = if (band.channel == ParametricEqChannel.RIGHT) paints.unifiedOverlayDashEffect else null
+                canvas.drawPath(path, paints.unifiedOverlayPaint)
             }
         }
     }
@@ -1143,31 +895,31 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
         val numberOffset = bankNumberOffset(bank)
         bands.forEachIndexed { index, band ->
-            val color = perBandPalette[(numberOffset + index) % perBandPalette.size]
+            val color = paints.perBandPalette[(numberOffset + index) % paints.perBandPalette.size]
             val x = xForFrequency(band.frequency)
             val y = yForGain(band.gain)
             val selected = emphasised && band.uuid == selectedId
             val highlighted = selected || (infoBand?.uuid == band.uuid && infoBandBank == bank)
             if (highlighted) {
-                nodeHaloPaint.color = color
-                nodeHaloPaint.alpha = 60
-                canvas.drawCircle(x, y, baseRadiusDp * density + 7f * density, nodeHaloPaint)
+                paints.nodeHaloPaint.color = color
+                paints.nodeHaloPaint.alpha = 60
+                canvas.drawCircle(x, y, baseRadiusDp * density + 7f * density, paints.nodeHaloPaint)
             }
             val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * density
-            nodeFillPaint.color = color
-            nodeFillPaint.alpha = 255
-            canvas.drawCircle(x, y, radius, nodeFillPaint)
+            paints.nodeFillPaint.color = color
+            paints.nodeFillPaint.alpha = 255
+            canvas.drawCircle(x, y, radius, paints.nodeFillPaint)
             // Right-only bands get a dark ring on top of the fill -- same solid(L)/marked(R)
             // convention as the dashed R sum curve -- since color alone is hard to read at
             // this size for colorblind users and small screens.
             if (band.channel == ParametricEqChannel.RIGHT) {
-                nodeRingPaint.alpha = 255
-                canvas.drawCircle(x, y, radius, nodeRingPaint)
+                paints.nodeRingPaint.alpha = 255
+                canvas.drawCircle(x, y, radius, paints.nodeRingPaint)
             }
-            nodeTextPaint.color =
+            paints.nodeTextPaint.color =
                 if (ColorUtils.calculateLuminance(color) > 0.5) Color.BLACK else Color.WHITE
-            val baseline = y - (nodeTextPaint.ascent() + nodeTextPaint.descent()) / 2
-            canvas.drawText((numberOffset + index + 1).toString(), x, baseline, nodeTextPaint)
+            val baseline = y - (paints.nodeTextPaint.ascent() + paints.nodeTextPaint.descent()) / 2
+            canvas.drawText((numberOffset + index + 1).toString(), x, baseline, paints.nodeTextPaint)
         }
     }
 
@@ -1189,8 +941,8 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             "${bankLabel(bank)} band",
         )
         val pad = 8f * density
-        val lineHeight = infoTextPaint.textSize * 1.42f
-        val boxWidth = (lines.maxOf { infoTextPaint.measureText(it) } + pad * 2f).coerceAtMost(right - left)
+        val lineHeight = paints.infoTextPaint.textSize * 1.42f
+        val boxWidth = (lines.maxOf { paints.infoTextPaint.measureText(it) } + pad * 2f).coerceAtMost(right - left)
         val boxHeight = lineHeight * lines.size + pad * 2f
         val nodeX = xForFrequency(band.frequency)
         val nodeY = yForGain(band.gain)
@@ -1198,14 +950,14 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val above = nodeY - 15f * density - boxHeight
         val boxTop = if (above >= top) above else (nodeY + 15f * density).coerceAtMost(bottom - boxHeight)
         val rect = RectF(boxLeft, boxTop, boxLeft + boxWidth, boxTop + boxHeight)
-        infoCardBgPaint.alpha = (a * 0.94f).roundToInt()
-        infoCardStrokePaint.color = perBandPalette[(infoBandNumber - 1).coerceAtLeast(0) % perBandPalette.size]
-        infoCardStrokePaint.alpha = a
-        infoTextPaint.alpha = a
-        canvas.drawRoundRect(rect, 6f * density, 6f * density, infoCardBgPaint)
-        canvas.drawRoundRect(rect, 6f * density, 6f * density, infoCardStrokePaint)
+        paints.infoCardBgPaint.alpha = (a * 0.94f).roundToInt()
+        paints.infoCardStrokePaint.color = paints.perBandPalette[(infoBandNumber - 1).coerceAtLeast(0) % paints.perBandPalette.size]
+        paints.infoCardStrokePaint.alpha = a
+        paints.infoTextPaint.alpha = a
+        canvas.drawRoundRect(rect, 6f * density, 6f * density, paints.infoCardBgPaint)
+        canvas.drawRoundRect(rect, 6f * density, 6f * density, paints.infoCardStrokePaint)
         lines.forEachIndexed { i, text ->
-            canvas.drawText(text, boxLeft + pad, boxTop + pad + lineHeight * (i + 0.82f), infoTextPaint)
+            canvas.drawText(text, boxLeft + pad, boxTop + pad + lineHeight * (i + 0.82f), paints.infoTextPaint)
         }
     }
 
@@ -1218,7 +970,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val pivotY = yForGain(0.0)
         val amountX = pivotX + 22f * density
         val amountY = yForGain(tilt.amountDb.toDouble())
-        val paint = if (enabled) tiltHandlePaint else tiltHandleDimPaint
+        val paint = if (enabled) paints.tiltHandlePaint else paints.tiltHandleDimPaint
 
         canvas.drawLine(pivotX, amountY, amountX, amountY, paint)
         canvas.drawLine(pivotX, pivotY, pivotX, amountY, paint)
@@ -1235,7 +987,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawCircle(amountX, amountY, r, paint)
 
         if (!enabled) {
-            canvas.drawText("TILT BYPASSED", pivotX + r + 6f * density, pivotY - 6f * density, tiltLabelPaint)
+            canvas.drawText("TILT BYPASSED", pivotX + r + 6f * density, pivotY - 6f * density, paints.tiltLabelPaint)
         }
     }
 
@@ -1247,27 +999,27 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                     "FINAL SUM GROUP DELAY (L/R averaged) · compressor not shown (nonlinear)",
                     left,
                     baseline,
-                    unifiedLegendPaint,
+                    paints.unifiedLegendPaint,
                 )
                 return
             }
             DisplayMode.PHASE -> {
-                val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
-                val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
+                val lowPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorLow }
+                val midPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorMid }
                 canvas.drawText("LOW", left, baseline, lowPaint)
                 canvas.drawText("MID", left + 38f * density, baseline, midPaint)
                 canvas.drawText(
                     "FINAL SUM PHASE (L solid / R dashed) · compressor not shown (nonlinear)",
                     left + 76f * density,
                     baseline,
-                    unifiedLegendPaint,
+                    paints.unifiedLegendPaint,
                 )
                 return
             }
             DisplayMode.MAGNITUDE_PHASE -> {
-                val fullPaint = Paint(unifiedLegendPaint).apply { color = bankColorFull }
-                val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
-                val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
+                val fullPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorFull }
+                val lowPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorLow }
+                val midPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorMid }
                 canvas.drawText("FULL", left, baseline, fullPaint)
                 canvas.drawText("LOW", left + 38f * density, baseline, lowPaint)
                 canvas.drawText("MID", left + 74f * density, baseline, midPaint)
@@ -1275,15 +1027,15 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
                     "SUM SOLID = MAGNITUDE, THIN DASHED = PHASE",
                     left + 112f * density,
                     baseline,
-                    unifiedLegendPaint,
+                    paints.unifiedLegendPaint,
                 )
                 return
             }
             DisplayMode.MAGNITUDE -> Unit
         }
-        val fullPaint = Paint(unifiedLegendPaint).apply { color = bankColorFull }
-        val lowPaint = Paint(unifiedLegendPaint).apply { color = bankColorLow }
-        val midPaint = Paint(unifiedLegendPaint).apply { color = bankColorMid }
+        val fullPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorFull }
+        val lowPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorLow }
+        val midPaint = Paint(paints.unifiedLegendPaint).apply { color = paints.bankColorMid }
         canvas.drawText("FULL", left, baseline, fullPaint)
         canvas.drawText("LOW", left + 38f * density, baseline, lowPaint)
         canvas.drawText("MID", left + 74f * density, baseline, midPaint)
@@ -1292,7 +1044,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         } else {
             "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)"
         }
-        canvas.drawText(sumNote, left + 112f * density, baseline, unifiedLegendPaint)
+        canvas.drawText(sumNote, left + 112f * density, baseline, paints.unifiedLegendPaint)
     }
 
     private fun updateContentDescription() {
@@ -1329,10 +1081,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         private const val ACTIVE_NODE_RADIUS_DP = 8f
         private const val NODE_TOUCH_RADIUS_DP = 22f
         private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
-        private const val PHASE_MIN_DEG = -180.0
-        private const val PHASE_MAX_DEG = 180.0
-        private const val GROUP_DELAY_MIN_MS = -2.0
-        private const val GROUP_DELAY_MAX_MS = 10.0
 
         private const val METER_FLOOR_DB = -50f
         private const val METER_CEILING_DB = 0f
