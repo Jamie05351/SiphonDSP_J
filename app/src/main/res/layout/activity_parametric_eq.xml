@@ -23,6 +23,7 @@
                 style="@style/Theme.SiphonDSP.Toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/header_toolbar_height"
+                android:background="@color/dsp_workspace_header_bg"
                 android:paddingEnd="24dp"
                 app:contentInsetEnd="24dp"
                 app:contentInsetEndWithActions="24dp"
@@ -45,6 +46,7 @@
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/dsp_workspace_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
@@ -57,14 +59,16 @@
              Back navigation and the power toggle stay in the toolbar itself. -->
         <!-- Flush against all three edges (top, bottom, left) of the content area, so the panel
              reads as a structural fixture built into the workspace.
-             Width is not a fixed dp. The bar art (drawable-*/sidebar_bar_*.png) is cropped tight
-             to the panel frame (no transparent margin; ~714x3258 at xxxhdpi), shown FIT_CENTER. In
-             landscape it is always height-constrained, so its rendered width is exactly
-             (column height * 714 / 3258). Pinning the column to that same ratio makes it exactly
-             as wide as the panel with no slack on either side: the panel sits hard against the
-             screen edge and the divider plus content pane butt straight up against it. No
-             marginStart, no padding, no constraintWidth_max; the head unit is the only target
-             and a width cap below the natural size would only reintroduce top/bottom letterbox. -->
+             Width is not a fixed dp. The panel itself is no longer drawn here; it's baked into
+             the dsp_workspace_content backdrop (drawable-mdpi/dsp_workspace_backdrop_*.png, one
+             per DspDestination, painted by DspCrossNavBar.populate()) alongside the content-pane
+             texture, at native 1:1 scale against the content area's own bounds. This column exists
+             purely to reserve that same width for dsp_cross_nav's invisible click-target/focus-ring
+             rows, which must land exactly on the backdrop's baked-in tiles. The 714:3258 ratio is
+             the original bar-art panel's own measured proportions, which the new backdrop's panel
+             still matches (measured ~91dp wide at this column's 417dp content-area height, against
+             714/3258 x 417 = 91.39dp), close enough that the ratio didn't need to change when the
+             art did. No marginStart, no padding, no constraintWidth_max. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
             android:layout_width="0dp"

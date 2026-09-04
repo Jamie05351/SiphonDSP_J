@@ -269,8 +269,8 @@ object BmwDashboardSkin {
     // panel language as the slider capsule/glass box above. The switch now carries a red/green
     // status convention: OFF = neon-red shell border + red thumb, ON = neon-green shell border +
     // green thumb (both the track's shell border and the thumb are stateful on state_checked).
-    internal const val GLASS_SWITCH_TRACK_WIDTH_DP = 50f
-    internal const val GLASS_SWITCH_TRACK_HEIGHT_DP = 26f
+    internal const val GLASS_SWITCH_TRACK_WIDTH_DP = 75f
+    internal const val GLASS_SWITCH_TRACK_HEIGHT_DP = 20f
     internal const val GLASS_SWITCH_TRACK_BORDER_WIDTH_DP = 1.3f
     internal val GLASS_SWITCH_TRACK_FILL_TOP = Color.rgb(0x11, 0x11, 0x11)
     internal val GLASS_SWITCH_TRACK_FILL_MID = Color.rgb(0x09, 0x09, 0x09)
@@ -283,7 +283,9 @@ object BmwDashboardSkin {
     internal val GLASS_SWITCH_OFF_COLOR = Color.rgb(0xFF, 0x31, 0x31)
     internal val GLASS_SWITCH_ON_COLOR = Color.rgb(0x39, 0xFF, 0x14)
 
-    internal const val GLASS_SWITCH_THUMB_SIZE_DP = 22f
+    // Matches the 20dp track exactly -- flush, no overhang. glow/inset/border/highlight below
+    // stay their own fixed dp (unchanged), so this only sets how big the visible ball reads.
+    internal const val GLASS_SWITCH_THUMB_SIZE_DP = 20f
     internal val GLASS_SWITCH_THUMB_ON_FILL_NEAR = blend(GLASS_SWITCH_ON_COLOR, Color.WHITE, 0.3f)
     internal val GLASS_SWITCH_THUMB_ON_FILL_FAR = GLASS_SWITCH_ON_COLOR
     internal val GLASS_SWITCH_THUMB_ON_BORDER = Color.argb(0xF0, Color.red(GLASS_SWITCH_ON_COLOR), Color.green(GLASS_SWITCH_ON_COLOR), Color.blue(GLASS_SWITCH_ON_COLOR))
@@ -323,22 +325,6 @@ object BmwDashboardSkin {
     // (eg. NORMAL/INVERT) toggle variant -- same blend-toward-accent technique SliderThumbDrawable
     // uses. (The plain ON/OFF switch has no such hook: it's a fixed red/green status pair.)
     fun glassSegmentDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSegmentDrawable(context, accentColor)
-
-    fun styleWorkspace(root: View) {
-        root.background = brushedPanelDrawable(root.context)
-        styleTree(root)
-    }
-
-    /**
-     * Background-only half of [styleWorkspace], for workspaces (Gains/Delay, Crossovers &amp; Tilt)
-     * whose content is built by [CrossoverDashboardBuilder], which already styles its own cards
-     * and sliders. Running the full [styleTree] walk there would overwrite that styling with the
-     * generic XML-card/slider skin -- this just paints the continuous panel background behind
-     * the toolbar/sidebar/content seam, without touching anything inside the content tree.
-     */
-    fun paintWorkspaceBackground(root: View) {
-        root.background = brushedPanelDrawable(root.context)
-    }
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {
