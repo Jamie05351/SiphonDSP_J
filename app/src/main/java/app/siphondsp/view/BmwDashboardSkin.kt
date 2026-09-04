@@ -326,22 +326,6 @@ object BmwDashboardSkin {
     // uses. (The plain ON/OFF switch has no such hook: it's a fixed red/green status pair.)
     fun glassSegmentDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSegmentDrawable(context, accentColor)
 
-    fun styleWorkspace(root: View) {
-        root.background = brushedPanelDrawable(root.context)
-        styleTree(root)
-    }
-
-    /**
-     * Background-only half of [styleWorkspace], for workspaces (Gains/Delay, Crossovers &amp; Tilt)
-     * whose content is built by [CrossoverDashboardBuilder], which already styles its own cards
-     * and sliders. Running the full [styleTree] walk there would overwrite that styling with the
-     * generic XML-card/slider skin -- this just paints the continuous panel background behind
-     * the toolbar/sidebar/content seam, without touching anything inside the content tree.
-     */
-    fun paintWorkspaceBackground(root: View) {
-        root.background = brushedPanelDrawable(root.context)
-    }
-
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {
         when (root) {

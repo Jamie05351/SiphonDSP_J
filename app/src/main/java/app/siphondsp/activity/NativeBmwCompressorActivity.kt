@@ -26,8 +26,10 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
 
         // Apply the same BMW dashboard chrome as the other DSP workspaces once the fragment
         // view is present. This is visual-only and deliberately not tied to audio lifecycle.
+        // styleTree only (not styleWorkspace): the background half is now painted by
+        // DspCrossNavBar's per-destination workspace backdrop above, on R.id.dsp_workspace_content.
         findViewById<android.view.View>(android.R.id.content).post {
-            BmwDashboardSkin.styleWorkspace(findViewById(android.R.id.content))
+            BmwDashboardSkin.styleTree(findViewById(android.R.id.content))
         }
     }
 }

@@ -31,7 +31,9 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         }
 
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
-        // is not attached to onStart/onResume or any DSP/service lifecycle callback.
-        binding.root.post { BmwDashboardSkin.styleWorkspace(binding.root) }
+        // is not attached to onStart/onResume or any DSP/service lifecycle callback. styleTree
+        // only (not styleWorkspace): the background half is now painted by DspCrossNavBar's
+        // per-destination workspace backdrop above, on R.id.dsp_workspace_content.
+        binding.root.post { BmwDashboardSkin.styleTree(binding.root) }
     }
 }

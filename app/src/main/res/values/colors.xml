@@ -22,6 +22,12 @@
     <!-- 40%-alpha panel fill for alert dialogs on the DSP workspaces (see
          AppTheme.AlertDialogTheme.Workspace); base RGB is siphon_surface (#141418). -->
     <color name="bmw_workspace_dialog_surface">#66141418</color>
+    <!-- Sampled from dsp_workspace_backdrop_*.png's content-pane fill (all 5 average to within a
+         couple of RGB values of each other, ~rgb(32,32,32)), so the toolbar above the tri-colour
+         stripe reads as the same material as the workspace backdrop below it instead of a
+         different flat tone (was ?attr/colorSurface / siphon_surface, #141418, distinctly
+         darker/bluer). See the toolbar in activity_parametric_eq.xml. -->
+    <color name="dsp_workspace_header_bg">#202020</color>
 
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>

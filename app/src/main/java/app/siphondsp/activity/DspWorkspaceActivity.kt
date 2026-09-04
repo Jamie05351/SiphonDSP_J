@@ -24,9 +24,10 @@ import app.siphondsp.view.BmwDashboardSkin
  *  icon). Settings, Presets, Revert, and Blocklist live solely on MainActivity's bottom bar now;
  *  they used to also be reachable from a settings cog/3-dot overflow in this sidebar, removed in
  *  favor of Routing taking that space as a DspCrossNavBar tile instead. The sidebar itself has no
- *  background of its own -- it's transparent, so the same continuous photo background painted on
- *  the workspace root (paintWorkspaceBackground/styleWorkspace) shows through behind it too,
- *  rather than a separate solid panel colour hiding it. */
+ *  background of its own -- it's transparent, so the per-destination workspace backdrop painted
+ *  on R.id.dsp_workspace_content by DspCrossNavBar.populate() (which bakes the sidebar's own
+ *  panel/tiles in already) shows through behind it too, rather than a separate solid panel colour
+ *  hiding it. */
 abstract class DspWorkspaceActivity : BaseActivity() {
     private val serviceStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
