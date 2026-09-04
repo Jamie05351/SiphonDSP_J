@@ -617,14 +617,24 @@ class CrossoverDashboardBuilder(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        // Top-aligned, not the row's own CENTER_VERTICAL default (still left for carImage below):
+        // lowLeft carries an extra LINK L/R row lowRight doesn't have, so leftColumn is taller
+        // than rightColumn overall. Centering both columns in the row's full height (== the
+        // taller column's height) floated the shorter rightColumn's cards down relative to
+        // leftColumn's -- Right Mid no longer lined up with Left Mid. Top-aligning both instead
+        // keeps midLeft/midRight (identical height) and, one vspace(6) later, lowLeft/lowRight's
+        // top edges level; only lowLeft's bottom edge extends further, which is expected since
+        // it's the one card with the extra row.
         innerRow.addView(
             leftColumn,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginEnd = dp(4) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat())
+                .apply { marginEnd = dp(4); gravity = Gravity.TOP },
         )
         innerRow.addView(carImage, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CAR_DIAGRAM_WIDTH_DP.toFloat()))
         innerRow.addView(
             rightColumn,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat()).apply { marginStart = dp(4) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, CHANNEL_CARD_WIDTH_DP.toFloat())
+                .apply { marginStart = dp(4); gravity = Gravity.TOP },
         )
 
         addCustomView(innerRow, topMarginDp = 4, bottomMarginDp = 4)
