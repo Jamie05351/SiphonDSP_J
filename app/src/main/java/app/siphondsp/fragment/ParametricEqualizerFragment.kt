@@ -567,18 +567,11 @@ class ParametricEqualizerFragment : Fragment() {
         PeqScope.MID -> peqState.midBandBands
     }
 
-    private fun bandsForScope(state: BmwPeqState, scope: PeqScope = selectedScope) = when (scope) {
-        PeqScope.FULL -> state.fullRangeBands
-        PeqScope.LOW -> state.lowBandBands
-        PeqScope.MID -> state.midBandBands
-    }
+    private fun bandsForScope(state: BmwPeqState, scope: PeqScope = selectedScope) =
+        PeqBandEditor.bandsFor(state, scope)
 
-    private fun replaceScopeBands(state: BmwPeqState, replacement: ParametricEqBandList) {
-        bandsForScope(state).apply {
-            clear()
-            addAll(replacement)
-        }
-    }
+    private fun replaceScopeBands(state: BmwPeqState, replacement: ParametricEqBandList) =
+        PeqBandEditor.replaceScopeBands(state, selectedScope, replacement)
 
     private fun bindScope(preserveScroll: Boolean = false) {
         val bands = bandsForScope()
@@ -1111,59 +1104,45 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun copyWholeScope(target: PeqScope, append: Boolean) {
-        val candidate = peqState.deepCopy()
-        val source = bandsForScope(candidate).toList()
-        val destination = bandsForScope(candidate, target)
-        val resultingSize = (if (append) destination.size else 0) + source.size
-        if (resultingSize > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${target.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
-            )
-            return
+        when (val result = PeqBandEditor.copyWholeScope(peqState, selectedScope, target, append)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed -> applyCandidate(result.candidate, result.undoSource)
+            else -> Unit
         }
-        if (!append) destination.clear()
-        source.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
-        applyCandidate(candidate, if (append) "copy-scope-append" else "copy-scope-replace")
     }
 
     private fun duplicateSelectedFilter(index: Int): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        if (bands.size >= BmwPeqState.MAX_BANDS) {
-            requireContext().toast("${selectedScope.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return true
+        when (val result = PeqBandEditor.duplicateFilter(peqState, selectedScope, index)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed -> {
+                selectedBandByScope[selectedScope] = result.select
+                applyCandidate(result.candidate, result.undoSource)
+            }
+            else -> Unit
         }
-        val source = bands[index]
-        val duplicate = source.copyWithUuid(UUID.randomUUID())
-        bands.add(index + 1, duplicate)
-        selectedBandByScope[selectedScope] = duplicate.uuid
-        applyCandidate(candidate, "duplicate")
         return true
     }
 
     private fun copySelectedFilter(index: Int, target: PeqScope): Boolean {
-        val candidate = peqState.deepCopy()
-        val destination = bandsForScope(candidate, target)
-        if (destination.size >= BmwPeqState.MAX_BANDS) {
-            requireContext().toast("${target.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return true
-        }
-        val copied = bandsForScope(candidate)[index].copyWithUuid(UUID.randomUUID())
-        destination.add(copied)
-        if (applyCandidate(candidate, "copy-filter")) {
-            selectedBandByScope[target] = copied.uuid
+        when (val result = PeqBandEditor.copyFilter(peqState, selectedScope, index, target)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed ->
+                if (applyCandidate(result.candidate, result.undoSource)) {
+                    selectedBandByScope[target] = result.select
+                }
+            else -> Unit
         }
         return true
     }
 
     private fun moveSelectedFilter(from: Int, to: Int): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        if (from !in bands.indices || to !in bands.indices) return true
-        val band = bands.removeAt(from)
-        bands.add(to, band)
-        selectedBandByScope[selectedScope] = band.uuid
-        applyCandidate(candidate, "reorder")
+        when (val result = PeqBandEditor.moveFilter(peqState, selectedScope, from, to)) {
+            is PeqBandEditResult.Changed -> {
+                selectedBandByScope[selectedScope] = result.select
+                applyCandidate(result.candidate, result.undoSource)
+            }
+            else -> Unit
+        }
         return true
     }
 
@@ -1172,49 +1151,17 @@ class ParametricEqualizerFragment : Fragment() {
         destinationChannel: ParametricEqChannel,
         replaceBoth: Boolean,
     ): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        val source = bands.filter { it.channel == sourceChannel }
-        val resultingSize = bands.size + source.size
-        if (resultingSize > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+        when (
+            val result = PeqBandEditor.copyChannelFilters(
+                peqState, selectedScope, sourceChannel, destinationChannel, replaceBoth,
             )
-            return true
+        ) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            PeqBandEditResult.NoMatchingChannel ->
+                requireContext().toast("No ${sourceChannel.displayLabel} filters to copy")
+            is PeqBandEditResult.Changed -> applyCandidate(result.candidate, result.undoSource)
+            else -> Unit
         }
-        if (replaceBoth) {
-            val sourceIds = source.mapTo(mutableSetOf()) { it.uuid }
-            bands.removeAll { it.uuid in sourceIds }
-        }
-        source.forEach { band ->
-            bands.add(
-                ParametricEqBand(
-                    band.frequency,
-                    band.gain,
-                    band.q,
-                    band.filterType,
-                    destinationChannel,
-                    UUID.randomUUID(),
-                )
-            )
-            if (replaceBoth) {
-                bands.add(
-                    ParametricEqBand(
-                        band.frequency,
-                        band.gain,
-                        band.q,
-                        band.filterType,
-                        ParametricEqChannel.RIGHT,
-                        UUID.randomUUID(),
-                    )
-                )
-            }
-        }
-        if (source.isEmpty()) {
-            requireContext().toast("No ${sourceChannel.displayLabel} filters to copy")
-            return true
-        }
-        applyCandidate(candidate, "copy-channel")
         return true
     }
 
