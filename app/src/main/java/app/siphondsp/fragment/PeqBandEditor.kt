@@ -161,6 +161,61 @@ object PeqBandEditor {
         return PeqBandEditResult.Changed(candidate, "copy-channel")
     }
 
+    /** Merge one or more filename-routed REW/APO files into their target banks. Replace clears
+     *  each touched bank first; the Input Correction file's preamp is applied on replace only. */
+    fun importRoutedApo(
+        state: BmwPeqState,
+        routed: List<RoutedApoImport>,
+        append: Boolean,
+    ): PeqBandEditResult {
+        val candidate = state.deepCopy()
+        val touchedScopes = routed.map { it.scope }.distinct()
+        if (!append) touchedScopes.forEach { bandsFor(candidate, it).clear() }
+
+        routed.forEach { r ->
+            val destination = bandsFor(candidate, r.scope)
+            r.bands.forEach {
+                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID()))
+            }
+        }
+
+        val overflow = touchedScopes.firstOrNull { bandsFor(candidate, it).size > BmwPeqState.MAX_BANDS }
+        if (overflow != null) return PeqBandEditResult.Overflow(overflow, alreadyFull = false)
+
+        // Only the Input Correction file carries a meaningful preamp; per-branch files don't.
+        val fullPreamp = routed.firstOrNull { it.scope == PeqScope.FULL }?.preampDb
+        val finalCandidate =
+            if (!append && fullPreamp != null) candidate.copy(preampDb = fullPreamp.toFloat()) else candidate
+        return PeqBandEditResult.Changed(
+            finalCandidate,
+            if (append) "rew-import-append" else "rew-import-replace",
+        )
+    }
+
+    /** Merge a single previewed filter set into [scope]. On a Full-bank replace, [importedPreamp]
+     *  becomes the state preamp. */
+    fun importIntoScope(
+        state: BmwPeqState,
+        scope: PeqScope,
+        imported: ParametricEqBandList,
+        importedPreamp: Float,
+        append: Boolean,
+    ): PeqBandEditResult {
+        val candidate = state.deepCopy()
+        val destination = bandsFor(candidate, scope)
+        if (!append) destination.clear()
+        if (destination.size + imported.size > BmwPeqState.MAX_BANDS) {
+            return PeqBandEditResult.Overflow(scope, alreadyFull = false)
+        }
+        imported.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
+        val completeCandidate =
+            if (scope == PeqScope.FULL && !append) candidate.copy(preampDb = importedPreamp) else candidate
+        return PeqBandEditResult.Changed(
+            completeCandidate,
+            if (append) "import-append" else "import-replace",
+        )
+    }
+
     private fun ParametricEqBand.copyWithUuid(uuid: UUID) = ParametricEqBand(
         frequency, gain, q, filterType, channel, uuid,
     )

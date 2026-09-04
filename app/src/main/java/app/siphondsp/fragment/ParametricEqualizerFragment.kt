@@ -98,15 +98,6 @@ class ParametricEqualizerFragment : Fragment() {
         val result: ApoImportResult,
     )
 
-    private data class RoutedApoImport(
-        val name: String,
-        val scope: PeqScope,
-        val channel: ParametricEqChannel,
-        val bands: ParametricEqBandList,
-        val preampDb: Double,
-        val skipped: Int,
-    )
-
     private fun handleApoImport(uris: List<android.net.Uri>) {
         val parsed = try {
             uris.mapNotNull { uri ->
@@ -191,32 +182,17 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun applyApoImport(routed: List<RoutedApoImport>, append: Boolean) {
-        val candidate = peqState.deepCopy()
-        val touchedScopes = routed.map { it.scope }.distinct()
-        if (!append) touchedScopes.forEach { bandsForScope(candidate, it).clear() }
-
-        routed.forEach { r ->
-            val destination = bandsForScope(candidate, r.scope)
-            r.bands.forEach {
-                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID()))
-            }
-        }
-
-        val overflow = touchedScopes.firstOrNull { bandsForScope(candidate, it).size > BmwPeqState.MAX_BANDS }
-        if (overflow != null) {
-            requireContext().toast("${overflow.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return
-        }
-
-        // Only the Input Correction file carries a meaningful preamp; per-branch files don't.
-        val fullPreamp = routed.firstOrNull { it.scope == PeqScope.FULL }?.preampDb
-        val finalCandidate = if (!append && fullPreamp != null) candidate.copy(preampDb = fullPreamp.toFloat()) else candidate
-
-        if (applyCandidate(finalCandidate, if (append) "rew-import-append" else "rew-import-replace")) {
-            val total = routed.sumOf { it.bands.size }
-            val skipped = routed.sumOf { it.skipped }
-            val base = "Imported $total filters into ${touchedScopes.size} bank(s)"
-            requireContext().toast(if (skipped > 0) "$base ($skipped lines skipped)" else base)
+        when (val result = PeqBandEditor.importRoutedApo(peqState, routed, append)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed ->
+                if (applyCandidate(result.candidate, result.undoSource)) {
+                    val total = routed.sumOf { it.bands.size }
+                    val skipped = routed.sumOf { it.skipped }
+                    val bankCount = routed.map { it.scope }.distinct().size
+                    val base = "Imported $total filters into $bankCount bank(s)"
+                    requireContext().toast(if (skipped > 0) "$base ($skipped lines skipped)" else base)
+                }
+            else -> Unit
         }
     }
 
@@ -239,27 +215,21 @@ class ParametricEqualizerFragment : Fragment() {
         append: Boolean,
         skippedFilters: Int,
     ) {
-        val candidate = peqState.deepCopy()
-        val destination = bandsForScope(candidate)
-        if (!append) destination.clear()
-        if (destination.size + imported.size > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+        when (
+            val result = PeqBandEditor.importIntoScope(
+                peqState, selectedScope, imported, importedPreamp, append,
             )
-            return
-        }
-        imported.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
-        val completeCandidate = if (selectedScope == PeqScope.FULL && !append) {
-            candidate.copy(preampDb = importedPreamp)
-        } else {
-            candidate
-        }
-        if (applyCandidate(completeCandidate, if (append) "import-append" else "import-replace")) {
-            val message = getString(R.string.peq_import_success, imported.size)
-            requireContext().toast(
-                if (skippedFilters > 0) "$message ($skippedFilters malformed or unsupported lines skipped)"
-                else message
-            )
+        ) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed ->
+                if (applyCandidate(result.candidate, result.undoSource)) {
+                    val message = getString(R.string.peq_import_success, imported.size)
+                    requireContext().toast(
+                        if (skippedFilters > 0) "$message ($skippedFilters malformed or unsupported lines skipped)"
+                        else message
+                    )
+                }
+            else -> Unit
         }
     }
 
@@ -1164,10 +1134,6 @@ class ParametricEqualizerFragment : Fragment() {
         }
         return true
     }
-
-    private fun ParametricEqBand.copyWithUuid(uuid: UUID) = ParametricEqBand(
-        frequency, gain, q, filterType, channel, uuid,
-    )
 
     private fun updateViewState() {
         binding.editCardTitle.text = getString(R.string.peq_band_list)

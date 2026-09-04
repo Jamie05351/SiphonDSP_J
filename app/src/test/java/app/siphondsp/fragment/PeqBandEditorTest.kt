@@ -222,6 +222,89 @@ class PeqBandEditorTest {
         assertEquals(3, PeqBandEditor.bandsFor(s, PeqScope.MID).size)
     }
 
+    // --- importIntoScope --------------------------------------------------------------
+
+    @Test
+    fun importIntoScopeReplaceClearsAndAppliesPreampOnFullBank() {
+        val original = state(full = listOfBands(band(), band())).copy(preampDb = 1f)
+        val result = PeqBandEditor.importIntoScope(
+            original, PeqScope.FULL, listOfBands(band(freq = 63.0)), importedPreamp = -4.5f, append = false,
+        )
+        result as PeqBandEditResult.Changed
+        assertEquals("import-replace", result.undoSource)
+        assertEquals(1, result.candidate.fullRangeBands.size)
+        assertEquals(-4.5f, result.candidate.preampDb)
+        assertEquals(1f, original.preampDb) // untouched
+    }
+
+    @Test
+    fun importIntoScopeAppendKeepsPreampAndExistingBands() {
+        val original = state(low = listOfBands(band())).copy(preampDb = 2f)
+        val result = PeqBandEditor.importIntoScope(
+            original, PeqScope.LOW, listOfBands(band(), band()), importedPreamp = -9f, append = true,
+        )
+        result as PeqBandEditResult.Changed
+        assertEquals("import-append", result.undoSource)
+        assertEquals(3, result.candidate.lowBandBands.size)
+        assertEquals(2f, result.candidate.preampDb) // preamp only changes on a Full replace
+    }
+
+    @Test
+    fun importIntoScopeOverflowsAfterClear() {
+        val result = PeqBandEditor.importIntoScope(
+            state(full = fill(3)), PeqScope.FULL, fill(17), importedPreamp = 0f, append = false,
+        )
+        assertEquals(PeqBandEditResult.Overflow(PeqScope.FULL, alreadyFull = false), result)
+    }
+
+    // --- importRoutedApo --------------------------------------------------------------
+
+    private fun routed(scope: PeqScope, count: Int, preamp: Double = 0.0) = RoutedApoImport(
+        name = "${scope.name}.txt",
+        scope = scope,
+        channel = ParametricEqChannel.LEFT_RIGHT,
+        bands = fill(count),
+        preampDb = preamp,
+        skipped = 0,
+    )
+
+    @Test
+    fun importRoutedApoReplaceClearsOnlyTouchedBanksAndTakesFullPreamp() {
+        val original = state(full = fill(4), low = fill(4), mid = fill(4)).copy(preampDb = 0f)
+        val result = PeqBandEditor.importRoutedApo(
+            original,
+            listOf(routed(PeqScope.FULL, 2, preamp = -6.0), routed(PeqScope.LOW, 3)),
+            append = false,
+        )
+        result as PeqBandEditResult.Changed
+        assertEquals("rew-import-replace", result.undoSource)
+        assertEquals(2, result.candidate.fullRangeBands.size)
+        assertEquals(3, result.candidate.lowBandBands.size)
+        assertEquals(4, result.candidate.midBandBands.size) // not in the routed set -> untouched
+        assertEquals(-6f, result.candidate.preampDb)
+    }
+
+    @Test
+    fun importRoutedApoAppendKeepsBanksAndIgnoresPreamp() {
+        val original = state(low = fill(2)).copy(preampDb = 3f)
+        val result = PeqBandEditor.importRoutedApo(
+            original, listOf(routed(PeqScope.FULL, 1, preamp = -6.0), routed(PeqScope.LOW, 2)), append = true,
+        )
+        result as PeqBandEditResult.Changed
+        assertEquals("rew-import-append", result.undoSource)
+        assertEquals(1, result.candidate.fullRangeBands.size)
+        assertEquals(4, result.candidate.lowBandBands.size)
+        assertEquals(3f, result.candidate.preampDb)
+    }
+
+    @Test
+    fun importRoutedApoOverflowsOnTheOffendingBank() {
+        val result = PeqBandEditor.importRoutedApo(
+            state(), listOf(routed(PeqScope.MID, 20)), append = false,
+        )
+        assertEquals(PeqBandEditResult.Overflow(PeqScope.MID, alreadyFull = false), result)
+    }
+
     @Test
     fun editorNeverMutatesTheInputState() {
         val original = state(full = listOfBands(band(), band()), low = listOfBands(band()))

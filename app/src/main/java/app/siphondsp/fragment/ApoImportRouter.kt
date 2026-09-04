@@ -1,7 +1,22 @@
 package app.siphondsp.fragment
 
+import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import java.io.InputStream
+
+/**
+ * One REW/APO file that [ApoImportRouter.routeApoFileName] mapped onto a (bank, channel), carried
+ * from the import dialog to [PeqBandEditor.importRoutedApo]. [name] and [skipped] are only used
+ * by the fragment's summary toast; the editor reads [scope], [channel], [bands] and [preampDb].
+ */
+data class RoutedApoImport(
+    val name: String,
+    val scope: PeqScope,
+    val channel: ParametricEqChannel,
+    val bands: ParametricEqBandList,
+    val preampDb: Double,
+    val skipped: Int,
+)
 
 /**
  * Pure helpers for the "import a REW/APO filter set" flow: mapping an export's filename onto a
