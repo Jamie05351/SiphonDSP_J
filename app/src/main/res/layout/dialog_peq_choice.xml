@@ -2,7 +2,7 @@
 <!-- Tap-to-commit choice list for the PEQ Type / Channel cells. Hosted in a button-less
      AlertDialog themed with ThemeOverlay.SiphonDSP.GlassDialog (title supplied by the builder).
      Rows are added in code as glass boxes tinted with the current scope accent; tapping a row
-     commits immediately and dismisses. See ParametricEqualizerFragment.showPeqChoiceDialog(). -->
+     commits immediately and dismisses. See PeqDialogs.showChoice(). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/choice_container"
     android:layout_width="match_parent"

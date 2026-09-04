@@ -7,23 +7,18 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.content.res.Configuration.ORIENTATION_LANDSCAPE
-import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.annotation.StringRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.ViewPager2
@@ -31,11 +26,8 @@ import app.siphondsp.R
 import app.siphondsp.BuildConfig
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.adapter.ParametricEqBandAdapter
-import app.siphondsp.databinding.DialogPeqChoiceBinding
 import app.siphondsp.databinding.FragmentParametricEqBinding
-import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwSignalChain
-import app.siphondsp.model.ApoImportResult
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.BmwPeqState
@@ -48,7 +40,6 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.storage.StorageUtils
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.showInputAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
@@ -60,11 +51,7 @@ import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.ParametricEqSurface
 import app.siphondsp.view.StaticPagerAdapter
 import timber.log.Timber
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 import java.util.UUID
-import java.io.InputStream
 
 class ParametricEqualizerFragment : Fragment() {
     private lateinit var binding: FragmentParametricEqBinding
@@ -77,8 +64,15 @@ class ParametricEqualizerFragment : Fragment() {
     private var pendingDiagnosticReport: String? = null
     private var peqDisplayMode = PeqDisplayMode.GRAPH
 
-    /** Trims trailing zeros ("1.41", "1000", "0.1") for the value dialog's field + range caption. */
-    private val peqValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US))
+    private val apoImport = PeqApoImport(object : PeqApoImport.Host {
+        override val context get() = requireContext()
+        override val activeScope get() = selectedScope
+        override val state get() = peqState
+        override fun applyCandidate(candidate: BmwPeqState, source: String) =
+            this@ParametricEqualizerFragment.applyCandidate(candidate, source)
+    })
+
+    private fun dialogs() = PeqDialogs(requireContext(), layoutInflater)
 
     private fun refreshActionChips() {
         binding.chipUndo.isEnabled = history.canUndo
@@ -91,214 +85,12 @@ class ParametricEqualizerFragment : Fragment() {
     private val importFileLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isEmpty()) return@registerForActivityResult
-            handleApoImport(uris)
+            apoImport.handleApoImport(uris)
         }
-
-    private data class ParsedApoFile(
-        val name: String,
-        val bands: ParametricEqBandList,
-        val result: ApoImportResult,
-    )
-
-    private data class RoutedApoImport(
-        val name: String,
-        val scope: PeqScope,
-        val channel: ParametricEqChannel,
-        val bands: ParametricEqBandList,
-        val preampDb: Double,
-        val skipped: Int,
-    )
-
-    /**
-     * Map a REW/APO export filename onto a (bank, channel). "input" / "correction" / "full" go
-     * to Input Correction as L+R; "low" / "mid" pick up a side from a left/right (or _l/_r,
-     * -l/-r) token in the name, otherwise L+R.
-     */
-    private fun routeApoFileName(name: String): Pair<PeqScope, ParametricEqChannel>? {
-        val base = name.substringBeforeLast('.').lowercase()
-        val side = when {
-            Regex("""(?:^|[ _.\-])(left|l)(?:$|[ _.\-])""").containsMatchIn(base) -> ParametricEqChannel.LEFT
-            Regex("""(?:^|[ _.\-])(right|r)(?:$|[ _.\-])""").containsMatchIn(base) -> ParametricEqChannel.RIGHT
-            else -> null
-        }
-        return when {
-            "input" in base || "correction" in base || "full" in base ->
-                PeqScope.FULL to ParametricEqChannel.LEFT_RIGHT
-            "low" in base -> PeqScope.LOW to (side ?: ParametricEqChannel.LEFT_RIGHT)
-            "mid" in base -> PeqScope.MID to (side ?: ParametricEqChannel.LEFT_RIGHT)
-            else -> null
-        }
-    }
-
-    private fun handleApoImport(uris: List<android.net.Uri>) {
-        val parsed = try {
-            uris.mapNotNull { uri ->
-                val name = StorageUtils.queryName(requireContext(), uri) ?: "file"
-                val text = requireContext().contentResolver.openInputStream(uri)
-                    ?.use(::readImportText) ?: return@mapNotNull null
-                val bands = ParametricEqBandList()
-                ParsedApoFile(name, bands, bands.fromApoString(text))
-            }
-        } catch (error: Exception) {
-            Timber.e(error, "Failed to read import files")
-            requireContext().toast(R.string.peq_import_error)
-            return
-        }
-        if (parsed.isEmpty()) return
-
-        val routed = LinkedHashMap<Pair<PeqScope, ParametricEqChannel>, RoutedApoImport>()
-        val unmatched = mutableListOf<String>()
-        parsed.forEach { file ->
-            val route = routeApoFileName(file.name)
-            if (route == null) {
-                unmatched += file.name
-            } else {
-                // last file wins if two map to the same bank+channel
-                routed[route] = RoutedApoImport(
-                    file.name, route.first, route.second, file.bands,
-                    file.result.preampDb, file.result.skippedFilters,
-                )
-            }
-        }
-
-        if (routed.isEmpty()) {
-            if (parsed.size == 1) {
-                promptSingleScopeImport(parsed[0].bands, parsed[0].result)
-            } else {
-                requireContext().toast(
-                    "No filenames recognised. Name them like input.txt / low_left.txt / mid_right.txt"
-                )
-            }
-            return
-        }
-
-        val channelSuffix = { c: ParametricEqChannel ->
-            when (c) {
-                ParametricEqChannel.LEFT -> " · L"
-                ParametricEqChannel.RIGHT -> " · R"
-                ParametricEqChannel.LEFT_RIGHT -> ""
-            }
-        }
-        val lines = routed.values.joinToString("\n") {
-            "${it.name} → ${it.scope.label}${channelSuffix(it.channel)}: ${it.bands.size}"
-        }
-        val skippedNote = if (unmatched.isEmpty()) "" else
-            "\n\nNot recognised, ignored: ${unmatched.joinToString(", ")}"
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Import REW filter set")
-            .setMessage("$lines$skippedNote\n\nReplace clears each affected bank first; Append adds to it.")
-            .setPositiveButton("Replace") { _, _ -> applyApoImport(routed.values.toList(), append = false) }
-            .setNeutralButton("Append") { _, _ -> applyApoImport(routed.values.toList(), append = true) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun promptSingleScopeImport(imported: ParametricEqBandList, result: ApoImportResult) {
-        val detail = if (result.skippedFilters > 0) {
-            "${result.skippedFilters} malformed or unsupported lines will be skipped."
-        } else {
-            "All ${imported.size} parsed filters are supported."
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle("Import into ${selectedScope.label}")
-            .setMessage("$detail Choose how to apply the previewed filters.")
-            .setPositiveButton("Replace") { _, _ ->
-                applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
-            }
-            .setNeutralButton("Append") { _, _ ->
-                applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun applyApoImport(routed: List<RoutedApoImport>, append: Boolean) {
-        val candidate = peqState.deepCopy()
-        val touchedScopes = routed.map { it.scope }.distinct()
-        if (!append) touchedScopes.forEach { bandsForScope(candidate, it).clear() }
-
-        routed.forEach { r ->
-            val destination = bandsForScope(candidate, r.scope)
-            r.bands.forEach {
-                destination.add(ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, r.channel, UUID.randomUUID()))
-            }
-        }
-
-        val overflow = touchedScopes.firstOrNull { bandsForScope(candidate, it).size > BmwPeqState.MAX_BANDS }
-        if (overflow != null) {
-            requireContext().toast("${overflow.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return
-        }
-
-        // Only the Input Correction file carries a meaningful preamp; per-branch files don't.
-        val fullPreamp = routed.firstOrNull { it.scope == PeqScope.FULL }?.preampDb
-        val finalCandidate = if (!append && fullPreamp != null) candidate.copy(preampDb = fullPreamp.toFloat()) else candidate
-
-        if (applyCandidate(finalCandidate, if (append) "rew-import-append" else "rew-import-replace")) {
-            val total = routed.sumOf { it.bands.size }
-            val skipped = routed.sumOf { it.skipped }
-            val base = "Imported $total filters into ${touchedScopes.size} bank(s)"
-            requireContext().toast(if (skipped > 0) "$base ($skipped lines skipped)" else base)
-        }
-    }
 
     private val exportFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         uri ?: return@registerForActivityResult
-        try {
-            val preamp = if (selectedScope == PeqScope.FULL) peqState.preampDb.toDouble() else 0.0
-            val apoString = bandsForScope().toApoString(preamp)
-            requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(apoString) }
-            requireContext().toast(R.string.peq_export_success)
-        } catch (error: Exception) {
-            Timber.e(error, "Failed to export PEQ file")
-            requireContext().toast("Export failed: ${error.message}")
-        }
-    }
-
-    private fun applyScopeImport(
-        imported: ParametricEqBandList,
-        importedPreamp: Float,
-        append: Boolean,
-        skippedFilters: Int,
-    ) {
-        val candidate = peqState.deepCopy()
-        val destination = bandsForScope(candidate)
-        if (!append) destination.clear()
-        if (destination.size + imported.size > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
-            )
-            return
-        }
-        imported.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
-        val completeCandidate = if (selectedScope == PeqScope.FULL && !append) {
-            candidate.copy(preampDb = importedPreamp)
-        } else {
-            candidate
-        }
-        if (applyCandidate(completeCandidate, if (append) "import-append" else "import-replace")) {
-            val message = getString(R.string.peq_import_success, imported.size)
-            requireContext().toast(
-                if (skippedFilters > 0) "$message ($skippedFilters malformed or unsupported lines skipped)"
-                else message
-            )
-        }
-    }
-
-    private fun readImportText(input: InputStream): String {
-        val reader = input.bufferedReader()
-        val output = StringBuilder()
-        val buffer = CharArray(8192)
-        while (true) {
-            val count = reader.read(buffer)
-            if (count < 0) break
-            if (output.length + count > MAX_IMPORT_CHARS) {
-                throw IllegalArgumentException("The import file is larger than the 1 MB safety limit")
-            }
-            output.append(buffer, 0, count)
-        }
-        return output.toString()
+        apoImport.exportTo(uri)
     }
 
     private val presetExportLauncher =
@@ -325,7 +117,7 @@ class ParametricEqualizerFragment : Fragment() {
             uri ?: return@registerForActivityResult
             try {
                 val text = requireContext().contentResolver.openInputStream(uri)
-                    ?.use(::readImportText)
+                    ?.use(ApoImportRouter::readImportText)
                     ?: throw IllegalArgumentException("The preset file is empty")
                 val preset = BmwPeqPreset.decode(text)
                 val candidate = preset.toState()
@@ -365,17 +157,13 @@ class ParametricEqualizerFragment : Fragment() {
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             uri ?: return@registerForActivityResult
             try {
-                val graphPrefs =
-                    requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+                val graphPrefs = PeqGraphPreferences(requireContext())
                 val backup = PrivatePeqBackup(
                     createdAtEpochMs = System.currentTimeMillis(),
                     state = BmwPeqPreset.fromState(peqState, name = "Jamie private PEQ backup"),
                     graphDisplay = PrivatePeqBackup.GraphDisplay(
-                        graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true),
-                        graphPrefs.getString(
-                            GRAPH_CHANNEL,
-                            ParametricEqSurface.ChannelDisplay.BOTH.name,
-                        ) ?: ParametricEqSurface.ChannelDisplay.BOTH.name,
+                        graphPrefs.showIndividualFilters,
+                        graphPrefs.channelDisplayName,
                     ),
                     // Full BMW DSP state (Gains & Delay, Compressor, Crossovers & Tilt), not
                     // just PEQ bands -- see PrivatePeqBackup.nativeDspValues.
@@ -397,7 +185,7 @@ class ParametricEqualizerFragment : Fragment() {
             uri ?: return@registerForActivityResult
             try {
                 val text = requireContext().contentResolver.openInputStream(uri)
-                    ?.use(::readImportText)
+                    ?.use(ApoImportRouter::readImportText)
                     ?: throw IllegalArgumentException("The backup file is empty")
                 val backup = PrivatePeqBackup.decode(text)
                 val candidate = backup.validatedState()
@@ -426,15 +214,10 @@ class ParametricEqualizerFragment : Fragment() {
                                 NativeBmwDspValues.save(requireContext(), restored)
                                 NativeBmwDspValues.broadcast(requireContext(), restored)
                             }
-                            val graphPrefs = requireContext()
-                                .getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-                            graphPrefs.edit()
-                                .putBoolean(
-                                    GRAPH_SHOW_OVERLAYS,
-                                    backup.graphDisplay.showIndividualFilters,
-                                )
-                                .putString(GRAPH_CHANNEL, backup.graphDisplay.channelDisplay)
-                                .apply()
+                            PeqGraphPreferences(requireContext()).writeBackupGraphDisplay(
+                                backup.graphDisplay.showIndividualFilters,
+                                backup.graphDisplay.channelDisplay,
+                            )
                             binding.equalizerSurface.showIndividualFilters =
                                 backup.graphDisplay.showIndividualFilters
                             binding.equalizerSurface.channelDisplay =
@@ -561,9 +344,10 @@ class ParametricEqualizerFragment : Fragment() {
      *  swiping does the same job; cards_pager is the only way to switch. Portrait has no
      *  cards_pager -- no-op there. */
     private fun configurePager() {
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
         peqDisplayMode = runCatching {
-            PeqDisplayMode.valueOf(graphPrefs.getString(GRAPH_DISPLAY_MODE, PeqDisplayMode.GRAPH.name)!!)
+            PeqDisplayMode.valueOf(
+                PeqGraphPreferences(requireContext()).listModeName ?: PeqDisplayMode.GRAPH.name
+            )
         }.getOrDefault(PeqDisplayMode.GRAPH)
 
         binding.cardsPager?.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
@@ -577,8 +361,7 @@ class ParametricEqualizerFragment : Fragment() {
     private fun setDisplayMode(mode: PeqDisplayMode, smoothScroll: Boolean) {
         if (peqDisplayMode == mode) return
         peqDisplayMode = mode
-        requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-            .edit().putString(GRAPH_DISPLAY_MODE, mode.name).apply()
+        PeqGraphPreferences(requireContext()).listModeName = mode.name
         applyDisplayMode(smoothScroll)
     }
 
@@ -605,18 +388,11 @@ class ParametricEqualizerFragment : Fragment() {
         PeqScope.MID -> peqState.midBandBands
     }
 
-    private fun bandsForScope(state: BmwPeqState, scope: PeqScope = selectedScope) = when (scope) {
-        PeqScope.FULL -> state.fullRangeBands
-        PeqScope.LOW -> state.lowBandBands
-        PeqScope.MID -> state.midBandBands
-    }
+    private fun bandsForScope(state: BmwPeqState, scope: PeqScope = selectedScope) =
+        PeqBandEditor.bandsFor(state, scope)
 
-    private fun replaceScopeBands(state: BmwPeqState, replacement: ParametricEqBandList) {
-        bandsForScope(state).apply {
-            clear()
-            addAll(replacement)
-        }
-    }
+    private fun replaceScopeBands(state: BmwPeqState, replacement: ParametricEqBandList) =
+        PeqBandEditor.replaceScopeBands(state, selectedScope, replacement)
 
     private fun bindScope(preserveScroll: Boolean = false) {
         val bands = bandsForScope()
@@ -693,19 +469,10 @@ class ParametricEqualizerFragment : Fragment() {
         // editing, but the drag-to-adjust handles stay directly on this graph too.
         binding.equalizerSurface.showTiltHandles = true
         binding.equalizerSurface.showGainMeters = true
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
-        binding.equalizerSurface.showIndividualFilters =
-            graphPrefs.getBoolean(GRAPH_SHOW_OVERLAYS, true)
-        binding.equalizerSurface.channelDisplay = runCatching {
-            ParametricEqSurface.ChannelDisplay.valueOf(
-                graphPrefs.getString(GRAPH_CHANNEL, ParametricEqSurface.ChannelDisplay.BOTH.name)!!
-            )
-        }.getOrDefault(ParametricEqSurface.ChannelDisplay.BOTH)
-        binding.equalizerSurface.displayMode = runCatching {
-            ParametricEqSurface.DisplayMode.valueOf(
-                graphPrefs.getString(GRAPH_RESPONSE_MODE, ParametricEqSurface.DisplayMode.MAGNITUDE.name)!!
-            )
-        }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
+        val graphPrefs = PeqGraphPreferences(requireContext())
+        binding.equalizerSurface.showIndividualFilters = graphPrefs.showIndividualFilters
+        binding.equalizerSurface.channelDisplay = graphPrefs.channelDisplay
+        binding.equalizerSurface.displayMode = graphPrefs.responseMode
 
         // Read-only graph now: a node tap just highlights that filter's row on the band-list
         // page (only active-scope taps reach here). Dragging filters/tilt on the graph was
@@ -721,7 +488,7 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun showGraphOptionsPopup(anchor: View) {
-        val graphPrefs = requireContext().getSharedPreferences(GRAPH_PREFS, Context.MODE_PRIVATE)
+        val graphPrefs = PeqGraphPreferences(requireContext())
         val popup = PopupMenu(requireContext(), anchor)
         popup.menu.add(Menu.NONE, GRAPH_MENU_OVERLAYS, Menu.NONE, "Show individual filters")
             .setCheckable(true)
@@ -756,9 +523,7 @@ class ParametricEqualizerFragment : Fragment() {
             when (item.itemId) {
                 GRAPH_MENU_OVERLAYS -> {
                     binding.equalizerSurface.showIndividualFilters = !item.isChecked
-                    graphPrefs.edit()
-                        .putBoolean(GRAPH_SHOW_OVERLAYS, binding.equalizerSurface.showIndividualFilters)
-                        .apply()
+                    graphPrefs.showIndividualFilters = binding.equalizerSurface.showIndividualFilters
                     true
                 }
                 GRAPH_MENU_BOTH, GRAPH_MENU_LEFT, GRAPH_MENU_RIGHT -> {
@@ -767,9 +532,7 @@ class ParametricEqualizerFragment : Fragment() {
                         GRAPH_MENU_RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
                         else -> ParametricEqSurface.ChannelDisplay.BOTH
                     }
-                    graphPrefs.edit()
-                        .putString(GRAPH_CHANNEL, binding.equalizerSurface.channelDisplay.name)
-                        .apply()
+                    graphPrefs.channelDisplay = binding.equalizerSurface.channelDisplay
                     bindScope()
                     true
                 }
@@ -780,9 +543,7 @@ class ParametricEqualizerFragment : Fragment() {
                         GRAPH_MENU_MODE_GROUP_DELAY -> ParametricEqSurface.DisplayMode.GROUP_DELAY
                         else -> ParametricEqSurface.DisplayMode.MAGNITUDE
                     }
-                    graphPrefs.edit()
-                        .putString(GRAPH_RESPONSE_MODE, binding.equalizerSurface.displayMode.name)
-                        .apply()
+                    graphPrefs.responseMode = binding.equalizerSurface.displayMode
                     true
                 }
                 else -> false
@@ -894,7 +655,7 @@ class ParametricEqualizerFragment : Fragment() {
         PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
     }
 
-    private fun showFrequencyDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showFrequencyDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_frequency), band.frequency, 20.0, 20000.0, "Hz",
     ) { value ->
         commitBandEdit(index, "edit_frequency") {
@@ -902,7 +663,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    private fun showGainDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showGainDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_gain), band.gain, -30.0, 30.0, "dB",
     ) { value ->
         commitBandEdit(index, "edit_gain") {
@@ -910,7 +671,7 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    private fun showQDialog(band: ParametricEqBand, index: Int) = showPeqValueDialog(
+    private fun showQDialog(band: ParametricEqBand, index: Int) = dialogs().showValueInput(
         getString(R.string.peq_q_factor), band.q, 0.1, 30.0, null,
     ) { value ->
         commitBandEdit(index, "edit_q") {
@@ -918,35 +679,9 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
-    /**
-     * Numeric value editor -- the exact same [showInputAlert] dialog the Delay / Compressor
-     * pages use (grey field, compact "min-max" range hint, Cancel/OK). The entered text is
-     * parsed and clamped to [[min], [max]] on commit; one edit is one undo entry.
-     */
-    private fun showPeqValueDialog(
-        title: String,
-        current: Double,
-        min: Double,
-        max: Double,
-        suffix: String?,
-        onCommit: (Double) -> Unit,
-    ) {
-        requireContext().showInputAlert(
-            layoutInflater,
-            title,
-            "${peqValueFormat.format(min)}–${peqValueFormat.format(max)}",
-            peqValueFormat.format(current),
-            true,
-            suffix,
-        ) { entered ->
-            val parsed = entered?.toDoubleOrNull()?.coerceIn(min, max) ?: return@showInputAlert
-            onCommit(parsed)
-        }
-    }
-
     private fun showFilterTypePicker(band: ParametricEqBand, index: Int) {
         val types = ParametricEqFilterType.entries
-        showPeqChoiceDialog(
+        dialogs().showChoice(
             titleRes = R.string.peq_filter_type,
             labels = listOf(
                 getString(R.string.peq_filter_type_peaking),
@@ -955,8 +690,9 @@ class ParametricEqualizerFragment : Fragment() {
                 getString(R.string.peq_filter_type_notch),
             ),
             currentIndex = types.indexOf(band.filterType),
+            accentColor = scopeAccent(),
         ) { picked ->
-            val newType = types.getOrNull(picked) ?: return@showPeqChoiceDialog
+            val newType = types.getOrNull(picked) ?: return@showChoice
             commitBandEdit(index, "edit_filter_type") {
                 ParametricEqBand(it.frequency, it.gain, it.q, newType, it.channel, it.uuid)
             }
@@ -965,63 +701,17 @@ class ParametricEqualizerFragment : Fragment() {
 
     private fun showChannelPicker(band: ParametricEqBand, index: Int) {
         val channels = ParametricEqChannel.entries
-        showPeqChoiceDialog(
+        dialogs().showChoice(
             titleRes = R.string.peq_channel,
             labels = channels.map { it.displayLabel },
             currentIndex = channels.indexOf(band.channel),
+            accentColor = scopeAccent(),
         ) { picked ->
-            val newChannel = channels.getOrNull(picked) ?: return@showPeqChoiceDialog
+            val newChannel = channels.getOrNull(picked) ?: return@showChoice
             commitBandEdit(index, "edit_channel") {
                 ParametricEqBand(it.frequency, it.gain, it.q, it.filterType, newChannel, it.uuid)
             }
         }
-    }
-
-    /**
-     * Bespoke tap-to-commit choice list (see dialog_peq_choice.xml). Rows are glass boxes tinted
-     * with the current scope's accent; the current value is full-opacity, the rest dimmed.
-     * Tapping a row commits immediately and dismisses -- there is no OK button.
-     */
-    private fun showPeqChoiceDialog(
-        @StringRes titleRes: Int,
-        labels: List<String>,
-        currentIndex: Int,
-        onPick: (Int) -> Unit,
-    ) {
-        val ctx = requireContext()
-        val dialogBinding = DialogPeqChoiceBinding.inflate(layoutInflater)
-        val accent = scopeAccent()
-        val dialog = MaterialAlertDialogBuilder(ctx, R.style.ThemeOverlay_SiphonDSP_GlassDialog)
-            .setTitle(titleRes)
-            .setView(dialogBinding.root)
-            .create()
-        val density = resources.displayMetrics.density
-        val pad = (12 * density).toInt()
-        labels.forEachIndexed { i, label ->
-            val row = TextView(ctx).apply {
-                text = label
-                textSize = 16f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(pad, pad, pad, pad)
-                background = BmwDashboardSkin.glassBoxDrawable(ctx, accentColor = accent)
-                setTextColor(accent ?: BmwDashboardSkin.LIGHT_BLUE)
-                alpha = if (i == currentIndex) 1f else 0.55f
-                isClickable = true
-                setOnClickListener {
-                    dialog.dismiss()
-                    onPick(i)
-                }
-            }
-            dialogBinding.choiceContainer.addView(
-                row,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = (6 * density).toInt() },
-            )
-        }
-        dialog.show()
     }
 
     private fun performImport() = importFileLauncher.launch(arrayOf("text/plain", "text/*"))
@@ -1149,59 +839,45 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     private fun copyWholeScope(target: PeqScope, append: Boolean) {
-        val candidate = peqState.deepCopy()
-        val source = bandsForScope(candidate).toList()
-        val destination = bandsForScope(candidate, target)
-        val resultingSize = (if (append) destination.size else 0) + source.size
-        if (resultingSize > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${target.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
-            )
-            return
+        when (val result = PeqBandEditor.copyWholeScope(peqState, selectedScope, target, append)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed -> applyCandidate(result.candidate, result.undoSource)
+            else -> Unit
         }
-        if (!append) destination.clear()
-        source.forEach { destination.add(it.copyWithUuid(UUID.randomUUID())) }
-        applyCandidate(candidate, if (append) "copy-scope-append" else "copy-scope-replace")
     }
 
     private fun duplicateSelectedFilter(index: Int): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        if (bands.size >= BmwPeqState.MAX_BANDS) {
-            requireContext().toast("${selectedScope.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return true
+        when (val result = PeqBandEditor.duplicateFilter(peqState, selectedScope, index)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed -> {
+                selectedBandByScope[selectedScope] = result.select
+                applyCandidate(result.candidate, result.undoSource)
+            }
+            else -> Unit
         }
-        val source = bands[index]
-        val duplicate = source.copyWithUuid(UUID.randomUUID())
-        bands.add(index + 1, duplicate)
-        selectedBandByScope[selectedScope] = duplicate.uuid
-        applyCandidate(candidate, "duplicate")
         return true
     }
 
     private fun copySelectedFilter(index: Int, target: PeqScope): Boolean {
-        val candidate = peqState.deepCopy()
-        val destination = bandsForScope(candidate, target)
-        if (destination.size >= BmwPeqState.MAX_BANDS) {
-            requireContext().toast("${target.label} already has the maximum ${BmwPeqState.MAX_BANDS} filters")
-            return true
-        }
-        val copied = bandsForScope(candidate)[index].copyWithUuid(UUID.randomUUID())
-        destination.add(copied)
-        if (applyCandidate(candidate, "copy-filter")) {
-            selectedBandByScope[target] = copied.uuid
+        when (val result = PeqBandEditor.copyFilter(peqState, selectedScope, index, target)) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Changed ->
+                if (applyCandidate(result.candidate, result.undoSource)) {
+                    selectedBandByScope[target] = result.select
+                }
+            else -> Unit
         }
         return true
     }
 
     private fun moveSelectedFilter(from: Int, to: Int): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        if (from !in bands.indices || to !in bands.indices) return true
-        val band = bands.removeAt(from)
-        bands.add(to, band)
-        selectedBandByScope[selectedScope] = band.uuid
-        applyCandidate(candidate, "reorder")
+        when (val result = PeqBandEditor.moveFilter(peqState, selectedScope, from, to)) {
+            is PeqBandEditResult.Changed -> {
+                selectedBandByScope[selectedScope] = result.select
+                applyCandidate(result.candidate, result.undoSource)
+            }
+            else -> Unit
+        }
         return true
     }
 
@@ -1210,55 +886,19 @@ class ParametricEqualizerFragment : Fragment() {
         destinationChannel: ParametricEqChannel,
         replaceBoth: Boolean,
     ): Boolean {
-        val candidate = peqState.deepCopy()
-        val bands = bandsForScope(candidate)
-        val source = bands.filter { it.channel == sourceChannel }
-        val resultingSize = bands.size + source.size
-        if (resultingSize > BmwPeqState.MAX_BANDS) {
-            requireContext().toast(
-                "${selectedScope.label} would exceed the maximum ${BmwPeqState.MAX_BANDS} filters"
+        when (
+            val result = PeqBandEditor.copyChannelFilters(
+                peqState, selectedScope, sourceChannel, destinationChannel, replaceBoth,
             )
-            return true
+        ) {
+            is PeqBandEditResult.Overflow -> requireContext().toast(PeqBandEditor.overflowToast(result))
+            PeqBandEditResult.NoMatchingChannel ->
+                requireContext().toast("No ${sourceChannel.displayLabel} filters to copy")
+            is PeqBandEditResult.Changed -> applyCandidate(result.candidate, result.undoSource)
+            else -> Unit
         }
-        if (replaceBoth) {
-            val sourceIds = source.mapTo(mutableSetOf()) { it.uuid }
-            bands.removeAll { it.uuid in sourceIds }
-        }
-        source.forEach { band ->
-            bands.add(
-                ParametricEqBand(
-                    band.frequency,
-                    band.gain,
-                    band.q,
-                    band.filterType,
-                    destinationChannel,
-                    UUID.randomUUID(),
-                )
-            )
-            if (replaceBoth) {
-                bands.add(
-                    ParametricEqBand(
-                        band.frequency,
-                        band.gain,
-                        band.q,
-                        band.filterType,
-                        ParametricEqChannel.RIGHT,
-                        UUID.randomUUID(),
-                    )
-                )
-            }
-        }
-        if (source.isEmpty()) {
-            requireContext().toast("No ${sourceChannel.displayLabel} filters to copy")
-            return true
-        }
-        applyCandidate(candidate, "copy-channel")
         return true
     }
-
-    private fun ParametricEqBand.copyWithUuid(uuid: UUID) = ParametricEqBand(
-        frequency, gain, q, filterType, channel, uuid,
-    )
 
     private fun updateViewState() {
         binding.editCardTitle.text = getString(R.string.peq_band_list)
@@ -1355,13 +995,6 @@ class ParametricEqualizerFragment : Fragment() {
         const val STATE_BANDS = "bands"
         // Lowest sample rate RootlessAudioProcessorService ever opens the recorder at.
         private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
-        private const val GRAPH_PREFS = "peq_graph_display"
-        private const val GRAPH_SHOW_OVERLAYS = "show_individual_filters"
-        private const val GRAPH_CHANNEL = "channel_display"
-        private const val GRAPH_DISPLAY_MODE = "peq_display_mode"
-        // Unrelated to GRAPH_DISPLAY_MODE above (that's the Graph/List PeqDisplayMode toggle) --
-        // this persists ParametricEqSurface.DisplayMode (Magnitude/Phase/Group Delay).
-        private const val GRAPH_RESPONSE_MODE = "response_display_mode"
         private const val GRAPH_MENU_OVERLAYS = 1
         private const val GRAPH_MENU_BOTH = 2
         private const val GRAPH_MENU_LEFT = 3
@@ -1379,14 +1012,7 @@ class ParametricEqualizerFragment : Fragment() {
         private const val FILTER_COPY_RIGHT_TO_LEFT = 31
         private const val FILTER_SPLIT_BOTH = 32
         private const val HISTORY_LIMIT = 20
-        private const val MAX_IMPORT_CHARS = 1_000_000
         fun newInstance() = ParametricEqualizerFragment()
-    }
-
-    private enum class PeqScope(val label: String, val fileName: String, val chipId: Int, val bank: BmwPeqBank) {
-        FULL("Input Correction", "input_correction_parametric_eq.txt", R.id.peq_scope_full, BmwPeqBank.FULL),
-        LOW("Low Band", "low_band_parametric_eq.txt", R.id.peq_scope_low, BmwPeqBank.LOW),
-        MID("Mid Band", "mid_band_parametric_eq.txt", R.id.peq_scope_mid, BmwPeqBank.MID),
     }
 
     /** Landscape-only: which of edit_card/preview_card dominates the cards row. */
