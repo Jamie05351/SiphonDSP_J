@@ -191,6 +191,40 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun midLpfRollsOffTheMidBranchAboveItsCornerWhenEnabled() {
+        val mid = BmwOutputChannel.LEFT.ordinal
+        val baseline = compute(baseValues()) // slot 141 ships disabled
+        val withLpf = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_MID_LPF_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MID_LPF_FREQ] = 2_000f
+        })
+
+        // Well below the corner (but above the 150 Hz mid HPF): untouched.
+        val below = nearestIndex(400.0)
+        assertEquals(
+            baseline.midBranchDb[mid][below], withLpf.midBranchDb[mid][below], 0.2,
+        )
+        // LR4 at the corner: -6 dB relative to the un-filtered branch.
+        val at = nearestIndex(2_000.0)
+        assertEquals(-6.0, withLpf.midBranchDb[mid][at] - baseline.midBranchDb[mid][at], 0.4)
+        // An octave and a half up: 24 dB/oct means a large drop.
+        val above = nearestIndex(8_000.0)
+        assertTrue(baseline.midBranchDb[mid][above] - withLpf.midBranchDb[mid][above] > 15.0)
+    }
+
+    @Test
+    fun midLpfDisabledLeavesTheMidBranchUnchanged() {
+        val baseline = compute(baseValues())
+        val explicitlyOff = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_MID_LPF_ENABLED] = 0f
+            it[NativeBmwDspValues.INDEX_MID_LPF_FREQ] = 2_000f
+        })
+        for (i in baseline.midBranchDb[0].indices) {
+            assertEquals(baseline.midBranchDb[0][i], explicitlyOff.midBranchDb[0][i], 1e-6)
+        }
+    }
+
+    @Test
     fun bothCrossoversBypassedReturnsPreSplitSignalNotDoubled() {
         val result = compute(baseValues().also {
             it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f

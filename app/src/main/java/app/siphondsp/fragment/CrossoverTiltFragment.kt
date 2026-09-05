@@ -65,7 +65,7 @@ class CrossoverTiltFragment : Fragment() {
         fun page(build: CrossoverDashboardBuilder.() -> Unit): View {
             val pageRoot = LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(4), dp(2), dp(4), dp(8))
+                setPadding(dp(4), dp(0), dp(4), dp(8))
             }
             CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).build()
             return NestedScrollView(requireContext()).apply {
@@ -84,10 +84,11 @@ class CrossoverTiltFragment : Fragment() {
             // Blank title/subtitle: the toolbar already shows "Crossovers & Tilt", so repeating
             // it here just wastes vertical space (same reasoning Gains & Delay's page uses).
             dashboardPanel("", null) {
-                // Page-title-weight headers (18f, no divider) matching dashboardPanel()'s own
-                // title style -- see [Gains & Delay]'s "Output"/"Limiter" headers -- splitting
-                // this one page into its two control groups.
-                sectionHeader("Subsonic Protection", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
+                // Single page-title-weight header (18f, no divider) covering the whole page --
+                // subsonic, both crossovers and the mid LPF -- so the mid LPF slider clears the
+                // fold without scrolling on the head unit. The old "Subsonic Protection" /
+                // "Crossovers" split cost a header's worth of vertical space for little gain.
+                sectionHeader("Crossovers", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_subsonic_lr4),
                     null,
@@ -100,7 +101,6 @@ class CrossoverTiltFragment : Fragment() {
                     20f, 60f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                 )
-                sectionHeader("Crossovers", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 // Both crossovers are LR4-only now (the 18dB/oct option was removed -- the
                 // mid-band highpass was already secretly LR4-only at the native layer, so this
                 // just makes the low-band one match instead of exposing a slope choice for it).
@@ -137,8 +137,8 @@ class CrossoverTiltFragment : Fragment() {
         }
 
         val tiltPage = page {
-            // Plain white title, no subtitle -- matches the Crossovers page's own header format
-            // (see "Subsonic Protection"/"Crossovers") rather than the old tint-and-blurb style.
+            // Plain white title, no subtitle -- matches the Crossovers page's own "Crossovers"
+            // header format rather than the old tint-and-blurb style.
             dashboardPanel(getString(R.string.bmw_dsp_tilt_section), null) {
                 addSegmentedSwitchRow(
                     getString(R.string.bmw_dsp_tilt_active),

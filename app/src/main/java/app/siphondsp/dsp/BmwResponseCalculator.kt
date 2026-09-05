@@ -37,7 +37,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
     private val fullCascade = arrayOf(BiquadCascade(20), BiquadCascade(20))
     private val lowCascade = arrayOf(BiquadCascade(22), BiquadCascade(22))
-    private val midCascade = arrayOf(BiquadCascade(20), BiquadCascade(20))
+    // 2 HPF + 2 optional mid-LPF sections + up to 16 mid-bank PEQ = 20; 22 keeps headroom.
+    private val midCascade = arrayOf(BiquadCascade(22), BiquadCascade(22))
     private val lowAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val tiltCascade = BiquadCascade(4)
@@ -231,6 +232,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
             cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
             cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            // Independent mid-band LPF (global slots 141/142), LR4 -- mirrors
+            // NativeBmwDspProcessor::rebuildMidCrossover's makeLowPass pair.
+            if (values[NativeBmwDspValues.INDEX_MID_LPF_ENABLED] >= .5f) {
+                val midLpfFreq = values[NativeBmwDspValues.INDEX_MID_LPF_FREQ].toDouble()
+                cascade.addLowPass(midLpfFreq, BUTTERWORTH_Q, sampleRate)
+                cascade.addLowPass(midLpfFreq, BUTTERWORTH_Q, sampleRate)
+            }
             if (peq.enabled) {
                 for (band in peq.midBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
             }
