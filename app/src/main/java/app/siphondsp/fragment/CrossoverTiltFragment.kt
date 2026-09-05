@@ -22,8 +22,8 @@ import kotlin.math.roundToInt
  * scrolling panel used to have, so nothing about the content changed, only how it's paged.
  * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
  * (A fourth Pultec-style bass EQ page briefly lived here between Tilt and Mono Bass; it was
- * unused and has been removed -- see NativeBmwDspProcessor.h's kConfigSize comment for the now-
- * inert config slots it left behind.)
+ * unused and has been removed -- its config slots have since been reclaimed, see
+ * NativeBmwDspProcessor.h's kConfigSize comment.)
  */
 class CrossoverTiltFragment : Fragment() {
     private lateinit var container: FrameLayout
@@ -115,6 +115,21 @@ class CrossoverTiltFragment : Fragment() {
                     "Highpass freq (LR4)", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
                     80f, 200f, 1f, "Hz",
                     mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
+                )
+                // Independent mid-band lowpass -- a second, decoupled corner above the highpass
+                // (native slots 141/142, applied only to the Mid outputs). Rolls the mid off
+                // below a passive tweeter to tame overlap comb-filtering. Same switch+slider
+                // pattern as the Subsonic block above.
+                addSegmentedSwitchRow(
+                    "Mid lowpass (LR4)",
+                    null,
+                    NativeBmwDspValues.INDEX_MID_LPF_ENABLED,
+                )
+                addSliderRow(
+                    "Mid lowpass freq", NativeBmwDspValues.INDEX_MID_LPF_FREQ,
+                    1500f, 8000f, 50f, "Hz",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                 )

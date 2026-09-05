@@ -126,6 +126,42 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     CHECK(at260Moved - at260Default > 5.f);
 }
 
+TEST_CASE("kMidLpfEnabled / kMidLpfFreq slots roll off the mid band") {
+    // The mid band alone: mute both low outputs, drop the mid HPF to 80 Hz so a 6 kHz tone is
+    // squarely in-band, and check that enabling the independent mid LPF at 2 kHz cuts 6 kHz hard
+    // while a below-corner reference (300 Hz) is left alone. Only slots 141/142 can do this.
+    auto midLevelDb = [](float lpfEnabled, float lpfFreq, double probeHz) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[sch::kTiltEnabled] = 0.f;
+        c[sch::kMidGainL] = c[sch::kMidGainR] = 0.f;
+        for (int out = 0; out < 2; ++out) {  // mute Low Left / Low Right
+            c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+        }
+        for (int out = 2; out < 4; ++out) {  // Mid Left / Mid Right HPF down to 80 Hz
+            c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = 80.f;
+            c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutCompressor] = 0.f;
+        }
+        c[sch::kMidLpfEnabled] = lpfEnabled;
+        c[sch::kMidLpfFreq] = lpfFreq;
+        return outLevelDbAt(proc, c, probeHz);
+    };
+
+    const float on6k = midLevelDb(1.f, 2000.f, 6000.0);
+    const float off6k = midLevelDb(0.f, 2000.f, 6000.0);
+    const float on300 = midLevelDb(1.f, 2000.f, 300.0);
+    const float off300 = midLevelDb(0.f, 2000.f, 300.0);
+    INFO("6 kHz: lpf off ", off6k, " on@2k ", on6k, " | 300 Hz: off ", off300, " on ", on300);
+    CHECK(off6k - on6k > 15.f);          // well above the 2 kHz corner -> strongly attenuated
+    CHECK(std::fabs(off300 - on300) < 1.f);  // well below the corner -> untouched
+
+    // The corner itself is a real control, not a fixed value: pushing it up to 8 kHz lets 6 kHz
+    // most of the way back.
+    const float on6k_8k = midLevelDb(1.f, 8000.f, 6000.0);
+    INFO("6 kHz: lpf on@2k ", on6k, "  on@8k ", on6k_8k);
+    CHECK(on6k_8k - on6k > 10.f);
+}
+
 TEST_CASE("kMonoBassEnabled / kMonoBassFreq slots") {
     // Decorrelated (L = -R) 50 Hz: with Mono Bass on and its corner above 50 Hz, the mono sum is
     // ~0 there, so the tone collapses. Moving the corner below 50 lets it back through.

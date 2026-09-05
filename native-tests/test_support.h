@@ -66,8 +66,8 @@ inline std::array<float, kConfigSize> defaultConfig() {
         150.f, 1.f, 0.f, 32.f, 0.f, 0.f, 0.f, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f,
         // 126..138 Mid Right
         150.f, 1.f, 0.f, 32.f, 0.f, 0.f, 0.f, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f,
-        // 139..142 meas-mute stopband oct, migration marker, 2x inert
-        1.f, 1.f, 0.f, 0.f,
+        // 139..142 meas-mute stopband oct, migration marker, mid-LPF enable, mid-LPF corner Hz
+        1.f, 1.f, 0.f, 5000.f,
         // 143 link L/R delay (UI only)
         0.f,
         // 144..148 MBC enabled, mix %, xo0, xo1, xo2
