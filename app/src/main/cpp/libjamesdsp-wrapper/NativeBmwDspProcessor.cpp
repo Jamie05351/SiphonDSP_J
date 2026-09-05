@@ -25,6 +25,24 @@ inline float clampf(float x, float lo, float hi) {
 inline bool changed(float a, float b) {
     return std::fabs(a - b) > 1e-6f;
 }
+// Soft-knee gain reduction (dB, <= 0) for a detector level `overDb` dB above threshold, given
+// `ratio` and knee width `kneeDb`. Shared by processCompressor's per-output path and
+// mbcBandGain's per-band path -- deliberately identical math, one place for a knee-shape fix.
+inline float softKneeGainReductionDb(float overDb, float ratio, float kneeDb) {
+    const float slope = 1 - 1 / std::max(1.001f, ratio);
+    if (kneeDb > 0) {
+        const float kh = kneeDb * .5f;
+        if (overDb >= kh) {
+            return -overDb * slope;
+        }
+        if (overDb > -kh) {
+            const float x = overDb + kh;
+            return -slope * x * x / (2 * kneeDb);
+        }
+        return 0.f;
+    }
+    return overDb > 0 ? -overDb * slope : 0.f;
+}
 using OutputId = NativeBmwRouting::OutputId;
 }  // namespace
 
@@ -884,18 +902,7 @@ void NativeBmwDspProcessor::processCompressor(float& sample, const CompressorPar
         s.peakEnv = pk > s.peakEnv ? pk : ftz(s.peakEnv * peakRelease_);
         float det = std::max(std::sqrt(std::max(0.f, s.rmsPower)), s.peakEnv * .5f);
         db = 20 * std::log10(std::max(det, 1e-12f));
-        float over = db - p.threshold, slope = 1 - 1 / std::max(1.001f, p.ratio), gr = 0,
-              kh = p.knee * .5f;
-        if (p.knee > 0) {
-            if (over >= kh) {
-                gr = -over * slope;
-            } else if (over > -kh) {
-                float x = over + kh;
-                gr = -slope * x * x / (2 * p.knee);
-            }
-        } else if (over > 0) {
-            gr = -over * slope;
-        }
+        float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
         float target = dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
         s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
         sample *= s.gain * s.makeupLin;
@@ -923,9 +930,9 @@ void NativeBmwDspProcessor::processLimiter(float& l, float& r) {
     }
 }
 
-// RMS+peak detector and soft-knee gain computer -- deliberately identical math to
-// processCompressor's per-output path (rmsMix_/peakRelease_ are shared), just factored out so
-// a stereo-linked band can feed it one combined level. Returns the smoothed linear gain (<=1).
+// RMS+peak detector and soft-knee gain computer -- shares softKneeGainReductionDb with
+// processCompressor's per-output path (rmsMix_/peakRelease_ are shared too), just factored out
+// so a stereo-linked band can feed it one combined level. Returns the smoothed linear gain (<=1).
 float NativeBmwDspProcessor::mbcBandGain(float peakAbs, const MbcBandParams& p, MbcCell& s,
                                          int band) {
     s.rms = ftz(s.rms + (peakAbs * peakAbs - s.rms) * rmsMix_);
@@ -933,18 +940,7 @@ float NativeBmwDspProcessor::mbcBandGain(float peakAbs, const MbcBandParams& p, 
     float det = std::max(std::sqrt(std::max(0.f, s.rms)), s.peak * .5f);
     float db = 20 * std::log10(std::max(det, 1e-12f));
     s.lastDetectorDb = db;
-    float over = db - p.threshold, slope = 1 - 1 / std::max(1.001f, p.ratio), gr = 0,
-          kh = p.knee * .5f;
-    if (p.knee > 0) {
-        if (over >= kh) {
-            gr = -over * slope;
-        } else if (over > -kh) {
-            float x = over + kh;
-            gr = -slope * x * x / (2 * p.knee);
-        }
-    } else if (over > 0) {
-        gr = -over * slope;
-    }
+    float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
     float target = dbToLin(gr), mix = target < s.gain ? mbcAttackMix_[band] : mbcReleaseMix_[band];
     s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
     return s.gain;
@@ -1247,6 +1243,9 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!p_.enabled) {
+        return s;
+    }
     auto* w = const_cast<float*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         captureTapIn(w[i], w[i + 1]);
@@ -1372,11 +1371,6 @@ bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* 
     }
 
     auto writeStereo = [&](const char* path, const float* left, const float* right) -> bool {
-        std::vector<float> interleaved(n * 2);
-        for (std::size_t i = 0; i < n; ++i) {
-            interleaved[i * 2] = left[i];
-            interleaved[i * 2 + 1] = right[i];
-        }
         drwav wav;
         drwav_data_format format;
         format.container = drwav_container_riff;
@@ -1387,9 +1381,22 @@ bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* 
         if (!drwav_init_file_write(&wav, path, &format, nullptr)) {
             return false;
         }
-        const drwav_uint64 written = drwav_write_pcm_frames(&wav, n, interleaved.data());
+        // Stream in fixed-size chunks rather than materializing the whole interleaved buffer up
+        // front -- at the max 30s capture window that's ~11.5MB per call, on top of the ~46MB
+        // already held across the four capture buffers.
+        constexpr std::size_t kChunkFrames = 4096;
+        std::array<float, kChunkFrames * 2> chunk{};
+        drwav_uint64 totalWritten = 0;
+        for (std::size_t offset = 0; offset < n; offset += kChunkFrames) {
+            const std::size_t count = std::min(kChunkFrames, n - offset);
+            for (std::size_t i = 0; i < count; ++i) {
+                chunk[i * 2] = left[offset + i];
+                chunk[i * 2 + 1] = right[offset + i];
+            }
+            totalWritten += drwav_write_pcm_frames(&wav, count, chunk.data());
+        }
         drwav_uninit(&wav);
-        return written == n;
+        return totalWritten == n;
     };
 
     if (!writeStereo(rawInPath, captureRawInL_.data(), captureRawInR_.data())) {
