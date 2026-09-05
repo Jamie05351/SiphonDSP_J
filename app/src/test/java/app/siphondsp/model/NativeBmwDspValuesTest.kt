@@ -340,6 +340,55 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun defaultsShipMidLpfDisabledAtItsDefaultCorner() {
+        // Reclaimed inert slots 141/142: no migration marker, so the shipped DEFAULTS must
+        // already be the intended state -- off, with a sane corner to fall back on.
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_MID_LPF_ENABLED], 0f)
+        assertEquals(
+            NativeBmwDspValues.DEFAULT_MID_LPF_FREQ,
+            NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_MID_LPF_FREQ],
+            0f,
+        )
+        // A fresh load (nothing saved) carries them through untouched -- no seeding step.
+        val loaded = NativeBmwDspValues.load(context)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MID_LPF_ENABLED], 0f)
+        assertEquals(
+            NativeBmwDspValues.DEFAULT_MID_LPF_FREQ,
+            loaded[NativeBmwDspValues.INDEX_MID_LPF_FREQ],
+            0f,
+        )
+    }
+
+    @Test
+    fun saveLoadRoundTripsMidLpfValues() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_MID_LPF_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MID_LPF_FREQ] = 3200f
+        }
+
+        NativeBmwDspValues.save(context, values)
+
+        assertArrayEquals(values, NativeBmwDspValues.load(context), 0f)
+    }
+
+    @Test
+    fun padToCurrentSizeFillsMidLpfFromDefaultsForConfigsSavedBeforeItExisted() {
+        // A pre-control array that stops at the old inert Pultec slots -- pad must backfill the
+        // Mid-LPF pair from DEFAULTS rather than leave a torn tail.
+        val legacy = FloatArray(141) { index -> NativeBmwDspValues.DEFAULTS[index] }
+
+        val padded = NativeBmwDspValues.padToCurrentSize(legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, padded.size)
+        assertEquals(0f, padded[NativeBmwDspValues.INDEX_MID_LPF_ENABLED], 0f)
+        assertEquals(
+            NativeBmwDspValues.DEFAULT_MID_LPF_FREQ,
+            padded[NativeBmwDspValues.INDEX_MID_LPF_FREQ],
+            0f,
+        )
+    }
+
+    @Test
     fun padToCurrentSizeFillsNewTrailingIndicesFromDefaults() {
         val legacy = FloatArray(144) { index -> NativeBmwDspValues.DEFAULTS[index] }
         legacy[NativeBmwDspValues.INDEX_HEADROOM] = -4.5f

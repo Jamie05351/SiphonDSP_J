@@ -15,11 +15,12 @@ object NativeBmwDspValues {
     // 0..85 are the original/native four-output config. 86 is a schema marker and
     // 87..138 are the independent per-output settings described below. 139..142 were the
     // Pultec-style bass boost/cut stage (global, post-routing); the feature was unused and has
-    // been removed. 139 and 140 have since been reclaimed in place (the trailing slots stay put
-    // rather than being renumbered, same as OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_LR4):
+    // been removed. All four slots have since been reclaimed in place (the trailing slots stay
+    // put rather than being renumbered, same as OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_LR4):
     //   139 -> INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES (read natively)
     //   140 -> INDEX_MEAS_MUTE_STOPBAND_MIGRATED, a one-time migration marker (Kotlin-only)
-    //   141..142 -> still inert.
+    //   141 -> INDEX_MID_LPF_ENABLED (read natively)
+    //   142 -> INDEX_MID_LPF_FREQ (read natively)
     // 143 is the Gains & Delay "Link L/R Delay" toggle -- UI-only, never read natively (see
     // INDEX_DELAY_LINKED), stored here anyway so it persists/syncs the same way every other
     // toggle in this array does.
@@ -139,7 +140,8 @@ object NativeBmwDspValues {
     }
 
     // 139..142: formerly the Pultec-style bass boost/cut stage's enabled/freq/boost/cut. Removed
-    // (unused feature, no native processing left); 139/140 reclaimed below, 141/142 still inert.
+    // (unused feature, no native processing left); all four slots reclaimed below (139/140 for the
+    // meas-mute stopband offset + marker, 141/142 for the Mid-band independent LPF).
 
     // Measurement-mute bus brick-wall: octaves to walk the LR8 corner off the opposite band's
     // crossover and into the stopband, so the band still playing keeps its own transition region
@@ -151,6 +153,16 @@ object NativeBmwDspValues {
     // default above. Lets the new control ship with a non-zero default without a full schema
     // version bump. Kotlin-only -- native never reads index 140.
     const val INDEX_MEAS_MUTE_STOPBAND_MIGRATED = 140
+
+    // Mid-band independent lowpass -- a second crossover corner on the Mid outputs, decoupled from
+    // the highpass at FIELD_CROSSOVER_FREQ. Lets the Mid band be rolled off below a passive tweeter
+    // (riding a factory 6 dB/oct cap) to tame comb-filtering in the overlap. Reclaimed from the
+    // removed Pultec run (141/142); both consumed natively (v[141]/v[142], fanned onto every
+    // output, acted on only by the Mid outputs). Ships disabled, so -- unlike slot 139 -- no
+    // migration marker is needed: a leftover 0 at 141 already means "off".
+    const val INDEX_MID_LPF_ENABLED = 141
+    const val INDEX_MID_LPF_FREQ = 142
+    const val DEFAULT_MID_LPF_FREQ = 5000f
 
     // UI-only: links Low Left/Right and Mid Left/Right delay editing together on the Gains &
     // Delay page. Native never reads this index -- see NativeBmwDspProcessor::configure(), which
@@ -260,9 +272,9 @@ object NativeBmwDspValues {
         150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
         150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // 139: meas-mute stopband octaves. 140: migration marker (1 = seeded). 141..142 inert
-        // (formerly Pultec boost/cut dB).
-        1f, 1f, 0f, 0f,
+        // 139: meas-mute stopband octaves. 140: migration marker (1 = seeded). 141: mid-LPF
+        // enable (0 = off). 142: mid-LPF corner Hz. (139..142 were formerly the Pultec stage.)
+        1f, 1f, 0f, 5000f,
         // Link L/R Delay (UI-only).
         0f,
         // --- Multiband compressor (144..181), ships DISABLED ---
