@@ -78,7 +78,9 @@ class CrossoverDashboardBuilder(
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(28), dp(18), dp(24), dp(20))
+            // Tight top pad -- the pages that use this skin (Crossovers & Tilt especially) need
+            // their last row to clear the fold without scrolling on the head unit.
+            setPadding(dp(28), dp(10), dp(24), dp(20))
         }
 
         // Blank title skips the row entirely -- for a page whose toolbar already shows this same
@@ -99,7 +101,7 @@ class CrossoverDashboardBuilder(
                 setPadding(0, dp(2), 0, dp(12))
             })
         } else {
-            content.addView(space(10))
+            content.addView(space(2))
         }
 
         currentContent = content
