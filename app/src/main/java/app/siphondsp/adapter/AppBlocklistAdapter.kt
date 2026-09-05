@@ -61,8 +61,10 @@ class AppBlocklistAdapter : ListAdapter<BlockedApp, AppBlocklistAdapter.AppBlock
     }
 
     class BlockedAppComparator : DiffUtil.ItemCallback<BlockedApp>() {
+        // Identity is package_name, not uid: apps sharing an android:sharedUserId have the same
+        // uid, and a uid-keyed check would collapse them into one list row.
         override fun areItemsTheSame(oldItem: BlockedApp, newItem: BlockedApp): Boolean {
-            return oldItem.uid == newItem.uid
+            return oldItem.packageName == newItem.packageName
         }
 
         override fun areContentsTheSame(oldItem: BlockedApp, newItem: BlockedApp): Boolean {
