@@ -23,7 +23,6 @@ import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-// TODO stepValue is broken in recyclerview!!!
 class MaterialSeekbarPreference : Preference {
     var mSeekBarValue/* synthetic access */ = 0f
     var mMin/* synthetic access */ = 0f
@@ -140,9 +139,17 @@ class MaterialSeekbarPreference : Preference {
         context: Context,
     ) : this(context, null)
 
+    /**
+     * Snaps [value] to the nearest tick, offset by [mMin] like [valueLandsOnTick] checks for --
+     * ticks sit at mMin, mMin + step, mMin + 2*step, etc., not at bare multiples of step.
+     */
+    private fun snapToStep(value: Float): Float {
+        return mMin + mSeekBarIncrement * ((value - mMin) / mSeekBarIncrement).roundToInt()
+    }
+
     private fun validateValue(value: Float): Float {
         if (mSeekBarIncrement > 0 && !valueLandsOnTick(value)) {
-            val newValue = mSeekBarIncrement * ((value / mSeekBarIncrement).roundToInt())
+            val newValue = snapToStep(value)
             Timber.w("setValueInternal: value corrected $value to $newValue")
             return newValue
         }
@@ -373,10 +380,6 @@ class MaterialSeekbarPreference : Preference {
         }
 
         seekBarValue = validateValue(seekBarValue)
-        if (mSeekBarIncrement > 0 && !valueLandsOnTick(seekBarValue)) {
-            seekBarValue = mSeekBarIncrement * ((seekBarValue / mSeekBarIncrement).roundToInt())
-            Timber.w("setValueInternal: value corrected $_seekBarValue to $seekBarValue")
-        }
 
         if (seekBarValue != mSeekBarValue) {
             mSeekBarValue = seekBarValue
