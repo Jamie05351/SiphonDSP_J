@@ -168,19 +168,21 @@ private:
         // Always LR4 now -- the 18dB/oct (BW3) option was removed. This field is read (and
         // forced true) but no longer branched on; see rebuildLowCrossover/processLowCrossover.
         bool crossoverLr4 = true;
+        bool subsonicEnabled = false;
+        float subsonicFreq = 32;
+        bool muted = false;
+        bool polarityInverted = false;
+        CompressorParams compressor{};
         // Independent Mid-band lowpass: a second crossover corner, decoupled from crossoverFreq
         // (which the Mid outputs use as their HPF), so the Mid band can be band-limited to tame
         // comb-filtering in the overlap with a passive tweeter riding a factory 6 dB/oct cap.
         // Fed from the global config slots 141/142 -- not this per-output block -- but stored here
         // so rebuildMidCrossover()/processMidCrossover() read it the same way as crossoverFreq.
         // Only the Mid outputs act on it; the Low outputs ignore it. LR4 (two BW sections).
+        // Kept last so the positional aggregate initializers in the constructor (which stop at
+        // `compressor`) still map correctly -- these two just take their defaults there.
         bool midLpfEnabled = false;
         float midLpfFreq = 5000;
-        bool subsonicEnabled = false;
-        float subsonicFreq = 32;
-        bool muted = false;
-        bool polarityInverted = false;
-        CompressorParams compressor{};
     };
     struct OutputRuntime {
         NativeBmwRouting::OutputId id = NativeBmwRouting::OutputId::LowLeft;
