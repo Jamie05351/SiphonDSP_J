@@ -45,7 +45,9 @@ class BlocklistFragment : Fragment() {
     }
     private val appListViewModel: ItemViewModel<AppInfo> by viewModels()
 
-    private val iconCache: HashMap<Int, Drawable> = hashMapOf()
+    // Keyed by packageName, not uid: a shared android:sharedUserId gives several apps one uid, so
+    // a uid key would show the first-resolved app's icon for all of them.
+    private val iconCache: HashMap<String, Drawable> = hashMapOf()
 
     private lateinit var sessionRecordingPolicyManager: SessionRecordingPolicyManager
     private var restrictedApps = arrayOf<String>()
@@ -90,19 +92,7 @@ class BlocklistFragment : Fragment() {
 
             // Update the cached copy of the blocked apps in the adapter.
             apps?.let { list ->
-                list.forEach {
-                    it.appIcon = if(iconCache.containsKey(it.uid))
-                        iconCache[it.uid]
-                    else {
-                        it.packageName?.let { pkg ->
-                            val icon = requireContext().getAppIcon(pkg)
-                            icon?.let { i ->
-                                iconCache[it.uid] = i
-                            }
-                            icon
-                        }
-                    }
-                }
+                resolveBlockedAppIcons(list, iconCache) { pkg -> requireContext().getAppIcon(pkg) }
                 adapter.submitList(list.sortedBy { it.appName })
             }
             binding.recyclerview.isVisible = !isEmpty
@@ -160,6 +150,19 @@ class BlocklistFragment : Fragment() {
     companion object {
         fun newInstance(): BlocklistFragment {
             return BlocklistFragment()
+        }
+    }
+}
+
+/** Fill each [BlockedApp.appIcon] from [cache] (keyed by packageName), loading misses via [loadIcon]. */
+internal fun resolveBlockedAppIcons(
+    apps: List<BlockedApp>,
+    cache: MutableMap<String, Drawable>,
+    loadIcon: (packageName: String) -> Drawable?,
+) {
+    apps.forEach { app ->
+        app.appIcon = cache[app.packageName] ?: loadIcon(app.packageName)?.also { icon ->
+            cache[app.packageName] = icon
         }
     }
 }
