@@ -37,7 +37,7 @@ CI runs it on every push/PR (`.github/workflows/build.yml`, "Run native DSP unit
 | `drwav_impl.cpp` | the one TU that defines `DR_WAV_IMPLEMENTATION` (only `exportCaptureWav` needs it) |
 | `test_support.h` | `defaultConfig()` (mirrors `NativeBmwDspValues.DEFAULTS`), signal generators, a windowed single-frequency magnitude probe |
 | `default_config_test.cpp` | config accepted / size guard; LR4 crossover sums flat through the handoff |
-| `mono_bass_test.cpp` | Mono Bass is all-pass on the sum for correlated content; leaves decorrelated stereo untouched above its corner (the PR #218 fix), including through the Low/Mid crossover handoff band itself |
+| `mono_bass_test.cpp` | Mono Bass is all-pass on the sum for correlated content; leaves decorrelated stereo untouched above its corner (the PR #218 fix) |
 | `limiter_test.cpp` | master limiter never exceeds −1 dBFS and doesn't touch a quiet signal; per-bus limiter GR engages only when hot / reads 0 when disabled |
 | `mbc_test.cpp` | MBC band GR follows the soft-knee gain computer and is monotone; meter idle while globally disabled |
 | `third_party/doctest/` | vendored doctest 2.4.11 single header |
