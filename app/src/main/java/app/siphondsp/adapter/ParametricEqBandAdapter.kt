@@ -3,6 +3,7 @@ package app.siphondsp.adapter
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,8 +29,8 @@ import kotlin.math.pow
  * the value dialog and each also carry inline - / + steppers -- Hz steps by [FREQ_STEP_FACTOR]
  * (1/24 octave, multiplicative) via [onFrequencyStep], dB by 0.5 via [onGainStep], Q by 0.1 via
  * [onQStep], all committing immediately. [accentColor] tints the value text per scope
- * (Low=blue / Mid=yellow / Pre EQ=white); the selected band shows that colour as a glass square
- * around its filter number rather than a whole-row highlight. A trailing "Add filter" row
+ * (Low=blue / Mid=yellow / Pre EQ=white); the selected band gets a thin border of that colour
+ * around the whole row (and its "#" in that colour). A trailing "Add filter" row
  * ([onAddClicked]) is appended while the scope has fewer than [BmwPeqState.MAX_BANDS] bands.
  */
 class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
@@ -220,26 +221,15 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.gain.text = gainText
         holder.qFactor.text = qText
 
-        // Selection shows only on the filter-number cell now: its "#" lights up inside a glass
-        // square bordered and lettered in this band's colour (any cell tap or -/+ step selects
-        // the band -- see ParametricEqualizerFragment). The rest of the row is untouched.
+        // The band you're working on gets a thin rounded border in its scope's colour around the
+        // whole row (any cell tap or -/+ step selects it -- see ParametricEqualizerFragment); its
+        // "#" also takes that colour. Everything else on the row is unchanged.
         val isSelected = band.uuid == selectedUuid
         holder.selectionOutline.visibility = View.INVISIBLE
-        holder.itemView.background = null
         val accentFill = accent ?: BmwDashboardSkin.LIGHT_BLUE
 
-        if (isSelected) {
-            holder.index.background =
-                BmwDashboardSkin.glassBoxDrawable(context, showBorder = true, accentColor = accentFill)
-            holder.index.setTextColor(accentFill)
-            val padH = (5 * context.resources.displayMetrics.density).toInt()
-            val padV = (2 * context.resources.displayMetrics.density).toInt()
-            holder.index.setPadding(padH, padV, padH, padV)
-        } else {
-            holder.index.background = null
-            holder.index.setTextColor(INDEX_COLOR)
-            holder.index.setPadding(0, 0, 0, 0)
-        }
+        holder.itemView.background = if (isSelected) rowSelectionBorder(context, accentFill) else null
+        holder.index.setTextColor(if (isSelected) accentFill else INDEX_COLOR)
 
         // Value cells always carry the scope's colour (Low=blue / Mid=yellow / Pre EQ=white).
         val valueColor = accentFill
@@ -300,6 +290,15 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         /** Dark translucent fill behind the "Add filter" glass button (its border/text carry the
          *  scope colour). Matches the near-black glass fills used elsewhere in the BMW skin. */
         private val ADD_GLASS_FILL = Color.rgb(0x14, 0x17, 0x1C)
+
+        /** Thin rounded [color] border, transparent fill -- the selected band row's outline. */
+        private fun rowSelectionBorder(context: android.content.Context, color: Int) =
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                val density = context.resources.displayMetrics.density
+                cornerRadius = 6f * density
+                setStroke((1.5f * density).toInt().coerceAtLeast(1), color)
+            }
 
         /** One inline Hz stepper tap = 1/24 octave, applied as a multiplier so the perceived
          *  interval is the same whether the band sits at 40 Hz or 4 kHz. */
