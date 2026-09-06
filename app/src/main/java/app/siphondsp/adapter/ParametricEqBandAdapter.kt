@@ -232,7 +232,9 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
             holder.index.background =
                 BmwDashboardSkin.glassBoxDrawable(context, showBorder = true, accentColor = accentFill)
             holder.index.setTextColor(accentFill)
-            val padH = (5 * context.resources.displayMetrics.density).toInt()
+            // Keep the horizontal padding small: the cell is a fixed 28dp and the box border
+            // eats into it, so a two-digit filter number (10..16) still needs room.
+            val padH = (3 * context.resources.displayMetrics.density).toInt()
             val padV = (2 * context.resources.displayMetrics.density).toInt()
             holder.index.setPadding(padH, padV, padH, padV)
         } else {

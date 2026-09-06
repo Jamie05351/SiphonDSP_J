@@ -135,7 +135,13 @@ class CrossoverDashboardBuilder(
             val maxTextWidth = pendingTitleBoxes
                 .filterIsInstance<TextView>()
                 .maxOfOrNull { it.paint.measureText(it.text.toString()) } ?: 0f
-            val boxWidth = maxTextWidth.roundToInt() + padding
+            var boxWidth = maxTextWidth.roundToInt() + padding
+            // A header/dropdown toggle cell (firstColumnCell) holds a fixed-width switch that
+            // isn't a TextView, so it doesn't feed maxTextWidth -- don't let the column collapse
+            // below the switch on a panel whose slider labels are all shorter than it.
+            if (pendingTitleBoxes.any { it !is TextView }) {
+                boxWidth = maxOf(boxWidth, dp(TOGGLE_SWITCH_WIDTH_DP))
+            }
             pendingTitleBoxes.forEach { it.layoutParams.width = boxWidth }
         }
 
