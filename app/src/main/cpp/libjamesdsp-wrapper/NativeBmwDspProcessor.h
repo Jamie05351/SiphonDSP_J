@@ -22,13 +22,9 @@ public:
     //   140 -> reclaimed: one-time "stopband offset migrated" marker, written by
     //          NativeBmwDspValues.kt so an existing saved config picks up the new default.
     //          Kotlin-only -- never read in configure().
-    //   141 -> reclaimed: Mid-band independent LPF enable. Read in configure() and fanned onto
-    //          every OutputConfig; only the Mid outputs act on it (rebuildMidCrossover /
-    //          processMidCrossover). Ships 0 -- no migration marker needed, unlike 139, because
-    //          a leftover 0 already means the intended default ("disabled").
-    //   142 -> reclaimed: Mid-band independent LPF corner in Hz, decoupled from the HPF
-    //          crossover at OutputConfig::crossoverFreq. Read in configure(), clamped
-    //          [1500, 8000]. Built LR4 (two BW sections) alongside the HPF pair.
+    //   141, 142 -> unused. Briefly held a Mid-band independent LPF enable/corner; that feature
+    //          was removed (wrong fix, native processing deleted). Not read in configure(); a
+    //          leftover value from an older save is simply ignored.
     // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
     // never read in configure() either; it only has to be included here so the array length
     // check (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
@@ -173,16 +169,6 @@ private:
         bool muted = false;
         bool polarityInverted = false;
         CompressorParams compressor{};
-        // Independent Mid-band lowpass: a second crossover corner, decoupled from crossoverFreq
-        // (which the Mid outputs use as their HPF), so the Mid band can be band-limited to tame
-        // comb-filtering in the overlap with a passive tweeter riding a factory 6 dB/oct cap.
-        // Fed from the global config slots 141/142 -- not this per-output block -- but stored here
-        // so rebuildMidCrossover()/processMidCrossover() read it the same way as crossoverFreq.
-        // Only the Mid outputs act on it; the Low outputs ignore it. LR4 (two BW sections).
-        // Kept last so the positional aggregate initializers in the constructor (which stop at
-        // `compressor`) still map correctly -- these two just take their defaults there.
-        bool midLpfEnabled = false;
-        float midLpfFreq = 5000;
     };
     struct OutputRuntime {
         NativeBmwRouting::OutputId id = NativeBmwRouting::OutputId::LowLeft;
@@ -192,9 +178,6 @@ private:
         float gain = 1.0f;
         Biquad subsonic1;
         Biquad crossover1, crossover2;
-        // Mid-band independent LPF pair (LR4). Separate from crossover1/crossover2, which stay the
-        // HPF pair; run after them by processMidCrossover() only while OutputConfig::midLpfEnabled.
-        Biquad midLpf1, midLpf2;
         Biquad monoBassHpf1, monoBassHpf2;
         // Mid compensation: Mid re-runs the EXACT Low-side mono-bass recombination on its own
         // band so it picks up the identical magnitude + phase Mono Bass puts on Low -- otherwise
@@ -220,8 +203,6 @@ private:
             subsonic1.clear();
             crossover1.clear();
             crossover2.clear();
-            midLpf1.clear();
-            midLpf2.clear();
             monoBassHpf1.clear();
             monoBassHpf2.clear();
             delay.clear();

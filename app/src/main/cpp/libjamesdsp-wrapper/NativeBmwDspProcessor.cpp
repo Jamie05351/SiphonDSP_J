@@ -261,12 +261,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         c.release = clampf(v[base + 5], 20, 800);
         c.makeup = clampf(v[base + 6], 0, 6);
     };
-    // Mid-band independent LPF lives at fixed global slots 141/142 (reclaimed from the removed
-    // Pultec stage), not in the per-output block -- read once and fan onto every output's config
-    // below so rebuildMidCrossover()/processMidCrossover() consume it like crossoverFreq. Only the
-    // Mid outputs act on it. v[141] ships 0 (disabled), so no migration marker is needed.
-    const bool midLpfEnabled = v[141] >= .5f;
-    const float midLpfFreq = clampf(v[142], 1500, 8000);
     for (std::size_t out = 0; out < nextOutputConfigs.size(); ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
@@ -279,8 +273,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         cfg.subsonicFreq = clampf(v[base + 3], 20, 60);
         cfg.muted = v[base + 4] >= .5f;
         cfg.polarityInverted = v[base + 5] >= .5f;
-        cfg.midLpfEnabled = midLpfEnabled;
-        cfg.midLpfFreq = midLpfFreq;
         readComp(cfg.compressor, base + 6);
     }
 
@@ -320,12 +312,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             if ((next.measurementMute == 1 && !low) || (next.measurementMute == 2 && low)) {
                 dirty |= DirtyMeasBus;
             }
-        }
-        // Mid LPF enable/corner is the same logical "mid band shape" as the HPF corner, so it
-        // shares DirtyMidXo rather than getting its own dirty bit. Mid outputs only.
-        if (!low && (old.midLpfEnabled != now.midLpfEnabled ||
-                     changed(old.midLpfFreq, now.midLpfFreq))) {
-            dirty |= DirtyMidXo;
         }
         if (low && (old.subsonicEnabled != now.subsonicEnabled ||
                     changed(old.subsonicFreq, now.subsonicFreq))) {
@@ -613,16 +599,6 @@ void NativeBmwDspProcessor::rebuildMidCrossover() {
         const auto& cfg = outputConfig(id);
         makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
         makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
-        // Independent LR4 LPF: two BW Q=1/sqrt(2) sections at the decoupled midLpfFreq corner,
-        // same construction as rebuildLowCrossover()'s makeLowPass pair. Cleared when disabled so
-        // a stale tail can't carry into the next enabled period (matches rebuildMonoBass).
-        if (cfg.midLpfEnabled) {
-            makeLowPass(out.midLpf1, cfg.midLpfFreq, BW, sampleRate_);
-            makeLowPass(out.midLpf2, cfg.midLpfFreq, BW, sampleRate_);
-        } else {
-            out.midLpf1.clear();
-            out.midLpf2.clear();
-        }
     }
 }
 void NativeBmwDspProcessor::updateDelays() {
@@ -1055,16 +1031,13 @@ float NativeBmwDspProcessor::processLowCrossover(OutputRuntime& out, const Outpu
     sample = out.crossover2.run(sample);
     return sample;
 }
-float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out, const OutputConfig& cfg,
+float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
+                                                 [[maybe_unused]] const OutputConfig& cfg,
                                                  float sample) {
+    // Kept symmetric with processLowCrossover (which still reads cfg.subsonicEnabled); the Mid
+    // side is just the HPF pair now.
     sample = out.crossover1.run(sample);
     sample = out.crossover2.run(sample);
-    // Independent LPF stage, after the HPF pair. No-op branch when disabled -- zero added cost,
-    // same discipline as measBusActive_ / p_.lpfPass / p_.hpfPass elsewhere in this file.
-    if (cfg.midLpfEnabled) {
-        sample = out.midLpf1.run(sample);
-        sample = out.midLpf2.run(sample);
-    }
     return sample;
 }
 

@@ -73,11 +73,7 @@ inline constexpr int kOutCompressor = 6;  // start of the 7-value compressor tup
 
 // --- measurement-mute bus brick-wall stopband offset (octaves) -----------------------------
 inline constexpr int kMeasMuteStopbandOctaves = 139;
-
-// --- Mid-band independent LPF (reclaimed inert slots 141/142) ------------------------------
-// Global enable + corner (Hz); configure() fans them onto every OutputConfig, Mid outputs only.
-inline constexpr int kMidLpfEnabled = 141;
-inline constexpr int kMidLpfFreq = 142;
+// 140 is a Kotlin-only migration marker; 141/142 are unused (a removed Mid-band LPF).
 
 // --- multiband compressor -----------------------------------------------------------------
 inline constexpr int kMbcEnabled = 144;

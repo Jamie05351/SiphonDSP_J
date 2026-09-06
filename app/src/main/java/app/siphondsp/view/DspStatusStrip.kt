@@ -24,10 +24,9 @@ import kotlin.math.roundToInt
 /**
  * Persistent bypass-state strip pinned to the bottom of every DSP workspace's content column
  * (see activity_parametric_eq.xml -- it spans from the right edge of dsp_sidebar to the far
- * right border). Shows the on/off state of the five global stages that are otherwise only
- * visible after navigating to their own screen -- Tilt, Mono Bass, Mid LPF, MBC, and the master
- * limiter (with its threshold) -- dimmed when off, each tappable to jump straight to the screen
- * that owns it.
+ * right border). Shows the on/off state of the global stages that are otherwise only visible
+ * after navigating to their own screen -- Tilt, Mono Bass, MBC, and the master limiter (with
+ * its threshold) -- dimmed when off, each tappable to jump straight to the screen that owns it.
  *
  * Refreshes itself: on attach, whenever the window regains focus (returning from another
  * screen), and on the ACTION_NATIVE_BMW_DSP_UPDATED local broadcast that every edit sends.
@@ -55,7 +54,6 @@ class DspStatusStrip @JvmOverloads constructor(
     private val segments = listOf(
         Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
         Segment("Mono Bass", NativeBmwDspValues.INDEX_MONO_BASS_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
-        Segment("Mid LPF", NativeBmwDspValues.INDEX_MID_LPF_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
         Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, NativeBmwCompressorActivity::class.java),
         Segment(
             "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, GainLimiterActivity::class.java,
