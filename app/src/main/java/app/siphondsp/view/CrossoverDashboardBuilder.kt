@@ -446,8 +446,8 @@ class CrossoverDashboardBuilder(
         sliderAccentColor: Int? = null,
         // When set, an inline glass ON/OFF switch for this index sits between the title box and
         // the slider, and the slider gives up a little width for it -- for a row whose enable used
-        // to be its own separate switch row above it (the Crossovers page's Subsonic / Mid LPF,
-        // the Output Limiter, the multiband-compressor master). null keeps the plain slider row.
+        // to be its own separate switch row above it (the Crossovers page's Subsonic, the Output
+        // Limiter, the multiband-compressor master). null keeps the plain slider row.
         toggleIndex: Int? = null,
         toggleMirrorIndices: IntArray = intArrayOf(),
         onToggled: () -> Unit = {},
