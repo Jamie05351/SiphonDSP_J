@@ -9,9 +9,8 @@
 
     <HorizontalScrollView
         android:id="@+id/horizontalScrollView"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="80dp"
         android:scrollbarDefaultDelayBeforeFade="0"
         app:layout_constraintBottom_toTopOf="@id/cards"
         app:layout_constraintEnd_toEndOf="parent"
@@ -155,15 +154,14 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cards"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="40dp"
         android:layout_marginBottom="16dp"
         app:layout_constrainedHeight="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/horizontalScrollView"><!-- start margin clears the borderless sidebar rail -->
+        app:layout_constraintTop_toBottomOf="@id/horizontalScrollView">
 
         <!-- Graph and List are swipeable pages of a ViewPager2 (position 0 = preview_card/GRAPH,
              1 = edit_card/LIST); see configurePager()/applyDisplayMode() in the fragment.

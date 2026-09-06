@@ -71,11 +71,9 @@ class DspStatusStrip @JvmOverloads constructor(
 
     init {
         orientation = HORIZONTAL
-        // Right-aligned: the info line butts up against the far border instead of trailing off
-        // the sidebar edge.
-        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
         setBackgroundColor(ContextCompat.getColor(context, R.color.dsp_workspace_header_bg))
-        setPadding(dp(12), dp(5), dp(4), dp(5))
+        setPadding(dp(12), dp(5), dp(12), dp(5))
 
         segments.forEachIndexed { index, segment ->
             if (index > 0) addView(separator())

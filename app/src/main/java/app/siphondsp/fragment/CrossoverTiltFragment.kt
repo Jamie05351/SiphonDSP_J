@@ -106,14 +106,12 @@ class CrossoverTiltFragment : Fragment() {
             // Subsonic + Lowpass/Highpass/Mid-LPF slider stack. Only the rows that don't belong
             // on the graph stay below it -- Subsonic, and the one linked Mid all-pass alignment
             // control -- plus a deep link to the full per-output All-pass screen.
-            dashboardPanel("", null, lean = true, leanStartDp = 80) {
+            dashboardPanel("", null, lean = true) {
                 val surface = CrossoverHandoffSurface(requireContext()).apply {
                     bind(values, peqState)
                     onEdit = onChanged
                 }
-                // Graph sits 40dp left of the control rows below (panel indent is 80dp) so it
-                // reads wider without crowding the rows against the sidebar.
-                addCustomView(surface, topMarginDp = 2, bottomMarginDp = 2, startMarginDp = -40)
+                addCustomView(surface, topMarginDp = 2, bottomMarginDp = 2)
 
                 // Fixed readout, not a selector: both corners are LR4 (24 dB/oct). The mid
                 // highpass was already LR4-only natively; the low band was matched to it.
@@ -164,7 +162,6 @@ class CrossoverTiltFragment : Fragment() {
                 toggleIndex = NativeBmwDspValues.INDEX_TILT_ENABLED,
                 topContentGapDp = 40,
                 lean = true,
-                leanStartDp = 80,
             ) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_tilt_amount),
@@ -190,7 +187,6 @@ class CrossoverTiltFragment : Fragment() {
                 toggleIndex = NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
                 topContentGapDp = 40,
                 lean = true,
-                leanStartDp = 80,
             ) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_mono_bass_freq),

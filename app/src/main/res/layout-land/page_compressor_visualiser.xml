@@ -14,16 +14,11 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Graph sits 40dp left of the master strip below (which carries dashboardPanel's ~88dp
-             lean indent) so it reads wider while still clearing the borderless sidebar rail. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/compressor_surface_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="48dp"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="6dp"
-            android:layout_marginEnd="6dp"
+            android:layout_margin="6dp"
             app:cardCornerRadius="18dp">
 
             <app.siphondsp.view.CompressorSurface
