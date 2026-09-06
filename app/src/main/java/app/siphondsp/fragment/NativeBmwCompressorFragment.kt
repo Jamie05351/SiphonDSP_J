@@ -130,13 +130,14 @@ class NativeBmwCompressorFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(2), dp(4), dp(2))
         }
-        CrossoverDashboardBuilder(ctx, masterRoot, values, onChanged).dashboardPanel("") {
-            addSegmentedSwitchRow(
-                "Multiband compressor",
-                "Pre-crossover, 4 bands. Off = fully bypassed.",
-                NativeBmwDspValues.INDEX_MBC_ENABLED,
+        CrossoverDashboardBuilder(ctx, masterRoot, values, onChanged).dashboardPanel(
+            "Multiband compressor",
+            "Pre-crossover, 4 bands. Off = fully bypassed.",
+        ) {
+            addSliderRow(
+                "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f, 100f, 1f, "%",
+                toggleIndex = NativeBmwDspValues.INDEX_MBC_ENABLED,
             )
-            addSliderRow("Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f, 100f, 1f, "%")
         }
         page.findViewById<FrameLayout>(R.id.compressor_master_container).addView(masterRoot)
         return page
@@ -191,17 +192,18 @@ class NativeBmwCompressorFragment : Fragment() {
         }
         val lowMeter = MbcBandGrMeter(ctx).also { lowBusGrMeter = it }
         val midMeter = MbcBandGrMeter(ctx).also { midBusGrMeter = it }
-        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel(
-            "Driver protection",
-            "Brick-wall limiter on each output bus, right before the driver gain.",
-        ) {
-            sectionHeader("Low bus", BmwDashboardSkin.M_BLUE)
-            addSegmentedSwitchRow("Limiter active", null, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED)
+        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("Driver protection", null) {
+            sectionHeader(
+                "Low bus", BmwDashboardSkin.M_BLUE,
+                toggleIndex = NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,
+            )
             addSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD, -24f, 0f, .5f, "dB")
             addSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_RELEASE, 20f, 800f, 5f, "ms")
             addCustomView(lowMeter)
-            sectionHeader("Mid bus", BmwDashboardSkin.MID_BAND_YELLOW)
-            addSegmentedSwitchRow("Limiter active", null, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED)
+            sectionHeader(
+                "Mid bus", BmwDashboardSkin.MID_BAND_YELLOW,
+                toggleIndex = NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
+            )
             addSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, -24f, 0f, .5f, "dB")
             addSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE, 20f, 800f, 5f, "ms")
             addCustomView(midMeter)

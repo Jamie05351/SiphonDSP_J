@@ -171,13 +171,11 @@ class GainLimiterFragment : Fragment() {
                     accentColor = BmwDashboardSkin.M_GREEN,
                     sliderAccentColor = BmwDashboardSkin.M_GREEN,
                 )
-                addSegmentedSwitchRow(
-                    "Limiter",
-                    null,
-                    NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
-                    // Matches the "Output" panel title above -- this row's own label is standing
-                    // in as the section heading now that the separate blue sectionHeader() is gone.
-                    titleTextSize = 18f,
+                // Master limiter: its own header (18f, matching "Output" above) carrying the
+                // enable switch, then the threshold slider under it.
+                sectionHeader(
+                    "Limiter", accentColor = BmwDashboardSkin.M_BLUE, textSize = 18f, showDivider = false,
+                    toggleIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
                 )
                 addSliderRow(
                     "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f, 0f, .5f, "dB",

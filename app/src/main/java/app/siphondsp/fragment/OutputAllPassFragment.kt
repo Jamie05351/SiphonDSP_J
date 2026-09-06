@@ -76,22 +76,20 @@ class OutputAllPassFragment : Fragment() {
             }
         }
 
-        // One page per physical output -- title, section-header, and both sliders all take the
-        // same band color, matching how Gains & Delay's channel cards and Crossovers & Tilt's
-        // frequency sliders are already colour-coded. The Enabled switch and Type dropdown stay
-        // neutral, same convention Crossovers & Tilt's own switches/dropdowns already follow.
+        // One page per physical output -- title and both sliders take the same band color,
+        // matching how Gains & Delay's channel cards and Crossovers & Tilt's frequency sliders
+        // are already colour-coded. Each section's enable toggle sits where its "Type" label box
+        // used to be, on the order-dropdown row; the "Section N" headers and the card subtitle
+        // were dropped to keep both sections on screen without scrolling.
         fun outputPage(title: String, output: Int, bandColor: Int, sliderColor: Int): View = page {
-            dashboardPanel(
-                title,
-                "Two cascaded all-pass filter sections, for phase/time alignment between bands",
-                titleColor = bandColor,
-            ) {
+            dashboardPanel(title, null, titleColor = bandColor) {
                 repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
                     val base = NativeBmwDspValues.INDEX_ALL_PASS +
                         (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-                    sectionHeader("Section ${section + 1}", accentColor = bandColor)
-                    addSegmentedSwitchRow("Enabled", null, base, accentColor = bandColor)
-                    addDropdownRow("Type", base + 1, listOf("First order" to 1f, "Second order" to 2f))
+                    addDropdownRow(
+                        "Type", base + 1, listOf("First order" to 1f, "Second order" to 2f),
+                        toggleIndex = base,
+                    )
                     // 20Hz-20kHz (the full audio range) made this slider nearly unusable -- one
                     // finger-width of drag covered thousands of Hz. All-pass sections here exist
                     // for phase/time alignment near a crossover (both bands' crossover freq slider
