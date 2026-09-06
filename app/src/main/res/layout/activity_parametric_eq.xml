@@ -112,6 +112,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:minHeight="34dp"
+            android:layout_marginStart="40dp"
             android:background="@color/dsp_workspace_header_bg"
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
