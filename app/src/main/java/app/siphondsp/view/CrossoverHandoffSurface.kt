@@ -121,6 +121,17 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     )
     private var activeHandle: Handle? = null
 
+    // Some hosts (ViewPager2's RecyclerView page here) swallow a plain invalidate() mid-gesture,
+    // so the curves only caught up on the next fragment rebuild. While a handle is held, drive a
+    // redraw every frame off the animation queue instead.
+    private var dragging = false
+    private val frameLoop = object : Runnable {
+        override fun run() {
+            invalidate()
+            if (dragging) postOnAnimation(this)
+        }
+    }
+
     /** Copies in a fresh config + PEQ snapshot and redraws. */
     fun bind(newValues: FloatArray, newPeqState: BmwPeqState) {
         if (newValues.size == BmwSignalChain.VALUE_COUNT) values = newValues.copyOf()
@@ -132,6 +143,12 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val desiredHeight = (182f * density).toInt()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), resolveSize(desiredHeight, heightMeasureSpec))
+    }
+
+    override fun onDetachedFromWindow() {
+        dragging = false
+        removeCallbacks(frameLoop)
+        super.onDetachedFromWindow()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -283,6 +300,9 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
                 if (picked != null && abs(hzToX(picked.frequency(), left, right) - event.x) <= GRAB_DP * density) {
                     activeHandle = picked
                     parent?.requestDisallowInterceptTouchEvent(true)
+                    dragging = true
+                    removeCallbacks(frameLoop)
+                    postOnAnimation(frameLoop)
                     return true
                 }
                 return false
@@ -294,7 +314,9 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 activeHandle = null
+                dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                invalidate()
                 return true
             }
         }
