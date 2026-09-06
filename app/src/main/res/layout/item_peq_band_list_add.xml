@@ -4,11 +4,11 @@
      Tapping the button adds a new default band and this row shifts down to sit after it; once
      the scope hits the cap, the adapter simply stops emitting this item and the list ends on
      the last real band row.
-     The leading spacers (3dp + 8dp margin, then 22dp) mirror item_peq_band_list.xml's selection
+     The leading spacers (3dp + 8dp margin, then 28dp) mirror item_peq_band_list.xml's selection
      bar + index column, and the button carries weight 5.0 (CH 2.0 + FILTER 3.0) so it sits
      directly under those two columns; the trailing weight-13.2 filler + 44dp Space cover the
-     Hz/dB/Q cells and the delete button. The button's solid fill + white text are applied in
-     ParametricEqBandAdapter.onBindViewHolder (colour is the per-scope accent). -->
+     Hz/dB/Q cells and the delete button. The button's glass fill + per-scope border/text colour
+     are applied in ParametricEqBandAdapter.onBindViewHolder. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/add_row_root"
@@ -28,12 +28,12 @@
         android:layout_marginEnd="8dp" />
 
     <Space
-        android:layout_width="22dp"
+        android:layout_width="28dp"
         android:layout_height="1dp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/add_row_button"
-        style="?attr/materialButtonStyle"
+        style="?attr/materialButtonOutlinedStyle"
         android:layout_width="0dp"
         android:layout_weight="5.0"
         android:layout_height="36dp"

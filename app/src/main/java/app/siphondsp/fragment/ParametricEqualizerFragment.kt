@@ -411,7 +411,7 @@ class ParametricEqualizerFragment : Fragment() {
             sampleRate,
         )
         binding.previewTitle.text = when (selectedScope) {
-            PeqScope.FULL -> "Input Correction PEQ response"
+            PeqScope.FULL -> "Pre EQ response"
             PeqScope.LOW -> "Low Band PEQ response · inside low crossover branch"
             PeqScope.MID -> "Mid Band PEQ response · inside mid crossover branch"
         }
@@ -647,10 +647,10 @@ class ParametricEqualizerFragment : Fragment() {
     }
 
     /** Per-scope cell accent, matching BmwDashboardSkin's app-wide Low=blue / Mid=yellow
-     *  convention; Input Correction stays neutral. Used for the band-row cells and the
-     *  tap-to-commit choice picker. */
-    private fun scopeAccent(): Int? = when (selectedScope) {
-        PeqScope.FULL -> null
+     *  convention; Pre EQ uses white so its list reads distinct from the blue Low band. Used for
+     *  the band-row cells and the tap-to-commit choice picker. */
+    private fun scopeAccent(): Int = when (selectedScope) {
+        PeqScope.FULL -> android.graphics.Color.WHITE
         PeqScope.LOW -> BmwDashboardSkin.LIGHT_BLUE
         PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
     }

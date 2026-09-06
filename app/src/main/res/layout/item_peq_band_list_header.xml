@@ -21,9 +21,9 @@
         android:layout_marginEnd="8dp" />
 
     <TextView
-        android:layout_width="22dp"
+        android:layout_width="28dp"
         android:layout_height="wrap_content"
-        android:gravity="end"
+        android:gravity="center"
         android:text="#"
         android:textAppearance="?attr/textAppearanceLabelSmall"
         android:textColor="?android:attr/textColorSecondary" />
