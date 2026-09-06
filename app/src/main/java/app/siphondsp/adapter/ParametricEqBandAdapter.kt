@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.core.graphics.ColorUtils
 import androidx.databinding.ObservableArrayList
 import androidx.databinding.ObservableList
 import androidx.recyclerview.widget.RecyclerView
@@ -29,7 +28,8 @@ import kotlin.math.pow
  * the value dialog and each also carry inline - / + steppers -- Hz steps by [FREQ_STEP_FACTOR]
  * (1/24 octave, multiplicative) via [onFrequencyStep], dB by 0.5 via [onGainStep], Q by 0.1 via
  * [onQStep], all committing immediately. [accentColor] tints the value text per scope
- * (Low=blue/Mid=yellow/Input Correction=null neutral). A trailing "Add filter" row
+ * (Low=blue / Mid=yellow / Pre EQ=white); the selected band shows that colour as a glass square
+ * around its filter number rather than a whole-row highlight. A trailing "Add filter" row
  * ([onAddClicked]) is appended while the scope has fewer than [BmwPeqState.MAX_BANDS] bands.
  */
 class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
@@ -185,13 +185,13 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
     @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         if (holder is AddRowViewHolder) {
-            // Same solid-accent template as a selected band row: filled with the per-scope accent
-            // (neutral blue when the scope has none), foreground colour picked for contrast.
-            val fill = accentColor ?: BmwDashboardSkin.LIGHT_BLUE
-            val fg = contrastOn(fill)
-            holder.button.backgroundTintList = ColorStateList.valueOf(fill)
-            holder.button.setTextColor(fg)
-            holder.button.iconTint = ColorStateList.valueOf(fg)
+            // Glass button: dark translucent fill with the border, label and icon all in the
+            // scope's colour (white on Pre EQ, blue/yellow on Low/Mid).
+            val tint = accentColor ?: BmwDashboardSkin.LIGHT_BLUE
+            holder.button.backgroundTintList = ColorStateList.valueOf(ADD_GLASS_FILL)
+            holder.button.strokeColor = ColorStateList.valueOf(tint)
+            holder.button.setTextColor(tint)
+            holder.button.iconTint = ColorStateList.valueOf(tint)
             holder.button.setOnClickListener { onAddClicked?.invoke() }
             holder.root.setOnClickListener { onAddClicked?.invoke() }
             return
@@ -220,24 +220,32 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         holder.gain.text = gainText
         holder.qFactor.text = qText
 
-        // The row you're working on is filled with the per-scope accent at 50% opacity (see
-        // ParametricEqualizerFragment: any cell tap or -/+ step selects that band). The thin
-        // left outline is superseded by the fill, so it stays hidden.
+        // Selection shows only on the filter-number cell now: its "#" lights up inside a glass
+        // square bordered and lettered in this band's colour (any cell tap or -/+ step selects
+        // the band -- see ParametricEqualizerFragment). The rest of the row is untouched.
         val isSelected = band.uuid == selectedUuid
         holder.selectionOutline.visibility = View.INVISIBLE
+        holder.itemView.background = null
         val accentFill = accent ?: BmwDashboardSkin.LIGHT_BLUE
-        val fill = ColorUtils.setAlphaComponent(accentFill, 0x80)
-        if (isSelected) holder.itemView.setBackgroundColor(fill) else holder.itemView.background = null
 
-        // Contrast is judged against the fill composited over the near-black list background,
-        // not the raw accent, since at 50% both blue and yellow darken considerably.
-        val onFill = contrastOn(ColorUtils.compositeColors(fill, Color.BLACK))
-        val valueColor = if (isSelected) onFill else accentFill
+        if (isSelected) {
+            holder.index.background =
+                BmwDashboardSkin.glassBoxDrawable(context, showBorder = true, accentColor = accentFill)
+            holder.index.setTextColor(accentFill)
+            val padH = (5 * context.resources.displayMetrics.density).toInt()
+            val padV = (2 * context.resources.displayMetrics.density).toInt()
+            holder.index.setPadding(padH, padV, padH, padV)
+        } else {
+            holder.index.background = null
+            holder.index.setTextColor(INDEX_COLOR)
+            holder.index.setPadding(0, 0, 0, 0)
+        }
+
+        // Value cells always carry the scope's colour (Low=blue / Mid=yellow / Pre EQ=white).
+        val valueColor = accentFill
         listOf(holder.type, holder.channel, holder.freq, holder.gain, holder.qFactor).forEach {
             it.setTextColor(valueColor)
         }
-        holder.index.setTextColor(if (isSelected) onFill else INDEX_COLOR)
-        // -/+ steppers track the value colour so they stay legible on the solid highlight fill.
         val stepperTint = ColorStateList.valueOf(valueColor)
         listOf(
             holder.freqMinus, holder.freqPlus, holder.gainMinus,
@@ -286,12 +294,12 @@ class ParametricEqBandAdapter(val bands: ParametricEqBandList) :
         private const val VIEW_TYPE_BAND = 0
         private const val VIEW_TYPE_ADD = 1
 
-        /** Neutral grey for the "#" index column, matching the header's textColorSecondary. */
+        /** Neutral grey for an unselected "#" index, matching the header's textColorSecondary. */
         private val INDEX_COLOR = Color.rgb(0x9A, 0xA1, 0xAB)
 
-        /** Black or white -- whichever reads better on top of [fill] (a solid accent). */
-        private fun contrastOn(fill: Int): Int =
-            if (ColorUtils.calculateLuminance(fill) > 0.5) Color.rgb(0x0A, 0x0B, 0x0E) else Color.WHITE
+        /** Dark translucent fill behind the "Add filter" glass button (its border/text carry the
+         *  scope colour). Matches the near-black glass fills used elsewhere in the BMW skin. */
+        private val ADD_GLASS_FILL = Color.rgb(0x14, 0x17, 0x1C)
 
         /** One inline Hz stepper tap = 1/24 octave, applied as a multiplier so the perceived
          *  interval is the same whether the band sits at 40 Hz or 4 kHz. */

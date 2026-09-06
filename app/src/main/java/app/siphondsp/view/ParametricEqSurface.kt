@@ -924,7 +924,7 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
     }
 
     private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
-        BmwPeqBank.FULL -> "Input Correction"
+        BmwPeqBank.FULL -> "Pre EQ"
         BmwPeqBank.LOW -> "Low Band"
         BmwPeqBank.MID -> "Mid Band"
     }
