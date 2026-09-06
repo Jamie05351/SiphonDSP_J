@@ -10,8 +10,6 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
@@ -22,11 +20,12 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import kotlin.math.roundToInt
 
 /**
- * Persistent bypass-state strip pinned to the bottom of every DSP workspace's content column
- * (see activity_parametric_eq.xml -- it spans from the right edge of dsp_sidebar to the far
- * right border). Shows the on/off state of the global stages that are otherwise only visible
- * after navigating to their own screen -- Tilt, Mono Bass, MBC, and the master limiter (with
- * its threshold) -- dimmed when off, each tappable to jump straight to the screen that owns it.
+ * Persistent bypass-state readout riding the DSP workspace toolbar line, between the back arrow
+ * and the centred title (see activity_parametric_eq.xml -- it sits in the AppBarLayout's toolbar
+ * overlay, above the ///M stripe divider, with no background of its own). Shows the on/off state
+ * of the global stages that are otherwise only visible after navigating to their own screen --
+ * Tilt, Mono Bass, MBC, and the master limiter (with its threshold) -- dimmed when off, each
+ * tappable to jump straight to the screen that owns it.
  *
  * Refreshes itself: on attach, whenever the window regains focus (returning from another
  * screen), and on the ACTION_NATIVE_BMW_DSP_UPDATED local broadcast that every edit sends.
@@ -69,11 +68,10 @@ class DspStatusStrip @JvmOverloads constructor(
 
     init {
         orientation = HORIZONTAL
-        // Right-aligned: the info line butts up against the far border instead of trailing off
-        // the sidebar edge.
-        gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        setBackgroundColor(ContextCompat.getColor(context, R.color.dsp_workspace_header_bg))
-        setPadding(dp(12), dp(5), dp(4), dp(5))
+        // Sits just past the toolbar's back arrow, centred on the toolbar line. No background of
+        // its own -- the toolbar it rides paints the header colour behind it.
+        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        setPadding(0, 0, 0, 0)
 
         segments.forEachIndexed { index, segment ->
             if (index > 0) addView(separator())

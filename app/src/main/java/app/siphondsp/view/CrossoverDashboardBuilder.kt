@@ -246,18 +246,19 @@ class CrossoverDashboardBuilder(
         }
     }
 
-    /** A header row: the panel-title-weight label on the left, with one or two compact glass
-     *  ON/OFF switches packed inline on the right -- for a page whose master enable (and
-     *  optionally a second switch) belongs at header height rather than its own separate switch
-     *  row (see the Compressor Band pages' "Band N" header, carrying both the band's own enable
-     *  switch and its Stereo link switch). Call with a blank dashboardPanel() title so this row
-     *  is the page's only header. */
+    /** A header row: the panel-title-weight label on the left, then the enable glass ON/OFF
+     *  switch sitting at the same x as this panel's slider rows begin (title column +
+     *  toggle-zone width -- the same inline placement [headerToggleRow] gives every other gated
+     *  panel), with an optional second labelled switch pinned to the row's right edge (see the
+     *  Compressor Band pages' "Band N" header, carrying the band's enable switch and its Stereo
+     *  link switch). Call with a blank dashboardPanel() title so this row is the page's only
+     *  header. */
     fun titleRowWithSwitches(
         title: String,
         enabledIndex: Int,
         enabledMirror: IntArray = intArrayOf(),
         onEnabledToggled: () -> Unit = {},
-        // A second switch (with its own label) packed further along the same row -- null skips it.
+        // A second switch (with its own label) pinned to the row's right edge -- null skips it.
         secondLabel: String? = null,
         secondIndex: Int? = null,
         secondMirror: IntArray = intArrayOf(),
@@ -268,22 +269,27 @@ class CrossoverDashboardBuilder(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(2), 0, dp(10))
         }
+        val titleView = TextView(context).apply {
+            text = title
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+        // Title in the width-synced first column + the fixed toggle-zone gap, so the enable
+        // switch's left edge lands exactly where the slider rows below it start.
+        row.addView(firstColumnCell(titleView))
+        row.addView(space(TOGGLE_ZONE_WIDTH_DP))
         row.addView(
-            TextView(context).apply {
-                text = title
-                textSize = 18f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(Color.WHITE)
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            glassSwitch(enabledIndex, enabledMirror, title, onEnabledToggled),
+            LinearLayout.LayoutParams(dp(TOGGLE_SWITCH_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
         )
-        row.addView(glassSwitch(enabledIndex, enabledMirror, title, onEnabledToggled))
 
         if (secondLabel != null && secondIndex != null) {
+            // Weighted spacer eats the slack so the second switch still rides the right edge.
+            row.addView(View(context), LinearLayout.LayoutParams(0, dp(1), 1f))
             row.addView(
                 singleLineLabel(secondLabel),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginStart = dp(20)
                     marginEnd = dp(10)
                 },
             )
@@ -381,9 +387,12 @@ class CrossoverDashboardBuilder(
             )
         }
         if (switch != null) {
+            // Pin the switch to the same height as this row's title/value glass boxes
+            // (SLIDER_TITLE_HEIGHT_DP) rather than letting MaterialSwitch's WRAP_CONTENT touch
+            // target pad the row taller than the boxes beside it.
             zone.addView(
                 switch,
-                LinearLayout.LayoutParams(dp(TOGGLE_SWITCH_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
+                LinearLayout.LayoutParams(dp(TOGGLE_SWITCH_WIDTH_DP), dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)),
             )
         }
         return zone
@@ -454,7 +463,9 @@ class CrossoverDashboardBuilder(
     ) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(3), 0, dp(3))
+            // 2dp top / 1dp bottom -- adjacent slider rows sit 3dp apart (was 6dp) to claw back
+            // vertical space across every dashboard page that stacks these rows.
+            setPadding(0, dp(2), 0, dp(1))
         }
 
         val topRow = LinearLayout(context).apply {
