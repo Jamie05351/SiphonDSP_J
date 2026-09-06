@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -40,7 +41,7 @@ class CrossoverDashboardBuilder(
     // longest title in the group actually needs -- not a fixed dp guess -- so every row in that
     // group still lines up, but the column is only as wide as it needs to be for its own labels
     // (Gains' 5 short labels don't reserve the same width Compressor's "Makeup gain" needs).
-    private val pendingTitleBoxes = mutableListOf<TextView>()
+    private val pendingTitleBoxes = mutableListOf<View>()
 
     private val accentBlue = BmwDashboardSkin.LIGHT_BLUE
     // Slider-row title text and value-box number: bright white now -- the row's colour identity
@@ -59,6 +60,16 @@ class CrossoverDashboardBuilder(
         // addSliderRow's accentColor already uses elsewhere. null keeps the default white title,
         // unaffected for every other page's call site.
         titleColor: Int? = null,
+        // When set, a glass ON/OFF switch for this index rides on the title row -- its left edge
+        // aligned with where this panel's slider rows start -- for a panel whose whole content is
+        // gated by one enable (Tonality tilt, Mono Bass) rather than carrying that switch on its
+        // own separate row.
+        toggleIndex: Int? = null,
+        toggleMirrorIndices: IntArray = intArrayOf(),
+        onToggled: () -> Unit = {},
+        // Vertical gap between the header row and the first content row. Bumped up on the roomy
+        // single-panel pages (Tonality tilt, Mono Bass).
+        topContentGapDp: Int = 2,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
         // Transparent, not its own copy of the photo background: the workspace's own content
@@ -82,16 +93,24 @@ class CrossoverDashboardBuilder(
             // their last row to clear the fold without scrolling on the head unit.
             setPadding(dp(28), dp(10), dp(24), dp(20))
         }
+        // Cleared before the header so a header-line toggle's width probe survives to the sizing
+        // pass below (it registers here, ahead of build()).
+        pendingTitleBoxes.clear()
 
         // Blank title skips the row entirely -- for a page whose toolbar already shows this same
         // title (Gains & Delay), repeating it inside the card too just wastes vertical space.
         if (title.isNotBlank()) {
-            content.addView(TextView(context).apply {
+            val titleView = TextView(context).apply {
                 text = title
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(titleColor ?: Color.WHITE)
-            })
+            }
+            if (toggleIndex != null) {
+                content.addView(headerToggleRow(titleView, toggleIndex, toggleMirrorIndices, onToggled))
+            } else {
+                content.addView(titleView)
+            }
         }
         if (!subtitle.isNullOrBlank()) {
             content.addView(TextView(context).apply {
@@ -101,11 +120,10 @@ class CrossoverDashboardBuilder(
                 setPadding(0, dp(2), 0, dp(12))
             })
         } else {
-            content.addView(space(2))
+            content.addView(space(topContentGapDp))
         }
 
         currentContent = content
-        pendingTitleBoxes.clear()
         build()
 
         // Every addSliderRow() in this panel queued its title box above -- now that the whole
@@ -114,9 +132,11 @@ class CrossoverDashboardBuilder(
         // without hand-picking a width per page.
         if (pendingTitleBoxes.isNotEmpty()) {
             val padding = dp(18) * 2
-            val maxTextWidth = pendingTitleBoxes.maxOf { it.paint.measureText(it.text.toString()) }
+            val maxTextWidth = pendingTitleBoxes
+                .filterIsInstance<TextView>()
+                .maxOfOrNull { it.paint.measureText(it.text.toString()) } ?: 0f
             val boxWidth = maxTextWidth.roundToInt() + padding
-            pendingTitleBoxes.forEach { (it.layoutParams as LinearLayout.LayoutParams).width = boxWidth }
+            pendingTitleBoxes.forEach { it.layoutParams.width = boxWidth }
         }
 
         card.addView(content)
@@ -160,15 +180,25 @@ class CrossoverDashboardBuilder(
         // The divider rule under the title -- on for the small accent-colored style's existing
         // call sites, off for a page-title-weight header standing on its own.
         showDivider: Boolean = true,
+        // When set, a glass ON/OFF switch for this index rides on the header line -- for a
+        // sub-section gated by one enable (the per-bus limiters' "Low bus" / "Mid bus" headers).
+        toggleIndex: Int? = null,
+        toggleMirrorIndices: IntArray = intArrayOf(),
+        onToggled: () -> Unit = {},
     ) {
         if (currentContent.childCount > 2) currentContent.addView(space(8))
-        currentContent.addView(TextView(context).apply {
+        val titleView = TextView(context).apply {
             text = title
             this.textSize = textSize
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(accentColor ?: accentBlue)
             setPadding(0, dp(2), 0, dp(7))
-        })
+        }
+        if (toggleIndex != null) {
+            currentContent.addView(headerToggleRow(titleView, toggleIndex, toggleMirrorIndices, onToggled))
+        } else {
+            currentContent.addView(titleView)
+        }
         if (showDivider) {
             currentContent.addView(View(context).apply {
                 setBackgroundColor(divider)
@@ -300,6 +330,63 @@ class CrossoverDashboardBuilder(
         addRow(row)
     }
 
+    // The fixed slot between a slider row's title box and its slider -- always the same width so
+    // every slider on the page starts at the same x and is the same length. The switch (when the
+    // row has one) is centred in the slot, so it has equal clear space to the title box and to
+    // the slider; a plain row leaves the slot empty.
+    private fun toggleZone(switch: View? = null): LinearLayout {
+        val zone = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                dp(TOGGLE_ZONE_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        if (switch != null) {
+            zone.addView(
+                switch,
+                LinearLayout.LayoutParams(dp(TOGGLE_SWITCH_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
+        return zone
+    }
+
+    /** A left-column cell holding [child] (start-aligned), width-synced with this panel's title
+     *  boxes so whatever follows it lines up with the slider rows. */
+    private fun firstColumnCell(child: View): FrameLayout {
+        val cell = FrameLayout(context).apply {
+            addView(
+                child,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.START or Gravity.CENTER_VERTICAL,
+                ),
+            )
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        pendingTitleBoxes += cell
+        return cell
+    }
+
+    /** Header row -- [titleView] on the shared first column, then the empty toggle-zone width,
+     *  then the switch, so the switch's left edge sits directly above where this panel's slider
+     *  rows start. */
+    private fun headerToggleRow(
+        titleView: TextView,
+        index: Int,
+        mirrorIndices: IntArray,
+        onToggled: () -> Unit,
+    ): View = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(firstColumnCell(titleView))
+        addView(space(TOGGLE_ZONE_WIDTH_DP))
+        addView(
+            glassSwitch(index, mirrorIndices, titleView.text.toString(), onToggled),
+            LinearLayout.LayoutParams(dp(TOGGLE_SWITCH_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+    }
+
     fun addSliderRow(
         label: String,
         index: Int,
@@ -319,6 +406,13 @@ class CrossoverDashboardBuilder(
         // slider accent (purple) with no title color at all. null keeps the default grey thumb
         // and standard blue capsule border every other slider still uses.
         sliderAccentColor: Int? = null,
+        // When set, an inline glass ON/OFF switch for this index sits between the title box and
+        // the slider, and the slider gives up a little width for it -- for a row whose enable used
+        // to be its own separate switch row above it (the Crossovers page's Subsonic / Mid LPF,
+        // the Output Limiter, the multiband-compressor master). null keeps the plain slider row.
+        toggleIndex: Int? = null,
+        toggleMirrorIndices: IntArray = intArrayOf(),
+        onToggled: () -> Unit = {},
     ) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -350,6 +444,13 @@ class CrossoverDashboardBuilder(
         val titleBox = createBoxedTitleText(label, sliderColor)
         topRow.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
         pendingTitleBoxes += titleBox
+
+        // Fixed-width slot (15dp | switch-or-nothing | 15dp). Present on every slider row so the
+        // sliders line up and are the same length whether or not this one carries an inline
+        // enable switch.
+        topRow.addView(
+            toggleZone(toggleIndex?.let { glassSwitch(it, toggleMirrorIndices, label, onToggled) }),
+        )
 
         val slider = Slider(context).apply {
             valueFrom = min
@@ -394,11 +495,10 @@ class CrossoverDashboardBuilder(
             }
         }
 
-        // No horizontal padding on the slider itself. No gap on the title side (its own fixed
-        // width and padding already separate it) and a 24dp gap on the value side, from margins
-        // matching the title box's and value box's own edges exactly.
+        // No horizontal padding on the slider itself: the fixed toggleZone before it already
+        // separates it from the title box, and a 24dp gap on the value side comes from a margin
+        // matching the value box's own edge exactly.
         topRow.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
             marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
         })
         // Explicit width so the value box's own number(weight 1)/unit(wrap) split has a fixed
@@ -722,15 +822,34 @@ class CrossoverDashboardBuilder(
     /** Dropdown row: label + tap-to-open PopupMenu offering a fixed set of stored values (e.g.
      *  All-pass section order, 1st/2nd). Lifted from the old crossover slope selector, which
      *  this replaced -- same PopupMenu-off-a-MaterialButton interaction, generalized. */
-    fun addDropdownRow(label: String, index: Int, options: List<Pair<String, Float>>, mirrorIndices: IntArray = intArrayOf()) {
+    fun addDropdownRow(
+        label: String,
+        index: Int,
+        options: List<Pair<String, Float>>,
+        mirrorIndices: IntArray = intArrayOf(),
+        // When set, this row's label box is dropped and an inline glass ON/OFF switch for this
+        // index takes its place in the toggle column -- the Output all-pass sections do this, so
+        // the "Type" label gives way to the section's enable switch.
+        toggleIndex: Int? = null,
+        toggleMirrorIndices: IntArray = intArrayOf(),
+        onToggled: () -> Unit = {},
+    ) {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = dp(BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP)
         }
-        val titleBox = createBoxedTitleText(label, BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
-        row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
-        pendingTitleBoxes += titleBox
+        if (toggleIndex != null) {
+            // The enable switch takes the label-box column itself, so it lines up with the
+            // Frequency / Q boxes on the rows below; the width-synced cell keeps the dropdown
+            // lined up with those rows' sliders.
+            row.addView(firstColumnCell(glassSwitch(toggleIndex, toggleMirrorIndices, label, onToggled)))
+        } else {
+            val titleBox = createBoxedTitleText(label, BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
+            row.addView(titleBox, LinearLayout.LayoutParams(0, dp(BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP)))
+            pendingTitleBoxes += titleBox
+        }
+        row.addView(toggleZone())
 
         fun currentLabel(): String {
             val current = values[index]
@@ -762,8 +881,9 @@ class CrossoverDashboardBuilder(
                 popup.show()
             }
         }
+        // marginStart 0: the fixed toggleZone before it already provides the gap, and lines this
+        // control up with the sliders on the rows below.
         row.addView(button, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = dp(BmwDashboardSkin.SLIDER_TITLE_GAP_DP)
             marginEnd = dp(BmwDashboardSkin.SLIDER_VALUE_GAP_DP)
         })
         row.addView(space(VALUE_WIDTH_DP))
@@ -986,6 +1106,10 @@ class CrossoverDashboardBuilder(
         private const val LABEL_WIDTH_DP = 225
         private const val VALUE_WIDTH_DP = 88
         private const val ROW_LABEL_WIDTH_DP = 46
+        // The fixed slot between a slider's title box and the slider itself. The inline enable
+        // switch (80dp) is centred in it -- 20dp of clear space to the title box and to the slider.
+        private const val TOGGLE_ZONE_WIDTH_DP = 120
+        private const val TOGGLE_SWITCH_WIDTH_DP = 80
         // innerRow weights: card | car | card. The car render stays the focal point but its
         // column is only as wide as the image actually needs at this height -- the slack that
         // used to letterbox it goes to the flanking cards instead, so their in-card sliders

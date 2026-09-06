@@ -84,23 +84,18 @@ class CrossoverTiltFragment : Fragment() {
             // Blank title/subtitle: the toolbar already shows "Crossovers & Tilt", so repeating
             // it here just wastes vertical space (same reasoning Gains & Delay's page uses).
             dashboardPanel("", null) {
-                // Single page-title-weight header (18f, no divider) covering the whole page --
-                // subsonic, both crossovers and the mid LPF -- so the mid LPF slider clears the
-                // fold without scrolling on the head unit. The old "Subsonic Protection" /
-                // "Crossovers" split cost a header's worth of vertical space for little gain.
-                sectionHeader("Crossovers", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_subsonic_lr4),
-                    null,
-                    NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
-                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
-                )
+                // Two page-title-weight headers (18f, no divider): Subsonic Protection over the
+                // subsonic row, then Crossovers over the low/mid split and the mid LPF.
+                sectionHeader("Subsonic Protection", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 addSliderRow(
                     getString(R.string.bmw_dsp_subsonic_freq),
                     NativeBmwDspValues.INDEX_SUBSONIC_FREQ,
                     20f, 60f, 1f, "Hz",
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
+                    toggleIndex = NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
+                    toggleMirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
                 )
+                sectionHeader("Crossovers", accentColor = Color.WHITE, textSize = 18f, showDivider = false)
                 // Both crossovers are LR4-only now (the 18dB/oct option was removed -- the
                 // mid-band highpass was already secretly LR4-only at the native layer, so this
                 // just makes the low-band one match instead of exposing a slope choice for it).
@@ -120,18 +115,14 @@ class CrossoverTiltFragment : Fragment() {
                 )
                 // Independent mid-band lowpass -- a second, decoupled corner above the highpass
                 // (native slots 141/142, applied only to the Mid outputs). Rolls the mid off
-                // below a passive tweeter to tame overlap comb-filtering. Same switch+slider
-                // pattern as the Subsonic block above.
-                addSegmentedSwitchRow(
-                    "Mid lowpass (LR4)",
-                    null,
-                    NativeBmwDspValues.INDEX_MID_LPF_ENABLED,
-                )
+                // below a passive tweeter to tame overlap comb-filtering. Enable is the inline
+                // switch on this row.
                 addSliderRow(
                     "Mid lowpass freq", NativeBmwDspValues.INDEX_MID_LPF_FREQ,
                     1500f, 8000f, 50f, "Hz",
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
+                    toggleIndex = NativeBmwDspValues.INDEX_MID_LPF_ENABLED,
                 )
             }
         }
@@ -139,12 +130,11 @@ class CrossoverTiltFragment : Fragment() {
         val tiltPage = page {
             // Plain white title, no subtitle -- matches the Crossovers page's own "Crossovers"
             // header format rather than the old tint-and-blurb style.
-            dashboardPanel(getString(R.string.bmw_dsp_tilt_section), null) {
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_tilt_active),
-                    null,
-                    NativeBmwDspValues.INDEX_TILT_ENABLED,
-                )
+            dashboardPanel(
+                getString(R.string.bmw_dsp_tilt_section), null,
+                toggleIndex = NativeBmwDspValues.INDEX_TILT_ENABLED,
+                topContentGapDp = 40,
+            ) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_tilt_amount),
                     NativeBmwDspValues.INDEX_TILT_AMOUNT,
@@ -164,12 +154,11 @@ class CrossoverTiltFragment : Fragment() {
 
         val monoBassPage = page {
             // No subtitle -- matches the Crossovers/Tilt pages' own header format.
-            dashboardPanel(getString(R.string.bmw_dsp_mono_bass), null) {
-                addSegmentedSwitchRow(
-                    getString(R.string.bmw_dsp_mono_bass_active),
-                    null,
-                    NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
-                )
+            dashboardPanel(
+                getString(R.string.bmw_dsp_mono_bass), null,
+                toggleIndex = NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
+                topContentGapDp = 40,
+            ) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_mono_bass_freq),
                     NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
