@@ -76,14 +76,22 @@ class CrossoverDashboardBuilder(
         // last control row clears the fold without scrolling. Default false keeps the glass card
         // for every other call site (Routing, Gains' diagram page, sectionCard()).
         lean: Boolean = false,
+        // Left indent for lean content, in dp, measured from the start of the workspace content
+        // column (the right edge of dsp_sidebar). Tuned per screen so the controls clear the
+        // sidebar rail now that its baked-in frame is gone -- callers pass their own value.
+        leanStartDp: Int = 40,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             // Tight top pad -- the pages that use this skin (Crossovers & Tilt especially) need
-            // their last row to clear the fold without scrolling on the head unit. lean trims it
-            // further since there's no card inset around it any more.
-            if (lean) setPadding(dp(8), dp(6), dp(8), dp(8)) else setPadding(dp(28), dp(10), dp(24), dp(20))
+            // their last row to clear the fold without scrolling on the head unit. lean cuts the
+            // *vertical* chrome (top/bottom pad, plus the card is gone); the left indent is
+            // per-screen (leanStartDp) so controls clear the borderless sidebar rail.
+            if (lean) setPadding(dp(leanStartDp), dp(6), dp(12), dp(8)) else setPadding(dp(28), dp(10), dp(24), dp(20))
+            // A wide element (the handoff graph) uses a negative start margin to reach back past
+            // the lean indent; don't clip it to the padding box.
+            clipToPadding = false
         }
         // Cleared before the header so a header-line toggle's width probe survives to the sizing
         // pass below (it registers here, ahead of build()).
@@ -186,12 +194,15 @@ class CrossoverDashboardBuilder(
     }
 
     /** Embeds an arbitrary view (e.g. an illustrative diagram) inside the current section card. */
-    fun addCustomView(view: View, topMarginDp: Int = 4, bottomMarginDp: Int = 10) {
+    fun addCustomView(view: View, topMarginDp: Int = 4, bottomMarginDp: Int = 10, startMarginDp: Int = 0) {
         currentContent.addView(
             view,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = dp(topMarginDp)
                 bottomMargin = dp(bottomMarginDp)
+                // Negative pulls a wide element (the handoff graph) back out past the panel's
+                // lean left indent so it reads wider than the control rows below it.
+                marginStart = dp(startMarginDp)
             },
         )
     }
