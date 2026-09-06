@@ -27,9 +27,10 @@ import kotlin.math.roundToInt
  * Dedicated Crossovers & Tilt screen using the shared BMW dashboard skin. Swipes between three
  * pages -- Crossover, Tilt, and Mono Bass. Page 1 is the interactive [CrossoverHandoffSurface]
  * (draggable Low / Mid HPF / Mid LPF corners over the live low/mid/sum response, with a flat-sum
- * readout) plus the two rows that don't belong on the graph -- Subsonic and one linked Mid
- * all-pass alignment control -- and a deep link to the full per-output All-pass screen. The
- * visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
+ * readout) plus numeric rows -- each with its own on/off switch -- for Subsonic, Mid LPF, Mono
+ * Bass and the linked Mid all-pass alignment, and a deep link to the full per-output All-pass
+ * screen. The visible Low/Mid controls stay linked while mirroring into independent L/R runtime
+ * config.
  * All four panels render in `lean` mode (no card, thin header) so the head unit's fold isn't
  * eaten by chrome.
  * (A fourth Pultec-style bass EQ page briefly lived here between Tilt and Mono Bass; it was
@@ -103,9 +104,9 @@ class CrossoverTiltFragment : Fragment() {
         val crossoversPage = page {
             // One "Crossover" object: an interactive Low/Mid handoff graph with three draggable
             // corners (Low, Mid HPF, Mid LPF) and a live flat-sum readout, replacing the old
-            // Subsonic + Lowpass/Highpass/Mid-LPF slider stack. Only the rows that don't belong
-            // on the graph stay below it -- Subsonic, and the one linked Mid all-pass alignment
-            // control -- plus a deep link to the full per-output All-pass screen.
+            // Lowpass/Highpass slider pair. Below it, the numeric rows with their own on/off
+            // switches -- Subsonic, Mid LPF, Mono Bass and the linked Mid all-pass alignment --
+            // plus a deep link to the full per-output All-pass screen.
             dashboardPanel("", null, lean = true, leanStartDp = 80) {
                 val surface = CrossoverHandoffSurface(requireContext()).apply {
                     bind(values, peqState)
@@ -119,6 +120,9 @@ class CrossoverTiltFragment : Fragment() {
                 // highpass was already LR4-only natively; the low band was matched to it.
                 sectionHeader("LR4 · 24 dB/oct", accentColor = Color.rgb(150, 158, 168), textSize = 11f, showDivider = false)
 
+                // Each of the three protection/bass-management stages keeps its own inline
+                // on/off switch here so it can be bypassed without hunting for it -- the graph
+                // handle can enable the Mid LPF but only this switch turns it back off.
                 addSliderRow(
                     getString(R.string.bmw_dsp_subsonic_freq),
                     NativeBmwDspValues.INDEX_SUBSONIC_FREQ,
@@ -126,6 +130,19 @@ class CrossoverTiltFragment : Fragment() {
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                     toggleIndex = NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
                     toggleMirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
+                )
+                addSliderRow(
+                    "Mid lowpass freq", NativeBmwDspValues.INDEX_MID_LPF_FREQ,
+                    1500f, 8000f, 50f, "Hz",
+                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
+                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
+                    toggleIndex = NativeBmwDspValues.INDEX_MID_LPF_ENABLED,
+                )
+                addSliderRow(
+                    getString(R.string.bmw_dsp_mono_bass_freq),
+                    NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
+                    40f, 120f, 1f, "Hz",
+                    toggleIndex = NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
                 )
                 addSliderRow(
                     "Mid align (all-pass)", midLeftAllPassBase + 2,
