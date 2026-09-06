@@ -82,7 +82,7 @@ class OutputAllPassFragment : Fragment() {
         // used to be, on the order-dropdown row; the "Section N" headers and the card subtitle
         // were dropped to keep both sections on screen without scrolling.
         fun outputPage(title: String, output: Int, bandColor: Int, sliderColor: Int): View = page {
-            dashboardPanel(title, null, titleColor = bandColor, lean = true) {
+            dashboardPanel(title, null, titleColor = bandColor, lean = true, leanStartDp = 40) {
                 repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
                     val base = NativeBmwDspValues.INDEX_ALL_PASS +
                         (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
