@@ -1,7 +1,6 @@
 package app.siphondsp.fragment
 
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Bundle
@@ -116,12 +115,11 @@ class CrossoverTiltFragment : Fragment() {
                     bind(values, peqState)
                 }
                 // Graph sits 40dp left of the control rows below (panel indent is 80dp) so it
-                // reads wider without crowding the rows against the sidebar.
-                addCustomView(surface, topMarginDp = 2, bottomMarginDp = 2, startMarginDp = -40)
-
-                // Fixed readout, not a selector: both corners are LR4 (24 dB/oct). The mid
-                // highpass was already LR4-only natively; the low band was matched to it.
-                sectionHeader("LR4 · 24 dB/oct", accentColor = Color.rgb(150, 158, 168), textSize = 11f, showDivider = false)
+                // reads wider without crowding the rows against the sidebar. bottomMargin (4dp)
+                // plus the slider row's own 2dp top padding leaves exactly 6dp to the first
+                // slider -- both corners are a fixed LR4 (24 dB/oct) readout, so the old
+                // "LR4 · 24 dB/oct" sectionHeader that used to sit here was pure vertical cost.
+                addCustomView(surface, topMarginDp = 0, bottomMarginDp = 4, startMarginDp = -40)
 
                 addSliderRow(
                     "Lowpass freq (LR4)", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,

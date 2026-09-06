@@ -29,6 +29,17 @@
                 app:contentInsetEndWithActions="24dp"
                 app:titleCentered="true" />
 
+            <!-- Persistent bypass-state info (Tilt / Mono Bass / MBC / Limiter), riding the
+                 toolbar line itself between the back arrow and the centred title: no strip,
+                 no background, no extra row. Moved up from the bottom of the content column so
+                 that space goes back to the workspace. See DspStatusStrip. -->
+            <app.siphondsp.view.DspStatusStrip
+                android:id="@+id/dsp_status_strip"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="56dp" />
+
             <!-- DspPager's numbered page toggle (Gains & Delay, Crossovers & Tilt, Compressor,
                  All-pass) docks here when a fragment provides it, floating over the toolbar just
                  left of its power icon, above the tri-colour stripe below. Empty/gone on
@@ -92,6 +103,9 @@
              into one continuous dsp_workspace_content backdrop image now, so a separately-drawn
              seam line would just streak a foreign colour across the art instead of anchoring two
              genuinely separate surfaces the way it did against the old two-piece background. -->
+        <!-- Bottom-constrained straight to the parent now that the bypass-state strip no longer
+             sits below it: that row moved up onto the toolbar line (see the AppBarLayout
+             above), handing this space back to the workspace. -->
         <FrameLayout
             android:id="@+id/params"
             android:name="androidx.navigation.fragment.NavHostFragment"
@@ -100,22 +114,6 @@
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/dsp_status_strip" />
-
-        <!-- Persistent bypass-state strip: spans the content column (right of the sidebar to the
-             far edge), pinned to the bottom. Opaque so the workspace backdrop art behind it
-             doesn't bleed through. See DspStatusStrip. The sidebar stays full-height (its
-             714:3258 ratio drives its width, and the baked-in tile click targets must not
-             shift), so the strip simply overlays the bottom of the backdrop to its right. -->
-        <app.siphondsp.view.DspStatusStrip
-            android:id="@+id/dsp_status_strip"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:minHeight="34dp"
-            android:layout_marginStart="40dp"
-            android:background="@color/dsp_workspace_header_bg"
-            app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
-            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>

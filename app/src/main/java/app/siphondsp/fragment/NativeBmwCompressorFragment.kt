@@ -170,7 +170,8 @@ class NativeBmwCompressorFragment : Fragment() {
                 secondLabel = "Stereo link",
                 secondIndex = idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK),
             )
-            addCustomView(meter)
+            // topMargin 1dp (default 4) -- trims 3dp between the "Band N" header and the meter.
+            addCustomView(meter, topMarginDp = 1)
             addSliderRow("Threshold", idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD), -48f, 0f, .5f, "dB")
             addSliderRow("Ratio", idx(NativeBmwDspValues.MBC_FIELD_RATIO), 1f, 20f, .1f, ":1")
             addSliderRow("Soft knee", idx(NativeBmwDspValues.MBC_FIELD_KNEE), 0f, 24f, 1f, "dB")
