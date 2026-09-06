@@ -70,28 +70,20 @@ class CrossoverDashboardBuilder(
         // Vertical gap between the header row and the first content row. Bumped up on the roomy
         // single-panel pages (Tonality tilt, Mono Bass).
         topContentGapDp: Int = 2,
+        // Full-bleed mode for the dense head-unit screens (Crossovers & Tilt, Output all-pass,
+        // Compressor, Gains' Output page): drops the MaterialCardView and its outer margins,
+        // shrinks the 18f header to a thin 13f strip, and tightens the content padding, so the
+        // last control row clears the fold without scrolling. Default false keeps the glass card
+        // for every other call site (Routing, Gains' diagram page, sectionCard()).
+        lean: Boolean = false,
         build: CrossoverDashboardBuilder.() -> Unit,
     ) {
-        // Transparent, not its own copy of the photo background: the workspace's own content
-        // area already paints that once, full-screen (DspCrossNavBar.populate()'s per-destination
-        // backdrop, on R.id.dsp_workspace_content) -- a card
-        // painting an independent opaque copy across its own (smaller) bounds both hides that
-        // real background behind an opaque duplicate and, since each card gets its own pinned
-        // M-badge, shrinks the badge down to card scale instead of it reading at one full-screen
-        // size. Text, value boxes, sliders, and any live visualizer keep their own solid
-        // backgrounds regardless -- only the card's own body becomes see-through.
-        val card = MaterialCardView(context).apply {
-            radius = dp(7).toFloat()
-            cardElevation = 0f
-            strokeWidth = 0
-            setCardBackgroundColor(Color.TRANSPARENT)
-        }
-
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             // Tight top pad -- the pages that use this skin (Crossovers & Tilt especially) need
-            // their last row to clear the fold without scrolling on the head unit.
-            setPadding(dp(28), dp(10), dp(24), dp(20))
+            // their last row to clear the fold without scrolling on the head unit. lean trims it
+            // further since there's no card inset around it any more.
+            if (lean) setPadding(dp(8), dp(6), dp(8), dp(8)) else setPadding(dp(28), dp(10), dp(24), dp(20))
         }
         // Cleared before the header so a header-line toggle's width probe survives to the sizing
         // pass below (it registers here, ahead of build()).
@@ -102,7 +94,7 @@ class CrossoverDashboardBuilder(
         if (title.isNotBlank()) {
             val titleView = TextView(context).apply {
                 text = title
-                textSize = 18f
+                textSize = if (lean) 13f else 18f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(titleColor ?: Color.WHITE)
             }
@@ -145,19 +137,48 @@ class CrossoverDashboardBuilder(
             pendingTitleBoxes.forEach { it.layoutParams.width = boxWidth }
         }
 
-        card.addView(content)
-        root.addView(
-            card,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                marginStart = dp(10)
-                marginEnd = dp(10)
-                topMargin = dp(8)
-                bottomMargin = dp(10)
-            },
-        )
+        if (lean) {
+            // No card, no side margins -- the content sits straight on the workspace backdrop so
+            // the grid runs edge to edge. Just a hair of vertical breathing room between panels.
+            root.addView(
+                content,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    topMargin = dp(2)
+                    bottomMargin = dp(4)
+                },
+            )
+        } else {
+            // Transparent, not its own copy of the photo background: the workspace's own content
+            // area already paints that once, full-screen (DspCrossNavBar.populate()'s
+            // per-destination backdrop, on R.id.dsp_workspace_content) -- a card painting an
+            // independent opaque copy across its own (smaller) bounds both hides that real
+            // background behind an opaque duplicate and, since each card gets its own pinned
+            // M-badge, shrinks the badge down to card scale instead of it reading at one
+            // full-screen size. Text, value boxes, sliders, and any live visualizer keep their
+            // own solid backgrounds regardless -- only the card's own body becomes see-through.
+            val card = MaterialCardView(context).apply {
+                radius = dp(7).toFloat()
+                cardElevation = 0f
+                strokeWidth = 0
+                setCardBackgroundColor(Color.TRANSPARENT)
+            }
+            card.addView(content)
+            root.addView(
+                card,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                    topMargin = dp(8)
+                    bottomMargin = dp(10)
+                },
+            )
+        }
     }
 
     fun sectionCard(title: String, subtitle: String? = null, titleColor: Int? = null, build: CrossoverDashboardBuilder.() -> Unit) {

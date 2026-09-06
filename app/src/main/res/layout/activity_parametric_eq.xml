@@ -96,10 +96,25 @@
             android:id="@+id/params"
             android:name="androidx.navigation.fragment.NavHostFragment"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/dsp_status_strip" />
+
+        <!-- Persistent bypass-state strip: spans the content column (right of the sidebar to the
+             far edge), pinned to the bottom. Opaque so the workspace backdrop art behind it
+             doesn't bleed through. See DspStatusStrip. The sidebar stays full-height (its
+             714:3258 ratio drives its width, and the baked-in tile click targets must not
+             shift), so the strip simply overlays the bottom of the backdrop to its right. -->
+        <app.siphondsp.view.DspStatusStrip
+            android:id="@+id/dsp_status_strip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:minHeight="34dp"
+            android:background="@color/dsp_workspace_header_bg"
+            app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
