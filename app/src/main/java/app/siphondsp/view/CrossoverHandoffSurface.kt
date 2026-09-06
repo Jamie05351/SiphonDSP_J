@@ -81,13 +81,15 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     private val dashed = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
 
     // The slider rows on this page write the fragment's config array and broadcast; the graph
-    // keeps its own copy, so without this it only caught up on the next fragment rebuild.
+    // keeps its own copy, so without this it only caught up on the next fragment rebuild. The
+    // payload carries the whole config array, so take it straight from the intent -- no disk
+    // read on the drag path -- and keep the existing PEQ snapshot (a crossover slider can't
+    // change it; the fragment re-binds with a fresh one on resume).
     private val configReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            val updated = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
+            intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
                 ?.takeIf { it.size == BmwSignalChain.VALUE_COUNT }
-                ?: NativeBmwDspValues.load(context)
-            bind(updated, BmwPeqState.load(context))
+                ?.let { bind(it, peqState) }
         }
     }
 
