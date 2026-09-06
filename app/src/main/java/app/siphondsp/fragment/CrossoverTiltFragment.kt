@@ -27,10 +27,10 @@ import kotlin.math.roundToInt
  * pages -- Crossover, Tilt, and Mono Bass. Page 1 is the read-only [CrossoverHandoffSurface]
  * (low/mid/sum response, corner markers, subsonic roll-off and the Mono Bass cue, with a
  * flat-sum readout) plus the numeric slider rows that actually set things: Lowpass and Highpass
- * crossover frequencies, Subsonic, Mono below, and the linked Mid all-pass alignment -- each
- * with its own Hz value box / on-off switch -- and a deep link to the full per-output All-pass
- * screen. The visible Low/Mid controls stay linked while mirroring into independent L/R runtime
- * config.
+ * crossover frequencies, Subsonic, and the linked Mid all-pass alignment -- each with its own
+ * Hz value box / on-off switch -- and a deep link to the full per-output All-pass screen. Mono
+ * Bass keeps its own page in this pager, so its frequency slider isn't duplicated on page 1.
+ * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
  * All four panels render in `lean` mode (no card, thin header) so the head unit's fold isn't
  * eaten by chrome.
  * (A fourth Pultec-style bass EQ page briefly lived here between Tilt and Mono Bass; it was
@@ -108,8 +108,9 @@ class CrossoverTiltFragment : Fragment() {
         val crossoversPage = page {
             // Read-only [CrossoverHandoffSurface] as the picture; the numeric rows below it do
             // the tuning -- Lowpass and Highpass crossover frequencies (with Hz value boxes),
-            // then Subsonic, Mono below, and the linked Mid all-pass alignment (each with its
-            // own on/off switch), plus a deep link to the full per-output All-pass screen.
+            // then Subsonic and the linked Mid all-pass alignment (each with its own on/off
+            // switch), plus a deep link to the full per-output All-pass screen. Mono Bass has
+            // its own dedicated page in this pager, so it isn't repeated here.
             dashboardPanel("", null, lean = true, leanStartDp = 80) {
                 val surface = CrossoverHandoffSurface(requireContext()).apply {
                     bind(values, peqState)
@@ -135,8 +136,8 @@ class CrossoverTiltFragment : Fragment() {
                     accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
                     sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
                 )
-                // Subsonic / Mono below keep their own inline on/off switch so they can be
-                // bypassed without leaving this page.
+                // Subsonic keeps its own inline on/off switch so it can be bypassed without
+                // leaving this page.
                 addSliderRow(
                     getString(R.string.bmw_dsp_subsonic_freq),
                     NativeBmwDspValues.INDEX_SUBSONIC_FREQ,
@@ -144,12 +145,6 @@ class CrossoverTiltFragment : Fragment() {
                     mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
                     toggleIndex = NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
                     toggleMirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_freq),
-                    NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
-                    40f, 120f, 1f, "Hz",
-                    toggleIndex = NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
                 )
                 addSliderRow(
                     "Mid align (all-pass)", midLeftAllPassBase + 2,
