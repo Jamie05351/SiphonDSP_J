@@ -1,7 +1,10 @@
 package app.siphondsp.view
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
@@ -17,6 +20,9 @@ import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -60,6 +66,11 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     private val sumPaint = strokePaint(Color.WHITE, 3.1f, 255)
     private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f * density }
     private val handleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val monoShadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = BmwDashboardSkin.LIGHT_BLUE
+        alpha = 26
+    }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         textSize = 10f * resources.displayMetrics.scaledDensity
@@ -132,6 +143,19 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
         }
     }
 
+    // Sliders and toggles on this page write the fragment's own config array and broadcast; the
+    // graph keeps its own copy, so without this it only caught up on the next fragment rebuild.
+    // Re-bind on every config broadcast (skipped mid-drag -- the drag already updates us).
+    private val configReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (dragging) return
+            val updated = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
+                ?.takeIf { it.size == BmwSignalChain.VALUE_COUNT }
+                ?: NativeBmwDspValues.load(context)
+            bind(updated, BmwPeqState.load(context))
+        }
+    }
+
     /** Copies in a fresh config + PEQ snapshot and redraws. */
     fun bind(newValues: FloatArray, newPeqState: BmwPeqState) {
         if (newValues.size == BmwSignalChain.VALUE_COUNT) values = newValues.copyOf()
@@ -145,9 +169,15 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), resolveSize(desiredHeight, heightMeasureSpec))
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        context.registerLocalReceiver(configReceiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+    }
+
     override fun onDetachedFromWindow() {
         dragging = false
         removeCallbacks(frameLoop)
+        context.unregisterLocalReceiver(configReceiver)
         super.onDetachedFromWindow()
     }
 
@@ -164,11 +194,33 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
         calculator.compute(values, peqState, curves)
 
         drawGrid(canvas, left, right, top, bottom)
+        drawMonoBass(canvas, left, right, top, bottom)
         drawCurve(canvas, left, right, top, bottom, ::lowAt, lowPaint)
         drawCurve(canvas, left, right, top, bottom, ::midAt, midPaint)
         drawCurve(canvas, left, right, top, bottom, ::sumAt, sumPaint)
         drawHandles(canvas, left, right, top, bottom)
         drawFlatness(canvas, right, top)
+    }
+
+    /**
+     * Display-only cue: below the Mono Bass corner the low end is summed to mono. The calculator
+     * models that branch under an L=R assumption so there's no magnitude curve to draw for it
+     * (see [MonoBassCue]); a shaded band up to the corner plus a marker makes "mono below N Hz"
+     * visible on the graph.
+     */
+    private fun drawMonoBass(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
+        if (!MonoBassCue.isActive(values)) return
+        val hz = MonoBassCue.frequency(values, MAX_HZ)
+        val cornerX = hzToX(hz.toFloat(), left, right).coerceIn(left, right)
+        canvas.drawRect(left, top, cornerX, bottom, monoShadePaint)
+        handlePaint.color = BmwDashboardSkin.LIGHT_BLUE
+        handlePaint.alpha = 150
+        handlePaint.pathEffect = dashed
+        canvas.drawLine(cornerX, top, cornerX, bottom, handlePaint)
+        handlePaint.pathEffect = null
+        labelPaint.color = BmwDashboardSkin.LIGHT_BLUE
+        canvas.drawText("MONO ${hz.roundToInt()} Hz", left + 4f * density, bottom - 4f * density, labelPaint)
+        labelPaint.color = Color.WHITE
     }
 
     private fun drawGrid(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
@@ -177,7 +229,7 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
             canvas.drawLine(left, y, right, y, gridPaint)
         }
         labelPaint.alpha = 140
-        floatArrayOf(50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f).forEach { hz ->
+        floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f).forEach { hz ->
             val x = hzToX(hz, left, right)
             canvas.drawLine(x, top, x, bottom, gridPaint)
             val label = if (hz >= 1000f) "${(hz / 1000f).roundToInt()}k" else hz.roundToInt().toString()
@@ -340,7 +392,9 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0
-        private const val MIN_HZ = 20.0
+        // Runs down to 10 Hz (not 20) so the Subsonic high-pass, whose corner is 20-60 Hz, has
+        // room to show its roll-off below the corner instead of being clipped at the axis edge.
+        private const val MIN_HZ = 10.0
         private const val MAX_HZ = 20_000.0
         private const val MIN_DB = -18f
         private const val MAX_DB = 12f
