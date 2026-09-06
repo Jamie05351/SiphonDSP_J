@@ -133,6 +133,7 @@ class NativeBmwCompressorFragment : Fragment() {
         CrossoverDashboardBuilder(ctx, masterRoot, values, onChanged).dashboardPanel(
             "Multiband compressor",
             "Pre-crossover, 4 bands. Off = fully bypassed.",
+            lean = true,
         ) {
             addSliderRow(
                 "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f, 100f, 1f, "%",
@@ -161,7 +162,7 @@ class NativeBmwCompressorFragment : Fragment() {
         // Blank dashboardPanel title/subtitle: the frequency-range subheading was dropped, and
         // the band's own title now lives in titleRowWithSwitches below, alongside its enable and
         // Stereo link switches.
-        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("", null) {
+        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("", null, lean = true) {
             titleRowWithSwitches(
                 "Band ${band + 1}",
                 enabledIndex = idx(NativeBmwDspValues.MBC_FIELD_ENABLED),
@@ -192,7 +193,7 @@ class NativeBmwCompressorFragment : Fragment() {
         }
         val lowMeter = MbcBandGrMeter(ctx).also { lowBusGrMeter = it }
         val midMeter = MbcBandGrMeter(ctx).also { midBusGrMeter = it }
-        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("Driver protection", null) {
+        CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("Driver protection", null, lean = true) {
             sectionHeader(
                 "Low bus", BmwDashboardSkin.M_BLUE,
                 toggleIndex = NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,

@@ -155,7 +155,7 @@ class GainLimiterFragment : Fragment() {
 
         val limiterGrMeter = MbcBandGrMeter(requireContext()).also { limiterMeter = it }
         val outputPage = page {
-            dashboardPanel("Output", null) {
+            dashboardPanel("Output", null, lean = true) {
                 addSliderRow(
                     getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
                     accentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
@@ -171,10 +171,10 @@ class GainLimiterFragment : Fragment() {
                     accentColor = BmwDashboardSkin.M_GREEN,
                     sliderAccentColor = BmwDashboardSkin.M_GREEN,
                 )
-                // Master limiter: its own header (18f, matching "Output" above) carrying the
-                // enable switch, then the threshold slider under it.
+                // Master limiter: its own header (13f, matching the lean "Output" title above)
+                // carrying the enable switch, then the threshold slider under it.
                 sectionHeader(
-                    "Limiter", accentColor = BmwDashboardSkin.M_BLUE, textSize = 18f, showDivider = false,
+                    "Limiter", accentColor = BmwDashboardSkin.M_BLUE, textSize = 13f, showDivider = false,
                     toggleIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
                 )
                 addSliderRow(
