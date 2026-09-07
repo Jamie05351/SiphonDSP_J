@@ -193,8 +193,8 @@ class NativeBmwCompressorFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(2), dp(4), dp(8))
         }
-        val lowMeter = MbcBandGrMeter(ctx).also { lowBusGrMeter = it }
-        val midMeter = MbcBandGrMeter(ctx).also { midBusGrMeter = it }
+        val lowMeter = MbcBandGrMeter(ctx).apply { stage = MbcBandGrMeter.Stage.LIMITER }.also { lowBusGrMeter = it }
+        val midMeter = MbcBandGrMeter(ctx).apply { stage = MbcBandGrMeter.Stage.LIMITER }.also { midBusGrMeter = it }
         CrossoverDashboardBuilder(ctx, root, values, onChanged).dashboardPanel("Driver protection", null, lean = true, leanStartDp = 80) {
             sectionHeader(
                 "Low bus", BmwDashboardSkin.M_BLUE,
