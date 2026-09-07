@@ -276,10 +276,10 @@ object NativeBmwDspValues {
         // --- Multiband compressor (144..181), ships DISABLED ---
         0f, // 144 enabled
         100f, // 145 dry/wet mix %
-        120f, 500f, 4000f, // 146..148 crossover splits: sub|warmth|body|air
+        80f, 500f, 4000f, // 146..148 crossover splits: sub|warmth|body|air
         // Per band: enabled, threshold dBFS, ratio, knee dB, attack ms, release ms, makeup dB, stereoLink.
-        0f, -24f, 2f, 6f, 15f, 150f, 0f, 1f, // 149..156 band 0 -- sub / boom (< 120 Hz)
-        0f, -20f, 2f, 6f, 20f, 180f, 0f, 1f, // 157..164 band 1 -- warmth / boxiness (120..500)
+        0f, -24f, 2f, 6f, 15f, 150f, 0f, 1f, // 149..156 band 0 -- sub / boom (< 80 Hz)
+        0f, -20f, 2f, 6f, 20f, 180f, 0f, 1f, // 157..164 band 1 -- warmth / boxiness (80..500)
         0f, -18f, 2f, 6f, 15f, 150f, 0f, 1f, // 165..172 band 2 -- body / honk (500..4k)
         0f, -24f, 2f, 6f, 5f, 80f, 0f, 1f, // 173..180 band 3 -- presence / air (> 4k)
         0f, // 181 MBC/limiter migration marker (0 = seed the block on next load)

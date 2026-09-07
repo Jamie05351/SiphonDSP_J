@@ -253,7 +253,7 @@ class NativeBmwDspValuesTest {
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED], 0f)
         assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MBC_MIGRATED], 0f)
         // Crossover splits + band layout come back at their shipped defaults.
-        assertEquals(120f, loaded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
+        assertEquals(80f, loaded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
         assertEquals(500f, loaded[NativeBmwDspValues.INDEX_MBC_XO_1], 0f)
         assertEquals(4000f, loaded[NativeBmwDspValues.INDEX_MBC_XO_2], 0f)
         assertEquals(
@@ -351,7 +351,7 @@ class NativeBmwDspValuesTest {
         assertEquals(-4.5f, padded[NativeBmwDspValues.INDEX_HEADROOM], 0f)
         assertEquals(1f, padded[NativeBmwDspValues.INDEX_DELAY_LINKED], 0f)
         assertEquals(0f, padded[NativeBmwDspValues.INDEX_MBC_ENABLED], 0f)
-        assertEquals(120f, padded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
+        assertEquals(80f, padded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
         assertEquals(100f, padded[NativeBmwDspValues.INDEX_MBC_MIX], 0f)
     }
 }

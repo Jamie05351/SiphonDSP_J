@@ -71,7 +71,7 @@ inline std::array<float, kConfigSize> defaultConfig() {
         // 143 link L/R delay (UI only)
         0.f,
         // 144..148 MBC enabled, mix %, xo0, xo1, xo2
-        0.f, 100.f, 120.f, 500.f, 4000.f,
+        0.f, 100.f, 80.f, 500.f, 4000.f,
         // 149..180 MBC bands 0..3 x [enabled, threshold, ratio, knee, attack, release, makeup, stereoLink]
         0.f, -24.f, 2.f, 6.f, 15.f, 150.f, 0.f, 1.f,
         0.f, -20.f, 2.f, 6.f, 20.f, 180.f, 0.f, 1.f,
