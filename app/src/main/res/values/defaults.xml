@@ -37,7 +37,9 @@
     <bool name="default_audioformat_optimization_benchmark" translatable="false">false</bool>
 
     <!-- Device profiles -->
-    <bool name="default_device_profiles_enable" translatable="false">false</bool>
+    <!-- Read at runtime via Preferences.getDefault() -> Resources.getIdentifier("default_" + key),
+         which lint's static analysis can't see (BackupManager reads key_device_profiles_enable). -->
+    <bool name="default_device_profiles_enable" translatable="false" tools:ignore="UnusedResources">false</bool>
 
     <!-- Appearance -->
     <string name="default_appearance_theme_mode" translatable="false">0</string>

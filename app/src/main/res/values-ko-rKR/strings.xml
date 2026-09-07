@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">설정</string>
     <string name="action_revert">기본값으로 초기화</string>
     <string name="action_blocked_apps">제외된 앱</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">설치</string>
     <string name="update">업데이트</string>
-    <string name="unknown_error">알 수 없는 오류</string>
     <string name="actions">액션</string>
     <string name="warning">주의</string>
     <string name="success">성공</string>
     <string name="open">열기</string>
     <string name="close">닫기</string>
-    <string name="delete">삭제</string>
-    <string name="copy">복사</string>
-    <string name="paste">붙여넣기</string>
-    <string name="add">추가</string>
     <string name="yes">예</string>
     <string name="no">아니요</string>
     <string name="value_not_set">설정되지 않음</string>
-    <string name="undo">되돌리기</string>
-    <string name="redo">다시 하기</string>
     <string name="no_activity_found">작업을 처리할 액티비티를 찾을 수 없습니다</string>
     <string name="permission_allowed">허용됨</string>
     <string name="permission_not_allowed">허용되지 않음</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">삭제</string>
     <string name="filelibrary_unsupported_format_title">지원되지 않는 파일 형식</string>
     <string name="filelibrary_unsupported_format">선택된 파일에 올바른 파일 확장자가 없습니다.</string>
-    <string name="filelibrary_corrupted_title">지원되지 않거나 손상된 파일</string>
-    <string name="filelibrary_corrupted">선택된 파일에 사용 가능한 데이터가 없거나 손상되었습니다.</string>
     <string name="filelibrary_access_fail">디렉토리 액세스 실패</string>
     <string name="filelibrary_no_file_selected">선택된 파일이 없습니다</string>
     <string name="filelibrary_new_file_name">새 파일 이름</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">컨볼버: 고급 파형 편집에 잘못된 값이 포함되어 있습니다.</string>
     <string name="message_liveprog_compile_fail">Liveprog를 실행하지 못했습니다. 선택된 스크립트가 손상되었습니다. 디버깅하려면 스크립트 에디터를 사용해 주세요.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">추가</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">기본값 복원</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">스크립트 편집기</string>
-    <string name="editor_find_and_replace">찾기/바꾸기...</string>
-    <string name="editor_docs">도움말</string>
-    <string name="editor_open_fail">스크립트 파일이 존재하지 않거나 열 수 없습니다.</string>
-    <string name="editor_run">저장 및 실행</string>
-    <string name="editor_save">저장</string>
-    <string name="editor_liveprog_enabled">Liveprog가 자동으로 켜졌습니다.</string>
-    <string name="editor_replace_all">모두 바꾸기</string>
-    <string name="editor_replacement">대체</string>
-    <string name="editor_find_next_match">다음 일치 항목 찾기</string>
-    <string name="editor_find_previous_match">이전 일치 항목 찾기</string>
-    <string name="editor_search_keyword">검색</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP가 활성화되지 않음</string>
-    <string name="editor_engine_down">SiphonDSP가 비활성화되어 있으므로 스크립트를 실행할 수 없습니다. 스크립트를 실행하려면 SiphonDSP를 활성화해 주세요.</string>
-    <string name="editor_save_prompt_title">변경 사항을 저장하시겠습니까?</string>
-    <string name="editor_save_prompt">현재 스크립트에 저장되지 않은 변경 사항이 있습니다. 변경 사항을 저장 또는 삭제하시겠습니까?</string>
-    <string name="editor_script_launched">스크립트 실행됨</string>
-    <string name="editor_cannot_undo">되돌릴 작업이 없습니다.</string>
-    <string name="editor_cannot_redo">다시 실행할 작업이 없습니다.</string>
-    <string name="editor_text_size">글자 크기</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">제외된 앱</string>
     <string name="blocklist_add_exclusion_alt">제외할 어플리케이션 추가</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">현재 SiphonDSP 프리셋을 기본값으로 초기화하시겠습니까?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">임펄스 음답 가져오기</string>
-    <string name="intent_import_vdc">VDC 파일 가져오기</string>
     <string name="intent_import_mode_add">가져오기만</string>
     <string name="intent_import_mode_select">가져오기 및 활성화</string>
     <string name="intent_import_fail">파일 \'%1$s\' 가져오기 실패</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">이 앱을 여러분의 언어로 번역하는 것을 도와주세요! Crowdin의 프로젝트 웹 사이트를 방문하려면 여기를 탭 하세요.</string>
     <string name="translation_notice">번역 기여</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">업데이트 실패</string>
-    <string name="self_update_download_fail">업데이트 패키지 다운로드 실패. 인터넷 연결을 확인해 주세요. 세부 정보:%1$s</string>
-    <string name="self_update_install_fail">설치 실패. %1$s</string>
-    <string name="self_update_finished">업데이트 설치됨. 앱을 다시 시작하는 중입니다…</string>
     <string name="self_update_no_updates">현재 사용 가능한 새 업데이트 없음</string>
     <string name="self_update_notice">새 업데이트 사용 가능 (%1$s)</string>
     <string name="self_update_notice_summary">새 업데이트를 다운로드하고 설치하려면 여기를 탭 하세요.</string>
     <string name="self_update_notice_dismiss_install">지금 설치</string>
     <string name="self_update_notice_dismiss_snooze">나중에 다시 알림</string>
     <string name="self_update_notice_dismiss_skip">이 업데이트 건너뛰기</string>
-    <string name="self_update_state_downloading">다운로드 중...</string>
-    <string name="self_update_state_installing">설치 중...</string>
     <!-- Backups -->
     <string name="backup_restore_progress">백업 복구</string>
     <string name="backup_restore_error">백업 복구 실패</string>

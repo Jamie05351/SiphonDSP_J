@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <plurals name="nodes">
-        <item quantity="one">%d Knoten</item>
-        <item quantity="other">%d Knoten</item>
-    </plurals>
     <plurals name="unsupported_apps">
         <item quantity="one">%d nicht unterstützte App wurde automatisch ausgeschlossen. Tippen für Details.</item>
         <item quantity="other">%d nicht unterstützte Apps wurden automatisch ausgeschlossen. Tippen für Details.</item>

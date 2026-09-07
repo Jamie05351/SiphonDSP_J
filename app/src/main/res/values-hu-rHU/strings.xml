@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Beállítások</string>
     <string name="action_revert">Alapértelmezett beállítások visszaállítása</string>
     <string name="action_blocked_apps">Kizárt alkalmazások</string>
     <!-- Notification channels -->
@@ -38,22 +37,14 @@
     <!-- General purpose -->
     <string name="install">Telepítés</string>
     <string name="update">Frissítés</string>
-    <string name="unknown_error">Ismeretlen hiba</string>
     <string name="actions">Műveletek</string>
     <string name="warning">Figyelmeztetés</string>
     <string name="success">Siker</string>
     <string name="open">Megnyitás</string>
     <string name="close">Bezárás</string>
-    <string name="delete">Gomb: Törlés
-Törlés</string>
-    <string name="copy">Másolás</string>
-    <string name="paste">Beilleszt</string>
-    <string name="add">Hozzáadás</string>
     <string name="yes">Igen</string>
     <string name="no">Nem</string>
     <string name="value_not_set">Nincs beállítva</string>
-    <string name="undo">Visszavonás</string>
-    <string name="redo">Mégis végrehajt</string>
     <string name="no_activity_found">Nem található cselekvés a tett kezeléséhez</string>
     <string name="permission_allowed">Engedélyezve</string>
     <string name="permission_not_allowed">Nincs engedélyezve</string>
@@ -162,7 +153,6 @@ Törlés</string>
     <!-- File library preference -->
     <!-- SiphonDSP engine messages -->
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Hozzáadás</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
     <!-- Liveprog script editor -->

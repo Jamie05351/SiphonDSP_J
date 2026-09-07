@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Instellingen</string>
     <string name="action_revert">Terugzetten naar standaardinstellingen</string>
     <string name="action_blocked_apps">Uitgesloten apps</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Installeer</string>
     <string name="update">Bijwerken</string>
-    <string name="unknown_error">Onbekende fout</string>
     <string name="actions">Acties</string>
     <string name="warning">Waarschuwing</string>
     <string name="success">Succesvol</string>
     <string name="open">Open</string>
     <string name="close">Sluit</string>
-    <string name="delete">Verwijder</string>
-    <string name="copy">Kopiëer</string>
-    <string name="paste">Plak</string>
-    <string name="add">Voeg toe</string>
     <string name="yes">Ja</string>
     <string name="no">Nee</string>
     <string name="value_not_set">Niet ingesteld</string>
-    <string name="undo">Ongedaan maken</string>
-    <string name="redo">Opnieuw uitvoeren</string>
     <string name="no_activity_found">Geen Activity gevonden om de actie te verwerken</string>
     <string name="permission_allowed">Toegestaan</string>
     <string name="permission_not_allowed">Niet toegestaan</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Verwijder</string>
     <string name="filelibrary_unsupported_format_title">Niet-ondersteund bestandstype</string>
     <string name="filelibrary_unsupported_format">Het geselecteerde bestand heeft niet de juiste bestandsextensie.</string>
-    <string name="filelibrary_corrupted_title">Niet-ondersteund of beschadigd bestand</string>
-    <string name="filelibrary_corrupted">Het geselecteerde bestand bevat geen bruikbare gegevens of is beschadigd.</string>
     <string name="filelibrary_access_fail">Toegang tot map mislukt</string>
     <string name="filelibrary_no_file_selected">Geen bestand geselecteerd</string>
     <string name="filelibrary_new_file_name">Nieuwe bestandsnaam</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Convolueerder: Geavanceerde golfbewerking bevat ongeldige waarden.</string>
     <string name="message_liveprog_compile_fail">Uitvoeren van Liveprog is mislukt. Geselecteerde script is beschadigd. Gebruik de scripteditor voor het debuggen.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Voeg toe</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Standaardinstellingen terugzetten</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Script bewerker</string>
-    <string name="editor_find_and_replace">Zoek/vervang…</string>
-    <string name="editor_docs">Hulp</string>
-    <string name="editor_open_fail">Script bestand bestaat niet of kan niet worden geopend.</string>
-    <string name="editor_run">Opslaan en uitvoeren</string>
-    <string name="editor_save">Opslaan</string>
-    <string name="editor_liveprog_enabled">Liveprog is automatisch ingeschakeld.</string>
-    <string name="editor_replace_all">Vervang alles</string>
-    <string name="editor_replacement">Vervanging</string>
-    <string name="editor_find_next_match">Volgende match zoeken</string>
-    <string name="editor_find_previous_match">Vorige match zoeken</string>
-    <string name="editor_search_keyword">Zoeken</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP is niet actief</string>
-    <string name="editor_engine_down">Kan script niet uitvoeren omdat SiphonDSP uitgeschakeld is. Schakel SiphonDSP in om scripts uit te voeren.</string>
-    <string name="editor_save_prompt_title">Wijzigingen opslaan?</string>
-    <string name="editor_save_prompt">Het huidige script heeft niet-opgeslagen wijzigingen. Wilt u uw wijzigingen opslaan of deze negeren?</string>
-    <string name="editor_script_launched">Script gestart</string>
-    <string name="editor_cannot_undo">Niets om ongedaan te maken.</string>
-    <string name="editor_cannot_redo">Niets om opnieuw uit te voeren.</string>
-    <string name="editor_text_size">Tekstgrootte</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Uitgesloten apps</string>
     <string name="blocklist_add_exclusion_alt">Voeg toepassing toe om uit te sluiten</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Wilt u uw huidige SiphonDSP voorinstelling herstellen naar de standaardwaarden?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Importeer impuls reactie</string>
-    <string name="intent_import_vdc">Importeer VDC-bestand</string>
     <string name="intent_import_mode_add">Alleen importeren</string>
     <string name="intent_import_mode_select">Importeren en activeren</string>
     <string name="intent_import_fail">Kan het bestand \'%1$s\' niet importeren</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Help ons deze app te vertalen in uw taal! Tik hier om de project-site op Crowdin te bezoeken.</string>
     <string name="translation_notice">Bijdragen aan vertalingen</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Update mislukt</string>
-    <string name="self_update_download_fail">Downloaden van update pakket mislukt. Controleer uw internetverbinding. Details: %1$s</string>
-    <string name="self_update_install_fail">Installatie mislukt. %1$s</string>
-    <string name="self_update_finished">Update geïnstalleerd. De app wordt nu opnieuw gestart…</string>
     <string name="self_update_no_updates">Geen nieuwe updates beschikbaar op dit moment</string>
     <string name="self_update_notice">Nieuwe update beschikbaar (%1$s)</string>
     <string name="self_update_notice_summary">Tik hier om de nieuwe update te downloaden en te installeren.</string>
     <string name="self_update_notice_dismiss_install">Installeer nu</string>
     <string name="self_update_notice_dismiss_snooze">Herinner mij later</string>
     <string name="self_update_notice_dismiss_skip">Deze update overslaan</string>
-    <string name="self_update_state_downloading">Downloaden…</string>
-    <string name="self_update_state_installing">Installeren…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Back-up herstellen</string>
     <string name="backup_restore_error">Back-up herstellen mislukt</string>

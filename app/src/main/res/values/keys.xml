@@ -74,38 +74,18 @@
     <string name="key_misc_permission_auto_start" translatable="false">misc_permission_auto_start</string>
     <string name="key_misc_permission_restart_setup" translatable="false">misc_permission_restart_setup</string>
 
-    <!-- Script editor -->
-    <string name="key_editor_font_size" translatable="false">editor_font_size</string>
-
     <!-- Deprecated -->
     <string name="key_debug_database" translatable="false">debug_database</string>
 
-    <!-- Device profiles -->
-    <string name="key_profile_active" translatable="false">profile_active</string> <!-- static -->
-
     <!-- DSP -->
-
-
-
-
     <string name="key_peq_enable" translatable="false">peq_enable</string>
     <string name="key_peq_bands" translatable="false">peq_bands</string>
     <string name="key_peq_preamp" translatable="false">peq_preamp</string>
-
-
-
 
     <string name="key_convolver_enable" translatable="false">convolver_enable</string>
     <string name="key_convolver_file" translatable="false">convolver_file</string>
     <string name="key_convolver_mode" translatable="false">convolver_mode</string>
     <string name="key_convolver_adv_imp" translatable="false">convolver_adv_imp</string>
-
-
-
-    <string name="key_liveprog_enable" translatable="false">liveprog_enable</string>
-    <string name="key_liveprog_file" translatable="false">liveprog_file</string>
-    <string name="key_liveprog_params" translatable="false">liveprog_params</string> <!-- static -->
-    <string name="key_liveprog_edit" translatable="false">liveprog_edit</string> <!-- static -->
 
     <string name="key_limiter_threshold" translatable="false">limiter_threshold</string>
     <string name="key_limiter_release" translatable="false">limiter_release</string>

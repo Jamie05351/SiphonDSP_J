@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">设置</string>
     <string name="action_revert">重置为默认</string>
     <string name="action_blocked_apps">排除的应用程序</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">安装</string>
     <string name="update">更新</string>
-    <string name="unknown_error">未知错误</string>
     <string name="actions">动作</string>
     <string name="warning">警告</string>
     <string name="success">成功</string>
     <string name="open">打开</string>
     <string name="close">关闭</string>
-    <string name="delete">删除</string>
-    <string name="copy">复制</string>
-    <string name="paste">粘贴</string>
-    <string name="add">添加</string>
     <string name="yes">确定</string>
     <string name="no">取消</string>
     <string name="value_not_set">未设置</string>
-    <string name="undo">撤销</string>
-    <string name="redo">重做</string>
     <string name="no_activity_found">未找到处理动作的活动</string>
     <string name="permission_allowed">允许</string>
     <string name="permission_not_allowed">不允许</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">删除</string>
     <string name="filelibrary_unsupported_format_title">不支持的文件类型</string>
     <string name="filelibrary_unsupported_format">选中的文件没有正确的文件扩展名。</string>
-    <string name="filelibrary_corrupted_title">不支持或损坏的文件</string>
-    <string name="filelibrary_corrupted">选中的文件中没有可用的数据或数据已损坏。</string>
     <string name="filelibrary_access_fail">创建目录失败</string>
     <string name="filelibrary_no_file_selected">未选择文件</string>
     <string name="filelibrary_new_file_name">新文件名</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">脉冲反馈：高级波形编辑包含无效值。</string>
     <string name="message_liveprog_compile_fail">Liveprog 执行失败，选定的脚本已损坏，请使用脚本编辑器进行调试。</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">添加</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">重置为默认</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">脚本编辑器</string>
-    <string name="editor_find_and_replace">查找/替换…</string>
-    <string name="editor_docs">帮助</string>
-    <string name="editor_open_fail">脚本文件不存在或无法打开。</string>
-    <string name="editor_run">保存并运行</string>
-    <string name="editor_save">保存</string>
-    <string name="editor_liveprog_enabled">Liveprog 已自动开启。</string>
-    <string name="editor_replace_all">全部替换</string>
-    <string name="editor_replacement">替换项</string>
-    <string name="editor_find_next_match">匹配下一个</string>
-    <string name="editor_find_previous_match">匹配上一个</string>
-    <string name="editor_search_keyword">查找</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP 未激活</string>
-    <string name="editor_engine_down">由于 SiphonDSP 已禁用，无法运行脚本。请打开 SiphonDSP 执行脚本。</string>
-    <string name="editor_save_prompt_title">保存更改？</string>
-    <string name="editor_save_prompt">当前的脚本有未保存的更改。您要保存更改还是丢弃？</string>
-    <string name="editor_script_launched">脚本已启动</string>
-    <string name="editor_cannot_undo">没有什么可以撤消的。</string>
-    <string name="editor_cannot_redo">没有什么可以重做的。</string>
-    <string name="editor_text_size">文本大小</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">排除的应用程序</string>
     <string name="blocklist_add_exclusion_alt">添加排除的应用程序</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">是否要将当前的 SiphonDSP 预设重置为默认值？</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">导入脉冲响应</string>
-    <string name="intent_import_vdc">导入 VDC 文件</string>
     <string name="intent_import_mode_add">仅导入</string>
     <string name="intent_import_mode_select">导入并激活</string>
     <string name="intent_import_fail">导入文件“%1$s”失败</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">请帮助我们将此应用翻译成您的语言！点击这里访问 Crowdin 的项目网站。</string>
     <string name="translation_notice">贡献翻译</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">更新失败</string>
-    <string name="self_update_download_fail">下载更新包失败，请检查您的网络连接。\n详细信息： %1$s</string>
-    <string name="self_update_install_fail">安装失败。 %1$s</string>
-    <string name="self_update_finished">更新已安装，应用正在重启…</string>
     <string name="self_update_no_updates">目前没有可用的更新</string>
     <string name="self_update_notice">有更新可用 (%1$s)</string>
     <string name="self_update_notice_summary">点击这里下载并安装更新。</string>
     <string name="self_update_notice_dismiss_install">立即安装</string>
     <string name="self_update_notice_dismiss_snooze">稍后提醒我</string>
     <string name="self_update_notice_dismiss_skip">跳过此更新</string>
-    <string name="self_update_state_downloading">正在下载...</string>
-    <string name="self_update_state_installing">正在安装...</string>
     <!-- Backups -->
     <string name="backup_restore_progress">正在恢复备份</string>
     <string name="backup_restore_error">恢复备份失败</string>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Pengaturan</string>
     <string name="action_revert">Atur ulang ke pengaturan awal</string>
     <string name="action_blocked_apps">Pengecualian aplikasi</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Instal</string>
     <string name="update">Perbarui</string>
-    <string name="unknown_error">Kesalahan tidak diketahui</string>
     <string name="actions">Tindakan</string>
     <string name="warning">Peringatan</string>
     <string name="success">Berhasil</string>
     <string name="open">Buka</string>
     <string name="close">Tutup</string>
-    <string name="delete">Hapus</string>
-    <string name="copy">Salin</string>
-    <string name="paste">Tempel</string>
-    <string name="add">Tambah</string>
     <string name="yes">Ya</string>
     <string name="no">Tidak</string>
     <string name="value_not_set">Belum diatur</string>
-    <string name="undo">Urungkan</string>
-    <string name="redo">Ulangi</string>
     <string name="no_activity_found">Tidak ada Aktivitas untuk menangani aksi</string>
     <string name="permission_allowed">Diizinkan</string>
     <string name="permission_not_allowed">Tidak diizinkan</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Hapus</string>
     <string name="filelibrary_unsupported_format_title">Jenis file tidak didukung</string>
     <string name="filelibrary_unsupported_format">File yang dipilih punya ekstensi yang tidak tepat.</string>
-    <string name="filelibrary_corrupted_title">File rusak atau tidak didukung</string>
-    <string name="filelibrary_corrupted">File yang dipilih korup atau berisi data tidak dapat digunakan.</string>
     <string name="filelibrary_access_fail">Gagal mengakses direktori</string>
     <string name="filelibrary_no_file_selected">Tidak ada file yang dipilih</string>
     <string name="filelibrary_new_file_name">Nama file baru</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Convolver: Advanced waveform editing berisi nilai yang tidak valid.</string>
     <string name="message_liveprog_compile_fail">Ekseskusi Liveprog gagal, skrip yang dipilih rusak. Gunakan editor skrip untuk debugging.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Tambah</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Kembalikan ke awal</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Editor skrip</string>
-    <string name="editor_find_and_replace">Cari/ganti…</string>
-    <string name="editor_docs">Bantuan</string>
-    <string name="editor_open_fail">File skrip tidak ada atau tidak bisa dibuka.</string>
-    <string name="editor_run">Simpan dan jalankan</string>
-    <string name="editor_save">Simpan</string>
-    <string name="editor_liveprog_enabled">Liveprog dinyalakan secara otomatis.</string>
-    <string name="editor_replace_all">Ganti semua</string>
-    <string name="editor_replacement">Pengganti</string>
-    <string name="editor_find_next_match">Cari pencocokan berikut</string>
-    <string name="editor_find_previous_match">Cari pencocokan sebelum</string>
-    <string name="editor_search_keyword">Cari</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP tidak aktif</string>
-    <string name="editor_engine_down">Skrip tidak bisa dijalankan karena SiphonDSP nonaktif, aktifkan SiphonDSP terlebih dahulu.</string>
-    <string name="editor_save_prompt_title">Simpan perubahan?</string>
-    <string name="editor_save_prompt">Skrip saat ini mempunyai perubahan, apa anda ingin menyimpannya atau membuang perubahan?</string>
-    <string name="editor_script_launched">Skrip dijalankan</string>
-    <string name="editor_cannot_undo">Tidak ada yang dikembalikan.</string>
-    <string name="editor_cannot_redo">Tidak ada yang diulang.</string>
-    <string name="editor_text_size">Ukuran teks</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Pengecualian aplikasi</string>
     <string name="blocklist_add_exclusion_alt">Tambahkan aplikasi ke pengecualian</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Anda ingin menyetel ulang preset SiphonDSP saat ini ke nilai awal?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Impor respon impulse</string>
-    <string name="intent_import_vdc">Impor file VDC</string>
     <string name="intent_import_mode_add">Hanya impor</string>
     <string name="intent_import_mode_select">Impor dan aktifkan</string>
     <string name="intent_import_fail">Gagal mengimpor file \'%1$s\'</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Bantu kami menerjemahkan aplikasi ke bahasa anda! Tekan di sini untuk melihat situs project di Crowdin.</string>
     <string name="translation_notice">Kontribusi penerjemahan</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Pembaruan gagal</string>
-    <string name="self_update_download_fail">Gagal mengundung pembaruan, periksa koneksi internet anda. Detail: %1$s</string>
-    <string name="self_update_install_fail">Pemasangan gagal. %1$s</string>
-    <string name="self_update_finished">Pembaruan terpasang, aplikasi akan dimuat ulang…</string>
     <string name="self_update_no_updates">Tidak ada pembaruan untuk saat ini</string>
     <string name="self_update_notice">Pembaruan tersedia (%1$s)</string>
     <string name="self_update_notice_summary">Tekan di sini untuk memasang pembaruan terbaru.</string>
     <string name="self_update_notice_dismiss_install">Pasang sekarang</string>
     <string name="self_update_notice_dismiss_snooze">Ingatkan nanti</string>
     <string name="self_update_notice_dismiss_skip">Lewatkan pembaruan</string>
-    <string name="self_update_state_downloading">Mengunduh…</string>
-    <string name="self_update_state_installing">Memasang…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Memulihkan cadangan</string>
     <string name="backup_restore_error">Pemulihan gagal</string>

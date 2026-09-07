@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Nastavení</string>
     <string name="action_revert">Obnovit výchozí nastavení</string>
     <string name="action_blocked_apps">Vyloučené aplikace</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Instalovat</string>
     <string name="update">Aktualizovat</string>
-    <string name="unknown_error">Neznámá chyba</string>
     <string name="actions">Akce</string>
     <string name="warning">Upozornění</string>
     <string name="success">Úspěch</string>
     <string name="open">Otevřít</string>
     <string name="close">Zavřít</string>
-    <string name="delete">Odstranit</string>
-    <string name="copy">Kopírovat</string>
-    <string name="paste">Vložit</string>
-    <string name="add">Přidat</string>
     <string name="yes">Ano</string>
     <string name="no">Ne</string>
     <string name="value_not_set">Nenastaveno</string>
-    <string name="undo">Vrátit zpět</string>
-    <string name="redo">Obnovit</string>
     <string name="no_activity_found">Nebyla nalezena žádná aktivita pro zpracování akce</string>
     <string name="permission_allowed">Povoleno</string>
     <string name="permission_not_allowed">Nepovoleno</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Odstranit</string>
     <string name="filelibrary_unsupported_format_title">Nepodporovaný typ souboru</string>
     <string name="filelibrary_unsupported_format">Vybraný soubor nemá správnou příponu.</string>
-    <string name="filelibrary_corrupted_title">Nepodporovaný nebo poškozený soubor</string>
-    <string name="filelibrary_corrupted">Vybraný soubor neobsahuje žádná použitelná data nebo je poškozen.</string>
     <string name="filelibrary_access_fail">Přístup ke složce se nezdařil</string>
     <string name="filelibrary_no_file_selected">Žádný soubor nevybrán</string>
     <string name="filelibrary_new_file_name">Nový název souboru</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Konvoluce: Pokročilé úpravy vln obsahují neplatné hodnoty.</string>
     <string name="message_liveprog_compile_fail">Spuštění Liveprog skriptu se nezdařilo. Vybraný skript je poškozen. Prosím použijte editor skriptu pro doladění a opravu chyb.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Přidat</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Obnovit výchozí</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Editor skriptu</string>
-    <string name="editor_find_and_replace">Najít/nahradit…</string>
-    <string name="editor_docs">Pomoc</string>
-    <string name="editor_open_fail">Soubor skriptu neexistuje nebo jej nelze otevřít.</string>
-    <string name="editor_run">Uložit a spustit</string>
-    <string name="editor_save">Uložit</string>
-    <string name="editor_liveprog_enabled">Liveprog byl automaticky zapnut.</string>
-    <string name="editor_replace_all">Nahradit vše</string>
-    <string name="editor_replacement">Nahrazení</string>
-    <string name="editor_find_next_match">Najít další shodu</string>
-    <string name="editor_find_previous_match">Najít předchozí shodu</string>
-    <string name="editor_search_keyword">Hledat</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP není aktivní</string>
-    <string name="editor_engine_down">Skript nelze spustit, protože SiphonDSP je vypnut. Zapněte prosím SiphonDSP pro spuštění skriptů.</string>
-    <string name="editor_save_prompt_title">Uložit změny?</string>
-    <string name="editor_save_prompt">Aktuální skript obsahuje neuložené změny. Chcete uložit změny nebo je zahodit?</string>
-    <string name="editor_script_launched">Skript spuštěn</string>
-    <string name="editor_cannot_undo">Není co vrátit.</string>
-    <string name="editor_cannot_redo">Není co obnovit.</string>
-    <string name="editor_text_size">Velikost písma</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Vyloučené aplikace</string>
     <string name="blocklist_add_exclusion_alt">Přidat aplikaci k vyloučeným</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Chcete resetovat aktuální předvolbu SiphonDSP na výchozí hodnoty?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Importovat impulzní odezvu</string>
-    <string name="intent_import_vdc">Importovat VDC soubor</string>
     <string name="intent_import_mode_add">Pouze importovat</string>
     <string name="intent_import_mode_select">Importovat a aktivovat</string>
     <string name="intent_import_fail">Nepodařilo se importovat soubor „%1$s“</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Prosím, pomozte nám přeložit tuto aplikaci do vašeho jazyka! Klepnutím sem navštivte stránku projektu na Crowdin.</string>
     <string name="translation_notice">Přispějte k překladům</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Aktualizace selhala</string>
-    <string name="self_update_download_fail">Nepodařilo se stáhnout balíček aktualizací. Prosím zkontrolujte připojení k internetu. Podrobnosti: %1$s</string>
-    <string name="self_update_install_fail">Instalace selhala. %1$s</string>
-    <string name="self_update_finished">Aktualizace nainstalována. Aplikace se nyní restartuje…</string>
     <string name="self_update_no_updates">V tuto chvíli nejsou k dispozici žádné nové aktualizace</string>
     <string name="self_update_notice">Nová aktualizace k dispozici (%1$s)</string>
     <string name="self_update_notice_summary">Klepněte zde pro stáhnutí a instalaci nové aktualizace.</string>
     <string name="self_update_notice_dismiss_install">Instalovat nyní</string>
     <string name="self_update_notice_dismiss_snooze">Připomenout později</string>
     <string name="self_update_notice_dismiss_skip">Přeskočit tuto aktualizaci</string>
-    <string name="self_update_state_downloading">Stahování…</string>
-    <string name="self_update_state_installing">Instalace…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Obnovování zálohy</string>
     <string name="backup_restore_error">Obnovení zálohy selhalo</string>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Configuración</string>
     <string name="action_revert">Restablecer predeterminados</string>
     <string name="action_blocked_apps">Apps excluidas</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Instalar</string>
     <string name="update">Actualizar</string>
-    <string name="unknown_error">Error desconocido</string>
     <string name="actions">Acciones</string>
     <string name="warning">Advertencia</string>
     <string name="success">Éxito</string>
     <string name="open">Abrir</string>
     <string name="close">Cerrar</string>
-    <string name="delete">Eliminar</string>
-    <string name="copy">Copiar</string>
-    <string name="paste">Pegar</string>
-    <string name="add">Agregar</string>
     <string name="yes">Sí</string>
     <string name="no">No</string>
     <string name="value_not_set">No establecido</string>
-    <string name="undo">Deshacer</string>
-    <string name="redo">Rehacer</string>
     <string name="no_activity_found">No se ha encontrado actividad para manejar la acción</string>
     <string name="permission_allowed">Permitido</string>
     <string name="permission_not_allowed">No permitido</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Eliminar</string>
     <string name="filelibrary_unsupported_format_title">Tipo de archivo no compatible</string>
     <string name="filelibrary_unsupported_format">El archivo seleccionado no tiene la extensión de archivo correcta.</string>
-    <string name="filelibrary_corrupted_title">Archivo no soportado o dañado</string>
-    <string name="filelibrary_corrupted">El archivo seleccionado no contiene datos utilizables o está dañado.</string>
     <string name="filelibrary_access_fail">Error al acceder al directorio</string>
     <string name="filelibrary_no_file_selected">Ningún archivo seleccionado</string>
     <string name="filelibrary_new_file_name">Nombre del nuevo archivo</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Convolver: La edición avanzada de waveform contiene valores no válidos.</string>
     <string name="message_liveprog_compile_fail">La ejecución de Liveprog ha fallado. El script seleccionado está dañado. Por favor, utilice el editor de scripts para la depuración.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Agregar</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Restaurar predeterminados</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Editor de scripts</string>
-    <string name="editor_find_and_replace">Buscar/reemplazar…</string>
-    <string name="editor_docs">Ayuda</string>
-    <string name="editor_open_fail">El archivo de script no existe o no se puede abrir.</string>
-    <string name="editor_run">Guardar y ejecutar</string>
-    <string name="editor_save">Guardar</string>
-    <string name="editor_liveprog_enabled">Liveprog se ha activado automáticamente.</string>
-    <string name="editor_replace_all">Reemplazar todo</string>
-    <string name="editor_replacement">Reemplazo</string>
-    <string name="editor_find_next_match">Buscar la siguiente coincidencia</string>
-    <string name="editor_find_previous_match">Buscar coincidencia anterior</string>
-    <string name="editor_search_keyword">Buscar</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP no está activo</string>
-    <string name="editor_engine_down">No se puede ejecutar el script porque SiphonDSP está desactivado. Por favor, active SiphonDSP para ejecutar scripts.</string>
-    <string name="editor_save_prompt_title">¿Guardar cambios?</string>
-    <string name="editor_save_prompt">El script actual tiene cambios sin guardar. ¿Desea guardar los cambios o descartarlos?</string>
-    <string name="editor_script_launched">Script iniciado</string>
-    <string name="editor_cannot_undo">Nada que deshacer.</string>
-    <string name="editor_cannot_redo">Nada que rehacer.</string>
-    <string name="editor_text_size">Tamaño del texto</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Apps excluidas</string>
     <string name="blocklist_add_exclusion_alt">Añadir aplicación para excluir</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">¿Desea restablecer el preajuste actual de SiphonDSP a los valores por defecto?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Importar respuesta de impulso</string>
-    <string name="intent_import_vdc">Importar archivo VDC</string>
     <string name="intent_import_mode_add">Solo importar</string>
     <string name="intent_import_mode_select">Importar y activar</string>
     <string name="intent_import_fail">Error al importar archivo \'%1$s\'</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">¡Ayúdanos a traducir esta aplicación a tu idioma! Pulsa aquí para visitar la página del proyecto en Crowdin.</string>
     <string name="translation_notice">Contribuir con las traducciones</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Actualización fallida</string>
-    <string name="self_update_download_fail">Error al descargar paquete de actualización. Por favor, compruebe su conexión a internet. Detalles: %1$s</string>
-    <string name="self_update_install_fail">Instalación fallida. %1$s</string>
-    <string name="self_update_finished">Actualización instalada. La aplicación se está reiniciando…</string>
     <string name="self_update_no_updates">No hay actualizaciones disponibles en este momento</string>
     <string name="self_update_notice">Nueva actualización disponible (%1$s)</string>
     <string name="self_update_notice_summary">Pulse aquí para descargar e instalar la nueva actualización.</string>
     <string name="self_update_notice_dismiss_install">Instalar ahora</string>
     <string name="self_update_notice_dismiss_snooze">Recordar más tarde</string>
     <string name="self_update_notice_dismiss_skip">Omitir esta actualización</string>
-    <string name="self_update_state_downloading">Descargando…</string>
-    <string name="self_update_state_installing">Instalando…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Restaurando copia de seguridad</string>
     <string name="backup_restore_error">Error al restaurar copia de seguridad</string>

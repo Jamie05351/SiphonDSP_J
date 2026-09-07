@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Ayarlar</string>
     <string name="action_revert">Varsayılanlara sıfırla</string>
     <string name="action_blocked_apps">Hariç tutulan uygulamalar</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Yükle</string>
     <string name="update">Güncelle</string>
-    <string name="unknown_error">Bilinmeyen hata</string>
     <string name="actions">Eylemler</string>
     <string name="warning">Uyarı</string>
     <string name="success">Başarılı</string>
     <string name="open">Aç</string>
     <string name="close">Kapat</string>
-    <string name="delete">Sil</string>
-    <string name="copy">Kopyala</string>
-    <string name="paste">Yapıştır</string>
-    <string name="add">Ekle</string>
     <string name="yes">Evet</string>
     <string name="no">Hayır</string>
     <string name="value_not_set">Ayarlanmamış</string>
-    <string name="undo">Geri al</string>
-    <string name="redo">Yinele</string>
     <string name="no_activity_found">Etkileşimi işleyecek aktivite bulunamadı</string>
     <string name="permission_allowed">İzin verildi</string>
     <string name="permission_not_allowed">İzin verilmiyor</string>
@@ -293,8 +285,6 @@
     <string name="filelibrary_context_delete">Sil</string>
     <string name="filelibrary_unsupported_format_title">Desteklenmeyen dosya türü</string>
     <string name="filelibrary_unsupported_format">Seçilen dosya doğru dosya uzantısına sahip değil.</string>
-    <string name="filelibrary_corrupted_title">Desteklenmeyen veya bozuk dosya</string>
-    <string name="filelibrary_corrupted">Seçilen dosya kullanılabilir veri içermiyor veya bozuk.</string>
     <string name="filelibrary_access_fail">Dizine erişilemedi</string>
     <string name="filelibrary_no_file_selected">Dosya seçilmedi</string>
     <string name="filelibrary_new_file_name">Yeni dosya adı</string>
@@ -309,32 +299,9 @@
     <string name="message_convolver_advimp_invalid">Dönüştürücü: Gelişmiş dalga formu düzenleme geçersiz değerler içeriyor.</string>
     <string name="message_liveprog_compile_fail">Liveprog yürütme başarısız oldu. Seçilen komut dosyası bozuk. Lütfen hata ayıklama için komut dosyası düzenleyicisini kullanın.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Ekle</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Varsayılanları geri yükle</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Komut dosyası düzenleyici</string>
-    <string name="editor_find_and_replace">Bul/değiştir…</string>
-    <string name="editor_docs">Yardım</string>
-    <string name="editor_open_fail">Komut dosyası mevcut değil veya açılamıyor.</string>
-    <string name="editor_run">Kaydet ve çalıştır</string>
-    <string name="editor_save">Kaydet</string>
-    <string name="editor_liveprog_enabled">Liveprog otomatik olarak açıldı.</string>
-    <string name="editor_replace_all">Hepsini değiştir</string>
-    <string name="editor_replacement">Yenisiyle değiştirilebilir</string>
-    <string name="editor_find_next_match">Sonraki eşleşmeyi bul</string>
-    <string name="editor_find_previous_match">Önceki eşleşmeyi bul</string>
-    <string name="editor_search_keyword">Ara</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP aktif değil</string>
-    <string name="editor_engine_down">SiphonDSP devre dışı olduğundan komut dosyası çalıştırılamıyor. Komut dosyalarını yürütmek için lütfen SiphonDSP\'yi açın.</string>
-    <string name="editor_save_prompt_title">Değişiklikleri Kaydet?</string>
-    <string name="editor_save_prompt">Geçerli komut dosyasında kaydedilmemiş değişiklikler var. Değişikliklerinizi kaydetmek mi yoksa silmek mi istiyorsunuz?</string>
-    <string name="editor_script_launched">Komut dosyası başlatıldı</string>
-    <string name="editor_cannot_undo">Geri alınacak bir şey yok.</string>
-    <string name="editor_cannot_redo">Yeniden yapılacak bir şey yok.</string>
-    <string name="editor_text_size">Yazı boyutu</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Hariç tutulan uygulamalar</string>
     <string name="blocklist_add_exclusion_alt">Hariç tutulacak uygulama ekle</string>
@@ -380,7 +347,6 @@
     <string name="revert_confirmation">Geçerli SiphonDSP ön ayarınızı varsayılan değerlere sıfırlamak istiyor musunuz?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">İleti yanıtını içe aktar</string>
-    <string name="intent_import_vdc">VDC dosyasını içe aktar</string>
     <string name="intent_import_mode_add">Yalnızca içe aktar</string>
     <string name="intent_import_mode_select">İçe aktar ve etkinleştir</string>
     <string name="intent_import_fail">\'%1$s\' dosyası içe aktarılamadı</string>
@@ -391,18 +357,12 @@
     <string name="translation_notice_summary">Lütfen bu uygulamayı dilinize çevirmemize yardım edin! Crowdin\'deki proje sitesini ziyaret etmek için buraya dokunun.</string>
     <string name="translation_notice">Çevirilere katkıda bulunun</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Güncelleme başarısız oldu</string>
-    <string name="self_update_download_fail">Güncelleme paketi indirilemedi. Lütfen internet bağlantınızı kontrol edin. Ayrıntılar: %1$s</string>
-    <string name="self_update_install_fail">Yükleme başarısız. %1$s</string>
-    <string name="self_update_finished">Güncelleme yüklendi. Uygulama şimdi yeniden başlatılıyor…</string>
     <string name="self_update_no_updates">Şu anda yeni güncelleme yok</string>
     <string name="self_update_notice">Yeni güncelleme mevcut (%1$s)</string>
     <string name="self_update_notice_summary">Yeni güncellemeyi indirip yüklemek için buraya dokunun.</string>
     <string name="self_update_notice_dismiss_install">Şimdi kur</string>
     <string name="self_update_notice_dismiss_snooze">Bana daha sonra hatırlat</string>
     <string name="self_update_notice_dismiss_skip">Bu güncellemeyi atla</string>
-    <string name="self_update_state_downloading">İndiriliyor…</string>
-    <string name="self_update_state_installing">Yükleniyor…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Yedekleme geri yükleniyor</string>
     <string name="backup_restore_error">Yedekleme geri yüklenemedi</string>
