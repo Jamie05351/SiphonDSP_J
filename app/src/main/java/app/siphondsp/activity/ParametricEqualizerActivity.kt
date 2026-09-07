@@ -7,6 +7,7 @@ import app.siphondsp.fragment.ParametricEqualizerFragment
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.DspWorkspaceFormFactor
 
 class ParametricEqualizerActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,9 +26,9 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
                 ?: error("ParametricEqualizerFragment missing from restored state")
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
-        // show); the backdrop's lit rail tile identifies the screen.
-        supportActionBar?.title = null
+        // Head-unit full-screen: no toolbar title (the backdrop's lit rail tile identifies the
+        // screen). On a phone the manifest android:label title stays -- see DspCrossNavBar.
+        if (DspWorkspaceFormFactor.isHeadUnit(this)) supportActionBar?.title = null
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, binding.dspCrossNav, DspDestination.PARAMETRIC_EQ) {
             fragment.canSwitchDspScreens()

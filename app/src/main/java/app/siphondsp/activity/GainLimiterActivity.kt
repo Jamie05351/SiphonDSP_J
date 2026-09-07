@@ -7,6 +7,7 @@ import app.siphondsp.R
 import app.siphondsp.fragment.GainLimiterFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.DspWorkspaceFormFactor
 
 class GainLimiterActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,9 +16,9 @@ class GainLimiterActivity : DspWorkspaceActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
-        // show); the backdrop's lit rail tile identifies the screen.
-        supportActionBar?.title = null
+        // Head-unit full-screen: no toolbar title (the backdrop's lit rail tile identifies the
+        // screen). On a phone the manifest android:label title stays -- see DspCrossNavBar.
+        if (DspWorkspaceFormFactor.isHeadUnit(this)) supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.GAINS_DELAY)
         if (savedInstanceState == null) {
