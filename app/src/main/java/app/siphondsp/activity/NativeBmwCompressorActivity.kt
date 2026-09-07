@@ -16,6 +16,9 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
+        // show); the backdrop's lit rail tile identifies the screen.
+        supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.COMPRESSOR)
         if (savedInstanceState == null) {
@@ -27,7 +30,7 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         // Apply the same BMW dashboard chrome as the other DSP workspaces once the fragment
         // view is present. This is visual-only and deliberately not tied to audio lifecycle.
         // styleTree only (not styleWorkspace): the background half is now painted by
-        // DspCrossNavBar's per-destination workspace backdrop above, on R.id.dsp_workspace_content.
+        // DspCrossNavBar's per-destination full-screen workspace backdrop above (R.id.dsp_workspace_backdrop).
         findViewById<android.view.View>(android.R.id.content).post {
             BmwDashboardSkin.styleTree(findViewById(android.R.id.content))
         }

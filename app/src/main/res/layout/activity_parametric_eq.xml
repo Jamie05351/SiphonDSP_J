@@ -5,87 +5,35 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
 
-    <com.google.android.material.appbar.AppBarLayout
+    <!-- Full-screen per-destination workspace backdrop: the ///M carbon logo, the suede field,
+         and the sidebar rail with its 5 inlaid tiles (and the selected tile's cyan glow) are all
+         baked into one of 5 source images (drawable-mdpi/dsp_workspace_backdrop_*.png), picked by
+         DspDestination and set on this view by DspCrossNavBar.populate(). Authored at exactly the
+         device's full-screen resolution (1280x480 at mdpi, edge to edge &#8212; the head unit runs
+         with no system bars), so it fills the whole activity behind every other layer. -->
+    <ImageView
+        android:id="@+id/dsp_workspace_backdrop"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fitsSystemWindows="true"
-        app:liftOnScroll="false">
-
-        <!-- The toggle slot below is a sibling overlay on top of the toolbar, not a row after
-             it, so it shares the toolbar's own 36dp height instead of adding one: the header's
-             total height (toolbar + stripe) is unchanged from before DspPager routed here. -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <com.google.android.material.appbar.MaterialToolbar
-                android:id="@+id/toolbar"
-                style="@style/Theme.SiphonDSP.Toolbar"
-                android:layout_width="match_parent"
-                android:layout_height="@dimen/header_toolbar_height"
-                android:background="@color/dsp_workspace_header_bg"
-                android:paddingEnd="24dp"
-                app:contentInsetEnd="24dp"
-                app:contentInsetEndWithActions="24dp"
-                app:titleCentered="true" />
-
-            <!-- Persistent bypass-state info (Tilt / Mono Bass / MBC / Limiter), riding the
-                 toolbar line itself between the back arrow and the centred title: no strip,
-                 no background, no extra row. Moved up from the bottom of the content column so
-                 that space goes back to the workspace. See DspStatusStrip. -->
-            <app.siphondsp.view.DspStatusStrip
-                android:id="@+id/dsp_status_strip"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="56dp" />
-
-            <!-- DspPager's numbered page toggle (Gains & Delay, Crossovers & Tilt, Compressor,
-                 All-pass) docks here when a fragment provides it, floating over the toolbar just
-                 left of its power icon, above the tri-colour stripe below. Empty/gone on
-                 screens that don't page (e.g. the Parametric EQ screen, which builds its own
-                 pager). -->
-            <FrameLayout
-                android:id="@+id/dsp_page_toggle_slot"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="64dp" />
-        </FrameLayout>
-
-        <include layout="@layout/view_m_stripe_divider" />
-    </com.google.android.material.appbar.AppBarLayout>
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:importantForAccessibility="no"
+        tools:src="@drawable/dsp_workspace_backdrop_xover" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/dsp_workspace_content"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:layout_height="match_parent">
 
-        <!-- Sidebar for the content area only, below the toolbar; not alongside it. Holds
-             dsp_cross_nav (destination icons, including Routing, populated by
-             DspCrossNavBar.populate()). Settings/overflow used to also live here but were
-             removed in favor of MainActivity's bottom bar being the sole entry point for those;
-             see DspWorkspaceActivity.setUpWorkspaceSidebarActions() for the panel background.
-             Back navigation and the power toggle stay in the toolbar itself. -->
-        <!-- Flush against all three edges (top, bottom, left) of the content area, so the panel
-             reads as a structural fixture built into the workspace.
-             Width is not a fixed dp. The panel itself is no longer drawn here; it's baked into
-             the dsp_workspace_content backdrop (drawable-mdpi/dsp_workspace_backdrop_*.png, one
-             per DspDestination, painted by DspCrossNavBar.populate()) alongside the content-pane
-             texture, at native 1:1 scale against the content area's own bounds. This column exists
-             purely to reserve that same width for dsp_cross_nav's invisible click-target/focus-ring
-             rows, which must land exactly on the backdrop's baked-in tiles. The 714:3258 ratio is
-             the original bar-art panel's own measured proportions, which the new backdrop's panel
-             still matches (measured ~91dp wide at this column's 417dp content-area height, against
-             714/3258 x 417 = 91.39dp), close enough that the ratio didn't need to change when the
-             art did. No marginStart, no padding, no constraintWidth_max. -->
+        <!-- Full-height column reserving the rail's width. Nothing is drawn here &#8212; the rail
+             panel/tiles/icons are baked into the backdrop above. It exists only so
+             DspCrossNavBar.populate() can lay an invisible click-target / focus-ring row over
+             each tile's measured bounds. Fixed width now (was a 714:3258 ratio) since the rail
+             is a fixed pixel fixture in the full-screen art; see @dimen/dsp_sidebar_width. -->
         <LinearLayout
             android:id="@+id/dsp_sidebar"
-            android:layout_width="0dp"
+            android:layout_width="@dimen/dsp_sidebar_width"
             android:layout_height="0dp"
             android:orientation="vertical"
-            app:layout_constraintDimensionRatio="714:3258"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent">
@@ -99,22 +47,64 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- No divider here any more: the sidebar panel and the content-pane texture are baked
-             into one continuous dsp_workspace_content backdrop image now, so a separately-drawn
-             seam line would just streak a foreign colour across the art instead of anchoring two
-             genuinely separate surfaces the way it did against the old two-piece background. -->
-        <!-- Bottom-constrained straight to the parent now that the bypass-state strip no longer
-             sits below it: that row moved up onto the toolbar line (see the AppBarLayout
-             above), handing this space back to the workspace. -->
+        <!-- The fragment content sits to the right of the rail and starts below the floating
+             transparent toolbar line (header_toolbar_height); the backdrop still shows through
+             the top strip behind that toolbar. -->
         <FrameLayout
             android:id="@+id/params"
             android:name="androidx.navigation.fragment.NavHostFragment"
             android:layout_width="0dp"
             android:layout_height="0dp"
+            android:layout_marginTop="@dimen/header_toolbar_height"
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Declared last so the toolbar chrome renders above the content. Transparent, no elevation,
+         no ///M stripe (removed &#8212; the carbon ///M logo is baked into the backdrop's bottom-right
+         instead). The back arrow, bypass-state strip and page-toggle numbers are indented past
+         the rail so they never sit over it. -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:liftOnScroll="false">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                style="@style/Theme.SiphonDSP.Toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/header_toolbar_height"
+                android:background="@android:color/transparent"
+                android:paddingStart="@dimen/dsp_sidebar_width"
+                android:paddingEnd="24dp"
+                app:contentInsetStart="@dimen/dsp_sidebar_width"
+                app:contentInsetStartWithNavigation="@dimen/dsp_sidebar_width"
+                app:contentInsetEnd="24dp"
+                app:contentInsetEndWithActions="24dp" />
+
+            <app.siphondsp.view.DspStatusStrip
+                android:id="@+id/dsp_status_strip"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="@dimen/dsp_status_strip_margin_start" />
+
+            <FrameLayout
+                android:id="@+id/dsp_page_toggle_slot"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp" />
+        </FrameLayout>
+
+    </com.google.android.material.appbar.AppBarLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

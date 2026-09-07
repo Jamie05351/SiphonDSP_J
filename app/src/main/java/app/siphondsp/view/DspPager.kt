@@ -52,7 +52,7 @@ object DspPager {
                 TextView(context).apply {
                     text = (index + 1).toString()
                     gravity = Gravity.CENTER
-                    textSize = 11f
+                    textSize = 14f
                     includeFontPadding = false
                     isSelected = index == 0
                     applyToggleBoxStyle(context, this)
@@ -64,8 +64,9 @@ object DspPager {
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL
                 setPadding(dp(context, 6), dp(context, 4), dp(context, 8), dp(context, 4))
                 boxes.forEach { box ->
-                    addView(box, LinearLayout.LayoutParams(dp(context, 26), dp(context, 22)).apply {
-                        marginStart = dp(context, 4)
+                    // 25% larger boxes with a wider gap between them (was 26x22 / 4dp gap).
+                    addView(box, LinearLayout.LayoutParams(dp(context, 33), dp(context, 28)).apply {
+                        marginStart = dp(context, 8)
                     })
                 }
             }
@@ -96,7 +97,7 @@ object DspPager {
     private fun applyToggleBoxStyle(context: Context, box: TextView) {
         val selected = box.isSelected
         box.background = GradientDrawable().apply {
-            cornerRadius = dp(context, 5).toFloat()
+            cornerRadius = dp(context, 6).toFloat()
             // No fill on the selected box any more -- just its border and number light green;
             // the workspace background shows through, same as unselected (which was never filled
             // solid either).

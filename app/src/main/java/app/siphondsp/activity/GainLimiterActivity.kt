@@ -15,6 +15,9 @@ class GainLimiterActivity : DspWorkspaceActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
+        // show); the backdrop's lit rail tile identifies the screen.
+        supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.GAINS_DELAY)
         if (savedInstanceState == null) {

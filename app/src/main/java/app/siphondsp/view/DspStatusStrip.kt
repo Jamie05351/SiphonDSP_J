@@ -47,7 +47,9 @@ class DspStatusStrip @JvmOverloads constructor(
     }
 
     private val density = resources.displayMetrics.density
-    private val onColor = Color.WHITE
+    // Active stages read in the app's "lit" green (same neon as the ON/OFF switch); inactive
+    // stay a dim grey.
+    private val onColor = BmwDashboardSkin.TOGGLE_ON_GREEN
     private val offColor = Color.rgb(120, 128, 138)
 
     private val segments = listOf(
