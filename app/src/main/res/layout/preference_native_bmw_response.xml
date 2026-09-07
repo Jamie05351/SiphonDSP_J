@@ -32,7 +32,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:text="Mag" />
+            android:text="@string/bmw_response_mode_magnitude" />
 
         <Button
             android:id="@+id/native_bmw_response_mode_phase"
@@ -40,7 +40,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:text="Phase" />
+            android:text="@string/bmw_response_mode_phase" />
 
         <Button
             android:id="@+id/native_bmw_response_mode_both"
@@ -48,7 +48,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:text="Mag+Phase" />
+            android:text="@string/bmw_response_mode_both" />
 
         <Button
             android:id="@+id/native_bmw_response_mode_group_delay"
@@ -56,7 +56,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:text="Group Delay" />
+            android:text="@string/bmw_response_mode_group_delay" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <app.siphondsp.fragment.NativeBmwDspResponseView

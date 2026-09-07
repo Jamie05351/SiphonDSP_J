@@ -97,6 +97,35 @@
     <string name="peq_col_hz">HZ</string>
     <string name="peq_col_db">dB</string>
     <string name="peq_col_q">Q</string>
+    <string name="peq_col_index">#</string>
+
+    <!-- Parametric EQ toolbar chips (fragment_parametric_eq.xml, both orientations) -->
+    <string name="peq_scope_full">Pre EQ</string>
+    <string name="peq_scope_low">Low Band</string>
+    <string name="peq_scope_mid">Mid Band</string>
+    <string name="peq_graph_options">Graph options</string>
+    <string name="peq_graph_options_desc">Graph display options</string>
+    <string name="peq_undo">Undo</string>
+    <string name="peq_undo_desc">Undo last committed PEQ change</string>
+    <string name="peq_redo">Redo</string>
+    <string name="peq_redo_desc">Redo last undone PEQ change</string>
+    <string name="peq_filter_tools">Filter tools</string>
+    <string name="peq_filter_tools_desc">Copy and reorder selected filter</string>
+    <string name="peq_preset_export">Export preset</string>
+    <string name="peq_preset_import">Import preset</string>
+    <string name="peq_diagnostics">Diagnostics</string>
+    <string name="peq_diagnostics_desc">Review and export a sanitised PEQ diagnostic report</string>
+    <string name="peq_backup_export">Backup</string>
+    <string name="peq_backup_export_desc">Export complete private PEQ backup</string>
+    <string name="peq_backup_import">Restore backup</string>
+    <string name="peq_backup_import_desc">Preview and restore complete private PEQ backup</string>
+    <string name="peq_preference_heading">Three-bank PEQ · Full + Low + Mid response</string>
+
+    <!-- BMW response preview graph mode toggle (preference_native_bmw_response.xml) -->
+    <string name="bmw_response_mode_magnitude">Mag</string>
+    <string name="bmw_response_mode_phase">Phase</string>
+    <string name="bmw_response_mode_both">Mag+Phase</string>
+    <string name="bmw_response_mode_group_delay">Group Delay</string>
     <string name="peq_gain_decrease">Decrease gain</string>
     <string name="peq_gain_increase">Increase gain</string>
     <string name="peq_frequency_decrease">Decrease frequency</string>

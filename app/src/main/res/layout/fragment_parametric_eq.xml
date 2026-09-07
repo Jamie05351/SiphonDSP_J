@@ -31,21 +31,21 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="true"
-                android:text="Pre EQ" />
+                android:text="@string/peq_scope_full" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/peq_scope_low"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Low Band" />
+                android:text="@string/peq_scope_low" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/peq_scope_mid"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Mid Band" />
+                android:text="@string/peq_scope_mid" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_reset"
@@ -84,70 +84,70 @@
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Graph display options"
-                android:text="Graph options" />
+                android:contentDescription="@string/peq_graph_options_desc"
+                android:text="@string/peq_graph_options" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_undo"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Undo last committed PEQ change"
-                android:text="Undo" />
+                android:contentDescription="@string/peq_undo_desc"
+                android:text="@string/peq_undo" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_redo"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Redo last undone PEQ change"
-                android:text="Redo" />
+                android:contentDescription="@string/peq_redo_desc"
+                android:text="@string/peq_redo" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_filter_tools"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Copy and reorder selected filter"
-                android:text="Filter tools" />
+                android:contentDescription="@string/peq_filter_tools_desc"
+                android:text="@string/peq_filter_tools" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_preset_export"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Export preset" />
+                android:text="@string/peq_preset_export" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_preset_import"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Import preset" />
+                android:text="@string/peq_preset_import" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_diagnostics"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Review and export a sanitised PEQ diagnostic report"
-                android:text="Diagnostics" />
+                android:contentDescription="@string/peq_diagnostics_desc"
+                android:text="@string/peq_diagnostics" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_backup_export"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Export complete private PEQ backup"
-                android:text="Backup" />
+                android:contentDescription="@string/peq_backup_export_desc"
+                android:text="@string/peq_backup_export" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chip_backup_import"
                 style="@style/Widget.Material3.Chip.Assist.Elevated"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="Preview and restore complete private PEQ backup"
-                android:text="Restore backup" />
+                android:contentDescription="@string/peq_backup_import_desc"
+                android:text="@string/peq_backup_import" />
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
 

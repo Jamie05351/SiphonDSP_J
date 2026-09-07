@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import androidx.core.content.ContextCompat
 import app.siphondsp.audio.SpectrumEngine
@@ -79,11 +80,11 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        textSize = 10f * resources.displayMetrics.scaledDensity
+        textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 10f, resources.displayMetrics)
     }
     private val legendPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        textSize = 11f * resources.displayMetrics.scaledDensity
+        textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics)
     }
 
     private var values = NativeBmwDspValues.DEFAULTS.copyOf()
@@ -296,7 +297,7 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     }
 
     private fun resolveColor(attribute: Int): Int {
-        val typedValue = android.util.TypedValue()
+        val typedValue = TypedValue()
         context.theme.resolveAttribute(attribute, typedValue, true)
         return if (typedValue.resourceId != 0) ContextCompat.getColor(context, typedValue.resourceId) else typedValue.data
     }
