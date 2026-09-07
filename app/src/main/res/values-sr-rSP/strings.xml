@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">Поставке</string>
-    <string name="action_presets">Presets</string>
     <!-- Notification channels -->
     <!-- Service notifications -->
     <!-- Permission request notifications -->

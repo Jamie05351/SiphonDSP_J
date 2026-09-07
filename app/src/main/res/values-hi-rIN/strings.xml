@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">सेटिंग्स</string>
-    <string name="action_presets">प्रीसेट</string>
     <string name="action_revert">डिफ़ॉल्ट पर रीसेट करें</string>
     <string name="action_blocked_apps">बहिष्कृत ऐप्स</string>
     <!-- Notification channels -->
@@ -40,7 +39,6 @@
     <string name="install">स्थापित करना</string>
     <string name="update">अद्यतन</string>
     <string name="unknown_error">अज्ञात त्रुटि</string>
-    <string name="details">विवरण</string>
     <string name="actions">कार्रवाई</string>
     <string name="warning">चेतावनी</string>
     <string name="success">सफलता</string>
@@ -60,27 +58,6 @@
     <string name="permission_not_allowed">अनुमति नहीं</string>
     <!-- Main screen -->
     <string name="power_button_alt">ऑडियो प्रोसेसिंग टॉगल करें</string>
-    <string name="eq_filter_type">फ़िल्टर प्रकार</string>
-    <string name="eq_interpolator">क्षेपक करनेवाला</string>
-    <string name="eq_interpolator_chip">पीसवाइज क्यूबिक हर्मिट इंटरपोलिंग पॉलीनोमियल</string>
-    <string name="eq_interpolator_mha">हिरोशी अंतरिक्ष रीढ़</string>
-    <string name="eq_preset_acoustic">ध्वनिक</string>
-    <string name="eq_preset_bass">बास</string>
-    <string name="eq_preset_beats">धड़कता है</string>
-    <string name="eq_preset_classic">क्लासिक</string>
-    <string name="eq_preset_clear">साफ़</string>
-    <string name="eq_preset_electronic">इलेक्ट्रॉनिक</string>
-    <string name="eq_preset_flat">फ्लैट</string>
-    <string name="eq_preset_hardstyle">हार्ड-स्टाइल</string>
-    <string name="eq_preset_hiphop">हिप-हॉप</string>
-    <string name="eq_preset_jazz">जैज़</string>
-    <string name="eq_preset_metal">मेटल</string>
-    <string name="eq_preset_movie">चलचित्र</string>
-    <string name="eq_preset_pop">पॉप</string>
-    <string name="eq_preset_rb">R&amp;B</string>
-    <string name="eq_preset_rock">रॉक</string>
-    <string name="eq_preset_vocal">स्वर बूस्टर</string>
-    <string name="reverb_preset_default">डिफॉल्ट</string>
     <string name="convolver_convolution_mode_original">मूल</string>
     <!-- Onboarding -->
     <!-- Rootless flavor -->

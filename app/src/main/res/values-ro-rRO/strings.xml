@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">Setări</string>
-    <string name="action_presets">Presets</string>
     <string name="action_revert">Revino la setările implicite</string>
     <string name="action_blocked_apps">Aplicații excluse</string>
     <!-- Notification channels -->
@@ -40,7 +39,6 @@
     <string name="install">Instalare</string>
     <string name="update">Actualizare</string>
     <string name="unknown_error">Eroare necunoscută</string>
-    <string name="details">Detalii</string>
     <string name="actions">Actiuni</string>
     <string name="warning">Avertisment</string>
     <string name="success">Succes</string>
