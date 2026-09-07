@@ -1,5 +1,5 @@
-// Shared helpers for the host-side NativeBmwDspProcessor tests: a canonical default config
-// (kept in step with NativeBmwDspValues.DEFAULTS), signal generation, and a windowed
+// Shared helpers for the host-side NativeBmwDspProcessor tests: the canonical default config
+// (loaded from native-tests/default_config.txt), signal generation, and a windowed
 // single-frequency magnitude probe for LTI-flatness checks.
 #pragma once
 
@@ -11,7 +11,16 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <fstream>
+#include <stdexcept>
+#include <string>
 #include <vector>
+
+// Absolute path to native-tests/default_config.txt, baked in by CMakeLists.txt. The fallback
+// keeps a bare compile (no -D) working when the binary is run from the repo root.
+#ifndef NBTEST_DEFAULT_CONFIG_PATH
+#define NBTEST_DEFAULT_CONFIG_PATH "native-tests/default_config.txt"
+#endif
 
 namespace nbtest {
 
@@ -23,67 +32,39 @@ static_assert(kConfigSize == NativeBmwDspProcessor::kConfigSize,
 
 // --- config -------------------------------------------------------------------------------
 
-// Byte-for-byte NativeBmwDspValues.DEFAULTS. If the Kotlin DEFAULTS change, this must follow;
-// defaultConfigMatchesSchemaSize() in default_config_test.cpp guards the length at least.
+// The canonical default config, parsed from native-tests/default_config.txt -- the single
+// source of truth shared with Kotlin. One numeric value per line; '#' starts a comment; blank
+// lines ignored. NativeBmwSchemaAgreementTest.nativeTestDefaultConfigMatchesKotlinDefaults()
+// asserts that same file equals NativeBmwDspValues.DEFAULTS, so this stays in step with the
+// Kotlin side without a hand-transcribed copy here.
 inline std::array<float, kConfigSize> defaultConfig() {
-    return {{
-        // 0..4  enabled, lpfPass, hpfPass, channelMute, measurementMute
-        1.f, 0.f, 0.f, 0.f, 0.f,
-        // 5..11 headroom, lowGain L/R, midGain L/R, postGain L/R
-        -6.f, 0.f, 0.f, -1.f, -1.f, 0.f, 0.f,
-        // 12..13 subsonic enabled, freq
-        1.f, 32.f,
-        // 14..16 lowMute, lowXo, lowLr4
-        0.f, 150.f, 0.f,
-        // 17..18 midMute, midXo
-        0.f, 150.f,
-        // 19..20 lowInvert, midInvert
-        0.f, 0.f,
-        // 21..24 mid/low delay L/R
-        0.f, 0.f, 0.f, 0.f,
-        // 25..27 tilt enabled, amount, freq
-        1.f, 3.f, 550.f,
-        // 28..34 legacy low compressor 7-tuple (retired path)
-        1.f, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f,
-        // 35..41 legacy mid compressor 7-tuple
-        0.f, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f,
-        // 42..45 mono bass enabled, freq, blend %, makeup dB
-        0.f, 80.f, 100.f, 0.f,
-        // 46..53 routing Low L / Low R / Mid L / Mid R x [FrontL, FrontR]
-        1.f, 0.f, 0.f, 1.f, 1.f, 0.f, 0.f, 1.f,
-        // 54..85 eight all-pass sections x [enabled, order, freq, q]
-        0.f, 2.f, 150.f, 0.70710677f, 0.f, 2.f, 150.f, 0.70710677f,
-        0.f, 2.f, 150.f, 0.70710677f, 0.f, 2.f, 150.f, 0.70710677f,
-        0.f, 2.f, 150.f, 0.70710677f, 0.f, 2.f, 150.f, 0.70710677f,
-        0.f, 2.f, 150.f, 0.70710677f, 0.f, 2.f, 150.f, 0.70710677f,
-        // 86 output schema marker
-        0.f,
-        // 87..99 Low Left: xo, lr4, sub on, sub Hz, mute, invert, comp 7-tuple
-        150.f, 0.f, 1.f, 32.f, 0.f, 0.f, 1.f, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f,
-        // 100..112 Low Right
-        150.f, 0.f, 1.f, 32.f, 0.f, 0.f, 1.f, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f,
-        // 113..125 Mid Left
-        150.f, 1.f, 0.f, 32.f, 0.f, 0.f, 0.f, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f,
-        // 126..138 Mid Right
-        150.f, 1.f, 0.f, 32.f, 0.f, 0.f, 0.f, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f,
-        // 139..142 meas-mute stopband oct, migration marker, then two unused slots (removed mid-LPF)
-        1.f, 1.f, 0.f, 0.f,
-        // 143 link L/R delay (UI only)
-        0.f,
-        // 144..148 MBC enabled, mix %, xo0, xo1, xo2
-        0.f, 100.f, 80.f, 500.f, 4000.f,
-        // 149..180 MBC bands 0..3 x [enabled, threshold, ratio, knee, attack, release, makeup, stereoLink]
-        0.f, -24.f, 2.f, 6.f, 15.f, 150.f, 0.f, 1.f,
-        0.f, -20.f, 2.f, 6.f, 20.f, 180.f, 0.f, 1.f,
-        0.f, -18.f, 2.f, 6.f, 15.f, 150.f, 0.f, 1.f,
-        0.f, -24.f, 2.f, 6.f, 5.f, 80.f, 0.f, 1.f,
-        // 181 MBC/limiter migration marker
-        0.f,
-        // 182..187 Low bus / Mid bus limiter x [enabled, threshold dBFS, release ms]
-        0.f, -3.f, 120.f, 0.f, -3.f, 120.f,
-        // 188 legacy-comp-disabled marker; 189..191 master limiter enabled, threshold dBFS, migrated
-        0.f, 1.f, -1.f, 1.f,
-    }};
+    std::ifstream in(NBTEST_DEFAULT_CONFIG_PATH);
+    if (!in.is_open()) {
+        throw std::runtime_error(
+            std::string("cannot open canonical default config: ") + NBTEST_DEFAULT_CONFIG_PATH);
+    }
+    std::array<float, kConfigSize> cfg{};
+    std::size_t count = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (const auto hash = line.find('#'); hash != std::string::npos) {
+            line.erase(hash);
+        }
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            continue;
+        }
+        const auto last = line.find_last_not_of(" \t\r\n");
+        if (count >= kConfigSize) {
+            throw std::runtime_error("canonical default config has more than the expected value count");
+        }
+        cfg[count++] = std::stof(line.substr(first, last - first + 1));
+    }
+    if (count != kConfigSize) {
+        throw std::runtime_error("canonical default config has " + std::to_string(count) +
+                                 " values, expected " + std::to_string(kConfigSize));
+    }
+    return cfg;
 }
 
 // --- signal generation ------------------------------------------------------------------

@@ -35,7 +35,8 @@ CI runs it on every push/PR (`.github/workflows/build.yml`, "Run native DSP unit
 | `CMakeLists.txt` | host executable; links `NativeBmwDspProcessor.cpp` from the app tree |
 | `test_main.cpp` | doctest entry point |
 | `drwav_impl.cpp` | the one TU that defines `DR_WAV_IMPLEMENTATION` (only `exportCaptureWav` needs it) |
-| `test_support.h` | `defaultConfig()` (mirrors `NativeBmwDspValues.DEFAULTS`), signal generators, a windowed single-frequency magnitude probe |
+| `test_support.h` | `defaultConfig()` (parses `default_config.txt`), signal generators, a windowed single-frequency magnitude probe |
+| `default_config.txt` | canonical flat-config default; single source of truth shared with Kotlin (`NativeBmwSchemaAgreementTest` asserts it equals `NativeBmwDspValues.DEFAULTS`) |
 | `default_config_test.cpp` | config accepted / size guard; LR4 crossover sums flat through the handoff |
 | `mono_bass_test.cpp` | Mono Bass is all-pass on the sum for correlated content; leaves decorrelated stereo untouched above its corner (the PR #218 fix) |
 | `limiter_test.cpp` | master limiter never exceeds −1 dBFS and doesn't touch a quiet signal; per-bus limiter GR engages only when hot / reads 0 when disabled |
@@ -44,6 +45,7 @@ CI runs it on every push/PR (`.github/workflows/build.yml`, "Run native DSP unit
 
 ## Adding tests
 
-Add a `*.cpp`, list it in `CMakeLists.txt`, `#include "test_support.h"`. Keep the
-`defaultConfig()` array in step with `NativeBmwDspValues.DEFAULTS` — the `static_assert` in
-`test_support.h` guards the length; the field layout is on you.
+Add a `*.cpp`, list it in `CMakeLists.txt`, `#include "test_support.h"`. When
+`NativeBmwDspValues.DEFAULTS` changes, edit `default_config.txt` to match — one value per
+line, index in the comment. `NativeBmwSchemaAgreementTest.nativeTestDefaultConfigMatchesKotlinDefaults()`
+fails CI if the two diverge.
