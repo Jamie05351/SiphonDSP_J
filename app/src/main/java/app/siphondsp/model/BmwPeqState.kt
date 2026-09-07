@@ -1,6 +1,7 @@
 package app.siphondsp.model
 
 import android.content.Context
+import androidx.core.content.edit
 import app.siphondsp.R
 import app.siphondsp.utils.Constants
 import timber.log.Timber
@@ -63,9 +64,9 @@ data class BmwPeqState(
     fun persist(context: Context): Boolean {
         val success = store(context).save(this)
         if (success) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putLong(KEY_LKG_TIMESTAMP, System.currentTimeMillis())
-                .apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+                putLong(KEY_LKG_TIMESTAMP, System.currentTimeMillis())
+            }
         }
         return success
     }
@@ -199,20 +200,20 @@ data class BmwPeqState(
         }
 
         private fun clearObsoleteStatePreferences(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .remove(KEY_VERSION)
-                .remove(KEY_ENABLED)
-                .remove(KEY_PREAMP)
-                .remove(KEY_FULL)
-                .remove(KEY_LOW)
-                .remove(KEY_MID)
-                .remove(KEY_LKG_VERSION)
-                .remove(KEY_LKG_ENABLED)
-                .remove(KEY_LKG_PREAMP)
-                .remove(KEY_LKG_FULL)
-                .remove(KEY_LKG_LOW)
-                .remove(KEY_LKG_MID)
-                .apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+                remove(KEY_VERSION)
+                remove(KEY_ENABLED)
+                remove(KEY_PREAMP)
+                remove(KEY_FULL)
+                remove(KEY_LOW)
+                remove(KEY_MID)
+                remove(KEY_LKG_VERSION)
+                remove(KEY_LKG_ENABLED)
+                remove(KEY_LKG_PREAMP)
+                remove(KEY_LKG_FULL)
+                remove(KEY_LKG_LOW)
+                remove(KEY_LKG_MID)
+            }
         }
 
         fun recordRestoreResult(
@@ -221,11 +222,11 @@ data class BmwPeqState(
             error: String? = null,
             fallbackUsed: Boolean = false,
         ) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY_LAST_RESTORE, result)
-                .putString(KEY_LAST_ERROR, error)
-                .putBoolean(KEY_FALLBACK_USED, fallbackUsed)
-                .apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+                putString(KEY_LAST_RESTORE, result)
+                putString(KEY_LAST_ERROR, error)
+                putBoolean(KEY_FALLBACK_USED, fallbackUsed)
+            }
         }
 
         fun diagnosticMetadata(context: Context): RestoreMetadata {
@@ -240,11 +241,13 @@ data class BmwPeqState(
         }
 
         fun recordBackupRestoreResult(context: Context, result: String) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY_LAST_BACKUP_RESTORE, result)
-                .apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+                putString(KEY_LAST_BACKUP_RESTORE, result)
+            }
         }
 
+        // Not edit {}: these return the commit() Boolean so the caller can act on a failed write.
+        @Suppress("UseKtx")
         fun backupLegacyOnce(
             context: Context,
             enabled: Boolean,
@@ -262,6 +265,7 @@ data class BmwPeqState(
                 .commit()
         }
 
+        @Suppress("UseKtx") // returns the commit() Boolean; see backupLegacyOnce
         fun backupRejectedPersistedState(context: Context): Boolean {
             val rejected = load(context)
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

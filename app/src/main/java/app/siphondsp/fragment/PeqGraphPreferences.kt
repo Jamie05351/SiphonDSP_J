@@ -1,6 +1,7 @@
 package app.siphondsp.fragment
 
 import android.content.Context
+import androidx.core.content.edit
 import app.siphondsp.view.ParametricEqSurface
 
 /**
@@ -18,7 +19,7 @@ class PeqGraphPreferences(context: Context) {
     var showIndividualFilters: Boolean
         get() = prefs.getBoolean(KEY_SHOW_OVERLAYS, true)
         set(value) {
-            prefs.edit().putBoolean(KEY_SHOW_OVERLAYS, value).apply()
+            prefs.edit { putBoolean(KEY_SHOW_OVERLAYS, value) }
         }
 
     var channelDisplay: ParametricEqSurface.ChannelDisplay
@@ -28,7 +29,7 @@ class PeqGraphPreferences(context: Context) {
             )
         }.getOrDefault(ParametricEqSurface.ChannelDisplay.BOTH)
         set(value) {
-            prefs.edit().putString(KEY_CHANNEL, value.name).apply()
+            prefs.edit { putString(KEY_CHANNEL, value.name) }
         }
 
     var responseMode: ParametricEqSurface.DisplayMode
@@ -38,7 +39,7 @@ class PeqGraphPreferences(context: Context) {
             )
         }.getOrDefault(ParametricEqSurface.DisplayMode.MAGNITUDE)
         set(value) {
-            prefs.edit().putString(KEY_RESPONSE_MODE, value.name).apply()
+            prefs.edit { putString(KEY_RESPONSE_MODE, value.name) }
         }
 
     /** Raw persisted channel name, falling back to BOTH -- left unparsed for the private backup
@@ -52,15 +53,15 @@ class PeqGraphPreferences(context: Context) {
     var listModeName: String?
         get() = prefs.getString(KEY_LIST_MODE, null)
         set(value) {
-            prefs.edit().putString(KEY_LIST_MODE, value).apply()
+            prefs.edit { putString(KEY_LIST_MODE, value) }
         }
 
     /** Single-transaction write used by the private backup restore. */
     fun writeBackupGraphDisplay(showIndividualFilters: Boolean, channelDisplayName: String) {
-        prefs.edit()
-            .putBoolean(KEY_SHOW_OVERLAYS, showIndividualFilters)
-            .putString(KEY_CHANNEL, channelDisplayName)
-            .apply()
+        prefs.edit {
+            putBoolean(KEY_SHOW_OVERLAYS, showIndividualFilters)
+            putString(KEY_CHANNEL, channelDisplayName)
+        }
     }
 
     companion object {

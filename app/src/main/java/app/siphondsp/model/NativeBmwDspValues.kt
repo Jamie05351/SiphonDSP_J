@@ -2,6 +2,7 @@ package app.siphondsp.model
 
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.edit
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
@@ -446,7 +447,7 @@ object NativeBmwDspValues {
         parsed.copyInto(values, endIndex = minOf(parsed.size, values.size))
         val migrated = store.save(values)
         Timber.i("BMW DSP migrated legacy SharedPreferences blob size=${parsed.size} success=$migrated")
-        if (migrated) prefs.edit().remove(KEY).apply()
+        if (migrated) prefs.edit { remove(KEY) }
         return values
     }
 

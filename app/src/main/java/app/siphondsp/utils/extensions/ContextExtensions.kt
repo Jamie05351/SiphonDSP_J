@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
@@ -36,6 +35,8 @@ import androidx.core.graphics.alpha
 import androidx.core.graphics.blue
 import androidx.core.graphics.green
 import androidx.core.graphics.red
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import app.siphondsp.R
@@ -94,13 +95,13 @@ object ContextExtensions {
     fun Context.openPlayStoreApp(pkgName:String?){
         if(!pkgName.isNullOrEmpty()) {
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkgName")))
+                startActivity(Intent(Intent.ACTION_VIEW, "market://details?id=$pkgName".toUri()))
             } catch (e: ActivityNotFoundException) {
                 try {
                     startActivity(
                         Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("https://play.google.com/store/apps/details?id=$pkgName")
+                            "https://play.google.com/store/apps/details?id=$pkgName".toUri()
                         )
                     )
                 }
@@ -160,7 +161,7 @@ object ContextExtensions {
         if (!isRootless() && !getSystemService<PowerManager>()!!.isIgnoringBatteryOptimizations(packageName)) {
             try {
                 startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    Uri.parse("package:$packageName")))
+                    "package:$packageName".toUri()))
             }
             catch(ex: ActivityNotFoundException) {
                 toast(getString(R.string.no_activity_found))
@@ -342,7 +343,7 @@ object ContextExtensions {
     private fun parseHexColorOrNull(input: String): Int? {
         val hex = input.trim().let { if (it.startsWith("#")) it else "#$it" }
         return try {
-            Color.parseColor(hex)
+            hex.toColorInt()
         } catch (e: IllegalArgumentException) {
             null
         }

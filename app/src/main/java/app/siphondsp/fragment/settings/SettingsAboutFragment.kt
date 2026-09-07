@@ -1,8 +1,8 @@
 package app.siphondsp.fragment.settings
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceGroup
@@ -64,12 +64,12 @@ class SettingsAboutFragment : SettingsBaseFragment() {
 
                 setOnPreferenceClickListener {
                     if(tls.size == 1)
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://crowdin.com/profile/${tls[0].username}")))
+                        startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/profile/${tls[0].username}".toUri()))
                     else {
                         this@SettingsAboutFragment.context?.let { ctx ->
                             MaterialAlertDialogBuilder(ctx)
                                 .setItems(tls.map { it.name }.toTypedArray()) { dialogInterface, i ->
-                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://crowdin.com/profile/${tls[i].username}")))
+                                    startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/profile/${tls[i].username}".toUri()))
                                     dialogInterface.dismiss()
                                 }
                                 .setTitle(title)

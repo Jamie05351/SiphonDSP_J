@@ -8,9 +8,6 @@
     <color name="bmw_m_purple">#2B115A</color>
     <color name="bmw_m_red">#F11A22</color>
 
-    <!-- BMW DSP workspace accent + slider value box, matching BmwDashboardSkin.LIGHT_BLUE and
-         the LOW PASS/HIGH PASS crossover cards' dark background (see CrossoverDashboardBuilder,
-         Widget.SiphonDSP.SliderValueBox in themes.xml). -->
     <!-- Elevated panel surface for the bespoke PEQ glass value/choice dialogs (see
          ThemeOverlay.SiphonDSP.GlassDialog): a touch lighter than the near-black value box so
          the dialog reads as a raised sheet, and the grey inner input field
@@ -34,8 +31,4 @@
     <!-- Material Design Colors -->
     <color name="md_black_1000_12">#1F000000</color>
     <color name="md_white_1000_12">#1FFFFFFF</color>
-
-    <!-- Editor -->
-
-    <!--Monokai Pro Theme Colors-->
 </resources>

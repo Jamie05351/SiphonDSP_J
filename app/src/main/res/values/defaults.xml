@@ -55,7 +55,4 @@
     <string name="default_backup_maximum" translatable="false">2</string>
     <string name="default_backup_location" translatable="false" />
 
-    <!-- Script editor -->
-    <integer name="default_editor_font_size" translatable="false" tools:keep="@integer/default_editor_font_size">13</integer>
-
 </resources>

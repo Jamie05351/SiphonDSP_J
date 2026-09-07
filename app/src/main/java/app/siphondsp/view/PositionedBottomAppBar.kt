@@ -2,8 +2,8 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.View
 import androidx.appcompat.widget.ActionMenuView
+import androidx.core.view.isVisible
 import com.google.android.material.bottomappbar.BottomAppBar
 import kotlin.math.roundToInt
 
@@ -50,7 +50,7 @@ class PositionedBottomAppBar @JvmOverloads constructor(
     private fun positionVisibleItems(menu: ActionMenuView, positions: FloatArray) {
         val items = (0 until menu.childCount)
             .map(menu::getChildAt)
-            .filter { it.visibility == View.VISIBLE }
+            .filter { it.isVisible }
 
         items.take(positions.size).forEachIndexed { index, item ->
             val itemWidth = item.measuredWidth
