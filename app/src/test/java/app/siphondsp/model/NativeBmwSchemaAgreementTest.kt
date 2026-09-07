@@ -150,7 +150,7 @@ class NativeBmwSchemaAgreementTest {
         )
 
     private fun locate(vararg rels: String): File {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null) {
             for (rel in rels) {
                 val candidate = File(dir, rel)

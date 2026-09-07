@@ -6,6 +6,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.withStyledAttributes
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceViewHolder
 import app.siphondsp.R
@@ -35,7 +36,7 @@ open class DropDownPreference(
     var isStatic: Boolean = false
 
     init {
-        with(context.obtainStyledAttributes(attrs, R.styleable.DropDownPreference)) {
+        context.withStyledAttributes(attrs, R.styleable.DropDownPreference) {
             isStatic = getBoolean(R.styleable.DropDownPreference_isStatic, false)
         }
     }
