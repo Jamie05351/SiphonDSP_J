@@ -153,7 +153,9 @@ class GainLimiterFragment : Fragment() {
             }
         }
 
-        val limiterGrMeter = MbcBandGrMeter(requireContext()).also { limiterMeter = it }
+        val limiterGrMeter = MbcBandGrMeter(requireContext())
+            .apply { stage = MbcBandGrMeter.Stage.LIMITER }
+            .also { limiterMeter = it }
         val outputPage = page {
             dashboardPanel("Output", null, lean = true) {
                 addSliderRow(
