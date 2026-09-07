@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">Indstillinger</string>
-    <string name="action_presets">Forudindstillinger</string>
     <string name="action_revert">Nulstil til standardindstillinger</string>
     <string name="action_blocked_apps">Ekskluderede apps</string>
     <!-- Notification channels -->

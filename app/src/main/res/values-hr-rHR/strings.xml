@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">Postavke</string>
-    <string name="action_presets">Unaprijed postavljene postavke</string>
     <string name="action_revert">Vrati na početne postavke</string>
     <string name="action_blocked_apps">Izuzete aplikacije</string>
     <!-- Notification channels -->
@@ -40,7 +39,6 @@
     <string name="install">Instaliraj</string>
     <string name="update">Ažuriraj</string>
     <string name="unknown_error">Nepoznata pogreška</string>
-    <string name="details">Detalji</string>
     <string name="actions">Radnje</string>
     <string name="warning">Upozorenje</string>
     <string name="success">Uspjeh</string>
@@ -62,23 +60,6 @@
     <string name="error_projection_api_missing">Proizvođač vašeg uređaja je onemogućio API za interno snimanje zvuka. Ova aplikacija ne može raditi bez njih.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Uključi/isključi procesiranje zvuka</string>
-    <string name="compander_enable">Compander dinamičkog ranga</string>
-    <string name="compander_timeconstant">Vremenska konstanta</string>
-    <string name="compander_granularity">Granularnost</string>
-    <string name="compander_granularity_very_low">Vrlo niska</string>
-    <string name="compander_granularity_low">Niska</string>
-    <string name="compander_granularity_medium">Srednja</string>
-    <string name="compander_granularity_high">Visoka</string>
-    <string name="compander_granularity_extreme">Ekstremna</string>
-    <string name="compander_tftransforms">Vrijeme-frekvencija transformacija</string>
-    <string name="reverb_preset_small_hall1">Mala dvorana 1</string>
-    <string name="reverb_preset_small_hall2">Mala dvorana 2</string>
-    <string name="reverb_preset_medium_hall2">Srednja dvorana</string>
-    <string name="reverb_preset_large_hall1">Velika dvorana</string>
-    <string name="reverb_preset_small_room1">Mala soba 1</string>
-    <string name="reverb_preset_small_room2">Mala soba 2</string>
-    <string name="reverb_preset_medium_room1">Srednja soba</string>
-    <string name="reverb_preset_large_room1">Velika soba</string>
     <string name="convolver_enable">Konvolver</string>
     <string name="convolver_impulse">Impulsni odaziv</string>
     <string name="convolver_advanced_editing">Napredno uređivanje valnog oblika</string>
@@ -86,24 +67,10 @@
     <string name="convolver_convolution_mode_original">Original</string>
     <string name="convolver_convolution_mode_shrink">Smanji</string>
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minimalna transformacija faze i smanjenje</string>
-    <string name="ddc_enable">ViPER-DDC</string>
-    <string name="ddc_file">DDC datoteka</string>
-    <string name="liveprog_enable">Uživo programabilni DSP</string>
-    <string name="liveprog_file">Liveprog skripta</string>
-    <string name="liveprog_additional_params">Dodatni parametri skripte</string>
-    <string name="liveprog_additional_params_not_supported">Odabrana skripta nema prilagodljivih parametara</string>
-    <string name="liveprog_not_found">Skripta nije pronađena</string>
-    <string name="liveprog_no_script_selected">Skripta nije odabrana</string>
-    <string name="liveprog_edit_header">Uredi odabranu skriptu</string>
-    <string name="liveprog_edit">Otvori aktivnu skriptu u ugrađenom uredniku</string>
-    <string name="tube_enable">Analogno modeliranje</string>
-    <string name="tube_drive">Pretpojačalo</string>
     <string name="output_control_header">Kontrola izlaza</string>
     <string name="output_limiter_threshold">Prag za ograničenje</string>
     <string name="output_limiter_release">Otpuštanje ograničenja</string>
     <string name="output_control_postgain">Post gain</string>
-    <string name="stereowide_enable">Širina zvučne scene</string>
-    <string name="stereowide_level">Širina</string>
     <!-- Onboarding -->
     <!-- Rootless flavor -->
     <!-- Root flavor -->

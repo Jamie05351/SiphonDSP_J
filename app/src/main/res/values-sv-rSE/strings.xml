@@ -2,7 +2,6 @@
 <resources>
     <!-- Main menu bar -->
     <string name="action_settings">Inställningar</string>
-    <string name="action_presets">Förinställningar</string>
     <string name="action_revert">Återställ standardvärden</string>
     <string name="action_blocked_apps">Exkluderade appar</string>
     <!-- Notification channels -->
@@ -40,7 +39,6 @@
     <string name="install">Installera</string>
     <string name="update">Uppdatera</string>
     <string name="unknown_error">Okänt fel</string>
-    <string name="details">Detaljer</string>
     <string name="actions">Åtgärder</string>
     <string name="warning">Varning</string>
     <string name="success">Klart</string>
@@ -62,67 +60,6 @@
     <string name="error_projection_api_missing">Din enhetstillverkare har inaktiverat interna ljudinspelnings-API:er. Applikation kan inte fungera utan dem.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Sätt på eller stäng av ljudprocessering</string>
-    <string name="compander_enable">Dynamisk omfångskompander</string>
-    <string name="compander_timeconstant">Tidskonstant</string>
-    <string name="compander_granularity">Granularitet</string>
-    <string name="compander_granularity_very_low">Mycket låg</string>
-    <string name="compander_granularity_low">Låg</string>
-    <string name="compander_granularity_medium">Medium</string>
-    <string name="compander_granularity_high">Hög</string>
-    <string name="compander_granularity_extreme">Extrem</string>
-    <string name="compander_tftransforms">Tidsfrekvenstransformation</string>
-    <string name="compander_tftransforms_stft">Enhetlig (Short-time Fourier)</string>
-    <string name="compander_tftransforms_continuous_wavelet">Multiresolution (Kontinuerligt vågelement, ofullständig dual frame)</string>
-    <string name="compander_tftransforms_undersampling">Pseudo multiresolution (Undersampling frame)</string>
-    <string name="compander_tftransforms_time_domain">Pseudo multiresolution (Tidsdomän, ingen fördröjning)</string>
-    <string name="eq_enable">Multimodal equalizer</string>
-    <string name="eq_filter_type">Filtertyp</string>
-    <string name="eq_interpolator">Interpolator</string>
-    <string name="eq_filter_type_fir_minimum">FIR minimumfas</string>
-    <string name="eq_filter_type_iir_4_order">IIR 4:e ordningen</string>
-    <string name="eq_filter_type_iir_6_order">IIR 6:e ordningen</string>
-    <string name="eq_filter_type_iir_8_order">IIR 8:e ordningen</string>
-    <string name="eq_filter_type_iir_10_order">IIR 10:e ordningen</string>
-    <string name="eq_filter_type_iir_12_order">IIR 12:e ordningen</string>
-    <string name="eq_interpolator_chip">Piecewise Cubic Hermite Interpolating Polynomial</string>
-    <string name="eq_interpolator_mha">Modifierad Hiroshi Akima spline</string>
-    <string name="eq_preset_acoustic">Akustisk</string>
-    <string name="eq_preset_bass">Bas</string>
-    <string name="eq_preset_beats">Beats</string>
-    <string name="eq_preset_classic">Klassisk</string>
-    <string name="eq_preset_clear">Clear</string>
-    <string name="eq_preset_deep">Djup</string>
-    <string name="eq_preset_dubstep">Dubstep</string>
-    <string name="eq_preset_electronic">Elektroniskt</string>
-    <string name="eq_preset_flat">Platt</string>
-    <string name="eq_preset_hardstyle">Hardstyle</string>
-    <string name="eq_preset_hiphop">Hip-Hop</string>
-    <string name="eq_preset_jazz">Jazz</string>
-    <string name="eq_preset_metal">Metal</string>
-    <string name="eq_preset_movie">Film</string>
-    <string name="eq_preset_pop">Pop</string>
-    <string name="eq_preset_rb">R&amp;B</string>
-    <string name="eq_preset_rock">Rock</string>
-    <string name="eq_preset_vocal">Sångförstärkare</string>
-    <string name="geq_enable">Arbitrary response equalizer</string>
-    <string name="geq_nodes">Magnitudssvar</string>
-    <string name="bass_enable">Dynamisk basförstärkning</string>
-    <string name="bass_max_gain">Maximal förstärkning</string>
-    <string name="reverb_enable">Virtuell rumseffekt</string>
-    <string name="reverb_room_type">Rumstyp</string>
-    <string name="reverb_preset_default">Förvald</string>
-    <string name="reverb_preset_small_hall1">Liten sal 1</string>
-    <string name="reverb_preset_small_hall2">Liten sal 2</string>
-    <string name="reverb_preset_medium_hall2">Mellanstor sal</string>
-    <string name="reverb_preset_large_hall1">Stor hall</string>
-    <string name="reverb_preset_small_room1">Litet rum 1</string>
-    <string name="reverb_preset_small_room2">Litet rum 2</string>
-    <string name="reverb_preset_medium_room1">Medelstort rum</string>
-    <string name="reverb_preset_large_room1">Stort rum</string>
-    <string name="reverb_preset_plate_high">Plåtreverb, högt</string>
-    <string name="reverb_preset_plate_low">Plåtreverb, lågt</string>
-    <string name="reverb_preset_long_reverb1">Långt reverb 1</string>
-    <string name="reverb_preset_long_reverb2">Långt reverb 2</string>
     <string name="convolver_enable">Convolver</string>
     <string name="convolver_impulse">Impulssvar</string>
     <string name="convolver_advanced_editing">Avancerad vågformsredigering</string>
@@ -130,37 +67,10 @@
     <string name="convolver_convolution_mode_original">Original</string>
     <string name="convolver_convolution_mode_shrink">Krymp</string>
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minfastransformering- och krympning</string>
-    <string name="ddc_enable">ViPER-DDC</string>
-    <string name="ddc_file">DDC-fil</string>
-    <string name="liveprog_enable">Live-programmerbar DSP</string>
-    <string name="liveprog_file">Liveprog-skript</string>
-    <string name="liveprog_additional_params">Ytterligare skriptparametrar</string>
-    <string name="liveprog_additional_params_not_supported">Valda skriptet har inga anpassningsbara parametrar</string>
-    <string name="liveprog_not_found">Skript hittades inte</string>
-    <string name="liveprog_no_script_selected">Inget skript valt</string>
-    <string name="liveprog_edit_header">Redigera valt skript</string>
-    <string name="liveprog_edit">Öppna aktivt skript i inbyggda redigeraren</string>
-    <string name="tube_enable">Analogmodellering</string>
-    <string name="tube_drive">Förförstärkare</string>
     <string name="output_control_header">Utljudskontroll</string>
     <string name="output_limiter_threshold">Tröskelvärde limiter</string>
     <string name="output_limiter_release">Limiter release</string>
     <string name="output_control_postgain">Förstärkning</string>
-    <string name="stereowide_enable">Ljudbildsbredd</string>
-    <string name="stereowide_level">Bredd</string>
-    <string name="stereowide_level_none">Ingen</string>
-    <string name="stereowide_level_very_wide">Mycket bred</string>
-    <string name="stereowide_level_wide">Bred</string>
-    <string name="stereowide_level_very_narrow">Mycket smal</string>
-    <string name="stereowide_level_narrow">Smal</string>
-    <string name="crossfeed_enable">Crossfeed</string>
-    <string name="crossfeed_preset">Förinställning</string>
-    <string name="crossfeed_preset_bs2b_weak">BS2B Svag</string>
-    <string name="crossfeed_preset_bs2b_strong">BS2B stark</string>
-    <string name="crossfeed_preset_out_of_head">Out of head</string>
-    <string name="crossfeed_preset_surround1">Surround 1</string>
-    <string name="crossfeed_preset_surround2">Surround 2</string>
-    <string name="crossfeed_preset_realistic_surround">Joe0Bloggs Realistiska surround</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
     <string name="onboarding_back">Tillbaka</string>
@@ -176,7 +86,6 @@
     <string name="onboarding_adb_manual_step3">Lägg till och anslut USB-enheten i WebADB.</string>
     <string name="onboarding_adb_manual_step4">Navigera till \'Interactive Shell\' och kör följande kommando: \'pm grant %s android.permission.DUMP\'</string>
     <string name="onboarding_adb_manual_step5">Tryck på \"Nästa\" i appen för att fortsätta.</string>
-    <string name="onboarding_adb_manual_step5b">(Valfritt) Du kan alltid hoppa över inspelningsbehörighetsmeddelanden för ljudinspelning genom att köra detta kommando: \'appops set %s PROJECT_MEDIA allow\'</string>
     <string name="onboarding_adb_manual_step5c">(Valfritt) Förutom det föregående steget kan du också aktivera auto-start genom att köra följande kommando: \'appops set %s SYSTEM_ALERT_WINDOW allow\'</string>
     <string name="onboarding_adb_manual_step1_button">Öppna utvecklingsinställningar</string>
     <string name="onboarding_perm_title">Andra behörigheter</string>
@@ -192,7 +101,6 @@
     <!-- File library preference -->
     <!-- SiphonDSP engine messages -->
     <!-- GraphicEQ editor -->
-    <string name="title_activity_geq">Magnitudssvar</string>
     <string name="gep_add_node">Lägg till</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
