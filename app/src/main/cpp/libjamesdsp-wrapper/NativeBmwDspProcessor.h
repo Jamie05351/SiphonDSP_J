@@ -278,7 +278,7 @@ private:
         // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
         bool mbcEnabled = false;
         float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)
-        float mbcXo[3] = {120.f, 500.f, 4000.f};
+        float mbcXo[3] = {80.f, 500.f, 4000.f};
         MbcBandParams mbcBand[4];
         // Per-bus output limiter (v[182..187]). Additive to -- not a replacement for -- the
         // per-output processCompressor path. Ships disabled.

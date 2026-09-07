@@ -12,7 +12,7 @@ class CompressorSurfaceMathTest {
     @Test
     fun splitFrequenciesReadTheShippedDefaults() {
         val splits = CompressorSurfaceMath.splitFrequencies(defaults())
-        assertEquals(120.0, splits[0], 0.0)
+        assertEquals(80.0, splits[0], 0.0)
         assertEquals(500.0, splits[1], 0.0)
         assertEquals(4000.0, splits[2], 0.0)
     }
