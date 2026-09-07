@@ -22,7 +22,9 @@ import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.core.content.edit
 import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -322,7 +324,7 @@ class MainActivity : BaseActivity() {
                         getString(R.string.version_mismatch_root_description)
                     ) {
                         if(it) {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://zackptg5.com/android.php")))
+                            startActivity(Intent(Intent.ACTION_VIEW, "https://zackptg5.com/android.php".toUri()))
                         }
                     }
                 }
@@ -492,7 +494,7 @@ class MainActivity : BaseActivity() {
             )
             .setPositiveButton(R.string.tutorial) { dialog, _ ->
                 prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/rVM13aY2rwU?t=31")))
+                startActivity(Intent(Intent.ACTION_VIEW, "https://youtu.be/rVM13aY2rwU?t=31".toUri()))
             }
             .setNegativeButton(R.string.close) { dialog, _ ->
                 prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
@@ -716,11 +718,10 @@ class MainActivity : BaseActivity() {
                         delay(250L)
 
                         @Suppress("DEPRECATION")
-                        getSharedPreferences(namespace, MODE_MULTI_PROCESS)
-                            .edit()
-                            .putBoolean(getString(keyEnable), true)
-                            .putString(getString(key), file.absolutePath)
-                            .apply()
+                        getSharedPreferences(namespace, MODE_MULTI_PROCESS).edit {
+                            putBoolean(getString(keyEnable), true)
+                            putString(getString(key), file.absolutePath)
+                        }
 
                         delay(250L)
                         broadcastPresetLoadEvent()

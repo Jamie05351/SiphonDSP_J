@@ -17,6 +17,7 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Drawable.ConstantState
+import androidx.core.graphics.withClip
 // Every design token these drawables read, the dp()/blend() helpers and the two bitmap loaders
 // stay on BmwDashboardSkin -- widened private -> internal for this -- and are pulled in wholesale.
 import app.siphondsp.view.BmwDashboardSkin.blend
@@ -201,11 +202,10 @@ internal class SliderThumbDrawable(private val context: Context, private val acc
 
         // Emboss: a thin lit line along the top edge, a thin dark line along the bottom edge,
         // both clipped to the thumb's own rounded silhouette so they don't spill past it.
-        canvas.save()
-        canvas.clipPath(clipPath)
-        canvas.drawRect(bodyRect.left, bodyRect.top, bodyRect.right, bodyRect.top + edgeLineWidth, highlightPaint)
-        canvas.drawRect(bodyRect.left, bodyRect.bottom - edgeLineWidth, bodyRect.right, bodyRect.bottom, shadowPaint)
-        canvas.restore()
+        canvas.withClip(clipPath) {
+            drawRect(bodyRect.left, bodyRect.top, bodyRect.right, bodyRect.top + edgeLineWidth, highlightPaint)
+            drawRect(bodyRect.left, bodyRect.bottom - edgeLineWidth, bodyRect.right, bodyRect.bottom, shadowPaint)
+        }
 
         canvas.drawRoundRect(bodyRect, cornerRadius, cornerRadius, borderPaint)
 
@@ -472,10 +472,7 @@ internal class GlassSwitchTrackDrawable(context: Context) : Drawable() {
         if (trackRect.isEmpty) return
         val corner = trackRect.height() / 2f
         canvas.drawRoundRect(trackRect, corner, corner, fillPaint)
-        canvas.save()
-        canvas.clipPath(clipPath)
-        canvas.drawPath(sheenPath, sheenPaint)
-        canvas.restore()
+        canvas.withClip(clipPath) { drawPath(sheenPath, sheenPaint) }
         // Thumb slides right when checked (ON), left when unchecked (OFF) -- the label sits in
         // the quarter of the track the thumb has vacated, not under where it currently rests.
         val label = if (checked) "ON" else "OFF"
@@ -705,10 +702,7 @@ internal class GlassSegmentDrawable(context: Context, private val accentColor: I
         val corner = segRect.height() / 2f
         canvas.drawRoundRect(segRect, corner, corner, glowPaint)
         canvas.drawRoundRect(segRect, corner, corner, fillPaint)
-        canvas.save()
-        canvas.clipPath(clipPath)
-        canvas.drawPath(sheenPath, sheenPaint)
-        canvas.restore()
+        canvas.withClip(clipPath) { drawPath(sheenPath, sheenPaint) }
         canvas.drawRoundRect(segRect, corner, corner, borderPaint)
     }
 
@@ -781,12 +775,11 @@ internal class GlassBoxDrawable(context: Context, private val showBorder: Boolea
         if (boxRect.isEmpty) return
         canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, fillPaint)
 
-        canvas.save()
-        canvas.clipPath(clipPath)
-        canvas.drawPath(sheenPath, sheenPaint)
-        canvas.drawRect(boxRect.left, boxRect.top, boxRect.right, boxRect.top + edgeLineWidth, highlightPaint)
-        canvas.drawRect(boxRect.left, boxRect.bottom - edgeLineWidth, boxRect.right, boxRect.bottom, shadowPaint)
-        canvas.restore()
+        canvas.withClip(clipPath) {
+            drawPath(sheenPath, sheenPaint)
+            drawRect(boxRect.left, boxRect.top, boxRect.right, boxRect.top + edgeLineWidth, highlightPaint)
+            drawRect(boxRect.left, boxRect.bottom - edgeLineWidth, boxRect.right, boxRect.bottom, shadowPaint)
+        }
 
         if (showBorder) canvas.drawRoundRect(boxRect, cornerRadius, cornerRadius, strokePaint)
     }

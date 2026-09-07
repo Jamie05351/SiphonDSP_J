@@ -2,11 +2,11 @@ package app.siphondsp.fragment
 
 import android.animation.LayoutTransition
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -63,7 +63,7 @@ class DspFragment : Fragment() {
     private fun setUpShortcutsPage() {
         shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
         shortcutsBinding.translationNotice.setOnRootClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://crowdin.com/project/siphondsp")))
+            startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/project/siphondsp".toUri()))
             hideTranslationNotice()
         }
 

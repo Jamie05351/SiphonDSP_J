@@ -3,6 +3,7 @@ package app.siphondsp.fragment
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import androidx.core.content.edit
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
@@ -99,17 +100,17 @@ class NativeBmwDspCardFragment : PreferenceFragmentCompat(), SharedPreferences.O
 
     private fun writeValuesToMenu(values: FloatArray) {
         updatingMenu = true
-        val editor = menuPreferences.edit()
-        KEY_TO_INDEX.forEach { (key, index) ->
-            when {
-                index in BOOLEAN_INDEXES -> editor.putBoolean(key, values[index] >= .5f)
-                index in LIST_INDEXES -> editor.putString(key, values[index].toInt().toString())
-                else -> editor.putFloat(key, values[index])
+        menuPreferences.edit {
+            KEY_TO_INDEX.forEach { (key, index) ->
+                when {
+                    index in BOOLEAN_INDEXES -> putBoolean(key, values[index] >= .5f)
+                    index in LIST_INDEXES -> putString(key, values[index].toInt().toString())
+                    else -> putFloat(key, values[index])
+                }
             }
+            putBoolean("bmw_mute_low_band", values[NativeBmwDspValues.INDEX_LOW_MUTE] >= .5f)
+            putBoolean("bmw_mute_mid_band", values[NativeBmwDspValues.INDEX_MID_MUTE] >= .5f)
         }
-        editor.putBoolean("bmw_mute_low_band", values[NativeBmwDspValues.INDEX_LOW_MUTE] >= .5f)
-        editor.putBoolean("bmw_mute_mid_band", values[NativeBmwDspValues.INDEX_MID_MUTE] >= .5f)
-        editor.apply()
         updatingMenu = false
     }
 
