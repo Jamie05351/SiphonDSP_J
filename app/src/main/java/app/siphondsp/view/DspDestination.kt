@@ -2,7 +2,9 @@ package app.siphondsp.view
 
 import android.content.Intent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -10,6 +12,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.siphondsp.R
+import com.google.android.material.appbar.MaterialToolbar
+import kotlin.math.roundToInt
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
@@ -84,12 +88,49 @@ object DspCrossNavBar {
         container.background = null
         val workspaceBackdrop = backdrop(current)
 
-        // Set the full-screen backdrop for this destination on the full-bleed ImageView -- the
-        // rail panel, its 5 tiles and the selected tile's glow are all baked into that art; see
-        // WorkspaceBackdrop above. Nothing paints inside dsp_sidebar; it only hosts the invisible
-        // click-targets laid over the baked tiles below.
-        activity.findViewById<android.widget.ImageView>(R.id.dsp_workspace_backdrop)
-            ?.setImageResource(workspaceBackdrop.res)
+        val headUnit = DspWorkspaceFormFactor.isHeadUnit(activity)
+
+        // Set the per-destination backdrop on the full-bleed ImageView -- the rail panel, its 5
+        // tiles and the selected tile's glow are baked into that art; see WorkspaceBackdrop above.
+        // Nothing paints inside dsp_sidebar; it only hosts the invisible click-targets laid over
+        // the baked tiles below.
+        //
+        // Head unit: CENTER_CROP at the art's native 1280x480. Anywhere else (phone / tablet /
+        // portrait): FIT_XY so the whole rail stays on screen -- it stretches, but art-y maps
+        // linearly to screen-y, so the sidebar column and its ROW_WEIGHTS fractions still land on
+        // the tiles.
+        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.apply {
+            scaleType = if (headUnit) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_XY
+            setImageResource(workspaceBackdrop.res)
+        }
+
+        if (!headUnit) {
+            // The head unit's transparent floating toolbar and its rail-width indent only work at
+            // ~1280x480. Elsewhere restore a plain bar: opaque, un-indented, with a *centred*
+            // title (manifest android:label, kept by the activities) so it doesn't collide with
+            // the bypass-state strip; the strip goes back to its pre-full-screen 8dp inset.
+            activity.findViewById<MaterialToolbar>(R.id.toolbar)?.apply {
+                setBackgroundResource(R.color.dsp_workspace_header_bg)
+                setPaddingRelative(0, paddingTop, paddingEnd, paddingBottom)
+                setContentInsetsRelative(0, contentInsetEnd)
+                setContentInsetStartWithNavigation(0)
+                isTitleCentered = true
+            }
+            activity.findViewById<View>(R.id.dsp_status_strip)?.let { strip ->
+                (strip.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+                    // 56dp: clear of the back arrow (pre-full-screen value).
+                    it.marginStart = (56f * activity.resources.displayMetrics.density).roundToInt()
+                    strip.layoutParams = it
+                }
+            }
+            // Proportional rail column so the click-targets track the FIT_XY-stretched rail
+            // rather than a fixed 124dp gutter.
+            activity.findViewById<View>(R.id.dsp_sidebar)?.let { col ->
+                col.layoutParams = col.layoutParams.apply {
+                    width = (activity.resources.displayMetrics.widthPixels * 124f / 1280f).roundToInt()
+                }
+            }
+        }
 
         val rows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         container.addView(

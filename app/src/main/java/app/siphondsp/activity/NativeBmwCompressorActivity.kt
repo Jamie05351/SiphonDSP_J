@@ -8,6 +8,7 @@ import app.siphondsp.fragment.NativeBmwCompressorFragment
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.DspWorkspaceFormFactor
 
 class NativeBmwCompressorActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,9 +17,9 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
-        // show); the backdrop's lit rail tile identifies the screen.
-        supportActionBar?.title = null
+        // Head-unit full-screen: no toolbar title (the backdrop's lit rail tile identifies the
+        // screen). On a phone the manifest android:label title stays -- see DspCrossNavBar.
+        if (DspWorkspaceFormFactor.isHeadUnit(this)) supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.COMPRESSOR)
         if (savedInstanceState == null) {
