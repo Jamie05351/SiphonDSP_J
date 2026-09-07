@@ -58,7 +58,7 @@ class SettingsBackupFragment : SettingsBaseFragment() {
             BackupCreatorJob.setupTask(requireContext(), interval)
 
             if(preferences.get<String>(R.string.key_backup_location).isBlank()
-                && (newValue.toString().toIntOrNull() ?: 0) > 0) {
+                && (newValue.toIntOrNull() ?: 0) > 0) {
                 openLocationSelection()
             }
             true

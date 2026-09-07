@@ -80,7 +80,7 @@ class FileLibraryDialogFragment : ListPreferenceDialogFragmentCompat(), TargetFr
             popupMenu.menu.findItem(R.id.resample_selection).isVisible = fileLibPreference.isIrs()
 
             popupMenu.setOnMenuItemClickListener { menuItem ->
-                val selectedFile = File(path.toString())
+                val selectedFile = File(path)
                 when (menuItem.itemId) {
                     R.id.resample_selection -> {
                         if(fileLibPreference.isIrs()) {

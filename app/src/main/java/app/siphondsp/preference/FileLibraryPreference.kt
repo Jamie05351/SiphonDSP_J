@@ -3,6 +3,7 @@ package app.siphondsp.preference
 import android.content.Context
 import android.content.res.TypedArray
 import android.util.AttributeSet
+import androidx.core.content.withStyledAttributes
 import androidx.preference.ListPreference
 import androidx.preference.Preference.SummaryProvider
 import app.siphondsp.R
@@ -37,7 +38,7 @@ class FileLibraryPreference(context: Context, attrs: AttributeSet?) :
         }
 
     init {
-        with(context.obtainStyledAttributes(attrs, R.styleable.FileLibraryPreference)) {
+        context.withStyledAttributes(attrs, R.styleable.FileLibraryPreference) {
             type = getString(R.styleable.FileLibraryPreference_type) ?: "unknown"
         }
     }

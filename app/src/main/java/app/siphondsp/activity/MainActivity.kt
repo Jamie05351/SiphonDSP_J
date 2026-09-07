@@ -676,11 +676,11 @@ class MainActivity : BaseActivity() {
             getString(R.string.intent_import_mode_select)
         )
 
-        val titleRes: Int?
-        val subDir: String?
-        var namespace: String? = null
-        var key: Int? = null
-        var keyEnable: Int? = null
+        val titleRes: Int
+        val subDir: String
+        val namespace: String
+        val key: Int
+        val keyEnable: Int
         when {
             name.endsWith(".irs") || name.endsWith(".wav") -> {
                 titleRes = R.string.intent_import_irs
@@ -715,13 +715,12 @@ class MainActivity : BaseActivity() {
                     lifecycleScope.launch(Dispatchers.Default) {
                         delay(250L)
 
-                        if (namespace != null && key != null && keyEnable != null)
-                            @Suppress("DEPRECATION")
-                            getSharedPreferences(namespace, MODE_MULTI_PROCESS)
-                                .edit()
-                                .putBoolean(getString(keyEnable), true)
-                                .putString(getString(key), file.absolutePath)
-                                .apply()
+                        @Suppress("DEPRECATION")
+                        getSharedPreferences(namespace, MODE_MULTI_PROCESS)
+                            .edit()
+                            .putBoolean(getString(keyEnable), true)
+                            .putString(getString(key), file.absolutePath)
+                            .apply()
 
                         delay(250L)
                         broadcastPresetLoadEvent()

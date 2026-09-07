@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.getSystemService
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import app.siphondsp.databinding.DialogProgressBinding
+import java.util.Locale
 import kotlin.math.roundToInt
 
 class ProgressDialog(
@@ -87,6 +88,7 @@ class ProgressDialog(
 
         val current = currentProgress / divisor
         val max = maxProgress / divisor
-        binding.progressNumber.text = "${String.format("%.1f", current)}/${String.format("%.1f", max)}$unit"
+        binding.progressNumber.text =
+            "${String.format(Locale.getDefault(), "%.1f", current)}/${String.format(Locale.getDefault(), "%.1f", max)}$unit"
     }
 }
