@@ -5,7 +5,6 @@
          directly (see DspDestination.ALLPASS) - distinct from action_output_allpass, which
          remains that screen's own toolbar title once opened. -->
     <string name="action_allpass">All-pass</string>
-    <string name="workspace_power">DSP power</string>
 
     <!-- Short labels for the sidebar nav tiles (DspCrossNavBar): the tile column is fixed-width,
          so these are deliberately shorter than the full activity titles (action_gain_limiter etc). -->

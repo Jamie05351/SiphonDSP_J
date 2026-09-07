@@ -23,9 +23,9 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         // DspDestination.ALLPASS's primary-nav tile opens All-pass directly, so All-pass shares
         // its nav identity here rather than leaving a gap.
         val current = if (allPassMode) DspDestination.ALLPASS else DspDestination.CROSSOVER_TILT
-        supportActionBar?.title = getString(
-            if (allPassMode) R.string.action_output_allpass else R.string.action_crossover_tilt
-        )
+        // No toolbar title on the full-screen workspace -- the backdrop's lit rail tile already
+        // says which screen this is.
+        supportActionBar?.title = null
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), current)
 
         if (savedInstanceState == null) {

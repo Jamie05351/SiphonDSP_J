@@ -22,7 +22,6 @@
          stripe reads as the same material as the workspace backdrop below it instead of a
          different flat tone (was ?attr/colorSurface / siphon_surface, #141418, distinctly
          darker/bluer). See the toolbar in activity_parametric_eq.xml. -->
-    <color name="dsp_workspace_header_bg">#202020</color>
 
     <!-- AMOLED Mode -->
     <color name="surface_amoled">#000001</color>

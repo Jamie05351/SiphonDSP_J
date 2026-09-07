@@ -10,4 +10,11 @@
     <dimen name="header_toolbar_height">36dp</dimen>
     <!-- BMW ///M stripe divider under the top banner; see view_m_stripe_divider.xml. -->
     <dimen name="m_stripe_height">3dp</dimen>
+    <!-- Width of the rail baked into the full-screen DSP workspace backdrop
+         (dsp_workspace_backdrop_*.png). dsp_sidebar reserves exactly this so DspCrossNavBar's
+         invisible click-targets land on the baked tiles, and the toolbar's back arrow / status
+         strip / page numbers are indented past it. Measured off the 1280x480 art (~124px). -->
+    <dimen name="dsp_sidebar_width">124dp</dimen>
+    <!-- Bypass-state strip starts just past the indented back arrow. -->
+    <dimen name="dsp_status_strip_margin_start">168dp</dimen>
 </resources>

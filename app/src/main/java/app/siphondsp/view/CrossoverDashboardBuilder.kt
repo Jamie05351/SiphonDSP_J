@@ -161,7 +161,7 @@ class CrossoverDashboardBuilder(
         } else {
             // Transparent, not its own copy of the photo background: the workspace's own content
             // area already paints that once, full-screen (DspCrossNavBar.populate()'s
-            // per-destination backdrop, on R.id.dsp_workspace_content) -- a card painting an
+            // per-destination full-screen backdrop, R.id.dsp_workspace_backdrop) -- a card painting an
             // independent opaque copy across its own (smaller) bounds both hides that real
             // background behind an opaque duplicate and, since each card gets its own pinned
             // M-badge, shrinks the badge down to card scale instead of it reading at one
