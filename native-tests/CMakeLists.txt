@@ -45,5 +45,11 @@ target_include_directories(native_tests PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/third_party
 )
 
+# Absolute path to the canonical default config, read at test time by test_support.h's
+# defaultConfig(). Baked in so the binary finds it regardless of the working directory.
+target_compile_definitions(native_tests PRIVATE
+    NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
+)
+
 enable_testing()
 add_test(NAME native_tests COMMAND native_tests)

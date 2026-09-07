@@ -129,20 +129,17 @@ class NativeBmwSchemaAgreementTest {
 
     @Test
     fun nativeTestDefaultConfigMatchesKotlinDefaults() {
-        // native-tests/test_support.h hand-transcribes NativeBmwDspValues.DEFAULTS for the
-        // host-side DSP tests -- a fourth copy of the array that nothing else guards. Parse its
-        // defaultConfig() braced initializer and require it element-for-element.
-        val src = locate("native-tests/test_support.h", "../native-tests/test_support.h").readText()
-        val block = Regex("""return \{\{(.*?)\}\};""", RegexOption.DOT_MATCHES_ALL)
-            .find(src)?.groupValues?.get(1) ?: error("defaultConfig() initializer not found")
-        val parsed = block
-            .replace(Regex("//[^\n]*"), "")
-            .split(',')
-            .map { it.trim() }
+        // native-tests/default_config.txt is the canonical flat-config default, the single
+        // source of truth shared with the host-side DSP tests (test_support.h::defaultConfig()
+        // parses the same file). Require it element-for-element against the Kotlin DEFAULTS so
+        // the two can't drift -- a DEFAULTS change is then a one-line edit to that file.
+        val file = locate("native-tests/default_config.txt", "../native-tests/default_config.txt")
+        val parsed = file.readLines()
+            .map { it.substringBefore('#').trim() }
             .filter { it.isNotEmpty() }
-            .map { it.removeSuffix("f").toFloat() }
+            .map { it.toFloat() }
             .toFloatArray()
-        assertEquals("defaultConfig() length", NativeBmwDspValues.DEFAULTS.size, parsed.size)
+        assertEquals("default_config.txt length", NativeBmwDspValues.DEFAULTS.size, parsed.size)
         assertArrayEquals(NativeBmwDspValues.DEFAULTS, parsed, 0f)
     }
 

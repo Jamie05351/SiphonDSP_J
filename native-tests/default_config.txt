@@ -1,0 +1,257 @@
+# ============================================================================
+# Canonical NativeBmwDspProcessor flat-config defaults (192 floats).
+#
+# Single source of truth for the default config, shared by:
+#   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
+#   - NativeBmwSchemaAgreementTest.nativeTestDefaultConfigMatchesKotlinDefaults()
+#     -- asserts this file equals Kotlin NativeBmwDspValues.DEFAULTS element-for-element
+#
+# One numeric value per line. '#' starts a comment; blank lines are ignored.
+# The index in each comment is the flat-array slot the value lands in.
+#
+# Keep in step with NativeBmwDspValues.DEFAULTS: the Kotlin test above fails CI
+# the moment they diverge, so a DEFAULTS change is a one-line edit here.
+# ============================================================================
+
+# 0..4  enabled, lpfPass, hpfPass, channelMute, measurementMute
+1            # 0   enabled
+0            # 1   lpfPass
+0            # 2   hpfPass
+0            # 3   channelMute
+0            # 4   measurementMute
+
+# 5..11  headroom dB, low gain L/R, mid gain L/R, post gain L/R
+-6           # 5   headroom
+0            # 6   lowGainL
+0            # 7   lowGainR
+-1           # 8   midGainL
+-1           # 9   midGainR
+0            # 10  postGainL
+0            # 11  postGainR
+
+# 12..20  legacy shared-band settings, retained for migration -- the native
+#         engine reads the per-output block at 87..138 instead
+1            # 12  subsonicEnabled (legacy)
+32           # 13  subsonicFreq (legacy)
+0            # 14  lowMute (legacy)
+150          # 15  lowCrossoverFreq (legacy)
+0            # 16  lowLr4 (legacy)
+0            # 17  midMute (legacy)
+150          # 18  midCrossoverFreq (legacy)
+0            # 19  lowInvert (legacy)
+0            # 20  midInvert (legacy)
+
+# 21..24  mid delay L/R, low delay L/R (ms)
+0            # 21  midDelayL
+0            # 22  midDelayR
+0            # 23  lowDelayL
+0            # 24  lowDelayR
+
+# 25..27  tilt enabled, amount dB, pivot Hz
+1            # 25  tiltEnabled
+3            # 26  tiltAmount
+550          # 27  tiltFreq
+
+# 28..34  legacy low-band compressor 7-tuple (retired path, not read natively)
+1            # 28  enabled
+-12          # 29  threshold
+2            # 30  ratio
+8            # 31  knee
+40           # 32  attack
+250          # 33  release
+1.5          # 34  makeup
+
+# 35..41  legacy mid-band compressor 7-tuple
+0            # 35  enabled
+-10          # 36  threshold
+1.5          # 37  ratio
+6            # 38  knee
+10           # 39  attack
+180          # 40  release
+0            # 41  makeup
+
+# 42..45  mono bass enabled, freq Hz, blend %, makeup dB
+0            # 42  monoBassEnabled
+80           # 43  monoBassFreq
+100          # 44  monoBassBlend
+0            # 45  monoBassMakeup
+
+# 46..53  routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
+1            # 46  LowL <- FrontL
+0            # 47  LowL <- FrontR
+0            # 48  LowR <- FrontL
+1            # 49  LowR <- FrontR
+1            # 50  MidL <- FrontL
+0            # 51  MidL <- FrontR
+0            # 52  MidR <- FrontL
+1            # 53  MidR <- FrontR
+
+# 54..85  eight all-pass sections (2 per output x 4 outputs), each
+#         [enabled, order, freq Hz, Q] -- all disabled by default
+0            # 54  LowL sec0 enabled
+2            # 55  LowL sec0 order
+150          # 56  LowL sec0 freq
+0.70710677   # 57  LowL sec0 Q
+0            # 58  LowL sec1 enabled
+2            # 59  LowL sec1 order
+150          # 60  LowL sec1 freq
+0.70710677   # 61  LowL sec1 Q
+0            # 62  LowR sec0 enabled
+2            # 63  LowR sec0 order
+150          # 64  LowR sec0 freq
+0.70710677   # 65  LowR sec0 Q
+0            # 66  LowR sec1 enabled
+2            # 67  LowR sec1 order
+150          # 68  LowR sec1 freq
+0.70710677   # 69  LowR sec1 Q
+0            # 70  MidL sec0 enabled
+2            # 71  MidL sec0 order
+150          # 72  MidL sec0 freq
+0.70710677   # 73  MidL sec0 Q
+0            # 74  MidL sec1 enabled
+2            # 75  MidL sec1 order
+150          # 76  MidL sec1 freq
+0.70710677   # 77  MidL sec1 Q
+0            # 78  MidR sec0 enabled
+2            # 79  MidR sec0 order
+150          # 80  MidR sec0 freq
+0.70710677   # 81  MidR sec0 Q
+0            # 82  MidR sec1 enabled
+2            # 83  MidR sec1 order
+150          # 84  MidR sec1 freq
+0.70710677   # 85  MidR sec1 Q
+
+# 86  independent-output schema marker (0 = seed from legacy on next load)
+0            # 86
+
+# 87..99  Low Left output: XO Hz, LR4, subsonic on, subsonic Hz, mute, invert,
+#         compressor [enabled, threshold, ratio, knee, attack, release, makeup]
+150          # 87  crossoverFreq
+0            # 88  lr4 (unread; always LR4)
+1            # 89  subsonicEnabled
+32           # 90  subsonicFreq
+0            # 91  muted
+0            # 92  polarityInverted
+1            # 93  comp enabled
+-12          # 94  comp threshold
+2            # 95  comp ratio
+8            # 96  comp knee
+40           # 97  comp attack
+250          # 98  comp release
+1.5          # 99  comp makeup
+
+# 100..112  Low Right output
+150          # 100 crossoverFreq
+0            # 101 lr4
+1            # 102 subsonicEnabled
+32           # 103 subsonicFreq
+0            # 104 muted
+0            # 105 polarityInverted
+1            # 106 comp enabled
+-12          # 107 comp threshold
+2            # 108 comp ratio
+8            # 109 comp knee
+40           # 110 comp attack
+250          # 111 comp release
+1.5          # 112 comp makeup
+
+# 113..125  Mid Left output (subsonic fields kept for a uniform block, ignored by native)
+150          # 113 crossoverFreq
+1            # 114 lr4
+0            # 115 subsonicEnabled
+32           # 116 subsonicFreq
+0            # 117 muted
+0            # 118 polarityInverted
+0            # 119 comp enabled
+-10          # 120 comp threshold
+1.5          # 121 comp ratio
+6            # 122 comp knee
+10           # 123 comp attack
+180          # 124 comp release
+0            # 125 comp makeup
+
+# 126..138  Mid Right output
+150          # 126 crossoverFreq
+1            # 127 lr4
+0            # 128 subsonicEnabled
+32           # 129 subsonicFreq
+0            # 130 muted
+0            # 131 polarityInverted
+0            # 132 comp enabled
+-10          # 133 comp threshold
+1.5          # 134 comp ratio
+6            # 135 comp knee
+10           # 136 comp attack
+180          # 137 comp release
+0            # 138 comp makeup
+
+# 139..142  meas-mute stopband octaves; meas-mute migration marker (1 = seeded);
+#           141/142 unused (was a Mid-band LPF, since removed)
+1            # 139 measBusStopbandOctaves
+1            # 140 measMuteStopbandMigrated (Kotlin-only)
+0            # 141 unused
+0            # 142 unused
+
+# 143  link L/R delay toggle (UI-only, never read natively)
+0            # 143
+
+# 144..148  multiband compressor: enabled, mix %, crossover splits sub|warmth|body|air
+0            # 144 mbcEnabled
+100          # 145 mbcMix %
+80           # 146 mbcXo0
+500          # 147 mbcXo1
+4000         # 148 mbcXo2
+
+# 149..180  MBC bands 0..3, each [enabled, threshold dBFS, ratio, knee dB,
+#           attack ms, release ms, makeup dB, stereoLink]
+0            # 149 band0 enabled
+-24          # 150 band0 threshold
+2            # 151 band0 ratio
+6            # 152 band0 knee
+15           # 153 band0 attack
+150          # 154 band0 release
+0            # 155 band0 makeup
+1            # 156 band0 stereoLink
+0            # 157 band1 enabled
+-20          # 158 band1 threshold
+2            # 159 band1 ratio
+6            # 160 band1 knee
+20           # 161 band1 attack
+180          # 162 band1 release
+0            # 163 band1 makeup
+1            # 164 band1 stereoLink
+0            # 165 band2 enabled
+-18          # 166 band2 threshold
+2            # 167 band2 ratio
+6            # 168 band2 knee
+15           # 169 band2 attack
+150          # 170 band2 release
+0            # 171 band2 makeup
+1            # 172 band2 stereoLink
+0            # 173 band3 enabled
+-24          # 174 band3 threshold
+2            # 175 band3 ratio
+6            # 176 band3 knee
+5            # 177 band3 attack
+80           # 178 band3 release
+0            # 179 band3 makeup
+1            # 180 band3 stereoLink
+
+# 181  MBC/limiter migration marker (0 = seed the block on next load)
+0            # 181
+
+# 182..187  per-bus output limiter -- Low bus [enabled, threshold dBFS, release ms], then Mid bus
+0            # 182 busLimLow enabled
+-3           # 183 busLimLow threshold
+120          # 184 busLimLow release
+0            # 185 busLimMid enabled
+-3           # 186 busLimMid threshold
+120          # 187 busLimMid release
+
+# 188  legacy per-output-compressor-disabled marker (0 = force off on next load)
+0            # 188
+
+# 189..191  master limiter enabled, threshold dBFS, migrated marker
+1            # 189 masterLimiterEnabled
+-1           # 190 masterLimiterThreshold
+1            # 191 masterLimiterMigrated
