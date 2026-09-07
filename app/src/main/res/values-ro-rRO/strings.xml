@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Setări</string>
     <string name="action_revert">Revino la setările implicite</string>
     <string name="action_blocked_apps">Aplicații excluse</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Instalare</string>
     <string name="update">Actualizare</string>
-    <string name="unknown_error">Eroare necunoscută</string>
     <string name="actions">Actiuni</string>
     <string name="warning">Avertisment</string>
     <string name="success">Succes</string>
     <string name="open">Deschideți</string>
     <string name="close">Închide</string>
-    <string name="delete">Ștergere</string>
-    <string name="copy">Copiere</string>
-    <string name="paste">Lipire</string>
-    <string name="add">Adaugă</string>
     <string name="yes">Da</string>
     <string name="no">Nu</string>
     <string name="value_not_set">Nesetat</string>
-    <string name="undo">Anulare</string>
-    <string name="redo">Refacere</string>
     <string name="no_activity_found">Nu s-a găsit nicio activitate pentru a gestiona acțiunea</string>
     <string name="permission_allowed">Permite</string>
     <string name="permission_not_allowed">Nu este permis</string>
@@ -70,7 +62,6 @@
     <!-- File library preference -->
     <!-- SiphonDSP engine messages -->
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Adaugă</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
     <!-- Liveprog script editor -->

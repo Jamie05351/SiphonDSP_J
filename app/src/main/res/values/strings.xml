@@ -2,7 +2,6 @@
     <string name="jamesdsp" translatable="false">J_DSP</string>
 
     <!-- Main menu bar -->
-    <string name="action_settings">Settings</string>
     <string name="action_parametric_eq">Parametric EQ</string>
     <string name="action_gain_limiter">Gains &amp; Delay</string>
     <string name="action_compressor">Compressor</string>
@@ -57,7 +56,6 @@
     <!-- General purpose -->
     <string name="install">Install</string>
     <string name="update">Update</string>
-    <string name="unknown_error">Unknown error</string>
     <string name="actions">Actions</string>
     <string name="warning">Warning</string>
     <string name="success">Success</string>
@@ -66,15 +64,9 @@
     <string name="continue_action">Continue</string>
     <string name="tutorial">Tutorial</string>
     <string name="never_show_warning_again">Never show this warning again</string>
-    <string name="delete">Delete</string>
-    <string name="copy">Copy</string>
-    <string name="paste">Paste</string>
-    <string name="add">Add</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="value_not_set">Not set</string>
-    <string name="undo">Undo</string>
-    <string name="redo">Redo</string>
     <string name="no_activity_found">No Activity found to handle action</string>
     <string name="permission_allowed">Allowed</string>
     <string name="permission_not_allowed">Not allowed</string>
@@ -84,39 +76,22 @@
     <!-- Main screen -->
     <string name="power_button_alt">Toggle audio processing</string>
 
-
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>
     <string name="title_activity_gain_limiter">Gains &amp; Delay</string>
     <string name="title_activity_crossover_tilt">Crossovers &amp; Tilt</string>
-    <string name="peq_add_band">Add</string>
-    <string name="peq_add_band_spaced">&#160;&#160;Add filter&#160;</string>
     <string name="peq_add_filter_row">Add filter</string>
     <string name="peq_import">Import</string>
     <string name="peq_export">Export</string>
     <string name="peq_edit_as_string">Edit as string</string>
     <string name="peq_reset">Reset</string>
-    <string name="peq_band_editor">Band editor</string>
     <string name="peq_band_list">Band list</string>
-    <string name="peq_no_bands_defined">No filters in this scope</string>
     <string name="peq_delete_band">Delete band</string>
-    <string name="peq_done_spaced">&#160;&#160;Done&#160;</string>
-    <string name="peq_done">Done</string>
-    <string name="peq_cancel_spaced">&#160;&#160;Discard&#160;</string>
-    <string name="peq_cancel">Discard</string>
-    <string name="peq_discard_changes_title">Discard changes and exit?</string>
-    <string name="peq_discard_changes">The values are not valid or empty. Your changes can\'t be saved.\nDo you want to discard your changes and exit?</string>
     <string name="peq_frequency">Frequency</string>
-    <string name="peq_frequency_range">Value between 20Hz and 20000Hz</string>
     <string name="peq_gain">Gain</string>
-    <string name="peq_gain_range">Value between -30dB and 30dB</string>
     <string name="peq_q_factor">Q Factor</string>
-    <string name="peq_q_range">Value between 0.1 and 30.0</string>
     <string name="peq_filter_type">Filter type</string>
     <string name="peq_channel">Channel</string>
-    <string name="peq_channel_both">Both</string>
-    <string name="peq_channel_left">Left</string>
-    <string name="peq_channel_right">Right</string>
     <string name="peq_col_ch">CH</string>
     <string name="peq_col_filter">FILTER</string>
     <string name="peq_col_hz">HZ</string>
@@ -139,36 +114,15 @@
     <string name="peq_export_success">Exported successfully</string>
     <string name="peq_edit_hint">EqualizerAPO format</string>
 
-    <string name="bmw_dsp_gain_structure">Gain structure</string>
     <string name="bmw_dsp_headroom">Headroom</string>
-    <string name="bmw_dsp_low_gain_l">Low gain L</string>
-    <string name="bmw_dsp_low_gain_r">Low gain R</string>
-    <string name="bmw_dsp_mid_gain_l">Mid gain L</string>
-    <string name="bmw_dsp_mid_gain_r">Mid gain R</string>
-    <string name="bmw_dsp_delay_polarity">Delay / polarity</string>
-    <string name="bmw_dsp_invert_low_polarity">Invert low polarity</string>
-    <string name="bmw_dsp_invert_mid_polarity">Invert mid polarity</string>
-    <string name="bmw_dsp_mid_delay_l">Mid delay L</string>
-    <string name="bmw_dsp_mid_delay_r">Mid delay R</string>
-    <string name="bmw_dsp_low_delay_l">Low delay L</string>
-    <string name="bmw_dsp_low_delay_r">Low delay R</string>
-    <string name="bmw_dsp_crossovers">Crossovers</string>
-    <string name="bmw_dsp_subsonic_lr4">Subsonic On/Off</string>
     <string name="bmw_dsp_subsonic_freq">Subsonic freq</string>
-    <string name="bmw_dsp_mute_low_band">Mute low band</string>
-    <string name="bmw_dsp_low_lpf_freq">Low LPF freq</string>
-    <string name="bmw_dsp_mute_mid_band">Mute mid band</string>
-    <string name="bmw_dsp_mid_hpf_freq">Mid HPF freq</string>
     <string name="bmw_dsp_tilt_section">Tonality Tilt</string>
-    <string name="bmw_dsp_tilt_active">Tilt On/Off</string>
     <string name="bmw_dsp_tilt_amount">Tilt amount</string>
     <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
     <string name="bmw_dsp_mono_bass">Mono Bass</string>
-    <string name="bmw_dsp_mono_bass_active">Mono Bass On/Off</string>
     <string name="bmw_dsp_mono_bass_freq">Mono below</string>
     <string name="bmw_dsp_mono_bass_blend">Blend</string>
     <string name="bmw_dsp_mono_bass_makeup">Makeup gain</string>
-
 
     <string name="convolver_enable">Convolver</string>
     <string name="convolver_impulse">Impulse response</string>
@@ -178,13 +132,10 @@
     <string name="convolver_convolution_mode_shrink">Shrink</string>
     <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
-
-
     <string name="output_control_header">Output control</string>
     <string name="output_limiter_threshold">Limiter threshold</string>
     <string name="output_limiter_release">Limiter release</string>
     <string name="output_control_postgain">Post gain</string>
-
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
@@ -432,8 +383,6 @@
     <string name="filelibrary_context_delete">Delete</string>
     <string name="filelibrary_unsupported_format_title">Unsupported file type</string>
     <string name="filelibrary_unsupported_format">The selected file has not have the correct file extension.</string>
-    <string name="filelibrary_corrupted_title">Unsupported or corrupted file</string>
-    <string name="filelibrary_corrupted">The selected file contains no useable data or is corrupted.</string>
     <string name="filelibrary_access_fail">Failed to access directory</string>
     <string name="filelibrary_no_file_selected">No file selected</string>
     <string name="filelibrary_new_file_name">New file name</string>
@@ -450,35 +399,12 @@
     <string name="message_liveprog_compile_fail">Liveprog execution failed. Selected script is damaged. Please use the script editor for debugging.</string>
 
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Add</string>
 
     <!-- AutoEQ GraphicEQ selector -->
 
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Restore defaults</string>
 
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Script editor</string>
-    <string name="editor_find_and_replace">Find/replace…</string>
-    <string name="editor_docs">Help</string>
-    <string name="editor_open_fail">Script file does not exist or cannot be opened.</string>
-    <string name="editor_run">Save and run</string>
-    <string name="editor_save">Save</string>
-    <string name="editor_liveprog_enabled">Liveprog has been automatically turned on.</string>
-    <string name="editor_replace_all">Replace all</string>
-    <string name="editor_replacement">Replacement</string>
-    <string name="editor_find_next_match">Find next match</string>
-    <string name="editor_find_previous_match">Find previous match</string>
-    <string name="editor_search_keyword">Search</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">J_DSP is not active</string>
-    <string name="editor_engine_down">Cannot run script because J_DSP is disabled. Please turn on J_DSP to execute scripts.</string>
-    <string name="editor_save_prompt_title">Save changes?</string>
-    <string name="editor_save_prompt">The current script has unsaved changes. Do you want to save your changes or discard them?</string>
-    <string name="editor_script_launched">Script launched</string>
-    <string name="editor_cannot_undo">Nothing to undo.</string>
-    <string name="editor_cannot_redo">Nothing to redo.</string>
-    <string name="editor_text_size">Text size</string>
 
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Excluded apps</string>
@@ -547,7 +473,6 @@
 
     <!-- File intent handler -->
     <string name="intent_import_irs">Import impulse response</string>
-    <string name="intent_import_vdc">Import VDC file</string>
     <string name="intent_import_mode_add">Import only</string>
     <string name="intent_import_mode_select">Import and activate</string>
     <string name="intent_import_fail">Failed to import file \'%1$s\'</string>
@@ -560,18 +485,12 @@
     <string name="translation_notice">Contribute translations</string>
 
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Update failed</string>
-    <string name="self_update_download_fail">Failed to download update package. Please check your internet connection. Details: %1$s</string>
-    <string name="self_update_install_fail">Installation failed. %1$s</string>
-    <string name="self_update_finished">Update installed. The app is now restarting…</string>
     <string name="self_update_no_updates">No new updates available at the moment</string>
     <string name="self_update_notice">New update available (%1$s)</string>
     <string name="self_update_notice_summary">Tap here to download and install the new update.</string>
     <string name="self_update_notice_dismiss_install">Install now</string>
     <string name="self_update_notice_dismiss_snooze">Remind me later</string>
     <string name="self_update_notice_dismiss_skip">Skip this update</string>
-    <string name="self_update_state_downloading">Downloading…</string>
-    <string name="self_update_state_installing">Installing…</string>
 
     <!-- Backups -->
     <string name="backup_restore_progress">Restoring backup</string>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Настройки</string>
     <string name="action_revert">Сброс к значениям по умолчанию</string>
     <string name="action_blocked_apps">Исключенные приложения</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Установить</string>
     <string name="update">Обновить</string>
-    <string name="unknown_error">Неизвестная ошибка</string>
     <string name="actions">Действия</string>
     <string name="warning">Предупреждение</string>
     <string name="success">Успешно выполнено</string>
     <string name="open">Открыть</string>
     <string name="close">Закрыть</string>
-    <string name="delete">Удалить</string>
-    <string name="copy">Копировать</string>
-    <string name="paste">Вставить</string>
-    <string name="add">Добавить</string>
     <string name="yes">Да</string>
     <string name="no">Нет</string>
     <string name="value_not_set">Не задано</string>
-    <string name="undo">Отменить</string>
-    <string name="redo">Повторить</string>
     <string name="no_activity_found">Не найдено ни одного Activity для обработки данного действия</string>
     <string name="permission_allowed">Разрешено</string>
     <string name="permission_not_allowed">Запрещено</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Удалить</string>
     <string name="filelibrary_unsupported_format_title">Неподдерживаемый тип файла</string>
     <string name="filelibrary_unsupported_format">Выбранный файл имеет неправильное расширение.</string>
-    <string name="filelibrary_corrupted_title">Файл не поддерживается или поврежден</string>
-    <string name="filelibrary_corrupted">Выбранный файл не содержит пригодных для использования данных или поврежден.</string>
     <string name="filelibrary_access_fail">Не удалось получить доступ к каталогу</string>
     <string name="filelibrary_no_file_selected">Файл не выбран</string>
     <string name="filelibrary_new_file_name">Новое имя файла</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Конвольвер: Расширенное редактирование формы сигнала содержит недопустимые значения.</string>
     <string name="message_liveprog_compile_fail">Ошибка выполнения Liveprog. Выбранный скрипт поврежден. Используйте редактор скриптов для отладки.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Добавить</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Восстановить настройки по умолчанию</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Редактор скриптов</string>
-    <string name="editor_find_and_replace">Найти/Заменить…</string>
-    <string name="editor_docs">Помощь</string>
-    <string name="editor_open_fail">Файл скрипта не существует или не может быть открыт.</string>
-    <string name="editor_run">Сохранить и запустить</string>
-    <string name="editor_save">Сохранить</string>
-    <string name="editor_liveprog_enabled">Liveprog был автоматически включен.</string>
-    <string name="editor_replace_all">Заменить всё</string>
-    <string name="editor_replacement">Замена</string>
-    <string name="editor_find_next_match">Найти следующее совпадение</string>
-    <string name="editor_find_previous_match">Найти предыдущее совпадение</string>
-    <string name="editor_search_keyword">Поиск</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP не активирован</string>
-    <string name="editor_engine_down">Не удалось запустить скрипт, так как SiphonDSP отключен. Пожалуйста, включите SiphonDSP для выполнения скриптов.</string>
-    <string name="editor_save_prompt_title">Сохранить изменения?</string>
-    <string name="editor_save_prompt">Текущий скрипт имеет несохраненные изменения. Сохранить изменения или отменить их?</string>
-    <string name="editor_script_launched">Скрипт запущен</string>
-    <string name="editor_cannot_undo">Нет действий для отмены.</string>
-    <string name="editor_cannot_redo">Нет действий для повтора.</string>
-    <string name="editor_text_size">Размер текста</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Исключенные приложения</string>
     <string name="blocklist_add_exclusion_alt">Добавить приложение в исключения</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Сбросить текущий пресет SiphonDSP к значениям по умолчанию?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Импортировать импульсный отклик</string>
-    <string name="intent_import_vdc">Импортировать файл VDC</string>
     <string name="intent_import_mode_add">Только импортировать</string>
     <string name="intent_import_mode_select">Импортировать и активировать</string>
     <string name="intent_import_fail">Не удалось импортировать файл %1$s</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Помогите нам перевести это приложение на ваш язык! Нажмите здесь, чтобы перейти на сайт проекта на Crowdin.</string>
     <string name="translation_notice">Помочь с переводами</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Не удалось обновить</string>
-    <string name="self_update_download_fail">Не удалось загрузить пакет обновления. Пожалуйста, проверьте ваше интернет-соединение. Подробности: %1$s</string>
-    <string name="self_update_install_fail">Ошибка установки. %1$s</string>
-    <string name="self_update_finished">Обновление установлено. Перезапуск приложения…</string>
     <string name="self_update_no_updates">Нет доступных обновлений</string>
     <string name="self_update_notice">Доступно новое обновление (%1$s)</string>
     <string name="self_update_notice_summary">Нажмите здесь, чтобы загрузить и установить обновление.</string>
     <string name="self_update_notice_dismiss_install">Установить сейчас</string>
     <string name="self_update_notice_dismiss_snooze">Напомнить позже</string>
     <string name="self_update_notice_dismiss_skip">Пропустить это обновление</string>
-    <string name="self_update_state_downloading">Загрузка…</string>
-    <string name="self_update_state_installing">Установка…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Восстановление резервной копии</string>
     <string name="backup_restore_error">Ошибка восстановления резервной копии</string>

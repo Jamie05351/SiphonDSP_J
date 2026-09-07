@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Cài đặt</string>
     <string name="action_revert">Đặt lại về mặc định</string>
     <string name="action_blocked_apps">Loại trừ ứng dụng</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Cài đặt</string>
     <string name="update">Cập nhật</string>
-    <string name="unknown_error">Lỗi không xác định</string>
     <string name="actions">Hành động</string>
     <string name="warning">Cảnh báo</string>
     <string name="success">Thành công</string>
     <string name="open">Mở</string>
     <string name="close">Đóng</string>
-    <string name="delete">Xoá</string>
-    <string name="copy">Sao chép</string>
-    <string name="paste">Dán</string>
-    <string name="add">Thêm</string>
     <string name="yes">Có</string>
     <string name="no">Không</string>
     <string name="value_not_set">Chưa đặt</string>
-    <string name="undo">Hoàn tác</string>
-    <string name="redo">Làm lại</string>
     <string name="no_activity_found">Không tìm thấy Hoạt động nào để xử lý hành động</string>
     <string name="permission_allowed">Cho phép</string>
     <string name="permission_not_allowed">Không cho phép</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Xóa</string>
     <string name="filelibrary_unsupported_format_title">Loại tập tin không được hỗ trợ</string>
     <string name="filelibrary_unsupported_format">Tệp đã chọn không có phần mở rộng tệp chính xác.</string>
-    <string name="filelibrary_corrupted_title">Tệp sao lưu không được hỗ trợ hoặc đã bị hỏng</string>
-    <string name="filelibrary_corrupted">Tệp đã chọn không chứa dữ liệu có thể sử dụng được hoặc bị hỏng.</string>
     <string name="filelibrary_access_fail">Không thể truy cập thư mục</string>
     <string name="filelibrary_no_file_selected">Chưa chọn tệp nào</string>
     <string name="filelibrary_new_file_name">Tên file mới</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Bộ biến đổi: Chỉnh sửa sóng nâng cao chứa giá trị không hợp lệ.</string>
     <string name="message_liveprog_compile_fail">Liveprog thực hiện thất bại. Tập lệnh đã chọn bị hỏng. Vui lòng sử dụng trình chỉnh sửa tập lệnh để gỡ lỗi.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Thêm</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Khôi phục mặc định</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Trỉnh sửa tập lệnh</string>
-    <string name="editor_find_and_replace">Tìm/thay thế…</string>
-    <string name="editor_docs">Trợ giúp</string>
-    <string name="editor_open_fail">Tệp tập lệnh không tồn tại hoặc không thể mở được.</string>
-    <string name="editor_run">Lưu và chạy</string>
-    <string name="editor_save">Lưu</string>
-    <string name="editor_liveprog_enabled">Liveprog đã được bật tự động.</string>
-    <string name="editor_replace_all">Thay thế tất cả</string>
-    <string name="editor_replacement">Thay thế</string>
-    <string name="editor_find_next_match">Tìm từ khớp tiếp theo</string>
-    <string name="editor_find_previous_match">Tìm từ khớp trước</string>
-    <string name="editor_search_keyword">Tìm kiếm</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP không hoạt động</string>
-    <string name="editor_engine_down">Không thể chạy tập lệnh vì SiphonDSP bị tắt. Vui lòng bật SiphonDSP để thực thi tập lệnh.</string>
-    <string name="editor_save_prompt_title">Lưu thay đổi chứ?</string>
-    <string name="editor_save_prompt">Script hiện tại có những thay đổi chưa được lưu. Bạn muốn lưu các thay đổi của mình hay loại bỏ chúng?</string>
-    <string name="editor_script_launched">Đã khởi chạy tập lệnh</string>
-    <string name="editor_cannot_undo">Không có gì để hoàn tác.</string>
-    <string name="editor_cannot_redo">Không có gì để làm lại.</string>
-    <string name="editor_text_size">Cỡ chữ</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Loại trừ ứng dụng</string>
     <string name="blocklist_add_exclusion_alt">Thêm ứng dụng để loại trừ</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Bạn có muốn đặt lại cài đặt SiphonDSP hiện tại của mình về giá trị mặc định không?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Nhập đáp ứng xung</string>
-    <string name="intent_import_vdc">Nhập tệp VDC</string>
     <string name="intent_import_mode_add">Chỉ nhập vào</string>
     <string name="intent_import_mode_select">Nhập và kích hoạt</string>
     <string name="intent_import_fail">Không thể nhập tệp \'%1$s\'</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Hãy giúp chúng tôi dịch ứng dụng này sang ngôn ngữ của bạn! Nhấn vào đây để truy cập trang web dự án trên Crowdin.</string>
     <string name="translation_notice">Đóng góp bản dịch</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Cập nhật không thành công</string>
-    <string name="self_update_download_fail">Không tải được gói cập nhật. xin vui lòng kiểm tra kết nối Internet của bạn. chi tiết: %1$s</string>
-    <string name="self_update_install_fail">Cài đặt thất bại. %1$s</string>
-    <string name="self_update_finished">Đã cập nhật. Ứng dụng đang khởi động lại…</string>
     <string name="self_update_no_updates">Hiện tại không có bản cập nhật mới nào</string>
     <string name="self_update_notice">Đã có bản cập nhật mới (%1$s)</string>
     <string name="self_update_notice_summary">Chạm vào đây để tải xuống và cài đặt bản cập nhật mới.</string>
     <string name="self_update_notice_dismiss_install">Cài ngay</string>
     <string name="self_update_notice_dismiss_snooze">Nhắc mình sau nhé</string>
     <string name="self_update_notice_dismiss_skip">Bỏ qua cập nhật này</string>
-    <string name="self_update_state_downloading">Đang tải về…</string>
-    <string name="self_update_state_installing">Đang cài đặt…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Đang khôi phục bản sao</string>
     <string name="backup_restore_error">Khôi phục sao lưu không thành công</string>

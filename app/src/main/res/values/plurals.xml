@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <plurals name="nodes">
-        <item quantity="one">%d node</item>
-        <item quantity="other">%d nodes</item>
-    </plurals>
     <plurals name="unsupported_apps">
         <item quantity="one">%d unsupported app has been automatically excluded. Tap for details.</item>
         <item quantity="other">%d unsupported apps have been automatically excluded. Tap for details.</item>

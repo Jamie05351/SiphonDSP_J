@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">ตั้งค่า</string>
     <string name="action_revert">รีเซ็ตเป็นค่าเริ่มต้น</string>
     <string name="action_blocked_apps"> แอพที่ยกเว้น</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">ติดตั้ง</string>
     <string name="update">อัปเดต</string>
-    <string name="unknown_error">ข้อผิดพลาดที่ไม่รู้จัก</string>
     <string name="actions">การกระทำ</string>
     <string name="warning">คำเตือน</string>
     <string name="success">สำเร็จ</string>
     <string name="open">เปิด</string>
     <string name="close">ปิด</string>
-    <string name="delete">ลบ</string>
-    <string name="copy">คัดลอก</string>
-    <string name="paste">วาง</string>
-    <string name="add">เพิ่ม</string>
     <string name="yes">ใช่</string>
     <string name="no">ไม่</string>
     <string name="value_not_set">ไม่ได้ตั้งค่า</string>
-    <string name="undo">เลิกทำ</string>
-    <string name="redo">ทำซ้ำ</string>
     <string name="no_activity_found">ไม่พบกิจกรรมที่จะจัดการการดำเนินการ</string>
     <string name="permission_allowed">อนุญาต</string>
     <string name="permission_not_allowed">ไม่อนุญาต</string>
@@ -300,8 +292,6 @@
     <string name="filelibrary_context_delete">ลบ</string>
     <string name="filelibrary_unsupported_format_title">ไม่รองรับชนิดของไฟล์นี้</string>
     <string name="filelibrary_unsupported_format">ไฟล์ที่เลือกไม่มีนามสกุลไฟล์ที่ถูกต้อง</string>
-    <string name="filelibrary_corrupted_title">ไฟล์ไม่รองรับหรือเสียหาย</string>
-    <string name="filelibrary_corrupted">ไฟล์ที่เลือกไม่มีข้อมูลที่ใช้งานได้หรือเสียหาย</string>
     <string name="filelibrary_access_fail">ไม่สามารถเข้าถึงไดเร็กทอรี</string>
     <string name="filelibrary_no_file_selected">ไม่ได้เลือกไฟล์</string>
     <string name="filelibrary_new_file_name">ชื่อไฟล์ใหม่</string>
@@ -316,32 +306,9 @@
     <string name="message_convolver_advimp_invalid">Convolver: การแก้ไขรูปคลื่นขั้นสูงมีค่าที่ไม่ถูกต้อง</string>
     <string name="message_liveprog_compile_fail">การดำเนินการ Liveprog ล้มเหลว  สคริปต์ที่เลือกเสียหาย  โปรดใช้โปรแกรมแก้ไขสคริปต์สำหรับการดีบัก</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">เพิ่ม</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">คืนค่าเริ่มต้น</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">แก้ไขสคริปต์ </string>
-    <string name="editor_find_and_replace">ค้นหา/แทนที่…</string>
-    <string name="editor_docs">ช่วยเหลือ</string>
-    <string name="editor_open_fail">ไม่มีไฟล์สคริปต์หรือไม่สามารถเปิดได้ </string>
-    <string name="editor_run">บันทึกและเรียกใช้ </string>
-    <string name="editor_save">บันทึก</string>
-    <string name="editor_liveprog_enabled">Liveprog ถูกเปิดใช้งานโดยอัตโนมัติ</string>
-    <string name="editor_replace_all">แทนที่ทั้งหมด</string>
-    <string name="editor_replacement">เปลี่ยน</string>
-    <string name="editor_find_next_match">จับคู่</string>
-    <string name="editor_find_previous_match">จับคู่ก่อนหน้า</string>
-    <string name="editor_search_keyword">ค้นหา</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP ไม่ทำงาน</string>
-    <string name="editor_engine_down">ไม่สามารถเรียกใช้สคริปต์ได้เนื่องจาก SiphonDSP ถูกปิดใช้งาน  โปรดเปิด SiphonDSP เพื่อเรียกใช้สคริปต์ </string>
-    <string name="editor_save_prompt_title">บันทึก การแก้ไข</string>
-    <string name="editor_save_prompt">สคริปต์ปัจจุบันมีการเปลี่ยนแปลงที่ไม่ได้บันทึก  คุณต้องการบันทึกการเปลี่ยนแปลงหรือยกเลิกหรือไม่</string>
-    <string name="editor_script_launched">เปิดตัวสคริปต์ </string>
-    <string name="editor_cannot_undo">ไม่มีอะไรจะเลิกทำ</string>
-    <string name="editor_cannot_redo">ไม่มีอะไรต้องทำซ้ำ</string>
-    <string name="editor_text_size">ขนาดข้อความ</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist"> แอพที่ยกเว้น</string>
     <string name="blocklist_add_exclusion_alt">เพิ่มแอปพลิเคชันที่จะไม่รวม</string>
@@ -387,7 +354,6 @@
     <string name="revert_confirmation">คุณต้องการรีเซ็ตการตั้งค่าล่วงหน้าของ SiphonDSP ปัจจุบันเป็นค่าเริ่มต้นหรือไม่</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">นำเข้าการตอบสนองแรงกระตุ้น</string>
-    <string name="intent_import_vdc">นำเข้าไฟล์ VDC</string>
     <string name="intent_import_mode_add">ที่นำเข้าเท่านั้น</string>
     <string name="intent_import_mode_select">นำเข้าและเปิดใช้งาน</string>
     <string name="intent_import_fail">การนำเข้า %1$s ล้มเหลว</string>
@@ -398,18 +364,12 @@
     <string name="translation_notice_summary">โปรดช่วยเราแปลแอพนี้เป็นภาษาของคุณ!  แตะที่นี่เพื่อเยี่ยมชมไซต์โครงการบน Crowdin</string>
     <string name="translation_notice">ร่วมแปล</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">อัปเดตล้มเหลว</string>
-    <string name="self_update_download_fail">ดาวน์โหลดแพ็คเกจอัพเดทไม่สำเร็จ  โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ  รายละเอียด: %1$s</string>
-    <string name="self_update_install_fail">การติดตั้งล้มเหลว.  %1$s</string>
-    <string name="self_update_finished">ติดตั้งการอัปเดตแล้ว  แอพกำลังรีสตาร์ท ...</string>
     <string name="self_update_no_updates">ไม่มีการอัปเดตใหม่ในขณะนี้ </string>
     <string name="self_update_notice">มีการอัปเดตใหม่ (%1$s)</string>
     <string name="self_update_notice_summary">แตะที่นี่เพื่อดาวน์โหลดและติดตั้งการอัปเดตใหม่</string>
     <string name="self_update_notice_dismiss_install">ติดตั้งเดี๋ยวนี้</string>
     <string name="self_update_notice_dismiss_snooze">เตือนฉันในภายหลัง</string>
     <string name="self_update_notice_dismiss_skip">ข้ามการอัปเดต</string>
-    <string name="self_update_state_downloading">กำลังดาวน์โหลด...</string>
-    <string name="self_update_state_installing">กำลังติดตั้ง…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">การคืนค่าการสำรองข้อมูล</string>
     <string name="backup_restore_error">กู้คืนการสำรองข้อมูลล้มเหลว</string>

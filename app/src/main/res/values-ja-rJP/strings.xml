@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">設定</string>
     <string name="action_revert">デフォルトにリセットする</string>
     <string name="action_blocked_apps">除外するアプリ</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">インストール</string>
     <string name="update">アップデート</string>
-    <string name="unknown_error">不明なエラー</string>
     <string name="actions">動作</string>
     <string name="warning">警告</string>
     <string name="success">成功</string>
     <string name="open">開く</string>
     <string name="close">閉じる</string>
-    <string name="delete">削除</string>
-    <string name="copy">コピー</string>
-    <string name="paste">貼り付け</string>
-    <string name="add">追加</string>
     <string name="yes">はい</string>
     <string name="no">いいえ</string>
     <string name="value_not_set">未設定</string>
-    <string name="undo">やり直し</string>
-    <string name="redo">やり直し</string>
     <string name="no_activity_found">アクションを処理するアクティビティが見つかりませんでした</string>
     <string name="permission_allowed">許可されています</string>
     <string name="permission_not_allowed">許可されていません</string>
@@ -301,8 +293,6 @@
     <string name="filelibrary_context_delete">削除</string>
     <string name="filelibrary_unsupported_format_title">対応していないファイル形式です</string>
     <string name="filelibrary_unsupported_format">選択したファイルの拡張子が正しくありません。</string>
-    <string name="filelibrary_corrupted_title">対応していないか破損したファイル</string>
-    <string name="filelibrary_corrupted">選択したファイルに使用可能なデータがないか、ファイルが破損ています。</string>
     <string name="filelibrary_access_fail">ディレクトリへのアクセスに失敗しました</string>
     <string name="filelibrary_no_file_selected">ファイルが選択されていません</string>
     <string name="filelibrary_new_file_name">新しいファイル名</string>
@@ -317,32 +307,9 @@
     <string name="message_convolver_advimp_invalid">Convolver: 高度な波形編集に無効な値が含まれています。</string>
     <string name="message_liveprog_compile_fail">Liveprog の実行に失敗しました。選択したスクリプトが破損しています。スクリプト・エディタを使用してデバックしてください。</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">追加</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">既定値に戻す</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">スクリプトエディタ</string>
-    <string name="editor_find_and_replace">検索/置換...</string>
-    <string name="editor_docs">ヘルプ</string>
-    <string name="editor_open_fail">スクリプトファイルが存在しないか、開けません。</string>
-    <string name="editor_run">保存して実行</string>
-    <string name="editor_save">保存</string>
-    <string name="editor_liveprog_enabled">Liveprog は自動的に On になりました。</string>
-    <string name="editor_replace_all">全て置換</string>
-    <string name="editor_replacement">置き換え</string>
-    <string name="editor_find_next_match">次に該当するものを探す</string>
-    <string name="editor_find_previous_match">前に一致するものを探す</string>
-    <string name="editor_search_keyword">検索</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP は有効ではありません</string>
-    <string name="editor_engine_down">SiphonDSPが無効であるため、スクリプトを実行できません。スクリプトを実行するにはSiphonDSPを有効にしてください。</string>
-    <string name="editor_save_prompt_title">変更を保存しますか？</string>
-    <string name="editor_save_prompt">現在のスクリプトに保存されていない変更があります。変更を保存するか破棄しますか？</string>
-    <string name="editor_script_launched">スクリプトが起動しました</string>
-    <string name="editor_cannot_undo">元に戻すことはできません。</string>
-    <string name="editor_cannot_redo">やり直すものはありません。</string>
-    <string name="editor_text_size">文字サイズ</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">除外するアプリ</string>
     <string name="blocklist_add_exclusion_alt">除外するアプリを追加</string>
@@ -388,7 +355,6 @@
     <string name="revert_confirmation">現在のSiphonDSPプリセットをデフォルト値にリセットしますか？</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">インパルス応答をインポート</string>
-    <string name="intent_import_vdc">VDC ファイルをインポート</string>
     <string name="intent_import_mode_add">インポートのみ</string>
     <string name="intent_import_mode_select">インポートして有効化</string>
     <string name="intent_import_fail">ファイル \'%1$s\' のインポートに失敗しました</string>
@@ -399,18 +365,12 @@
     <string name="translation_notice_summary">ここをタップして Crowdin のプロジェクトサイトにアクセスして、このアプリをあなたの言語に翻訳する手助けをしてください！</string>
     <string name="translation_notice">翻訳に貢献</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">更新失敗</string>
-    <string name="self_update_download_fail">更新パッケージのダウンロードに失敗しました。インターネット接続を確認してください。詳細: %1$s</string>
-    <string name="self_update_install_fail">インストールに失敗しました。 %1$s</string>
-    <string name="self_update_finished">アップデートをインストールしました。アプリが再起動します…</string>
     <string name="self_update_no_updates">現在利用可能な新しいアップデートはありません</string>
     <string name="self_update_notice">新しいアップデートが利用可能です (%1$s)</string>
     <string name="self_update_notice_summary">新しいアップデートをダウンロードしてインストールするには、ここをタップしてください。</string>
     <string name="self_update_notice_dismiss_install">今すぐインストールする</string>
     <string name="self_update_notice_dismiss_snooze">後で通知する</string>
     <string name="self_update_notice_dismiss_skip">このアップデートをスキップする</string>
-    <string name="self_update_state_downloading">ダウンロード中…</string>
-    <string name="self_update_state_installing">インストール中…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">バックアップから復元中</string>
     <string name="backup_restore_error">バックアップからの復元に失敗しました</string>

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Asetukset</string>
     <string name="action_revert">Palauta oletukset</string>
     <!-- Notification channels -->
     <string name="notification_group_service">Palvelu</string>
@@ -18,20 +17,13 @@
     <!-- General purpose -->
     <string name="install">Asenna</string>
     <string name="update">Päivitä</string>
-    <string name="unknown_error">Tuntematon virhe</string>
     <string name="actions">Toiminnot</string>
     <string name="warning">Varoitus</string>
     <string name="open">Avaa</string>
     <string name="close">Sulje</string>
-    <string name="delete">Poista</string>
-    <string name="copy">Kopioi</string>
-    <string name="paste">Liitä</string>
-    <string name="add">Lisää</string>
     <string name="yes">Kyllä</string>
     <string name="no">Ei</string>
     <string name="value_not_set">Ei asetettu</string>
-    <string name="undo">Kumoa</string>
-    <string name="redo">Tee uudelleen</string>
     <string name="permission_allowed">Sallittu</string>
     <string name="permission_not_allowed">Ei sallittu</string>
     <!-- Main screen -->
@@ -103,17 +95,9 @@
     <string name="filelibrary_file_exists">Tiedosto on jo olemassa</string>
     <!-- SiphonDSP engine messages -->
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Lisää</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
     <!-- Liveprog script editor -->
-    <string name="editor_docs">Ohje</string>
-    <string name="editor_save">Tallenna</string>
-    <string name="editor_replace_all">Korvaa kaikki</string>
-    <string name="editor_find_next_match">Etsi seuraava osuma</string>
-    <string name="editor_find_previous_match">Etsi edellinen osuma</string>
-    <string name="editor_search_keyword">Hae</string>
-    <string name="editor_text_size">Tekstin koko</string>
     <!-- Blocklist -->
     <!-- Compatibility issue activity -->
     <string name="app_compat_retry">Yritä uudelleen</string>
@@ -136,12 +120,9 @@
     <!-- Translation notice box -->
     <string name="translation_notice">Avusta Kääntämisessä</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Päivitys epäonnistui</string>
     <string name="self_update_notice_dismiss_install">Asenna nyt</string>
     <string name="self_update_notice_dismiss_snooze">Muistuta myöhemmin</string>
     <string name="self_update_notice_dismiss_skip">Ohita tämä päivitys</string>
-    <string name="self_update_state_downloading">Ladataan…</string>
-    <string name="self_update_state_installing">Asennetaan…</string>
     <!-- Backups -->
     <string name="backup_create_error">Varmuuskopiointi epäonnistui</string>
     <string name="backup_manual_backup">Manuaalinen varmuuskopiointi</string>

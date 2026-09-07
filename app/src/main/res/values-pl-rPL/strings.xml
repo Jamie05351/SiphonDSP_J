@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Ustawienia</string>
     <string name="action_revert">Przywróć domyślne</string>
     <string name="action_blocked_apps">Wykluczone aplikacje</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Zainstaluj</string>
     <string name="update">Aktualizuj</string>
-    <string name="unknown_error">Nieznany błąd</string>
     <string name="actions">Akcje</string>
     <string name="warning">Uwaga</string>
     <string name="success">Wykonano</string>
     <string name="open">Otwórz</string>
     <string name="close">Zamknij</string>
-    <string name="delete">Usuń</string>
-    <string name="copy">Kopiuj</string>
-    <string name="paste">Wklej</string>
-    <string name="add">Dodaj</string>
     <string name="yes">Tak</string>
     <string name="no">Nie</string>
     <string name="value_not_set">Nie ustawiono</string>
-    <string name="undo">Cofnij</string>
-    <string name="redo">Ponów</string>
     <string name="no_activity_found">Nie znaleziono aktywności do obsługi akcji</string>
     <string name="permission_allowed">Dozwolone</string>
     <string name="permission_not_allowed">Niedozwolone</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Usuń</string>
     <string name="filelibrary_unsupported_format_title">Nieobsługiwany typ pliku</string>
     <string name="filelibrary_unsupported_format">Wybrany plik nie ma poprawnego rozszerzenia pliku.</string>
-    <string name="filelibrary_corrupted_title">Nieobsługiwany lub uszkodzony plik</string>
-    <string name="filelibrary_corrupted">Wybrany plik nie zawiera żadnych użytecznych danych lub jest uszkodzony.</string>
     <string name="filelibrary_access_fail">Nie udało się uzyskać dostępu do katalogu</string>
     <string name="filelibrary_no_file_selected">Nie wybrano pliku</string>
     <string name="filelibrary_new_file_name">Nazwa nowego pliku</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Convolver: Zaawansowana edycja formularza waveform zawiera nieprawidłowe wartości.</string>
     <string name="message_liveprog_compile_fail">Wykonanie Liveprog nie powiodło się. Wybrany skrypt jest uszkodzony. Użyj edytora skryptu do debugowania.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Dodaj</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Przywróć ustawienia domyślne</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Edytor skryptów</string>
-    <string name="editor_find_and_replace">Znajdź i zamień…</string>
-    <string name="editor_docs">Pomoc</string>
-    <string name="editor_open_fail">Plik skryptu nie istnieje lub nie można go otworzyć.</string>
-    <string name="editor_run">Zapisz i uruchom</string>
-    <string name="editor_save">Zapisz</string>
-    <string name="editor_liveprog_enabled">Liveprog został włączony automatycznie.</string>
-    <string name="editor_replace_all">Zastąp wszystkie</string>
-    <string name="editor_replacement">Zamień na</string>
-    <string name="editor_find_next_match">Znajdź następne dopasowanie</string>
-    <string name="editor_find_previous_match">Znajdź poprzednie dopasowanie</string>
-    <string name="editor_search_keyword">Wyszukaj</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP nie jest aktywny</string>
-    <string name="editor_engine_down">Nie można uruchomić skryptu, ponieważ SiphonDSP jest wyłączony. Włącz SiphonDSP, aby wykonać skrypty.</string>
-    <string name="editor_save_prompt_title">Zapisać zmiany?</string>
-    <string name="editor_save_prompt">Bieżący skrypt ma niezapisane zmiany. Czy chcesz zapisać zmiany czy je odrzucić?</string>
-    <string name="editor_script_launched">Skrypt uruchomiony</string>
-    <string name="editor_cannot_undo">Nie ma nic do cofnięcia.</string>
-    <string name="editor_cannot_redo">Nie ma nic do zrobienia ponownie.</string>
-    <string name="editor_text_size">Rozmiar czcionki</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Wykluczone aplikacje</string>
     <string name="blocklist_add_exclusion_alt">Dodaj aplikację do wykluczenia</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Czy chcesz zresetować aktualne ustawienia SiphonDSP do wartości domyślnych?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Importuj odpowiedź impulsu</string>
-    <string name="intent_import_vdc">Importuj plik VDC</string>
     <string name="intent_import_mode_add">Tylko importuj</string>
     <string name="intent_import_mode_select">Importuj i aktywuj</string>
     <string name="intent_import_fail">Nie udało się zaimportować pliku \'%1$s\'</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Pomóż nam przetłumaczyć tę aplikację na swój język! Dotknij tutaj, aby odwiedzić stronę projektu na Crowdin.</string>
     <string name="translation_notice">Pomóż w tłumaczeniu</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Błąd aktualizacji</string>
-    <string name="self_update_download_fail">Nie udało się pobrać pakietu aktualizacji. Sprawdź swoje połączenie internetowe. Szczegóły: %1$s</string>
-    <string name="self_update_install_fail">Instalacja nie powiodła się. %1$s</string>
-    <string name="self_update_finished">Aktualizacja zainstalowana. Aplikacja uruchamia się ponownie…</string>
     <string name="self_update_no_updates">Brak dostępnych nowych aktualizacji</string>
     <string name="self_update_notice">Dostępna jest nowa aktualizacja (%1$s)</string>
     <string name="self_update_notice_summary">Kliknij tutaj, aby pobrać i zainstalować nową aktualizację.</string>
     <string name="self_update_notice_dismiss_install">Zainstaluj teraz</string>
     <string name="self_update_notice_dismiss_snooze">Przypomnij później</string>
     <string name="self_update_notice_dismiss_skip">Pomiń tę aktualizację</string>
-    <string name="self_update_state_downloading">Pobieranie…</string>
-    <string name="self_update_state_installing">Instalowanie…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Przywracanie kopii zapasowej</string>
     <string name="backup_restore_error">Przywracanie kopii zapasowej nie powiodło się</string>

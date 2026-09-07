@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <plurals name="nodes">
-        <item quantity="one">%d вузол</item>
-        <item quantity="few">%d вузли</item>
-        <item quantity="many">%d вузлів</item>
-        <item quantity="other">%d вузлів</item>
-    </plurals>
     <plurals name="unsupported_apps">
         <item quantity="one">%d непідтримуваний додаток було автоматично виключено. Натисніть, щоб дізнатися більше.</item>
         <item quantity="few">%d непідтримувані додатки було автоматично виключено. Натисніть, щоб дізнатися більше.</item>

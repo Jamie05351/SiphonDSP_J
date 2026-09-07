@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings">Параметри</string>
     <string name="action_revert">Відновити типові налаштування</string>
     <string name="action_blocked_apps">Виключені додатки</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">Встановити</string>
     <string name="update">Оновити</string>
-    <string name="unknown_error">Невідома помилка</string>
     <string name="actions">Дії</string>
     <string name="warning">Попередження</string>
     <string name="success">Успішно виконано</string>
     <string name="open">Відкрити</string>
     <string name="close">Закрити</string>
-    <string name="delete">Видалити</string>
-    <string name="copy">Копіювати</string>
-    <string name="paste">Вставити</string>
-    <string name="add">Додати</string>
     <string name="yes">Так</string>
     <string name="no">Ні</string>
     <string name="value_not_set">Не задано</string>
-    <string name="undo">Скасувати</string>
-    <string name="redo">Повторити</string>
     <string name="no_activity_found">Не знайдено жодного Activity для обробки цієї дії</string>
     <string name="permission_allowed">Дозволено</string>
     <string name="permission_not_allowed">Заборонено</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">Видалити</string>
     <string name="filelibrary_unsupported_format_title">Непідтримуваний тип файлу</string>
     <string name="filelibrary_unsupported_format">Обраний файл має неправильне розширення.</string>
-    <string name="filelibrary_corrupted_title">Непідтримуваний або пошкоджений файл</string>
-    <string name="filelibrary_corrupted">Обраний файл не містить придатних для використання даних або пошкоджений.</string>
     <string name="filelibrary_access_fail">Не вдалося отримати доступ до каталогу</string>
     <string name="filelibrary_no_file_selected">Файл не вибрано</string>
     <string name="filelibrary_new_file_name">Нове ім\'я файлу</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">Конвольвер: Розширене редагування форми сигналу містить неприпустимі значення.</string>
     <string name="message_liveprog_compile_fail">Помилка виконання Liveprog. Обраний скрипт пошкоджений. Використайте редактор скриптів для налагодження.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">Додати</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">Відновити типові значення</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">Редактор скриптів</string>
-    <string name="editor_find_and_replace">Знайти/Замінити…</string>
-    <string name="editor_docs">Допомога</string>
-    <string name="editor_open_fail">Файл скрипта не існує або не може бути відкритий.</string>
-    <string name="editor_run">Зберегти та запустити</string>
-    <string name="editor_save">Зберегти</string>
-    <string name="editor_liveprog_enabled">Liveprog було автоматично увімкнено.</string>
-    <string name="editor_replace_all">Замінити все</string>
-    <string name="editor_replacement">Заміна</string>
-    <string name="editor_find_next_match">Знайти наступний збіг</string>
-    <string name="editor_find_previous_match">Знайти попередній збіг</string>
-    <string name="editor_search_keyword">Пошук</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP не активований</string>
-    <string name="editor_engine_down">Не вдалося запустити скрипт, оскільки SiphonDSP вимкнено. Будь ласка, увімкніть SiphonDSP для виконання скриптів.</string>
-    <string name="editor_save_prompt_title">Зберегти зміни?</string>
-    <string name="editor_save_prompt">Поточний скрипт має незбережені зміни. Зберегти зміни чи скасувати їх?</string>
-    <string name="editor_script_launched">Скрипт запущено</string>
-    <string name="editor_cannot_undo">Немає дій для скасування.</string>
-    <string name="editor_cannot_redo">Немає дій для повторення.</string>
-    <string name="editor_text_size">Розмір тексту</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">Виключені додатки</string>
     <string name="blocklist_add_exclusion_alt">Додати програму до виключень</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">Скинути поточний пресет SiphonDSP до типових значень?</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">Імпортувати імпульсний відгук</string>
-    <string name="intent_import_vdc">Імпортувати файл VDC</string>
     <string name="intent_import_mode_add">Лише імпортувати</string>
     <string name="intent_import_mode_select">Імпортувати та активувати</string>
     <string name="intent_import_fail">Не вдалось імпортувати файл %1$s</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">Допоможіть нам перекласти цей додаток вашою мовою! Натисніть тут, щоб перейти на сайт проекту на Crowdin.</string>
     <string name="translation_notice">Допомогти з перекладом</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">Не вдалося оновити</string>
-    <string name="self_update_download_fail">Не вдалося завантажити пакет оновлення. Будь ласка, перевірте ваше інтернет-з\'єднання. Детальніше: %1$s</string>
-    <string name="self_update_install_fail">Помилка при встановленні. %1$s</string>
-    <string name="self_update_finished">Оновлення встановлено. Перезапуск додатка…</string>
     <string name="self_update_no_updates">Наразі немає нових оновлень</string>
     <string name="self_update_notice">Доступне нове оновлення (%1$s)</string>
     <string name="self_update_notice_summary">Натисніть тут, щоб завантажити та встановити оновлення.</string>
     <string name="self_update_notice_dismiss_install">Встановити зараз</string>
     <string name="self_update_notice_dismiss_snooze">Нагадати пізніше</string>
     <string name="self_update_notice_dismiss_skip">Пропустити це оновлення</string>
-    <string name="self_update_state_downloading">Завантаження…</string>
-    <string name="self_update_state_installing">Встановлення…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">Відновлення з резервної копії</string>
     <string name="backup_restore_error">Помилка відновлення резервної копії</string>

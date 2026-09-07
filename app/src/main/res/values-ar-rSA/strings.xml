@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Main menu bar -->
-    <string name="action_settings"></string>
     <string name="action_revert">إعادة الضبط</string>
     <string name="action_blocked_apps">التطبيقات المستبعدة</string>
     <!-- Notification channels -->
@@ -38,21 +37,14 @@
     <!-- General purpose -->
     <string name="install">تثبيت</string>
     <string name="update">تحديث</string>
-    <string name="unknown_error">خطأ غير معروف</string>
     <string name="actions">الإجراءات</string>
     <string name="warning">تحذير</string>
     <string name="success">تم بنجاح</string>
     <string name="open">فتح</string>
     <string name="close">إغلاق</string>
-    <string name="delete">حذف</string>
-    <string name="copy">نسخ</string>
-    <string name="paste">لصق</string>
-    <string name="add">إضافة</string>
     <string name="yes">نعم</string>
     <string name="no">لا</string>
     <string name="value_not_set">لم يتم تعيينه</string>
-    <string name="undo">تراجع</string>
-    <string name="redo">إعادة</string>
     <string name="no_activity_found">لم يتم العثور على نشاط لمعالجة الإجراء</string>
     <string name="permission_allowed">مسموح</string>
     <string name="permission_not_allowed">غير مسموح به</string>
@@ -299,8 +291,6 @@
     <string name="filelibrary_context_delete">حذف</string>
     <string name="filelibrary_unsupported_format_title">نوع الملف غير مدعوم</string>
     <string name="filelibrary_unsupported_format">الملف المحدد ليس لديه امتداد الملف الصحيح.</string>
-    <string name="filelibrary_corrupted_title">ملف غير مدعوم أو معطوب</string>
-    <string name="filelibrary_corrupted">الملف المحدد لا يحتوي على بيانات صالحة للاستخدام أو تالف.</string>
     <string name="filelibrary_access_fail">فشل في الوصول إلى المجلد</string>
     <string name="filelibrary_no_file_selected">لم يتم تحديد أي ملف</string>
     <string name="filelibrary_new_file_name">اسم ملف جديد</string>
@@ -315,32 +305,9 @@
     <string name="message_convolver_advimp_invalid">الدوران: تحرير الشكل الموجي المتقدم يحتوي على قيم غير صالحة.</string>
     <string name="message_liveprog_compile_fail">فشل تنفيذ Liveprog. البرنامج النصي المحدد معطوب. الرجاء استخدام محرر البرنامج النصي لتصحيح الأخطاء.</string>
     <!-- GraphicEQ editor -->
-    <string name="gep_add_node">إضافة</string>
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
-    <string name="action_restore_defaults">إستعادة الافتراضية</string>
     <!-- Liveprog script editor -->
-    <string name="title_activity_liveprog_editor">محرر البرنامج النصي</string>
-    <string name="editor_find_and_replace">العثور على / استبدال…</string>
-    <string name="editor_docs">الدعم</string>
-    <string name="editor_open_fail">ملف البرنامج النصي غير موجود أو لا يمكن فتحه.</string>
-    <string name="editor_run">حفظ وتشغيل</string>
-    <string name="editor_save">حفظ</string>
-    <string name="editor_liveprog_enabled">تم تشغيل Liveprog تلقائياً.</string>
-    <string name="editor_replace_all">استبدال الكل</string>
-    <string name="editor_replacement">الاستبدال</string>
-    <string name="editor_find_next_match">بحث عن التطابق التالي</string>
-    <string name="editor_find_previous_match">البحث عن تطابق سابق</string>
-    <string name="editor_search_keyword">بحث</string>
-    <string name="editor_source_position">%1$d:%2$d</string>
-    <string name="editor_engine_down_title">SiphonDSP غير نشط</string>
-    <string name="editor_engine_down">لا يمكن تشغيل البرنامج النصي بسبب تعطيل SiphonDSP. الرجاء تشغيل SiphonDSP لتنفيذ البرامج النصية.</string>
-    <string name="editor_save_prompt_title">هل تريد حفظ التغييرات؟</string>
-    <string name="editor_save_prompt">يحتوي البرنامج النصي الحالي على تغييرات غير محفوظة. هل تريد حفظ التغييرات الخاصة بك أو تجاهلها؟</string>
-    <string name="editor_script_launched">تم تشغيل البرنامج النصي</string>
-    <string name="editor_cannot_undo">لا شيء يمكن التراجع عنه.</string>
-    <string name="editor_cannot_redo">لا شيء يمكن إعادته.</string>
-    <string name="editor_text_size">حجم الخط</string>
     <!-- Blocklist -->
     <string name="title_activity_blocklist">التطبيقات المستبعدة</string>
     <string name="blocklist_add_exclusion_alt">إضافة تطبيق للاستبعاد</string>
@@ -386,7 +353,6 @@
     <string name="revert_confirmation">هل تريد إعادة تعيين الـ SiphonDSP الحالي الخاص بك إلى القيم الافتراضية؟</string>
     <!-- File intent handler -->
     <string name="intent_import_irs">إستيراد استجابة الدافع</string>
-    <string name="intent_import_vdc">استيراد ملف VDC</string>
     <string name="intent_import_mode_add">استيراد فقط</string>
     <string name="intent_import_mode_select">استيراد وتفعيل</string>
     <string name="intent_import_fail">فشل استيراد الملف \'%1$s\'</string>
@@ -397,18 +363,12 @@
     <string name="translation_notice_summary">الرجاء مساعدتنا في ترجمة هذا التطبيق إلى لغتك! انقر هنا لزيارة موقع المشروع على كراودن.</string>
     <string name="translation_notice">ساهم في الترجمة</string>
     <!-- Self-updates (Root) -->
-    <string name="self_update_install_error">فشل التحديث</string>
-    <string name="self_update_download_fail">فشل تنزيل حزمة التحديث. الرجاء التحقق من اتصالك بالإنترنت. التفاصيل: %1$s</string>
-    <string name="self_update_install_fail">فشل التثبيت. %1$s</string>
-    <string name="self_update_finished">تم تثبيت التحديث. يتم الآن إعادة تشغيل التطبيق…</string>
     <string name="self_update_no_updates">لا توجد تحديثات جديدة متاحة في الوقت الحالي</string>
     <string name="self_update_notice">تحديث جديد متوفر (%1$s)</string>
     <string name="self_update_notice_summary">انقر هنا لتنزيل وتثبيت التحديث الجديد.</string>
     <string name="self_update_notice_dismiss_install">تثبيت الآن</string>
     <string name="self_update_notice_dismiss_snooze">ذكرني لاحقاً</string>
     <string name="self_update_notice_dismiss_skip">تخطى هذا التحديث</string>
-    <string name="self_update_state_downloading">جاري تحميل…</string>
-    <string name="self_update_state_installing">جار التثبيت…</string>
     <!-- Backups -->
     <string name="backup_restore_progress">استعادة النسخة الاحتياطية</string>
     <string name="backup_restore_error">فشل استرجاع النسخ الاحتياطي</string>
