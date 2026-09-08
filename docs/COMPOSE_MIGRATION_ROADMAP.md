@@ -348,6 +348,8 @@ makes it the hardest:
 
 ## Visual design direction: analyzer/graph polish
 
+> Full implementation-ready detail: see `docs/ANALYZER_VISUAL_SPEC.md`.
+
 Applies to the PEQ graph (`ParametricEqSurface`), the Crossovers & Tilt response graph
 (`NativeBmwDspResponseView`), and the Compressor multiband graph. Direction: move from the
 current flat/neon-approximated look toward something closer to FabFilter Pro-Q's curve
