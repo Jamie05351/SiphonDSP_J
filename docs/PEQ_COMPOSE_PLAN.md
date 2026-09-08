@@ -149,6 +149,13 @@ curves, summed curve via `drawSumCurve`, phase overlay, spectrum background via
 fade timer + tap-detail callout (§4) and the graph-options menu (channel display / curve mode)
 as a Compose `DropdownMenu`, as originally scoped.
 
+**Display modes: MAGNITUDE and PHASE only** (2026-09-09 direction). `MAGNITUDE_PHASE` (the
+combined overlay) and `GROUP_DELAY` are dropped — so the Canvas port skips `drawGroupDelayCurve`
+/ `drawGroupDelayGrid` / `drawSumPhaseOverlay` and the group-delay math in `PeqGraphMath`
+entirely, the `DisplayMode` enum shrinks to `{ MAGNITUDE, PHASE }`, and the graph-options menu
+drops two curve-mode entries. Node interaction is already MAGNITUDE-only (`onTouchEvent` gates
+on it), so PHASE stays a read-only view — unchanged. Cuts ~150-200 lines of porting.
+
 **Tap-only, no dragging** — matches current behavior exactly. `ParametricEqSurface` already
 removed drag-to-adjust entirely (screen is too small at 1280×480 for precise drag-selection of
 a specific filter/frequency/gain point); tapping a node selects it and shows the detail
