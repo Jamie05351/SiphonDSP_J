@@ -61,9 +61,10 @@ fun BmwPanel(
         } else {
             val style = TextStyle(fontSize = BoxTextSize, fontWeight = FontWeight.Bold)
             val widest = sliderLabels.maxOf { textMeasurer.measure(it, style).size.width }
-            // +2dp slack so a label exactly as wide as the measured text doesn't hit the
-            // maxLines=1 ellipsis on a sub-pixel rounding difference between measure and layout.
-            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 + 2.dp }
+            // +6dp slack so a label as wide as the measured text doesn't hit the maxLines=1
+            // ellipsis -- TextMeasurer with a bare TextStyle underestimates the rendered width
+            // slightly (font metrics / fallback), and "Threshold" was still clipping at +2dp.
+            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 + 6.dp }
         }
     }
 
@@ -74,6 +75,7 @@ fun BmwPanel(
                 .padding(start = leanStart, top = 6.dp, end = 12.dp, bottom = 8.dp),
         ) {
             if (title.isNotBlank()) {
+                val hasHeaderToggle = toggleChecked != null && onToggleChange != null
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = title,
@@ -82,7 +84,10 @@ fun BmwPanel(
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.width(titleColumnWidth),
+                        // Only pinned to the title-column width when a header switch follows it
+                        // (so the switch lands where the slider rows start); otherwise natural
+                        // width so a long panel title isn't needlessly clipped.
+                        modifier = if (hasHeaderToggle) Modifier.width(titleColumnWidth) else Modifier,
                     )
                     if (toggleChecked != null && onToggleChange != null) {
                         Spacer(Modifier.width(RowToggleZoneWidth))
