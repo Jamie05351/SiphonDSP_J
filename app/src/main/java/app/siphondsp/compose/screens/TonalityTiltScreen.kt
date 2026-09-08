@@ -61,6 +61,7 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
                 accentColor = tiltColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_TILT_AMOUNT, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_TILT_AMOUNT, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_TILT_AMOUNT, it) },
             )
             BmwSliderRow(
                 label = stringResource(R.string.bmw_dsp_tilt_pivot),
@@ -71,6 +72,7 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
                 accentColor = tiltColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_TILT_FREQ, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_TILT_FREQ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_TILT_FREQ, it) },
             )
         }
     }
