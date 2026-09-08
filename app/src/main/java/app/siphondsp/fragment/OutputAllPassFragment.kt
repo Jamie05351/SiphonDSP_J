@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
-import app.siphondsp.compose.controls.BmwSliderDemo
+import app.siphondsp.compose.ComposeSmokeTest
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
@@ -118,7 +118,7 @@ class OutputAllPassFragment : Fragment() {
         // pager, same pattern as Phase 1/2. Remove this block, both imports above, and
         // BmwSliderDemo.kt once confirmed on-device.
         val sliderDemoView = ComposeView(requireContext()).apply {
-            setContent { BmwSliderDemo() }
+            setContent { ComposeSmokeTest() }
         }
 
         val stack = LinearLayout(requireContext()).apply {
