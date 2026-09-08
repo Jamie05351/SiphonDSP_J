@@ -245,6 +245,16 @@
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:minHeight="260dp" />
+
+            <!-- TEMPORARY (10c-i-b / 10c-i-c): side-by-side Compose PeqGraph for parity checks;
+                 removed when 10e deletes this layout. Portrait isn't a target form factor, but
+                 the shared id keeps ViewBinding happy for both layouts. -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/compose_graph_harness"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:minHeight="200dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -14,6 +14,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
@@ -46,6 +47,10 @@ import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.compose.screens.PeqChannelDisplay
+import app.siphondsp.compose.screens.PeqGraph
+import app.siphondsp.compose.screens.PeqGraphMode
+import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.ParametricEqSurface
@@ -259,6 +264,7 @@ class ParametricEqualizerFragment : Fragment() {
                     if (values.size != BmwSignalChain.VALUE_COUNT) return
                     nativeDspValues = values.copyOf()
                     binding.equalizerSurface.setSystemValues(nativeDspValues)
+                    renderComposeGraphHarness()
                 }
             }
         }
@@ -287,6 +293,9 @@ class ParametricEqualizerFragment : Fragment() {
         binding = FragmentParametricEqBinding.inflate(layoutInflater, container, false)
         setUpCardsPager()
         binding.equalizerSurface.showSpectrum = true
+        binding.composeGraphHarness.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
 
         binding.previewCard.setOnClickListener {
             if (resources.configuration.orientation != ORIENTATION_LANDSCAPE) {
@@ -410,6 +419,7 @@ class ParametricEqualizerFragment : Fragment() {
             selectedBandByScope[selectedScope],
             sampleRate,
         )
+        renderComposeGraphHarness()
         binding.previewTitle.text = when (selectedScope) {
             PeqScope.FULL -> "Pre EQ response"
             PeqScope.LOW -> "Low Band PEQ response · inside low crossover branch"
@@ -487,6 +497,47 @@ class ParametricEqualizerFragment : Fragment() {
         }
     }
 
+    /**
+     * TEMPORARY (roadmap 10c-i-b / 10c-i-c): pushes the current state into the side-by-side
+     * Compose [PeqGraph] harness so it can be screenshot next to the live [ParametricEqSurface]
+     * for a parity check. The harness `ComposeView` and every call to this go away when 10e
+     * deletes `fragment_parametric_eq.xml`.
+     */
+    private fun renderComposeGraphHarness() {
+        if (!::nativeDspValues.isInitialized) return
+        val graphPrefs = PeqGraphPreferences(requireContext())
+        val sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble()
+        val mode = when (graphPrefs.responseMode) {
+            ParametricEqSurface.DisplayMode.PHASE -> PeqGraphMode.PHASE
+            else -> PeqGraphMode.MAGNITUDE
+        }
+        val channelDisplay = when (graphPrefs.channelDisplay) {
+            ParametricEqSurface.ChannelDisplay.LEFT -> PeqChannelDisplay.LEFT
+            ParametricEqSurface.ChannelDisplay.RIGHT -> PeqChannelDisplay.RIGHT
+            else -> PeqChannelDisplay.BOTH
+        }
+        val values = nativeDspValues
+        val state = peqState
+        val bank = selectedScope.bank
+        val selectedBand = selectedBandByScope[selectedScope]
+        val showOverlays = graphPrefs.showIndividualFilters
+        binding.composeGraphHarness.setContent {
+            BmwDspTheme {
+                PeqGraph(
+                    systemValues = values,
+                    peqState = state,
+                    activeBank = bank,
+                    selectedBandId = selectedBand,
+                    mode = mode,
+                    channelDisplay = channelDisplay,
+                    showIndividualFilters = showOverlays,
+                    showSpectrum = true,
+                    sampleRate = sampleRate,
+                )
+            }
+        }
+    }
+
     private fun showGraphOptionsPopup(anchor: View) {
         val graphPrefs = PeqGraphPreferences(requireContext())
         val popup = PopupMenu(requireContext(), anchor)
@@ -520,7 +571,7 @@ class ParametricEqualizerFragment : Fragment() {
             findItem(checked)?.isChecked = true
         }
         popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
+            val handled = when (item.itemId) {
                 GRAPH_MENU_OVERLAYS -> {
                     binding.equalizerSurface.showIndividualFilters = !item.isChecked
                     graphPrefs.showIndividualFilters = binding.equalizerSurface.showIndividualFilters
@@ -548,6 +599,8 @@ class ParametricEqualizerFragment : Fragment() {
                 }
                 else -> false
             }
+            if (handled) renderComposeGraphHarness()
+            handled
         }
         popup.show()
     }

@@ -287,10 +287,23 @@
                     android:id="@+id/equalizer_surface"
                     android:layout_width="0dp"
                     android:layout_height="0dp"
+                    app:layout_constraintBottom_toTopOf="@id/compose_graph_harness"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/preview_title"
+                    app:layout_constraintVertical_chainStyle="spread" />
+
+                <!-- TEMPORARY (10c-i-b / 10c-i-c): the Compose PeqGraph rendered directly below
+                     the live ParametricEqSurface for a side-by-side parity check on-device.
+                     Removed wholesale when 10e deletes this layout. -->
+                <androidx.compose.ui.platform.ComposeView
+                    android:id="@+id/compose_graph_harness"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/preview_title" />
+                    app:layout_constraintTop_toBottomOf="@id/equalizer_surface" />
             </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>
     </androidx.constraintlayout.widget.ConstraintLayout>
