@@ -6,9 +6,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
+import app.siphondsp.compose.controls.BmwSwitchDemo
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
@@ -101,20 +103,32 @@ class OutputAllPassFragment : Fragment() {
             }
         }
 
-        container.removeAllViews()
-        container.addView(
-            DspPager.build(
-                requireContext(),
-                listOf(
-                    outputPage("Left Low", NativeBmwDspValues.OUTPUT_LOW_LEFT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
-                    outputPage("Right Low", NativeBmwDspValues.OUTPUT_LOW_RIGHT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
-                    outputPage("Left Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
-                    outputPage("Right Mid", NativeBmwDspValues.OUTPUT_MID_RIGHT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
-                ),
-                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
+        val pagerView = DspPager.build(
+            requireContext(),
+            listOf(
+                outputPage("Left Low", NativeBmwDspValues.OUTPUT_LOW_LEFT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                outputPage("Right Low", NativeBmwDspValues.OUTPUT_LOW_RIGHT, BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                outputPage("Left Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
+                outputPage("Right Mid", NativeBmwDspValues.OUTPUT_MID_RIGHT, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
             ),
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+            toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
         )
+
+        // TEMPORARY (Phase 3b switch verification): stacks the switch demo above the real pager,
+        // same pattern as Phases 1/2/3a. Remove this block, both imports above, and
+        // BmwSwitchDemo.kt once confirmed on-device.
+        val switchDemoView = ComposeView(requireContext()).apply {
+            setContent { BmwSwitchDemo() }
+        }
+
+        val stack = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        stack.addView(switchDemoView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        stack.addView(pagerView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        container.removeAllViews()
+        container.addView(stack, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
