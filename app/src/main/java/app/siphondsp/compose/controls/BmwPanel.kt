@@ -60,7 +60,9 @@ fun BmwPanel(
         } else {
             val style = TextStyle(fontSize = BoxTextSize, fontWeight = FontWeight.Bold)
             val widest = sliderLabels.maxOf { textMeasurer.measure(it, style).size.width }
-            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 }
+            // +2dp slack so a label exactly as wide as the measured text doesn't hit the
+            // maxLines=1 ellipsis on a sub-pixel rounding difference between measure and layout.
+            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 + 2.dp }
         }
     }
 
