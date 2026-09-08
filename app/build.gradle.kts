@@ -16,7 +16,6 @@ plugins {
     id("com.google.devtools.ksp") version AndroidConfig.kspVersion
     id("dev.rikka.tools.refine") version AndroidConfig.rikkaRefineVersion
     id("org.jetbrains.kotlin.plugin.serialization") version AndroidConfig.kotlinVersion
-    id("org.jetbrains.kotlin.plugin.compose") version AndroidConfig.kotlinVersion
 }
 
 android {
@@ -135,7 +134,6 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
-        compose = true
         // Disable unused features
         aidl = false
         shaders = false
@@ -148,11 +146,6 @@ android {
         }
     }
     namespace = "app.siphondsp"
-}
-
-composeCompiler {
-    // Metrics/reports left off by default; enable if you need to diagnose recomposition
-    // or stability issues on the head-unit target (Snapdragon 662).
 }
 
 // Hooks to upload native symbols to crashlytics automatically
@@ -188,17 +181,6 @@ dependencies {
 
     // Material
     implementation("com.google.android.material:material:1.14.0")
-
-    // Jetpack Compose
-    implementation(platform("androidx.compose:compose-bom:2026.08.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
 
     // Dependency injection
     implementation("io.insert-koin:koin-android:4.2.2")
