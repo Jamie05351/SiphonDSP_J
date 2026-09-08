@@ -60,6 +60,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
                 accentColor = headroomColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_HEADROOM, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_HEADROOM, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_HEADROOM, it) },
             )
             BmwSliderRow(
                 label = "Post gain L",
@@ -68,6 +69,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
                 accentColor = greenColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
             )
             BmwSliderRow(
                 label = "Post gain R",
@@ -76,6 +78,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
                 accentColor = greenColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
             )
             BmwSectionHeader(
                 title = "Limiter",
@@ -93,6 +96,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
                 accentColor = blueColor,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
             )
             LimiterGrMeter(modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
         }

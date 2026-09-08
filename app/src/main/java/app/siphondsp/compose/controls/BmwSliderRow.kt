@@ -1,5 +1,6 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -47,7 +49,11 @@ fun BmwSliderRow(
     onCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    // When set, tapping the value box opens the numeric-entry dialog (View parity); the parsed,
+    // snapped, coerced value is delivered here.
+    onValueEntered: ((Float) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     var dragValue by remember(value) { mutableFloatStateOf(value) }
     val steps = remember(valueRange, step) {
         if (step > 0f) {
@@ -91,7 +97,23 @@ fun BmwSliderRow(
             text = ValueFormat.format(shown),
             unit = unit,
             accentColor = accentColor,
-            modifier = Modifier.width(RowValueWidth).height(RowBoxHeight),
+            modifier = Modifier
+                .width(RowValueWidth)
+                .height(RowBoxHeight)
+                .then(
+                    if (onValueEntered != null) {
+                        Modifier.clickable {
+                            context.showBmwNumberInput(
+                                label, valueRange.start, valueRange.endInclusive, dragValue, step, unit,
+                            ) { entered ->
+                                dragValue = entered
+                                onValueEntered(entered)
+                            }
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }
