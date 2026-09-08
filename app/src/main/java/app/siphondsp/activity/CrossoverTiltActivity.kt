@@ -8,7 +8,6 @@ import app.siphondsp.fragment.CrossoverTiltFragment
 import app.siphondsp.fragment.OutputAllPassFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
-import app.siphondsp.view.DspWorkspaceFormFactor
 
 class CrossoverTiltActivity : DspWorkspaceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,13 +23,9 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         // DspDestination.ALLPASS's primary-nav tile opens All-pass directly, so All-pass shares
         // its nav identity here rather than leaving a gap.
         val current = if (allPassMode) DspDestination.ALLPASS else DspDestination.CROSSOVER_TILT
-        // Head-unit full-screen: no toolbar title (the backdrop's lit rail tile says which screen
-        // this is). On a phone the bar is a normal titled one -- see DspCrossNavBar.populate().
-        supportActionBar?.title = if (DspWorkspaceFormFactor.isHeadUnit(this)) {
-            null
-        } else {
-            getString(if (allPassMode) R.string.action_output_allpass else R.string.action_crossover_tilt)
-        }
+        // No toolbar title on the full-screen workspace -- the backdrop's lit rail tile already
+        // says which screen this is.
+        supportActionBar?.title = null
         DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), current)
 
         if (savedInstanceState == null) {
