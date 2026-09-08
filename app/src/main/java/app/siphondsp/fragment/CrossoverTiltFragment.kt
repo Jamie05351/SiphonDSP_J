@@ -10,10 +10,12 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.compose.screens.TonalityTiltScreen
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
@@ -175,31 +177,13 @@ class CrossoverTiltFragment : Fragment() {
             }
         }
 
-        val tiltPage = page {
-            // Plain white title, no subtitle -- matches the Crossovers page's own "Crossovers"
-            // header format rather than the old tint-and-blurb style.
-            dashboardPanel(
-                getString(R.string.bmw_dsp_tilt_section), null,
-                toggleIndex = NativeBmwDspValues.INDEX_TILT_ENABLED,
-                topContentGapDp = 40,
-                lean = true,
-                leanStartDp = 80,
-            ) {
-                addSliderRow(
-                    getString(R.string.bmw_dsp_tilt_amount),
-                    NativeBmwDspValues.INDEX_TILT_AMOUNT,
-                    -6f, 6f, .1f, "dB",
-                    accentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_tilt_pivot),
-                    NativeBmwDspValues.INDEX_TILT_FREQ,
-                    200f, 2000f, 1f, "Hz",
-                    accentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_TILT_COLOR,
-                )
-            }
+        // Tilt page ported to Compose -- see TonalityTiltScreen and COMPOSE_MIGRATION_ROADMAP.md
+        // Phase 4. The Crossovers and Mono Bass pages stay on the View builder for now; DspPager
+        // hosts this ComposeView alongside them. TonalityTiltScreen reads/writes the same
+        // NativeBmwDspValues indices (and broadcasts the same way) via BmwDspState, so edits here
+        // stay in sync with the other two pages and with the audio engine.
+        val tiltPage: View = ComposeView(requireContext()).apply {
+            setContent { TonalityTiltScreen() }
         }
 
         val monoBassPage = page {

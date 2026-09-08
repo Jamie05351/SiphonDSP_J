@@ -55,6 +55,7 @@ fun BmwSlider(
     accentColor: Color,
     modifier: Modifier = Modifier,
     steps: Int = 0,
+    enabled: Boolean = true,
     onValueChangeFinished: (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -66,6 +67,7 @@ fun BmwSlider(
         onValueChangeFinished = onValueChangeFinished,
         valueRange = valueRange,
         steps = steps,
+        enabled = enabled,
         modifier = modifier.fillMaxWidth(),
         interactionSource = interactionSource,
         colors = SliderDefaults.colors(),
