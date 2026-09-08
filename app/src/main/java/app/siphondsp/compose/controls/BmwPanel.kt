@@ -61,10 +61,11 @@ fun BmwPanel(
         } else {
             val style = TextStyle(fontSize = BoxTextSize, fontWeight = FontWeight.Bold)
             val widest = sliderLabels.maxOf { textMeasurer.measure(it, style).size.width }
-            // +6dp slack so a label as wide as the measured text doesn't hit the maxLines=1
+            // +12dp slack so a label as wide as the measured text doesn't hit the maxLines=1
             // ellipsis -- TextMeasurer with a bare TextStyle underestimates the rendered width
-            // slightly (font metrics / fallback), and "Threshold" was still clipping at +2dp.
-            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 + 6.dp }
+            // by several px ("Highpass freq (LR4)" still clipped at +6dp). A SubcomposeLayout
+            // measuring the actual BoxedTitle composables would be exact -- Phase 11 cleanup.
+            with(density) { widest.toDp() + BoxTitleHorizontalPadding * 2 + 12.dp }
         }
     }
 
