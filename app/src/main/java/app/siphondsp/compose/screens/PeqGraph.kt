@@ -7,21 +7,45 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
 import android.util.TypedValue
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas as ComposeCanvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
@@ -40,6 +64,7 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.MonoBassCue
+import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
 import app.siphondsp.view.PeqPlotGeometry
 import app.siphondsp.view.PeqSurfacePaints
@@ -48,6 +73,7 @@ import android.graphics.Color as AndroidColor
 import java.util.UUID
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -87,6 +113,18 @@ private const val OVERLAY_POINT_COUNT = 96
 private const val SPECTRUM_STEPS = 240
 private const val BAND_FILL_ALPHA = 48
 private const val BAND_STROKE_ALPHA = 170
+
+private const val SECONDARY_NODE_RADIUS_DP = 6.5f
+private const val ACTIVE_NODE_RADIUS_DP = 8f
+private const val NODE_TOUCH_RADIUS_DP = 22f
+private const val TILT_HANDLE_DRAW_RADIUS_DP = 8f
+private const val METER_FLOOR_DB = -50f
+private const val METER_CEILING_DB = 0f
+
+// Node auto-fade after idle (2026-09-09 direction): the dots recede so the response shape stays
+// readable; curves never fade and hit-testing stays live. Any interaction snaps them back.
+private const val NODE_IDLE_FADE_DELAY_MS = 6_000L
+private const val NODE_FADE_DURATION_MS = 400
 
 // Plot insets — 1:1 with ParametricEqSurface.padLeft/padTop/padRight/padBottom.
 private val PlotPadLeft = 34.dp
@@ -148,14 +186,24 @@ fun PeqGraphFrame(
     }
 }
 
+/** The three graph-options callbacks, bundled so [PeqGraph] can host the ⋮ menu itself. Null =
+ *  no menu affordance (the caller drives `mode` / `channelDisplay` / `showIndividualFilters` some
+ *  other way). */
+class PeqGraphOptions(
+    val onModeChange: (PeqGraphMode) -> Unit,
+    val onChannelDisplayChange: (PeqChannelDisplay) -> Unit,
+    val onShowIndividualFiltersChange: (Boolean) -> Unit,
+)
+
 /**
  * The full response graph: [PeqGraphFrame]'s frame plus the modelled branch / per-band / sum
- * curves, the individual-filter overlays, and — when [showSpectrum] — the live dry/wet spectrum
- * trace with its boost/cut delta fill. Still no nodes and no interaction (10c-i-c).
+ * curves, the individual-filter overlays, the live spectrum trace (10c-i-b), and now (10c-i-c)
+ * the numbered per-bank nodes with tap-to-detail, the 6 s idle node fade, the read-only tilt
+ * handles, the L/R gain meters, and the ⋮ graph-options menu.
  *
- * Stateless: the caller passes the current native config, PEQ state, active bank and selection.
- * The modelled response is recomputed synchronously whenever those inputs change; the spectrum
- * trace redraws at ~30 fps off its own effect loop without recomposing the rest.
+ * Stateless: the caller passes the current native config, PEQ state, active bank and selection,
+ * plus [onNodeTapped] (select the band + scroll its list row). Node fade is owned here — any tap
+ * or any change to [peqState] / [activeBank] snaps the dots back to full opacity.
  */
 @Composable
 fun PeqGraph(
@@ -168,7 +216,11 @@ fun PeqGraph(
     channelDisplay: PeqChannelDisplay = PeqChannelDisplay.BOTH,
     showIndividualFilters: Boolean = true,
     showSpectrum: Boolean = true,
+    showTiltHandles: Boolean = false,
+    showGainMeters: Boolean = false,
     sampleRate: Double = 48_000.0,
+    onNodeTapped: (ParametricEqBand) -> Unit = {},
+    graphOptions: PeqGraphOptions? = null,
 ) {
     val paints = rememberPeqSurfacePaints()
     val model = remember { PeqResponseModel() }
@@ -184,48 +236,136 @@ fun PeqGraph(
         model.recompute(systemValues, peqState, sampleRate)
     }
 
-    // ~30 fps spectrum poll, scoped to composition. Acquire/release bracket SpectrumEngine; the
-    // tick counter is read only in the draw phase below so it never triggers recomposition.
+    // ~30 fps spectrum + gain-meter poll, scoped to composition. Acquire/release bracket
+    // SpectrumEngine; the tick counter is read only in the draw phase below so it never triggers
+    // recomposition. The two PeakHoldMeters decay on the same tick (only while showGainMeters).
     val spectrumTick = remember { mutableIntStateOf(0) }
-    LaunchedEffect(showSpectrum) {
-        if (!showSpectrum) return@LaunchedEffect
+    val leftMeter = remember { PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB) }
+    val rightMeter = remember { PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB) }
+    LaunchedEffect(showSpectrum, showGainMeters) {
+        if (!showSpectrum && !showGainMeters) return@LaunchedEffect
+        val levels = FloatArray(4)
         SpectrumEngine.acquire()
         try {
             while (true) {
+                if (showGainMeters) {
+                    SpectrumEngine.channelLevelsInto(levels)
+                    val now = System.currentTimeMillis()
+                    leftMeter.update(levels[0], levels[1], now)
+                    rightMeter.update(levels[2], levels[3], now)
+                }
                 spectrumTick.intValue++
                 delay(33L)
             }
         } finally {
             SpectrumEngine.release()
+            leftMeter.reset()
+            rightMeter.reset()
         }
     }
 
-    ComposeCanvas(modifier.fillMaxSize()) {
-        // Read the tick here (draw phase), not in composition — see the effect above.
-        val spectrumFrame = spectrumTick.intValue
-        val left = PlotPadLeft.toPx()
-        val top = PlotPadTop.toPx()
-        val right = size.width - PlotPadRight.toPx()
-        val bottom = size.height - PlotPadBottom.toPx()
-        if (right <= left || bottom <= top) return@ComposeCanvas
-        val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency)
-        val ctx = PeqDrawContext(
-            geometry = geometry,
-            paints = paints,
-            model = model,
-            density = density,
-            systemValues = systemValues,
-            peqState = peqState,
-            activeBank = activeBank,
-            selectedId = selectedBandId,
-            channelDisplay = channelDisplay,
-            showIndividualFilters = showIndividualFilters,
-            sampleRate = sampleRate,
-            maxFrequency = maxFrequency,
-            mode = mode,
-        )
-        drawIntoCanvas { canvas ->
-            renderPeqGraph(canvas.nativeCanvas, ctx, drawSpectrum = showSpectrum, spectrumFrame = spectrumFrame)
+    // Node auto-fade: any node tap or any change to peqState / activeBank bumps interactionTick,
+    // which restarts the 6 s idle timer and snaps nodeAlpha back to 1.
+    val nodeAlpha = remember { Animatable(1f) }
+    var interactionTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(interactionTick, peqState, activeBank) {
+        nodeAlpha.snapTo(1f)
+        delay(NODE_IDLE_FADE_DELAY_MS)
+        nodeAlpha.animateTo(0f, tween(NODE_FADE_DURATION_MS))
+    }
+
+    var callout by remember { mutableStateOf<NodeHit?>(null) }
+    LaunchedEffect(callout) {
+        if (callout != null) {
+            delay(3_600L)
+            callout = null
+        }
+    }
+
+    Box(modifier) {
+        ComposeCanvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency) {
+                    detectTapGestures { offset ->
+                        interactionTick++
+                        if (mode != PeqGraphMode.MAGNITUDE) {
+                            callout = null
+                            return@detectTapGestures
+                        }
+                        val left = PlotPadLeft.toPx()
+                        val top = PlotPadTop.toPx()
+                        val right = size.width - PlotPadRight.toPx()
+                        val bottom = size.height - PlotPadBottom.toPx()
+                        if (right <= left || bottom <= top) return@detectTapGestures
+                        val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency)
+                        val hit = hitTestAnyBank(offset, geometry, peqState, density)
+                        // Keep the callout on-screen: pin its top-left inside the graph bounds.
+                        callout = hit?.let {
+                            val maxX = (this.size.width - 190.dp.toPx()).coerceAtLeast(0f)
+                            val maxY = (this.size.height - 64.dp.toPx()).coerceAtLeast(0f)
+                            NodeHit(
+                                it.band, it.bank, it.number,
+                                Offset(it.anchor.x.coerceIn(0f, maxX), it.anchor.y.coerceIn(0f, maxY)),
+                            )
+                        }
+                        // Match ParametricEqSurface: only an active-bank node opens in the list.
+                        if (hit != null && hit.bank == activeBank) onNodeTapped(hit.band)
+                    }
+                },
+        ) {
+            // Read the tick + node alpha here (draw phase), not in composition.
+            val spectrumFrame = spectrumTick.intValue
+            val dotAlpha = nodeAlpha.value
+            val left = PlotPadLeft.toPx()
+            val top = PlotPadTop.toPx()
+            val right = size.width - PlotPadRight.toPx()
+            val bottom = size.height - PlotPadBottom.toPx()
+            if (right <= left || bottom <= top) return@ComposeCanvas
+            val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency)
+            val ctx = PeqDrawContext(
+                geometry = geometry,
+                paints = paints,
+                model = model,
+                density = density,
+                systemValues = systemValues,
+                peqState = peqState,
+                activeBank = activeBank,
+                selectedId = selectedBandId,
+                channelDisplay = channelDisplay,
+                showIndividualFilters = showIndividualFilters,
+                sampleRate = sampleRate,
+                maxFrequency = maxFrequency,
+                mode = mode,
+                showTiltHandles = showTiltHandles,
+                showGainMeters = showGainMeters,
+                nodeAlpha = dotAlpha,
+                calloutBandId = callout?.band?.uuid,
+                leftMeter = leftMeter,
+                rightMeter = rightMeter,
+            )
+            drawIntoCanvas { canvas ->
+                renderPeqGraph(canvas.nativeCanvas, ctx, drawSpectrum = showSpectrum, spectrumFrame = spectrumFrame)
+            }
+        }
+
+        callout?.let { hit ->
+            PeqNodeCallout(
+                hit = hit,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset { IntOffset(hit.anchor.x.roundToInt(), hit.anchor.y.roundToInt()) },
+            )
+        }
+
+        graphOptions?.let { opts ->
+            PeqGraphOptionsButton(
+                mode = mode,
+                channelDisplay = channelDisplay,
+                showIndividualFilters = showIndividualFilters,
+                options = opts,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
         }
     }
 }
@@ -266,6 +406,9 @@ private fun renderPeqGraph(
             drawFilterOverlays(nc, ctx)
             drawPerBandFills(nc, ctx)
             drawSumCurve(nc, ctx)
+            if (ctx.showTiltHandles) drawTiltHandles(nc, ctx)
+            drawMultiBankNodes(nc, ctx)
+            if (ctx.showGainMeters) drawGainMeters(nc, ctx)
         }
         PeqGraphMode.PHASE -> {
             drawGrid(nc, g, ctx.paints, ctx.density, PhaseGridLines) { g.yForPhaseDeg(it) }
@@ -666,6 +809,250 @@ private fun fillDeltaSegment(nc: Canvas, ctx: PeqDrawContext, startIndex: Int, e
     nc.drawPath(m.deltaFillPath, if (boost) ctx.paints.spectrumBoostFillPaint else ctx.paints.spectrumCutFillPaint)
 }
 
+// --- nodes / tilt handles / gain meters — 1:1 with the same-named ParametricEqSurface methods --
+
+private fun drawMultiBankNodes(nc: Canvas, ctx: PeqDrawContext) {
+    ctx.forEachVisibleBank { bank, bands ->
+        drawBankNodes(nc, ctx, bands, bank, emphasised = bank == ctx.activeBank)
+    }
+}
+
+private fun drawBankNodes(
+    nc: Canvas,
+    ctx: PeqDrawContext,
+    bands: List<ParametricEqBand>,
+    bank: BmwPeqBank,
+    emphasised: Boolean,
+) {
+    val g = ctx.geometry
+    val p = ctx.paints
+    val d = ctx.density
+    val alpha = ctx.nodeAlpha.coerceIn(0f, 1f)
+    if (alpha <= 0f) return
+    fun withAlpha(a: Int) = (a * alpha).roundToInt().coerceIn(0, 255)
+    val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
+    val numberOffset = ctx.bankNumberOffset(bank)
+    bands.forEachIndexed { index, band ->
+        val color = p.perBandPalette[(numberOffset + index) % p.perBandPalette.size]
+        val x = g.xForFrequency(band.frequency)
+        val y = g.yForGain(band.gain)
+        val selected = emphasised && band.uuid == ctx.selectedId
+        val highlighted = selected || band.uuid == ctx.calloutBandId
+        if (highlighted) {
+            p.nodeHaloPaint.color = color
+            p.nodeHaloPaint.alpha = withAlpha(60)
+            nc.drawCircle(x, y, baseRadiusDp * d + 7f * d, p.nodeHaloPaint)
+        }
+        val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * d
+        p.nodeFillPaint.color = color
+        p.nodeFillPaint.alpha = withAlpha(255)
+        nc.drawCircle(x, y, radius, p.nodeFillPaint)
+        if (band.channel == ParametricEqChannel.RIGHT) {
+            p.nodeRingPaint.alpha = withAlpha(255)
+            nc.drawCircle(x, y, radius, p.nodeRingPaint)
+        }
+        p.nodeTextPaint.color =
+            if (ColorUtils.calculateLuminance(color) > 0.5) AndroidColor.BLACK else AndroidColor.WHITE
+        p.nodeTextPaint.alpha = withAlpha(255)
+        val baseline = y - (p.nodeTextPaint.ascent() + p.nodeTextPaint.descent()) / 2
+        nc.drawText((numberOffset + index + 1).toString(), x, baseline, p.nodeTextPaint)
+    }
+}
+
+/** Read-only tilt markers — pivot diamond (frequency) + amount circle. 1:1 with the View. */
+private fun drawTiltHandles(nc: Canvas, ctx: PeqDrawContext) {
+    val g = ctx.geometry
+    val p = ctx.paints
+    val d = ctx.density
+    val values = ctx.systemValues
+    if (values.size != BmwSignalChain.VALUE_COUNT) return
+    val enabled = values[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f
+    val pivotX = g.xForFrequency(values[NativeBmwDspValues.INDEX_TILT_FREQ].toDouble())
+    val pivotY = g.yForGain(0.0)
+    val amountX = pivotX + 22f * d
+    val amountY = g.yForGain(values[NativeBmwDspValues.INDEX_TILT_AMOUNT].toDouble())
+    val paint = if (enabled) p.tiltHandlePaint else p.tiltHandleDimPaint
+
+    nc.drawLine(pivotX, amountY, amountX, amountY, paint)
+    nc.drawLine(pivotX, pivotY, pivotX, amountY, paint)
+
+    val r = TILT_HANDLE_DRAW_RADIUS_DP * d
+    val diamond = Path().apply {
+        moveTo(pivotX, pivotY - r)
+        lineTo(pivotX + r, pivotY)
+        lineTo(pivotX, pivotY + r)
+        lineTo(pivotX - r, pivotY)
+        close()
+    }
+    nc.drawPath(diamond, paint)
+    nc.drawCircle(amountX, amountY, r, paint)
+
+    if (!enabled) {
+        nc.drawText("TILT BYPASSED", pivotX + r + 6f * d, pivotY - 6f * d, p.tiltLabelPaint)
+    }
+}
+
+private fun drawGainMeters(nc: Canvas, ctx: PeqDrawContext) {
+    val left = ctx.leftMeter ?: return
+    val right = ctx.rightMeter ?: return
+    val g = ctx.geometry
+    val p = ctx.paints
+    val d = ctx.density
+    val barWidth = 8f * d
+    val gap = 4f * d
+    val leftBarX = g.right + 5f * d
+    val rightBarX = leftBarX + barWidth + gap
+    drawMeterBar(nc, p, d, leftBarX, g.top, g.bottom, barWidth, left)
+    drawMeterBar(nc, p, d, rightBarX, g.top, g.bottom, barWidth, right)
+    nc.drawText("L", leftBarX + barWidth / 2f, g.bottom + 15f * d, p.meterLabelPaint)
+    nc.drawText("R", rightBarX + barWidth / 2f, g.bottom + 15f * d, p.meterLabelPaint)
+}
+
+private fun drawMeterBar(
+    nc: Canvas,
+    p: PeqSurfacePaints,
+    d: Float,
+    x: Float,
+    top: Float,
+    bottom: Float,
+    width: Float,
+    meter: PeakHoldMeter,
+) {
+    nc.drawRect(x, top, x + width, bottom, p.meterTrackPaint)
+    val rmsFraction = PeakHoldMeter.fractionFor(meter.rmsDb, METER_FLOOR_DB, METER_CEILING_DB)
+    val rmsY = bottom - rmsFraction * (bottom - top)
+    nc.drawRect(x, rmsY, x + width, bottom, p.meterRmsPaint)
+    val peakFraction = PeakHoldMeter.fractionFor(meter.peakDb, METER_FLOOR_DB, METER_CEILING_DB)
+    val peakY = bottom - peakFraction * (bottom - top)
+    nc.drawLine(x, peakY, x + width, peakY, p.meterPeakPaint)
+    val holdFraction = PeakHoldMeter.fractionFor(meter.holdDb, METER_FLOOR_DB, METER_CEILING_DB)
+    val holdY = (bottom - holdFraction * (bottom - top)).coerceIn(top, bottom - 1.5f * d)
+    nc.drawRect(x, holdY - 1.5f * d, x + width, holdY + 1.5f * d, p.meterHoldPaint)
+}
+
+// --- node hit-testing + detail callout + options menu ----------------------------------------
+
+/** A tapped node: its band, which bank, its global 1-based number, and where it sits in px. */
+private class NodeHit(
+    val band: ParametricEqBand,
+    val bank: BmwPeqBank,
+    val number: Int,
+    val anchor: Offset,
+)
+
+/**
+ * Nearest node within [NODE_TOUCH_RADIUS_DP] across all three banks — 1:1 with
+ * `ParametricEqSurface.hitTestAnyBank`. Numbers are global 1-based (Full, then Low, then Mid).
+ */
+private fun hitTestAnyBank(
+    tap: Offset,
+    geometry: PeqPlotGeometry,
+    peqState: BmwPeqState,
+    density: Float,
+): NodeHit? {
+    val full = peqState.fullRangeBands.toList()
+    val low = peqState.lowBandBands.toList()
+    val mid = peqState.midBandBands.toList()
+    val radius = NODE_TOUCH_RADIUS_DP * density
+    var best: NodeHit? = null
+    var bestDistance = Float.MAX_VALUE
+    fun consider(bands: List<ParametricEqBand>, bank: BmwPeqBank, numberOffset: Int) {
+        bands.forEachIndexed { index, band ->
+            val x = geometry.xForFrequency(band.frequency)
+            val y = geometry.yForGain(band.gain)
+            val distance = hypot(tap.x - x, tap.y - y)
+            if (distance <= radius && distance < bestDistance) {
+                bestDistance = distance
+                best = NodeHit(band, bank, numberOffset + index + 1, Offset(x, y))
+            }
+        }
+    }
+    consider(full, BmwPeqBank.FULL, 0)
+    consider(low, BmwPeqBank.LOW, full.size)
+    consider(mid, BmwPeqBank.MID, full.size + low.size)
+    return best
+}
+
+private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
+    BmwPeqBank.FULL -> "Pre EQ"
+    BmwPeqBank.LOW -> "Low Band"
+    BmwPeqBank.MID -> "Mid Band"
+}
+
+/** The tapped-node detail card — the [drawInfoCard] content, as a small Compose surface. */
+@Composable
+private fun PeqNodeCallout(hit: NodeHit, modifier: Modifier = Modifier) {
+    val band = hit.band
+    Column(
+        modifier = modifier
+            .padding(6.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF121316))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Text(
+            "#${hit.number} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}",
+            color = Color(0xFFE8EAF0),
+            fontSize = 11.sp,
+        )
+        Text(
+            "${band.frequency.roundToInt()} Hz · ${"%+.1f".format(band.gain)} dB · Q ${"%.2f".format(band.q)}",
+            color = Color(0xFFE8EAF0),
+            fontSize = 11.sp,
+        )
+        Text("${bankLabel(hit.bank)} band", color = Color(0xFF9AA0AA), fontSize = 11.sp)
+    }
+}
+
+/** The ⋮ graph-options menu — the Compose replacement for the fragment's `showGraphOptionsPopup`. */
+@Composable
+private fun PeqGraphOptionsButton(
+    mode: PeqGraphMode,
+    channelDisplay: PeqChannelDisplay,
+    showIndividualFilters: Boolean,
+    options: PeqGraphOptions,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        IconButton(onClick = { expanded = true }) {
+            // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) — glyph it.
+            Text("⋮", fontSize = 20.sp, color = Color(0xFFB0B2BA))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Show individual filters" + if (showIndividualFilters) "  ✓" else "") },
+                onClick = { options.onShowIndividualFiltersChange(!showIndividualFilters); expanded = false },
+            )
+            MenuSectionLabel("Display channel")
+            PeqChannelDisplay.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() } + if (option == channelDisplay) "  ✓" else "") },
+                    onClick = { options.onChannelDisplayChange(option); expanded = false },
+                )
+            }
+            MenuSectionLabel("Response mode")
+            PeqGraphMode.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() } + if (option == mode) "  ✓" else "") },
+                    onClick = { options.onModeChange(option); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuSectionLabel(text: String) {
+    Text(
+        text,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        fontSize = 11.sp,
+        fontFamily = FontFamily.SansSerif,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 // --- draw-call context + reusable scratch -----------------------------------------------------
 
 /** Everything [renderPeqGraph]'s helpers read — the Compose equivalent of the View's fields. */
@@ -683,6 +1070,12 @@ private class PeqDrawContext(
     val sampleRate: Double,
     val maxFrequency: Double,
     val mode: PeqGraphMode,
+    val showTiltHandles: Boolean = false,
+    val showGainMeters: Boolean = false,
+    val nodeAlpha: Float = 1f,
+    val calloutBandId: UUID? = null,
+    val leftMeter: PeakHoldMeter? = null,
+    val rightMeter: PeakHoldMeter? = null,
 ) {
     val curves: BmwResponseCurves get() = model.curves
 
