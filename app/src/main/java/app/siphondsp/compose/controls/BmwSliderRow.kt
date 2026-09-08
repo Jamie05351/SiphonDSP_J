@@ -1,6 +1,7 @@
 package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +53,10 @@ fun BmwSliderRow(
     // When set, tapping the value box opens the numeric-entry dialog (View parity); the parsed,
     // snapped, coerced value is delivered here.
     onValueEntered: ((Float) -> Unit)? = null,
+    // When set, an inline BmwSwitch sits in the toggle-zone slot between the title and the
+    // slider (the View's addSliderRow `toggleIndex` case -- e.g. the compressor Mix row).
+    toggleChecked: Boolean? = null,
+    onToggleChange: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var dragValue by remember(value) { mutableFloatStateOf(value) }
@@ -77,7 +82,13 @@ fun BmwSliderRow(
             accentColor = accentColor,
             modifier = Modifier.width(LocalRowTitleColumnWidth.current).height(RowBoxHeight),
         )
-        Spacer(Modifier.width(RowToggleZoneWidth))
+        if (toggleChecked != null && onToggleChange != null) {
+            Box(Modifier.width(RowToggleZoneWidth), contentAlignment = Alignment.CenterStart) {
+                BmwSwitch(checked = toggleChecked, onCheckedChange = onToggleChange, contentDescription = label)
+            }
+        } else {
+            Spacer(Modifier.width(RowToggleZoneWidth))
+        }
         BmwSlider(
             value = shown,
             onValueChange = {

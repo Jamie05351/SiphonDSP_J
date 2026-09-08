@@ -47,6 +47,7 @@ fun BmwPanel(
     toggleChecked: Boolean? = null,
     onToggleChange: ((Boolean) -> Unit)? = null,
     titleColor: Color = Color.White,
+    subtitle: String? = null,
     leanStart: Dp = 80.dp,
     topContentGap: Dp = 40.dp,
     sliderLabels: List<String> = emptyList(),
@@ -93,8 +94,61 @@ fun BmwPanel(
                     }
                 }
             }
-            Spacer(Modifier.height(topContentGap))
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    color = SubtitleColor,
+                    fontSize = 11.5.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+                )
+            } else {
+                Spacer(Modifier.height(topContentGap))
+            }
             content()
+        }
+    }
+}
+
+/**
+ * The View builder's `titleRowWithSwitches` -- a big (18sp) white title in the title column,
+ * the primary enable [BmwSwitch] aligned to where the slider rows start, and (optionally) a
+ * second labelled switch pinned to the right edge. Used by the compressor band pages.
+ */
+@Composable
+fun BmwTitleRowWithSwitches(
+    title: String,
+    enabledChecked: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    secondLabel: String? = null,
+    secondChecked: Boolean? = null,
+    onSecondChange: ((Boolean) -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(LocalRowTitleColumnWidth.current),
+        )
+        Spacer(Modifier.width(RowToggleZoneWidth))
+        BmwSwitch(checked = enabledChecked, onCheckedChange = onEnabledChange, contentDescription = title)
+        if (secondLabel != null && secondChecked != null && onSecondChange != null) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = secondLabel,
+                color = Color.White,
+                fontSize = 12.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(end = 10.dp),
+            )
+            BmwSwitch(checked = secondChecked, onCheckedChange = onSecondChange, contentDescription = secondLabel)
         }
     }
 }
@@ -144,6 +198,7 @@ internal val RowValueGap = BmwDashboardSkin.SLIDER_VALUE_GAP_DP.dp
 internal val RowBoxHeight = BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP.dp // == SLIDER_VALUE_HEIGHT_DP (30)
 internal val RowMinHeight = BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP.dp
 private val BoxTextSize = 14.sp
+private val SubtitleColor = Color(0xFFB2BBC6) // rgb(178, 187, 198)
 private val BoxTitleHorizontalPadding = 18.dp // createBoxedTitleText's setPadding(dp(18), .., dp(18), ..)
 
 /** Width of every boxed row title in the enclosing [BmwPanel], measured from its `sliderLabels`;
