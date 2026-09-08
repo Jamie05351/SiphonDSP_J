@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -44,6 +46,7 @@ import app.siphondsp.view.BmwDashboardSkin
  * `slider*` colors (sliderLowBand, sliderMidBand, sliderHeadroom, sliderTilt, sliderDefault) to
  * match the row's band.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BmwSlider(
     value: Float,
@@ -106,6 +109,7 @@ private val ThumbInsetBorderColor = Color(0xFF111317)
  *  checking availability -- this local helper avoids that uncertainty entirely. */
 private fun Rect.insetBy(amount: Float) = Rect(left + amount, top + amount, right - amount, bottom - amount)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BmwSliderTrack(sliderState: SliderState, accentColor: Color, focused: Boolean) {
     val activeFillColor = lerp(accentColor, Color.White, 0.2f)
