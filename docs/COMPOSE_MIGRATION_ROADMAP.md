@@ -320,6 +320,8 @@ with a section enable toggle, a "Frequency" slider (20..1000 Hz), a "Q" slider
 
 ## 11. Phase 10 — Parametric Equalizer screen (highest risk — its own sub‑plan)
 
+> Sub‑plan written: see `docs/PEQ_COMPOSE_PLAN.md` (sub‑phases 10a–10f).
+
 `ParametricEqualizerFragment` — explicitly **last**, with a dedicated sub‑plan
 written once Phases 3b–9 are done and the component set is proven. Scope that
 makes it the hardest:
