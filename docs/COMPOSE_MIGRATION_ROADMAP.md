@@ -346,6 +346,73 @@ makes it the hardest:
 
 ---
 
+## Visual design direction: analyzer/graph polish
+
+Applies to the PEQ graph (`ParametricEqSurface`), the Crossovers & Tilt response graph
+(`NativeBmwDspResponseView`), and the Compressor multiband graph. Direction: move from the
+current flat/neon-approximated look toward something closer to FabFilter Pro-Q's curve
+rendering -- real depth and glow rather than flat fills and wide-stroke fake blur.
+
+Current state (for reference):
+- Curve glow is faked via `strokeNeon()`: a second copy of the same path, drawn ~3.4x wider
+  at low alpha, underneath the crisp line. Reads as a hard-edged translucent band, not a
+  soft glow.
+- Filter nodes (`drawBankNodes`) are flat-filled circles with a flat low-alpha halo ring --
+  no gradient, no real blur.
+- The Compressor graph's per-band zones are flat, hard-edged solid color blocks.
+- Grid lines are uniform weight/opacity throughout.
+
+Target treatment, for all three graphs:
+- **Real blur glow** on the combined/summed response curve, using Compose's `RenderEffect`/
+  `BlurEffect` (same mechanism already used for `BmwSlider`'s focus ring in Phase 3a) instead
+  of the fake wide-stroke approximation. Per-filter individual curves stay thin/subtle/
+  low-opacity (as now) so they don't compete with the summed curve.
+- **Gradient area fill** under the combined curve, fading from the curve's color to
+  transparent -- this is a large part of what makes Pro-Q's curve read as "substantial"
+  rather than "a line on a chart."
+- **Filter/band nodes**: soft radial-gradient fill (glassy, not flat) plus a real blurred glow
+  halo, colored to match their curve -- same glass-sphere spirit as `GlassSwitchThumbDrawable`'s
+  thumb treatment, applied to graph nodes instead of switches.
+- **Grid hierarchy**: not all gridlines equal weight. The 0dB reference line (and octave
+  markers, where present) slightly brighter/more opaque; everything else recedes further than
+  it currently does.
+- **Panel depth**: a subtle vignette/darkening toward the panel edges, plus the same glass-bezel
+  treatment (inset shadow, subtle rim light) already used elsewhere in the app (see
+  `BmwSkinDrawables`), so the graph area feels like part of the same physical dashboard instead
+  of floating on flat black.
+- **Spectrum overlay** (PEQ background spectrum): desaturate/lower its opacity further so it
+  reads as ambient context rather than competing with the curve, and add smoothing/peak-hold
+  decay rather than redrawing the raw instantaneous spectrum every frame (real analyzers show a
+  fast trace plus a slower-decaying peak line).
+- **Compressor graph specifically**: soften the flat color-block zones into gradient-tinted
+  regions using the same grid/depth treatment as above; if the compressor engine exposes live
+  gain-reduction data, consider drawing an actual GR trace on top of the static band zones
+  rather than leaving them purely static.
+
+This is a rendering/visual-polish pass, not a data/behavior change -- the underlying curve
+math, node interaction, and drag-to-adjust behavior stay exactly as they are now.
+
+## Gains & Delay: car cutout diagram
+
+Direction (decided): **Option 2 -- distance/delay readout overlay.** Keep the existing car
+interior photo and layout as the base. Add, per speaker position marked on the photo:
+- A thin connecting line from that speaker's position to a marked listening-position point
+  (the app's existing ~60/40 driver/passenger-weighted reference point -- see
+  [[e60-dsp]]/[[rew-measurement]] project notes on multi-seat tuning philosophy).
+- A label along or at the end of that line showing the current delay value (already available
+  per-channel from `NativeBmwDspValues`) and the equivalent physical distance the delay
+  represents (distance = delay_ms * speed_of_sound_mm_per_ms; confirm/settle on a reference
+  speed-of-sound constant, e.g. ~343mm/ms at ~20C, when implementing).
+- These lines/labels update live as the corresponding Delay slider is dragged, giving the
+  diagram real informational value instead of being purely decorative.
+
+Explicitly NOT in scope for this direction: animated wavefront arcs (a fancier alternative
+that was considered and set aside), and no change to the photo/background art itself beyond
+the added overlay lines/labels and the general glass-panel treatment applied to panels
+elsewhere in this document.
+
+---
+
 ## 12. Phase 11 — Final `View`‑system cleanup
 
 Only once **every** workspace screen is Compose:
