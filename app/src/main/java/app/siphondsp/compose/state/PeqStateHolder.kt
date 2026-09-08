@@ -154,6 +154,14 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         applyCandidate(peqState.deepCopy().copy(preampDb = preampDb), "preamp")
     }
 
+    fun deleteBand(index: Int) {
+        val candidate = peqState.deepCopy()
+        val list = PeqBandEditor.bandsFor(candidate, selectedScope)
+        if (index !in list.indices) return
+        list.removeAt(index)
+        applyCandidate(candidate, "delete")
+    }
+
     /**
      * Apply a [PeqBandEditor] result (the filter-tools ops -- duplicate / move / copy / split).
      * `Changed` → [applyCandidate] + select; `Overflow` → toast; `Ignored` → nothing;
