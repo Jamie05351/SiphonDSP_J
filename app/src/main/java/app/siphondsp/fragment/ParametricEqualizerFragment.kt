@@ -50,6 +50,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.compose.screens.PeqChannelDisplay
 import app.siphondsp.compose.screens.PeqGraph
 import app.siphondsp.compose.screens.PeqGraphMode
+import app.siphondsp.compose.screens.PeqGraphOptions
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
@@ -532,7 +533,44 @@ class ParametricEqualizerFragment : Fragment() {
                     channelDisplay = channelDisplay,
                     showIndividualFilters = showOverlays,
                     showSpectrum = true,
+                    showTiltHandles = true,
+                    showGainMeters = true,
                     sampleRate = sampleRate,
+                    onNodeTapped = { band ->
+                        bandsForScope().firstOrNull { it.uuid == band.uuid }?.let {
+                            selectedBandByScope[selectedScope] = it.uuid
+                            adapter.selectedUuid = it.uuid
+                            binding.bandList.post {
+                                bandsForScope().indexOfFirst { b -> b.uuid == it.uuid }
+                                    .takeIf { i -> i >= 0 }
+                                    ?.let(binding.bandList::smoothScrollToPosition)
+                            }
+                        }
+                    },
+                    graphOptions = PeqGraphOptions(
+                        onModeChange = {
+                            graphPrefs.responseMode = when (it) {
+                                PeqGraphMode.PHASE -> ParametricEqSurface.DisplayMode.PHASE
+                                PeqGraphMode.MAGNITUDE -> ParametricEqSurface.DisplayMode.MAGNITUDE
+                            }
+                            binding.equalizerSurface.displayMode = graphPrefs.responseMode
+                            renderComposeGraphHarness()
+                        },
+                        onChannelDisplayChange = {
+                            graphPrefs.channelDisplay = when (it) {
+                                PeqChannelDisplay.LEFT -> ParametricEqSurface.ChannelDisplay.LEFT
+                                PeqChannelDisplay.RIGHT -> ParametricEqSurface.ChannelDisplay.RIGHT
+                                PeqChannelDisplay.BOTH -> ParametricEqSurface.ChannelDisplay.BOTH
+                            }
+                            binding.equalizerSurface.channelDisplay = graphPrefs.channelDisplay
+                            bindScope()
+                        },
+                        onShowIndividualFiltersChange = {
+                            graphPrefs.showIndividualFilters = it
+                            binding.equalizerSurface.showIndividualFilters = it
+                            renderComposeGraphHarness()
+                        },
+                    ),
                 )
             }
         }
