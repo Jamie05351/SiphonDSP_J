@@ -44,7 +44,14 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
             // 4dp (the View page()'s own left pad) + 80dp (dashboardPanel lean indent).
             leanStart = 84.dp,
             topContentGap = 40.dp,
+            sliderLabels = listOf(
+                stringResource(R.string.bmw_dsp_tilt_amount),
+                stringResource(R.string.bmw_dsp_tilt_pivot),
+            ),
         ) {
+            // Sliders stay fully interactive when the section toggle is off -- parity with the
+            // View builder, whose dashboardPanel toggle only writes INDEX_TILT_ENABLED and does
+            // not grey its content.
             BmwSliderRow(
                 label = stringResource(R.string.bmw_dsp_tilt_amount),
                 value = dsp.get(NativeBmwDspValues.INDEX_TILT_AMOUNT),
@@ -52,7 +59,6 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
                 step = 0.1f,
                 unit = "dB",
                 accentColor = tiltColor,
-                enabled = enabled,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_TILT_AMOUNT, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_TILT_AMOUNT, it) },
             )
@@ -63,7 +69,6 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
                 step = 1f,
                 unit = "Hz",
                 accentColor = tiltColor,
-                enabled = enabled,
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_TILT_FREQ, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_TILT_FREQ, it) },
             )

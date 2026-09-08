@@ -1,22 +1,20 @@
 package app.siphondsp.fragment
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
+import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CrossoverDashboardBuilder
 import app.siphondsp.view.DspPager
-import app.siphondsp.view.MbcBandGrMeter
 import kotlin.math.roundToInt
 
 /**
@@ -24,30 +22,12 @@ import kotlin.math.roundToInt
  * pages: the car/speaker diagram with per-channel Delay, Polarity and Gain cards (the Left Low
  * card also carries the global Link L/R Delay toggle), and an Output page with Headroom, the
  * post-gain L/R sliders and the master limiter (enable + threshold + a live GR meter).
+ *
+ * The Output page is ported to Compose (see HeadroomOutputScreen / COMPOSE_MIGRATION_ROADMAP.md
+ * Phase 5); the car-diagram page stays on the View builder for now.
  */
 class GainLimiterFragment : Fragment() {
     private lateinit var container: FrameLayout
-    private val handler = Handler(Looper.getMainLooper())
-    private var limiterMeter: MbcBandGrMeter? = null
-
-    private val meterTick = object : Runnable {
-        override fun run() {
-            RootlessAudioProcessorService.nativeBmwMasterLimiterMeter()?.let { m ->
-                limiterMeter?.setGainReductionDb(m[0])
-            }
-            handler.postDelayed(this, 33L)
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        handler.post(meterTick)
-    }
-
-    override fun onStop() {
-        handler.removeCallbacks(meterTick)
-        super.onStop()
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -153,39 +133,12 @@ class GainLimiterFragment : Fragment() {
             }
         }
 
-        val limiterGrMeter = MbcBandGrMeter(requireContext())
-            .apply { stage = MbcBandGrMeter.Stage.LIMITER }
-            .also { limiterMeter = it }
-        val outputPage = page {
-            dashboardPanel("Output", null, lean = true) {
-                addSliderRow(
-                    getString(R.string.bmw_dsp_headroom), NativeBmwDspValues.INDEX_HEADROOM, -12f, 0f, 1f, "dB",
-                    accentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_HEADROOM_COLOR,
-                )
-                addSliderRow(
-                    "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f, 6f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.M_GREEN,
-                    sliderAccentColor = BmwDashboardSkin.M_GREEN,
-                )
-                addSliderRow(
-                    "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f, 6f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.M_GREEN,
-                    sliderAccentColor = BmwDashboardSkin.M_GREEN,
-                )
-                // Master limiter: its own header (13f, matching the lean "Output" title above)
-                // carrying the enable switch, then the threshold slider under it.
-                sectionHeader(
-                    "Limiter", accentColor = BmwDashboardSkin.M_BLUE, textSize = 13f, showDivider = false,
-                    toggleIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
-                )
-                addSliderRow(
-                    "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f, 0f, .5f, "dB",
-                    accentColor = BmwDashboardSkin.M_BLUE,
-                    sliderAccentColor = BmwDashboardSkin.M_BLUE,
-                )
-                addCustomView(limiterGrMeter)
-            }
+        // Output page ported to Compose -- see HeadroomOutputScreen. It reads/writes the same
+        // NativeBmwDspValues indices and broadcasts the same way, and owns its own lifecycle-
+        // scoped poll of the master-limiter GR meter (the fragment's old onStart/onStop Handler
+        // loop moved in there).
+        val outputPage: View = ComposeView(requireContext()).apply {
+            setContent { HeadroomOutputScreen() }
         }
 
         container.removeAllViews()

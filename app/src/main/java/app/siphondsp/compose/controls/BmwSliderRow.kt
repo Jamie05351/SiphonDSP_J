@@ -69,7 +69,7 @@ fun BmwSliderRow(
         BoxedTitle(
             text = label,
             accentColor = accentColor,
-            modifier = Modifier.width(RowTitleColumnWidth).height(RowBoxHeight),
+            modifier = Modifier.width(LocalRowTitleColumnWidth.current).height(RowBoxHeight),
         )
         Spacer(Modifier.width(RowToggleZoneWidth))
         BmwSlider(
