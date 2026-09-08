@@ -52,28 +52,28 @@ biggest single one.
 The "unsaved edit guard" the comments mention (`canSwitchDspScreens()`) is a stub
 that always returns `true` — nothing to port.
 
-## 2. Keep as `AndroidView` (interop, not port)
+## 2. What stays interop vs. gets ported
 
-`ParametricEqSurface` stays a `View`, hosted via `AndroidView`. Same decision as
-`CompressorSurface` / `CrossoverHandoffSurface` / `MbcBandGrMeter` — a large
-precision drag surface, no functional benefit from a rewrite, real regression
-risk (the memory records its Compose migration was dropped twice).
-`PeqGraphMath` / `PeqPlotGeometry` / `PeqSurfacePaints` come along as its
-internals. Bridge:
+**`PeqDialogs` — interop.** It's a fragment-independent class taking `context` +
+`LayoutInflater`; call it from Compose click handlers (same pattern as
+`showBmwNumberInput`). Porting it to Compose `AlertDialog` is a possible later
+cleanup, not Phase 10.
 
-- **In:** `peqState`, the selected band UUID, the channel-display / curve-mode
-  enums, and a new `nodeAlpha: Float` (§4).
-- **Out:** `onNodeTapped(band, anchorPx)` → Compose shows a detail callout (§4)
-  **and** the state holder sets `selectedBandByScope[scope]`.
+**`ParametricEqSurface` (the graph) — ported to Compose Canvas** (10c-i), then
+given the `ANALYZER_VISUAL_SPEC.md` treatment (10c-ii). This reverses the
+original "keep as `AndroidView`" call: with drag-to-adjust already removed
+upstream (tap-only), there is no precision multi-touch drag state machine left to
+port — the risk that got its Compose migration dropped twice is gone, and folding
+the visual spec in now (rather than an unscheduled future pass) is worth the
+Canvas rewrite. `PeqGraphMath` / `PeqPlotGeometry` are reused as pure math;
+`PeqSurfacePaints` is replaced by Compose draw calls. See 10c-i / 10c-ii and the
+**2026 update** note in §7.
 
-Small additions to `ParametricEqSurface`: a `setNodeAlpha(Float)` setter that
-scales the node draw alpha (hit-testing stays active while faded), and the
-`onNodeTapped` callback carrying the tapped node's screen position.
-
-`PeqDialogs` also stays **interop** — it's already a fragment-independent class
-taking `context` + `LayoutInflater`; call it from Compose click handlers (same
-pattern as `showBmwNumberInput`). Porting it to Compose `AlertDialog` is a
-possible later cleanup, not Phase 10.
+- **In (to the graph composable):** `peqState`, the selected band UUID, the
+  channel-display / curve-mode enums, and `nodeAlpha: Float` (§4, now a plain
+  composable parameter, not a `setNodeAlpha` setter on a View).
+- **Out:** `onNodeTapped(band)` → Compose shows a detail callout (§4) **and** the
+  holder sets `selectedUuid`.
 
 ## 3. State holder
 
@@ -127,7 +127,7 @@ rows (frequency / gain / Q / type / channel), each cell tap-to-edit via
 
 ## 6. Sub-phases
 
-Each a reviewable PR that builds and (from 10c on) runs.
+Each a reviewable PR that builds and (from 10c-i on) runs.
 
 ### 10a — `PeqStateHolder` + scope
 `rememberPeqState()` + `applyCandidate` + `add` / `reset` / `commitBandEdit` +
@@ -141,20 +141,75 @@ exercises add / edit / scope switch / reset. **Medium.**
 The keyed `LazyColumn` (§5) + rows + `PeqDialogs` interop for tap-to-edit +
 selected highlight + scroll-to-selected. **Large.**
 
-### 10c — graph + graph options + node behaviour
-`AndroidView(ParametricEqSurface)` wired to the holder, the `setNodeAlpha` fade
-timer + tap-detail callout (§4), and the graph-options menu (channel display /
-curve mode) as a Compose `DropdownMenu`. First runnable milestone: graph + list +
-scope + edits landing. **Medium–large.**
+### 10c-i — graph functional port (Compose Canvas, no visual polish yet)
+Replace `AndroidView(ParametricEqSurface)` with a real Compose-drawn graph — a `Canvas`
+composable reproducing `ParametricEqSurface`'s current drawing 1:1 (grid, per-filter overlay
+curves, summed curve via `drawSumCurve`, phase overlay, spectrum background via
+`drawSpectrumDelta`, node circles via `drawBankNodes`) wired to the holder. Same node-alpha
+fade timer + tap-detail callout (§4) and the graph-options menu (channel display / curve mode)
+as a Compose `DropdownMenu`, as originally scoped.
 
-### 10d — assemble `ParametricEqScreen` + wire the fragment
+**Display modes: MAGNITUDE and PHASE only** (2026-09-09 direction). `MAGNITUDE_PHASE` (the
+combined overlay) and `GROUP_DELAY` are dropped — so the Canvas port skips `drawGroupDelayCurve`
+/ `drawGroupDelayGrid` / `drawSumPhaseOverlay` and the group-delay math in `PeqGraphMath`
+entirely, the `DisplayMode` enum shrinks to `{ MAGNITUDE, PHASE }`, and the graph-options menu
+drops two curve-mode entries. Node interaction is already MAGNITUDE-only (`onTouchEvent` gates
+on it), so PHASE stays a read-only view — unchanged. Cuts ~150-200 lines of porting.
+
+**Tap-only, no dragging** — matches current behavior exactly. `ParametricEqSurface` already
+removed drag-to-adjust entirely (screen is too small at 1280×480 for precise drag-selection of
+a specific filter/frequency/gain point); tapping a node selects it and shows the detail
+callout, but all value edits happen through the filter list's rows/dialogs (10b), never through
+the graph itself. Compose's `detectTapGestures` (tap only) is sufficient here — no
+`detectDragGestures`, no drag hit-testing to port, since there's nothing to port.
+
+Goal here is *parity*, not polish — this step proves tap-to-select/detail and the options menu
+work correctly as a Compose `Canvas` before any visual treatment changes. Verify on-device
+against the current View-based graph side by side (or before/after screenshots): tapping a node
+selects the right filter and shows the right detail callout, the sum curve matches the current
+math exactly, the options menu behaves the same.
+
+**Large.**
+- *Investigate first:* exact `bindScope` side effects beyond deriving the list (`previewTitle`
+  text, graph re-bind ordering) — carried over from the original 10c note, still applies here.
+
+### 10c-ii — graph visual polish (ANALYZER_VISUAL_SPEC.md)
+Once 10c-i is verified on-device, apply `docs/ANALYZER_VISUAL_SPEC.md` sections 1-4 and 7 to
+this same graph, in the same PR sequence (separate commit(s), same branch is fine) rather than
+a disconnected future phase:
+- §1: real blur glow (`RenderEffect`/`BlurEffect`) on the summed curve, replacing
+  `strokeNeon()`'s fake wide-stroke approximation. Individual per-filter overlay curves stay
+  unglowed per the spec.
+- §2: gradient area fill under the summed curve.
+- §3: glass-treatment filter nodes (radial gradient fill, real blurred glow halo, crisp
+  ring/border, highlight arc) replacing the current flat-circle `drawBankNodes` styling. Keep
+  the existing right-channel dark-ring convention and node number label exactly as-is (spec is
+  explicit these aren't decorative).
+- §4: grid hierarchy (0dB line and octave markers brighter, everything else recedes further).
+- §7: spectrum background smoothing (EMA) + peak-hold, desaturated further — replaces the raw
+  redraw-every-frame `drawSpectrumDelta` behavior.
+- §5 (glass bezel/vignette panel treatment) applies to this graph's container too, if not
+  already covered by whatever `BmwPanel`/`BmwGlassBox` wrapping 10c-i's Canvas sits inside.
+
+None of this changes interaction — 10c-i's tap-only selection model is untouched; this step
+only changes how the graph is painted.
+
+Verify on-device against the visual spec's descriptions (not against the old View, which this
+is deliberately improving on) — the goal here is matching FabFilter Pro-Q's curve-rendering
+feel per the original design conversation, not matching what `ParametricEqSurface` used to
+look like.
+
+**Medium** (building on 10c-i's already-correct interaction/data plumbing — this step only
+changes how it's painted).
+
+### 10e — assemble `ParametricEqScreen` + wire the fragment
 Graph/List mode toggle (`BmwSegmentedControl` GRAPH/LIST + `AnimatedContent`).
 `ParametricEqualizerFragment` → `FrameLayout` + `ComposeView`; **delete
 `fragment_parametric_eq.xml` and every portrait code path** (`collapsePreview`,
 the weighted-chain code, `ORIENTATION_LANDSCAPE` branching) — portrait is dead
 weight on the 1280×480 head unit. Keep `activity_parametric_eq.xml`. **Medium.**
 
-### 10e — file I/O + reset wording
+### 10f — file I/O + reset wording
 `rememberLauncherForActivityResult` for: APO/REW `.txt` `OpenMultipleDocuments`
 (→ `PeqApoImport.handleApoImport`), `.txt` `CreateDocument` export, private
 backup `CreateDocument` / `OpenDocument` (`PrivatePeqBackup`), diagnostic-report
@@ -164,7 +219,7 @@ backup `CreateDocument` / `OpenDocument` (`PrivatePeqBackup`), diagnostic-report
   fragment-independent — the `Host` interface needs `context` / `activeScope` /
   `state` / `applyCandidate`, all on the holder.
 
-### 10f — receiver + expanded diagnostics
+### 10g — receiver + expanded diagnostics
 `DisposableEffect` registering the `ACTION_NATIVE_BMW_DSP_UPDATED` +
 backup-restore `BroadcastReceiver`. Plus **expand `PeqDiagnosticReport`** (§8).
 **Small–medium.**
@@ -182,7 +237,15 @@ backup-restore `BroadcastReceiver`. Plus **expand `PeqDiagnosticReport`** (§8).
 **Kept action set:** Pre EQ / Low Band / Mid Band (scope), Reset, Import, Export,
 Graph options, Filter tools, Diagnostics, Backup export, Restore backup.
 
-## 8. Expanded diagnostics (§10f)
+**2026 update:** 10c was originally scoped as `AndroidView(ParametricEqSurface)` (wrap the
+existing View, no visual change). Revised to a full Compose Canvas rewrite (10c-i) plus the
+ANALYZER_VISUAL_SPEC.md treatment (10c-ii) in the same phase, rather than deferring the visual
+spec to an unscheduled future pass — see chat discussion 2026-09-09. Crossovers & Tilt's and
+Compressor's graphs are still `AndroidView`-wrapped as of this update; the same
+functional-port-then-visual-polish split should apply to those when their turn comes, using
+this phase as the template.
+
+## 8. Expanded diagnostics (§10g)
 
 `PeqDiagnosticReport.create` today emits: app version / commit / build type /
 build time, Android + device + ABIs + screen, DSP service active, native handle
@@ -226,10 +289,14 @@ isn't). Left out of the list above pending a call.
 
 ## 9. Non-goals
 
-- No `ParametricEqSurface` Compose rewrite (`AndroidView`).
 - No `PeqDialogs` Compose rewrite (interop).
-- The analyzer/graph visual polish in `ANALYZER_VISUAL_SPEC.md` is a separate
-  later pass, not part of this.
+- No `ParametricEqSurface` *drag* interaction — it's tap-only already and the
+  Canvas port keeps it tap-only (10c-i).
+- Not porting Crossovers & Tilt's / Compressor's graphs off `AndroidView` here —
+  that's later, using 10c-i/10c-ii as the template (§7 2026 update).
+
+(The analyzer/graph visual polish that §9 previously deferred to "a separate
+later pass" is now **in scope** as 10c-ii.)
 
 ## 10. After Phase 10 — Phase 11 cleanup
 
