@@ -7,6 +7,8 @@ component set is proven, and `BmwDspState` established the "screen owns hoisted
 state + a single mutation funnel" shape. The PEQ screen is the last port and the
 biggest single one.
 
+**This revision bakes in the scope decisions from 2026-09-09** (see §7).
+
 ## 1. What's there today
 
 `ParametricEqualizerFragment` — ~1020 lines — plus ~14 supporting files
@@ -16,160 +18,223 @@ biggest single one.
 - **ViewBinding** (`FragmentParametricEqBinding`) + a `RecyclerView`
   (`ParametricEqBandAdapter`, `item_peq_band_list*.xml`) for the filter list.
 - **`ParametricEqSurface`** — a ~1100-line custom `View`: spectrum + magnitude /
-  phase / group-delay curves, per-band draggable nodes, node-tap selects the
-  band. Precision multi-touch drag state machine.
-- **`cards_pager`** — a landscape-only `ViewPager` swiping between a **GRAPH**
-  page (`preview_card`) and a **LIST** page (`edit_card`); portrait stacks them.
+  phase / group-delay curves, per-band nodes, node-tap selects the band.
+  Drag-to-adjust on the graph was already removed upstream ("it only ever nudged
+  filters by accident") — nodes are **tap-only** already.
+- **`cards_pager`** — a landscape-only `ViewPager` swiping between a **GRAPH** and
+  a **LIST** page; portrait stacks them.
 - **State:** `peqState: BmwPeqState` (three band lists — `fullRangeBands` /
   `lowBandBands` / `midBandBands` — plus `preampDb`), `selectedScope`
   (`PeqScope.FULL/LOW/MID`), `selectedBandByScope: Map<PeqScope, UUID?>`,
-  `history: PeqStateHistory(HISTORY_LIMIT)` (undo/redo stack, already a clean
-  standalone class).
+  `history: PeqStateHistory` (undo/redo).
 - **`applyCandidate(candidate, source, recordHistory, preserveScroll)`** — the
   single mutation funnel: `copy(enabled = true)` → `validate(sampleRate)` (toast
   + bail on failure) → if `nativeBmwPeqHandleReady() == true`
   `applyNativeBmwPeq(candidate)` else `candidate.persist(context)` → toast on a
-  rejected result → push to `history` → `bindScope()`. This is pure
-  validation + IO + history logic; it should move into the state holder almost
-  verbatim.
+  rejected result → push to `history` → `bindScope()`.
+- **Action chips:** scope (Pre EQ / Low Band / Mid Band), Reset, Import file,
+  Export file, Edit as string, Graph options, Undo, Redo, Filter tools,
+  Preset export, Preset import, Diagnostics, Backup export, Backup import.
+- **Filter tools** popup (`showFilterTools` + `PeqBandEditor`): Duplicate
+  selected, Move up / Move down (this is the list-reorder mechanism), Copy
+  selected → other scope, Copy all → other scope, Copy all L→R / R→L, Split Both
+  into L + R.
 - **File I/O** via `registerForActivityResult`: APO/REW `.txt` multi-import
-  (`PeqApoImport` + `ApoImportRouter` route by filename — `input` / `low_left` /
-  `low_right` / `mid_left` / `mid_right` → bank + channel), `.txt` export, and
-  three-bank JSON preset export/import (`BmwPeqPreset`).
-- **Dialogs:** `PeqDialogs(context, layoutInflater)` — a fragment-independent
-  class already: value input (frequency / gain / Q), filter-type picker, channel
-  picker, yes/no confirms. Plus `performReset`, `performEditAsString` (paste APO
-  text), `showGraphOptionsPopup` (channel display + curve mode `PopupMenu`).
+  (`PeqApoImport` + `ApoImportRouter` route by filename), `.txt` export, JSON
+  preset export/import (`BmwPeqPreset`), private backup export/import
+  (`PrivatePeqBackup`), diagnostic-report export.
+- **Dialogs:** `PeqDialogs(context, layoutInflater)` — fragment-independent
+  already: value input (frequency / gain / Q), filter-type picker, channel
+  picker, yes/no confirms.
 - **`BroadcastReceiver`** for `ACTION_NATIVE_BMW_DSP_UPDATED` and backup-restore
-  results; a diagnostic-report path.
-- **Drag-to-reorder** bands — `PeqBandEditor` produces a `"reorder"` edit result,
-  so the list is reorderable.
+  results.
 
-The "unsaved edit guard" the comments mention (`canSwitchDspScreens()`) is
-currently a **stub that always returns `true`** and the scope switch has no
-guard — so there is nothing to port there.
+The "unsaved edit guard" the comments mention (`canSwitchDspScreens()`) is a stub
+that always returns `true` — nothing to port.
 
-## 2. Keep as `AndroidView`
+## 2. Keep as `AndroidView` (interop, not port)
 
-`ParametricEqSurface` stays a `View`, hosted via `AndroidView` — same decision as
-`CompressorSurface` / `CrossoverHandoffSurface` / `MbcBandGrMeter`. It's a large
-precision drag surface with no functional benefit from a rewrite and real
-regression risk (see the `project` memory on why its Compose migration was
-dropped twice). Bridge:
+`ParametricEqSurface` stays a `View`, hosted via `AndroidView`. Same decision as
+`CompressorSurface` / `CrossoverHandoffSurface` / `MbcBandGrMeter` — a large
+precision drag surface, no functional benefit from a rewrite, real regression
+risk (the memory records its Compose migration was dropped twice).
+`PeqGraphMath` / `PeqPlotGeometry` / `PeqSurfacePaints` come along as its
+internals. Bridge:
 
-- **In:** the current `peqState` (as whatever array/model `ParametricEqSurface`
-  already consumes), the selected band UUID, and the channel-display / curve-mode
-  enums.
-- **Out:** a `onNodeSelected(uuid)` callback → the state holder sets
-  `selectedBandByScope[scope]`; a `onNodeDragged(...)` callback → funnel a band
-  edit through `applyCandidate`. `ParametricEqSurface` already exposes these as
-  listeners for the fragment — reuse them.
+- **In:** `peqState`, the selected band UUID, the channel-display / curve-mode
+  enums, and a new `nodeAlpha: Float` (§4).
+- **Out:** `onNodeTapped(band, anchorPx)` → Compose shows a detail callout (§4)
+  **and** the state holder sets `selectedBandByScope[scope]`.
 
-`PeqGraphMath` / `PeqPlotGeometry` / `PeqSurfacePaints` come along unchanged as
-`ParametricEqSurface`'s internals.
+Small additions to `ParametricEqSurface`: a `setNodeAlpha(Float)` setter that
+scales the node draw alpha (hit-testing stays active while faded), and the
+`onNodeTapped` callback carrying the tapped node's screen position.
 
-## 3. State holder — the crux
+`PeqDialogs` also stays **interop** — it's already a fragment-independent class
+taking `context` + `LayoutInflater`; call it from Compose click handlers (same
+pattern as `showBmwNumberInput`). Porting it to Compose `AlertDialog` is a
+possible later cleanup, not Phase 10.
 
-PEQ's state is **not** the `FloatArray` `BmwDspState` model. It's typed
-(`BmwPeqState`), has its own persistence (`persist` / `applyNativeBmwPeq`) and its
-own undo history. So PEQ gets its own holder:
+## 3. State holder
+
+PEQ's state is typed (`BmwPeqState`), not the `FloatArray` `BmwDspState` model,
+with its own persistence. It gets its own holder:
 
 ```
 rememberPeqState(): PeqStateHolder
 ```
 
 - Fields: `peqState` (`mutableStateOf<BmwPeqState>`), `selectedScope`
-  (`mutableStateOf`, `rememberSaveable`), `selectedBandByScope`, `history`
-  (`PeqStateHistory` reused verbatim), `pendingDiagnosticReport`.
-- **`applyCandidate(candidate, source, recordHistory = true)`** — moved in almost
-  verbatim; the only change is `bindScope()` disappears (the visible band list is
-  now a *derived* value: `bandsForScope(peqState, selectedScope)` recomputed on
-  read, no explicit rebind).
-- Convenience ops that today live in the fragment and just call `applyCandidate`:
-  `performAdd`, `performReset`, `commitBandEdit(index, source, transform)`,
-  `performUndo` / `performRedo` (`history.undo()/redo()` → `applyCandidate(...,
-  recordHistory = false)`), `reorder(from, to)`.
-- Derived: `visibleBands` (list for the current scope), `canUndo` / `canRedo`,
-  `selectedUuid`, `scopeAccent`.
-- The `RootlessAudioProcessorService` calls (`nativeBmwPeqSampleRate`,
-  `nativeBmwPeqHandleReady`, `applyNativeBmwPeq`) stay exactly as they are —
-  service-ready branching unchanged.
+  (`rememberSaveable`), `selectedBandByScope`.
+- **`applyCandidate(candidate, source)`** — moved in near-verbatim, minus
+  everything undo-related (§7): validate → native push or persist → toast on
+  fail. `bindScope()` disappears — the visible list is a *derived* value
+  (`bandsForScope(peqState, selectedScope)`), recomputed on read.
+- Ops that today call `applyCandidate`: `add`, `reset` (scope-aware),
+  `commitBandEdit(index, source, transform)`, and every filter-tools op via
+  `PeqBandEditor` (all already return a candidate + a "select" uuid).
+- Derived: `visibleBands`, `selectedUuid`, `scopeAccent`.
+- The `RootlessAudioProcessorService` PEQ calls stay exactly as-is.
 
-**Sizing: large.** It's the single biggest piece; land + review it on its own.
+**Sizing: medium** (was "large" — undo history and its coalescing are gone).
 
-## 4. Sub-phases
+## 4. Graph node behaviour (new — from the 2026-09-09 direction)
 
-Ordered so each is a reviewable PR that builds and (from 10c on) runs.
+- **Tap a node → detail callout.** The surface reports `onNodeTapped(band,
+  anchorPx)`; Compose renders a small `Popup` near that point showing the band's
+  frequency / gain / Q / filter type / channel. Dismisses on outside tap or after
+  a few seconds. The tap still selects the band (list-row highlight +
+  `animateScrollToItem`).
+- **Nodes fade after 6s idle.** Compose owns the timer: an interaction counter
+  (bumped on node tap, any filter edit, scope switch) drives a
+  `LaunchedEffect(interactionTick)` that waits 6s then animates `nodeAlpha`
+  1 → 0 over ~400ms; each interaction resets it to 1. `nodeAlpha` is pushed into
+  the surface via `setNodeAlpha`. The curves themselves don't fade — only the
+  draggable/tappable node dots — so the response shape stays readable while the
+  clutter recedes. Hit-testing for node tap stays live while faded.
 
-### 10a — `PeqStateHolder`
-`rememberPeqState()` + `applyCandidate` + the convenience ops + derived values.
-No UI yet; a throwaway `@Preview` / tiny harness exercises add / edit / undo /
-scope switch. **Large.**
+## 5. The filter list
+
+`LazyColumn(key = { it.uuid })` — a header row, an "add band" row, and per-band
+rows (frequency / gain / Q / type / channel), each cell tap-to-edit via
+`PeqDialogs` interop. Row styling from `item_peq_band_list*.xml`.
+
+- **No drag-to-reorder.** Filter tools' "Move up / Move down" is the reorder
+  mechanism and stays; a reorderable `LazyColumn` (no first-party support, the
+  plan's old top risk) is not needed.
+- Selected-band highlight + `LazyListState.animateScrollToItem` on node tap;
+  `rememberSaveable` for scroll position (no `preserveScroll` plumbing).
+
+## 6. Sub-phases
+
+Each a reviewable PR that builds and (from 10c on) runs.
+
+### 10a — `PeqStateHolder` + scope
+`rememberPeqState()` + `applyCandidate` + `add` / `reset` / `commitBandEdit` +
+the `PeqBandEditor` ops + derived values, and the **scope segmented control**
+(`BmwSegmentedControl`, 3 options — already built). Tiny harness / `@Preview`
+exercises add / edit / scope switch / reset. **Medium.**
 - *Investigate first:* exact `bindScope` side effects beyond deriving the list
-  (scroll position via `preserveScroll`, `previewTitle` text, graph re-bind
-  order); `PeqStateHistory`'s push/coalesce semantics (does it dedupe rapid
-  same-band edits?).
+  (`previewTitle` text, graph re-bind ordering).
 
 ### 10b — the filter list
-`LazyColumn(key = { it.uuid })` — the roadmap's keyed-list requirement — with a
-header row, an "add band" row, and per-band rows (frequency / gain / Q / type /
-channel), each cell tap-to-edit. **Large.**
-- Tap-to-edit reuses **`PeqDialogs` via interop** (call from a Compose click
-  handler with `LocalContext` + a remembered `LayoutInflater`, same pattern as
-  `showBmwNumberInput`). Port `PeqDialogs` to Compose `AlertDialog` later if
-  wanted — not now.
-- Row styling from `item_peq_band_list.xml` (+ `_header`, `_add`).
-- *Investigate first / genuine risk:* **drag-to-reorder in a `LazyColumn`** has
-  no first-party support. Options: `sh.calvin.reorderable` (small, well-tested
-  lib — check it's on an allowed repo), or `detectDragGesturesAfterLongPress` +
-  manual index math + `animateItemPlacement`. Decide when implementing; the
-  reorder edit still funnels through `applyCandidate("reorder")`.
-- *Also:* `selectedBandByScope` highlight + scroll-to-selected on node tap
-  (`LazyListState.animateScrollToItem`), and `rememberSaveable` for scroll pos.
+The keyed `LazyColumn` (§5) + rows + `PeqDialogs` interop for tap-to-edit +
+selected highlight + scroll-to-selected. **Large.**
 
-### 10c — graph + scope + graph-options
-`AndroidView(ParametricEqSurface)` wired to the holder (§2), the **scope
-segmented control** (`BmwSegmentedControl`, 3 options — already built), and the
-graph-options menu (channel display / curve mode) as a Compose `DropdownMenu`
-(like `BmwDropdown`). First runnable milestone: graph + list + scope switching,
-edits landing. **Medium.**
+### 10c — graph + graph options + node behaviour
+`AndroidView(ParametricEqSurface)` wired to the holder, the `setNodeAlpha` fade
+timer + tap-detail callout (§4), and the graph-options menu (channel display /
+curve mode) as a Compose `DropdownMenu`. First runnable milestone: graph + list +
+scope + edits landing. **Medium–large.**
 
 ### 10d — assemble `ParametricEqScreen` + wire the fragment
-Graph/List mode switch (`BmwSegmentedControl` GRAPH/LIST + `AnimatedContent`, or a
-Compose `HorizontalPager` of 2 for the swipe). `ParametricEqualizerFragment` →
-`FrameLayout` + `ComposeView` (drop `fragment_parametric_eq.xml`); keep
-`activity_parametric_eq.xml`. **Medium.**
-- *Investigate first:* is the **portrait** layout used anywhere on a real device?
-  The head unit is 1280×480 landscape. If portrait is effectively dead, build
-  only the landscape layout + a plain vertical stack fallback and delete the
-  portrait branching (`collapsePreview`, the weighted-chain code) — removes a
-  whole code path. Confirm before dropping.
+Graph/List mode toggle (`BmwSegmentedControl` GRAPH/LIST + `AnimatedContent`).
+`ParametricEqualizerFragment` → `FrameLayout` + `ComposeView`; **delete
+`fragment_parametric_eq.xml` and every portrait code path** (`collapsePreview`,
+the weighted-chain code, `ORIENTATION_LANDSCAPE` branching) — portrait is dead
+weight on the 1280×480 head unit. Keep `activity_parametric_eq.xml`. **Medium.**
 
-### 10e — file I/O + reset + edit-as-string
+### 10e — file I/O + reset wording
 `rememberLauncherForActivityResult` for: APO/REW `.txt` `OpenMultipleDocuments`
-(→ `PeqApoImport.handleApoImport`), `.txt` `CreateDocument` export, JSON preset
-`CreateDocument` / `OpenDocument` (`BmwPeqPreset`). `performReset` (scope-aware
-confirm), `performEditAsString` (paste APO text dialog). **Medium.**
-- `PeqApoImport` / `ApoImportRouter` / `BmwPeqPreset` are already
-  fragment-independent — the `Host` interface just needs `context` / `activeScope`
-  / `state` / `applyCandidate`, all on the holder.
+(→ `PeqApoImport.handleApoImport`), `.txt` `CreateDocument` export, private
+backup `CreateDocument` / `OpenDocument` (`PrivatePeqBackup`), diagnostic-report
+`CreateDocument`. `reset` confirm dialog. Reword the backup-restore confirmation
+(drop "This can be undone" — there's no undo). **Medium.**
+- `PeqApoImport` / `ApoImportRouter` / `PrivatePeqBackup` are already
+  fragment-independent — the `Host` interface needs `context` / `activeScope` /
+  `state` / `applyCandidate`, all on the holder.
 
-### 10f — receiver + diagnostics
+### 10f — receiver + expanded diagnostics
 `DisposableEffect` registering the `ACTION_NATIVE_BMW_DSP_UPDATED` +
-backup-restore `BroadcastReceiver` (→ holder refresh / result toast), and the
-`pendingDiagnosticReport` path. **Small.**
+backup-restore `BroadcastReceiver`. Plus **expand `PeqDiagnosticReport`** (§8).
+**Small–medium.**
 
-## 5. Non-goals for Phase 10
+## 7. Dropped from the port (2026-09-09 direction)
 
-- No `ParametricEqSurface` Compose rewrite (stays `AndroidView`).
+| Dropped | Consequence |
+|---|---|
+| **Portrait layout** | Delete `fragment_parametric_eq.xml` + `collapsePreview` + weighted-chain + orientation branching. Landscape-only. |
+| **Undo / Redo** | No `PeqStateHistory` in the port. `applyCandidate` loses `recordHistory` + `history.push`; no `performUndo/Redo`, no `refreshActionChips`. Reword the "This can be undone" lines in the reset / backup-restore confirms. |
+| **Edit as string** (`chip_edit_string`) | `performEditAsString` gone. `ParametricEqBandList.toApoString` / `fromApoString` stay (file import/export use them). |
+| **Preset export / import** (`chip_preset_*`) | `performPresetImport/Export` + launchers gone. `BmwPeqPreset` class stays — `PrivatePeqBackup` uses it. |
+| **Drag-to-reorder (list & graph)** | Filter tools' Move up/down is the reorder path. Kills the reorderable-`LazyColumn` risk. |
+
+**Kept action set:** Pre EQ / Low Band / Mid Band (scope), Reset, Import, Export,
+Graph options, Filter tools, Diagnostics, Backup export, Restore backup.
+
+## 8. Expanded diagnostics (§10f)
+
+`PeqDiagnosticReport.create` today emits: app version / commit / build type /
+build time, Android + device + ABIs + screen, DSP service active, native handle
+ready, sample rate, PEQ state format, PEQ enabled, per-bank filter counts, last
+restore / fallback / error, last backup restore, last-known-good timestamp, and a
+privacy note (no audio, filter values, file contents, paths, usernames, account
+ids).
+
+Rename the header to a broader "SiphonDSP DSP diagnostic" and add — all
+structural / privacy-safe, keeping the same stance:
+
+- **Per-bank filter-type histogram** — counts by `ParametricEqFilterType`
+  (peaking / low-shelf / high-shelf / high-pass / low-pass / …). Structure, not
+  values.
+- **Per-bank channel breakdown** — how many Left / Right / Both.
+- **At-capacity flags** — each bank's filter count vs the per-bank native max.
+- **Current-state validation** — run `state.validate(liveSampleRate)` and report
+  pass, or which check failed (the single most useful line for "why did my import
+  get rejected").
+- **Native engine state** — recorder sample rate vs engine sample rate, PEQ
+  handle-ready tri-state, and the enable flags for MBC / bus limiters / master
+  limiter / tilt / crossover / mono-bass / all-pass sections (from
+  `NativeBmwDspValues`) — a full "what is the DSP doing" snapshot.
+- **Backup / restore history** — the last N results, not just the most recent
+  (needs `BmwPeqState`/`PrivatePeqBackup` to keep a short ring; today it keeps
+  one).
+- **Persistence health** — existence + byte size + mtime (not contents) of the
+  PEQ state file, the last-known-good file, and the newest private backup.
+- **Device health** — `ActivityManager.isLowRamDevice` / low-memory flag, free vs
+  total heap, available internal storage.
+- **Permission / mode** — Shizuku vs rootless vs root, `PROJECT_MEDIA` appop
+  state (explains a stalled engine / capture).
+- **Timezone offset** — so a reader can interpret the timestamps above.
+- **Graph display prefs** — channel display + show-individual-filters (from
+  `PeqGraphPreferences`).
+
+**Borderline — decide before implementing:** the **preamp dB value** (a single
+config number, arguably fine but the privacy note currently says "no filter
+values") and **device locale** (mildly identifying vs. timezone offset which
+isn't). Left out of the list above pending a call.
+
+## 9. Non-goals
+
+- No `ParametricEqSurface` Compose rewrite (`AndroidView`).
 - No `PeqDialogs` Compose rewrite (interop).
-- The analyzer/graph visual polish in `ANALYZER_VISUAL_SPEC.md` is a *separate*
-  later pass on top of the ported screens — not part of this.
+- The analyzer/graph visual polish in `ANALYZER_VISUAL_SPEC.md` is a separate
+  later pass, not part of this.
 
-## 6. After 10 — Phase 11 cleanup (unchanged scope, now reachable)
+## 10. After Phase 10 — Phase 11 cleanup
 
-Once PEQ is Compose: delete `CrossoverDashboardBuilder` + the now-dead
-`BmwSkinDrawables` classes (audit — some may still back settings-screen XML),
-replace `DspPager` with a Compose pager, drop `viewBinding` once no `*Binding`
-remains, replace `BmwPanel`'s dp-slack title-column measurement with a
-`SubcomposeLayout` exact measure, and audit remaining `AndroidView` wrappers.
+Delete `CrossoverDashboardBuilder` + now-dead `BmwSkinDrawables` classes (audit —
+some may still back settings-screen XML), replace `DspPager` with a Compose
+pager, drop `viewBinding` once no `*Binding` remains, replace `BmwPanel`'s
+dp-slack title-column measurement with a `SubcomposeLayout` exact measure, and
+audit remaining `AndroidView` wrappers.
