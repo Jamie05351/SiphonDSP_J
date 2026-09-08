@@ -1,52 +1,33 @@
 package app.siphondsp.fragment
 
-import android.content.Intent
-import android.graphics.Paint
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.compose.ui.platform.ComposeView
-import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
-import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.compose.screens.CrossoversPageScreen
+import app.siphondsp.compose.screens.MonoBassScreen
 import app.siphondsp.compose.screens.TonalityTiltScreen
-import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.view.BmwDashboardSkin
-import app.siphondsp.view.CrossoverDashboardBuilder
-import app.siphondsp.view.CrossoverHandoffSurface
 import app.siphondsp.view.DspPager
-import kotlin.math.roundToInt
 
 /**
- * Dedicated Crossovers & Tilt screen using the shared BMW dashboard skin. Swipes between three
- * pages -- Crossover, Tilt, and Mono Bass. Page 1 is the read-only [CrossoverHandoffSurface]
- * (low/mid/sum response, corner markers, subsonic roll-off and the Mono Bass cue, with a
- * flat-sum readout) plus the numeric slider rows that actually set things: Lowpass and Highpass
- * crossover frequencies, Subsonic, and the linked Mid all-pass alignment -- each with its own
- * Hz value box / on-off switch -- and a deep link to the full per-output All-pass screen. Mono
- * Bass keeps its own page in this pager, so its frequency slider isn't duplicated on page 1.
- * The visible Low/Mid controls stay linked while mirroring into independent L/R runtime config.
- * All four panels render in `lean` mode (no card, thin header) so the head unit's fold isn't
- * eaten by chrome.
- * (A fourth Pultec-style bass EQ page briefly lived here between Tilt and Mono Bass; it was
- * unused and has been removed -- its config slots have since been reclaimed, see
- * NativeBmwDspProcessor.h's kConfigSize comment.)
+ * Crossovers & Tilt workspace -- a [DspPager] of three Compose pages:
+ * - [CrossoversPageScreen] -- the read-only CrossoverHandoffSurface graph over the Lowpass /
+ *   Highpass / Subsonic / Mid-align rows, plus a deep link to the full All-pass screen.
+ * - [TonalityTiltScreen] -- Tilt amount / pivot.
+ * - [MonoBassScreen] -- Mono Bass frequency / blend / makeup.
+ *
+ * All three read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the
+ * same way, so this fragment is just a `DspPager` host (COMPOSE_MIGRATION_ROADMAP.md Phase 4 +
+ * follow-up).
  */
 class CrossoverTiltFragment : Fragment() {
     private lateinit var container: FrameLayout
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         this.container = FrameLayout(requireContext())
         rebuild()
         return this.container
@@ -54,175 +35,25 @@ class CrossoverTiltFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // NativeBmwDspValues is loaded once into a local array and captured by closures below;
-        // rebuild from disk on every resume so edits made elsewhere aren't silently overwritten
-        // by this screen's stale snapshot the next time a slider here is touched.
+        // Rebuilt on every resume so a fresh set of ComposeViews (and their BmwDspState) pick up
+        // edits made elsewhere while this screen was stopped.
         if (::container.isInitialized) rebuild()
     }
 
     private fun rebuild() {
-        val values = NativeBmwDspValues.load(requireContext())
-        val peqState = BmwPeqState.load(requireContext())
-        val onChanged: (FloatArray) -> Unit = { updated ->
-            NativeBmwDspValues.save(requireContext(), updated)
-            NativeBmwDspValues.broadcast(requireContext(), updated)
-        }
-
-        // The linked Low/Mid controls set their legacy global index and mirror onto both of
-        // that band's per-output config blocks (which native actually reads).
-        fun lowPair(field: Int) = intArrayOf(
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, field),
-        )
-        fun midPair(field: Int) = intArrayOf(
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, field),
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
-        )
-
-        fun page(build: CrossoverDashboardBuilder.() -> Unit): View {
-            val pageRoot = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(4), dp(0), dp(4), dp(8))
-            }
-            CrossoverDashboardBuilder(requireContext(), pageRoot, values, onChanged).build()
-            return NestedScrollView(requireContext()).apply {
-                // Deliberately NOT isFillViewport=true: stretching a shorter-than-viewport page
-                // (eg. Tilt's 3 rows, Mono Bass's 4) to fill the remaining height corrupts
-                // LinearLayout's measure pass for addSegmentedSwitchRow's MATCH_PARENT control
-                // slot and addSliderRow's weighted spacer, silently dropping every row after the
-                // first slider that follows a switch (confirmed: their views ARE added to the
-                // tree, they just never get measured/laid out). Only pages whose natural content
-                // already exceeds the viewport (eg. Gain Structure's 5 sliders) were unaffected.
-                addView(pageRoot, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            }
-        }
-
-        // Section-1 (index 0) all-pass block for each Mid output: [enabled, order, freq, Q].
-        // Linked L/R below -- the frequency handle is what aligns the Mid branch's phase through
-        // the handoff; per-output / section 2 / Q stay on the full All-pass screen.
-        val midLeftAllPassBase = NativeBmwDspValues.INDEX_ALL_PASS +
-            (NativeBmwDspValues.OUTPUT_MID_LEFT * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) *
-            NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-        val midRightAllPassBase = NativeBmwDspValues.INDEX_ALL_PASS +
-            (NativeBmwDspValues.OUTPUT_MID_RIGHT * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) *
-            NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-
-        val crossoversPage = page {
-            // Read-only [CrossoverHandoffSurface] as the picture; the numeric rows below it do
-            // the tuning -- Lowpass and Highpass crossover frequencies (with Hz value boxes),
-            // then Subsonic and the linked Mid all-pass alignment (each with its own on/off
-            // switch), plus a deep link to the full per-output All-pass screen. Mono Bass has
-            // its own dedicated page in this pager, so it isn't repeated here.
-            dashboardPanel("", null, lean = true, leanStartDp = 80) {
-                val surface = CrossoverHandoffSurface(requireContext()).apply {
-                    bind(values, peqState)
-                }
-                // Graph sits 40dp left of the control rows below (panel indent is 80dp) so it
-                // reads wider without crowding the rows against the sidebar. bottomMargin (4dp)
-                // plus the slider row's own 2dp top padding leaves exactly 6dp to the first
-                // slider -- both corners are a fixed LR4 (24 dB/oct) readout, so the old
-                // "LR4 · 24 dB/oct" sectionHeader that used to sit here was pure vertical cost.
-                addCustomView(surface, topMarginDp = 0, bottomMarginDp = 4, startMarginDp = -40)
-
-                addSliderRow(
-                    "Lowpass freq (LR4)", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ,
-                    80f, 200f, 1f, "Hz",
-                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                    accentColor = BmwDashboardSkin.LIGHT_BLUE,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
-                )
-                addSliderRow(
-                    "Highpass freq (LR4)", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
-                    80f, 200f, 1f, "Hz",
-                    mirrorIndices = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
-                )
-                // Subsonic keeps its own inline on/off switch so it can be bypassed without
-                // leaving this page.
-                addSliderRow(
-                    getString(R.string.bmw_dsp_subsonic_freq),
-                    NativeBmwDspValues.INDEX_SUBSONIC_FREQ,
-                    20f, 60f, 1f, "Hz",
-                    mirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ),
-                    toggleIndex = NativeBmwDspValues.INDEX_SUBSONIC_ENABLED,
-                    toggleMirrorIndices = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED),
-                )
-                addSliderRow(
-                    "Mid align (all-pass)", midLeftAllPassBase + 2,
-                    20f, 1000f, 1f, "Hz",
-                    mirrorIndices = intArrayOf(midRightAllPassBase + 2),
-                    accentColor = BmwDashboardSkin.MID_BAND_YELLOW,
-                    sliderAccentColor = BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
-                    toggleIndex = midLeftAllPassBase,
-                    toggleMirrorIndices = intArrayOf(midRightAllPassBase),
-                )
-                addCustomView(
-                    TextView(requireContext()).apply {
-                        text = "Open full All-pass ›"
-                        textSize = 12f
-                        setTextColor(BmwDashboardSkin.LIGHT_BLUE)
-                        paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
-                        setTypeface(typeface, Typeface.BOLD)
-                        setPadding(dp(4), dp(6), dp(4), dp(2))
-                        setOnClickListener {
-                            startActivity(
-                                Intent(requireContext(), CrossoverTiltActivity::class.java)
-                                    .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS),
-                            )
-                        }
-                    },
-                    topMarginDp = 0, bottomMarginDp = 2,
-                )
-            }
-        }
-
-        // Tilt page ported to Compose -- see TonalityTiltScreen and COMPOSE_MIGRATION_ROADMAP.md
-        // Phase 4. The Crossovers and Mono Bass pages stay on the View builder for now; DspPager
-        // hosts this ComposeView alongside them. TonalityTiltScreen reads/writes the same
-        // NativeBmwDspValues indices (and broadcasts the same way) via BmwDspState, so edits here
-        // stay in sync with the other two pages and with the audio engine.
-        val tiltPage: View = ComposeView(requireContext()).apply {
-            setContent { TonalityTiltScreen() }
-        }
-
-        val monoBassPage = page {
-            // No subtitle -- matches the Crossovers/Tilt pages' own header format.
-            dashboardPanel(
-                getString(R.string.bmw_dsp_mono_bass), null,
-                toggleIndex = NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
-                topContentGapDp = 40,
-                lean = true,
-                leanStartDp = 80,
-            ) {
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_freq),
-                    NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
-                    40f, 120f, 1f, "Hz",
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_blend),
-                    NativeBmwDspValues.INDEX_MONO_BASS_BLEND,
-                    0f, 100f, 1f, "%",
-                )
-                addSliderRow(
-                    getString(R.string.bmw_dsp_mono_bass_makeup),
-                    NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP,
-                    -6f, 6f, .1f, "dB",
-                )
-            }
-        }
-
+        val ctx = requireContext()
         container.removeAllViews()
         container.addView(
             DspPager.build(
-                requireContext(),
-                listOf(crossoversPage, tiltPage, monoBassPage),
+                ctx,
+                listOf(
+                    ComposeView(ctx).apply { setContent { CrossoversPageScreen() } },
+                    ComposeView(ctx).apply { setContent { TonalityTiltScreen() } },
+                    ComposeView(ctx).apply { setContent { MonoBassScreen() } },
+                ),
                 toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
     }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 }
