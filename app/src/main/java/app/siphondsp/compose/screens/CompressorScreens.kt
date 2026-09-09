@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.compose.controls.BmwGrMeter
@@ -77,7 +78,12 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
             )
             BmwPanel(
                 title = "Multiband compressor",
-                subtitle = "Pre-crossover, 4 bands. Off = fully bypassed.",
+                titleFontSize = 18.sp,
+                // Enable toggle nested by the header (same pattern as the bus limiters), not on
+                // the Mix row.
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
+                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
+                subtitle = "Mix sets the dry/wet blend: 0% bypasses the compressor, 100% is fully processed. Pre-crossover, 4 bands.",
                 modifier = Modifier.fillMaxWidth(),
                 // 8dp master-container margin + 4dp masterRoot pad + 80dp dashboardPanel lean.
                 leanStart = 92.dp,
@@ -91,8 +97,6 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
                     onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MBC_MIX, it) },
                     onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MBC_MIX, it) },
                     onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MBC_MIX, it) },
-                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
-                    onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
                 )
             }
         }
