@@ -8,18 +8,21 @@ import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
+import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.view.DspPager
 
 /**
- * Dedicated Gains & Delay workspace. Swipes between two pages, both now Compose:
+ * Dedicated Gains & Delay workspace. Swipes between three pages, all Compose:
  * - [GainsDelayScreen] -- the car/speaker diagram with per-channel Delay, Polarity and Gain
  *   cards (the Left Low card also carries the global Link L/R Delay toggle).
  * - [HeadroomOutputScreen] -- Headroom, the post-gain L/R sliders and the master limiter
  *   (enable + threshold + a live GR meter).
+ * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus), moved here
+ *   from the compressor pager so every limiter stage lives on one screen.
  *
- * Both screens read/write the same `NativeBmwDspValues` indices and broadcast the same way via
+ * All three read/write the same `NativeBmwDspValues` indices and broadcast the same way via
  * `BmwDspState`, so this fragment is now just a `DspPager` host (see
  * COMPOSE_MIGRATION_ROADMAP.md Phases 5-6).
  */
@@ -50,12 +53,15 @@ class GainLimiterFragment : Fragment() {
         val outputPage: View = ComposeView(requireContext()).apply {
             setContent { HeadroomOutputScreen() }
         }
+        val busLimiterPage: View = ComposeView(requireContext()).apply {
+            setContent { CompressorDriverPage() }
+        }
 
         container.removeAllViews()
         container.addView(
             DspPager.build(
                 requireContext(),
-                listOf(diagramPage, outputPage),
+                listOf(diagramPage, outputPage, busLimiterPage),
                 toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
