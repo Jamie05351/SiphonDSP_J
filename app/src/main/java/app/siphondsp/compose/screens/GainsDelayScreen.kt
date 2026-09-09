@@ -31,8 +31,9 @@ import app.siphondsp.view.BmwDashboardSkin
  * is on, each delay edit also writes the band's other side (via [BmwDspState]'s `mirrors`), and
  * the sibling card just recomposes off the shared snapshot.
  *
- * The Output page is the other half of this workspace and is already Compose
- * ([HeadroomOutputScreen]); `DspPager` hosts both.
+ * The Output page ([HeadroomOutputScreen]) and the bus-limiter page ([CompressorDriverPage],
+ * moved here from the compressor pager) are the other two pages of this workspace; `DspPager`
+ * hosts all three.
  */
 @Composable
 fun GainsDelayScreen(modifier: Modifier = Modifier) {

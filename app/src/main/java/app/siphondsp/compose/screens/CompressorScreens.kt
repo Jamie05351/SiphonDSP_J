@@ -37,13 +37,15 @@ import app.siphondsp.view.CompressorSurface
 import app.siphondsp.view.MbcBandGrMeter
 
 /**
- * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Six
- * `DspPager` pages, each its own `ComposeView`:
+ * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five
+ * `DspPager` pages on this screen, each its own `ComposeView`:
  * - [CompressorVisualiserPage] -- the `CompressorSurface` (kept as `AndroidView`) + MBC
  *   enable / dry-wet Mix master strip.
  * - [CompressorBandPage] x4 -- per-band enable + stereo-link, a live GR meter, and the
  *   threshold / ratio / knee / attack / release / makeup sliders.
- * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus).
+ *
+ * [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus) -- is defined
+ * here too but hosted on the Gains & Delay pager (with the master limiter), not this screen.
  *
  * Each page polls only the meters it shows, on a `LifecycleStartEffect` `Handler` loop scoped to
  * that page's composition -- and since `DspPager` (a `ViewPager2`) only keeps the current page

@@ -9,17 +9,17 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.compose.screens.CompressorBandPage
-import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.CompressorVisualiserPage
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.DspPager
 
 /**
- * The pre-crossover multiband compressor screen: a full-bleed [DspPager] of six Compose pages --
+ * The pre-crossover multiband compressor screen: a full-bleed [DspPager] of five Compose pages --
  * the [CompressorVisualiserPage] (the `CompressorSurface` visualiser + the MBC enable / dry-wet
- * Mix master strip), four [CompressorBandPage]s (enable, stereo link, a live GR meter, and the
- * threshold / ratio / knee / attack / release / makeup sliders), and the [CompressorDriverPage]
- * (per-bus brick-wall limiters). See COMPOSE_MIGRATION_ROADMAP.md Phase 7.
+ * Mix master strip) and four [CompressorBandPage]s (enable, stereo link, a live GR meter, and the
+ * threshold / ratio / knee / attack / release / makeup sliders). The per-bus brick-wall limiters
+ * (`CompressorDriverPage`) now live on the Gains & Delay pager. See COMPOSE_MIGRATION_ROADMAP.md
+ * Phase 7.
  *
  * Every control writes into the shared `NativeBmwDspValues` array via `BmwDspState` and
  * broadcasts the same way; the legacy per-output compressor this screen used to edit is retired
@@ -50,7 +50,6 @@ class NativeBmwCompressorFragment : Fragment() {
             for (band in 0 until NativeBmwDspValues.MBC_BAND_COUNT) {
                 add(ComposeView(ctx).apply { setContent { CompressorBandPage(band) } })
             }
-            add(ComposeView(ctx).apply { setContent { CompressorDriverPage() } })
         }
 
         pagerContainer.removeAllViews()
