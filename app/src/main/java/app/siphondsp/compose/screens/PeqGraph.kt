@@ -1,10 +1,12 @@
 package app.siphondsp.compose.screens
 
 import android.content.Context
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.util.TypedValue
 import androidx.compose.animation.core.Animatable
@@ -223,6 +225,7 @@ fun PeqGraph(
     graphOptions: PeqGraphOptions? = null,
 ) {
     val paints = rememberPeqSurfacePaints()
+    val glass = rememberGlassPaints()
     val model = remember { PeqResponseModel() }
     val maxFrequency = remember(sampleRate) {
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
@@ -326,6 +329,7 @@ fun PeqGraph(
             val ctx = PeqDrawContext(
                 geometry = geometry,
                 paints = paints,
+                glass = glass,
                 model = model,
                 density = density,
                 systemValues = systemValues,
@@ -379,8 +383,25 @@ private fun rememberPeqSurfacePaints(): PeqSurfacePaints {
             density = density,
             themeTextColor = themeColor(context, android.R.attr.textColorPrimary),
             themeAccentColor = themeColor(context, android.R.attr.colorAccent),
-        )
+        ).apply {
+            // ANALYZER_VISUAL_SPEC §4 grid hierarchy: recede the regular mesh so the brightened
+            // 0 dB / octave lines actually read as emphasised rather than one-more-line.
+            unifiedGridPaint.alpha = 90
+            unifiedZeroPaint.color = AndroidColor.rgb(132, 136, 146)
+            unifiedZeroPaint.alpha = 255
+            // §7: push the live spectrum further into the background — greyer + fainter.
+            unifiedSpectrumStrokePaint.color =
+                ColorUtils.blendARGB(spectrumAccentColor, AndroidColor.rgb(150, 150, 150), 0.55f)
+            unifiedSpectrumStrokePaint.alpha = 110
+            dryStrokePaint.alpha = 120
+        }
     }
+}
+
+@Composable
+private fun rememberGlassPaints(): PeqGlassPaints {
+    val density = LocalDensity.current.density
+    return remember(density) { PeqGlassPaints(density) }
 }
 
 // --- render orchestration — mirrors ParametricEqSurface.drawUnifiedSystem ----------------------
@@ -398,28 +419,33 @@ private fun renderPeqGraph(
     val g = ctx.geometry
     when (ctx.mode) {
         PeqGraphMode.MAGNITUDE -> {
-            drawGrid(nc, g, ctx.paints, ctx.density, MagnitudeGridLines) { g.yForGain(it) }
+            drawGrid(nc, g, ctx.paints, ctx.density, MagnitudeGridLines, { g.yForGain(it) }, ctx.glass.octaveGridPaint)
             drawCrossoverShading(nc, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
             drawMonoBassRegion(nc, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency)
             if (drawSpectrum) drawUnifiedSpectrum(nc, ctx)
             drawBranchCurves(nc, ctx)
             drawFilterOverlays(nc, ctx)
             drawPerBandFills(nc, ctx)
+            drawSumAreaFill(nc, ctx)
             drawSumCurve(nc, ctx)
             if (ctx.showTiltHandles) drawTiltHandles(nc, ctx)
             drawMultiBankNodes(nc, ctx)
             if (ctx.showGainMeters) drawGainMeters(nc, ctx)
         }
         PeqGraphMode.PHASE -> {
-            drawGrid(nc, g, ctx.paints, ctx.density, PhaseGridLines) { g.yForPhaseDeg(it) }
+            drawGrid(nc, g, ctx.paints, ctx.density, PhaseGridLines, { g.yForPhaseDeg(it) }, ctx.glass.octaveGridPaint)
             drawCrossoverShading(nc, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
             drawPhaseCurves(nc, ctx)
         }
     }
     drawLegend(nc, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency, ctx.mode)
+    drawVignette(nc, ctx)
 }
 
 // --- frame helpers (raw Canvas, shared by PeqGraphFrame and renderPeqGraph) --------------------
+
+// ANALYZER_VISUAL_SPEC §4: octave-boundary verticals get their own weight.
+private val OctaveFreqs = setOf(100.0, 1_000.0, 10_000.0)
 
 private fun drawGrid(
     nc: Canvas,
@@ -428,6 +454,7 @@ private fun drawGrid(
     density: Float,
     lines: FloatArray,
     toY: (Double) -> Float,
+    octavePaint: Paint? = null,
 ) {
     lines.forEach { value ->
         val y = toY(value.toDouble())
@@ -436,7 +463,8 @@ private fun drawGrid(
     }
     FreqScale.forEach { frequency ->
         val x = g.xForFrequency(frequency)
-        nc.drawLine(x, g.top, x, g.bottom, p.unifiedGridPaint)
+        val linePaint = if (octavePaint != null && frequency in OctaveFreqs) octavePaint else p.unifiedGridPaint
+        nc.drawLine(x, g.top, x, g.bottom, linePaint)
         val label = frequency.prettyNumberFormat()
         nc.drawText(label, x - p.unifiedLabelPaint.measureText(label) / 2f, g.bottom + 15f * density, p.unifiedLabelPaint)
     }
@@ -531,6 +559,20 @@ private fun strokeNeon(nc: Canvas, path: Path, paint: Paint, glow: Paint) {
     glow.color = paint.color
     glow.alpha = (AndroidColor.alpha(paint.color) * 0.16f).roundToInt()
     glow.strokeWidth = paint.strokeWidth * 3.4f
+    glow.pathEffect = paint.pathEffect
+    nc.drawPath(path, glow)
+    nc.drawPath(path, paint)
+}
+
+/**
+ * ANALYZER_VISUAL_SPEC §1: real Gaussian blur glow beneath a crisp core stroke — replaces
+ * [strokeNeon]'s fake wide-stroke approximation for the primary (summed) curve only.
+ */
+private fun drawGlowStroke(nc: Canvas, glass: PeqGlassPaints, path: Path, paint: Paint) {
+    val glow = glass.sumGlowPaint
+    glow.color = paint.color
+    glow.alpha = 170
+    glow.strokeWidth = paint.strokeWidth * 1.6f
     glow.pathEffect = paint.pathEffect
     nc.drawPath(path, glow)
     nc.drawPath(path, paint)
@@ -638,7 +680,73 @@ private fun drawSumChannelMonoAware(
         val y = g.yForGain(value)
         if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
-    strokeNeon(nc, path, paint, ctx.paints.glowPaint)
+    drawGlowStroke(nc, ctx.glass, path, paint)
+}
+
+/**
+ * ANALYZER_VISUAL_SPEC §2: gradient area fill under the primary summed curve, fading toward the
+ * 0 dB reference (PEQ's gain axis is symmetric around it). Drawn behind the stroke + glow.
+ */
+private fun drawSumAreaFill(nc: Canvas, ctx: PeqDrawContext) {
+    val g = ctx.geometry
+    val primaryIsRight = ctx.channelDisplay == PeqChannelDisplay.RIGHT
+    val self = ctx.curves.sumDb[if (primaryIsRight) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal]
+    val other = ctx.curves.sumDb[if (primaryIsRight) BmwOutputChannel.LEFT.ordinal else BmwOutputChannel.RIGHT.ordinal]
+    if (self.isEmpty()) return
+    val zeroY = g.yForGain(0.0)
+    val path = ctx.model.areaFillPath
+    path.rewind()
+    for (i in self.indices) {
+        val frequency = ctx.curves.frequencies.getOrElse(i) { ctx.maxFrequency }
+        val blend = ctx.monoBassBlendAt(frequency)
+        val value = if (blend <= 0f) self[i] else self[i] + (((self[i] + other[i]) * 0.5) - self[i]) * blend
+        val x = g.left + (i.toFloat() / (self.size - 1).coerceAtLeast(1)) * (g.right - g.left)
+        val y = g.yForGain(value)
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    path.lineTo(g.right, zeroY)
+    path.lineTo(g.left, zeroY)
+    path.close()
+
+    val glass = ctx.glass
+    val key = g.top.roundToInt() * 92821 + g.bottom.roundToInt()
+    if (glass.areaFillKey != key) {
+        val col = ctx.paints.sumColor
+        val zeroFraction = PeqGraphMath.gainToFraction(0.0)
+        glass.areaFillPaint.shader = LinearGradient(
+            0f, g.top, 0f, g.bottom,
+            intArrayOf(
+                ColorUtils.setAlphaComponent(col, 72),
+                ColorUtils.setAlphaComponent(col, 0),
+                ColorUtils.setAlphaComponent(col, 72),
+            ),
+            floatArrayOf(0f, zeroFraction.coerceIn(0.02f, 0.98f), 1f),
+            Shader.TileMode.CLAMP,
+        )
+        glass.areaFillKey = key
+    }
+    nc.drawPath(path, glass.areaFillPaint)
+}
+
+/** ANALYZER_VISUAL_SPEC §5: a subtle corner vignette so the plot ground doesn't read as flat. */
+private fun drawVignette(nc: Canvas, ctx: PeqDrawContext) {
+    val g = ctx.geometry
+    val glass = ctx.glass
+    val key = g.left.roundToInt() * 92821 + g.bottom.roundToInt() * 131 + g.right.roundToInt()
+    if (glass.vignetteKey != key) {
+        val cx = (g.left + g.right) / 2f
+        val cy = (g.top + g.bottom) / 2f
+        val radius = hypot(g.right - g.left, g.bottom - g.top) / 2f
+        if (radius <= 0f) return
+        glass.vignettePaint.shader = RadialGradient(
+            cx, cy, radius,
+            intArrayOf(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT, AndroidColor.argb(34, 0, 0, 0)),
+            floatArrayOf(0f, 0.68f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        glass.vignetteKey = key
+    }
+    nc.drawRect(g.left, g.top, g.right, g.bottom, glass.vignettePaint)
 }
 
 private fun drawFilterOverlays(nc: Canvas, ctx: PeqDrawContext) {
@@ -732,6 +840,10 @@ private fun referenceCurveForBank(ctx: PeqDrawContext, bank: BmwPeqBank): Double
 
 // --- live spectrum trace — 1:1 with drawUnifiedSpectrum / drawSpectrumDelta / fillDeltaSegment -
 
+// §7: EMA weight toward the raw magnitude, and peak-hold decay, both per ~33 ms frame.
+private const val SPECTRUM_EMA_ALPHA = 0.30f
+private const val SPECTRUM_PEAK_DECAY_DB_PER_FRAME = 0.4f // ≈ 12 dB/s at 33 ms
+
 private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     val p = ctx.paints
@@ -739,38 +851,60 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     m.spectrumStrokePath.rewind()
     m.spectrumFillPath.rewind()
     m.dryStrokePath.rewind()
+    m.spectrumPeakPath.rewind()
     m.spectrumFillPath.moveTo(g.left, g.bottom)
     for (i in 0..SPECTRUM_STEPS) {
         val fraction = i / SPECTRUM_STEPS.toFloat()
         val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, ctx.maxFrequency)
-        val wetGain = PeqGraphMath.spectrumDbToGraphGain(
-            SpectrumEngine.magnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB,
-        )
+        // §7: exponential moving average across frames removes the raw per-frame jitter.
+        val rawWetDb = SpectrumEngine.magnitudeDbAt(freq)
+        val wetDb = if (m.spectrumPrimed) {
+            m.spectrumDbDisplayed[i] + SPECTRUM_EMA_ALPHA * (rawWetDb - m.spectrumDbDisplayed[i])
+        } else {
+            rawWetDb
+        }
+        m.spectrumDbDisplayed[i] = wetDb
+        // §7: peak-hold — jump up instantly, decay slowly.
+        m.spectrumDbPeak[i] = if (wetDb >= m.spectrumDbPeak[i]) {
+            wetDb
+        } else {
+            maxOf(wetDb, m.spectrumDbPeak[i] - SPECTRUM_PEAK_DECAY_DB_PER_FRAME)
+        }
+
+        val wetGain = PeqGraphMath.spectrumDbToGraphGain(wetDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
         val dryGain = PeqGraphMath.spectrumDbToGraphGain(
             SpectrumEngine.dryMagnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB,
         )
+        val peakGain = PeqGraphMath.spectrumDbToGraphGain(m.spectrumDbPeak[i], SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
         val x = g.left + fraction * (g.right - g.left)
         val wetY = g.yForGain(wetGain)
         val dryY = g.yForGain(dryGain)
+        val peakY = g.yForGain(peakGain)
         m.spectrumXs[i] = x
         m.spectrumWetYs[i] = wetY
         m.spectrumDryYs[i] = dryY
         if (i == 0) {
             m.spectrumStrokePath.moveTo(x, wetY)
             m.dryStrokePath.moveTo(x, dryY)
+            m.spectrumPeakPath.moveTo(x, peakY)
         } else {
             m.spectrumStrokePath.lineTo(x, wetY)
             m.dryStrokePath.lineTo(x, dryY)
+            m.spectrumPeakPath.lineTo(x, peakY)
         }
         m.spectrumFillPath.lineTo(x, wetY)
     }
+    m.spectrumPrimed = true
     m.spectrumFillPath.lineTo(g.right, g.bottom)
     m.spectrumFillPath.close()
     drawSpectrumDelta(nc, ctx, SPECTRUM_STEPS + 1)
     if (g.top != p.spectrumFillShaderTop || g.bottom != p.spectrumFillShaderBottom) {
+        // §7: fainter than before (was 150) so it stays ambient context, not a competing element.
         p.unifiedSpectrumFillPaint.shader = LinearGradient(
             0f, g.top, 0f, g.bottom,
-            ColorUtils.setAlphaComponent(p.spectrumAccentColor, 150),
+            ColorUtils.setAlphaComponent(
+                ColorUtils.blendARGB(p.spectrumAccentColor, AndroidColor.rgb(150, 150, 150), 0.55f), 80,
+            ),
             ColorUtils.setAlphaComponent(p.spectrumAccentColor, 0),
             Shader.TileMode.CLAMP,
         )
@@ -779,7 +913,8 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     }
     nc.drawPath(m.spectrumFillPath, p.unifiedSpectrumFillPaint)
     nc.drawPath(m.dryStrokePath, p.dryStrokePaint)
-    strokeNeon(nc, m.spectrumStrokePath, p.unifiedSpectrumStrokePaint, p.glowPaint)
+    nc.drawPath(m.spectrumStrokePath, p.unifiedSpectrumStrokePaint)
+    nc.drawPath(m.spectrumPeakPath, ctx.glass.spectrumPeakPaint)
 }
 
 private fun drawSpectrumDelta(nc: Canvas, ctx: PeqDrawContext, pointCount: Int) {
@@ -826,6 +961,7 @@ private fun drawBankNodes(
 ) {
     val g = ctx.geometry
     val p = ctx.paints
+    val gl = ctx.glass
     val d = ctx.density
     val alpha = ctx.nodeAlpha.coerceIn(0f, 1f)
     if (alpha <= 0f) return
@@ -833,24 +969,49 @@ private fun drawBankNodes(
     val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
     val numberOffset = ctx.bankNumberOffset(bank)
     bands.forEachIndexed { index, band ->
+        // §3 glass treatment: radial "lit from above" fill, real blurred glow when highlighted,
+        // crisp ring + border, a top-left highlight arc — keeping the R-channel dark ring and the
+        // luminance-contrasted number label exactly as before.
         val color = p.perBandPalette[(numberOffset + index) % p.perBandPalette.size]
         val x = g.xForFrequency(band.frequency)
         val y = g.yForGain(band.gain)
         val selected = emphasised && band.uuid == ctx.selectedId
         val highlighted = selected || band.uuid == ctx.calloutBandId
-        if (highlighted) {
-            p.nodeHaloPaint.color = color
-            p.nodeHaloPaint.alpha = withAlpha(60)
-            nc.drawCircle(x, y, baseRadiusDp * d + 7f * d, p.nodeHaloPaint)
-        }
         val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * d
-        p.nodeFillPaint.color = color
-        p.nodeFillPaint.alpha = withAlpha(255)
-        nc.drawCircle(x, y, radius, p.nodeFillPaint)
+
+        if (highlighted) {
+            gl.nodeGlowPaint.color = color
+            gl.nodeGlowPaint.alpha = withAlpha(120)
+            nc.drawCircle(x, y, radius + 3f * d, gl.nodeGlowPaint)
+        }
+
+        gl.nodeFillPaint.shader = RadialGradient(
+            x, y - 0.16f * radius, radius.coerceAtLeast(1f),
+            ColorUtils.blendARGB(color, AndroidColor.WHITE, 0.30f),
+            color,
+            Shader.TileMode.CLAMP,
+        )
+        gl.nodeFillPaint.alpha = withAlpha(255)
+        nc.drawCircle(x, y, radius, gl.nodeFillPaint)
+        gl.nodeFillPaint.shader = null
+
+        gl.nodeRingPaint.color = ColorUtils.blendARGB(color, AndroidColor.WHITE, 0.45f)
+        gl.nodeRingPaint.alpha = withAlpha(200)
+        nc.drawCircle(x, y, radius, gl.nodeRingPaint)
+        gl.nodeBorderPaint.color = ColorUtils.blendARGB(color, AndroidColor.BLACK, 0.35f)
+        gl.nodeBorderPaint.alpha = withAlpha(220)
+        nc.drawCircle(x, y, radius, gl.nodeBorderPaint)
+
+        // Top-left glass highlight arc (200°, 70° sweep) — same geometry as GlassSwitchThumbDrawable.
+        gl.nodeHighlightArcPaint.alpha = withAlpha(150)
+        nodeArcRect.set(x - radius * 0.62f, y - radius * 0.72f, x + radius * 0.62f, y + radius * 0.44f)
+        nc.drawArc(nodeArcRect, 200f, 70f, false, gl.nodeHighlightArcPaint)
+
         if (band.channel == ParametricEqChannel.RIGHT) {
             p.nodeRingPaint.alpha = withAlpha(255)
             nc.drawCircle(x, y, radius, p.nodeRingPaint)
         }
+
         p.nodeTextPaint.color =
             if (ColorUtils.calculateLuminance(color) > 0.5) AndroidColor.BLACK else AndroidColor.WHITE
         p.nodeTextPaint.alpha = withAlpha(255)
@@ -858,6 +1019,9 @@ private fun drawBankNodes(
         nc.drawText((numberOffset + index + 1).toString(), x, baseline, p.nodeTextPaint)
     }
 }
+
+// Scratch rect for the node highlight arc (single-threaded draw; never escapes a frame).
+private val nodeArcRect = android.graphics.RectF()
 
 /** Read-only tilt markers — pivot diamond (frequency) + amount circle. 1:1 with the View. */
 private fun drawTiltHandles(nc: Canvas, ctx: PeqDrawContext) {
@@ -1059,6 +1223,7 @@ private fun MenuSectionLabel(text: String) {
 private class PeqDrawContext(
     val geometry: PeqPlotGeometry,
     val paints: PeqSurfacePaints,
+    val glass: PeqGlassPaints,
     val model: PeqResponseModel,
     val density: Float,
     val systemValues: FloatArray,
@@ -1125,6 +1290,15 @@ private class PeqResponseModel {
     val spectrumFillPath = Path()
     val dryStrokePath = Path()
     val deltaFillPath = Path()
+    val areaFillPath = Path()
+
+    // §7: cross-frame smoothing state for the spectrum overlay. dbDisplayed EMA-tracks the raw
+    // magnitude; dbPeak holds the max and decays slowly. `spectrumPrimed` guards the first frame
+    // so the EMA doesn't ramp up from the floor.
+    val spectrumDbDisplayed = FloatArray(SPECTRUM_STEPS + 1) { SpectrumEngine.FLOOR_DB }
+    val spectrumDbPeak = FloatArray(SPECTRUM_STEPS + 1) { SpectrumEngine.FLOOR_DB }
+    val spectrumPeakPath = Path()
+    var spectrumPrimed = false
 
     fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double) {
         if (values.size != BmwSignalChain.VALUE_COUNT) return
@@ -1133,6 +1307,61 @@ private class PeqResponseModel {
         calculator.invalidateAll()
         calculator.compute(values, peq, curves)
     }
+}
+
+/**
+ * Extra paints for the 10c-ii visual pass (`ANALYZER_VISUAL_SPEC.md` §1–5, §7) — constructed
+ * once per composition, reused every frame. Real Gaussian blur comes from [BlurMaskFilter] (the
+ * same mechanism `GlassSwitchThumbDrawable` / `BmwSwitch` use); no `RenderEffect` layer juggling.
+ */
+private class PeqGlassPaints(density: Float) {
+    // §1: real blur glow beneath the summed curve.
+    val sumGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        maskFilter = BlurMaskFilter((8f * density).coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
+    }
+    // §2: gradient area fill under the summed curve; shader rebuilt when the plot rect changes.
+    val areaFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    var areaFillKey = Int.MIN_VALUE
+
+    // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.
+    val octaveGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density
+        color = AndroidColor.rgb(92, 96, 106)
+    }
+
+    // §3: glass node treatment.
+    val nodeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        maskFilter = BlurMaskFilter((6f * density).coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
+    }
+    val nodeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    val nodeRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.2f * density
+    }
+    val nodeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * density
+    }
+    val nodeHighlightArcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.4f * density
+        strokeCap = Paint.Cap.ROUND
+        color = AndroidColor.argb(150, 255, 255, 255)
+    }
+
+    // §7: peak-hold marker line above the smoothed spectrum trace.
+    val spectrumPeakPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * density
+        color = AndroidColor.argb(140, 170, 176, 186)
+    }
+
+    // §5: corner vignette; shader rebuilt when the plot rect changes.
+    val vignettePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    var vignetteKey = Int.MIN_VALUE
 }
 
 /** Compose equivalent of `ParametricEqSurface.themeColor` — resolves a `?android:attr` colour. */
