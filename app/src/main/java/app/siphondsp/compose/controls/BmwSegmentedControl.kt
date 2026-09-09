@@ -3,6 +3,7 @@ package app.siphondsp.compose.controls
 import android.graphics.BlurMaskFilter
 import android.graphics.Paint
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -52,11 +53,15 @@ fun BmwSegmentedControl(
     modifier: Modifier = Modifier,
     optionAccents: List<Color>? = null,
     segmentHeight: Dp = 24.dp,
+    // A gap between adjacent segments so a near-the-boundary tap doesn't land on the wrong one.
+    // Default 0 keeps compact inline uses (Polarity NORMAL/INVERT) unchanged.
+    segmentGap: Dp = 0.dp,
 ) {
     Row(
         modifier = modifier
             .drawBehind { drawSegmentTrack() }
             .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(segmentGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEachIndexed { i, label ->

@@ -198,7 +198,9 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
                     screenMode = PeqScreenMode.entries[it]
                     graphPrefs.listModeName = screenMode.name
                 },
-                modifier = Modifier.width(160.dp),
+                modifier = Modifier.width(190.dp),
+                segmentHeight = 36.dp,
+                segmentGap = 6.dp,
             )
         }
 
