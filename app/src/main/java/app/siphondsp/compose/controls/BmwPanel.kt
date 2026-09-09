@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,6 +48,7 @@ fun BmwPanel(
     toggleChecked: Boolean? = null,
     onToggleChange: ((Boolean) -> Unit)? = null,
     titleColor: Color = Color.White,
+    titleFontSize: TextUnit = 13.sp,
     subtitle: String? = null,
     leanStart: Dp = 80.dp,
     topContentGap: Dp = 40.dp,
@@ -81,14 +83,15 @@ fun BmwPanel(
                     Text(
                         text = title,
                         color = titleColor,
-                        fontSize = 13.sp,
+                        fontSize = titleFontSize,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        // Only pinned to the title-column width when a header switch follows it
-                        // (so the switch lands where the slider rows start); otherwise natural
-                        // width so a long panel title isn't needlessly clipped.
-                        modifier = if (hasHeaderToggle) Modifier.width(titleColumnWidth) else Modifier,
+                        // With a header switch, reserve at least the title-column width so a short
+                        // title lands the switch where the slider rows start; a title wider than
+                        // the column (e.g. a large-type panel heading) keeps its natural width and
+                        // pushes the switch right rather than clipping.
+                        modifier = if (hasHeaderToggle) Modifier.widthIn(min = titleColumnWidth) else Modifier,
                     )
                     if (toggleChecked != null && onToggleChange != null) {
                         Spacer(Modifier.width(RowToggleZoneWidth))
