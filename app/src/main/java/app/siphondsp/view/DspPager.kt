@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
@@ -55,18 +56,32 @@ object DspPager {
                     textSize = 14f
                     includeFontPadding = false
                     isSelected = index == 0
+                    // Explicit -- a TextView is only clickable once a listener is attached, and the
+                    // hit target should not depend on that ordering.
+                    isClickable = true
+                    isFocusable = true
                     applyToggleBoxStyle(context, this)
-                    setOnClickListener { viewPager.currentItem = index }
+                    setOnClickListener { viewPager.setCurrentItem(index, true) }
                 }
             }
             val toggleRow = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                setPadding(dp(context, 6), dp(context, 4), dp(context, 8), dp(context, 4))
+                // Vertical room is capped at the 36dp toolbar band (header_toolbar_height); grow
+                // the hit target horizontally instead, where the app-bar has space.
+                setPadding(dp(context, 6), dp(context, 3), dp(context, 8), dp(context, 3))
+                // Own the whole strip so a tap that lands in the gap between two numbers is
+                // absorbed here rather than falling through to the toolbar / app-bar behind it.
+                isClickable = true
+                // Sit unambiguously above the MaterialToolbar it shares the app-bar FrameLayout
+                // with, so the numbers actually receive the touch.
+                elevation = dp(context, 8).toFloat()
                 boxes.forEach { box ->
-                    // 25% larger boxes with a wider gap between them (was 26x22 / 4dp gap).
-                    addView(box, LinearLayout.LayoutParams(dp(context, 33), dp(context, 28)).apply {
-                        marginStart = dp(context, 8)
+                    // Wider boxes with a wider gap so a deliberate tap isn't a guess and an
+                    // incidental brush doesn't flip the page (was 33x28 / 8dp gap). Height stays
+                    // within the 36dp band: 30 + 2x3 padding.
+                    addView(box, LinearLayout.LayoutParams(dp(context, 46), dp(context, 30)).apply {
+                        marginStart = dp(context, 18)
                     })
                 }
             }
@@ -82,9 +97,18 @@ object DspPager {
             if (toggleContainer != null) {
                 // The slot itself is wrap_content-width (see activity_parametric_eq.xml) so it
                 // doesn't add to the toolbar's own fixed height -- match its width here too
-                // (not MATCH_PARENT) so the two don't fight over sizing the row.
+                // (not MATCH_PARENT) so the two don't fight over sizing the row. Pin it end /
+                // centre-vertical explicitly: a bare ViewGroup.LayoutParams lands the row at the
+                // slot's top-left with no gravity, which drifts the hit areas off the numbers.
                 toggleContainer.removeAllViews()
-                toggleContainer.addView(toggleRow, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                toggleContainer.addView(
+                    toggleRow,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        Gravity.END or Gravity.CENTER_VERTICAL,
+                    ),
+                )
             } else {
                 root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }
