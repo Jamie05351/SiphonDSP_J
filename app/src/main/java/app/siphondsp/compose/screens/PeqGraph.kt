@@ -40,12 +40,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -287,10 +289,13 @@ fun PeqGraph(
     var callout by remember { mutableStateOf<NodeHit?>(null) }
     LaunchedEffect(callout) {
         if (callout != null) {
-            delay(3_600L)
+            delay(5_000L)
             callout = null
         }
     }
+    // The last tapped node stays lit until you tap somewhere else (independent of the callout,
+    // which auto-hides). Cleared when peqState / bank changes so a stale uuid never lingers.
+    var tappedNodeId by remember(peqState, activeBank) { mutableStateOf<UUID?>(null) }
 
     Box(modifier) {
         ComposeCanvas(
@@ -310,6 +315,7 @@ fun PeqGraph(
                         if (right <= left || bottom <= top) return@detectTapGestures
                         val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency)
                         val hit = hitTestAnyBank(offset, geometry, peqState, density)
+                        tappedNodeId = hit?.band?.uuid
                         // Keep the callout on-screen: pin its top-left inside the graph bounds.
                         callout = hit?.let {
                             val maxX = (this.size.width - 190.dp.toPx()).coerceAtLeast(0f)
@@ -352,6 +358,7 @@ fun PeqGraph(
                 showGainMeters = showGainMeters,
                 nodeAlpha = dotAlpha,
                 calloutBandId = callout?.band?.uuid,
+                highlightId = tappedNodeId,
                 leftMeter = leftMeter,
                 rightMeter = rightMeter,
             )
@@ -486,6 +493,7 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + if (ctx.showTiltHandles) 1 else 0
     k = 31 * k + (ctx.selectedId?.hashCode() ?: 0)
     k = 31 * k + (ctx.calloutBandId?.hashCode() ?: 0)
+    k = 31 * k + (ctx.highlightId?.hashCode() ?: 0)
     k = 31 * k + (ctx.nodeAlpha * 12f).roundToInt() // bucketed: ~12 rebuilds across the 400ms fade
     return k
 }
@@ -1020,6 +1028,9 @@ private fun fillDeltaSegment(nc: Canvas, ctx: PeqDrawContext, startIndex: Int, e
 
 // --- nodes / tilt handles / gain meters — 1:1 with the same-named ParametricEqSurface methods --
 
+/** Scale a 0–255 paint alpha by a 0–1 fade factor, clamped to a legal channel value. */
+private fun scaleAlpha(base: Int, factor: Float) = (base * factor).roundToInt().coerceIn(0, 255)
+
 private fun drawMultiBankNodes(nc: Canvas, ctx: PeqDrawContext) {
     ctx.forEachVisibleBank { bank, bands ->
         drawBankNodes(nc, ctx, bands, bank, emphasised = bank == ctx.activeBank)
@@ -1037,11 +1048,17 @@ private fun drawBankNodes(
     val p = ctx.paints
     val gl = ctx.glass
     val d = ctx.density
-    val alpha = ctx.nodeAlpha.coerceIn(0f, 1f)
-    if (alpha <= 0f) return
-    fun withAlpha(a: Int) = (a * alpha).roundToInt().coerceIn(0, 255)
+    val fadeAlpha = ctx.nodeAlpha.coerceIn(0f, 1f)
     val baseRadiusDp = if (emphasised) ACTIVE_NODE_RADIUS_DP else SECONDARY_NODE_RADIUS_DP
     val numberOffset = ctx.bankNumberOffset(bank)
+    // A tapped / selected / callout node stays fully lit even once the 6 s idle fade has taken
+    // the rest of the dots to zero — it only goes dark when you tap somewhere else. So the whole
+    // bank can't bail on fadeAlpha == 0; faded dots are skipped one at a time below instead.
+    val highlightHere = bands.any { band ->
+        band.uuid == ctx.highlightId || band.uuid == ctx.calloutBandId ||
+            (emphasised && band.uuid == ctx.selectedId)
+    }
+    if (fadeAlpha <= 0f && !highlightHere) return
     bands.forEachIndexed { index, band ->
         // §3 glass treatment: radial "lit from above" fill, real blurred glow when highlighted,
         // crisp ring + border, a top-left highlight arc — keeping the R-channel dark ring and the
@@ -1050,19 +1067,27 @@ private fun drawBankNodes(
         val x = g.xForFrequency(band.frequency)
         val y = g.yForGain(band.gain)
         val selected = emphasised && band.uuid == ctx.selectedId
-        val highlighted = selected || band.uuid == ctx.calloutBandId
-        val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * d
+        val highlighted = selected ||
+            band.uuid == ctx.calloutBandId ||
+            band.uuid == ctx.highlightId
+        // Highlighted dot ignores the idle fade; every other dot rides it and vanishes at 0.
+        val dotAlpha = if (highlighted) 1f else fadeAlpha
+        if (dotAlpha <= 0f) return@forEachIndexed
+        fun withAlpha(a: Int) = scaleAlpha(a, dotAlpha)
+        val radius = (if (highlighted) baseRadiusDp + 3f else baseRadiusDp) * d
 
         if (highlighted) {
-            // Soft colour-coded selection ring behind the fill — this band's own palette colour
-            // at ~24% alpha, base radius + 7dp. 1:1 with ParametricEqSurface's flat nodeHaloPaint;
-            // a tighter blurred glow then sits on top of it for the glass read.
+            // A tapped node lights up unmistakably: a wide colour-coded halo, a blurred glow, and
+            // a bright near-white outer ring so it reads as "this one" against the glass fill.
             p.nodeHaloPaint.color = color
-            p.nodeHaloPaint.alpha = withAlpha(60)
-            nc.drawCircle(x, y, baseRadiusDp * d + 7f * d, p.nodeHaloPaint)
+            p.nodeHaloPaint.alpha = withAlpha(160)
+            nc.drawCircle(x, y, baseRadiusDp * d + 11f * d, p.nodeHaloPaint)
             gl.nodeGlowPaint.color = color
-            gl.nodeGlowPaint.alpha = withAlpha(90)
-            nc.drawCircle(x, y, radius + 3f * d, gl.nodeGlowPaint)
+            gl.nodeGlowPaint.alpha = withAlpha(180)
+            nc.drawCircle(x, y, radius + 5f * d, gl.nodeGlowPaint)
+            gl.nodeRingPaint.color = ColorUtils.blendARGB(color, AndroidColor.WHITE, 0.8f)
+            gl.nodeRingPaint.alpha = withAlpha(255)
+            nc.drawCircle(x, y, radius + 2.5f * d, gl.nodeRingPaint)
         }
 
         gl.nodeFillPaint.shader = RadialGradient(
@@ -1227,17 +1252,21 @@ private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
 @Composable
 private fun PeqNodeCallout(hit: NodeHit, accent: Color, modifier: Modifier = Modifier) {
     val band = hit.band
+    // A thin, bright "neon" edge in the node's own colour — accent lifted toward white so it
+    // reads as a lit outline around the text body rather than a heavy frame.
+    val neon = lerp(accent, Color.White, 0.3f)
     Column(
         modifier = modifier
             .padding(6.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF121316))
-            .border(1.dp, accent, RoundedCornerShape(6.dp))
+            .border(1.dp, neon, RoundedCornerShape(6.dp))
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(
             "#${hit.number} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}",
-            color = Color(0xFFE8EAF0),
+            color = accent,
+            fontWeight = FontWeight.Bold,
             fontSize = 11.sp,
         )
         Text(
@@ -1320,6 +1349,7 @@ private class PeqDrawContext(
     val showGainMeters: Boolean = false,
     val nodeAlpha: Float = 1f,
     val calloutBandId: UUID? = null,
+    val highlightId: UUID? = null,
     val leftMeter: PeakHoldMeter? = null,
     val rightMeter: PeakHoldMeter? = null,
 ) {

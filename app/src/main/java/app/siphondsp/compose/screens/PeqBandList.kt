@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,8 @@ import kotlin.math.pow
 private val FreqStepFactor = 2.0.pow(1.0 / 24.0)
 private val IndexColor = Color(0xFF9AA1AB)
 private val AddGlassFill = Color(0xFF14171C)
+private val TapCellFill = Color(0xFF1B1F26)
+private val GlyphButtonFill = Color(0xFF23272F)
 private val MRed = Color(BmwDashboardSkin.M_RED)
 
 private val FreqFmt = DecimalFormat("0.#", DecimalFormatSymbols.getInstance())
@@ -53,8 +56,12 @@ private val GainFmt = DecimalFormat("0.##", DecimalFormatSymbols.getInstance())
 private val QFmt = DecimalFormat("0.##", DecimalFormatSymbols.getInstance())
 
 private const val WIndex = 0.5f
-private const val WPicker = 1f
-private const val WValue = 2.2f
+private const val WPicker = 1.1f
+private const val WValue = 3.0f
+
+private val CellGap = 6.dp
+private val StepButtonSize = 48.dp
+private val DeleteButtonSize = 40.dp
 
 /**
  * Compose port of the Parametric EQ filter list (roadmap Phase 10b) -- a keyed [LazyColumn] of
@@ -171,7 +178,7 @@ private fun PeqListHeader() {
         HeaderCell("Hz", WValue)
         HeaderCell("dB", WValue)
         HeaderCell("Q", WValue)
-        Spacer(Modifier.width(28.dp)) // delete column
+        Spacer(Modifier.width(DeleteButtonSize)) // delete column
     }
 }
 
@@ -206,9 +213,10 @@ private fun PeqBandRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
             .then(if (selected) Modifier.border(1.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
-            .padding(4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(CellGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -224,7 +232,7 @@ private fun PeqBandRow(
         StepperCell(FreqFmt.format(band.frequency), accent, onFreq, { onFreqStep(false) }, { onFreqStep(true) })
         StepperCell(GainFmt.format(band.gain), accent, onGain, { onGainStep(-0.5) }, { onGainStep(0.5) })
         StepperCell(QFmt.format(band.q), accent, onQ, { onQStep(-0.1) }, { onQStep(0.1) })
-        Glyph("×", MRed, Modifier.size(28.dp), onDelete)
+        Glyph("×", MRed, Modifier.size(DeleteButtonSize), onDelete)
     }
 }
 
@@ -236,7 +244,12 @@ private fun RowScope.TapCell(text: String, accent: Color, weight: Float, onClick
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
-        modifier = Modifier.weight(weight).clickable(onClick = onClick).padding(vertical = 6.dp),
+        modifier = Modifier
+            .weight(weight)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .background(TapCellFill)
+            .padding(vertical = 9.dp),
     )
 }
 
@@ -248,28 +261,43 @@ private fun RowScope.StepperCell(
     onMinus: () -> Unit,
     onPlus: () -> Unit,
 ) {
+    // Value box on the left; the −/+ pair grouped together on the right as big, obvious hit
+    // targets so stepping a value isn't a guessing game between three near-touching controls.
     Row(
         modifier = Modifier.weight(WValue),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Glyph("−", accent, Modifier.size(24.dp), onMinus)
         Text(
             text = value,
             color = accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f).clickable(onClick = onValueClick).padding(vertical = 6.dp),
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onValueClick)
+                .background(TapCellFill)
+                .padding(vertical = 12.dp),
         )
-        Glyph("+", accent, Modifier.size(24.dp), onPlus)
+        Glyph("−", accent, Modifier.size(StepButtonSize), onMinus)
+        Glyph("+", accent, Modifier.size(StepButtonSize), onPlus)
     }
 }
 
+/** A stepper / delete button: a filled rounded hit target with a large glyph so it's not an
+ *  accidental touch next to the value box. */
 @Composable
 private fun Glyph(text: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(text = text, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    Box(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(GlyphButtonFill)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = text, color = tint, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
