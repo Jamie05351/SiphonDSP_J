@@ -1,5 +1,9 @@
 package app.siphondsp.compose.screens
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -24,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +53,10 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.PeqDiagnosticReport
 import app.siphondsp.model.PrivatePeqBackup
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.toast
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import timber.log.Timber
 
 private enum class PeqScreenMode { GRAPH, LIST }
@@ -70,11 +78,6 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
     val graphPrefs = remember(context) { PeqGraphPreferences(context) }
 
     var systemValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
-    LifecycleResumeEffect(Unit) {
-        holder.refreshFromDisk()
-        systemValues = NativeBmwDspValues.load(context)
-        onPauseOrDispose { }
-    }
 
     // Persisted in graphPrefs.listModeName, so a plain remember is enough across recompositions
     // (a config change / process death restores it from prefs on the next composition).
@@ -86,6 +89,44 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
+
+    fun reloadEverything() {
+        holder.refreshFromDisk()
+        systemValues = NativeBmwDspValues.load(context)
+        graphMode = graphPrefs.responseMode
+        channelDisplay = graphPrefs.channelDisplay
+        showOverlays = graphPrefs.showIndividualFilters
+    }
+
+    LifecycleResumeEffect(Unit) {
+        reloadEverything()
+        onPauseOrDispose { }
+    }
+
+    // 10g: keep the graph tracking edits made on the other DSP screens (crossover / tilt / gains
+    // / compressor all broadcast ACTION_NATIVE_BMW_DSP_UPDATED) and full-config swaps (preset
+    // load, app-wide backup restore) without needing a screen re-entry.
+    DisposableEffect(holder) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                when (intent.action) {
+                    Constants.ACTION_NATIVE_BMW_DSP_UPDATED ->
+                        intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
+                            ?.takeIf { it.size == NativeBmwDspValues.SIZE }
+                            ?.let { systemValues = it.copyOf() }
+                    Constants.ACTION_PRESET_LOADED, Constants.ACTION_BACKUP_RESTORED -> reloadEverything()
+                }
+            }
+        }
+        context.registerLocalReceiver(
+            receiver,
+            IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).apply {
+                addAction(Constants.ACTION_PRESET_LOADED)
+                addAction(Constants.ACTION_BACKUP_RESTORED)
+            },
+        )
+        onDispose { context.unregisterLocalReceiver(receiver) }
+    }
 
     // --- file-I/O launchers (10f) ---------------------------------------------------------------
 
@@ -172,11 +213,14 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
             onDiagnostics = {
                 val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
                 diagnosticReport = PeqDiagnosticReport.create(
-                    context,
-                    holder.peqState,
-                    sampleRate,
+                    context = context,
+                    state = holder.peqState,
+                    systemValues = systemValues,
+                    sampleRate = sampleRate,
                     serviceActive = sampleRate != null,
                     nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
+                    channelDisplay = channelDisplay.name,
+                    showIndividualFilters = showOverlays,
                 )
             },
             onBackupExport = { backupExportLauncher.launch("SiphonDSP-private-peq-backup.json") },
@@ -256,7 +300,7 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
     diagnosticReport?.let { report ->
         AlertDialog(
             onDismissRequest = { diagnosticReport = null },
-            title = { Text("PEQ diagnostic report") },
+            title = { Text("DSP diagnostic report") },
             text = {
                 Text(
                     report,
