@@ -13,6 +13,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -227,6 +229,7 @@ fun PeqGraph(
     val paints = rememberPeqSurfacePaints()
     val glass = rememberGlassPaints()
     val model = remember { PeqResponseModel() }
+    DisposableEffect(model) { onDispose { model.recycleBitmaps() } }
     val maxFrequency = remember(sampleRate) {
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
     }
@@ -239,9 +242,13 @@ fun PeqGraph(
         model.recompute(systemValues, peqState, sampleRate)
     }
 
-    // ~30 fps spectrum + gain-meter poll, scoped to composition. Acquire/release bracket
-    // SpectrumEngine; the tick counter is read only in the draw phase below so it never triggers
-    // recomposition. The two PeakHoldMeters decay on the same tick (only while showGainMeters).
+    // Spectrum + gain-meter poll, scoped to composition. Acquire/release bracket SpectrumEngine;
+    // the tick counter is read only in the draw phase below so it never triggers recomposition.
+    // The two PeakHoldMeters decay on the same tick (only while showGainMeters).
+    //
+    // ~20 fps, not 30: every tick invalidates the whole Canvas — grid, curves, the real-blur sum
+    // glow, glass nodes and all — and the blur passes are the per-frame cost that pegs a
+    // software-GL head unit. 20 fps + the §7 peak-hold markers still read as "alive".
     val spectrumTick = remember { mutableIntStateOf(0) }
     val leftMeter = remember { PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB) }
     val rightMeter = remember { PeakHoldMeter(floorDb = SpectrumEngine.LEVEL_FLOOR_DB) }
@@ -258,7 +265,7 @@ fun PeqGraph(
                     rightMeter.update(levels[2], levels[3], now)
                 }
                 spectrumTick.intValue++
-                delay(33L)
+                delay(50L)
             }
         } finally {
             SpectrumEngine.release()
@@ -349,13 +356,25 @@ fun PeqGraph(
                 rightMeter = rightMeter,
             )
             drawIntoCanvas { canvas ->
-                renderPeqGraph(canvas.nativeCanvas, ctx, drawSpectrum = showSpectrum, spectrumFrame = spectrumFrame)
+                renderPeqGraph(
+                    canvas.nativeCanvas, ctx,
+                    canvasW = size.width.roundToInt(),
+                    canvasH = size.height.roundToInt(),
+                    drawSpectrum = showSpectrum,
+                    spectrumFrame = spectrumFrame,
+                )
             }
         }
 
         callout?.let { hit ->
+            // Border colour-coded to the tapped band, same palette index as its node/overlay/fill
+            // (perBandPalette[(number - 1) % size]) — 1:1 with ParametricEqSurface's infoCardStrokePaint.
+            val calloutAccent = Color(
+                paints.perBandPalette[(hit.number - 1).coerceAtLeast(0) % paints.perBandPalette.size],
+            )
             PeqNodeCallout(
                 hit = hit,
+                accent = calloutAccent,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .offset { IntOffset(hit.anchor.x.roundToInt(), hit.anchor.y.roundToInt()) },
@@ -407,39 +426,94 @@ private fun rememberGlassPaints(): PeqGlassPaints {
 // --- render orchestration — mirrors ParametricEqSurface.drawUnifiedSystem ----------------------
 
 /**
- * @param spectrumFrame unused by the drawing itself — reading it in the caller's draw phase is
- *        what re-runs this render on every spectrum tick.
+ * Draws a frame. The static layers (grid + shading in `bg`, curves + nodes + tilt + legend +
+ * vignette in `fg`) are cached in bitmaps and rebuilt only when [staticKeyOf] changes; only the
+ * live spectrum trace and the gain meters are painted fresh every [spectrumFrame].
  */
 private fun renderPeqGraph(
     nc: Canvas,
     ctx: PeqDrawContext,
+    canvasW: Int,
+    canvasH: Int,
     drawSpectrum: Boolean,
     @Suppress("UNUSED_PARAMETER") spectrumFrame: Int,
 ) {
+    val m = ctx.model
+    val w = canvasW.coerceAtLeast(1)
+    val h = canvasH.coerceAtLeast(1)
+
+    val bg = ensureBitmap(m.bgBitmap, w, h)?.also { m.bgBitmap = it } ?: return
+    val fg = ensureBitmap(m.fgBitmap, w, h)?.also { m.fgBitmap = it } ?: return
+    val key = staticKeyOf(ctx, w, h)
+    if (key != m.staticKey) {
+        m.bgCanvas.setBitmap(bg)
+        m.fgCanvas.setBitmap(fg)
+        bg.eraseColor(AndroidColor.TRANSPARENT)
+        fg.eraseColor(AndroidColor.TRANSPARENT)
+        renderStaticLayers(m.bgCanvas, m.fgCanvas, ctx)
+        m.bgCanvas.setBitmap(null)
+        m.fgCanvas.setBitmap(null)
+        m.staticKey = key
+    }
+
+    nc.drawBitmap(bg, 0f, 0f, null)
+    if (drawSpectrum && ctx.mode == PeqGraphMode.MAGNITUDE) drawUnifiedSpectrum(nc, ctx)
+    nc.drawBitmap(fg, 0f, 0f, null)
+    if (ctx.showGainMeters && ctx.mode == PeqGraphMode.MAGNITUDE) drawGainMeters(nc, ctx)
+}
+
+private fun ensureBitmap(existing: android.graphics.Bitmap?, w: Int, h: Int): android.graphics.Bitmap? {
+    if (existing != null && existing.width == w && existing.height == h) return existing
+    existing?.recycle()
+    return runCatching { android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888) }.getOrNull()
+}
+
+/** Everything that changes only when a non-spectrum input changes (see [renderPeqGraph]). */
+private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
+    var k = 17
+    k = 31 * k + w
+    k = 31 * k + h
+    k = 31 * k + ctx.systemValues.contentHashCode()
+    // Bands are not a data class — hashCode is identity — but the same instances are re-listed
+    // each frame from the same peqState, so this stays stable between commits and flips on any
+    // commit (applyCandidate always deep-copies).
+    k = 31 * k + ctx.fullBands.hashCode()
+    k = 31 * k + 31 * ctx.lowBands.hashCode()
+    k = 31 * k + 961 * ctx.midBands.hashCode()
+    k = 31 * k + ctx.mode.ordinal
+    k = 31 * k + ctx.channelDisplay.ordinal
+    k = 31 * k + if (ctx.showIndividualFilters) 1 else 0
+    k = 31 * k + if (ctx.showTiltHandles) 1 else 0
+    k = 31 * k + (ctx.selectedId?.hashCode() ?: 0)
+    k = 31 * k + (ctx.calloutBandId?.hashCode() ?: 0)
+    k = 31 * k + (ctx.nodeAlpha * 12f).roundToInt() // bucketed: ~12 rebuilds across the 400ms fade
+    return k
+}
+
+private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     when (ctx.mode) {
         PeqGraphMode.MAGNITUDE -> {
-            drawGrid(nc, g, ctx.paints, ctx.density, MagnitudeGridLines, { g.yForGain(it) }, ctx.glass.octaveGridPaint)
-            drawCrossoverShading(nc, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
-            drawMonoBassRegion(nc, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency)
-            if (drawSpectrum) drawUnifiedSpectrum(nc, ctx)
-            drawBranchCurves(nc, ctx)
-            drawFilterOverlays(nc, ctx)
-            drawPerBandFills(nc, ctx)
-            drawSumAreaFill(nc, ctx)
-            drawSumCurve(nc, ctx)
-            if (ctx.showTiltHandles) drawTiltHandles(nc, ctx)
-            drawMultiBankNodes(nc, ctx)
-            if (ctx.showGainMeters) drawGainMeters(nc, ctx)
+            drawGrid(bg, g, ctx.paints, ctx.density, MagnitudeGridLines, { g.yForGain(it) }, ctx.glass.octaveGridPaint)
+            drawCrossoverShading(bg, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
+            drawMonoBassRegion(bg, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency)
+
+            drawBranchCurves(fg, ctx)
+            drawFilterOverlays(fg, ctx)
+            drawPerBandFills(fg, ctx)
+            drawSumAreaFill(fg, ctx)
+            drawSumCurve(fg, ctx)
+            if (ctx.showTiltHandles) drawTiltHandles(fg, ctx)
+            drawMultiBankNodes(fg, ctx)
         }
         PeqGraphMode.PHASE -> {
-            drawGrid(nc, g, ctx.paints, ctx.density, PhaseGridLines, { g.yForPhaseDeg(it) }, ctx.glass.octaveGridPaint)
-            drawCrossoverShading(nc, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
-            drawPhaseCurves(nc, ctx)
+            drawGrid(bg, g, ctx.paints, ctx.density, PhaseGridLines, { g.yForPhaseDeg(it) }, ctx.glass.octaveGridPaint)
+            drawCrossoverShading(bg, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
+            drawPhaseCurves(fg, ctx)
         }
     }
-    drawLegend(nc, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency, ctx.mode)
-    drawVignette(nc, ctx)
+    drawLegend(fg, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency, ctx.mode)
+    drawVignette(fg, ctx)
 }
 
 // --- frame helpers (raw Canvas, shared by PeqGraphFrame and renderPeqGraph) --------------------
@@ -841,8 +915,8 @@ private fun referenceCurveForBank(ctx: PeqDrawContext, bank: BmwPeqBank): Double
 // --- live spectrum trace — 1:1 with drawUnifiedSpectrum / drawSpectrumDelta / fillDeltaSegment -
 
 // §7: EMA weight toward the raw magnitude, and peak-hold decay, both per ~33 ms frame.
-private const val SPECTRUM_EMA_ALPHA = 0.30f
-private const val SPECTRUM_PEAK_DECAY_DB_PER_FRAME = 0.4f // ≈ 12 dB/s at 33 ms
+private const val SPECTRUM_EMA_ALPHA = 0.35f
+private const val SPECTRUM_PEAK_DECAY_DB_PER_FRAME = 0.6f // ≈ 12 dB/s at the ~50 ms tick
 
 private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
@@ -980,8 +1054,14 @@ private fun drawBankNodes(
         val radius = (if (selected) baseRadiusDp + 1.5f else baseRadiusDp) * d
 
         if (highlighted) {
+            // Soft colour-coded selection ring behind the fill — this band's own palette colour
+            // at ~24% alpha, base radius + 7dp. 1:1 with ParametricEqSurface's flat nodeHaloPaint;
+            // a tighter blurred glow then sits on top of it for the glass read.
+            p.nodeHaloPaint.color = color
+            p.nodeHaloPaint.alpha = withAlpha(60)
+            nc.drawCircle(x, y, baseRadiusDp * d + 7f * d, p.nodeHaloPaint)
             gl.nodeGlowPaint.color = color
-            gl.nodeGlowPaint.alpha = withAlpha(120)
+            gl.nodeGlowPaint.alpha = withAlpha(90)
             nc.drawCircle(x, y, radius + 3f * d, gl.nodeGlowPaint)
         }
 
@@ -1145,13 +1225,14 @@ private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
 
 /** The tapped-node detail card — the [drawInfoCard] content, as a small Compose surface. */
 @Composable
-private fun PeqNodeCallout(hit: NodeHit, modifier: Modifier = Modifier) {
+private fun PeqNodeCallout(hit: NodeHit, accent: Color, modifier: Modifier = Modifier) {
     val band = hit.band
     Column(
         modifier = modifier
             .padding(6.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF121316))
+            .border(1.dp, accent, RoundedCornerShape(6.dp))
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Text(
@@ -1299,6 +1380,23 @@ private class PeqResponseModel {
     val spectrumDbPeak = FloatArray(SPECTRUM_STEPS + 1) { SpectrumEngine.FLOOR_DB }
     val spectrumPeakPath = Path()
     var spectrumPrimed = false
+
+    // Cached static layers so the per-frame spectrum tick doesn't re-run the grid, the curves,
+    // the real-blur sum glow and the glass nodes (the blur passes are what pegs a software-GL
+    // head unit). `bg` = grid + shading (behind the spectrum), `fg` = curves + nodes + tilt +
+    // legend + vignette (in front). Both rebuilt only when a static input changes; the spectrum
+    // and the live gain meters draw straight onto the frame between / on top of them.
+    var bgBitmap: android.graphics.Bitmap? = null
+    var fgBitmap: android.graphics.Bitmap? = null
+    val bgCanvas = Canvas()
+    val fgCanvas = Canvas()
+    var staticKey = Int.MIN_VALUE
+
+    fun recycleBitmaps() {
+        bgBitmap?.recycle(); bgBitmap = null
+        fgBitmap?.recycle(); fgBitmap = null
+        staticKey = Int.MIN_VALUE
+    }
 
     fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double) {
         if (values.size != BmwSignalChain.VALUE_COUNT) return
