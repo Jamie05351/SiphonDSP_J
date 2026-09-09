@@ -35,6 +35,7 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorSurface
 import app.siphondsp.view.MbcBandGrMeter
+import kotlin.math.roundToInt
 
 /**
  * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five
@@ -54,6 +55,15 @@ import app.siphondsp.view.MbcBandGrMeter
 
 private const val MeterTickMs = 33L
 private val DefaultSliderAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
+
+/** "80 Hz" / "1.5 kHz" / "4 kHz" -- compact frequency label for the band crossover subheadings. */
+private fun formatHz(hz: Float): String =
+    if (hz >= 1_000f) {
+        val k = hz / 1_000f
+        if (k == k.toInt().toFloat()) "${k.toInt()} kHz" else "%.1f kHz".format(k)
+    } else {
+        "${hz.roundToInt()} Hz"
+    }
 
 @Composable
 fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
@@ -113,6 +123,18 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
 
     fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
+    // Crossover range this band spans, live off the three MBC split frequencies (defaults
+    // 80 / 500 / 4000 Hz). Band 1 runs from 20 Hz, band 4 up to 20 kHz.
+    val rangeLabel = run {
+        val lo = if (band == 0) 20f else dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + band - 1)
+        val hi = if (band == NativeBmwDspValues.MBC_BAND_COUNT - 1) {
+            20_000f
+        } else {
+            dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + band)
+        }
+        "${formatHz(lo)} – ${formatHz(hi.coerceAtLeast(lo * 1.01f))}"
+    }
+
     BmwDspTheme {
         Column(
             modifier = modifier
@@ -128,6 +150,7 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
             ) {
                 BmwTitleRowWithSwitches(
                     title = "Band ${band + 1}",
+                    subheading = rangeLabel,
                     enabledChecked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
                     onEnabledChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
                     secondLabel = "Stereo link",
