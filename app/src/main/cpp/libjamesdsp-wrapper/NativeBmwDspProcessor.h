@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -43,6 +44,12 @@ public:
     enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 192 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
+    // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
+    // for a wider range than the sub-millisecond crossover/driver alignment: 10 ms cap -> 480
+    // samples @ 48 kHz, 960 @ 96 kHz. 1024 keeps the full 10 ms available up to ~102 kHz. Kept
+    // separate from kDelayLineCapacity so the per-output / limiter Delay instances stay 256.
+    enum : unsigned { kStageDelayCapacity = 1024 };
+    static constexpr float kStageDelayMaxMs = 10.f;
     enum : std::size_t {
         kRoutingValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kInputCount,
         kAllPassValueWidth = 4,
@@ -139,6 +146,32 @@ private:
         float delay = 0;
         float run(float x);
         void clear();
+    };
+    // Same fractional-delay line as Delay (see Delay::run in the .cpp), with a larger ring
+    // buffer for the multi-millisecond stage-centering range. Its own type -- rather than
+    // templating Delay on capacity -- so none of the existing Delay users change.
+    struct StageDelay {
+        std::array<float, kStageDelayCapacity> data{};
+        unsigned write = 0;
+        float delay = 0;
+        float run(float x) {
+            if (delay <= 0) {
+                return x;
+            }
+            data[write] = x;
+            float read = static_cast<float>(write) - delay;
+            while (read < 0) {
+                read += data.size();
+            }
+            unsigned i0 = static_cast<unsigned>(read) % data.size(), i1 = (i0 + 1) % data.size();
+            float f = read - std::floor(read), y = data[i0] + (data[i1] - data[i0]) * f;
+            write = (write + 1) % data.size();
+            return y;
+        }
+        void clear() {
+            data.fill(0);
+            write = 0;
+        }
     };
     struct PeqBank {
         std::array<Biquad, kMaxPeqSectionsPerChannel> left{};
@@ -269,6 +302,11 @@ private:
         float headroom = -6, lowGainL = 0, lowGainR = 0, midGainL = -1, midGainR = -1,
               postGainL = 0, postGainR = 0;
         float midDelayL = 0, midDelayR = 0, lowDelayL = 0, lowDelayR = 0;
+        // Stage-centering L/R alignment delay (ms), applied to the summed stereo bus after the
+        // master limiter -- the last thing before the deliberate hardware L/R swap. A separate
+        // correction layer from the per-output crossover/driver-alignment delays above (v[141]
+        // / v[142]). Clamped to kStageDelayMaxMs.
+        float stageDelayL = 0, stageDelayR = 0;
         float tiltAmount = 3, tiltFreq = 550;
         bool monoBass = false;
         float monoBassFreq = 80, monoBassBlend = 100, monoBassMakeup = 0;
@@ -373,6 +411,9 @@ private:
     float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
     float rmsMix_ = 0, peakRelease_ = 0;
     Limiter limiter_;
+    // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
+    // and processFrame's tail). delay (in samples) is set by updateDelays().
+    StageDelay stageDelayL_, stageDelayR_;
     // Low mono-sum LR4 low-pass, and the matching Mid mono-sum low-pass the Mid compensation
     // feeds so both bands run the identical mono-bass transfer (flat crossover sum for stereo
     // content, not only for L==R). See processFrame's Mono Bass blocks.

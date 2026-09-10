@@ -188,9 +188,9 @@
 # 139..142  meas-mute stopband octaves; meas-mute migration marker (1 = seeded);
 #           141/142 unused (was a Mid-band LPF, since removed)
 1            # 139 measBusStopbandOctaves
-1            # 140 measMuteStopbandMigrated (Kotlin-only)
-0            # 141 unused
-0            # 142 unused
+2            # 140 139..142 migration counter (Kotlin-only; 2 = fully migrated)
+0            # 141 stageDelayL ms
+0            # 142 stageDelayR ms
 
 # 143  link L/R delay toggle (UI-only, never read natively)
 0            # 143

@@ -142,9 +142,9 @@ object NativeBmwDspValues {
     }
 
     // 139..142: formerly the Pultec-style bass boost/cut stage's enabled/freq/boost/cut. Removed
-    // (unused feature, no native processing left). 139/140 now hold the meas-mute stopband
-    // offset + its migration marker; 141/142 are unused (a Mid-band LPF briefly lived there and
-    // was removed).
+    // (unused feature, no native processing left). 139/140 hold the meas-mute stopband offset +
+    // its migration marker; 141/142 (briefly a removed Mid-band LPF) are now the stage-centering
+    // L/R alignment delay -- see below.
 
     // Measurement-mute bus brick-wall: octaves to walk the LR8 corner off the opposite band's
     // crossover and into the stopband, so the band still playing keeps its own transition region
@@ -152,14 +152,21 @@ object NativeBmwDspValues {
     const val INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES = 139
     const val DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES = 1f
 
-    // One-time marker: set to 1 once an existing saved config has had slot 139 seeded to the
-    // default above. Lets the new control ship with a non-zero default without a full schema
-    // version bump. Kotlin-only -- native never reads index 140.
+    // One-time migration counter for the reclaimed 139..142 block. Kotlin-only -- native never
+    // reads index 140. 0 = unseeded; >=1 = slot 139 seeded to the meas-mute default;
+    // >=2 = slots 141/142 zeroed for the stage-delay reclaim (a leftover Mid-LPF corner value
+    // there would otherwise clamp to a several-ms stage delay). See load()'s migrate* calls.
     const val INDEX_MEAS_MUTE_STOPBAND_MIGRATED = 140
 
-    // 141, 142: unused. A Mid-band independent LPF briefly lived here and was removed. Left in
-    // place (not renumbered) so no save migration is needed; DEFAULTS ships them 0 and native
-    // ignores them.
+    // 141, 142: stage-centering L/R alignment delay in ms -- an independent post-sum correction
+    // layer for L/R stage imaging, downstream of the per-output crossover/driver-alignment
+    // delays (INDEX_LOW/MID_DELAY_*). Applied natively to the summed stereo bus after the master
+    // limiter, the last stage before the hardware L/R swap. Clamped to [0, STAGE_DELAY_MAX_MS].
+    // Reclaimed from a removed Mid-band LPF; migrateStageDelayReclaimIfNeeded() zeroes any
+    // leftover value once.
+    const val INDEX_STAGE_DELAY_L = 141
+    const val INDEX_STAGE_DELAY_R = 142
+    const val STAGE_DELAY_MAX_MS = 10f
 
     // UI-only: links Low Left/Right and Mid Left/Right delay editing together on the Gains &
     // Delay page. Native never reads this index -- see NativeBmwDspProcessor::configure(), which
@@ -269,9 +276,10 @@ object NativeBmwDspValues {
         150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
         150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // 139: meas-mute stopband octaves. 140: migration marker (1 = seeded). 141/142: unused
-        // (briefly a Mid-band LPF; removed). 139..142 were originally the Pultec stage.
-        1f, 1f, 0f, 0f,
+        // 139: meas-mute stopband octaves. 140: 139..142 migration counter (2 = fully migrated
+        // on a fresh install). 141/142: stage-centering L/R alignment delay ms (default 0).
+        // 139..142 were originally the Pultec stage, then a removed Mid-band LPF at 141/142.
+        1f, 2f, 0f, 0f,
         // Link L/R Delay (UI-only).
         0f,
         // --- Multiband compressor (144..181), ships DISABLED ---
@@ -304,6 +312,7 @@ object NativeBmwDspValues {
         values[INDEX_ENABLED] = 1f
         migrateIndependentOutputsIfNeeded(store, values)
         migrateMeasMuteStopbandIfNeeded(store, values)
+        migrateStageDelayReclaimIfNeeded(store, values)
         migrateMbcIfNeeded(store, values)
         migrateDisableLegacyCompressorIfNeeded(store, values)
         migrateMasterLimiterIfNeeded(store, values)
@@ -388,14 +397,30 @@ object NativeBmwDspValues {
      * Seed the measurement-mute stopband offset (index 139, reclaimed from the removed Pultec
      * stage) on configs saved before the control existed -- their slot 139 holds a leftover 0,
      * which would silently mean "corner exactly on the crossover". Runs once, then the marker at
-     * index 140 stops it so a later deliberate 0 is respected.
+     * index 140 (>= 1) stops it so a later deliberate 0 is respected.
      */
     private fun migrateMeasMuteStopbandIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
-        if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] == 1f) return
+        if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] >= 1f) return
         values[INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES] = DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES
         values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
         val saved = store.save(values)
         Timber.i("BMW DSP seeded meas-mute stopband offset default success=$saved")
+    }
+
+    /**
+     * Zero slots 141/142 once, when reclaiming them for the stage-centering L/R alignment delay.
+     * A config saved while the short-lived Mid-band LPF feature was live holds its enable flag /
+     * corner frequency there; read as ms of stage delay, a leftover corner (e.g. 2000) would
+     * clamp to the full [STAGE_DELAY_MAX_MS]. Advances the shared 139..142 marker at index 140 to
+     * 2; runs after [migrateMeasMuteStopbandIfNeeded] so the marker climbs 0 -> 1 -> 2.
+     */
+    private fun migrateStageDelayReclaimIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] >= 2f) return
+        values[INDEX_STAGE_DELAY_L] = 0f
+        values[INDEX_STAGE_DELAY_R] = 0f
+        values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 2f
+        val saved = store.save(values)
+        Timber.i("BMW DSP zeroed reclaimed slots 141/142 for stage delay success=$saved")
     }
 
     /**

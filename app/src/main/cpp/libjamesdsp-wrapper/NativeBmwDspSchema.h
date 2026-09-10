@@ -73,7 +73,11 @@ inline constexpr int kOutCompressor = 6;  // start of the 7-value compressor tup
 
 // --- measurement-mute bus brick-wall stopband offset (octaves) -----------------------------
 inline constexpr int kMeasMuteStopbandOctaves = 139;
-// 140 is a Kotlin-only migration marker; 141/142 are unused (a removed Mid-band LPF).
+// 140 is a Kotlin-only migration marker (0 unseeded / 1 meas-mute seeded / 2 stage-delay
+// reclaim done). 141/142, formerly a removed Mid-band LPF, are now the stage-centering L/R
+// alignment delay (ms) applied to the summed stereo bus after the master limiter.
+inline constexpr int kStageDelayLeftMs = 141;
+inline constexpr int kStageDelayRightMs = 142;
 
 // --- multiband compressor -----------------------------------------------------------------
 inline constexpr int kMbcEnabled = 144;

@@ -75,6 +75,9 @@ class NativeBmwSchemaAgreementTest {
 
         "kMeasMuteStopbandOctaves" to NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES,
 
+        "kStageDelayLeftMs" to NativeBmwDspValues.INDEX_STAGE_DELAY_L,
+        "kStageDelayRightMs" to NativeBmwDspValues.INDEX_STAGE_DELAY_R,
+
         "kMbcEnabled" to NativeBmwDspValues.INDEX_MBC_ENABLED,
         "kMbcMix" to NativeBmwDspValues.INDEX_MBC_MIX,
         "kMbcXo0" to NativeBmwDspValues.INDEX_MBC_XO_0,
