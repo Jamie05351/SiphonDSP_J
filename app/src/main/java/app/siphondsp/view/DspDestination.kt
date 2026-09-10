@@ -121,10 +121,23 @@ object DspCrossNavBar {
                     setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     setOnClickListener {
                         if (!canNavigate()) return@setOnClickListener
+                        // Rail navigation is a clean cut, not a transition: picking another DSP
+                        // menu from the sidebar should just swap the screen. The platform default
+                        // slides the new activity in from the right (and the old one out left),
+                        // which reads like a page swipe -- and swiping is reserved for paging
+                        // *within* a menu. FLAG_ACTIVITY_NO_ANIMATION suppresses both the enter
+                        // and exit animation for this launch; overridePendingTransition(0, 0)
+                        // covers the finishing activity on API levels where the flag alone leaves
+                        // a close animation.
                         val intent = Intent(activity, destination.activityClass.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                         destination.workspaceMode?.let { intent.putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
                         activity.startActivity(intent)
+                        @Suppress("DEPRECATION")
+                        activity.overridePendingTransition(0, 0)
                         activity.finish()
+                        @Suppress("DEPRECATION")
+                        activity.overridePendingTransition(0, 0)
                     }
                 }
             }
