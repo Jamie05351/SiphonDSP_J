@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.compose.controls.BmwGrMeter
 import app.siphondsp.compose.controls.BmwPanel
@@ -33,15 +32,14 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
-import app.siphondsp.view.CompressorSurface
 import app.siphondsp.view.MbcBandGrMeter
 import kotlin.math.roundToInt
 
 /**
  * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five
  * `DspPager` pages on this screen, each its own `ComposeView`:
- * - [CompressorVisualiserPage] -- the `CompressorSurface` (kept as `AndroidView`) + MBC
- *   enable / dry-wet Mix master strip.
+ * - [CompressorVisualiserPage] -- the `CompressorGraph` (Compose port of `CompressorSurface`) +
+ *   MBC enable / dry-wet Mix master strip.
  * - [CompressorBandPage] x4 -- per-band enable + stereo-link, a live GR meter, and the
  *   threshold / ratio / knee / attack / release / makeup sliders.
  *
@@ -76,12 +74,11 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
         ) {
-            AndroidView(
-                factory = { CompressorSurface(it, null) },
-                update = { surface ->
-                    surface.setSystemValues(dsp.values)
-                    mbcMeter?.let(surface::setMbcMeter)
-                },
+            // Compose port of CompressorSurface. Step A: static frame (band regions, grid,
+            // threshold lines, GR readouts); spectrum + live gain-reduction curve arrive in Step B.
+            CompressorGraph(
+                systemValues = dsp.values,
+                mbcMeter = mbcMeter,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp)
