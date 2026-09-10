@@ -74,8 +74,9 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Compose port of CompressorSurface. Step A: static frame (band regions, grid,
-            // threshold lines, GR readouts); spectrum + live gain-reduction curve arrive in Step B.
+            // Compose port of CompressorSurface: band regions, grid, threshold lines, GR
+            // readouts, the live dry/wet spectrum + boost/cut delta fill, and the applied
+            // gain-reduction curve.
             CompressorGraph(
                 systemValues = dsp.values,
                 mbcMeter = mbcMeter,
