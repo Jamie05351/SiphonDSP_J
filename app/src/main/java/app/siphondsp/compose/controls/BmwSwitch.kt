@@ -88,11 +88,13 @@ private val ComponentHeight = 34.dp
 private val TrackHeight = 20.dp        // thin, recessed -- the thumb rides proud of it
 private val ThumbDiameter = 32.dp      // > TrackHeight, so it overhangs the track top & bottom
 private val TrackBorderWidth = 1.6.dp
-private val ThumbGlowWidth = 6.dp
+private val ThumbGlowWidth = 8.dp
+private val ThumbHaloWidth = 13.dp     // wide, faint outer bloom -> the sphere reads as emissive
 private val ThumbShadowBlur = 5.dp
 private val ThumbRingWidth = 1.2.dp
 private val ThumbBorderWidth = 1.dp
 private val HighlightArcWidth = 1.6.dp
+private val TopRimWidth = 1.1.dp       // bright catch-light along the capsule's top edge
 private val SegmentGlowBlur = 7.dp
 private const val LabelTextSizeSp = 12.5f
 private const val LabelLetterSpacing = 0.03f
@@ -153,6 +155,18 @@ private fun DrawScope.drawTrack(progress: Float) {
             end = Offset(trackRect.right - corner, trackRect.bottom - density),
             strokeWidth = density,
         )
+        // Bright specular catch-light skimming the top edge -- the "polished glass" read.
+        drawLine(
+            brush = Brush.horizontalGradient(
+                0f to Color.Transparent,
+                0.5f to Color.White.copy(alpha = 0.42f),
+                1f to Color.Transparent,
+                startX = trackRect.left + corner, endX = trackRect.right - corner,
+            ),
+            start = Offset(trackRect.left + corner, trackRect.top + TopRimWidth.toPx()),
+            end = Offset(trackRect.right - corner, trackRect.top + TopRimWidth.toPx()),
+            strokeWidth = TopRimWidth.toPx(),
+        )
 
         // Soft status-coloured glow filling the half the thumb has vacated. `on` -> thumb right,
         // glow + label on the left; `off` -> mirrored.
@@ -165,7 +179,7 @@ private fun DrawScope.drawTrack(progress: Float) {
             drawIntoCanvas { canvas ->
                 val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     maskFilter = BlurMaskFilter(SegmentGlowBlur.toPx(), BlurMaskFilter.Blur.NORMAL)
-                    color = status.copy(alpha = 0.55f).toArgb()
+                    color = status.copy(alpha = 0.275f).toArgb()
                 }
                 canvas.nativeCanvas.drawRoundRect(
                     segLeft, trackRect.top + trackRect.height * 0.18f,
@@ -173,12 +187,6 @@ private fun DrawScope.drawTrack(progress: Float) {
                     corner, corner, glow,
                 )
             }
-            drawRoundRect(
-                color = status.copy(alpha = 0.16f),
-                topLeft = Offset(segLeft, trackRect.top),
-                size = Size(segRight - segLeft, trackRect.height),
-                cornerRadius = CornerRadius(corner),
-            )
         }
 
         // ON / OFF label in the vacated half, status-coloured: blur-glow copy then a crisp copy.
@@ -210,7 +218,7 @@ private fun DrawScope.drawTrack(progress: Float) {
             style = Paint.Style.STROKE
             strokeWidth = borderPx
             maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
-            color = status.copy(alpha = 0.5f).toArgb()
+            color = status.copy(alpha = 0.25f).toArgb()
         }
         canvas.nativeCanvas.drawRoundRect(
             trackRect.left, trackRect.top, trackRect.right, trackRect.bottom, corner, corner, bloom,
@@ -237,8 +245,7 @@ private fun DrawScope.drawThumb(progress: Float) {
     val cy = circle.center.y
     val r = circle.width / 2f
     val status = lerp(OffColor, OnColor, progress)
-    val fillNear = lerp(status, Color.White, 0.5f)
-    val fillEdge = lerp(status, Color.Black, 0.32f)
+    val haloPx = ThumbHaloWidth.toPx()
 
     drawIntoCanvas { canvas ->
         // Drop shadow onto the track.
@@ -247,28 +254,41 @@ private fun DrawScope.drawThumb(progress: Float) {
             color = Color(0x8C000000).toArgb()
         }
         canvas.nativeCanvas.drawCircle(cx, cy + 2f * density, r, shadow)
-        // Blurred status-coloured outer glow.
+        // Two-stage status-coloured bloom: a wide faint halo, then a tighter bright glow, so the
+        // sphere reads as lit rather than just outlined.
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = haloPx
+            maskFilter = BlurMaskFilter(haloPx, BlurMaskFilter.Blur.NORMAL)
+            color = status.copy(alpha = 0.15f).toArgb()
+        }
+        canvas.nativeCanvas.drawCircle(cx, cy, r + haloPx * 0.35f, halo)
         val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = glowPx
-            maskFilter = BlurMaskFilter(glowPx, BlurMaskFilter.Blur.NORMAL)
-            color = status.copy(alpha = 0.62f).toArgb()
+            maskFilter = BlurMaskFilter(glowPx * 1.25f, BlurMaskFilter.Blur.NORMAL)
+            color = status.copy(alpha = 0.45f).toArgb()
         }
-        canvas.nativeCanvas.drawCircle(cx, cy, r + glowPx * 0.5f, glow)
+        canvas.nativeCanvas.drawCircle(cx, cy, r + glowPx * 0.4f, glow)
     }
 
-    // Sphere: radial gradient lit from up-left.
+    // Emissive coloured sphere: a hot near-white core bleeding out to the status colour, with only
+    // a slight darkening at the rim so it reads as lit rather than as a shaded ball.
+    val fillCore = lerp(status, Color.White, 0.55f)
+    val fillEdge = lerp(status, Color.Black, 0.20f)
     drawCircle(
         brush = Brush.radialGradient(
-            0f to fillNear, 0.6f to status, 1f to fillEdge,
-            center = Offset(cx - r * 0.28f, cy - r * 0.32f),
-            radius = r * 1.15f,
+            0f to fillCore, 0.45f to status, 1f to fillEdge,
+            center = Offset(cx - r * 0.26f, cy - r * 0.30f),
+            radius = r * 1.2f,
         ),
         radius = r,
         center = Offset(cx, cy),
     )
-    drawCircle(lerp(status, Color.White, 0.35f).copy(alpha = 0.85f), r, Offset(cx, cy), style = Stroke(ThumbRingWidth.toPx()))
-    drawCircle(lerp(status, Color.Black, 0.25f).copy(alpha = 0.8f), r, Offset(cx, cy), style = Stroke(ThumbBorderWidth.toPx()))
+    drawCircle(lerp(status, Color.White, 0.35f).copy(alpha = 0.9f), r, Offset(cx, cy), style = Stroke(ThumbRingWidth.toPx()))
+    drawCircle(lerp(status, Color.Black, 0.25f).copy(alpha = 0.7f), r, Offset(cx, cy), style = Stroke(ThumbBorderWidth.toPx()))
+    // Crisp specular hotspot, up-left, where the light source hits the glass.
+    drawCircle(Color.White.copy(alpha = 0.85f), r * 0.22f, Offset(cx - r * 0.32f, cy - r * 0.36f))
 
     // Top highlight arc: 200deg start, 70deg sweep, round cap.
     val arc = Rect(cx - r * 0.55f, circle.top + r * 0.15f, cx + r * 0.55f, circle.top + r * 1.1f)
