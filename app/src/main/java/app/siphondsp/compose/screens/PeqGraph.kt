@@ -3,9 +3,11 @@ package app.siphondsp.compose.screens
 import android.content.Context
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
+import android.graphics.ComposeShader
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.util.TypedValue
@@ -117,8 +119,19 @@ enum class PeqChannelDisplay { BOTH, LEFT, RIGHT }
 private const val SYSTEM_POINT_COUNT = 192
 private const val OVERLAY_POINT_COUNT = 96
 private const val SPECTRUM_STEPS = 240
-private const val BAND_FILL_ALPHA = 48
-private const val BAND_STROKE_ALPHA = 170
+// Per-band fill: a neon vertical gradient — a hot, near-white-cored edge along the band's own
+// curve, through the saturated palette colour, falling off toward the "curve without this band"
+// edge. Bright enough near the crest that overlaps still read; the solid neon border (below)
+// does the hard shape definition.
+private const val BAND_FILL_HOT_ALPHA = 212   // luminous edge at the band's own curve
+private const val BAND_FILL_MID_ALPHA = 148
+private const val BAND_FILL_TAIL_ALPHA = 54   // falloff toward the reference edge
+private const val BAND_FILL_HOT_WHITEN = 0.32f
+// Per-band border: a solid, full-opacity neon outline — a wide colour glow under a crisp
+// near-white core — drawn on top of every fill so each band's shape stays defined.
+private const val BAND_BORDER_ALPHA = 255
+private const val BAND_BORDER_GLOW_ALPHA = 112
+private const val BAND_BORDER_CORE_WHITEN = 0.34f
 
 private const val SECONDARY_NODE_RADIUS_DP = 6.5f
 private const val ACTIVE_NODE_RADIUS_DP = 8f
@@ -420,6 +433,16 @@ private fun rememberPeqSurfacePaints(): PeqSurfacePaints {
                 ColorUtils.blendARGB(spectrumAccentColor, AndroidColor.rgb(150, 150, 150), 0.55f)
             unifiedSpectrumStrokePaint.alpha = 110
             dryStrokePaint.alpha = 120
+
+            // Pro-Q signature: the summed-response curve is a warm yellow, not white, and drawn
+            // a little heavier so the bloom underneath reads as neon. Compose-only override —
+            // PeqSurfacePaints.sumColor stays white for the legacy view, the gain meters, and
+            // the phase-mode overlay.
+            val sumCurveColor = AndroidColor.rgb(0xFF, 0xC9, 0x36)
+            sumPaintSolid.color = sumCurveColor
+            sumPaintSolid.strokeWidth = 2.2f * density
+            sumPaintDashed.color = sumCurveColor
+            sumPaintDashed.strokeWidth = 2.2f * density
         }
     }
 }
@@ -653,8 +676,8 @@ private fun strokeNeon(nc: Canvas, path: Path, paint: Paint, glow: Paint) {
 private fun drawGlowStroke(nc: Canvas, glass: PeqGlassPaints, path: Path, paint: Paint) {
     val glow = glass.sumGlowPaint
     glow.color = paint.color
-    glow.alpha = 170
-    glow.strokeWidth = paint.strokeWidth * 1.6f
+    glow.alpha = 205
+    glow.strokeWidth = paint.strokeWidth * 1.9f
     glow.pathEffect = paint.pathEffect
     nc.drawPath(path, glow)
     nc.drawPath(path, paint)
@@ -791,20 +814,38 @@ private fun drawSumAreaFill(nc: Canvas, ctx: PeqDrawContext) {
     path.close()
 
     val glass = ctx.glass
-    val key = g.top.roundToInt() * 92821 + g.bottom.roundToInt()
+    val key = g.top.roundToInt() * 92821 + g.bottom.roundToInt() * 131 +
+        g.left.roundToInt() * 17 + g.right.roundToInt()
     if (glass.areaFillKey != key) {
-        val col = ctx.paints.sumColor
-        val zeroFraction = PeqGraphMath.gainToFraction(0.0)
-        glass.areaFillPaint.shader = LinearGradient(
-            0f, g.top, 0f, g.bottom,
+        val zeroFraction = PeqGraphMath.gainToFraction(0.0).coerceIn(0.02f, 0.98f)
+        // Horizontal hue sweep keyed to frequency position: warm in the bass, cool in the
+        // treble (the image-2 reference look).
+        val hue = LinearGradient(
+            g.left, 0f, g.right, 0f,
             intArrayOf(
-                ColorUtils.setAlphaComponent(col, 72),
-                ColorUtils.setAlphaComponent(col, 0),
-                ColorUtils.setAlphaComponent(col, 72),
+                AndroidColor.rgb(255, 66, 84),   // ~20 Hz
+                AndroidColor.rgb(255, 150, 40),
+                AndroidColor.rgb(255, 214, 0),
+                AndroidColor.rgb(64, 220, 132),
+                AndroidColor.rgb(42, 148, 255),
+                AndroidColor.rgb(150, 92, 240),  // ~20 kHz
             ),
-            floatArrayOf(0f, zeroFraction.coerceIn(0.02f, 0.98f), 1f),
+            floatArrayOf(0f, 0.2f, 0.4f, 0.6f, 0.8f, 1f),
             Shader.TileMode.CLAMP,
         )
+        // Vertical alpha falloff toward the 0 dB line so the hue reads as a subtle wash hugging
+        // the summed curve, not a solid slab. Composited onto `hue` via DST_IN.
+        val fade = LinearGradient(
+            0f, g.top, 0f, g.bottom,
+            intArrayOf(
+                AndroidColor.argb(122, 255, 255, 255),
+                AndroidColor.argb(0, 255, 255, 255),
+                AndroidColor.argb(122, 255, 255, 255),
+            ),
+            floatArrayOf(0f, zeroFraction, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        glass.areaFillPaint.shader = ComposeShader(hue, fade, PorterDuff.Mode.DST_IN)
         glass.areaFillKey = key
     }
     nc.drawPath(path, glass.areaFillPaint)
@@ -866,6 +907,9 @@ private fun drawPerBandFills(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     val m = ctx.model
     val path = Path()
+    // Pass 1 fills the polygons (near-opaque, so later bands occlude earlier ones); pass 2 then
+    // lays every band's solid neon border back on top so no outline is lost to an overlap.
+    val borders = ArrayList<Pair<Path, Int>>()
     ctx.forEachVisibleBank { bank, bands ->
         if (bands.isEmpty()) return@forEachVisibleBank
         val referenceCurve = referenceCurveForBank(ctx, bank) ?: return@forEachVisibleBank
@@ -896,13 +940,64 @@ private fun drawPerBandFills(nc: Canvas, ctx: PeqDrawContext) {
             path.close()
             val palette = ctx.paints.perBandPalette
             val color = palette[(ctx.bankNumberOffset(bank) + index) % palette.size]
-            ctx.paints.bandFillPaint.color = color
-            ctx.paints.bandFillPaint.alpha = BAND_FILL_ALPHA
-            nc.drawPath(path, ctx.paints.bandFillPaint)
-            ctx.paints.bandStrokePaint.color = color
-            ctx.paints.bandStrokePaint.alpha = BAND_STROKE_ALPHA
-            nc.drawPath(path, ctx.paints.bandStrokePaint)
+
+            // Vertical gradient across the fill polygon: hot near-white edge along this band's
+            // own curve, through the palette colour, to a faint tail at the reference edge.
+            // Direction depends on whether the band boosts (its curve sits higher on screen =
+            // smaller Y) or cuts.
+            var yTopMost = Float.MAX_VALUE
+            var yBotMost = -Float.MAX_VALUE
+            var peakIdx = 0
+            var peakDev = -1f
+            for (i in 0 until SYSTEM_POINT_COUNT) {
+                val t = m.fillTopY[i]
+                val b = m.fillBottomY[i]
+                if (t < yTopMost) yTopMost = t
+                if (b < yTopMost) yTopMost = b
+                if (t > yBotMost) yBotMost = t
+                if (b > yBotMost) yBotMost = b
+                val dev = if (t > b) t - b else b - t
+                if (dev > peakDev) { peakDev = dev; peakIdx = i }
+            }
+            val boost = m.fillTopY[peakIdx] <= m.fillBottomY[peakIdx]
+            val curveEdgeY = if (boost) yTopMost else yBotMost
+            val refEdgeY = if (boost) yBotMost else yTopMost
+            val fillPaint = ctx.glass.bandGradientFillPaint
+            val hot = ColorUtils.setAlphaComponent(
+                ColorUtils.blendARGB(color, AndroidColor.WHITE, BAND_FILL_HOT_WHITEN), BAND_FILL_HOT_ALPHA,
+            )
+            val mid = ColorUtils.setAlphaComponent(color, BAND_FILL_MID_ALPHA)
+            val tail = ColorUtils.setAlphaComponent(color, BAND_FILL_TAIL_ALPHA)
+            if (curveEdgeY != refEdgeY) {
+                fillPaint.shader = LinearGradient(
+                    0f, curveEdgeY, 0f, refEdgeY,
+                    intArrayOf(hot, mid, tail),
+                    floatArrayOf(0f, 0.4f, 1f),
+                    Shader.TileMode.CLAMP,
+                )
+            } else {
+                fillPaint.shader = null
+                fillPaint.color = hot
+            }
+            nc.drawPath(path, fillPaint)
+            borders.add(Path(path) to color)
         }
+    }
+
+    // Pass 2: solid neon border for every band — a wide translucent colour glow under a crisp,
+    // full-opacity core, so each shape stays defined even where another band is painted over it.
+    val glow = ctx.paints.glowPaint
+    val core = ctx.paints.bandStrokePaint
+    for ((bandPath, color) in borders) {
+        glow.color = color
+        glow.alpha = BAND_BORDER_GLOW_ALPHA
+        glow.strokeWidth = 6f * ctx.density
+        glow.pathEffect = null
+        nc.drawPath(bandPath, glow)
+        core.color = ColorUtils.blendARGB(color, AndroidColor.WHITE, BAND_BORDER_CORE_WHITEN)
+        core.alpha = BAND_BORDER_ALPHA
+        core.strokeWidth = 1.9f * ctx.density
+        nc.drawPath(bandPath, core)
     }
 }
 
@@ -935,6 +1030,12 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     m.dryStrokePath.rewind()
     m.spectrumPeakPath.rewind()
     m.spectrumFillPath.moveTo(g.left, g.bottom)
+    // Whether the dry (pre-DSP) reference trace carries real data this frame. When it doesn't
+    // (no feed wired, or the analyzer hasn't primed yet) every dry sample sits on the floor, so
+    // the whole band reads as one "boost" segment and drawSpectrumDelta floods the graph with the
+    // green boost fill. Gate the delta shading on this so a missing dry feed stays invisible
+    // instead of painting a solid green mass behind the curves.
+    var dryHasSignal = false
     for (i in 0..SPECTRUM_STEPS) {
         val fraction = i / SPECTRUM_STEPS.toFloat()
         val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, ctx.maxFrequency)
@@ -954,8 +1055,10 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
         }
 
         val wetGain = PeqGraphMath.spectrumDbToGraphGain(wetDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
+        val dryDb = SpectrumEngine.dryMagnitudeDbAt(freq)
+        if (dryDb > SpectrumEngine.FLOOR_DB + 1f) dryHasSignal = true
         val dryGain = PeqGraphMath.spectrumDbToGraphGain(
-            SpectrumEngine.dryMagnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB,
+            dryDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB,
         )
         val peakGain = PeqGraphMath.spectrumDbToGraphGain(m.spectrumDbPeak[i], SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB)
         val x = g.left + fraction * (g.right - g.left)
@@ -979,7 +1082,7 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
     m.spectrumPrimed = true
     m.spectrumFillPath.lineTo(g.right, g.bottom)
     m.spectrumFillPath.close()
-    drawSpectrumDelta(nc, ctx, SPECTRUM_STEPS + 1)
+    if (dryHasSignal) drawSpectrumDelta(nc, ctx, SPECTRUM_STEPS + 1)
     if (g.top != p.spectrumFillShaderTop || g.bottom != p.spectrumFillShaderBottom) {
         // §7: fainter than before (was 150) so it stays ambient context, not a competing element.
         p.unifiedSpectrumFillPaint.shader = LinearGradient(
@@ -1451,6 +1554,11 @@ private class PeqGlassPaints(density: Float) {
     // §2: gradient area fill under the summed curve; shader rebuilt when the plot rect changes.
     val areaFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     var areaFillKey = Int.MIN_VALUE
+
+    // Pro-Q-style per-band gradient fill; its shader is rebuilt per band, every frame, in
+    // drawPerBandFills (kept off the shared PeqSurfacePaints.bandFillPaint so the legacy view
+    // is untouched).
+    val bandGradientFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.
     val octaveGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

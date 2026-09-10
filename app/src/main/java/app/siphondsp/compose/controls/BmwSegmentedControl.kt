@@ -121,6 +121,20 @@ private fun DrawScope.drawSegmentTrack() {
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
     )
+    // Faint glass catch-light along the shell's top edge.
+    clipPath(Path().apply { addRoundRect(RoundRect(rect, corner)) }) {
+        drawLine(
+            brush = Brush.horizontalGradient(
+                0f to Color.Transparent,
+                0.5f to Color.White.copy(alpha = 0.2f),
+                1f to Color.Transparent,
+                startX = rect.left + corner.x, endX = rect.right - corner.x,
+            ),
+            start = Offset(rect.left + corner.x, rect.top + borderPx),
+            end = Offset(rect.right - corner.x, rect.top + borderPx),
+            strokeWidth = borderPx,
+        )
+    }
     drawRoundRect(
         color = SegmentTrackRim,
         topLeft = Offset(rect.left, rect.top),
@@ -143,54 +157,56 @@ private fun DrawScope.drawSelectedPill(accent: Color) {
     val rect = inset(Rect(0f, 0f, size.width, size.height), borderPx / 2f)
     if (rect.width <= 0f || rect.height <= 0f) return
     val corner = CornerRadius(rect.height / 2f)
-    val w = rect.width
+    val haloPx = SegmentHaloWidth.toPx()
 
-    val fillNear = lerp(accent, Color.White, 0.25f)
-    val fillFar = lerp(accent, Color.Black, 0.25f)
-    val glow = accent.copy(alpha = SegmentGlowAlpha)
-
-    // Blurred glow ring -- nativeCanvas (DrawScope can't blur a stroke).
+    // Two-stage blurred glow ring -- nativeCanvas (DrawScope can't blur a stroke). Wide faint
+    // halo, then a tight bright ring, so the pill glows rather than just having a coloured edge.
     drawIntoCanvas { canvas ->
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = haloPx
+            maskFilter = BlurMaskFilter(haloPx, BlurMaskFilter.Blur.NORMAL)
+            color = accent.copy(alpha = SegmentHaloAlpha).toArgb()
+        }
+        canvas.nativeCanvas.drawRoundRect(
+            rect.left, rect.top, rect.right, rect.bottom, corner.x, corner.y, halo,
+        )
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = glowPx
-            maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
-            color = glow.toArgb()
+            maskFilter = BlurMaskFilter(glowPx * 0.9f, BlurMaskFilter.Blur.NORMAL)
+            color = accent.copy(alpha = SegmentGlowAlpha).toArgb()
         }
         canvas.nativeCanvas.drawRoundRect(
             rect.left, rect.top, rect.right, rect.bottom, corner.x, corner.y, p,
         )
     }
+    // No coloured fill for the selected segment -- only its border carries the accent. A faint
+    // white catch-light along the top edge keeps the glass read.
+    val clip = Path().apply { addRoundRect(RoundRect(rect, corner)) }
+    clipPath(clip) {
+        drawLine(
+            brush = Brush.horizontalGradient(
+                0f to Color.Transparent,
+                0.5f to Color.White.copy(alpha = 0.3f),
+                1f to Color.Transparent,
+                startX = rect.left + corner.x, endX = rect.right - corner.x,
+            ),
+            start = Offset(rect.left + corner.x, rect.top + borderPx),
+            end = Offset(rect.right - corner.x, rect.top + borderPx),
+            strokeWidth = borderPx,
+        )
+    }
+    // Border: a soft accent bloom stroke under a crisp accent edge.
     drawRoundRect(
-        brush = Brush.linearGradient(
-            0f to fillNear, 0.18f to accent, 1f to fillFar,
-            start = Offset(rect.left, rect.top),
-            end = Offset(rect.right, rect.bottom),
-        ),
+        color = accent.copy(alpha = 0.275f),
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
+        style = Stroke(borderPx * 1.8f),
     )
-    val clip = Path().apply { addRoundRect(RoundRect(rect, corner)) }
-    clipPath(clip) {
-        val sheen = Path().apply {
-            moveTo(rect.left + w * 0.12f, rect.top)
-            lineTo(rect.left + w * 0.42f, rect.top)
-            lineTo(rect.left + w * 0.30f, rect.bottom)
-            lineTo(rect.left, rect.bottom)
-            close()
-        }
-        drawPath(
-            sheen,
-            brush = Brush.linearGradient(
-                listOf(SegmentSheenNear, SegmentSheenFar),
-                start = Offset(rect.left + w * 0.12f, rect.top),
-                end = Offset(rect.left + w * 0.30f, rect.bottom),
-            ),
-        )
-    }
     drawRoundRect(
-        color = accent,
+        color = lerp(accent, Color.White, 0.12f),
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
@@ -201,13 +217,16 @@ private fun DrawScope.drawSelectedPill(accent: Color) {
 private fun inset(r: Rect, d: Float) = Rect(r.left + d, r.top + d, r.right - d, r.bottom - d)
 
 private val SegmentBorderWidth = BmwDashboardSkin.GLASS_SEGMENT_BORDER_WIDTH_DP.dp
-private val SegmentGlowWidth = BmwDashboardSkin.GLASS_SEGMENT_GLOW_WIDTH_DP.dp
-private val SegmentGlowAlpha = android.graphics.Color.alpha(BmwDashboardSkin.GLASS_SEGMENT_GLOW_COLOR) / 255f
+// Local to Compose (the View path keeps BmwDashboardSkin's values). Two-stage glow around the
+// selected segment, dialled to roughly half strength -- the segment carries its accent in the
+// border, not a fill.
+private val SegmentGlowWidth = 7.dp
+private val SegmentGlowAlpha = 0.275f
+private val SegmentHaloWidth = 12.dp
+private val SegmentHaloAlpha = 0.13f
 private val SegmentIdleText = Color(0xFFB4BCC5) // rgb(180,188,197)
 private val DefaultSelectedAccent = Color(BmwDashboardSkin.GLASS_SEGMENT_BORDER_COLOR)
 private val SegmentTrackFillNear = Color(BmwDashboardSkin.GLASS_SEGMENT_TRACK_FILL_NEAR)
 private val SegmentTrackFillFar = Color(BmwDashboardSkin.GLASS_SEGMENT_TRACK_FILL_FAR)
 private val SegmentTrackRim = Color(BmwDashboardSkin.GLASS_SEGMENT_TRACK_RIM_COLOR)
 private val SegmentTrackBorder = Color(BmwDashboardSkin.GLASS_SEGMENT_TRACK_BORDER_COLOR)
-private val SegmentSheenNear = Color(BmwDashboardSkin.GLASS_SEGMENT_SHEEN_NEAR)
-private val SegmentSheenFar = Color(BmwDashboardSkin.GLASS_SEGMENT_SHEEN_FAR)
