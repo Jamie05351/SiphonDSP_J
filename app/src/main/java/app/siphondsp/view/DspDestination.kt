@@ -40,36 +40,22 @@ enum class DspDestination(
 }
 
 object DspCrossNavBar {
-    // The whole full-screen workspace backdrop -- the ///M carbon logo, the suede field, *and*
-    // the sidebar's rounded panel frame with its 5 inlaid tiles, each tile's own icon, and which
-    // single tile reads as "selected" (a cyan glow border, icon recolored to match) -- is baked
-    // into one of 5 source images (drawable-mdpi/dsp_workspace_backdrop_*.png), picked by [current]
-    // and set on R.id.dsp_workspace_backdrop (the full-bleed ImageView in
-    // activity_parametric_eq.xml). The art is authored at exactly the device's full-screen
-    // resolution (1280x480 at mdpi, edge to edge -- the head unit runs with no system bars). Only
-    // an mdpi export exists so far; on any other density it still renders at the *correct dp size*
-    // (Android auto-scales a single-bucket drawable's declared pixel size to match target density)
-    // but not at full sharpness until matching h/xh/xxh/xxxhdpi exports are added.
+    // The rail -- rounded glass panel, 5 inlaid tiles, each tile's icon, and the cyan selection
+    // on the current screen's tile -- is drawn live by WorkspaceSidebarView (R.id.dsp_sidebar_view
+    // in activity_parametric_eq.xml), identical on every screen, only the selected tile moving.
+    // The backdrop behind it (R.id.dsp_workspace_backdrop) is one sidebar-less field image
+    // (suede + ///M logo) for every destination.
     //
-    // populate() draws no icon/label of its own; it only lays an invisible click-target/focus-ring
-    // row over each tile's measured bounds within dsp_sidebar's reserved column (see that column's
-    // own comment in activity_parametric_eq.xml).
-    private class WorkspaceBackdrop(@DrawableRes val res: Int, val rowWeights: IntArray)
+    // populate() draws no icon/label of its own; it only sets WorkspaceSidebarView.selectedIndex
+    // and lays an invisible click-target/focus-ring row over each tile's measured bounds within
+    // dsp_sidebar's reserved column (see that column's own comment in activity_parametric_eq.xml).
 
-    // Measured off the 1280x480 backdrop art's rail geometry (all 5 backdrops share an identical
-    // rail): rail top margin 16px, five 80px-tall tiles with 12px inter-tile gaps, 16px bottom
-    // margin -- 16 + 5*80 + 4*12 + 16 = 480, the backdrop's full height. populate() applies these
-    // as cumulative pixel fractions of dsp_sidebar's real measured height, so only the ratios
-    // matter; tune against the art if the click-targets drift off the tiles.
+    // Rail geometry: rail top margin 16, five 80-unit tiles with 12-unit inter-tile gaps, 16
+    // bottom margin -- 16 + 5*80 + 4*12 + 16 = 480. populate() applies these as cumulative
+    // fractions of dsp_sidebar's real measured height (so only the ratios matter), and
+    // WorkspaceSidebarView draws the panel/tiles from the same 480-unit space, so the two stay
+    // registered. Tune both together if the click-targets drift off the tiles.
     private val ROW_WEIGHTS = intArrayOf(16, 80, 12, 80, 12, 80, 12, 80, 12, 80, 16)
-
-    private fun backdrop(current: DspDestination): WorkspaceBackdrop = when (current) {
-        DspDestination.PARAMETRIC_EQ -> WorkspaceBackdrop(R.drawable.dsp_workspace_backdrop_peq, ROW_WEIGHTS)
-        DspDestination.GAINS_DELAY -> WorkspaceBackdrop(R.drawable.dsp_workspace_backdrop_gains, ROW_WEIGHTS)
-        DspDestination.CROSSOVER_TILT -> WorkspaceBackdrop(R.drawable.dsp_workspace_backdrop_xover, ROW_WEIGHTS)
-        DspDestination.COMPRESSOR -> WorkspaceBackdrop(R.drawable.dsp_workspace_backdrop_compressor, ROW_WEIGHTS)
-        DspDestination.ALLPASS -> WorkspaceBackdrop(R.drawable.dsp_workspace_backdrop_allpass, ROW_WEIGHTS)
-    }
 
     private class WeightedChild(val view: View, val weightIndex: Int)
 
@@ -82,14 +68,6 @@ object DspCrossNavBar {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
         container.background = null
-        val workspaceBackdrop = backdrop(current)
-
-        // Set the full-screen backdrop for this destination on the full-bleed ImageView -- the
-        // rail panel, its 5 tiles and the selected tile's glow are all baked into that art; see
-        // WorkspaceBackdrop above. Nothing paints inside dsp_sidebar; it only hosts the invisible
-        // click-targets laid over the baked tiles below.
-        activity.findViewById<android.widget.ImageView>(R.id.dsp_workspace_backdrop)
-            ?.setImageResource(workspaceBackdrop.res)
 
         val rows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         container.addView(
@@ -98,8 +76,12 @@ object DspCrossNavBar {
         )
 
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
-        val weights = workspaceBackdrop.rowWeights
+        val weights = ROW_WEIGHTS
         val children = mutableListOf<WeightedChild>()
+
+        // The rail visual: same on every screen, only the selected tile's cyan moves.
+        activity.findViewById<WorkspaceSidebarView>(R.id.dsp_sidebar_view)?.selectedIndex =
+            destinations.indexOf(current)
 
         fun addSpacer(weightIndex: Int) {
             val spacer = View(activity)
