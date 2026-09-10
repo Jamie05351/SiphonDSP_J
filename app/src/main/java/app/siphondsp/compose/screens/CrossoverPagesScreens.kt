@@ -10,7 +10,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -19,10 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.controls.BmwPanel
+import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
@@ -30,7 +33,6 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
-import app.siphondsp.view.CrossoverHandoffSurface
 
 private val DefaultAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
 private val NoMirror = IntArray(0)
@@ -50,6 +52,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
+    var graphMode by remember { mutableStateOf(CrossoverGraphMode.MAGNITUDE) }
 
     val lowSlider = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
     val midSlider = Color(BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
@@ -89,8 +92,22 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                     "Lowpass freq (LR4)", "Highpass freq (LR4)", subsonicLabel, "Mid align (all-pass)",
                 ),
             ) {
-                AndroidView(
-                    factory = { CrossoverHandoffSurface(it).apply { bind(dsp.values, peqState) } },
+                // Compose port of NativeBmwDspResponseView (replacing the AndroidView-wrapped
+                // CrossoverHandoffSurface). Step A: static frame + per-mode legend only; curves,
+                // spectrum and the crossover-Hz marker arrive in Step B.
+                BmwSegmentedControl(
+                    options = listOf("MAG", "PHASE", "BOTH", "DELAY"),
+                    selectedIndex = graphMode.ordinal,
+                    onSelect = { graphMode = CrossoverGraphMode.entries[it] },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 2.dp),
+                    segmentGap = 4.dp,
+                )
+                CrossoverResponseGraph(
+                    mode = graphMode,
+                    systemValues = dsp.values,
+                    peqState = peqState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
