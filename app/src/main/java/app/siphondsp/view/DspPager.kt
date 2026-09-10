@@ -36,16 +36,16 @@ object DspPager {
             orientation = LinearLayout.VERTICAL
         }
 
-        // ViewPager2 requires every page to explicitly declare match_parent/match_parent --
-        // programmatically-built pages (unlike XML-inflated ones) have no LayoutParams at all
-        // until something sets them, which throws "Pages must fill the whole ViewPager2" the
-        // instant the page is measured. Enforce it here so callers don't have to remember.
-        pages.forEach { page ->
-            page.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        }
+        // Each page is wrapped in a PagerChildSwipeGate: a quick horizontal flick that lands on a
+        // slider row turns the page instead of nudging (and committing) the slider, while a slow,
+        // deliberate horizontal drag still adjusts the slider. The gate also satisfies ViewPager2's
+        // requirement that every page explicitly fill it -- programmatically-built pages have no
+        // LayoutParams until something sets them, which otherwise throws "Pages must fill the whole
+        // ViewPager2" the instant the page is measured.
+        val gatedPages = pages.map { page -> PagerChildSwipeGate.wrap(context, page) }
 
         val viewPager = ViewPager2(context).apply {
-            adapter = StaticPagerAdapter(pages)
+            adapter = StaticPagerAdapter(gatedPages)
         }
 
         if (pages.size > 1) {
