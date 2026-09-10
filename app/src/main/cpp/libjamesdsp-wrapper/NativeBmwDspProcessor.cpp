@@ -160,6 +160,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.midDelayR = clampf(v[22], 0, 2.8f);
     next.lowDelayL = clampf(v[23], 0, 2.8f);
     next.lowDelayR = clampf(v[24], 0, 2.8f);
+    // v[141] / v[142] -- reclaimed from the removed Mid-band LPF -- are the stage-centering L/R
+    // alignment delay (ms). See Params::stageDelay* and processFrame's tail.
+    next.stageDelayL = clampf(v[141], 0, kStageDelayMaxMs);
+    next.stageDelayR = clampf(v[142], 0, kStageDelayMaxMs);
     next.tilt = v[25] >= .5f;
     next.tiltAmount = clampf(v[26], -6, 6);
     next.tiltFreq = clampf(v[27], 200, 2000);
@@ -284,7 +288,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         dirty |= DirtyGains;
     }
     if (changed(next.lowDelayL, p_.lowDelayL) || changed(next.lowDelayR, p_.lowDelayR) ||
-        changed(next.midDelayL, p_.midDelayL) || changed(next.midDelayR, p_.midDelayR)) {
+        changed(next.midDelayL, p_.midDelayL) || changed(next.midDelayR, p_.midDelayR) ||
+        changed(next.stageDelayL, p_.stageDelayL) || changed(next.stageDelayR, p_.stageDelayR)) {
         dirty |= DirtyDelays;
     }
     if (changed(next.tiltAmount, p_.tiltAmount) || changed(next.tiltFreq, p_.tiltFreq)) {
@@ -609,6 +614,12 @@ void NativeBmwDspProcessor::updateDelays() {
     output(OutputId::LowRight).delay.delay = d(p_.lowDelayR);
     output(OutputId::MidLeft).delay.delay = d(p_.midDelayL);
     output(OutputId::MidRight).delay.delay = d(p_.midDelayR);
+    // Stage-centering delay -- its own (larger) ring buffer, so clamp to kStageDelayCapacity.
+    auto dStage = [this](float ms) {
+        return clampf(ms * sampleRate_ * .001f, 0, kStageDelayCapacity - 1.f);
+    };
+    stageDelayL_.delay = dStage(p_.stageDelayL);
+    stageDelayR_.delay = dStage(p_.stageDelayR);
 }
 void NativeBmwDspProcessor::rebuildLimiter() {
     float lookahead = clampf(kLimiterLookaheadMs * sampleRate_ * .001f, 0.f,
@@ -869,6 +880,8 @@ void NativeBmwDspProcessor::rebuildAll() {
         out.clearState();
     }
     limiter_.clear();
+    stageDelayL_.clear();
+    stageDelayR_.clear();
     masterLimiterGrDb_.store(0.f);
     limiterMeterCounter_ = 0;
     resetMbcState();
@@ -1229,6 +1242,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (p_.limiterEnabled) {
         processLimiter(oL, oR);
     }
+    // Stage-centering L/R alignment delay -- the last processing before the hardware swap. A
+    // pure fractional delay on the already-limited summed bus (delaying a brick-walled signal
+    // changes nothing about its level), independent of the per-output lowDelay*/midDelay*
+    // lines and the per-output all-pass sections, which all run pre-sum.
+    oL = ftz(stageDelayL_.run(oL));
+    oR = ftz(stageDelayR_.run(oR));
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap

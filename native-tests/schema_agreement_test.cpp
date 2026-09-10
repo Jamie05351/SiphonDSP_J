@@ -277,3 +277,39 @@ TEST_CASE("kMasterLimiterEnabled / kMasterLimiterThreshold slots") {
     CHECK(on6.peak < 0.6f);                   // held near the -6 dBFS ceiling
     CHECK(on1.peak > on6.peak + 0.2f);        // a higher threshold lets more through
 }
+
+TEST_CASE("kStageDelayLeftMs / kStageDelayRightMs delay one summed-bus side") {
+    // Impulse through the chain; cross-correlate the two output channels. The per-channel
+    // filters are identical, so any lag between ch0 and ch1 is pure sample delay from the
+    // stage-centering lines. Note the deliberate final L/R swap: stageDelayLeft acts on oL,
+    // which is written to output r (interleaved index 1), so an L delay makes ch1 lag ch0.
+    auto lag = [](float stageL, float stageR) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[sch::kStageDelayLeftMs] = stageL;
+        c[sch::kStageDelayRightMs] = stageR;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        const std::size_t frames = 4096;
+        std::vector<float> buf(frames * 2, 0.f);
+        buf[0] = buf[1] = 1.f;
+        proc.process(buf.data(), buf.size());
+        int bestLag = 0;
+        double best = -1e300;
+        for (int L = -600; L <= 600; ++L) {
+            double acc = 0;
+            for (std::size_t n = 0; n < frames; ++n) {
+                const long m = static_cast<long>(n) - L;
+                if (m < 0 || static_cast<std::size_t>(m) >= frames) continue;
+                acc += static_cast<double>(buf[n * 2 + 1]) * static_cast<double>(buf[m * 2 + 0]);
+            }
+            if (acc > best) { best = acc; bestLag = L; }
+        }
+        return bestLag;
+    };
+    const int ms4 = static_cast<int>(std::lround(4.0 * kSampleRate / 1000.0));  // 192 @ 48k
+    INFO("lag 0/0 ", lag(0.f, 0.f), "  4/0 ", lag(4.f, 0.f), "  0/4 ", lag(0.f, 4.f));
+    CHECK(std::abs(lag(0.f, 0.f)) <= 1);              // aligned
+    CHECK(std::abs(lag(4.f, 0.f) - ms4) <= 1);        // L delay -> ch1 lags ch0
+    CHECK(std::abs(lag(0.f, 4.f) + ms4) <= 1);        // R delay -> ch0 lags ch1
+}

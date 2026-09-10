@@ -230,6 +230,9 @@ object BmwDashboardSkin {
     const val SLIDER_HEADROOM_COLOR = 0xFFB14DFF.toInt()
     // Tonality Tilt: a bright neon orange, distinct from the Mid band's pure yellow.
     const val SLIDER_TILT_COLOR = 0xFFFF6A00.toInt()
+    // Stage-timing L/R alignment delay: a neon magenta -- not tied to a band, and clear of the
+    // blue / yellow / purple / orange / green already spoken for.
+    const val SLIDER_STAGE_COLOR = 0xFFFF3D8B.toInt()
     const val SLIDER_DEFAULT_COLOR = 0xFF12CFFF.toInt()
 
     // The exact neon green the ON/OFF glass switch lights up with -- reused by the page-toggle

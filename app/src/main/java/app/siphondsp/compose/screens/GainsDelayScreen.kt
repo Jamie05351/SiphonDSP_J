@@ -18,6 +18,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.BmwChannelCard
+import app.siphondsp.compose.controls.BmwPanel
+import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -45,6 +47,7 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
     val mBlue = Color(BmwDashboardSkin.M_BLUE)
     val midSlider = Color(BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
     val lowSlider = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+    val stageAccent = Color(BmwDashboardSkin.SLIDER_STAGE_COLOR)
 
     BmwDspTheme {
         Column(
@@ -100,8 +103,41 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                     )
                 }
             }
+
+            // Stage timing -- a separate L/R stage-centring correction layer, downstream of the
+            // per-driver crossover delays in the cards above (native applies it to the summed
+            // output, after the master limiter). Left and Right are independent.
+            Spacer(Modifier.height(10.dp))
+            BmwPanel(
+                title = "Stage timing",
+                subtitle = "L/R alignment delay for stage centring. Independent of the per-driver " +
+                    "delays above; applied to the summed output.",
+                modifier = Modifier.fillMaxWidth(),
+                leanStart = 84.dp,
+                sliderLabels = listOf("Left", "Right"),
+            ) {
+                StageDelayRow(dsp, "Left", NativeBmwDspValues.INDEX_STAGE_DELAY_L, stageAccent)
+                StageDelayRow(dsp, "Right", NativeBmwDspValues.INDEX_STAGE_DELAY_R, stageAccent)
+            }
         }
     }
+}
+
+@Composable
+private fun StageDelayRow(dsp: BmwDspState, label: String, index: Int, accent: Color) {
+    BmwSliderRow(
+        label = label,
+        value = dsp.get(index),
+        valueRange = 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS,
+        step = 0.05f,
+        unit = "ms",
+        accentColor = accent,
+        // Commit on release / on typed entry only -- a delay value jumping every drag frame
+        // steps the fractional delay line and clicks. Matches the per-driver delay controls.
+        onPreview = {},
+        onCommit = { dsp.commit(index, it) },
+        onValueEntered = { dsp.commit(index, it) },
+    )
 }
 
 @Composable

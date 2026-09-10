@@ -183,7 +183,8 @@ class NativeBmwDspValuesTest {
             loaded[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES],
             0f,
         )
-        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
+        // The shared 139..142 marker climbs 0 -> 1 (meas-mute seeded) -> 2 (stage-delay reclaim).
+        assertEquals(2f, loaded[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
     }
 
     @Test
@@ -197,6 +198,38 @@ class NativeBmwDspValuesTest {
         val loaded = NativeBmwDspValues.load(context)
 
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES], 0f)
+    }
+
+    @Test
+    fun loadZeroesLeftoverMidLpfValuesWhenReclaimingStageDelaySlots() {
+        // A config saved while the short-lived Mid-band LPF lived at 141/142: enable flag +
+        // corner Hz. Read as stage delay ms, the corner would clamp to STAGE_DELAY_MAX_MS.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_STAGE_DELAY_L] = 1f
+            it[NativeBmwDspValues.INDEX_STAGE_DELAY_R] = 2000f
+            it[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
+        assertEquals(2f, loaded[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadKeepsAUserSetStageDelayOnceTheReclaimMigrationHasRun() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_STAGE_DELAY_L] = 3.5f
+            it[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 2f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(3.5f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
     }
 
     @Test
