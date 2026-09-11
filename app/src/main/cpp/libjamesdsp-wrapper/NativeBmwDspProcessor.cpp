@@ -13,6 +13,9 @@ constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
 inline float ftz(float x) {
     return (!std::isfinite(x) || std::fabs(x) < 1e-20f) ? 0.f : x;
 }
+inline double ftzd(double x) {
+    return (!std::isfinite(x) || std::fabs(x) < 1e-30) ? 0.0 : x;
+}
 template<class T>
 T clampInt(float x) {
     const double lo = static_cast<double>(std::numeric_limits<T>::min()),
@@ -47,10 +50,11 @@ using OutputId = NativeBmwRouting::OutputId;
 }  // namespace
 
 float NativeBmwDspProcessor::Biquad::run(float x) {
-    float y = b0 * x + z1;
-    z1 = ftz(b1 * x - a1 * y + z2);
-    z2 = ftz(b2 * x - a2 * y);
-    return ftz(y);
+    const double xd = static_cast<double>(x);
+    double y = b0 * xd + z1;
+    z1 = ftzd(b1 * xd - a1 * y + z2);
+    z2 = ftzd(b2 * xd - a2 * y);
+    return static_cast<float>(ftzd(y));
 }
 void NativeBmwDspProcessor::Biquad::clear() {
     z1 = z2 = 0;
@@ -392,9 +396,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 }
 
 void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) {
-    float w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-          a = s / (2 * Q), d = 1 + a;
-    q.b0 = ((1 - c) * .5f) / d;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
+           a = s / (2 * Q), d = 1 + a;
+    q.b0 = ((1 - c) * .5) / d;
     q.b1 = (1 - c) / d;
     q.b2 = q.b0;
     q.a1 = (-2 * c) / d;
@@ -402,9 +406,9 @@ void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) 
     q.clear();
 }
 void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr) {
-    float w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-          a = s / (2 * Q), d = 1 + a;
-    q.b0 = ((1 + c) * .5f) / d;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
+           a = s / (2 * Q), d = 1 + a;
+    q.b0 = ((1 + c) * .5) / d;
     q.b1 = (-(1 + c)) / d;
     q.b2 = q.b0;
     q.a1 = (-2 * c) / d;
@@ -417,9 +421,9 @@ void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr)
 // (tilt freq is [200,2000]); this is belt-and-braces so a future caller can't feed it a
 // near-Nyquist corner and get NaN coefficients with no identity fallback.
 void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float g, float sr) {
-    float A = std::pow(10.f, g / 40.f), w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr,
-          c = std::cos(w), s = std::sin(w), a = s / (2 * BW), r = std::sqrt(A),
-          iv = 1 / ((A + 1) + (A - 1) * c + 2 * r * a);
+    double A = std::pow(10., static_cast<double>(g) / 40.),
+           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
+           a = s / (2 * BW), r = std::sqrt(A), iv = 1 / ((A + 1) + (A - 1) * c + 2 * r * a);
     q.b0 = A * ((A + 1) - (A - 1) * c + 2 * r * a) * iv;
     q.b1 = 2 * A * ((A - 1) - (A + 1) * c) * iv;
     q.b2 = A * ((A + 1) - (A - 1) * c - 2 * r * a) * iv;
@@ -428,9 +432,9 @@ void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float g, float sr)
     q.clear();
 }
 void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float g, float sr) {
-    float A = std::pow(10.f, g / 40.f), w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr,
-          c = std::cos(w), s = std::sin(w), a = s / (2 * BW), r = std::sqrt(A),
-          iv = 1 / ((A + 1) - (A - 1) * c + 2 * r * a);
+    double A = std::pow(10., static_cast<double>(g) / 40.),
+           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
+           a = s / (2 * BW), r = std::sqrt(A), iv = 1 / ((A + 1) - (A - 1) * c + 2 * r * a);
     q.b0 = A * ((A + 1) + (A - 1) * c + 2 * r * a) * iv;
     q.b1 = -2 * A * ((A - 1) + (A + 1) * c) * iv;
     q.b2 = A * ((A + 1) + (A - 1) * c - 2 * r * a) * iv;
@@ -442,11 +446,11 @@ void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float g, float sr
 // magnitude everywhere, -360 deg phase sweep through fc. Matches
 // NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC tree.
 void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
-    float w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-          a = s / (2 * BW), d = 1 + a;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
+           a = s / (2 * BW), d = 1 + a;
     q.b0 = (1 - a) / d;
     q.b1 = (-2 * c) / d;
-    q.b2 = 1.f;
+    q.b2 = 1.0;
     q.a1 = (-2 * c) / d;
     q.a2 = (1 - a) / d;
     q.clear();

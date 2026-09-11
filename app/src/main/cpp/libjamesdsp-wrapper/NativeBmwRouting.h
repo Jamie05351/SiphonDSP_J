@@ -70,11 +70,11 @@ struct RoutingMatrix {
 };
 
 struct BiquadCoefficients {
-    float b0 = 1.0f;
-    float b1 = 0.0f;
-    float b2 = 0.0f;
-    float a1 = 0.0f;
-    float a2 = 0.0f;
+    double b0 = 1.0;
+    double b1 = 0.0;
+    double b2 = 0.0;
+    double a1 = 0.0;
+    double a2 = 0.0;
 };
 
 /**
@@ -107,41 +107,41 @@ struct AllPassSection {
             return false;
         }
 
-        constexpr float pi = 3.14159265358979323846f;
-        const float omega = 2.0f * pi * frequencyHz / sampleRate;
+        constexpr double pi = 3.14159265358979323846;
+        const double omega = 2.0 * pi * static_cast<double>(frequencyHz) / static_cast<double>(sampleRate);
 
         if (!secondOrder) {
-            const float tangent = std::tan(omega * 0.5f);
-            const float denom = tangent + 1.0f;
-            if (!std::isfinite(denom) || std::fabs(denom) < 1.0e-12f) {
+            const double tangent = std::tan(omega * 0.5);
+            const double denom = tangent + 1.0;
+            if (!std::isfinite(denom) || std::fabs(denom) < 1.0e-12) {
                 return false;
             }
-            const float a = (tangent - 1.0f) / denom;
+            const double a = (tangent - 1.0) / denom;
             if (!std::isfinite(a)) {
                 return false;
             }
             coefficients.b0 = a;
-            coefficients.b1 = 1.0f;
-            coefficients.b2 = 0.0f;
+            coefficients.b1 = 1.0;
+            coefficients.b2 = 0.0;
             coefficients.a1 = a;
-            coefficients.a2 = 0.0f;
+            coefficients.a2 = 0.0;
             return true;
         }
 
-        const float cosine = std::cos(omega);
-        const float sine = std::sin(omega);
-        const float alpha = sine / (2.0f * q);
-        const float a0 = 1.0f + alpha;
-        if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12f) {
+        const double cosine = std::cos(omega);
+        const double sine = std::sin(omega);
+        const double alpha = sine / (2.0 * static_cast<double>(q));
+        const double a0 = 1.0 + alpha;
+        if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12) {
             return false;
         }
 
         // RBJ second-order all-pass: numerator is reversed denominator.
-        coefficients.b0 = (1.0f - alpha) / a0;
-        coefficients.b1 = (-2.0f * cosine) / a0;
-        coefficients.b2 = 1.0f;
-        coefficients.a1 = (-2.0f * cosine) / a0;
-        coefficients.a2 = (1.0f - alpha) / a0;
+        coefficients.b0 = (1.0 - alpha) / a0;
+        coefficients.b1 = (-2.0 * cosine) / a0;
+        coefficients.b2 = 1.0;
+        coefficients.a1 = (-2.0 * cosine) / a0;
+        coefficients.a2 = (1.0 - alpha) / a0;
         if (!std::isfinite(coefficients.b0) || !std::isfinite(coefficients.b1) ||
             !std::isfinite(coefficients.a1) || !std::isfinite(coefficients.a2)) {
             coefficients = {};
