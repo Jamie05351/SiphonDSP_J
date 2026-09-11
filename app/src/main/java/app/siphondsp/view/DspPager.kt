@@ -3,26 +3,27 @@ package app.siphondsp.view
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
 import kotlin.math.roundToInt
 
 /**
- * Wraps a fixed set of pre-built page views in a [ViewPager2] with a numbered page-toggle strip
- * docked as a footer below the pages -- for the DSP workspace screens that page their sections
- * (Gains & Delay, Crossovers & Tilt, Compressor, All-pass; the Parametric EQ screen builds its own
- * pager and is deliberately not routed through here). Tap a number to jump; horizontal swipe still
- * works. Selected box's border and number light green (the same neon as the ON/OFF switch), no
- * fill -- unselected boxes and numbers are greyed. Hand-rolled to match the rest of this dashboard
- * chrome.
+ * Wraps a fixed set of pre-built page views in a [ViewPager2] with a small dot page indicator --
+ * for the DSP workspace screens that page their sections (Gains & Delay, Crossovers & Tilt,
+ * Compressor, All-pass; the Parametric EQ screen builds its own pager and is deliberately not
+ * routed through here). Tap a dot to jump; horizontal swipe still works.
  *
- * The strip used to dock in the top toolbar (`R.id.dsp_page_toggle_slot`, since removed) -- top
- * edge of a 1280x480 head-unit screen turned out to be an awkward reach and a fiddly tap target
- * with real fingers. A bottom footer, same width as the content column, is both easier to reach
- * and gives the boxes more room than the 36dp toolbar band ever allowed.
+ * The dots float directly over the bottom of the page (a [FrameLayout] overlay, not a footer that
+ * reserves its own row) and paint no card/box behind them -- just the dot itself, same neon green
+ * as the ON/OFF switch when selected, dim when not. Each dot's actual touch target is bigger than
+ * its drawn circle (an [InsetDrawable] wrapping a small [GradientDrawable] oval), so tapping is
+ * still comfortable without the visible footprint looking like a button. Previously a numbered
+ * strip that lived first in the top toolbar, then a dedicated footer row -- both read as an
+ * unwanted opaque bar sitting on top of the workspace chrome.
  */
 object DspPager {
     fun build(
@@ -30,10 +31,6 @@ object DspPager {
         pages: List<View>,
         onPageSelected: (Int) -> Unit = {},
     ): View {
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
         // Each page is wrapped in a PagerChildSwipeGate: a quick horizontal flick that lands on a
         // slider row turns the page instead of nudging (and committing) the slider, while a slow,
         // deliberate horizontal drag still adjusts the slider. The gate also satisfies ViewPager2's
@@ -46,76 +43,74 @@ object DspPager {
             adapter = StaticPagerAdapter(gatedPages)
         }
 
-        root.addView(viewPager, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        val root = FrameLayout(context)
+        root.addView(viewPager, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
 
         if (pages.size > 1) {
-            val boxes = pages.indices.map { index ->
-                TextView(context).apply {
-                    text = (index + 1).toString()
-                    gravity = Gravity.CENTER
-                    textSize = 15f
-                    includeFontPadding = false
+            val dots = pages.indices.map { index ->
+                View(context).apply {
                     isSelected = index == 0
-                    // Explicit -- a TextView is only clickable once a listener is attached, and the
+                    // Explicit -- a View is only clickable once a listener is attached, and the
                     // hit target should not depend on that ordering.
                     isClickable = true
                     isFocusable = true
-                    applyToggleBoxStyle(context, this)
+                    background = dotDrawable(context, selected = isSelected)
                     setOnClickListener { viewPager.setCurrentItem(index, true) }
                 }
             }
-            val toggleRow = LinearLayout(context).apply {
+            val dotsRow = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6))
-                // Own the whole footer so a tap that lands in the gap between two numbers is
-                // absorbed here rather than falling through to the page behind it.
+                // Wrap-content, not full width: this row only owns the small area right around
+                // the dots, so it can't shadow-block taps anywhere else on the page. isClickable
+                // absorbs a tap landing in the narrow gap between two dots, so it doesn't fall
+                // through to whatever's on the page underneath.
                 isClickable = true
-                boxes.forEach { box ->
-                    // A real footer row (not squeezed into the old 36dp toolbar band), so the
-                    // boxes clear Android's 48dp minimum touch target -- was 46x30 with an 18dp
-                    // gap when this lived in the toolbar.
-                    addView(box, LinearLayout.LayoutParams(dp(context, 52), dp(context, 48)).apply {
-                        marginStart = dp(context, 20)
-                    })
+                dots.forEach { dot ->
+                    addView(dot, LinearLayout.LayoutParams(dp(context, TOUCH_TARGET_DP), dp(context, TOUCH_TARGET_DP)))
                 }
             }
             viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
-                    boxes.forEachIndexed { index, box ->
-                        box.isSelected = index == position
-                        applyToggleBoxStyle(context, box)
+                    dots.forEachIndexed { index, dot ->
+                        val selected = index == position
+                        dot.isSelected = selected
+                        dot.background = dotDrawable(context, selected)
                     }
                     onPageSelected(position)
                 }
             })
-            root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            root.addView(
+                dotsRow,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+                ).apply { bottomMargin = dp(context, 10) },
+            )
         }
 
         return root
     }
 
-    private fun applyToggleBoxStyle(context: Context, box: TextView) {
-        val selected = box.isSelected
-        box.background = GradientDrawable().apply {
-            cornerRadius = dp(context, 6).toFloat()
-            // No fill on the selected box any more -- just its border and number light green;
-            // the workspace background shows through, same as unselected (which was never filled
-            // solid either).
-            setColor(if (selected) Color.TRANSPARENT else UNSELECTED_FILL)
-            setStroke(
-                dp(context, 1),
-                if (selected) BmwDashboardSkin.TOGGLE_ON_GREEN else UNSELECTED_STROKE,
-            )
+    /** A plain filled circle, no stroke/card -- [InsetDrawable] centers it inside the larger
+     *  [TOUCH_TARGET_DP] touch target the dot View itself uses. */
+    private fun dotDrawable(context: Context, selected: Boolean): InsetDrawable {
+        val diameterDp = if (selected) SELECTED_DOT_DP else DOT_DP
+        val oval = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (selected) BmwDashboardSkin.TOGGLE_ON_GREEN else UNSELECTED_DOT)
         }
-        box.setTextColor(if (selected) BmwDashboardSkin.TOGGLE_ON_GREEN else UNSELECTED_TEXT)
-        box.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+        val inset = (dp(context, TOUCH_TARGET_DP) - dp(context, diameterDp)) / 2
+        return InsetDrawable(oval, inset)
     }
 
-    // 50% opacity so the photo background reads through the box -- glassier than a near-opaque fill.
-    private val UNSELECTED_FILL = Color.argb(0x80, 0x10, 0x12, 0x16)
-    private val UNSELECTED_STROKE = Color.argb(0x66, 0x8A, 0x93, 0x9E)
-    private val UNSELECTED_TEXT = Color.argb(0xB0, 0x9A, 0xA1, 0xAB)
+    private const val TOUCH_TARGET_DP = 40
+    private const val DOT_DP = 7
+    private const val SELECTED_DOT_DP = 9
+
+    // Translucent so it reads as a dim marker, not a filled UI element competing with the page.
+    private val UNSELECTED_DOT = Color.argb(0x8A, 0xB2, 0xBB, 0xC6)
 
     private fun dp(context: Context, value: Int) = (value * context.resources.displayMetrics.density).roundToInt()
 }

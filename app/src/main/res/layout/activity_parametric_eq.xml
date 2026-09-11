@@ -69,8 +69,8 @@
 
     <!-- Declared last so the toolbar chrome renders above the content. Transparent, no elevation,
          no ///M stripe (removed &#8212; the carbon ///M logo is baked into the backdrop's bottom-right
-         instead). The back arrow, bypass-state strip and page-toggle numbers are indented past
-         the rail so they never sit over it. -->
+         instead). The back arrow and bypass-state strip are indented past the rail so they never
+         sit over it. -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
