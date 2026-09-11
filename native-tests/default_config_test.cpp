@@ -231,3 +231,44 @@ TEST_CASE("Full-range PEQ all-pass band has unity magnitude everywhere") {
         CHECK(std::fabs(measuredDb) < 0.3);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (tonality tilt shelf): tilt is two cascaded
+// low-shelf stages (+g dB each) and two cascaded high-shelf stages (-g dB each) at the same
+// corner, all fixed Q=1/sqrt(2) (rebuildTilt: g = tiltAmount * 0.75f). Two identical cascaded
+// shelf stages add their dB gains, so the asymptotic tilt -- well below/above tiltFreq, where
+// each shelf pair has fully settled -- is exactly +/-2g dB. Verified with a throwaway model
+// before writing this: at 1/10th and 10x tiltFreq, measured asymptotic gain was within 0.002 dB
+// of the theoretical +/-2g.
+//
+// Tilt is applied identically to both final-output channels before the deliberate L/R swap (see
+// the subsonic test above), so which physical side maps to which buffer channel doesn't matter
+// here either. Uses the with/without differential like the subsonic test, cancelling out
+// everything else in the chain rather than asserting an absolute level.
+TEST_CASE("Tilt shelf pair matches its designed asymptotic gain") {
+    auto cfgOn = flatConfig();
+    auto cfgOff = flatConfig();
+    constexpr float kTiltAmount = 4.f;
+    constexpr float kTiltFreq = 500.f;
+    cfgOn[nbschema::kTiltEnabled] = 1.f;
+    cfgOn[nbschema::kTiltAmount] = kTiltAmount;
+    cfgOn[nbschema::kTiltFreq] = kTiltFreq;
+
+    const double lowFreq = static_cast<double>(kTiltFreq) / 10.0;
+    const double highFreq = static_cast<double>(kTiltFreq) * 10.0;
+    const double amp = 0.05;
+    const double expectedAsymptoteDb = 2.0 * (static_cast<double>(kTiltAmount) * 0.75);
+
+    struct Case { double freq, expectedDb; };
+    const Case cases[] = {
+        {lowFreq, expectedAsymptoteDb},
+        {highFreq, -expectedAsymptoteDb},
+    };
+    for (const auto& c : cases) {
+        NativeBmwDspProcessor on, off;
+        const double onDb = linToDb(channelMagnitudeAt(renderSteadyState(on, cfgOn, c.freq, amp), 0, c.freq));
+        const double offDb = linToDb(channelMagnitudeAt(renderSteadyState(off, cfgOff, c.freq, amp), 0, c.freq));
+        const double measuredDb = onDb - offDb;
+        INFO("f=", c.freq, " Hz  measured=", measuredDb, " dB  expected=", c.expectedDb, " dB");
+        CHECK(std::fabs(measuredDb - c.expectedDb) < 0.3);
+    }
+}
