@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
-import app.siphondsp.R
 import app.siphondsp.compose.screens.OutputAllPassScreen
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
@@ -54,7 +53,6 @@ class OutputAllPassFragment : Fragment() {
                     page(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
                     page(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
                 ),
-                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )

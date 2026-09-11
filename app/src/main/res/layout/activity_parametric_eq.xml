@@ -101,13 +101,6 @@
                 android:layout_height="match_parent"
                 android:layout_gravity="start|center_vertical"
                 android:layout_marginStart="@dimen/dsp_status_strip_margin_start" />
-
-            <FrameLayout
-                android:id="@+id/dsp_page_toggle_slot"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="16dp" />
         </FrameLayout>
 
     </com.google.android.material.appbar.AppBarLayout>

@@ -54,11 +54,7 @@ class NativeBmwCompressorFragment : Fragment() {
 
         pagerContainer.removeAllViews()
         pagerContainer.addView(
-            DspPager.build(
-                ctx,
-                pages,
-                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
-            ),
+            DspPager.build(ctx, pages),
         )
     }
 }

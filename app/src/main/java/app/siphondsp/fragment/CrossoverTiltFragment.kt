@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
-import app.siphondsp.R
 import app.siphondsp.compose.screens.CrossoversPageScreen
 import app.siphondsp.compose.screens.TonalityTiltScreen
 import app.siphondsp.view.DspPager
@@ -48,7 +47,6 @@ class CrossoverTiltFragment : Fragment() {
                     ComposeView(ctx).apply { setContent { CrossoversPageScreen() } },
                     ComposeView(ctx).apply { setContent { TonalityTiltScreen() } },
                 ),
-                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
