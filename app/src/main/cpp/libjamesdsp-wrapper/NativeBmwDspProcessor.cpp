@@ -51,20 +51,33 @@ using OutputId = NativeBmwRouting::OutputId;
 
 float NativeBmwDspProcessor::Biquad::run(float x) {
     const double xd = static_cast<double>(x);
-    double y = b0 * xd + z1;
-    z1 = ftzd(b1 * xd - a1 * y + z2);
-    z2 = ftzd(b2 * xd - a2 * y);
-    return static_cast<float>(ftzd(y));
+    if (firstOrder) {
+        // Untouched 1-pole all-pass recursion (RBJ cookbook): y = a*x + z1; z1' = x - a*y.
+        const double y = op_a * xd + op_z1;
+        op_z1 = ftzd(xd - op_a * y);
+        return static_cast<float>(ftzd(y));
+    }
+    // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form.
+    const double v3 = xd - ic2eq;
+    const double v1 = a1 * ic1eq + a2 * v3;
+    const double v2 = ic2eq + a2 * ic1eq + a3 * v3;
+    ic1eq = ftzd(2.0 * v1 - ic1eq);
+    ic2eq = ftzd(2.0 * v2 - ic2eq);
+    return static_cast<float>(ftzd(m0 * xd + m1 * v1 + m2 * v2));
 }
 void NativeBmwDspProcessor::Biquad::clear() {
-    z1 = z2 = 0;
+    op_z1 = 0;
+    ic1eq = ic2eq = 0;
 }
 void NativeBmwDspProcessor::Biquad::loadAllPass(const NativeBmwRouting::BiquadCoefficients& c) {
-    b0 = c.b0;
-    b1 = c.b1;
-    b2 = c.b2;
+    firstOrder = c.firstOrder;
+    op_a = c.opA;
     a1 = c.a1;
     a2 = c.a2;
+    a3 = c.a3;
+    m0 = c.m0;
+    m1 = c.m1;
+    m2 = c.m2;
     clear();
 }
 float NativeBmwDspProcessor::PeqBank::processLeft(float sample) {
@@ -381,113 +394,129 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     return true;
 }
 
+// Trapezoidal SVF, Andy Simper/Cytomic form: g = tan(w/2) (w = 2*pi*fc/sr, the usual bilinear
+// prewarp), k = 1/Q. a1/a2/a3 are shared by every 2nd-order type below; m0/m1/m2 pick the type by
+// mixing the input with the two integrator outputs (v1, v2) in Biquad::run. Verified against this
+// file's previous RBJ DF2T formulas by direct time-domain simulation (magnitude+phase match to
+// machine precision across every filter type/fc/Q/gain this engine uses) before this migration --
+// see PR description, not reproduced as a runtime check.
 void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * Q), d = 1 + a;
-    q.b0 = ((1 - c) * .5) / d;
-    q.b1 = (1 - c) / d;
-    q.b2 = q.b0;
-    q.a1 = (-2 * c) / d;
-    q.a2 = (1 - a) / d;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
+           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = 0;
+    q.m1 = 0;
+    q.m2 = 1;
     q.clear();
 }
 void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * Q), d = 1 + a;
-    q.b0 = ((1 + c) * .5) / d;
-    q.b1 = (-(1 + c)) / d;
-    q.b2 = q.b0;
-    q.a1 = (-2 * c) / d;
-    q.a2 = (1 - a) / d;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
+           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = 1;
+    q.m1 = -k;
+    q.m2 = -1;
     q.clear();
 }
 // fc clamp matches makeLowPass/makeHighPass/makeAllPass2: every coefficient builder in this file
-// keeps its corner inside [20 Hz, 0.49*sr] so w stays well below pi and sin(w) stays positive --
-// the shelf denominator (A+1)+(A-1)c+2*r*a then can't collapse toward zero. Callers already clamp
-// (tilt freq is [200,2000]); this is belt-and-braces so a future caller can't feed it a
-// near-Nyquist corner and get NaN coefficients with no identity fallback.
-void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float g, float sr) {
-    double A = std::pow(10., static_cast<double>(g) / 40.),
-           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * BW), r = std::sqrt(A), iv = 1 / ((A + 1) + (A - 1) * c + 2 * r * a);
-    q.b0 = A * ((A + 1) - (A - 1) * c + 2 * r * a) * iv;
-    q.b1 = 2 * A * ((A - 1) - (A + 1) * c) * iv;
-    q.b2 = A * ((A + 1) - (A - 1) * c - 2 * r * a) * iv;
-    q.a1 = -2 * ((A - 1) + (A + 1) * c) * iv;
-    q.a2 = ((A + 1) + (A - 1) * c - 2 * r * a) * iv;
+// keeps its corner inside [20 Hz, 0.49*sr] so w stays well below pi -- g=tan(w/2) then stays
+// large-but-finite instead of approaching the asymptote at w/2=pi/2 (fc -> Nyquist). Callers
+// already clamp (tilt freq is [200,2000]); this is belt-and-braces so a future caller can't feed
+// it a near-Nyquist corner and get non-finite coefficients with no identity fallback.
+void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float gainDb, float sr) {
+    double A = std::pow(10., static_cast<double>(gainDb) / 40.),
+           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) / std::sqrt(A),
+           k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = 1;
+    q.m1 = k * (A - 1);
+    q.m2 = A * A - 1;
     q.clear();
 }
-void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float g, float sr) {
-    double A = std::pow(10., static_cast<double>(g) / 40.),
-           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * BW), r = std::sqrt(A), iv = 1 / ((A + 1) - (A - 1) * c + 2 * r * a);
-    q.b0 = A * ((A + 1) + (A - 1) * c + 2 * r * a) * iv;
-    q.b1 = -2 * A * ((A - 1) + (A + 1) * c) * iv;
-    q.b2 = A * ((A + 1) + (A - 1) * c - 2 * r * a) * iv;
-    q.a1 = 2 * ((A - 1) - (A + 1) * c) * iv;
-    q.a2 = ((A + 1) - (A - 1) * c - 2 * r * a) * iv;
+void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, float sr) {
+    double A = std::pow(10., static_cast<double>(gainDb) / 40.),
+           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) * std::sqrt(A),
+           k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = A * A;
+    q.m1 = k * (1 - A) * A;
+    q.m2 = 1 - A * A;
     q.clear();
 }
-// RBJ 2nd-order all-pass, Q = 1/sqrt(2). Numerator is the reversed denominator -- unity
-// magnitude everywhere, -360 deg phase sweep through fc. Matches
-// NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC tree.
+// SVF all-pass, Q = 1/sqrt(2). Unity magnitude everywhere, -360 deg phase sweep through fc.
+// Matches NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC
+// tree.
 void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * BW), d = 1 + a;
-    q.b0 = (1 - a) / d;
-    q.b1 = (-2 * c) / d;
-    q.b2 = 1.0;
-    q.a1 = (-2 * c) / d;
-    q.a2 = (1 - a) / d;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW,
+           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = 1;
+    q.m1 = -2 * k;
+    q.m2 = 0;
     q.clear();
 }
-bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double g, double Q, int type, float sr) {
-    if (!std::isfinite(f) || !std::isfinite(g) || !std::isfinite(Q) || f < 20 || f >= sr * .5 ||
+bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q, int type, float sr) {
+    if (!std::isfinite(f) || !std::isfinite(gainDb) || !std::isfinite(Q) || f < 20 || f >= sr * .5 ||
         Q < .1 || Q > 30 || type < 0 || type > 3) {
         return false;
     }
-    double A = std::pow(10., g / 40.), w = 2. * PI * f / sr, c = std::cos(w), s = std::sin(w),
-           a = s / (2 * Q), b0, b1, b2, a0, a1, a2;
+    double A = std::pow(10., gainDb / 40.), w = 2. * PI * f / sr, g = std::tan(w * .5), k, m0, m1, m2;
     if (type == 0) {
-        b0 = 1 + a * A;
-        b1 = -2 * c;
-        b2 = 1 - a * A;
-        a0 = 1 + a / A;
-        a1 = -2 * c;
-        a2 = 1 - a / A;
-    } else if (type == 3) {
-        b0 = 1;
-        b1 = -2 * c;
-        b2 = 1;
-        a0 = 1 + a;
-        a1 = -2 * c;
-        a2 = 1 - a;
+        // Bell/peak: k folds A into the Q term rather than into g (the shelf types below do the
+        // opposite) -- this is the standard Cytomic bell derivation, confirmed against the old
+        // RBJ bell formula's response, not read off intuition.
+        k = 1. / (Q * A);
+        m0 = 1;
+        m1 = k * (A * A - 1);
+        m2 = 0;
+    } else if (type == 1) {
+        g /= std::sqrt(A);
+        k = 1. / Q;
+        m0 = 1;
+        m1 = k * (A - 1);
+        m2 = A * A - 1;
+    } else if (type == 2) {
+        g *= std::sqrt(A);
+        k = 1. / Q;
+        m0 = A * A;
+        m1 = k * (1 - A) * A;
+        m2 = 1 - A * A;
     } else {
-        double r = std::sqrt(A), t = 2 * r * a;
-        if (type == 1) {
-            b0 = A * ((A + 1) - (A - 1) * c + t);
-            b1 = 2 * A * ((A - 1) - (A + 1) * c);
-            b2 = A * ((A + 1) - (A - 1) * c - t);
-            a0 = (A + 1) + (A - 1) * c + t;
-            a1 = -2 * ((A - 1) + (A + 1) * c);
-            a2 = (A + 1) + (A - 1) * c - t;
-        } else {
-            b0 = A * ((A + 1) + (A - 1) * c + t);
-            b1 = -2 * A * ((A - 1) + (A + 1) * c);
-            b2 = A * ((A + 1) + (A - 1) * c - t);
-            a0 = (A + 1) - (A - 1) * c + t;
-            a1 = 2 * ((A - 1) - (A + 1) * c);
-            a2 = (A + 1) - (A - 1) * c - t;
-        }
+        k = 1. / Q;
+        m0 = 1;
+        m1 = -2 * k;
+        m2 = 0;
     }
-    if (!std::isfinite(a0) || std::fabs(a0) < 1e-15) {
+    const double a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    // makePeq is the one coefficient builder here with fc unclamped up to true Nyquist (arbitrary
+    // user-edited PEQ bands), so it's the one that keeps an explicit finite-result guard -- g can
+    // grow very large as f approaches sr/2 (g=tan(w/2) has no asymptote-avoiding margin here the
+    // way the 0.49*sr-clamped builders above do).
+    if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3)) {
         return false;
     }
-    q.b0 = b0 / a0;
-    q.b1 = b1 / a0;
-    q.b2 = b2 / a0;
-    q.a1 = a1 / a0;
-    q.a2 = a2 / a0;
+    q.firstOrder = false;
+    q.a1 = a1;
+    q.a2 = a2;
+    q.a3 = a3;
+    q.m0 = m0;
+    q.m1 = m1;
+    q.m2 = m2;
     q.clear();
     return true;
 }

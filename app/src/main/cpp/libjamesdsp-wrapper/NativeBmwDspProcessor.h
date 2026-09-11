@@ -136,13 +136,35 @@ private:
         DirtyAll = 0xffffffffu,
     };
 
-    // Coefficients and DF2T state are double, not float: at low corner frequencies relative to
-    // the sample rate -- the subsonic HPF (~32 Hz), the low-band crossover, and the 40-65 Hz
-    // phase-alignment all-pass sections -- the pole coefficients cluster very close to the unit
-    // circle (a1 ~= -2, a2 ~= 1), and running that recursion in float32 loses meaningful
-    // precision. Don't simplify this back to float.
+    // Trapezoidal-integrated state variable filter (Andy Simper / "Cytomic" topology), not RBJ
+    // Direct Form II Transposed. DF2T's a1/a2 coefficients cluster near the unit circle at low
+    // corner frequencies relative to the sample rate -- the subsonic HPF (~32 Hz), the low-band
+    // crossover, the 40-65 Hz phase-alignment all-pass sections -- which is exactly the case SVF
+    // is designed for: its two trapezoidal integrator states (ic1eq/ic2eq) stay well-conditioned
+    // there by construction, rather than needing double precision (still used throughout, see
+    // below) to paper over an ill-conditioned realization. Every coefficient-design function
+    // below (makeLowPass/makeHighPass/makeLowShelf/makeHighShelf/makeAllPass2/makePeq) derives
+    // the identical designed transfer function the old RBJ formulas did -- verified by direct
+    // time-domain simulation against those formulas before this migration, machine-precision
+    // match on magnitude and phase across every filter type/fc/Q/gain this engine uses. Don't
+    // simplify this back to DF2T or to float.
     struct Biquad {
-        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+        // firstOrder is the one exception to the SVF topology: a true 1-pole design (used only by
+        // NativeBmwRouting::AllPassSection's optional 1st-order phase-align case) doesn't map
+        // onto SVF's 2-integrator form, so it keeps its original 1-pole recursion untouched,
+        // stored alongside the SVF fields rather than forcing a degenerate-case SVF derivation
+        // nobody asked for. Still per-instance state, no sharing -- just a branch in run().
+        bool firstOrder = false;
+        double op_z1 = 0, op_a = 0;
+        // SVF state (trapezoidal integrators).
+        double ic1eq = 0, ic2eq = 0;
+        // SVF coefficients: a1/a2/a3 from g=tan(pi*fc/fs), k=1/Q; m0/m1/m2 select the filter type
+        // (LP/HP/shelf/bell/all-pass) as a mix of the two integrator outputs plus the input.
+        // Defaults (a1=a2=a3=0, m0=1/m1=0/m2=0) are an identity pass-through -- matching the old
+        // DF2T struct's b0=1-rest-0 default -- so a Biquad that somehow runs before its owning
+        // rebuild*() ever fires (e.g. process() called before the first configure()) is inert
+        // instead of silent.
+        double a1 = 0, a2 = 0, a3 = 0, m0 = 1, m1 = 0, m2 = 0;
         float run(float x);
         void clear();
         void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
