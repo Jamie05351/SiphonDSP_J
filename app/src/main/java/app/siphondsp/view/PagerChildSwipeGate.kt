@@ -185,7 +185,13 @@ class PagerChildSwipeGate(context: Context) : FrameLayout(context) {
     }
 
     companion object {
-        private const val HANDOFF_DP_PER_SEC = 700f
+        // Was 700f, tuned against emulator/desktop touch input. On the physical head unit's
+        // touchscreen -- which reports coordinates with more latency/smoothing than a phone or
+        // the emulator -- even a deliberate flick rarely measured that fast, so paging almost
+        // never triggered. Lowered to stay comfortably above "a few hundred dp/s" (the careful
+        // slider drag the gate must still not misclassify) while giving a real head-unit flick
+        // room to clear it.
+        private const val HANDOFF_DP_PER_SEC = 420f
         private const val HORIZONTAL_BIAS = 1.2f
 
         /** Wrap [content] so it fills the pager page and gate its horizontal drags. */

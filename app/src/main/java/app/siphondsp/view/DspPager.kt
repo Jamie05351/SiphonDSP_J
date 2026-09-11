@@ -5,32 +5,30 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
 import kotlin.math.roundToInt
 
 /**
- * Wraps a fixed set of pre-built page views in a [ViewPager2] with a numbered page-toggle strip,
- * top-right -- for the DSP workspace screens that page their sections (Gains & Delay, Crossovers
- * & Tilt, Compressor, All-pass; the Parametric EQ screen builds its own pager and is deliberately
- * not routed through here). Tap a number to jump; horizontal swipe still works. Selected box's
- * border and number light green (the same neon as the ON/OFF switch), no fill -- unselected boxes
- * and numbers are greyed. Hand-rolled to match the rest of this dashboard chrome.
+ * Wraps a fixed set of pre-built page views in a [ViewPager2] with a numbered page-toggle strip
+ * docked as a footer below the pages -- for the DSP workspace screens that page their sections
+ * (Gains & Delay, Crossovers & Tilt, Compressor, All-pass; the Parametric EQ screen builds its own
+ * pager and is deliberately not routed through here). Tap a number to jump; horizontal swipe still
+ * works. Selected box's border and number light green (the same neon as the ON/OFF switch), no
+ * fill -- unselected boxes and numbers are greyed. Hand-rolled to match the rest of this dashboard
+ * chrome.
  *
- * [toggleContainer], when given, is where the toggle row docks instead of the pager's own root --
- * callers pass the activity's `R.id.dsp_page_toggle_slot` (see activity_parametric_eq.xml) so the
- * numbers sit in their own row above the tri-colour stripe, not inside the scrolling content.
- * null keeps the toggle pinned atop the pager itself, same as before.
+ * The strip used to dock in the top toolbar (`R.id.dsp_page_toggle_slot`, since removed) -- top
+ * edge of a 1280x480 head-unit screen turned out to be an awkward reach and a fiddly tap target
+ * with real fingers. A bottom footer, same width as the content column, is both easier to reach
+ * and gives the boxes more room than the 36dp toolbar band ever allowed.
  */
 object DspPager {
     fun build(
         context: Context,
         pages: List<View>,
         onPageSelected: (Int) -> Unit = {},
-        toggleContainer: ViewGroup? = null,
     ): View {
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -48,12 +46,14 @@ object DspPager {
             adapter = StaticPagerAdapter(gatedPages)
         }
 
+        root.addView(viewPager, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
         if (pages.size > 1) {
             val boxes = pages.indices.map { index ->
                 TextView(context).apply {
                     text = (index + 1).toString()
                     gravity = Gravity.CENTER
-                    textSize = 14f
+                    textSize = 15f
                     includeFontPadding = false
                     isSelected = index == 0
                     // Explicit -- a TextView is only clickable once a listener is attached, and the
@@ -66,22 +66,17 @@ object DspPager {
             }
             val toggleRow = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                // Vertical room is capped at the 36dp toolbar band (header_toolbar_height); grow
-                // the hit target horizontally instead, where the app-bar has space.
-                setPadding(dp(context, 6), dp(context, 3), dp(context, 8), dp(context, 3))
-                // Own the whole strip so a tap that lands in the gap between two numbers is
-                // absorbed here rather than falling through to the toolbar / app-bar behind it.
+                gravity = Gravity.CENTER
+                setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6))
+                // Own the whole footer so a tap that lands in the gap between two numbers is
+                // absorbed here rather than falling through to the page behind it.
                 isClickable = true
-                // Sit unambiguously above the MaterialToolbar it shares the app-bar FrameLayout
-                // with, so the numbers actually receive the touch.
-                elevation = dp(context, 8).toFloat()
                 boxes.forEach { box ->
-                    // Wider boxes with a wider gap so a deliberate tap isn't a guess and an
-                    // incidental brush doesn't flip the page (was 33x28 / 8dp gap). Height stays
-                    // within the 36dp band: 30 + 2x3 padding.
-                    addView(box, LinearLayout.LayoutParams(dp(context, 46), dp(context, 30)).apply {
-                        marginStart = dp(context, 18)
+                    // A real footer row (not squeezed into the old 36dp toolbar band), so the
+                    // boxes clear Android's 48dp minimum touch target -- was 46x30 with an 18dp
+                    // gap when this lived in the toolbar.
+                    addView(box, LinearLayout.LayoutParams(dp(context, 52), dp(context, 48)).apply {
+                        marginStart = dp(context, 20)
                     })
                 }
             }
@@ -94,27 +89,9 @@ object DspPager {
                     onPageSelected(position)
                 }
             })
-            if (toggleContainer != null) {
-                // The slot itself is wrap_content-width (see activity_parametric_eq.xml) so it
-                // doesn't add to the toolbar's own fixed height -- match its width here too
-                // (not MATCH_PARENT) so the two don't fight over sizing the row. Pin it end /
-                // centre-vertical explicitly: a bare ViewGroup.LayoutParams lands the row at the
-                // slot's top-left with no gravity, which drifts the hit areas off the numbers.
-                toggleContainer.removeAllViews()
-                toggleContainer.addView(
-                    toggleRow,
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        Gravity.END or Gravity.CENTER_VERTICAL,
-                    ),
-                )
-            } else {
-                root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            }
+            root.addView(toggleRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
 
-        root.addView(viewPager, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
 

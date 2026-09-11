@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
-import app.siphondsp.R
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
@@ -62,7 +61,6 @@ class GainLimiterFragment : Fragment() {
             DspPager.build(
                 requireContext(),
                 listOf(diagramPage, outputPage, busLimiterPage),
-                toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
