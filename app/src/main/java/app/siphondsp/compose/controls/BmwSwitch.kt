@@ -99,17 +99,19 @@ fun BmwSwitch(
 }
 
 // --- geometry --------------------------------------------------------------------------------
-private val ComponentWidth = 62.dp
-private val ComponentHeight = 34.dp
-private val PillHeight = 25.dp
+// Longer than the old 62x34 switch: the knob + label had no room to breathe. The toggle-zone
+// slot every call site puts this in is >=120dp wide, so the extra length costs no layout.
+private val ComponentWidth = 82.dp
+private val ComponentHeight = 35.dp
+private val PillHeight = 26.dp
 private val PillBorderWidth = 1.4.dp
 private val KnobDiameter = 30.dp
 private val KnobShadowBlur = 4.dp
 private val KnobRimWidth = 1.7.dp
 private val KnobOutlineWidth = 1.dp
 private val GlowBlur = 6.dp
-private const val LabelTextSizeSp = 11.5f
-private const val LabelLetterSpacing = 0.06f
+private const val LabelTextSizeSp = 12f
+private const val LabelLetterSpacing = 0.07f
 private val LabelBlur = 3.dp
 private const val DisabledAlpha = 0.4f
 
