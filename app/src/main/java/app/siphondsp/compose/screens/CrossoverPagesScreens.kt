@@ -175,38 +175,6 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
     }
 }
 
-/** Crossovers & Tilt page 3 -- the Mono Bass panel (frequency / blend / makeup, gated by one
- *  enable on the panel header). */
-@Composable
-fun MonoBassScreen(modifier: Modifier = Modifier) {
-    val dsp = rememberBmwDspState()
-    val monoBelow = stringResource(R.string.bmw_dsp_mono_bass_freq)
-    val blend = stringResource(R.string.bmw_dsp_mono_bass_blend)
-    val makeup = stringResource(R.string.bmw_dsp_mono_bass_makeup)
-
-    BmwDspTheme {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-        ) {
-            BmwPanel(
-                title = stringResource(R.string.bmw_dsp_mono_bass),
-                modifier = Modifier.fillMaxWidth(),
-                leanStart = 84.dp,
-                topContentGap = 40.dp,
-                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED),
-                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED, if (it) 1f else 0f) },
-                sliderLabels = listOf(monoBelow, blend, makeup),
-            ) {
-                DspSliderRow(monoBelow, NativeBmwDspValues.INDEX_MONO_BASS_FREQ, 40f..120f, 1f, "Hz", dsp, DefaultAccent)
-                DspSliderRow(blend, NativeBmwDspValues.INDEX_MONO_BASS_BLEND, 0f..100f, 1f, "%", dsp, DefaultAccent)
-                DspSliderRow(makeup, NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP, -6f..6f, 0.1f, "dB", dsp, DefaultAccent)
-            }
-        }
-    }
-}
-
 @Composable
 private fun DspSliderRow(
     label: String,

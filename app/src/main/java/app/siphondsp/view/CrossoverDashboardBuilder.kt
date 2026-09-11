@@ -62,13 +62,13 @@ class CrossoverDashboardBuilder(
         titleColor: Int? = null,
         // When set, a glass ON/OFF switch for this index rides on the title row -- its left edge
         // aligned with where this panel's slider rows start -- for a panel whose whole content is
-        // gated by one enable (Tonality tilt, Mono Bass) rather than carrying that switch on its
-        // own separate row.
+        // gated by one enable (Tonality tilt) rather than carrying that switch on its own
+        // separate row.
         toggleIndex: Int? = null,
         toggleMirrorIndices: IntArray = intArrayOf(),
         onToggled: () -> Unit = {},
         // Vertical gap between the header row and the first content row. Bumped up on the roomy
-        // single-panel pages (Tonality tilt, Mono Bass).
+        // single-panel pages (Tonality tilt).
         topContentGapDp: Int = 2,
         // Full-bleed mode for the dense head-unit screens (Crossovers & Tilt, Output all-pass,
         // Compressor, Gains' Output page): drops the MaterialCardView and its outer margins,

@@ -43,22 +43,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val tiltCascade = BiquadCascade(4)
 
-    // Mono Bass's own LR4 (2 cascaded 2nd-order sections each) low/high split, mirroring
-    // NativeBmwDspProcessor::rebuildMonoBass exactly (BUTTERWORTH_Q sections at monoBassFreq).
-    // Shared per-channel like every other cascade here, under the same L≈R reference-input
-    // assumption the rest of this calculator already makes -- see applyMonoBass for why that
-    // assumption is what lets this be folded into a single per-point complex multiply instead of
-    // needing a genuinely stereo (L+R-coupled) model.
-    private val monoBassLpf = arrayOf(BiquadCascade(2), BiquadCascade(2))
-    private val monoBassHpf = arrayOf(BiquadCascade(2), BiquadCascade(2))
-
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
 
     private val preSplitAcc = arrayOf(ComplexAcc(), ComplexAcc())
     private val branchAcc = ComplexAcc()
     private val sumAcc = ComplexAcc()
-    private val monoBassLpfAcc = ComplexAcc()
-    private val monoBassHpfAcc = ComplexAcc()
 
     fun configureAxis(sampleRate: Double, minFrequency: Double, maxFrequency: Double) {
         if (this.sampleRate == sampleRate && this.minFrequency == minFrequency && this.maxFrequency == maxFrequency) return
@@ -137,91 +126,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             }
         }
         rebuildAllPassCascade(lowAllPass[channel.ordinal], values, output)
-        rebuildMonoBassCascades(values, channel)
-    }
-
-    private fun rebuildMonoBassCascades(values: FloatArray, channel: BmwOutputChannel) {
-        val freq = values[NativeBmwDspValues.INDEX_MONO_BASS_FREQ].toDouble()
-        val lpf = monoBassLpf[channel.ordinal]
-        lpf.clear()
-        lpf.addLowPass(freq, BUTTERWORTH_Q, sampleRate)
-        lpf.addLowPass(freq, BUTTERWORTH_Q, sampleRate)
-        val hpf = monoBassHpf[channel.ordinal]
-        hpf.clear()
-        hpf.addHighPass(freq, BUTTERWORTH_Q, sampleRate)
-        hpf.addHighPass(freq, BUTTERWORTH_Q, sampleRate)
-    }
-
-    /**
-     * Mono Bass blends `branchAcc` (the low path so far) with a mono-summed, LR4-lowpassed copy
-     * plus an LR4-highpassed copy of itself: `out = dry*(1-blend) + (LP(mono)*makeup + HP(dry))*
-     * blend`, mirroring NativeBmwDspProcessor.cpp's per-sample math in
-     * `processFrame`/`rebuildMonoBass` exactly.
-     *
-     * `mono = (lowL+lowR)*0.5` is a genuinely stereo, L+R-coupled quantity that a single-channel
-     * frequency-response model has no way to represent on its own -- so this reuses the same
-     * simplifying assumption every other stage in this calculator already makes for a reference
-     * response curve: treat L and R as carrying identical content, so `mono ≈ dry`. Once L≈R,
-     * `LP(mono)*makeup + HP(dry)` collapses to `(LP*makeup + HP)` applied to the *same* `dry`
-     * value already in `branchAcc`, and because every stage involved (LP, HP, the dry
-     * passthrough) is linear, the whole blend is just one more complex multiply:
-     * `branchAcc *= (1-blend) + LP_transfer*makeup + HP_transfer*blend`. That transfer factor
-     * doesn't depend on anything upstream or downstream of it, so applying it here (right after
-     * the crossover, before this bank's own PEQ bands) versus wherever the native chain actually
-     * inserts it makes no difference to the final magnitude -- cascaded multiplications commute.
-     */
-    private fun applyMonoBass(branchAcc: ComplexAcc, values: FloatArray, channel: BmwOutputChannel, cosW: Double, sinW: Double, cos2W: Double, sin2W: Double) {
-        if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] < .5f) return
-        val blend = values[NativeBmwDspValues.INDEX_MONO_BASS_BLEND].toDouble() * .01
-        if (blend <= 0.0) return
-        val makeupLin = dbToLinear(values[NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP].toDouble())
-
-        monoBassLpfAcc.setUnity()
-        monoBassLpf[channel.ordinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassLpfAcc)
-        monoBassHpfAcc.setUnity()
-        monoBassHpf[channel.ordinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassHpfAcc)
-
-        val transferRe = (1.0 - blend) + monoBassLpfAcc.re * makeupLin * blend + monoBassHpfAcc.re * blend
-        val transferIm = monoBassLpfAcc.im * makeupLin * blend + monoBassHpfAcc.im * blend
-        branchAcc.mul(transferRe, transferIm)
-    }
-
-    /**
-     * Mid-side companion to [applyMonoBass]. Mono Bass's Low-side mono/stereo split-and-recombine
-     * reshapes Low's magnitude (with makeup != 0 dB) and phase, so unless Mid gets the identical
-     * treatment the two stop summing flat at the Low/Mid crossover the instant Mono Bass is on --
-     * a real dip, confirmed analytically and against this graph. Native (NativeBmwDspProcessor.cpp)
-     * cancels it by re-running the exact recombination on Mid: the low/makeup half fed the Mid
-     * *mono sum* `(midL+midR)/2`, the high half per channel, same blend -- identical to applying
-     * Mono Bass once pre-split, so the crossover stays flat for stereo content too, not only for
-     * L==R.
-     *
-     * This calculator is a single-reference model (`L == R`, see [applyMonoBass]), so `(midL+midR)/2`
-     * collapses to the per-channel `branchAcc` value and the whole thing is still the single
-     * complex multiply `mid *= (1-blend) + (LP*makeup + HP)*blend` -- the same transfer
-     * [applyMonoBass] applies to Low, reusing the same monoBassLpf/monoBassHpf cascades. The
-     * native per-channel-vs-mono-sum distinction only shows up on genuinely stereo input, which
-     * this reference curve doesn't represent, so no functional change is needed here.
-     */
-    private fun applyMonoBassCompensation(branchAcc: ComplexAcc, values: FloatArray, channel: BmwOutputChannel, cosW: Double, sinW: Double, cos2W: Double, sin2W: Double) {
-        if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] < .5f) return
-        val blend = values[NativeBmwDspValues.INDEX_MONO_BASS_BLEND].toDouble() * .01
-        if (blend <= 0.0) return
-        val makeupLin = dbToLinear(values[NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP].toDouble())
-
-        // Mono Bass's frequency reference is per-output (Low), but this transfer function only
-        // depends on monoBassFreq itself, which is shared/global -- so the Low-channel cascade
-        // for this same L/R side is exactly the right one to reuse here, no separate Mid-side
-        // cascade needed.
-        val lowChannelOrdinal = channel.ordinal
-        monoBassLpfAcc.setUnity()
-        monoBassLpf[lowChannelOrdinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassLpfAcc)
-        monoBassHpfAcc.setUnity()
-        monoBassHpf[lowChannelOrdinal].accumulate(cosW, sinW, cos2W, sin2W, monoBassHpfAcc)
-
-        val transferRe = (1.0 - blend) + monoBassLpfAcc.re * makeupLin * blend + monoBassHpfAcc.re * blend
-        val transferIm = monoBassLpfAcc.im * makeupLin * blend + monoBassHpfAcc.im * blend
-        branchAcc.mul(transferRe, transferIm)
     }
 
     private fun rebuildMidCascade(values: FloatArray, peq: BmwPeqState, channel: BmwOutputChannel) {
@@ -349,7 +253,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.setFrom(pre)
                 lowCascade[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                 if (!lpfPass) {
-                    applyMonoBass(branchAcc, values, channel, cosW[i], sinW[i], cos2W[i], sin2W[i])
                     lowAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                     applyDelay(branchAcc, frequencies[i], lowDelayMs.toDouble())
                     branchAcc.scale(dbToLinear(lowGainDb.toDouble()))
@@ -364,7 +267,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 branchAcc.setFrom(pre)
                 midCascade[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                 if (!hpfPass) {
-                    applyMonoBassCompensation(branchAcc, values, channel, cosW[i], sinW[i], cos2W[i], sin2W[i])
                     midAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
                     applyDelay(branchAcc, frequencies[i], midDelayMs.toDouble())
                     branchAcc.scale(dbToLinear(midGainDb.toDouble()))

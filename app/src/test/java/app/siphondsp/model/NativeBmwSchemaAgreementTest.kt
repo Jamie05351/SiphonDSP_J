@@ -52,11 +52,6 @@ class NativeBmwSchemaAgreementTest {
         "kTiltAmount" to NativeBmwDspValues.INDEX_TILT_AMOUNT,
         "kTiltFreq" to NativeBmwDspValues.INDEX_TILT_FREQ,
 
-        "kMonoBassEnabled" to NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
-        "kMonoBassFreq" to NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
-        "kMonoBassBlend" to NativeBmwDspValues.INDEX_MONO_BASS_BLEND,
-        "kMonoBassMakeup" to NativeBmwDspValues.INDEX_MONO_BASS_MAKEUP,
-
         "kRoutingBase" to NativeBmwDspValues.INDEX_ROUTING,
         "kRoutingStride" to 2,
 

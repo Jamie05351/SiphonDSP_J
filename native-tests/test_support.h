@@ -82,20 +82,6 @@ inline std::vector<float> stereoSine(double freqHz, double amplitude, std::size_
     return buf;
 }
 
-// Interleaved stereo sine with independent per-channel phase -- a decorrelated (non-mono)
-// bass signal, which is what exposes the Mono Bass Mid-compensation.
-inline std::vector<float> stereoSinePhased(double freqHz, double amplitude, std::size_t frames,
-                                           double phaseL, double phaseR,
-                                           double sampleRate = kSampleRate) {
-    std::vector<float> buf(frames * 2);
-    const double w = 2.0 * kPi * freqHz / sampleRate;
-    for (std::size_t n = 0; n < frames; ++n) {
-        buf[2 * n] = static_cast<float>(amplitude * std::sin(w * static_cast<double>(n) + phaseL));
-        buf[2 * n + 1] = static_cast<float>(amplitude * std::sin(w * static_cast<double>(n) + phaseR));
-    }
-    return buf;
-}
-
 // --- measurement ----------------------------------------------------------------------
 
 inline float peakAbs(const std::vector<float>& interleaved) {

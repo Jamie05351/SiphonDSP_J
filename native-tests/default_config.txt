@@ -70,11 +70,12 @@
 180          # 40  release
 0            # 41  makeup
 
-# 42..45  mono bass enabled, freq Hz, blend %, makeup dB
-0            # 42  monoBassEnabled
-80           # 43  monoBassFreq
-100          # 44  monoBassBlend
-0            # 45  monoBassMakeup
+# 42..45  reclaimed from the removed Mono Bass feature (enabled, freq Hz, blend %, makeup dB).
+#         Not read natively; a leftover value from an older save is simply ignored.
+0            # 42  unused (was monoBassEnabled)
+80           # 43  unused (was monoBassFreq)
+100          # 44  unused (was monoBassBlend)
+0            # 45  unused (was monoBassMakeup)
 
 # 46..53  routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
 1            # 46  LowL <- FrontL

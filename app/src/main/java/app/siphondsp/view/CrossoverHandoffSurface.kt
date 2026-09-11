@@ -35,7 +35,6 @@ import kotlin.math.sqrt
  *  - the Subsonic high-pass roll-off at the low end (the axis runs down to 10 Hz for it);
  *  - a non-draggable dashed marker + Hz label at each crossover corner
  *    ([NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ] / `INDEX_MID_CROSSOVER_FREQ`);
- *  - a shaded band + marker where Mono Bass engages ([MonoBassCue]);
  *  - the worst-case flat-sum deviation over the handoff octave, top-right.
  *
  * Crossover frequencies are set by the slider rows below the graph; this view repaints itself on
@@ -63,11 +62,6 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
     private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.5f * density
-    }
-    private val monoShadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = BmwDashboardSkin.LIGHT_BLUE
-        alpha = 26
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -130,7 +124,6 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
         calculator.compute(values, peqState, curves)
 
         drawGrid(canvas, left, right, top, bottom)
-        drawMonoBass(canvas, left, right, top, bottom)
         drawCurve(canvas, left, right, top, bottom, ::lowAt, lowPaint)
         drawCurve(canvas, left, right, top, bottom, ::midAt, midPaint)
         drawCurve(canvas, left, right, top, bottom, ::sumAt, sumPaint)
@@ -197,27 +190,6 @@ class CrossoverHandoffSurface @JvmOverloads constructor(
         val tx = (x + 5f * density).coerceAtMost(right - labelPaint.measureText(label))
         labelPaint.color = color
         canvas.drawText(label, tx, labelY, labelPaint)
-        labelPaint.color = Color.WHITE
-    }
-
-    /**
-     * Display-only cue: below the Mono Bass corner the low end is summed to mono. The calculator
-     * models that branch under an L=R assumption so there's no magnitude curve to draw for it
-     * (see [MonoBassCue]); a shaded band up to the corner plus a marker makes "mono below N Hz"
-     * visible on the graph.
-     */
-    private fun drawMonoBass(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        if (!MonoBassCue.isActive(values)) return
-        val hz = MonoBassCue.frequency(values, MAX_HZ)
-        val cornerX = hzToX(hz.toFloat(), left, right).coerceIn(left, right)
-        canvas.drawRect(left, top, cornerX, bottom, monoShadePaint)
-        markerPaint.color = BmwDashboardSkin.LIGHT_BLUE
-        markerPaint.alpha = 150
-        markerPaint.pathEffect = dashed
-        canvas.drawLine(cornerX, top, cornerX, bottom, markerPaint)
-        markerPaint.pathEffect = null
-        labelPaint.color = BmwDashboardSkin.LIGHT_BLUE
-        canvas.drawText("MONO ${hz.roundToInt()} Hz", left + 4f * density, bottom - 4f * density, labelPaint)
         labelPaint.color = Color.WHITE
     }
 

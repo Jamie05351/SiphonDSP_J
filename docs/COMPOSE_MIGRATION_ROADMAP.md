@@ -46,7 +46,7 @@ Zero Compose call sites. Every workspace screen still runs on:
 
 | Screen | Host | Structure |
 |---|---|---|
-| Crossovers & Tilt | `CrossoverTiltFragment` + `CrossoverTiltActivity` | `DspPager` of 3 pages: Crossovers, **Tilt**, Mono Bass |
+| Crossovers & Tilt | `CrossoverTiltFragment` + `CrossoverTiltActivity` | `DspPager` of 2 pages: Crossovers, **Tilt** |
 | Gains & Delay + Output | `GainLimiterFragment` + `GainLimiterActivity` | `DspPager` of 2 pages: channel‑card **diagram page**, **Output page** (Headroom, post‑gain L/R, master limiter + GR meter) |
 | Multiband Compressor | `NativeBmwCompressorFragment` + `NativeBmwCompressorActivity` | `DspPager`; page 1 = `CompressorSurface` visualiser + master strip; then per‑band pages with `MbcBandGrMeter`s |
 | Output All‑Pass | `OutputAllPassFragment` | `DspPager` of 4 output pages, each with repeated all‑pass sections (`INDEX_ALL_PASS` block, section width) |

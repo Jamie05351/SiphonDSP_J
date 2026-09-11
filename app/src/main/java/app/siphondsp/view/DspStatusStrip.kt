@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
  * and the centred title (see activity_parametric_eq.xml -- it sits in the AppBarLayout's toolbar
  * overlay, above the ///M stripe divider, with no background of its own). Shows the on/off state
  * of the global stages that are otherwise only visible after navigating to their own screen --
- * Tilt, Mono Bass, MBC, and the master limiter (with its threshold) -- dimmed when off, each
+ * Tilt, MBC, and the master limiter (with its threshold) -- dimmed when off, each
  * tappable to jump straight to the screen that owns it.
  *
  * Refreshes itself: on attach, whenever the window regains focus (returning from another
@@ -54,7 +54,6 @@ class DspStatusStrip @JvmOverloads constructor(
 
     private val segments = listOf(
         Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
-        Segment("Mono Bass", NativeBmwDspValues.INDEX_MONO_BASS_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
         Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, NativeBmwCompressorActivity::class.java),
         Segment(
             "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, GainLimiterActivity::class.java,

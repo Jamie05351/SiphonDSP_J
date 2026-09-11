@@ -83,13 +83,11 @@ object NativeBmwDspValues {
     const val INDEX_MID_COMPRESSOR_RELEASE = 40
     const val INDEX_MID_COMPRESSOR_MAKEUP = 41
 
-    // Frequency-dependent mono/stereo blend for the low paths. This is deliberately the only
-    // stage that can couple Low L and Low R; when disabled the four processing paths remain
-    // independent until the final stereo reconstruction.
-    const val INDEX_MONO_BASS_ENABLED = 42
-    const val INDEX_MONO_BASS_FREQ = 43
-    const val INDEX_MONO_BASS_BLEND = 44
-    const val INDEX_MONO_BASS_MAKEUP = 45
+    // 42..45 were the Mono Bass enable/freq/blend/makeup (a frequency-dependent mono/stereo
+    // blend for the low paths). The feature was removed (disabled by default, never proven
+    // useful) and the slots were reclaimed in place rather than by shrinking the array -- same
+    // rationale as 139..142 below. Not read natively; a leftover value from an older save is
+    // simply ignored.
 
     // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
     const val INDEX_ROUTING = 46
@@ -257,6 +255,7 @@ object NativeBmwDspValues {
         1f, 3f, 550f,
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        // 42..45: reclaimed from the removed Mono Bass feature. Unused; native never reads them.
         0f, 80f, 100f, 0f,
         // Low L, Low R, Mid L, Mid R: [Front L, Front R].
         1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
