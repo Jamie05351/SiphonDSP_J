@@ -630,6 +630,9 @@ void NativeBmwDspProcessor::rebuildMbc() {
     const float f1 = clampf(p_.mbcXo[1], f0 * 1.05f, sampleRate_ * .45f);
     const float f2 = clampf(p_.mbcXo[2], f1 * 1.05f, sampleRate_ * .45f);
     for (auto& t : mbc_) {
+        t.clear();  // explicit -- makeLowPass/makeHighPass below also clear each biquad they
+                    // touch, so this is belt-and-braces, but it makes the state-reset intent
+                    // visible here rather than relying on a side effect three lines down.
         makeLowPass(t.lp0a, f0, BW, sampleRate_);
         makeLowPass(t.lp0b, f0, BW, sampleRate_);
         makeHighPass(t.hp0a, f0, BW, sampleRate_);
