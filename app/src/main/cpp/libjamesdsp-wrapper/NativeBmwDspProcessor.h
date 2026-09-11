@@ -134,8 +134,13 @@ private:
         DirtyAll = 0xffffffffu,
     };
 
+    // Coefficients and DF2T state are double, not float: at low corner frequencies relative to
+    // the sample rate -- the subsonic HPF (~32 Hz), the low-band crossover, and the 40-65 Hz
+    // phase-alignment all-pass sections -- the pole coefficients cluster very close to the unit
+    // circle (a1 ~= -2, a2 ~= 1), and running that recursion in float32 loses meaningful
+    // precision. Don't simplify this back to float.
     struct Biquad {
-        float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
         float run(float x);
         void clear();
         void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
