@@ -9,18 +9,16 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import app.siphondsp.R
 import app.siphondsp.compose.screens.CrossoversPageScreen
-import app.siphondsp.compose.screens.MonoBassScreen
 import app.siphondsp.compose.screens.TonalityTiltScreen
 import app.siphondsp.view.DspPager
 
 /**
- * Crossovers & Tilt workspace -- a [DspPager] of three Compose pages:
+ * Crossovers & Tilt workspace -- a [DspPager] of two Compose pages:
  * - [CrossoversPageScreen] -- the read-only CrossoverHandoffSurface graph over the Lowpass /
  *   Highpass / Subsonic / Mid-align rows, plus a deep link to the full All-pass screen.
  * - [TonalityTiltScreen] -- Tilt amount / pivot.
- * - [MonoBassScreen] -- Mono Bass frequency / blend / makeup.
  *
- * All three read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the
+ * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the
  * same way, so this fragment is just a `DspPager` host (COMPOSE_MIGRATION_ROADMAP.md Phase 4 +
  * follow-up).
  */
@@ -49,7 +47,6 @@ class CrossoverTiltFragment : Fragment() {
                 listOf(
                     ComposeView(ctx).apply { setContent { CrossoversPageScreen() } },
                     ComposeView(ctx).apply { setContent { TonalityTiltScreen() } },
-                    ComposeView(ctx).apply { setContent { MonoBassScreen() } },
                 ),
                 toggleContainer = requireActivity().findViewById(R.id.dsp_page_toggle_slot),
             ),

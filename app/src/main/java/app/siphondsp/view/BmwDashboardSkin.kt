@@ -127,7 +127,7 @@ object BmwDashboardSkin {
     fun sidebarTileFocusRingDrawable(context: Context): Drawable = TileFocusRingDrawable(context)
 
     // Single slider thumb/track/capsule shared by every DSP workspace slider (Gains/Delay,
-    // Crossovers & Tilt, Mono Bass, Routing, Compressor). Recreates the user-supplied
+    // Crossovers & Tilt, Routing, Compressor). Recreates the user-supplied
     // J_DSP_slider_master_style_4_colour pack (slider_{cyan,dark_blue,yellow,purple}_vector.xml):
     // a compact 18dp housing with an inset recessed groove (outer capsule shell + inset bezel +
     // thin highlight line) and a slim 6.5dp value fill, with the fill and thumb both tinted per

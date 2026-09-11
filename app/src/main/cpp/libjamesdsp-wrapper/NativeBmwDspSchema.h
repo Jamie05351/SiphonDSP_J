@@ -45,10 +45,8 @@ inline constexpr int kTiltEnabled = 25;
 inline constexpr int kTiltAmount = 26;
 inline constexpr int kTiltFreq = 27;
 
-inline constexpr int kMonoBassEnabled = 42;
-inline constexpr int kMonoBassFreq = 43;
-inline constexpr int kMonoBassBlend = 44;
-inline constexpr int kMonoBassMakeup = 45;
+// 42..45, formerly Mono Bass enabled/freq/blend/makeup, were removed (unused feature, no native
+// processing left) and are not listed here -- configure() no longer reads them.
 
 // --- routing matrix: 4 outputs (Low L, Low R, Mid L, Mid R) x [fromFrontL, fromFrontR] -----
 inline constexpr int kRoutingBase = 46;

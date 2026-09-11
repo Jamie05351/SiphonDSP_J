@@ -65,7 +65,6 @@ object PeqDiagnosticReport {
             appendLine("Crossover LPF/HPF: ${bypassFlag(NativeBmwDspValues.INDEX_LPF_PASS)} / ${bypassFlag(NativeBmwDspValues.INDEX_HPF_PASS)}")
             appendLine("Subsonic: ${flag(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED)}")
             appendLine("Tilt: ${flag(NativeBmwDspValues.INDEX_TILT_ENABLED)}")
-            appendLine("Mono bass: ${flag(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED)}")
             appendLine("All-pass: ${flag(NativeBmwDspValues.INDEX_ALL_PASS)}")
             appendLine("MBC: ${flag(NativeBmwDspValues.INDEX_MBC_ENABLED)}")
             appendLine(

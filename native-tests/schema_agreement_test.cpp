@@ -126,31 +126,6 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     CHECK(at260Moved - at260Default > 5.f);
 }
 
-TEST_CASE("kMonoBassEnabled / kMonoBassFreq slots") {
-    // Decorrelated (L = -R) 50 Hz: with Mono Bass on and its corner above 50 Hz, the mono sum is
-    // ~0 there, so the tone collapses. Moving the corner below 50 lets it back through.
-    auto probe = [](float enabled, float freq) {
-        NativeBmwDspProcessor proc;
-        auto c = defaultConfig();
-        c[sch::kMonoBassEnabled] = enabled;
-        c[sch::kMonoBassFreq] = freq;
-        c[sch::kMonoBassBlend] = 100.f;
-        proc.setSampleRate(kSampleRate);
-        REQUIRE(proc.configure(c.data(), c.size()));
-        auto warm = stereoSinePhased(50.0, 0.05, 24000, 0.0, kPi);  // L = -R
-        proc.process(warm.data(), warm.size());
-        auto win = stereoSinePhased(50.0, 0.05, 16384, 0.0, kPi);
-        proc.process(win.data(), win.size());
-        return linToDb(channelMagnitudeAt(win, 0, 50.0) / 0.05);
-    };
-    const double onHi = probe(1.f, 80.f);   // corner above 50 -> killed
-    const double onLo = probe(1.f, 40.f);   // corner below 50 -> passes
-    const double offv = probe(0.f, 80.f);   // disabled -> passes
-    INFO("50 Hz decorrelated: off ", offv, "  on@40 ", onLo, "  on@80 ", onHi);
-    CHECK(offv - onHi > 12.0);
-    CHECK(onLo - onHi > 12.0);
-}
-
 TEST_CASE("kTiltEnabled / kTiltAmount / kTiltFreq slots") {
     auto balanceDb = [](float enabled, float amount, float freq) {
         // Low-vs-high balance: enable + amount move this a lot.

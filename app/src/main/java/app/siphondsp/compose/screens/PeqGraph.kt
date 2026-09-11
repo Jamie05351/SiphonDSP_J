@@ -71,7 +71,6 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.utils.BiquadUtils
 import app.siphondsp.utils.extensions.prettyNumberFormat
-import app.siphondsp.view.MonoBassCue
 import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
 import app.siphondsp.view.PeqPlotGeometry
@@ -197,10 +196,7 @@ fun PeqGraphFrame(
             val nc = canvas.nativeCanvas
             drawGrid(nc, geometry, paints, density, gridLines, toY)
             drawCrossoverShading(nc, geometry, paints, systemValues, maxFrequency)
-            if (mode == PeqGraphMode.MAGNITUDE) {
-                drawMonoBassRegion(nc, geometry, paints, density, systemValues, maxFrequency)
-            }
-            drawLegend(nc, geometry, paints, density, systemValues, maxFrequency, mode)
+            drawLegend(nc, geometry, paints, density, mode)
         }
     }
 }
@@ -527,7 +523,6 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
         PeqGraphMode.MAGNITUDE -> {
             drawGrid(bg, g, ctx.paints, ctx.density, MagnitudeGridLines, { g.yForGain(it) }, ctx.glass.octaveGridPaint)
             drawCrossoverShading(bg, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
-            drawMonoBassRegion(bg, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency)
 
             drawBranchCurves(fg, ctx)
             drawFilterOverlays(fg, ctx)
@@ -543,7 +538,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
             drawPhaseCurves(fg, ctx)
         }
     }
-    drawLegend(fg, g, ctx.paints, ctx.density, ctx.systemValues, ctx.maxFrequency, ctx.mode)
+    drawLegend(fg, g, ctx.paints, ctx.density, ctx.mode)
     drawVignette(fg, ctx)
 }
 
@@ -601,39 +596,15 @@ private fun drawCrossoverShading(
     )
 }
 
-private fun drawMonoBassRegion(
-    nc: Canvas,
-    g: PeqPlotGeometry,
-    p: PeqSurfacePaints,
-    density: Float,
-    values: FloatArray,
-    maxFrequency: Double,
-) {
-    if (values.size != BmwSignalChain.VALUE_COUNT || !MonoBassCue.isActive(values)) return
-    val frequency = MonoBassCue.frequency(values, maxFrequency)
-    val cornerX = g.xForFrequency(frequency).coerceIn(g.left, g.right)
-    nc.drawRect(g.left, g.top, cornerX, g.bottom, p.crossoverShadePaint)
-    nc.drawLine(cornerX, g.top, cornerX, g.bottom, p.unifiedGridPaint)
-    nc.drawText(
-        "MONO BASS ▸ ${frequency.roundToInt()} Hz",
-        g.left + 6f * density,
-        g.bottom - 6f * density,
-        p.tiltLabelPaint,
-    )
-}
-
 private fun drawLegend(
     nc: Canvas,
     g: PeqPlotGeometry,
     p: PeqSurfacePaints,
     density: Float,
-    values: FloatArray,
-    maxFrequency: Double,
     mode: PeqGraphMode,
 ) {
     val baseline = g.top - 6f * density
     fun tinted(color: Int) = Paint(p.unifiedLegendPaint).apply { this.color = color }
-    val monoActive = values.size == BmwSignalChain.VALUE_COUNT && MonoBassCue.isActive(values)
     when (mode) {
         PeqGraphMode.PHASE -> {
             nc.drawText("LOW", g.left, baseline, tinted(p.bankColorLow))
@@ -647,13 +618,10 @@ private fun drawLegend(
             nc.drawText("FULL", g.left, baseline, tinted(p.bankColorFull))
             nc.drawText("LOW", g.left + 38f * density, baseline, tinted(p.bankColorLow))
             nc.drawText("MID", g.left + 74f * density, baseline, tinted(p.bankColorMid))
-            val sumNote = if (monoActive) {
-                "FINAL SUM (L solid / R dashed, mono below " +
-                    "${MonoBassCue.frequency(values, maxFrequency).roundToInt()} Hz)"
-            } else {
-                "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)"
-            }
-            nc.drawText(sumNote, g.left + 112f * density, baseline, p.unifiedLegendPaint)
+            nc.drawText(
+                "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)",
+                g.left + 112f * density, baseline, p.unifiedLegendPaint,
+            )
         }
     }
 }
@@ -760,29 +728,20 @@ private fun drawSumCurve(nc: Canvas, ctx: PeqDrawContext) {
     val leftDb = ctx.curves.sumDb[BmwOutputChannel.LEFT.ordinal]
     val rightDb = ctx.curves.sumDb[BmwOutputChannel.RIGHT.ordinal]
     if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) {
-        drawSumChannelMonoAware(nc, ctx, leftDb, rightDb, ctx.paints.sumPaintSolid)
+        drawSumChannel(nc, ctx, leftDb, ctx.paints.sumPaintSolid)
     }
     if (ctx.channelDisplay != PeqChannelDisplay.LEFT) {
-        drawSumChannelMonoAware(nc, ctx, rightDb, leftDb, ctx.paints.sumPaintDashed)
+        drawSumChannel(nc, ctx, rightDb, ctx.paints.sumPaintDashed)
     }
 }
 
-private fun drawSumChannelMonoAware(
-    nc: Canvas,
-    ctx: PeqDrawContext,
-    self: DoubleArray,
-    other: DoubleArray,
-    paint: Paint,
-) {
+private fun drawSumChannel(nc: Canvas, ctx: PeqDrawContext, self: DoubleArray, paint: Paint) {
     if (self.isEmpty()) return
     val g = ctx.geometry
     val path = Path()
     for (i in self.indices) {
-        val frequency = ctx.curves.frequencies.getOrElse(i) { ctx.maxFrequency }
-        val blend = ctx.monoBassBlendAt(frequency)
-        val value = if (blend <= 0f) self[i] else self[i] + (((self[i] + other[i]) * 0.5) - self[i]) * blend
         val x = g.left + (i.toFloat() / (self.size - 1).coerceAtLeast(1)) * (g.right - g.left)
-        val y = g.yForGain(value)
+        val y = g.yForGain(self[i])
         if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
     drawGlowStroke(nc, ctx.glass, path, paint)
@@ -796,17 +755,13 @@ private fun drawSumAreaFill(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     val primaryIsRight = ctx.channelDisplay == PeqChannelDisplay.RIGHT
     val self = ctx.curves.sumDb[if (primaryIsRight) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal]
-    val other = ctx.curves.sumDb[if (primaryIsRight) BmwOutputChannel.LEFT.ordinal else BmwOutputChannel.RIGHT.ordinal]
     if (self.isEmpty()) return
     val zeroY = g.yForGain(0.0)
     val path = ctx.model.areaFillPath
     path.rewind()
     for (i in self.indices) {
-        val frequency = ctx.curves.frequencies.getOrElse(i) { ctx.maxFrequency }
-        val blend = ctx.monoBassBlendAt(frequency)
-        val value = if (blend <= 0f) self[i] else self[i] + (((self[i] + other[i]) * 0.5) - self[i]) * blend
         val x = g.left + (i.toFloat() / (self.size - 1).coerceAtLeast(1)) * (g.right - g.left)
-        val y = g.yForGain(value)
+        val y = g.yForGain(self[i])
         if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
     path.lineTo(g.right, zeroY)
@@ -1462,11 +1417,6 @@ private class PeqDrawContext(
     val lowBands: List<ParametricEqBand> = peqState.lowBandBands.toList()
     val midBands: List<ParametricEqBand> = peqState.midBandBands.toList()
 
-    private val hasSystemConfig = systemValues.size == BmwSignalChain.VALUE_COUNT
-
-    fun monoBassBlendAt(frequency: Double): Float =
-        if (hasSystemConfig) MonoBassCue.blendAt(systemValues, frequency, maxFrequency) else 0f
-
     /** Global 1-based filter numbering: Full, then Low, then Mid — = ParametricEqSurface.bankNumberOffset. */
     fun bankNumberOffset(bank: BmwPeqBank): Int = when (bank) {
         BmwPeqBank.FULL -> 0
@@ -1616,9 +1566,6 @@ private fun PeqGraphFramePreview() {
         FloatArray(BmwSignalChain.VALUE_COUNT).apply {
             this[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 120f
             this[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 640f
-            this[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
-            this[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = 80f
-            this[NativeBmwDspValues.INDEX_MONO_BASS_BLEND] = 100f
         }
     }
     BmwDspTheme {

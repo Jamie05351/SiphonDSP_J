@@ -34,7 +34,6 @@ add_executable(native_tests
     drwav_impl.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessor.cpp
     default_config_test.cpp
-    mono_bass_test.cpp
     limiter_test.cpp
     mbc_test.cpp
     schema_agreement_test.cpp

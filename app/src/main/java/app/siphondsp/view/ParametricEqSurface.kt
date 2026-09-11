@@ -431,7 +431,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             DisplayMode.MAGNITUDE -> {
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
-                drawMonoBassRegion(canvas, left, right, top, bottom)
                 if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawFilterOverlays(canvas, left, right)
@@ -445,7 +444,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             DisplayMode.MAGNITUDE_PHASE -> {
                 drawUnifiedGrid(canvas, left, right, top, bottom)
                 drawCrossoverShading(canvas, left, right, top, bottom)
-                drawMonoBassRegion(canvas, left, right, top, bottom)
                 if (showSpectrum && spectrumTicker.isActive) drawUnifiedSpectrum(canvas, left, right, top, bottom)
                 drawBranchCurves(canvas, left, right, top, bottom)
                 drawSumCurve(canvas, left, right, top, bottom)
@@ -536,24 +534,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
             .toDouble().coerceIn(20.0, maximumFrequency)
         if (midFreq <= lowFreq) return
         canvas.drawRect(xForFrequency(lowFreq).coerceIn(left, right), top, xForFrequency(midFreq).coerceIn(left, right), bottom, paints.crossoverShadePaint)
-    }
-
-    // Mono-bass display-cue math lives in MonoBassCue now (pure, tested); these stay as the
-    // in-view names the draw code and legend already call.
-    private fun monoBassActive(): Boolean = MonoBassCue.isActive(systemValues)
-
-    private fun monoBassFrequency(): Double = MonoBassCue.frequency(systemValues, maximumFrequency)
-
-    private fun monoBassBlendAt(frequency: Double): Float =
-        MonoBassCue.blendAt(systemValues, frequency, maximumFrequency)
-
-    private fun drawMonoBassRegion(canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float) {
-        if (!monoBassActive()) return
-        val cornerX = xForFrequency(monoBassFrequency()).coerceIn(left, right)
-        canvas.drawRect(left, top, cornerX, bottom, paints.crossoverShadePaint)
-        canvas.drawLine(cornerX, top, cornerX, bottom, paints.unifiedGridPaint)
-        val label = "MONO BASS ▸ ${monoBassFrequency().roundToInt()} Hz"
-        canvas.drawText(label, left + 6f * density, bottom - 6f * density, paints.tiltLabelPaint)
     }
 
     /**
@@ -779,10 +759,10 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         val leftDb = curves.sumDb[BmwOutputChannel.LEFT.ordinal]
         val rightDb = curves.sumDb[BmwOutputChannel.RIGHT.ordinal]
         if (channelDisplay != ChannelDisplay.RIGHT) {
-            drawSumChannelMonoAware(canvas, leftDb, rightDb, left, right, paints.sumPaintSolid)
+            drawSystemCurveForChannel(canvas, leftDb, left, right, paints.sumPaintSolid) { yForGain(it) }
         }
         if (channelDisplay != ChannelDisplay.LEFT) {
-            drawSumChannelMonoAware(canvas, rightDb, leftDb, left, right, paints.sumPaintDashed)
+            drawSystemCurveForChannel(canvas, rightDb, left, right, paints.sumPaintDashed) { yForGain(it) }
         }
     }
 
@@ -839,25 +819,6 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         for (i in values.indices) {
             val x = left + (i.toFloat() / (values.size - 1).coerceAtLeast(1)) * (right - left)
             val y = toY(values[i])
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        strokeNeon(canvas, path, paint)
-    }
-
-    /**
-     * L/R sum for magnitude view: like [drawSystemCurveForChannel] but, where Mono Bass is
-     * engaged ([monoBassBlendAt]), each point is pulled toward the L/R mean so the solid-L and
-     * dashed-R lines visibly converge across the mono-bass region.
-     */
-    private fun drawSumChannelMonoAware(canvas: Canvas, self: DoubleArray, other: DoubleArray, left: Float, right: Float, paint: Paint) {
-        if (self.isEmpty()) return
-        val path = Path()
-        for (i in self.indices) {
-            val frequency = curves.frequencies.getOrElse(i) { maximumFrequency }
-            val blend = monoBassBlendAt(frequency)
-            val value = if (blend <= 0f) self[i] else self[i] + (((self[i] + other[i]) * 0.5) - self[i]) * blend
-            val x = left + (i.toFloat() / (self.size - 1).coerceAtLeast(1)) * (right - left)
-            val y = yForGain(value)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         strokeNeon(canvas, path, paint)
@@ -1039,12 +1000,12 @@ class ParametricEqSurface(context: Context, attrs: AttributeSet?) : View(context
         canvas.drawText("FULL", left, baseline, fullPaint)
         canvas.drawText("LOW", left + 38f * density, baseline, lowPaint)
         canvas.drawText("MID", left + 74f * density, baseline, midPaint)
-        val sumNote = if (monoBassActive()) {
-            "FINAL SUM (L solid / R dashed, mono below ${monoBassFrequency().roundToInt()} Hz)"
-        } else {
-            "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)"
-        }
-        canvas.drawText(sumNote, left + 112f * density, baseline, paints.unifiedLegendPaint)
+        canvas.drawText(
+            "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)",
+            left + 112f * density,
+            baseline,
+            paints.unifiedLegendPaint,
+        )
     }
 
     private fun updateContentDescription() {

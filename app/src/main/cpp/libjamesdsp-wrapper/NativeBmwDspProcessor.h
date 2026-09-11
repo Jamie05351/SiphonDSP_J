@@ -12,6 +12,12 @@
 
 class NativeBmwDspProcessor {
 public:
+    // 42..45 were Mono Bass enable/freq/blend/makeup. The feature was removed (disabled by
+    // default, never proven useful) and the slots were reclaimed in place rather than by
+    // shrinking the array -- same rationale as 139..142 below. Not read in configure(); a
+    // leftover value from an older save is simply ignored. No Kotlin-side migration marker was
+    // added for this removal (unlike 140/181/188/191) -- flag if one turns out to be needed.
+    //
     // 139..142 were the Pultec-style bass boost/cut stage; the feature was removed (unused,
     // native processing deleted below) and the slots were reclaimed in place rather than by
     // shrinking the array -- same as FIELD_CROSSOVER_LR4, since shrinking would shift every
@@ -120,16 +126,12 @@ private:
         DirtyTilt = 1u << 5,
         DirtyCompTiming = 1u << 6,
         DirtyCompState = 1u << 7,
-        DirtyMonoBass = 1u << 8,
         DirtyPolarity = 1u << 9,
         DirtyMeasBus = 1u << 10,
         DirtyMbc = 1u << 11,  // crossover-tree coefficients (split freqs) -- clears filter state
         DirtyMbcTiming = 1u << 12,  // attack/release/makeup/mix scalars only -- no filter touch
         DirtyMbcState = 1u << 13,   // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
-        DirtyMonoBassGain =
-            1u
-            << 15,  // Mono Bass makeup dB -> monoBassMakeupLin_ scalar only, no filter-state clear
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyAll = 0xffffffffu,
     };
@@ -216,14 +218,6 @@ private:
         float gain = 1.0f;
         Biquad subsonic1;
         Biquad crossover1, crossover2;
-        Biquad monoBassHpf1, monoBassHpf2;
-        // Mid compensation: Mid re-runs the EXACT Low-side mono-bass recombination on its own
-        // band so it picks up the identical magnitude + phase Mono Bass puts on Low -- otherwise
-        // Low and Mid stop summing flat at the Low/Mid crossover the instant Mono Bass is
-        // enabled. The low/makeup half is fed the Mid *mono sum* (monoBassMidLp1_/2_ below), so
-        // this holds for genuinely stereo content and not just for L==R material; only the
-        // per-channel high-passed half lives here. See processFrame and rebuildMonoBass.
-        Biquad monoBassCompHp1, monoBassCompHp2;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>
             allPass{};
@@ -241,11 +235,7 @@ private:
             subsonic1.clear();
             crossover1.clear();
             crossover2.clear();
-            monoBassHpf1.clear();
-            monoBassHpf2.clear();
             delay.clear();
-            monoBassCompHp1.clear();
-            monoBassCompHp2.clear();
             for (auto& section : allPassState) {
                 section.clear();
             }
@@ -313,8 +303,6 @@ private:
         // / v[142]). Clamped to kStageDelayMaxMs.
         float stageDelayL = 0, stageDelayR = 0;
         float tiltAmount = 3, tiltFreq = 550;
-        bool monoBass = false;
-        float monoBassFreq = 80, monoBassBlend = 100, monoBassMakeup = 0;
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves = 1;
@@ -374,8 +362,6 @@ private:
     void rebuildMbcTiming();  // dry/wet mix, per-band makeup + attack/release smoothing coeffs
     void resetMbcState();
     void rebuildBusLimiter();
-    void rebuildMonoBass();
-    void rebuildMonoBassGain();  // monoBassMakeupLin_ only -- no biquad rebuild / state clear
     void rebuildPolarityAndMute();
     // Option A measurement-mute bus brick-wall; rebuilt only on a DirtyMeasBus transition.
     void rebuildMeasBus();
@@ -419,12 +405,6 @@ private:
     // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
     // and processFrame's tail). delay (in samples) is set by updateDelays().
     StageDelay stageDelayL_, stageDelayR_;
-    // Low mono-sum LR4 low-pass, and the matching Mid mono-sum low-pass the Mid compensation
-    // feeds so both bands run the identical mono-bass transfer (flat crossover sum for stereo
-    // content, not only for L==R). See processFrame's Mono Bass blocks.
-    Biquad monoBassLpf1_, monoBassLpf2_;
-    Biquad monoBassMidLp1_, monoBassMidLp2_;
-    float monoBassMakeupLin_ = 1;
     Biquad tiltLoL1_, tiltLoL2_, tiltHiL1_, tiltHiL2_;
     Biquad tiltLoR1_, tiltLoR2_, tiltHiR1_, tiltHiR2_;
     // Option A measurement-mute bus brick-wall. Inert unless p_.measurementMute != 0: the
