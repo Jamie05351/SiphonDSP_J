@@ -55,3 +55,45 @@ TEST_CASE("LR4 low/mid crossover sums flat through the handoff") {
         CHECK(std::fabs(rel) < 0.6);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (Low band): the subsonic HPF is a 2nd-order
+// Butterworth (Q=1/sqrt(2)), so |H(f)|^2 = (f/fc)^4 / (1+(f/fc)^4) is its exact theoretical
+// response. Measuring with-subsonic vs without-subsonic on otherwise-identical configs cancels
+// out everything else in the chain (crossover, headroom, ...), isolating just the HPF's own
+// contribution -- so this only passes if the migrated SVF high-pass still matches the same
+// Butterworth corner the old RBJ DF2T high-pass did.
+//
+// Enables subsonic on BOTH Low outputs (indices 0 and 1), not just one: NativeBmwDspProcessor's
+// final output stage does a deliberate L/R swap correcting the target vehicle's reversed speaker
+// harness ("DO NOT REMOVE OR FIX THIS", see processFrame), so channel 0 of the interleaved output
+// carries the *Right*-side chain -- enabling only Low Left and measuring channel 0 would silently
+// measure the untouched side. Symmetric L/R config, like flatConfig()'s own subsonic-off lines,
+// sidesteps needing to know which physical side maps to which buffer channel.
+TEST_CASE("Low subsonic HPF matches the theoretical 2nd-order Butterworth corner") {
+    auto cfgOn = flatConfig();
+    auto cfgOff = flatConfig();
+    constexpr float kSubsonicFreq = 32.f;
+    const int lowLeftBase = nbschema::kOutputConfigBase;
+    const int lowRightBase = nbschema::kOutputConfigBase + nbschema::kOutputConfigWidth;
+    for (int base : {lowLeftBase, lowRightBase}) {
+        cfgOn[base + nbschema::kOutSubsonicEnabled] = 1.f;
+        cfgOn[base + nbschema::kOutSubsonicFreq] = kSubsonicFreq;
+    }
+
+    const double freqs[] = {12, 16, 24, 32, 48, 64, 96, 130};
+    const double amp = 0.05;
+
+    for (double f : freqs) {
+        NativeBmwDspProcessor withSub, withoutSub;
+        const double magOn = channelMagnitudeAt(renderSteadyState(withSub, cfgOn, f, amp), 0, f);
+        const double magOff = channelMagnitudeAt(renderSteadyState(withoutSub, cfgOff, f, amp), 0, f);
+        const double measuredDb = linToDb(magOn) - linToDb(magOff);
+
+        const double ratio = f / static_cast<double>(kSubsonicFreq);
+        const double r4 = ratio * ratio * ratio * ratio;
+        const double expectedDb = 10.0 * std::log10(r4 / (1.0 + r4));
+
+        INFO("f=", f, " Hz  measured=", measuredDb, " dB  expected=", expectedDb, " dB");
+        CHECK(std::fabs(measuredDb - expectedDb) < 0.5);
+    }
+}

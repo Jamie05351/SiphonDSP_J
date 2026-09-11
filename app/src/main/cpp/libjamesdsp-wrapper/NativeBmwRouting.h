@@ -69,12 +69,19 @@ struct RoutingMatrix {
     }
 };
 
+// SVF (trapezoidal-integrated state variable filter) coefficients -- see
+// NativeBmwDspProcessor::Biquad for the matching state/run() this feeds via loadAllPass(). The
+// default (firstOrder=false, a1=a2=a3=0, m0=1/m1=0/m2=0) is an identity pass-through, same
+// contract `rebuild()`'s failure paths below rely on ("coefficients = {}" degrades to no-op).
 struct BiquadCoefficients {
-    double b0 = 1.0;
-    double b1 = 0.0;
-    double b2 = 0.0;
+    bool firstOrder = false;
+    double opA = 0.0;    // 1-pole coefficient, only meaningful when firstOrder
     double a1 = 0.0;
     double a2 = 0.0;
+    double a3 = 0.0;
+    double m0 = 1.0;
+    double m1 = 0.0;
+    double m2 = 0.0;
 };
 
 /**
@@ -111,6 +118,9 @@ struct AllPassSection {
         const double omega = 2.0 * pi * static_cast<double>(frequencyHz) / static_cast<double>(sampleRate);
 
         if (!secondOrder) {
+            // Untouched 1-pole all-pass derivation -- doesn't map onto the 2nd-order SVF form
+            // below, so it keeps its own coefficient (opA) and Biquad::run() branches on
+            // firstOrder to use the matching untouched 1-pole recursion.
             const double tangent = std::tan(omega * 0.5);
             const double denom = tangent + 1.0;
             if (!std::isfinite(denom) || std::fabs(denom) < 1.0e-12) {
@@ -120,33 +130,30 @@ struct AllPassSection {
             if (!std::isfinite(a)) {
                 return false;
             }
-            coefficients.b0 = a;
-            coefficients.b1 = 1.0;
-            coefficients.b2 = 0.0;
-            coefficients.a1 = a;
-            coefficients.a2 = 0.0;
+            coefficients.firstOrder = true;
+            coefficients.opA = a;
             return true;
         }
 
-        const double cosine = std::cos(omega);
-        const double sine = std::sin(omega);
-        const double alpha = sine / (2.0 * static_cast<double>(q));
-        const double a0 = 1.0 + alpha;
-        if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12) {
-            return false;
-        }
-
-        // RBJ second-order all-pass: numerator is reversed denominator.
-        coefficients.b0 = (1.0 - alpha) / a0;
-        coefficients.b1 = (-2.0 * cosine) / a0;
-        coefficients.b2 = 1.0;
-        coefficients.a1 = (-2.0 * cosine) / a0;
-        coefficients.a2 = (1.0 - alpha) / a0;
-        if (!std::isfinite(coefficients.b0) || !std::isfinite(coefficients.b1) ||
-            !std::isfinite(coefficients.a1) || !std::isfinite(coefficients.a2)) {
+        // SVF second-order all-pass: g = tan(omega/2), k = 1/q. Same derivation as
+        // NativeBmwDspProcessor::makeAllPass2, just Q-adjustable here (that one is fixed at
+        // 1/sqrt(2)).
+        const double g = std::tan(omega * 0.5);
+        const double k = 1.0 / static_cast<double>(q);
+        const double a1 = 1.0 / (1.0 + g * (g + k));
+        const double a2 = g * a1;
+        const double a3 = g * a2;
+        if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3)) {
             coefficients = {};
             return false;
         }
+        coefficients.firstOrder = false;
+        coefficients.a1 = a1;
+        coefficients.a2 = a2;
+        coefficients.a3 = a3;
+        coefficients.m0 = 1.0;
+        coefficients.m1 = -2.0 * k;
+        coefficients.m2 = 0.0;
         return true;
     }
 };
