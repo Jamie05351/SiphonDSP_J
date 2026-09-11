@@ -97,3 +97,51 @@ TEST_CASE("Low subsonic HPF matches the theoretical 2nd-order Butterworth corner
         CHECK(std::fabs(measuredDb - expectedDb) < 0.5);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (Mid band): the Mid crossover HPF is two
+// cascaded identical 2nd-order Butterworth stages (LR4), so its magnitude-squared response is the
+// single-stage Butterworth response *squared* -- in dB, exactly double the single-stage dB. At the
+// crossover frequency itself that works out to the well-known LR4 signature of -6 dB (not -3 dB),
+// which is what lets the Low and Mid branches sum back to flat through the handoff (see the
+// sibling "sums flat" test above).
+//
+// Both Low outputs are muted so only the Mid HPF crossover shapes the final output; the crossover
+// frequency defaults to the same 150 Hz on both Mid Left and Mid Right (flatConfig() doesn't
+// touch it), so unlike the subsonic test above there's no need to account for the deliberate
+// output L/R swap here -- both buffer channels show the identical Mid-only response either way.
+TEST_CASE("Mid crossover HPF matches the theoretical LR4 (cascaded Butterworth) rolloff") {
+    auto cfg = flatConfig();
+    const int lowLeftBase = nbschema::kOutputConfigBase;
+    const int lowRightBase = nbschema::kOutputConfigBase + nbschema::kOutputConfigWidth;
+    cfg[lowLeftBase + nbschema::kOutMuted] = 1.f;
+    cfg[lowRightBase + nbschema::kOutMuted] = 1.f;
+
+    constexpr double kMidCrossoverFreq = 150.0;  // flatConfig()'s untouched per-output default
+    const double freqs[] = {40, 60, 90, 130, 150, 175, 250, 400, 1000, 4000};
+    const double amp = 0.05;
+
+    std::vector<double> measured, expected;
+    for (double f : freqs) {
+        NativeBmwDspProcessor proc;
+        auto out = renderSteadyState(proc, cfg, f, amp);
+        measured.push_back(linToDb(channelMagnitudeAt(out, 0, f)));
+
+        const double ratio = f / kMidCrossoverFreq;
+        const double r4 = ratio * ratio * ratio * ratio;
+        const double singleStageDb = 10.0 * std::log10(r4 / (1.0 + r4));
+        expected.push_back(2.0 * singleStageDb);
+    }
+
+    // Normalise both curves to the 4 kHz point (last entry above, deep in the passband, ~0 dB
+    // either way) rather than asserting an absolute level -- same "compare shapes, not absolute
+    // gain" approach the sibling flat-sum test uses, so this doesn't need to know about every
+    // other stage's exact gain contribution (postGain, the DC blocker's own gentle rolloff, ...).
+    const double refMeasured = measured.back(), refExpected = expected.back();
+
+    for (std::size_t i = 0; i < measured.size(); ++i) {
+        const double relMeasured = measured[i] - refMeasured;
+        const double relExpected = expected[i] - refExpected;
+        INFO("f=", freqs[i], " Hz  measuredRel=", relMeasured, " dB  expectedRel=", relExpected, " dB");
+        CHECK(std::fabs(relMeasured - relExpected) < 0.6);
+    }
+}
