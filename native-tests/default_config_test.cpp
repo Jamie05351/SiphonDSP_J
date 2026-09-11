@@ -145,3 +145,89 @@ TEST_CASE("Mid crossover HPF matches the theoretical LR4 (cascaded Butterworth) 
         CHECK(std::fabs(relMeasured - relExpected) < 0.6);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (Full-range PEQ, 3x16 bands): exercises
+// makePeq's all 4 types (bell, low shelf, high shelf, all-pass) through the full-range bank
+// (inputPeq_ -- applied before the low/mid split, so no crossover shaping to account for). The
+// low/mid PEQ banks use this exact same makePeq/Biquad machinery on the exact same 5-value band
+// format, just applied post-split -- their correctness follows from this bank's, not tested
+// separately here.
+//
+// Uses configurePeq() directly (its own array format, [freq, gainDb, Q, type, channel] per band
+// -- not part of configure()'s v[] array) rather than going through the Kotlin-facing config
+// array, since that's the API surface this exercises. Each band type gets its own configurePeq()
+// call with exactly one band, not a combined multi-band config: with several bands active
+// together, every measurement reflects their *combined* response (confirmed with a throwaway
+// model before writing this -- a bell only ~2.5x away from another band's centre frequency
+// shifted that band's measured gain by close to 1 dB), which would make this test either flaky
+// or need per-pair-of-bands-specific tolerances. Isolating each type keeps every check exact and
+// independent of how the others are tuned.
+static void configureSingleBand(NativeBmwDspProcessor& proc, double freq, double gainDb, double q, int type) {
+    const double band[5] = {freq, gainDb, q, static_cast<double>(type), 0.0 /* both channels */};
+    REQUIRE(proc.configurePeq(true, 0.0f, band, 5, nullptr, 0, nullptr, 0));
+}
+
+TEST_CASE("Full-range PEQ bell bands hit their designed gain at their own centre frequency") {
+    auto cfg = flatConfig();
+    const double amp = 0.05;
+    // Gain at fc is exactly the designed dB, independent of Q -- a well-known exact property of
+    // the peaking-EQ transfer function, and a direct check the migrated SVF bell coefficients
+    // still hit the same designed gain the RBJ ones did.
+    struct Case { double freq, gainDb, q; };
+    const Case cases[] = {
+        {150.0, 6.0, 1.0},
+        {2000.0, -8.0, 2.5},
+    };
+    for (const auto& c : cases) {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+        configureSingleBand(proc, c.freq, c.gainDb, c.q, 0);
+
+        const double measuredDb = linToDb(channelMagnitudeAt(renderSteadyState(proc, cfg, c.freq, amp), 0, c.freq));
+        INFO("bell fc=", c.freq, " Hz  measured=", measuredDb, " dB  expected=", c.gainDb, " dB");
+        CHECK(std::fabs(measuredDb - c.gainDb) < 0.3);
+    }
+}
+
+TEST_CASE("Full-range PEQ shelf bands settle to their designed gain away from the corner") {
+    auto cfg = flatConfig();
+    const double amp = 0.05;
+    // Low shelf probed a decade below fc, high shelf a factor of 5 above -- comfortably into the
+    // flat part of the shelf in both cases (the high shelf's fc is kept low enough that 5x still
+    // clears Nyquist at 48 kHz with headroom).
+    struct Case { double freq, gainDb, q, probe; int type; };
+    const Case cases[] = {
+        {60.0, 5.0, 0.7071067812, 6.0, 1},
+        {3000.0, -6.0, 0.7071067812, 15000.0, 2},
+    };
+    for (const auto& c : cases) {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+        configureSingleBand(proc, c.freq, c.gainDb, c.q, c.type);
+
+        const double measuredDb = linToDb(channelMagnitudeAt(renderSteadyState(proc, cfg, c.probe, amp), 0, c.probe));
+        INFO((c.type == 1 ? "low" : "high"), " shelf fc=", c.freq, " Hz probe=", c.probe,
+             " Hz  measured=", measuredDb, " dB  expected=", c.gainDb, " dB");
+        CHECK(std::fabs(measuredDb - c.gainDb) < 0.5);
+    }
+}
+
+TEST_CASE("Full-range PEQ all-pass band has unity magnitude everywhere") {
+    auto cfg = flatConfig();
+    const double amp = 0.05;
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    configureSingleBand(proc, 500.0, 0.0, 1.0, 3);
+
+    // Unity magnitude at every frequency is the defining property of an all-pass -- swept well
+    // below to well above the section's own fc, not just near it.
+    const double freqs[] = {30, 100, 500, 2000, 8000, 18000};
+    for (double f : freqs) {
+        const double measuredDb = linToDb(channelMagnitudeAt(renderSteadyState(proc, cfg, f, amp), 0, f));
+        INFO("all-pass probe f=", f, " Hz  measured=", measuredDb, " dB (expected ~0 dB)");
+        CHECK(std::fabs(measuredDb) < 0.3);
+    }
+}
