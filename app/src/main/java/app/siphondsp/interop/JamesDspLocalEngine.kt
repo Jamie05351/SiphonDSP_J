@@ -281,18 +281,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 
-    /** 4 floats: per-output injected subharmonic level (dBFS). See getNativeBmwSubharmonicMeter. */
-    fun nativeBmwSubharmonicMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwSubharmonicMeter(it) }
-
-    /** Estimated preamp cut (dB, >= 0) for the subharmonic synth's worst-case peak. */
-    fun nativeBmwSubharmonicHeadroomDb(): Float =
-        withHandle(0f) { JamesDspWrapper.getNativeBmwSubharmonicHeadroomDb(it) }
-
-    /** Momentary: outputId to solo (NativeBmwDspValues.OUTPUT_*), -1 to release. */
-    fun setNativeBmwSubharmonicSolo(outputId: Int) =
-        withHandle { JamesDspWrapper.setNativeBmwSubharmonicSolo(it, outputId) }
-
     fun startNativeBmwCapture() = withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
 
     fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }

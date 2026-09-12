@@ -253,23 +253,6 @@ TEST_CASE("kMasterLimiterEnabled / kMasterLimiterThreshold slots") {
     CHECK(on1.peak > on6.peak + 0.2f);        // a higher threshold lets more through
 }
 
-TEST_CASE("kSubEnabled / kSubBandsBase drive the subharmonic synthesizer") {
-    // Band 0 (default 48..70 Hz) tracks a 60 Hz tone and divides it down an octave to 30 Hz --
-    // proves the config slots reach the real divider (not just an enable no-op).
-    auto energyAt30Hz = [](float enabled) {
-        NativeBmwDspProcessor proc;
-        auto c = defaultConfig();
-        c[sch::kSubEnabled] = enabled;
-        c[sch::kTiltEnabled] = 0.f;  // keep the tonality tilt shelf out of the 30 Hz reading
-        auto out = renderSteadyState(proc, c, 60.0, 0.2);
-        return linToDb(channelMagnitudeAt(out, 0, 30.0) / 0.2);
-    };
-    const float off = energyAt30Hz(0.f);
-    const float on = energyAt30Hz(1.f);
-    INFO("30 Hz energy (relative to 60 Hz input amplitude): off ", off, " dB   on ", on, " dB");
-    CHECK(on - off > 20.f);
-}
-
 TEST_CASE("kStageDelayLeftMs / kStageDelayRightMs delay one summed-bus side") {
     // Impulse through the chain; cross-correlate the two output channels. The per-channel
     // filters are identical, so any lag between ch0 and ch1 is pure sample delay from the

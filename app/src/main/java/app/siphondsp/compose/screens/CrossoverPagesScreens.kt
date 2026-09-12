@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.sp
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.controls.BmwPanel
-import app.siphondsp.compose.controls.BmwSectionHeader
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.state.BmwDspState
@@ -152,37 +151,6 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                     onValueEntered = { dsp.commit(midLeftBase + 2, it, midAlignFreqMirror) },
                     toggleChecked = dsp.isOn(midLeftBase),
                     onToggleChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-                )
-
-                // Minimal on/off toggle for the subharmonic synthesizer (octave-under enhancer).
-                // Band-level controls (freq range, level, gate) are a follow-up once this DSP
-                // path is verified; this just exposes the global enable, same shape as the
-                // "Limiter" toggle on the Output page.
-                BmwSectionHeader(
-                    title = "Subharmonic synth",
-                    accentColor = lowSlider,
-                    fontSize = 13.sp,
-                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_SUB_ENABLED),
-                    onToggleChange = { on ->
-                        dsp.commit(NativeBmwDspValues.INDEX_SUB_ENABLED, if (on) 1f else 0f)
-                    },
-                )
-                Text(
-                    text = "Open full Subharmonic synth ›",
-                    color = linkBlue,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    textDecoration = TextDecoration.Underline,
-                    modifier = Modifier
-                        .padding(start = 4.dp, top = 2.dp, bottom = 6.dp)
-                        .clickable {
-                            context.startActivity(
-                                Intent(context, CrossoverTiltActivity::class.java).putExtra(
-                                    CrossoverTiltActivity.EXTRA_WORKSPACE_MODE,
-                                    CrossoverTiltActivity.MODE_SUBHARMONIC,
-                                ),
-                            )
-                        },
                 )
 
                 Text(

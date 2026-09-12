@@ -118,17 +118,6 @@ void NativeBmwDspProcessor::Delay::clear() {
     data.fill(0);
     write = 0;
 }
-void NativeBmwDspProcessor::SubharmonicBand::clear() {
-    bandpass.clear();
-    smoothing.clear();
-    flip = 1.0;
-    lastSample = 0.0;
-    envFast = envSlow = 0.f;
-    ampEnv = 0.f;
-    gateGain = 1.f;
-    lastGateTarget = 1.f;
-    holdCounter = 0;
-}
 void NativeBmwDspProcessor::Limiter::clear() {
     delayL.clear();
     delayR.clear();
@@ -230,22 +219,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
     next.limiterEnabled = v[189] >= .5f;
     next.limiterThreshDb = clampf(v[190], -12, 0);
-
-    // Subharmonic synthesizer (v[192..214]). v[191] is the master-limiter migration marker,
-    // not read here. See NativeBmwDspProcessor.h's kConfigSize comment.
-    next.subEnabled = v[192] >= .5f;
-    next.subCeilingDb = clampf(v[193], -12, 0);
-    for (int b = 0; b < 3; ++b) {
-        const std::size_t base = 194 + b * 7;
-        auto& sb = next.subBand[b];
-        sb.enabled = v[base] >= .5f;
-        sb.freqLo = clampf(v[base + 1], 20, 300);
-        sb.freqHi = clampf(v[base + 2], sb.freqLo * 1.05f, 400);
-        sb.levelDb = clampf(v[base + 3], 0, 12);
-        sb.gateMode = static_cast<int>(clampf(v[base + 4], 0, 2));
-        sb.gateDepthPct = clampf(v[base + 5], 0, 100);
-        sb.gateHoldMs = clampf(v[base + 6], 0, 1000);
-    }
 
     NativeBmwRouting::RoutingMatrix nextRouting;
     for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
@@ -412,30 +385,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
         dirty |= DirtyLimiter;
     }
-    // Subharmonic synthesizer: freq changes need new filter coefficients (DirtySub); level/
-    // ceiling/gate scalars are read live via cached values, so only need a scalar recompute
-    // (DirtySubTiming); enable transitions reset per-band state so a re-enabled band starts clean
-    // (DirtySubState) -- same three-way split as the MBC block above.
-    if (next.subEnabled != p_.subEnabled) {
-        dirty |= DirtySubState;
-    }
-    if (changed(next.subCeilingDb, p_.subCeilingDb)) {
-        dirty |= DirtySubTiming;
-    }
-    for (int b = 0; b < 3; ++b) {
-        const auto& cur = p_.subBand[b];
-        const auto& nxt = next.subBand[b];
-        if (changed(cur.freqLo, nxt.freqLo) || changed(cur.freqHi, nxt.freqHi)) {
-            dirty |= DirtySub;
-        }
-        if (cur.enabled != nxt.enabled) {
-            dirty |= DirtySubState;
-        }
-        if (changed(cur.levelDb, nxt.levelDb) || cur.gateMode != nxt.gateMode ||
-            changed(cur.gateDepthPct, nxt.gateDepthPct) || changed(cur.gateHoldMs, nxt.gateHoldMs)) {
-            dirty |= DirtySubTiming;
-        }
-    }
 
     p_ = next;
     routing_ = nextRouting;
@@ -518,20 +467,6 @@ void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
     q.a3 = a3;
     q.m0 = 1;
     q.m1 = -2 * k;
-    q.m2 = 0;
-    q.clear();
-}
-void NativeBmwDspProcessor::makeSvfBandpass(Biquad& q, float freqLo, float freqHi, float sr) {
-    const float center = std::sqrt(std::max(freqLo, 1.f) * std::max(freqHi, freqLo + 1.f));
-    const float Q = center / std::max(1.f, freqHi - freqLo);
-    double w = 2 * PI * clampf(center, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
-           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 0;
-    q.m1 = k;
     q.m2 = 0;
     q.clear();
 }
@@ -786,55 +721,6 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimMidReleaseMix_ =
         1 - std::exp(-1 / (std::max(20.f, p_.busLimMidReleaseMs) * .001f * sampleRate_));
 }
-void NativeBmwDspProcessor::rebuildSubharmonic() {
-    for (int b = 0; b < 3; ++b) {
-        auto& band = subBands_[b];
-        const auto& p = p_.subBand[b];
-        makeSvfBandpass(band.bandpass, p.freqLo, p.freqHi, sampleRate_);
-        const float center = std::sqrt(std::max(p.freqLo, 1.f) * std::max(p.freqHi, p.freqLo + 1.f));
-        // ~1.5x the divided (half) center frequency -- keeps the synthesized tone clean rather
-        // than buzzy.
-        makeLowPass(band.smoothing, center * .75f, BW, sampleRate_);
-        band.clear();
-    }
-    // Fixed (non-configurable) characteristic of the effect itself: a gentle +3dB/Q1/70Hz bell.
-    makePeq(subBell_, 70.0, 3.0, 1.0, 0, sampleRate_);
-    rebuildSubharmonicTiming();
-}
-void NativeBmwDspProcessor::rebuildSubharmonicTiming() {
-    subCeilingLin_ = dbToLin(p_.subCeilingDb);
-    subLimAttackMix_ = 1 - std::exp(-1 / (.001f * sampleRate_));  // fixed-fast, matches bus limiter
-    subLimReleaseMix_ = 1 - std::exp(-1 / (.050f * sampleRate_));
-    subEnvFastMix_ = 1 - std::exp(-1 / (.003f * sampleRate_));
-    subEnvSlowMix_ = 1 - std::exp(-1 / (.150f * sampleRate_));
-    subAmpEnvMix_ = 1 - std::exp(-1 / (.015f * sampleRate_));
-    subGateSmoothMix_ = 1 - std::exp(-1 / (.005f * sampleRate_));
-    for (int b = 0; b < 3; ++b) {
-        const auto& p = p_.subBand[b];
-        subBandLevelLin_[b] = dbToLin(p.levelDb);
-        subBandGateDepth_[b] = clampf(p.gateDepthPct * .01f, 0.f, 1.f);
-        subBandGateHoldSamples_[b] =
-            static_cast<int>(clampf(p.gateHoldMs * .001f * sampleRate_, 0.f, 1e6f));
-    }
-    // Needed preamp cut: how far a full-scale (0 dBFS) program peak plus the synth's own ceiling,
-    // summed constructively, would land above 0 dBFS, net of the headroom already pulled upstream
-    // (p_.headroom <= 0, so adding it directly subtracts that existing margin).
-    const float combinedOverDb = 20.f * std::log10(1.f + subCeilingLin_);
-    subNeededCutDb_.store(std::max(0.f, combinedOverDb + p_.headroom), std::memory_order_relaxed);
-}
-void NativeBmwDspProcessor::resetSubharmonicState() {
-    for (auto& band : subBands_) {
-        band.clear();
-    }
-    subBell_.clear();
-    subLimGain_ = 1.f;
-    for (auto& v : subMeterDb_) {
-        v.store(-100.f, std::memory_order_relaxed);
-    }
-    for (auto& c : subMeterCounter_) {
-        c = 0;
-    }
-}
 void NativeBmwDspProcessor::rebuildTilt() {
     float g = p_.tiltAmount * .75f;
     makeLowShelf(tiltLoL1_, p_.tiltFreq, g, sampleRate_);
@@ -969,15 +855,6 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLimiter) {
         rebuildLimiter();
     }
-    if (d & DirtySub) {
-        rebuildSubharmonic();
-    }
-    if (d & DirtySubTiming) {
-        rebuildSubharmonicTiming();
-    }
-    if (d & DirtySubState) {
-        resetSubharmonicState();
-    }
 }
 void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = std::exp(-2 * PI * 10 / sampleRate_);
@@ -990,7 +867,6 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildLimiter();
     rebuildMbc();
     rebuildBusLimiter();
-    rebuildSubharmonic();
     rebuildPolarityAndMute();
     rebuildMeasBus();
     rebuildAllPass();
@@ -1004,7 +880,6 @@ void NativeBmwDspProcessor::rebuildAll() {
     masterLimiterGrDb_.store(0.f);
     limiterMeterCounter_ = 0;
     resetMbcState();
-    resetSubharmonicState();
     busLimLowGain_ = busLimMidGain_ = 1.f;
     busLimLowGrDb_.store(0.f);
     busLimMidGrDb_.store(0.f);
@@ -1155,93 +1030,20 @@ void NativeBmwDspProcessor::processBusLimiter(float& l, float& r, float threshol
     l = ftz(l * gain);
     r = ftz(r * gain);
 }
-// RMS+peak-style discriminator envelopes drive the transient/sustained gate; ampEnv separately
-// tracks the divided tone's own loudness so gate timing and level tracking don't fight. Zero-
-// crossing divide-by-2: `flip` toggles once per rising crossing of the bandpassed signal, and the
-// held value *is* the divided (one-octave-down) square wave.
-float NativeBmwDspProcessor::processSubharmonicBand(SubharmonicBand& band, float monoSample,
-                                                    const Params::SubBandParams& p, float levelLin,
-                                                    float gateDepth, int holdSamples) {
-    const double bp = band.bandpass.run(monoSample);
-    const float absBp = static_cast<float>(std::fabs(bp));
-    band.envFast = ftz(band.envFast + (absBp - band.envFast) * subEnvFastMix_);
-    band.envSlow = ftz(band.envSlow + (absBp - band.envSlow) * subEnvSlowMix_);
-    if (band.lastSample <= 0.0 && bp > 0.0) {
-        band.flip = -band.flip;
-    }
-    band.lastSample = bp;
-    band.ampEnv = ftz(band.ampEnv + (absBp - band.ampEnv) * subAmpEnvMix_);
-    const float raw = static_cast<float>(band.flip) * band.ampEnv;
-    const float smoothed = band.smoothing.run(raw);
-
-    float rawTarget = 1.f;
-    if (p.gateMode != 0) {
-        const float ratio = band.envFast / (band.envSlow + 1e-6f);
-        const bool isTransient = ratio > 1.6f;
-        const bool favorPercussive = p.gateMode == 1;
-        const bool openGate = favorPercussive ? isTransient : !isTransient;
-        rawTarget = openGate ? 1.f : (1.f - gateDepth);
-    }
-    if (band.holdCounter > 0) {
-        --band.holdCounter;
-    } else if (std::fabs(rawTarget - band.lastGateTarget) > 1e-6f) {
-        band.lastGateTarget = rawTarget;
-        band.holdCounter = holdSamples;
-    }
-    band.gateGain = ftz(band.gateGain + (band.lastGateTarget - band.gateGain) * subGateSmoothMix_);
-    return smoothed * band.gateGain * levelLin;
-}
-// Sub ceiling: a brick-wall soft-knee follower with its own independent state -- same no-
-// lookahead shape as processBusLimiter, not shared with the master limiter.
-float NativeBmwDspProcessor::softLimitSub(float x) {
-    const float pk = std::fabs(x);
-    const float target = pk > subCeilingLin_ ? subCeilingLin_ / pk : 1.f;
-    const float mix = target < subLimGain_ ? subLimAttackMix_ : subLimReleaseMix_;
-    subLimGain_ = std::min(1.f, ftz(subLimGain_ + (target - subLimGain_) * mix));
-    return ftz(x * subLimGain_);
-}
-float NativeBmwDspProcessor::computeSubharmonicMix(float monoSample) {
-    if (!p_.subEnabled) {
-        return 0.f;
-    }
-    float sum = 0.f;
-    for (int b = 0; b < 3; ++b) {
-        if (p_.subBand[b].enabled) {
-            sum += processSubharmonicBand(subBands_[b], monoSample, p_.subBand[b],
-                                          subBandLevelLin_[b], subBandGateDepth_[b],
-                                          subBandGateHoldSamples_[b]);
-        }
-    }
-    sum = subBell_.run(sum);
-    return softLimitSub(sum);
-}
-float NativeBmwDspProcessor::injectSubharmonic(OutputId id, float sample, float subInject) {
-    const std::size_t idx = static_cast<std::size_t>(id);
-    if ((++subMeterCounter_[idx] & 255u) == 0) {
-        const float db = 20.f * std::log10(std::max(std::fabs(subInject), 1e-12f));
-        subMeterDb_[idx].store(clampf(db, -100.f, 6.f), std::memory_order_relaxed);
-    }
-    if (subSoloOutput_.load(std::memory_order_relaxed) == static_cast<int>(id)) {
-        return subInject;
-    }
-    return sample + subInject;
-}
 float NativeBmwDspProcessor::processLowCrossover(OutputRuntime& out, const OutputConfig& cfg,
-                                                 float sample, float subInject) {
+                                                 float sample) {
     if (cfg.subsonicEnabled) {
         sample = out.subsonic1.run(sample);
     }
-    sample = injectSubharmonic(out.id, sample, subInject);
     sample = out.crossover1.run(sample);
     sample = out.crossover2.run(sample);
     return sample;
 }
 float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
                                                  [[maybe_unused]] const OutputConfig& cfg,
-                                                 float sample, float subInject) {
+                                                 float sample) {
     // Kept symmetric with processLowCrossover (which still reads cfg.subsonicEnabled); the Mid
-    // side has no subsonic stage, so the synth is injected right at entry instead.
-    sample = injectSubharmonic(out.id, sample, subInject);
+    // side is just the HPF pair now.
     sample = out.crossover1.run(sample);
     sample = out.crossover2.run(sample);
     return sample;
@@ -1259,9 +1061,6 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
     sL *= headroom_;
     sR *= headroom_;
-    // Subharmonic synth taps the same post-headroom mono downmix processMbc is about to consume
-    // (read-only; computed before processMbc mutates sL/sR in place for its own wet/dry mix).
-    const float subMix = computeSubharmonicMix(0.5f * (sL + sR));
     // Pre-crossover multiband compressor: full-range stereo, before any band split. No-op branch
     // while disabled (how it ships).
     processMbc(sL, sR);
@@ -1280,8 +1079,8 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     const auto& midRightCfg = outputConfig(OutputId::MidRight);
 
     if (!p_.lpfPass) {
-        lowL = processLowCrossover(lowLeft, lowLeftCfg, lowL, subMix);
-        lowR = processLowCrossover(lowRight, lowRightCfg, lowR, subMix);
+        lowL = processLowCrossover(lowLeft, lowLeftCfg, lowL);
+        lowR = processLowCrossover(lowRight, lowRightCfg, lowR);
         if (peqEnabled_) {
             lowL = lowPeq_.processLeft(lowL);
             lowR = lowPeq_.processRight(lowR);
@@ -1314,8 +1113,8 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
 
     if (!p_.hpfPass) {
-        midL = processMidCrossover(midLeft, midLeftCfg, midL, subMix);
-        midR = processMidCrossover(midRight, midRightCfg, midR, subMix);
+        midL = processMidCrossover(midLeft, midLeftCfg, midL);
+        midR = processMidCrossover(midRight, midRightCfg, midR);
         if (peqEnabled_) {
             midL = midPeq_.processLeft(midL);
             midR = midPeq_.processRight(midR);
@@ -1519,20 +1318,6 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
         return;
     }
     v[0] = p_.limiterEnabled ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
-}
-void NativeBmwDspProcessor::readSubharmonicMeter(float* v, std::size_t n) const {
-    if (!v || n < NativeBmwRouting::kOutputCount) {
-        return;
-    }
-    for (std::size_t i = 0; i < NativeBmwRouting::kOutputCount; ++i) {
-        v[i] = subMeterDb_[i].load(std::memory_order_relaxed);
-    }
-}
-float NativeBmwDspProcessor::readSubharmonicHeadroomDb() const {
-    return subNeededCutDb_.load(std::memory_order_relaxed);
-}
-void NativeBmwDspProcessor::setSubharmonicSolo(int outputId) {
-    subSoloOutput_.store(outputId, std::memory_order_relaxed);
 }
 
 void NativeBmwDspProcessor::startCapture() {

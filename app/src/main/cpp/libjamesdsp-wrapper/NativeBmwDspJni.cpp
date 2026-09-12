@@ -159,54 +159,6 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv
     return result;
 }
 
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwSubharmonicMeter(JNIEnv* env, jobject,
-                                                                        jlong self) {
-    if (env == nullptr || self == 0) {
-        return nullptr;
-    }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
-    float values[4];
-    processor->readSubharmonicMeter(values, 4);
-    jfloatArray result = env->NewFloatArray(4);
-    if (result != nullptr) {
-        env->SetFloatArrayRegion(result, 0, 4, values);
-    }
-    return result;
-}
-
-extern "C" JNIEXPORT jfloat JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwSubharmonicHeadroomDb(JNIEnv* env, jobject,
-                                                                             jlong self) {
-    if (env == nullptr || self == 0) {
-        return 0.f;
-    }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return 0.f;
-    }
-    return processor->readSubharmonicHeadroomDb();
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_setNativeBmwSubharmonicSolo(JNIEnv* env, jobject,
-                                                                       jlong self,
-                                                                       jint outputId) {
-    if (env == nullptr || self == 0) {
-        return;
-    }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor != nullptr) {
-        processor->setSubharmonicSolo(static_cast<int>(outputId));
-    }
-}
-
 extern "C" JNIEXPORT void JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
