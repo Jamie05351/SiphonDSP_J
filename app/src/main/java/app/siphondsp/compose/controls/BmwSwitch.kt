@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.view.BmwDashboardSkin
 import kotlin.math.max
@@ -41,9 +42,11 @@ import kotlin.math.max
  * glow on the knob's side. Green + knob-right + "ON" for on, red + knob-left + "OFF" for off. The
  * knob is neutral chrome in both states; only the glow and the label carry the status colour.
  *
- * Drawn (not a bitmap) so it stays crisp and the "ON"/"OFF" label stays legible at the small
- * inline size the slider rows use. Colours come from [BmwDashboardSkin]'s `GLASS_SWITCH_*`
- * constants, shared with the (now dead) View path.
+ * Drawn (not a bitmap) so it stays crisp and the labels stay legible at the small inline size the
+ * slider rows use. Colours default to [BmwDashboardSkin]'s `GLASS_SWITCH_*` constants (shared with
+ * the now-dead View path) and labels default to "ON"/"OFF"; [onColor]/[offColor]/[onLabel]/
+ * [offLabel] let a caller with its own on/off convention (e.g. polarity: green=normal,
+ * pink=inverted) reuse this same chrome instead of a second switch implementation.
  *
  * Built on [toggleable] with [Role.Switch]. Stateless: the caller hoists [checked] /
  * [onCheckedChange]. Footprint ([ComponentWidth] x [ComponentHeight]) is unchanged from the
@@ -56,6 +59,16 @@ fun BmwSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentDescription: String? = null,
+    // Defaults are the app's standard ON/OFF green/red glass switch. A caller with its own
+    // status-colour convention (e.g. polarity: green=normal, pink=inverted) overrides these
+    // rather than needing a second switch implementation.
+    onColor: Color = Color(BmwDashboardSkin.GLASS_SWITCH_ON_COLOR),
+    offColor: Color = Color(BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR),
+    onLabel: String = "ON",
+    offLabel: String = "OFF",
+    // Wider labels ("NORMAL"/"INVERT" for the polarity switch) need more room than the default
+    // ON/OFF footprint every other call site relies on, so width is overridable per-instance.
+    width: Dp = ComponentWidth,
 ) {
     val progress by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
@@ -67,7 +80,7 @@ fun BmwSwitch(
     Canvas(
         modifier = modifier
             .then(if (enabled) Modifier else Modifier.alpha(DisabledAlpha))
-            .size(ComponentWidth, ComponentHeight)
+            .size(width, ComponentHeight)
             .toggleable(
                 value = checked,
                 enabled = enabled,
@@ -78,7 +91,7 @@ fun BmwSwitch(
                 if (desc != null) Modifier.semantics { this.contentDescription = desc } else Modifier
             ),
     ) {
-        val status = lerp(OffColor, OnColor, progress)
+        val status = lerp(offColor, onColor, progress)
         val pillH = PillHeight.toPx()
         val pillTop = (size.height - pillH) / 2f
         val pill = Rect(0f, pillTop, size.width, pillTop + pillH)
@@ -93,7 +106,7 @@ fun BmwSwitch(
 
         drawPerimeterGlow(pill, corner, status, progress, kcx, kcy, kr)
         drawPillBody(pill, corner, status)
-        drawLabels(pill, corner, knobD, progress)
+        drawLabels(pill, corner, knobD, progress, onColor, offColor, onLabel, offLabel)
         drawKnob(kcx, kcy, kr, status)
     }
 }
@@ -116,9 +129,6 @@ private val LabelBlur = 3.dp
 private const val DisabledAlpha = 0.4f
 
 // --- colours -------------------------------------------------------------------------------
-private val OnColor = Color(BmwDashboardSkin.GLASS_SWITCH_ON_COLOR)
-private val OffColor = Color(BmwDashboardSkin.GLASS_SWITCH_OFF_COLOR)
-
 private val PillTop = Color(0xFF2C2C2E)
 private val PillMid = Color(0xFF161617)
 private val PillBottom = Color(0xFF050506)
@@ -266,7 +276,16 @@ private fun DrawScope.drawPillBody(pill: Rect, corner: Float, status: Color) {
     )
 }
 
-private fun DrawScope.drawLabels(pill: Rect, corner: Float, knobD: Float, progress: Float) {
+private fun DrawScope.drawLabels(
+    pill: Rect,
+    corner: Float,
+    knobD: Float,
+    progress: Float,
+    onColor: Color,
+    offColor: Color,
+    onLabel: String,
+    offLabel: String,
+) {
     // OFF fades out quickly as the knob leaves the left; ON fades in over the second half.
     val offAlpha = (1f - progress * 2f).coerceIn(0f, 1f)
     val onAlpha = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
@@ -291,8 +310,8 @@ private fun DrawScope.drawLabels(pill: Rect, corner: Float, knobD: Float, progre
             canvas.nativeCanvas.drawText(text, cx, baselineY, glow)
             canvas.nativeCanvas.drawText(text, cx, baselineY, base)
         }
-        label("OFF", offX, OffColor, offAlpha)
-        label("ON", onX, OnColor, onAlpha)
+        label(offLabel, offX, offColor, offAlpha)
+        label(onLabel, onX, onColor, onAlpha)
     }
 }
 
