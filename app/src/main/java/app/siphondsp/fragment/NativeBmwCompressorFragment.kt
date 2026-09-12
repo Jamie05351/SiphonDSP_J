@@ -45,6 +45,10 @@ class NativeBmwCompressorFragment : Fragment() {
 
     private fun rebuild() {
         val ctx = requireContext()
+        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
+        // creates page 0 otherwise, which snapped this screen back to its first page on every
+        // entry (including just backgrounding and returning to the app).
+        val page = DspPager.currentPage(pagerContainer.getChildAt(0))
         val pages = buildList<View> {
             add(ComposeView(ctx).apply { setContent { CompressorVisualiserPage() } })
             for (band in 0 until NativeBmwDspValues.MBC_BAND_COUNT) {
@@ -54,7 +58,7 @@ class NativeBmwCompressorFragment : Fragment() {
 
         pagerContainer.removeAllViews()
         pagerContainer.addView(
-            DspPager.build(ctx, pages),
+            DspPager.build(ctx, pages, initialPage = page),
         )
     }
 }
