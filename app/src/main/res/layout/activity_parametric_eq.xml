@@ -6,7 +6,7 @@
     tools:context=".activity.ParametricEqualizerActivity">
 
     <!-- Full-screen workspace backdrop: per-destination art (rail housing, tile buttons, lit
-         selection glow, background field and the ///M carbon logo all baked in together) -- see
+         selection glow, background field and the ///M carbon logo all baked in together) &#8212; see
          DspDestination.backdrop. DspCrossNavBar.populate() swaps this image per destination.
          Authored at 1280x480 mdpi, edge to edge (the head unit runs with no system bars), so it
          fills the whole activity behind every other layer. -->
