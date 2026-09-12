@@ -22,6 +22,7 @@ enum class DspDestination(
     @StringRes val sidebarLabelRes: Int,
     @DrawableRes val icon: Int,
     @DrawableRes val backdrop: Int,
+    @DrawableRes val backdropPhone: Int,
     val activityClass: KClass<out AppCompatActivity>,
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
@@ -35,15 +36,20 @@ enum class DspDestination(
     // selection glow and background all baked in together) -- hand-authored per destination, not
     // generated. Replaces the single shared dsp_workspace_field.png + live-drawn
     // WorkspaceSidebarView overlay (both removed).
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.dsp_workspace_backdrop_peq, ParametricEqualizerActivity::class),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.dsp_workspace_backdrop_gains, GainLimiterActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.dsp_workspace_backdrop_xover, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.dsp_workspace_backdrop_compressor, NativeBmwCompressorActivity::class),
+    //
+    // `backdropPhone` is a second, separately-authored set for a regular phone screen (drawable-
+    // nodpi, since it's picked by name at runtime -- see DspCrossNavBar.isHeadUnitDisplay --
+    // rather than by density/config qualifiers). The head-unit set stays exactly as authored;
+    // this is purely additive.
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.dsp_workspace_backdrop_peq, R.drawable.dsp_workspace_backdrop_peq_phone, ParametricEqualizerActivity::class),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.dsp_workspace_backdrop_gains, R.drawable.dsp_workspace_backdrop_gains_phone, GainLimiterActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.dsp_workspace_backdrop_xover, R.drawable.dsp_workspace_backdrop_xover_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.dsp_workspace_backdrop_compressor, R.drawable.dsp_workspace_backdrop_compressor_phone, NativeBmwCompressorActivity::class),
     // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
     // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
     // the native chain). The Measurements / routing rows live in the Settings page's inline
     // card (NativeBmwDspCardFragment).
-    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.dsp_workspace_backdrop_allpass, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.dsp_workspace_backdrop_allpass, R.drawable.dsp_workspace_backdrop_allpass_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {
@@ -62,6 +68,17 @@ object DspCrossNavBar {
     // tile layout baked into each destination's backdrop art. Tune both together if the
     // click-targets drift off the tiles.
     private val ROW_WEIGHTS = intArrayOf(16, 80, 12, 80, 12, 80, 12, 80, 12, 80, 16)
+
+    // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
+    // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
+    // phone gets remotely close to that in landscape at any density, so a wide margin below it
+    // (1100dp) reliably tells the two apart without needing an exact resolution/density match.
+    // NOTE: the sidebar's clickable column width (dsp_sidebar_width, 124dp, fixed) does not scale
+    // with this switch -- it was sized against the head unit's 1280dp-wide layout. The phone
+    // backdrop art bakes in roughly the same rail-to-width proportion, but a real device may not
+    // land pixel-for-pixel; worth a quick on-device check of tap-target alignment.
+    private fun isHeadUnitDisplay(activity: FragmentActivity): Boolean =
+        activity.resources.configuration.screenWidthDp >= 1100
 
     private class WeightedChild(val view: View, val weightIndex: Int)
 
@@ -86,8 +103,11 @@ object DspCrossNavBar {
         val children = mutableListOf<WeightedChild>()
 
         // The rail visual: swap in this destination's own backdrop (housing + tiles + lit glow
-        // all baked in), rather than moving a live-drawn selection over a shared image.
-        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(current.backdrop)
+        // all baked in), rather than moving a live-drawn selection over a shared image. Picks the
+        // head-unit or phone art per-destination based on the live screen width -- see
+        // isHeadUnitDisplay().
+        val backdrop = if (isHeadUnitDisplay(activity)) current.backdrop else current.backdropPhone
+        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
 
         fun addSpacer(weightIndex: Int) {
             val spacer = View(activity)
