@@ -46,6 +46,11 @@ class GainLimiterFragment : Fragment() {
     }
 
     private fun rebuild() {
+        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
+        // creates page 0 otherwise, which snapped this screen back to its first page on every
+        // resume (including just backgrounding and returning to the app).
+        val page = DspPager.currentPage(container.getChildAt(0))
+
         val diagramPage: View = ComposeView(requireContext()).apply {
             setContent { GainsDelayScreen() }
         }
@@ -61,6 +66,7 @@ class GainLimiterFragment : Fragment() {
             DspPager.build(
                 requireContext(),
                 listOf(diagramPage, outputPage, busLimiterPage),
+                initialPage = page,
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )

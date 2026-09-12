@@ -38,21 +38,27 @@ class OutputAllPassFragment : Fragment() {
     }
 
     private fun rebuild() {
-        fun page(output: Int, title: String, bandColor: Int, sliderColor: Int): View =
+        fun pageView(output: Int, title: String, bandColor: Int, sliderColor: Int): View =
             ComposeView(requireContext()).apply {
                 setContent { OutputAllPassScreen(output, title, bandColor, sliderColor) }
             }
+
+        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
+        // creates page 0 otherwise, which snapped this screen back to its first page on every
+        // resume (including just backgrounding and returning to the app).
+        val page = DspPager.currentPage(container.getChildAt(0))
 
         container.removeAllViews()
         container.addView(
             DspPager.build(
                 requireContext(),
                 listOf(
-                    page(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
-                    page(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
-                    page(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
-                    page(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
+                    pageView(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                    pageView(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR),
+                    pageView(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
+                    pageView(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR),
                 ),
+                initialPage = page,
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )

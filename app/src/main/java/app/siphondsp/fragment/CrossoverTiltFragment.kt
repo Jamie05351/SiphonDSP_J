@@ -39,6 +39,10 @@ class CrossoverTiltFragment : Fragment() {
 
     private fun rebuild() {
         val ctx = requireContext()
+        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
+        // creates page 0 otherwise, which snapped this screen back to its first page on every
+        // resume (including just backgrounding and returning to the app).
+        val page = DspPager.currentPage(container.getChildAt(0))
         container.removeAllViews()
         container.addView(
             DspPager.build(
@@ -47,6 +51,7 @@ class CrossoverTiltFragment : Fragment() {
                     ComposeView(ctx).apply { setContent { CrossoversPageScreen() } },
                     ComposeView(ctx).apply { setContent { TonalityTiltScreen() } },
                 ),
+                initialPage = page,
             ),
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
