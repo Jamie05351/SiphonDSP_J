@@ -858,6 +858,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeBmwMasterLimiterMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwMasterLimiterMeter()
 
+        fun nativeBmwSubharmonicMeter(): FloatArray? =
+            activeInstance?.engine?.nativeBmwSubharmonicMeter()
+
+        fun nativeBmwSubharmonicHeadroomDb(): Float? =
+            activeInstance?.engine?.nativeBmwSubharmonicHeadroomDb()
+
+        fun setNativeBmwSubharmonicSolo(outputId: Int) {
+            activeInstance?.engine?.setNativeBmwSubharmonicSolo(outputId)
+        }
+
         fun startNativeBmwCapture(): Boolean {
             val service = activeInstance ?: return false
             service.engine.startNativeBmwCapture()
