@@ -3,6 +3,7 @@ package app.siphondsp.view
 import android.content.Intent
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -20,6 +21,7 @@ enum class DspDestination(
     @StringRes val labelRes: Int,
     @StringRes val sidebarLabelRes: Int,
     @DrawableRes val icon: Int,
+    @DrawableRes val backdrop: Int,
     val activityClass: KClass<out AppCompatActivity>,
     val workspaceMode: String? = null,
     val showInPrimaryNav: Boolean = true,
@@ -28,33 +30,37 @@ enum class DspDestination(
     // matches the main tile grid's PEQ, Gains, Xovers, Compressor, All-pass order
     // (fragment_dsp_page_shortcuts.xml) rather than an arbitrary/functional grouping, so the
     // sidebar doesn't present a different sequence than the page the user navigated in from.
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    //
+    // `backdrop` is a full-screen, per-destination piece of art (rail housing, tile buttons, lit
+    // selection glow and background all baked in together) -- hand-authored per destination, not
+    // generated. Replaces the single shared dsp_workspace_field.png + live-drawn
+    // WorkspaceSidebarView overlay (both removed).
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.dsp_workspace_backdrop_peq, ParametricEqualizerActivity::class),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.dsp_workspace_backdrop_gains, GainLimiterActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.dsp_workspace_backdrop_xover, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.dsp_workspace_backdrop_compressor, NativeBmwCompressorActivity::class),
     // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
     // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
     // the native chain). The Measurements / routing rows live in the Settings page's inline
     // card (NativeBmwDspCardFragment).
-    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.dsp_workspace_backdrop_allpass, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {
-    // The rail -- rounded glass panel, 5 inlaid tiles, each tile's icon, and the cyan selection
-    // on the current screen's tile -- is drawn live by WorkspaceSidebarView (R.id.dsp_sidebar_view
-    // in activity_parametric_eq.xml), identical on every screen, only the selected tile moving.
-    // The backdrop behind it (R.id.dsp_workspace_backdrop) is one sidebar-less field image
-    // (suede + ///M logo) for every destination.
+    // The rail -- rounded glass panel, 5 inlaid tiles, each tile's icon, and the lit selection
+    // glow on the current screen's tile -- is baked into each destination's own full-screen
+    // backdrop image (DspDestination.backdrop, set on R.id.dsp_workspace_backdrop below). A
+    // different backdrop swaps in per destination; nothing is drawn live over it.
     //
-    // populate() draws no icon/label of its own; it only sets WorkspaceSidebarView.selectedIndex
-    // and lays an invisible click-target/focus-ring row over each tile's measured bounds within
-    // dsp_sidebar's reserved column (see that column's own comment in activity_parametric_eq.xml).
+    // populate() sets that backdrop image and lays an invisible click-target/focus-ring row over
+    // each tile's measured bounds within dsp_sidebar's reserved column (see that column's own
+    // comment in activity_parametric_eq.xml).
 
     // Rail geometry: rail top margin 16, five 80-unit tiles with 12-unit inter-tile gaps, 16
     // bottom margin -- 16 + 5*80 + 4*12 + 16 = 480. populate() applies these as cumulative
-    // fractions of dsp_sidebar's real measured height (so only the ratios matter), and
-    // WorkspaceSidebarView draws the panel/tiles from the same 480-unit space, so the two stay
-    // registered. Tune both together if the click-targets drift off the tiles.
+    // fractions of dsp_sidebar's real measured height (so only the ratios matter), matching the
+    // tile layout baked into each destination's backdrop art. Tune both together if the
+    // click-targets drift off the tiles.
     private val ROW_WEIGHTS = intArrayOf(16, 80, 12, 80, 12, 80, 12, 80, 12, 80, 16)
 
     private class WeightedChild(val view: View, val weightIndex: Int)
@@ -79,9 +85,9 @@ object DspCrossNavBar {
         val weights = ROW_WEIGHTS
         val children = mutableListOf<WeightedChild>()
 
-        // The rail visual: same on every screen, only the selected tile's cyan moves.
-        activity.findViewById<WorkspaceSidebarView>(R.id.dsp_sidebar_view)?.selectedIndex =
-            destinations.indexOf(current)
+        // The rail visual: swap in this destination's own backdrop (housing + tiles + lit glow
+        // all baked in), rather than moving a live-drawn selection over a shared image.
+        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(current.backdrop)
 
         fun addSpacer(weightIndex: Int) {
             val spacer = View(activity)

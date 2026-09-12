@@ -5,27 +5,28 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
 
-    <!-- Full-screen workspace backdrop: the suede field and the ///M carbon logo. One image for
-         every destination (no baked sidebar) &#8212; the rail is drawn live by WorkspaceSidebarView
-         below. Authored at 1280x480 mdpi, edge to edge (the head unit runs with no system bars),
-         so it fills the whole activity behind every other layer. -->
+    <!-- Full-screen workspace backdrop: per-destination art (rail housing, tile buttons, lit
+         selection glow, background field and the ///M carbon logo all baked in together) -- see
+         DspDestination.backdrop. DspCrossNavBar.populate() swaps this image per destination.
+         Authored at 1280x480 mdpi, edge to edge (the head unit runs with no system bars), so it
+         fills the whole activity behind every other layer. -->
     <ImageView
         android:id="@+id/dsp_workspace_backdrop"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="centerCrop"
         android:importantForAccessibility="no"
-        android:src="@drawable/dsp_workspace_field"
-        tools:src="@drawable/dsp_workspace_field" />
+        android:src="@drawable/dsp_workspace_backdrop_peq"
+        tools:src="@drawable/dsp_workspace_backdrop_peq" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/dsp_workspace_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Full-height column for the rail: WorkspaceSidebarView draws the panel/tiles/icons +
-             the cyan selection (identical on every screen, only the selected tile moves), and
-             dsp_cross_nav overlays it with the invisible click-target / focus-ring rows that
+        <!-- Full-height column for the rail: the panel/tiles/icons/selection glow are baked into
+             the per-destination backdrop image (R.id.dsp_workspace_backdrop) behind this column,
+             and dsp_cross_nav overlays it with the invisible click-target / focus-ring rows that
              DspCrossNavBar.populate() lays over each tile's measured bounds. Fixed width &#8212; the
              rail is a fixed pixel fixture; see @dimen/dsp_sidebar_width. -->
         <FrameLayout
@@ -35,12 +36,6 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent">
-
-            <app.siphondsp.view.WorkspaceSidebarView
-                android:id="@+id/dsp_sidebar_view"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:importantForAccessibility="no" />
 
             <LinearLayout
                 android:id="@+id/dsp_cross_nav"
