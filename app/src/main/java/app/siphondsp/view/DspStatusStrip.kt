@@ -72,14 +72,14 @@ class DspStatusStrip @JvmOverloads constructor(
         // Sits just past the toolbar's back arrow, centred on the toolbar line. No background of
         // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
         // the toolbar's own (see activity_parametric_eq.xml / header_toolbar_height) so this
-        // strip's text lines up with the now-lower back arrow instead of the old flush-top band.
+        // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        setPadding(0, dp(10), 0, 0)
+        setPadding(0, dp(25), 0, 0)
 
         segments.forEachIndexed { index, segment ->
             if (index > 0) addView(separator())
             val cell = TextView(context).apply {
-                textSize = 13.75f // 11f + 25%, matching the enlarged back arrow
+                textSize = 11f
                 includeFontPadding = false
                 setPadding(dp(6), dp(4), dp(6), dp(4))
                 setOnClickListener { open(segment) }
@@ -124,7 +124,7 @@ class DspStatusStrip @JvmOverloads constructor(
 
     private fun separator(): TextView = TextView(context).apply {
         text = "·"
-        textSize = 13.75f // 11f + 25%, matching the enlarged back arrow
+        textSize = 11f
         setTextColor(Color.rgb(90, 96, 104))
         setPadding(dp(2), 0, dp(2), 0)
     }

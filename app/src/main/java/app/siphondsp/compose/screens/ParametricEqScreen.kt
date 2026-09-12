@@ -231,24 +231,32 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     // space itself. dsp_status_strip_margin_start is the same "just past the indented back
     // arrow" offset dsp_status_strip used before it was hidden on this screen (see
     // ParametricEqualizerActivity), so the row starts exactly where that strip used to.
+    //
+    // top = 25.dp matches the native toolbar's own paddingTop (activity_parametric_eq.xml):
+    // without it, this Row centers within the ComposeView's full (bezel-padded) height and lands
+    // higher than the toolbar's own (padded-then-centered) back arrow -- close enough to read as
+    // two misaligned rows fighting for the same line rather than one clean line.
     val startInset = dimensionResource(R.dimen.dsp_status_strip_margin_start)
     Row(
         modifier = modifier
             .fillMaxHeight()
+            .padding(top = 25.dp)
             .horizontalScroll(rememberScrollState())
             .padding(start = startInset, end = 25.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Height matched to the AssistChips beside it (32dp, Material3's default chip height);
-        // width fixed rather than the old weight(1f) row-filling stretch -- roughly half of what
-        // that used to render as on a full-width toolbar line, now that it's a compact leading
-        // item in a scrolling row rather than sharing a row with just the Graph/List toggle.
+        // Default height (24dp) restored -- 32dp made the 3 segments cramped enough at a narrow
+        // width to look degraded rather than just smaller. Needs an explicit bounded width here
+        // (unlike its old Modifier.weight(1f), which only works in a plain, non-scrolling Row):
+        // BmwSegmentedControl's own segments use weight(1f) internally, which requires a bounded
+        // parent width to distribute -- inside this horizontalScroll Row, an unconstrained
+        // modifier would give it an unbounded width and crash. 300dp keeps each of the 3 labels
+        // ("PRE EQ"/"LOW"/"MID") comfortably unscrunched.
         PeqScopeControl(
             selected = holder.selectedScope,
             onSelect = { holder.selectedScope = it },
-            segmentHeight = 32.dp,
-            modifier = Modifier.width(160.dp),
+            modifier = Modifier.width(300.dp),
         )
         Chip("Reset") { showResetConfirm = true }
         Chip("Import") { importLauncher.launch(arrayOf("text/plain", "text/*")) }
