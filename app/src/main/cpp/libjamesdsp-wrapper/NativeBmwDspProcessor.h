@@ -47,7 +47,16 @@ public:
     //   188      Kotlin-only "legacy per-output compressor force-disabled" marker -- not read here
     //   189..190 master brick-wall limiter (enable, threshold dBFS) -- both read in configure()
     //   191      Kotlin-only "master limiter migrated" marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 192 };
+    //
+    // 192..214 -- subharmonic synthesizer (octave-under enhancer), added in the 192 -> 215
+    // growth. Zero-crossing octave-divider bands tracking a mono downmix, injected per-output
+    // after the subsonic HPF and before the crossover split. Ships disabled. Indices match
+    // NativeBmwDspValues.INDEX_SUB_*:
+    //   192      global enable            193      sub ceiling (dBFS, soft-limiter threshold)
+    //   194..200 band 0 (enable, freqLo, freqHi, levelDb, gateMode, gateDepthPct, gateHoldMs)
+    //   201..207 band 1 (same 7-field layout)
+    //   208..214 band 2 (same 7-field layout)
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 215 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -102,6 +111,21 @@ public:
     // 1 float: gain reduction (dB, >= 0) of the master brick-wall limiter on the summed output.
     // 0 while the limiter is bypassed. Lock-free; published by processLimiter().
     void readMasterLimiterMeter(float* values, std::size_t count) const;
+    // 4 floats: per-output injected subharmonic-synth peak level (dBFS), one per OutputId, read
+    // exactly where each output's injection happens. Lock-free, same discipline as the other
+    // meters above; idle (-100) while the synth or that output's crossover path isn't running.
+    void readSubharmonicMeter(float* values, std::size_t count) const;
+    // Estimated preamp cut (dB, >= 0) to keep the synth's worst-case constructive peak (a
+    // full-scale program peak plus the sub ceiling, summed) under 0 dBFS given the currently
+    // configured headroom. Recomputed by rebuildSubharmonicTiming(); 0 once existing headroom
+    // already covers it.
+    float readSubharmonicHeadroomDb() const;
+    // Momentary UI control (press-and-hold), not persisted config: while outputId matches one of
+    // NativeBmwRouting::OutputId's values, that output's normal signal is replaced with just the
+    // injected synth contribution (post-mix, pre-crossover) so it can be auditioned in isolation.
+    // -1 (default) restores normal mixing. Lock-free, same atomic-control discipline as the
+    // capture write index.
+    void setSubharmonicSolo(int outputId);
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
@@ -133,6 +157,9 @@ private:
         DirtyMbcState = 1u << 13,   // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
+        DirtySub = 1u << 17,        // per-band bandpass/smoothing coefficients (freq changes)
+        DirtySubTiming = 1u << 18,  // level/ceiling/gate scalars only -- no filter touch
+        DirtySubState = 1u << 19,   // enable transitions -- reset band/gate/envelope state
         DirtyAll = 0xffffffffu,
     };
 
@@ -313,6 +340,24 @@ private:
         std::atomic<float> outputDb{-60.f};
         std::atomic<float> gainReductionDb{0.f};
     };
+    // Subharmonic synthesizer -- one mono divider band. bandpass isolates the band's tracked
+    // fundamental; smoothing (a lowpass tuned to ~1.5x the divided/half frequency) turns the raw
+    // divided square wave into a clean tone. flip/lastSample implement the zero-crossing
+    // divide-by-2; envFast/envSlow feed the percussive/sustained gate discriminator; ampEnv
+    // tracks the synthesized tone's own loudness contour, independently of the gate envelopes so
+    // gate timing and loudness tracking don't fight each other.
+    struct SubharmonicBand {
+        Biquad bandpass;
+        Biquad smoothing;
+        double flip = 1.0;
+        double lastSample = 0.0;
+        float envFast = 0, envSlow = 0;
+        float ampEnv = 0;
+        float gateGain = 1.f;
+        float lastGateTarget = 1.f;
+        int holdCounter = 0;
+        void clear();
+    };
     struct Params {
         bool enabled = true, lpfPass = false, hpfPass = false, tilt = true;
         int channelMute = 0, measurementMute = 0;
@@ -343,6 +388,22 @@ private:
         // this stage always used before it was made adjustable.
         bool limiterEnabled = true;
         float limiterThreshDb = -1.f;
+        // Subharmonic synthesizer (v[192..214]). Zero-crossing octave-divider bands generating a
+        // synthetic tone one octave below tracked program bass, injected per-output after the
+        // subsonic HPF and before the crossover split. Ships disabled.
+        bool subEnabled = false;
+        float subCeilingDb = -3.f;
+        struct SubBandParams {
+            bool enabled = false;
+            float freqLo = 48, freqHi = 70, levelDb = 6;
+            int gateMode = 0;  // 0 off, 1 favor percussive, 2 favor sustained
+            float gateDepthPct = 60, gateHoldMs = 120;
+        };
+        SubBandParams subBand[3] = {
+            {true, 48, 70, 6, 0, 60, 120},
+            {true, 70, 112, 6, 0, 60, 120},
+            {false, 112, 160, 6, 0, 60, 120},
+        };
     } p_;
 
     static float dbToLin(float db);
@@ -351,11 +412,17 @@ private:
     static void makeLowShelf(Biquad& q, float fc, float gain, float sr);
     static void makeHighShelf(Biquad& q, float fc, float gain, float sr);
     static void makeAllPass2(Biquad& q, float fc, float sr);
+    // Bandpass, unity gain at center (m1 = k) -- used only by the subharmonic synthesizer's
+    // per-band tracking filter. center = sqrt(freqLo*freqHi), Q = center/(freqHi-freqLo)
+    // (standard bandwidth-to-Q conversion).
+    static void makeSvfBandpass(Biquad& q, float freqLo, float freqHi, float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type,
                         float sampleRate);
     float processChannelInput(float x, float& dcX, float& dcY);
-    float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
-    float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
+    float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample,
+                              float subInject);
+    float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample,
+                              float subInject);
     void processFrame(float& l, float& r);
     void processCompressor(float& sample, const CompressorParams& params, CompressorState& state);
     void processLimiter(float& left, float& right);
@@ -369,6 +436,25 @@ private:
     // already carries that. No-op branch while the bus's enable is false.
     void processBusLimiter(float& left, float& right, float thresholdDb, float& gain,
                            float releaseMix, std::atomic<float>& grMeterDb);
+    // Subharmonic synthesizer: one mono divider instance shared by all 4 outputs (a zero-crossing
+    // detector needs one coherent signal, and content this low isn't worth the phase-fighting
+    // risk of two independently-phased per-channel dividers). computeSubharmonicMix taps the same
+    // post-headroom mono downmix processMbc uses (read-only; MBC's own path is untouched) and
+    // returns the additive term injected at each output's processLowCrossover/processMidCrossover
+    // call. No lookahead, no added latency anywhere in this path.
+    float processSubharmonicBand(SubharmonicBand& band, float monoSample,
+                                 const Params::SubBandParams& p, float levelLin, float gateDepth,
+                                 int holdSamples);
+    float computeSubharmonicMix(float monoSample);
+    // Adds subInject to sample (or, while this output is momentarily soloed, replaces sample with
+    // just subInject) and publishes that output's injected-level meter. Called once per output,
+    // right after the subsonic stage (Low) / at entry (Mid) -- see processLowCrossover/
+    // processMidCrossover.
+    float injectSubharmonic(NativeBmwRouting::OutputId id, float sample, float subInject);
+    float softLimitSub(float x);
+    void rebuildSubharmonic();
+    void rebuildSubharmonicTiming();
+    void resetSubharmonicState();
     void publishIdleMeter(CompressorState& state);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
@@ -465,6 +551,26 @@ private:
     float busLimLowGain_ = 1.f, busLimMidGain_ = 1.f;
     // Published gain reduction (dB, >= 0) of each per-bus limiter, for readBusLimiterMeter().
     std::atomic<float> busLimLowGrDb_{0.f}, busLimMidGrDb_{0.f};
+
+    // Subharmonic synthesizer state. subBands_[0..2] mirror p_.subBand[0..2]; subBell_ is the
+    // fixed (non-configurable) +3dB/Q1/70Hz peaking bell; subLimGain_ is the sub ceiling's own
+    // independent soft-knee follower (same no-lookahead shape as processBusLimiter, not shared
+    // with the master limiter). subSoloOutput_/subMeterDb_/subNeededCutDb_ are runtime-only
+    // (never persisted config) -- see setSubharmonicSolo/readSubharmonicMeter/
+    // readSubharmonicHeadroomDb.
+    std::array<SubharmonicBand, 3> subBands_{};
+    Biquad subBell_;
+    float subCeilingLin_ = 1.f;
+    float subLimGain_ = 1.f;
+    float subLimAttackMix_ = 1.f, subLimReleaseMix_ = 0.f;
+    float subBandLevelLin_[3] = {1.f, 1.f, 1.f};
+    float subBandGateDepth_[3] = {0.6f, 0.6f, 0.6f};
+    int subBandGateHoldSamples_[3] = {0, 0, 0};
+    float subEnvFastMix_ = 0, subEnvSlowMix_ = 0, subAmpEnvMix_ = 0, subGateSmoothMix_ = 0;
+    std::atomic<int> subSoloOutput_{-1};
+    std::array<std::atomic<float>, NativeBmwRouting::kOutputCount> subMeterDb_{};
+    std::array<uint32_t, NativeBmwRouting::kOutputCount> subMeterCounter_{};
+    std::atomic<float> subNeededCutDb_{0.f};
 
     // Capture state -- see startCapture()/stopCapture()/exportCaptureWav(). The buffers and
     // captureEnabled_ are protected by stateMutex_ like everything else here (including from

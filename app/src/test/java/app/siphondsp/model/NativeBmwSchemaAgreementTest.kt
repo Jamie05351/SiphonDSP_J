@@ -99,6 +99,19 @@ class NativeBmwSchemaAgreementTest {
 
         "kMasterLimiterEnabled" to NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED,
         "kMasterLimiterThreshold" to NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD,
+
+        "kSubEnabled" to NativeBmwDspValues.INDEX_SUB_ENABLED,
+        "kSubCeilingDb" to NativeBmwDspValues.INDEX_SUB_CEILING_DB,
+        "kSubBandsBase" to NativeBmwDspValues.INDEX_SUB_BANDS,
+        "kSubBandWidth" to NativeBmwDspValues.SUB_BAND_WIDTH,
+        "kSubBandCount" to NativeBmwDspValues.SUB_BAND_COUNT,
+        "kSubBandEnabled" to NativeBmwDspValues.SUB_FIELD_ENABLED,
+        "kSubBandFreqLo" to NativeBmwDspValues.SUB_FIELD_FREQ_LO,
+        "kSubBandFreqHi" to NativeBmwDspValues.SUB_FIELD_FREQ_HI,
+        "kSubBandLevelDb" to NativeBmwDspValues.SUB_FIELD_LEVEL_DB,
+        "kSubBandGateMode" to NativeBmwDspValues.SUB_FIELD_GATE_MODE,
+        "kSubBandGateDepthPct" to NativeBmwDspValues.SUB_FIELD_GATE_DEPTH_PCT,
+        "kSubBandGateHoldMs" to NativeBmwDspValues.SUB_FIELD_GATE_HOLD_MS,
     )
 
     @Test

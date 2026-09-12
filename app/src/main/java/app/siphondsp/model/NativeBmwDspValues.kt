@@ -31,7 +31,13 @@ object NativeBmwDspValues {
     // added in the 144 -> 192 growth. The store keys entries by index, so an older 144-value
     // save just leaves 144..191 at their DEFAULTS; migrateMbcIfNeeded() claims the marker and
     // force-clears the enables. See the INDEX_MBC_* / INDEX_BUS_LIMITER_* section lower down.
-    const val SIZE = 192
+    //
+    // 192..214 are the subharmonic synthesizer block, added in the 192 -> 215 growth: brand-new
+    // functionality (not a reclaim), so it's simply appended -- the index-keyed store already
+    // backfills any missing trailing index from DEFAULTS on load, and subEnabled defaults to 0,
+    // so no explicit migration function is needed the way the MBC/limiter growth needed one. See
+    // the INDEX_SUB_* section lower down.
+    const val SIZE = 215
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -236,6 +242,33 @@ object NativeBmwDspValues {
     const val INDEX_MASTER_LIMITER_MIGRATED = 191
     const val DEFAULT_MASTER_LIMITER_THRESHOLD_DB = -1f
 
+    // ---------------------------------------------------------------------------------------
+    // Subharmonic synthesizer -- indices 192..214. New in the 192 -> 215 schema growth.
+    // Zero-crossing octave-divider bands tracking a mono downmix of the post-headroom stereo
+    // bus, generating a synthetic tone one octave below the tracked program bass and injecting
+    // it per-output after that output's subsonic HPF and before its crossover split (see
+    // NativeBmwDspProcessor::processLowCrossover/processMidCrossover). Ships DISABLED; only a
+    // minimal on/off toggle lands in this PR, band-level controls are a follow-up.
+    const val INDEX_SUB_ENABLED = 192
+    const val INDEX_SUB_CEILING_DB = 193 // soft-limiter threshold on the synth sum, dBFS
+
+    const val INDEX_SUB_BANDS = 194
+    const val SUB_BAND_COUNT = 3
+    const val SUB_BAND_WIDTH = 7
+    const val SUB_FIELD_ENABLED = 0
+    const val SUB_FIELD_FREQ_LO = 1
+    const val SUB_FIELD_FREQ_HI = 2
+    const val SUB_FIELD_LEVEL_DB = 3
+    const val SUB_FIELD_GATE_MODE = 4 // 0 off, 1 favor percussive, 2 favor sustained
+    const val SUB_FIELD_GATE_DEPTH_PCT = 5
+    const val SUB_FIELD_GATE_HOLD_MS = 6
+
+    fun subBandIndex(band: Int, field: Int): Int {
+        require(band in 0 until SUB_BAND_COUNT) { "Invalid subharmonic band $band" }
+        require(field in 0 until SUB_BAND_WIDTH) { "Invalid subharmonic band field $field" }
+        return INDEX_SUB_BANDS + band * SUB_BAND_WIDTH + field
+    }
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -297,6 +330,13 @@ object NativeBmwDspValues {
         // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
         // 189..191: master limiter enabled, threshold dBFS, migrated marker.
         0f, 1f, -1f, 1f,
+        // --- Subharmonic synthesizer (192..214), ships DISABLED ---
+        0f, // 192 subEnabled
+        -3f, // 193 subCeilingDb
+        // Per band: enabled, freqLo Hz, freqHi Hz, levelDb, gateMode, gateDepthPct, gateHoldMs.
+        1f, 48f, 70f, 6f, 0f, 60f, 120f, // 194..200 band 0
+        1f, 70f, 112f, 6f, 0f, 60f, 120f, // 201..207 band 1
+        0f, 112f, 160f, 6f, 0f, 60f, 120f, // 208..214 band 2 (extension band, off by default)
     )
 
     init {
