@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (215 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (192 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -256,30 +256,3 @@
 1            # 189 masterLimiterEnabled
 -1           # 190 masterLimiterThreshold
 1            # 191 masterLimiterMigrated
-
-# 192..214  subharmonic synthesizer -- global enable, sub ceiling dBFS, then 3 bands each
-#           [enabled, freqLo Hz, freqHi Hz, levelDb, gateMode, gateDepthPct, gateHoldMs].
-#           Ships disabled.
-0            # 192 subEnabled
--3           # 193 subCeilingDb
-1            # 194 band0 enabled
-48           # 195 band0 freqLo
-70           # 196 band0 freqHi
-6            # 197 band0 levelDb
-0            # 198 band0 gateMode
-60           # 199 band0 gateDepthPct
-120          # 200 band0 gateHoldMs
-1            # 201 band1 enabled
-70           # 202 band1 freqLo
-112          # 203 band1 freqHi
-6            # 204 band1 levelDb
-0            # 205 band1 gateMode
-60           # 206 band1 gateDepthPct
-120          # 207 band1 gateHoldMs
-0            # 208 band2 enabled
-112          # 209 band2 freqLo
-160          # 210 band2 freqHi
-6            # 211 band2 levelDb
-0            # 212 band2 gateMode
-60           # 213 band2 gateDepthPct
-120          # 214 band2 gateHoldMs
