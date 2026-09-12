@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Standard Material "arrow_back" glyph (unchanged path/viewport), rendered at 30dp instead of
+     the AppCompat default 24dp (+25%), see DspWorkspaceActivity.onWindowFocusChanged, applied
+     via ActionBar.setHomeAsUpIndicator() on every DSP workspace screen. Tinted by the toolbar's
+     existing navigationIconTint (Theme.SiphonDSP.Toolbar), same as the default it replaces. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="30dp"
+    android:height="30dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z" />
+</vector>

@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.siphondsp.R
 
 /**
  * Shared chrome for the dedicated BMW DSP workspaces. These screens run **full-screen**: the
@@ -32,6 +33,13 @@ abstract class DspWorkspaceActivity : BaseActivity() {
         if (hasFocus) {
             WindowInsetsControllerCompat(window, window.decorView)
                 .hide(WindowInsetsCompat.Type.systemBars())
+            // The stock AppCompat back arrow (24dp) was reading small and, on the head unit,
+            // sitting close enough to the physical bezel to look cropped. +25% (30dp) on every
+            // workspace screen -- see ic_dsp_back_arrow and header_toolbar_height's paired
+            // 10dp top-padding fix. Reapplied on every focus change (idempotent) rather than
+            // once in onCreate, since setDisplayHomeAsUpEnabled(true) -- called by each
+            // subclass afterward -- would otherwise overwrite it with the stock icon.
+            supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_dsp_back_arrow)
         }
     }
 }

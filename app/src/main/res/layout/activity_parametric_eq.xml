@@ -83,6 +83,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/header_toolbar_height"
                 android:background="@android:color/transparent"
+                android:paddingTop="10dp"
                 android:paddingStart="@dimen/dsp_sidebar_width"
                 android:paddingEnd="24dp"
                 app:contentInsetStart="@dimen/dsp_sidebar_width"
@@ -96,6 +97,17 @@
                 android:layout_height="match_parent"
                 android:layout_gravity="start|center_vertical"
                 android:layout_marginStart="@dimen/dsp_status_strip_margin_start" />
+
+            <!-- PEQ-only: the Pre EQ/Low/Mid scope switch + action-chip row, relocated onto the
+                 toolbar's own line. Gone/zero-effect for every other DSP workspace screen &#8212;
+                 only ParametricEqualizerActivity finds this id, sets its content, and shows it
+                 (and hides dsp_status_strip alongside it, since there's no room for both on one
+                 line once this row is showing). See PeqToolbarActions. -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/peq_toolbar_actions"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
         </FrameLayout>
 
     </com.google.android.material.appbar.AppBarLayout>

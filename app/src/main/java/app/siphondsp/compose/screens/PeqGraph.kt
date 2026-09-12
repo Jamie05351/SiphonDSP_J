@@ -151,7 +151,7 @@ private val PlotPadRight = 44.dp
 private val PlotPadBottom = 22.dp
 
 // Horizontal gridline values per mode — 1:1 with drawUnifiedGrid / drawPhaseGrid.
-private val MagnitudeGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f)
+private val MagnitudeGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 
 // Decade-ish vertical frequency markers — 1:1 with ParametricEqSurface.FREQ_SCALE.

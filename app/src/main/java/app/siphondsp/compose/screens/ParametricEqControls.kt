@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -26,6 +27,7 @@ fun PeqScopeControl(
     selected: PeqScope,
     onSelect: (PeqScope) -> Unit,
     modifier: Modifier = Modifier,
+    segmentHeight: Dp = 24.dp,
 ) {
     BmwSegmentedControl(
         options = PeqScope.entries.map { it.label },
@@ -37,6 +39,7 @@ fun PeqScopeControl(
             Color(BmwDashboardSkin.MID_BAND_YELLOW),
         ),
         modifier = modifier,
+        segmentHeight = segmentHeight,
     )
 }
 
