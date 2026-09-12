@@ -7,7 +7,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Shared chrome for the dedicated BMW DSP workspaces. These screens run **full-screen**: the
- * per-destination backdrop art (drawable-mdpi/dsp_workspace_backdrop_*.png, set by
+ * per-destination backdrop art (drawable-mdpi-v4/dsp_workspace_backdrop_*.png, set by
  * DspCrossNavBar.populate() on R.id.dsp_workspace_backdrop) is authored at the head unit's full
  * 1280x480 with no system bars, and the toolbar floats over it transparently. So this base hides
  * the system bars and lets content draw edge to edge.
