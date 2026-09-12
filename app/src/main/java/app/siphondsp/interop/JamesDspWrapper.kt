@@ -38,16 +38,6 @@ object JamesDspWrapper {
     external fun getNativeBmwBusLimiterMeter(self: JamesDspHandle): FloatArray?
     // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
     external fun getNativeBmwMasterLimiterMeter(self: JamesDspHandle): FloatArray?
-    // 4 floats: per-output injected subharmonic-synth peak level (dBFS), one per OutputId (Low L,
-    // Low R, Mid L, Mid R). Idle (-100) while the synth or that output's crossover path isn't
-    // running.
-    external fun getNativeBmwSubharmonicMeter(self: JamesDspHandle): FloatArray?
-    // Estimated preamp cut (dB, >= 0) to keep the synth's worst-case constructive peak under
-    // 0 dBFS given the currently configured headroom.
-    external fun getNativeBmwSubharmonicHeadroomDb(self: JamesDspHandle): Float
-    // Momentary (not persisted config): outputId matches NativeBmwDspValues.OUTPUT_* to solo that
-    // output's synth contribution in isolation; -1 restores normal mixing.
-    external fun setNativeBmwSubharmonicSolo(self: JamesDspHandle, outputId: Int)
     external fun startNativeBmwCapture(self: JamesDspHandle)
     external fun stopNativeBmwCapture(self: JamesDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: JamesDspHandle): Long

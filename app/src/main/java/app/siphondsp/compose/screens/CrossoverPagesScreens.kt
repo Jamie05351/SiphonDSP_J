@@ -167,23 +167,6 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                         dsp.commit(NativeBmwDspValues.INDEX_SUB_ENABLED, if (on) 1f else 0f)
                     },
                 )
-                Text(
-                    text = "Open full Subharmonic synth ›",
-                    color = linkBlue,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    textDecoration = TextDecoration.Underline,
-                    modifier = Modifier
-                        .padding(start = 4.dp, top = 2.dp, bottom = 6.dp)
-                        .clickable {
-                            context.startActivity(
-                                Intent(context, CrossoverTiltActivity::class.java).putExtra(
-                                    CrossoverTiltActivity.EXTRA_WORKSPACE_MODE,
-                                    CrossoverTiltActivity.MODE_SUBHARMONIC,
-                                ),
-                            )
-                        },
-                )
 
                 Text(
                     text = "Open full All-pass ›",
