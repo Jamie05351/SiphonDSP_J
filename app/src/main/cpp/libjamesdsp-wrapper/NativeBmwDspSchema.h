@@ -20,7 +20,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 192;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 215;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -107,6 +107,21 @@ inline constexpr int kBusLimMidRelease = 187;
 // --- master brick-wall limiter (189/190; 191 is a Kotlin-only migration marker) ------------
 inline constexpr int kMasterLimiterEnabled = 189;
 inline constexpr int kMasterLimiterThreshold = 190;
+
+// --- subharmonic synthesizer -- global enable/ceiling, then 3 bands x kSubBandWidth --------
+inline constexpr int kSubEnabled = 192;
+inline constexpr int kSubCeilingDb = 193;
+inline constexpr int kSubBandsBase = 194;
+inline constexpr int kSubBandWidth = 7;
+inline constexpr int kSubBandCount = 3;
+// field offsets within one band's block:
+inline constexpr int kSubBandEnabled = 0;
+inline constexpr int kSubBandFreqLo = 1;
+inline constexpr int kSubBandFreqHi = 2;
+inline constexpr int kSubBandLevelDb = 3;
+inline constexpr int kSubBandGateMode = 4;
+inline constexpr int kSubBandGateDepthPct = 5;
+inline constexpr int kSubBandGateHoldMs = 6;
 
 }  // namespace nbschema
 
