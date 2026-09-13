@@ -194,3 +194,95 @@ TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
     INFO("gain away from fc=", kFarFreq, " Hz: with-notch=", dbFar, " dB  baseline=", dbBaseline, " dB");
     CHECK(std::fabs(dbFar - dbBaseline) < 0.5);
 }
+
+// Measures a full-bank PEQ band's own contribution at one frequency: (with the band) minus
+// (without it), both against the same flatConfig() baseline -- same differential technique as the
+// Notch test above, since channelMagnitudeAt reads an absolute signal amplitude, not a gain.
+static double peqBandGainAt(double freq, double bandFreq, double gainDb, double q, int type, double amp = 0.1) {
+    const auto cfg = flatConfig();
+    const double band[5] = {bandFreq, gainDb, q, static_cast<double>(type), 0.0};
+
+    NativeBmwDspProcessor withBand;
+    withBand.setSampleRate(kSampleRate);
+    REQUIRE(withBand.configure(cfg.data(), cfg.size()));
+    REQUIRE(withBand.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    const double dbWith = linToDb(channelMagnitudeAt(renderSteadyState(withBand, cfg, freq, amp), 0, freq));
+
+    NativeBmwDspProcessor baseline;
+    baseline.setSampleRate(kSampleRate);
+    REQUIRE(baseline.configure(cfg.data(), cfg.size()));
+    const double dbBaseline = linToDb(channelMagnitudeAt(renderSteadyState(baseline, cfg, freq, amp), 0, freq));
+
+    return dbWith - dbBaseline;
+}
+
+// Regression coverage for the SVF migration's remaining PEQ types (Bell/LowShelf/HighShelf) --
+// only Notch had a native test before this. All three were re-verified by hand (DC/Nyquist limit
+// analysis against the Cytomic reference mixing table) after the Notch bug turned up in the same
+// function, but that bug is exactly why "verified by hand once" isn't the same as "covered."
+TEST_CASE("PEQ Bell band boosts/cuts by its designed gain at fc, unity away from it") {
+    constexpr double kFreq = 1000.0, kQ = 2.0, kGainDb = 6.0;
+    const double atFc = peqBandGainAt(kFreq, kFreq, kGainDb, kQ, /*type=*/0);
+    const double farAway = peqBandGainAt(200.0, kFreq, kGainDb, kQ, /*type=*/0);
+    INFO("Bell at fc=", kFreq, " Hz: ", atFc, " dB (want ~", kGainDb, ")  away: ", farAway, " dB (want ~0)");
+    CHECK(std::fabs(atFc - kGainDb) < 0.5);
+    CHECK(std::fabs(farAway) < 0.5);
+
+    // Cut (negative gain) exercises the other half of makePeq's k = 1/(Q*A) term (A < 1).
+    constexpr double kCutDb = -6.0;
+    const double atFcCut = peqBandGainAt(kFreq, kFreq, kCutDb, kQ, /*type=*/0);
+    INFO("Bell cut at fc=", kFreq, " Hz: ", atFcCut, " dB (want ~", kCutDb, ")");
+    CHECK(std::fabs(atFcCut - kCutDb) < 0.5);
+}
+
+TEST_CASE("PEQ Low Shelf band shifts the low end by its designed gain, unity at Nyquist-ish") {
+    constexpr double kFreq = 500.0, kQ = 0.7071067812, kGainDb = 6.0;
+    // Deep in the shelf's low plateau (well below fc) vs deep in its high plateau (well above fc,
+    // still comfortably under the 48 kHz sample rate's Nyquist).
+    const double lowPlateau = peqBandGainAt(40.0, kFreq, kGainDb, kQ, /*type=*/1);
+    const double highPlateau = peqBandGainAt(15000.0, kFreq, kGainDb, kQ, /*type=*/1);
+    INFO("Low Shelf low-plateau: ", lowPlateau, " dB (want ~", kGainDb, ")  high-plateau: ", highPlateau, " dB (want ~0)");
+    CHECK(std::fabs(lowPlateau - kGainDb) < 0.5);
+    CHECK(std::fabs(highPlateau) < 0.5);
+}
+
+TEST_CASE("PEQ High Shelf band shifts the high end by its designed gain, unity at DC-ish") {
+    constexpr double kFreq = 2000.0, kQ = 0.7071067812, kGainDb = 6.0;
+    const double lowPlateau = peqBandGainAt(40.0, kFreq, kGainDb, kQ, /*type=*/2);
+    const double highPlateau = peqBandGainAt(15000.0, kFreq, kGainDb, kQ, /*type=*/2);
+    INFO("High Shelf low-plateau: ", lowPlateau, " dB (want ~0)  high-plateau: ", highPlateau, " dB (want ~", kGainDb, ")");
+    CHECK(std::fabs(lowPlateau) < 0.5);
+    CHECK(std::fabs(highPlateau - kGainDb) < 0.5);
+}
+
+// Regression coverage for the SVF migration's tilt shelf (rebuildTilt): two cascaded makeLowShelf
+// stages (each +g dB) plus two cascaded makeHighShelf stages (each -g dB) at the same corner --
+// a classic tilt EQ. Cascaded identical shelves add their dB directly at each end's asymptote, so
+// the low end should land at +2g and the high end at -2g, independent of the migration's mixing
+// coefficients being right -- exactly the kind of engine-wide-shared-code path a coefficient typo
+// in makeLowShelf/makeHighShelf would silently break for every caller (Tilt, PEQ Low/High Shelf,
+// and Gains & Delay all route through the same two functions).
+TEST_CASE("Tilt shelf lands at +/-2x its per-stage gain at the low/high asymptotes") {
+    auto cfgOn = flatConfig();
+    auto cfgOff = flatConfig();  // c[25] already 0 (tilt off) from flatConfig() itself.
+    constexpr float kTiltAmount = 4.0f;      // g = tiltAmount * 0.75 per rebuildTilt().
+    constexpr float kTiltFreq = 1000.0f;
+    constexpr double kExpectedPerEndDb = 2.0 * (kTiltAmount * 0.75);
+    cfgOn[25] = 1.f;
+    cfgOn[26] = kTiltAmount;
+    cfgOn[27] = kTiltFreq;
+
+    const double amp = 0.05;
+    for (double f : {40.0, 15000.0}) {
+        NativeBmwDspProcessor procOn, procOff;
+        procOn.setSampleRate(kSampleRate);
+        procOff.setSampleRate(kSampleRate);
+        const double dbOn = linToDb(channelMagnitudeAt(renderSteadyState(procOn, cfgOn, f, amp), 0, f));
+        const double dbOff = linToDb(channelMagnitudeAt(renderSteadyState(procOff, cfgOff, f, amp), 0, f));
+        const double delta = dbOn - dbOff;
+        // Low end tilts up (+2g), high end tilts down (-2g).
+        const double expected = (f < kTiltFreq) ? kExpectedPerEndDb : -kExpectedPerEndDb;
+        INFO("f=", f, " Hz  measured delta=", delta, " dB  expected=", expected, " dB");
+        CHECK(std::fabs(delta - expected) < 0.5);
+    }
+}
