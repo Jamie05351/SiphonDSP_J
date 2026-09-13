@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <mutex>
 #include <vector>
+#include "NativeBmwMeasurementGenerator.h"
 #include "NativeBmwRouting.h"
 
 class NativeBmwDspProcessor {
@@ -47,7 +48,9 @@ public:
     //   188      Kotlin-only "legacy per-output compressor force-disabled" marker -- not read here
     //   189..190 master brick-wall limiter (enable, threshold dBFS) -- both read in configure()
     //   191      Kotlin-only "master limiter migrated" marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 192 };
+    //   192      measurement generator type (0 off, 1 sweep; pink lands in a follow-up growth)
+    //   193..196 sweep start Hz, end Hz, duration s, level dBFS
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 197 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -133,6 +136,7 @@ private:
         DirtyMbcState = 1u << 13,   // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
+        DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyAll = 0xffffffffu,
     };
 
@@ -328,6 +332,11 @@ private:
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves = 1;
+        // Measurement signal generator (v[192..196]). 0 = off; nonzero replaces the real input
+        // entirely, pre-crossover -- see processFrame(). Ships off.
+        int measGenType = 0;
+        float measGenSweepStartHz = 20, measGenSweepEndHz = 20000, measGenSweepDurationS = 10,
+              measGenSweepLevelDb = -12;
         // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
         bool mbcEnabled = false;
         float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)
@@ -387,6 +396,9 @@ private:
     void rebuildPolarityAndMute();
     // Option A measurement-mute bus brick-wall; rebuilt only on a DirtyMeasBus transition.
     void rebuildMeasBus();
+    // Measurement signal generator; restarts the run on a DirtyMeasGen transition (type flipped,
+    // or a sweep parameter changed while already running).
+    void rebuildMeasGen();
     void rebuildAllPass();
     void resetDynamics();
     OutputRuntime& output(NativeBmwRouting::OutputId id) {
@@ -439,6 +451,10 @@ private:
     std::array<Biquad, kMeasBusSections> measBusL_{}, measBusR_{};
     bool measBusActive_ = false;
     bool measBusIsHighpass_ = true;
+    // Measurement signal generator (own module, see NativeBmwMeasurementGenerator.h). Per-instance
+    // state, only ever touched from processFrame() (audio thread, while p_.measGenType != 0) and
+    // rebuildMeasGen() (control thread, under stateMutex_ like everything else here).
+    NativeBmwMeasurementGenerator measGen_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;  // -1 dBFS -- the default threshold
     // Live ceiling = dbToLin(p_.limiterThreshDb), refreshed by rebuildLimiter().
