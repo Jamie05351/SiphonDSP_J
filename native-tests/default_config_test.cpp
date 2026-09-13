@@ -176,18 +176,21 @@ TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
     INFO("gain at fc=", kNotchFreq, " Hz: ", dbAtFc, " dB");
     CHECK(dbAtFc < -20.0);
 
-    // Away from fc the band must still be inaudible -- confirms this isn't just a broadband
-    // attenuation bug wearing a Notch's clothes.
+    // Away from fc the band must be a no-op -- confirms this isn't just a broadband attenuation
+    // bug wearing a Notch's clothes. channelMagnitudeAt reads back an absolute signal amplitude
+    // (~amp for an untouched frequency, i.e. ~-20 dB here, not 0 dB), so -- same "compare against
+    // a reference measurement" approach every sibling test in this file uses -- this compares
+    // with-notch against a without-notch baseline rather than asserting an absolute dB figure.
     constexpr double kFarFreq = 200.0;
-    NativeBmwDspProcessor procFar;
+    NativeBmwDspProcessor procFar, procBaseline;
     procFar.setSampleRate(kSampleRate);
+    procBaseline.setSampleRate(kSampleRate);
     REQUIRE(procFar.configure(cfg.data(), cfg.size()));
     REQUIRE(procFar.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
-    std::vector<float> warmFar = stereoSine(kFarFreq, amp, 24000);
-    procFar.process(warmFar.data(), warmFar.size());
-    std::vector<float> farWindow = stereoSine(kFarFreq, amp, 16384);
-    procFar.process(farWindow.data(), farWindow.size());
-    const double dbFar = linToDb(channelMagnitudeAt(farWindow, 0, kFarFreq));
-    INFO("gain away from fc=", kFarFreq, " Hz: ", dbFar, " dB");
-    CHECK(std::fabs(dbFar) < 0.5);
+    REQUIRE(procBaseline.configure(cfg.data(), cfg.size()));
+
+    const double dbFar = linToDb(channelMagnitudeAt(renderSteadyState(procFar, cfg, kFarFreq, amp), 0, kFarFreq));
+    const double dbBaseline = linToDb(channelMagnitudeAt(renderSteadyState(procBaseline, cfg, kFarFreq, amp), 0, kFarFreq));
+    INFO("gain away from fc=", kFarFreq, " Hz: with-notch=", dbFar, " dB  baseline=", dbBaseline, " dB");
+    CHECK(std::fabs(dbFar - dbBaseline) < 0.5);
 }
