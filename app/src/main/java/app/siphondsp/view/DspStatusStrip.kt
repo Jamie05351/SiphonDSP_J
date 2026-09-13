@@ -70,9 +70,11 @@ class DspStatusStrip @JvmOverloads constructor(
     init {
         orientation = HORIZONTAL
         // Sits just past the toolbar's back arrow, centred on the toolbar line. No background of
-        // its own -- the toolbar it rides paints the header colour behind it.
+        // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
+        // the toolbar's own (see activity_parametric_eq.xml / header_toolbar_height) so this
+        // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        setPadding(0, 0, 0, 0)
+        setPadding(0, dp(25), 0, 0)
 
         segments.forEachIndexed { index, segment ->
             if (index > 0) addView(separator())

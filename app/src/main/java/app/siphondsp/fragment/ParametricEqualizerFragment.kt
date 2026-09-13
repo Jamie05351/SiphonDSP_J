@@ -7,14 +7,16 @@ import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.compose.screens.ParametricEqScreen
 import app.siphondsp.compose.theme.BmwDspTheme
 
 /**
  * The Parametric EQ workspace host. Everything is Compose now — [ParametricEqScreen] (roadmap
- * Phase 10) assembles the scope switch, the graph/list `AnimatedContent`, the action-chip row
- * and every file-I/O flow. This fragment is just the `ComposeView` shell plus the cross-nav
- * guard the activity calls.
+ * Phase 10, redesigned since to just the graph/list swipe pager) assembles the graph and the
+ * filter list. The scope switch and action-chip row live on the toolbar line instead, hosted
+ * directly by [ParametricEqualizerActivity] (`PeqToolbarActions`) -- this fragment reads that
+ * activity's shared `peqStateHolder` rather than creating its own, so the two stay in sync.
  *
  * `fragment_parametric_eq.xml` (and its `layout-land` variant) and every portrait-only code
  * path (`collapsePreview`, the weighted-chain layout, `cards_pager`) are gone — portrait is dead
@@ -33,9 +35,10 @@ class ParametricEqualizerFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        val holder = (requireActivity() as ParametricEqualizerActivity).peqStateHolder
         setContent {
             BmwDspTheme {
-                ParametricEqScreen()
+                ParametricEqScreen(holder = holder)
             }
         }
     }

@@ -11,12 +11,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -36,11 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import app.siphondsp.compose.controls.BmwSegmentedControl
+import app.siphondsp.R
 import app.siphondsp.compose.state.PeqStateHolder
-import app.siphondsp.compose.state.rememberPeqState
 import app.siphondsp.fragment.PeqApoImport
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqBandEditResult
@@ -59,33 +60,27 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import timber.log.Timber
 
-private enum class PeqScreenMode { GRAPH, LIST }
-
 /**
- * The whole Parametric EQ workspace, Compose (roadmap Phase 10e/10f). Assembles the 10a–10c
- * pieces — scope switch ([PeqScopeControl]), the graph ([PeqGraph]) and the filter list
- * ([PeqBandList]) as a Graph/List `AnimatedContent`, plus the action-chip row (Reset, Import,
- * Export, Filter tools, Diagnostics, Backup export, Restore backup) and their file-I/O flows.
+ * The Parametric EQ graph/list half of the workspace (roadmap Phase 10e/10f, redesigned to share
+ * the toolbar line with [PeqToolbarActions] -- see that composable for the scope switch and
+ * action-chip row, both relocated off this screen). A two-page horizontal swipe replaces the old
+ * Graph/List toggle: page 1 is [PeqGraph], page 2 is [PeqBandList] for whichever scope
+ * ([holder]'s selectedScope, driven by [PeqToolbarActions]'s Pre EQ/Low/Mid buttons) is current.
  *
- * State lives in [PeqStateHolder] (`rememberPeqState`); the 192-float native config is reloaded
- * from disk on every resume (the live `ACTION_NATIVE_BMW_DSP_UPDATED` receiver is roadmap 10g).
- * Undo/Redo, Edit-as-string, JSON presets and portrait are dropped (2026-09-09 direction).
+ * [holder] is created once by `ParametricEqualizerActivity` and shared with [PeqToolbarActions]
+ * (a separate Compose tree hosted directly on the toolbar, not nested under this screen) so a
+ * scope change there is reflected here -- `PeqStateHolder`'s properties are plain
+ * `mutableStateOf`, so this works across composition roots as long as it's the same instance.
+ * The 192-float native config is reloaded from disk on every resume (the live
+ * `ACTION_NATIVE_BMW_DSP_UPDATED` receiver is roadmap 10g). Undo/Redo, Edit-as-string, JSON
+ * presets and portrait are dropped (2026-09-09 direction).
  */
 @Composable
-fun ParametricEqScreen(modifier: Modifier = Modifier) {
+fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val holder = rememberPeqState()
     val graphPrefs = remember(context) { PeqGraphPreferences(context) }
 
     var systemValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
-
-    // Persisted in graphPrefs.listModeName, so a plain remember is enough across recompositions
-    // (a config change / process death restores it from prefs on the next composition).
-    var screenMode by remember {
-        mutableStateOf(
-            if (graphPrefs.listModeName == PeqScreenMode.LIST.name) PeqScreenMode.LIST else PeqScreenMode.GRAPH,
-        )
-    }
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
@@ -128,7 +123,57 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
         onDispose { context.unregisterLocalReceiver(receiver) }
     }
 
-    // --- file-I/O launchers (10f) ---------------------------------------------------------------
+    // --- layout: two-page horizontal swipe, Graph then List -----------------------------------
+    // Replaces the old Graph/List BmwSegmentedControl (moved out entirely, along with the scope
+    // switch and action-chip row -- see PeqToolbarActions). Page state isn't persisted: every
+    // entry starts on the graph, matching how the toggle always defaulted before a
+    // graphPrefs.listModeName restore; swiping during the session is enough on its own.
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    Column(modifier.fillMaxSize().padding(12.dp)) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            when (page) {
+                0 -> PeqGraph(
+                    systemValues = systemValues,
+                    peqState = holder.peqState,
+                    activeBank = holder.selectedScope.bank,
+                    selectedBandId = holder.selectedUuid,
+                    modifier = Modifier.fillMaxSize(),
+                    mode = graphMode,
+                    channelDisplay = channelDisplay,
+                    showIndividualFilters = showOverlays,
+                    showTiltHandles = true,
+                    showGainMeters = true,
+                    sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
+                    onNodeTapped = { band -> holder.selectedUuid = band.uuid },
+                    graphOptions = PeqGraphOptions(
+                        onModeChange = { graphMode = it; graphPrefs.responseMode = it },
+                        onChannelDisplayChange = { channelDisplay = it; graphPrefs.channelDisplay = it },
+                        onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
+                    ),
+                )
+                else -> PeqBandList(holder, Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+/**
+ * The Pre EQ/Low/Mid scope switch + action-chip row (Reset, Import, Export, Filter tools,
+ * Diagnostics, Backup export, Restore backup), relocated onto the toolbar's own line -- see
+ * activity_parametric_eq.xml's `peq_toolbar_actions` ComposeView and
+ * `ParametricEqualizerActivity`, the only caller. One continuous horizontally-scrolling row: the
+ * scope switch is its first (leftmost) item, everything else follows. `end = 25.dp` insets the
+ * scrollable viewport from the true screen edge, so content reveals/hides there rather than
+ * flush against the bezel.
+ *
+ * Shares [holder] with [ParametricEqScreen] (same instance, created once by the activity) so a
+ * scope change here moves the graph/list there. Diagnostics reads [PeqGraphPreferences] and
+ * `NativeBmwDspValues` fresh at click time instead of needing those kept in sync live from the
+ * graph's own composition -- both are already persisted, so a fresh read is exactly as current.
+ */
+@Composable
+fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
 
     val apoImport = remember(context, holder) {
         val hostContext = context
@@ -151,7 +196,9 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
 
     val backupExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri -> uri?.let { exportPrivateBackup(context, holder.peqState, graphPrefs, it) } }
+    ) { uri ->
+        uri?.let { exportPrivateBackup(context, holder.peqState, PeqGraphPreferences(context), it) }
+    }
 
     var pendingBackup by remember { mutableStateOf<PendingBackupRestore?>(null) }
     val backupImportLauncher = rememberLauncherForActivityResult(
@@ -175,89 +222,62 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // --- transient dialog state --------------------------------------------------------------
-
     var showResetConfirm by remember { mutableStateOf(false) }
     var diagnosticReport by remember { mutableStateOf<String?>(null) }
     var copyWholeScopeTarget by remember { mutableStateOf<PeqScope?>(null) }
 
-    // --- layout --------------------------------------------------------------------------------
-
-    Column(modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PeqScopeControl(
-                selected = holder.selectedScope,
-                onSelect = { holder.selectedScope = it },
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(12.dp))
-            BmwSegmentedControl(
-                options = listOf("Graph", "List"),
-                selectedIndex = screenMode.ordinal,
-                onSelect = {
-                    screenMode = PeqScreenMode.entries[it]
-                    graphPrefs.listModeName = screenMode.name
-                },
-                modifier = Modifier.width(190.dp),
-                segmentHeight = 36.dp,
-                segmentGap = 6.dp,
-            )
-        }
-
-        Spacer(Modifier.padding(4.dp))
-
-        PeqActionChipRow(
-            holder = holder,
-            onReset = { showResetConfirm = true },
-            onImport = { importLauncher.launch(arrayOf("text/plain", "text/*")) },
-            onExport = { exportLauncher.launch(holder.selectedScope.fileName) },
-            onCopyWholeScope = { copyWholeScopeTarget = it },
-            onDiagnostics = {
-                val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
-                diagnosticReport = PeqDiagnosticReport.create(
-                    context = context,
-                    state = holder.peqState,
-                    systemValues = systemValues,
-                    sampleRate = sampleRate,
-                    serviceActive = sampleRate != null,
-                    nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
-                    channelDisplay = channelDisplay.name,
-                    showIndividualFilters = showOverlays,
-                )
-            },
-            onBackupExport = { backupExportLauncher.launch("SiphonDSP-private-peq-backup.json") },
-            onBackupRestore = { backupImportLauncher.launch(arrayOf("application/json", "text/plain")) },
+    // The hosting ComposeView spans the toolbar's full width (from x=0, under the native back
+    // arrow) so its own visibility can be toggled as one unit -- this row has to clear that
+    // space itself. dsp_status_strip_margin_start is the same "just past the indented back
+    // arrow" offset dsp_status_strip used before it was hidden on this screen (see
+    // ParametricEqualizerActivity), so the row starts exactly where that strip used to.
+    //
+    // top = 25.dp matches the native toolbar's own paddingTop (activity_parametric_eq.xml):
+    // without it, this Row centers within the ComposeView's full (bezel-padded) height and lands
+    // higher than the toolbar's own (padded-then-centered) back arrow -- close enough to read as
+    // two misaligned rows fighting for the same line rather than one clean line.
+    val startInset = dimensionResource(R.dimen.dsp_status_strip_margin_start)
+    Row(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(top = 25.dp)
+            .horizontalScroll(rememberScrollState())
+            .padding(start = startInset, end = 25.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Default height (24dp) restored -- 32dp made the 3 segments cramped enough at a narrow
+        // width to look degraded rather than just smaller. Needs an explicit bounded width here
+        // (unlike its old Modifier.weight(1f), which only works in a plain, non-scrolling Row):
+        // BmwSegmentedControl's own segments use weight(1f) internally, which requires a bounded
+        // parent width to distribute -- inside this horizontalScroll Row, an unconstrained
+        // modifier would give it an unbounded width and crash. 300dp keeps each of the 3 labels
+        // ("PRE EQ"/"LOW"/"MID") comfortably unscrunched.
+        PeqScopeControl(
+            selected = holder.selectedScope,
+            onSelect = { holder.selectedScope = it },
+            modifier = Modifier.width(300.dp),
         )
-
-        Spacer(Modifier.padding(4.dp))
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            // Plain conditional (no AnimatedContent / Crossfade): a full-screen crossfade layer
-            // composited every frame on top of PeqGraph's own per-frame blur redraw pegs a
-            // software-GL head unit — the switch doesn't need the transition.
-            when (screenMode) {
-                PeqScreenMode.GRAPH -> PeqGraph(
-                    systemValues = systemValues,
-                    peqState = holder.peqState,
-                    activeBank = holder.selectedScope.bank,
-                    selectedBandId = holder.selectedUuid,
-                    modifier = Modifier.fillMaxSize(),
-                    mode = graphMode,
-                    channelDisplay = channelDisplay,
-                    showIndividualFilters = showOverlays,
-                    showTiltHandles = true,
-                    showGainMeters = true,
-                    sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
-                    onNodeTapped = { band -> holder.selectedUuid = band.uuid },
-                    graphOptions = PeqGraphOptions(
-                        onModeChange = { graphMode = it; graphPrefs.responseMode = it },
-                        onChannelDisplayChange = { channelDisplay = it; graphPrefs.channelDisplay = it },
-                        onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
-                    ),
-                )
-                PeqScreenMode.LIST -> PeqBandList(holder, Modifier.fillMaxSize())
-            }
+        Chip("Reset") { showResetConfirm = true }
+        Chip("Import") { importLauncher.launch(arrayOf("text/plain", "text/*")) }
+        Chip("Export") { exportLauncher.launch(holder.selectedScope.fileName) }
+        FilterToolsChip(holder, { copyWholeScopeTarget = it }) { message -> context.toast(message) }
+        Chip("Diagnostics") {
+            val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
+            val graphPrefs = PeqGraphPreferences(context)
+            diagnosticReport = PeqDiagnosticReport.create(
+                context = context,
+                state = holder.peqState,
+                systemValues = NativeBmwDspValues.load(context),
+                sampleRate = sampleRate,
+                serviceActive = sampleRate != null,
+                nativeHandleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady(),
+                channelDisplay = graphPrefs.channelDisplay.name,
+                showIndividualFilters = graphPrefs.showIndividualFilters,
+            )
         }
+        Chip("Backup") { backupExportLauncher.launch("SiphonDSP-private-peq-backup.json") }
+        Chip("Restore backup") { backupImportLauncher.launch(arrayOf("application/json", "text/plain")) }
     }
 
     // --- dialogs -----------------------------------------------------------------------------
@@ -331,9 +351,10 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
                 TextButton(onClick = {
                     val toRestore = prompt
                     pendingBackup = null
-                    applyBackupRestore(context, holder, graphPrefs, toRestore) { newValues ->
-                        systemValues = newValues
-                    }
+                    // Just applies + broadcasts; no local systemValues to update here (this
+                    // composable doesn't render the graph) -- ParametricEqScreen's own
+                    // ACTION_NATIVE_BMW_DSP_UPDATED receiver picks up the broadcast this sends.
+                    applyBackupRestore(context, holder, PeqGraphPreferences(context), toRestore) {}
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { pendingBackup = null }) { Text("Cancel") } },
@@ -341,34 +362,7 @@ fun ParametricEqScreen(modifier: Modifier = Modifier) {
     }
 }
 
-// --- action-chip row + filter-tools menu -------------------------------------------------------
-
-@Composable
-private fun PeqActionChipRow(
-    holder: PeqStateHolder,
-    onReset: () -> Unit,
-    onImport: () -> Unit,
-    onExport: () -> Unit,
-    onCopyWholeScope: (PeqScope) -> Unit,
-    onDiagnostics: () -> Unit,
-    onBackupExport: () -> Unit,
-    onBackupRestore: () -> Unit,
-) {
-    val context = LocalContext.current
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Chip("Reset", onReset)
-        Chip("Import", onImport)
-        Chip("Export", onExport)
-        FilterToolsChip(holder, onCopyWholeScope) { message -> context.toast(message) }
-        Chip("Diagnostics", onDiagnostics)
-        Chip("Backup", onBackupExport)
-        Chip("Restore backup", onBackupRestore)
-    }
-}
+// --- action chips + filter-tools menu ------------------------------------------------------
 
 @Composable
 private fun Chip(label: String, onClick: () -> Unit) {
