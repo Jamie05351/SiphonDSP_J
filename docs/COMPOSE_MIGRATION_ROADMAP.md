@@ -15,18 +15,29 @@ implementation code lands with it.
 | **1 — Toolchain** | Compose plugin (`org.jetbrains.kotlin.plugin.compose` @ Kotlin `2.4.0`), `buildFeatures.compose = true`, `composeCompiler {}`, BOM `androidx.compose:compose-bom:2026.08.00`, plus `ui`, `ui-graphics`, `ui-tooling(-preview)`, `material3`, `activity-compose:1.12.0`, `lifecycle-{viewmodel,runtime}-compose:2.10.0` in `app/build.gradle.kts`. Proven with a throwaway `ComposeView` smoke test in `OutputAllPassFragment` (removed after verification). | PR #271 |
 | **2 — Theme** | `app/src/main/java/app/siphondsp/compose/theme/` — `BmwTheme.kt` (`BmwDspTheme`, a fixed Material3 **dark** `ColorScheme`) and `BmwColors.kt` (`BmwColors` / `BmwTheme.colors` — the band‑specific accent palette: low / mid / headroom / tilt / default, plus `LocalBmwColors`). Every value reads directly from the existing `BmwDashboardSkin` `Int` constants, so the `View` system and Compose share one colour source of truth. | PR #272 |
 | **3a — `BmwSlider`** | `app/src/main/java/app/siphondsp/compose/controls/BmwSlider.kt` — faithful Compose recreation of the hand‑painted slider chrome (capsule / groove / active fill / pill thumb with gradient body + grip ticks + focus glow), built on Material3 `Slider`'s `track` / `thumb` slots so gesture handling, a11y and RTL stay Material's. Stateless: caller hoists `value` / `onValueChange`. Verified rendering + drag on the head‑unit‑sized emulator. | PR #274 |
+| **3b — `BmwSwitch`** | `compose/controls/BmwSwitch.kt` — the glass ON/OFF switch. | `eb6679f8` |
+| **3a (infra) — state layer** | `compose/state/` (`PeqStateHolder` + siblings) — hoisted, observable screen state, superseding the `Fragment.rebuild()` reload‑on‑resume pattern. | `58c45ec7` |
+| **3b (infra) — `BmwPanel`** | `compose/controls/BmwPanel.kt` — the glass panel scaffold, lean title, header‑toggle row (`BmwSectionHeader`, `BmwTitleRowWithSwitches`). | landed with Phase 4 |
+| **4 — `TonalityTiltScreen`** | First real leaf‑screen port — `compose/screens/TonalityTiltScreen.kt`, `CrossoverTiltFragment`'s Tilt page. | `f37c06a0` |
+| **5 — `HeadroomOutputScreen`** | `compose/screens/HeadroomOutputScreen.kt` — `GainLimiterFragment`'s Output page; first `AndroidView` live‑meter bridge (`MbcBandGrMeter`/`BmwGrMeter`). | `69d6baf2` |
+| **6 — `GainsDelayScreen`** | `compose/screens/GainsDelayScreen.kt` — the channel‑card/diagram page, `BmwChannelCard`, linked‑delay derived state. `BmwSegmentedControl` landed alongside it (Polarity NORMAL/INVERT). | `45c1aae5` |
+| **7 — `CompressorScreens`** | `compose/screens/CompressorScreens.kt` — MBC master strip, `CompressorGraph` visualiser, per‑band pages. | `c4b6bad2` |
+| **9 — `OutputAllPassScreen`** | `compose/screens/OutputAllPassScreen.kt` — the repeated‑rows pattern (generated all‑pass sections). `BmwDropdown` landed alongside it. (Phase 8's components ended up folding into Phases 6/9 rather than shipping as standalone work first — order deviated from the original plan; content didn't.) | `cc083be4` |
+| **10 — Parametric EQ** | `compose/screens/ParametricEqScreen.kt` + `PeqGraph.kt` + `PeqBandList.kt` — the full PEQ workspace: scope switch, graph, filter list, undo‑free edit model, presets, APO import, dialogs. Sub‑phases 10a–10f per `docs/PEQ_COMPOSE_PLAN.md`. | `1b90764e` (+ 10a `58c45ec7`) |
+
+All of Phases 3b–10 landed **2026‑09‑09** — a single sprint this doc's "Current state" section below was never updated after. Treat every "TODO" framed in the phase‑detail sections further down (§4 onward) as **historical planning record**, not open work, except where a section is explicitly marked otherwise.
 
 ### Current Compose footprint
 
-The **only** files importing `androidx.compose.*` in `app/src/main`:
+Every DSP workspace screen's *content* is Compose (Crossovers & Tilt, Gains & Delay + Output, Multiband Compressor, Output All‑Pass, Parametric EQ — see the table above). What's still `View`/XML, confirmed live in the codebase as of this update:
 
-```
-compose/theme/BmwTheme.kt
-compose/theme/BmwColors.kt
-compose/controls/BmwSlider.kt
-```
+- **`DspPager`** — the swipe‑pager + page‑dots *host* (a `ViewPager2` wrapper). Still used by `CrossoverTiltFragment`, `GainLimiterFragment`, `NativeBmwCompressorFragment`, `OutputAllPassFragment` — but every page it hosts in all four is already a `ComposeView`, so **Phase 11.1 is unblocked**. `ParametricEqualizerFragment` is the one exception: it skips `DspPager` entirely and uses Compose's own `HorizontalPager` directly (landed alongside the PEQ toolbar redesign, 2026‑09‑13) — the first screen to do so, and the proof that Phase 11.1 works.
+- **Activity‑level chrome** (`activity_parametric_eq.xml`) — the shared `MaterialToolbar`/`AppBarLayout`/sidebar‑rail scaffold behind all 5 workspace activities. Not in this roadmap's original scope at all; Compose content is hosted inside it via `ComposeView` (same interop pattern as everywhere else), most recently `peq_toolbar_actions` (2026‑09‑13).
+- **`CrossoverDashboardBuilder.kt`** — confirmed **dead**: the file still exists but has zero real `import`s anywhere in the app; every remaining reference is a doc‑comment ("Compose port of `CrossoverDashboardBuilder.addSliderRow`") left as porting provenance. Safe to delete (Phase 11.2), pending a `BmwSkinDrawables.kt` audit for anything Settings/preference screens still use.
+- **`viewBinding = true`** — ~25 files still use it (down from the ~27 baseline this doc cited). Most are legitimately out of scope per §13 (Settings, Blocklist, Onboarding, Measurement Capture, App Compatibility). A few are PEQ‑adjacent leftovers worth a look before Phase 11.3: `ParametricEqualizerActivity.kt`, `PeqDialogs.kt`, `ParametricEqBandAdapter.kt`, `ParametricEqBandList.kt`, `ParametricEqualizerPreference.kt` (the last three back the separate legacy Settings‑page inline PEQ card, not the workspace screen — confirm in scope before touching).
+- **`AndroidView` interop wrappers**, still in place per the "keep through Phase 10" decision, now due for the Phase 11 revisit: `BmwGrMeter.kt` (wraps `MbcBandGrMeter`), `HeadroomOutputScreen.kt` (wraps the same for the master limiter), `CrossoverPagesScreens.kt`, `PeqGraph.kt`.
 
-Zero Compose call sites. Every workspace screen still runs on:
+Historical framing below (the rest of §1, and §§4–10) describes the **pre‑Phase‑4 state** and the **original plan** for phases now complete — kept for context, not current status. Every workspace screen previously listed as "currently View" in the table below has been ported; see the Done table above for what actually shipped instead.
 
 - **`CrossoverDashboardBuilder`** — the imperative glass‑panel row builder
   (`dashboardPanel`, `addSliderRow`, `addDropdownRow`, `addSegmentedSwitchRow`,
@@ -417,7 +428,12 @@ elsewhere in this document.
 
 ---
 
-## 12. Phase 11 — Final `View`‑system cleanup
+## 12. Phase 11 — Final `View`‑system cleanup — **NEXT UP**
+
+> **Status (2026‑09‑13): unblocked and next.** Phases 3b–10 all landed 2026‑09‑09
+> (see the Done table in §1) — every workspace screen's content is Compose, so
+> the "only once every workspace screen is Compose" precondition below is
+> satisfied. This is the next real work on this roadmap.
 
 Only once **every** workspace screen is Compose:
 
