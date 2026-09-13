@@ -107,8 +107,11 @@ private fun RowScope.Segment(
 }
 
 /** Internal, not private: [DspPagerArrows] reuses the same glass capsule shell for visual
- *  consistency with this segmented control (the app's "boxed toggle group" chrome). */
-internal fun DrawScope.drawSegmentTrack() {
+ *  consistency with this segmented control (the app's "boxed toggle group" chrome) -- with its
+ *  own [rimColor] (cyan, for visibility against these screens' dark backdrop) rather than this
+ *  control's own neutral [SegmentTrackRim] default. Stroke width is untouched either way -- one
+ *  visual property changing, not two. */
+internal fun DrawScope.drawSegmentTrack(rimColor: Color = SegmentTrackRim) {
     val borderPx = SegmentBorderWidth.toPx()
     val rect = inset(Rect(0f, 0f, size.width, size.height), borderPx / 2f)
     if (rect.width <= 0f || rect.height <= 0f) return
@@ -138,14 +141,14 @@ internal fun DrawScope.drawSegmentTrack() {
         )
     }
     drawRoundRect(
-        color = SegmentTrackRim,
+        color = rimColor,
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
         style = Stroke(borderPx * 0.6f),
     )
     drawRoundRect(
-        color = SegmentTrackBorder,
+        color = if (rimColor == SegmentTrackRim) SegmentTrackBorder else rimColor,
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
