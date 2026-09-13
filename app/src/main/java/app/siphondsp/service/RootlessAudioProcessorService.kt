@@ -476,6 +476,24 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         bufferSizeBytes: Int,
         bufferSamples: Int
     ) {
+        // This is the actual real-time buffer loop (read -> native process() -> write) and had
+        // never asked for elevated scheduling -- it ran at the default THREAD_PRIORITY (5),
+        // competing with everything else on the device for CPU time same as any background
+        // worker. THREAD_PRIORITY_URGENT_AUDIO is the same class the platform's own audio HAL
+        // callback threads use; a foreground service (see startForeground() above) is entitled to
+        // ask for it. Doesn't fix any specific slow stage on its own, but widens the scheduling
+        // margin against exactly the kind of transient CPU contention (GC, UI, other threads) that
+        // shows up as random, worsening audio skips on a loop with no priority protection.
+        //
+        // Best-effort: this runs on the BMW head unit's own (likely customized/locked-down) AOSP
+        // fork, not stock Android, so a SecurityException here should degrade to "keep running at
+        // default priority" rather than take the whole audio thread down.
+        try {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        } catch (e: SecurityException) {
+            Timber.w(e, "runRecorderLoop: platform refused THREAD_PRIORITY_URGENT_AUDIO, continuing at default priority")
+        }
+
         var recorder: AudioRecord? = null
         var track: AudioTrack? = null
 
