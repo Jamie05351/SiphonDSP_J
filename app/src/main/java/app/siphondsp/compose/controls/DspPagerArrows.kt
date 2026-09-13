@@ -1,5 +1,6 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
@@ -25,6 +30,17 @@ import kotlinx.coroutines.launch
 private val DisabledColor = Color(0xFF4A4C54)
 private val ArrowBoxHeight = 30.dp
 private val ArrowBoxWidth = 60.dp
+private const val FillAlpha = 0.7f
+// Android reserves extra space below a glyph's baseline for descenders ("font padding"), which
+// otherwise reads as the arrow sitting low in its box even though Alignment.Center is centering
+// that whole (asymmetric) line box, not the glyph's own ink. includeFontPadding = false + a
+// centered/trimmed line height removes that reserved space so the glyph centers on its ink like
+// the box's own border chrome does.
+private val CenteredGlyphStyle = TextStyle(
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.Both),
+    textAlign = TextAlign.Center,
+)
 
 /**
  * Explicit prev/next page buttons for a DSP workspace's toolbar line -- the tap-driven answer to
@@ -62,7 +78,7 @@ fun DspPagerArrows(pagerState: PagerState, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier
                 .padding(top = 25.dp, end = endInset)
-                .drawBehind { drawSegmentTrack(rimColor = accent) }
+                .drawBehind { drawSegmentTrack(rimColor = accent, fillAlpha = FillAlpha) }
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -73,6 +89,15 @@ fun DspPagerArrows(pagerState: PagerState, modifier: Modifier = Modifier) {
                 enabled = !atStart,
                 accent = accent,
                 onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+            )
+            // Centre dividing line between the two arrows, echoing the "." separators DspStatusStrip
+            // uses on this same toolbar line -- makes the capsule read as two distinct buttons
+            // instead of one wide tappable strip.
+            Box(
+                Modifier
+                    .height(ArrowBoxHeight * 0.6f)
+                    .width(1.dp)
+                    .background(accent.copy(alpha = FillAlpha)),
             )
             ArrowSegment(
                 glyph = "›",
@@ -96,6 +121,13 @@ private fun ArrowSegment(glyph: String, enabled: Boolean, accent: Color, onClick
         // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) -- glyph it.
         // Sized up from 20sp: at that size the glyph read as lost inside a 60x30dp box instead of
         // filling it the way the box's own border chrome does.
-        Text(glyph, fontSize = 28.sp, color = if (enabled) accent else DisabledColor)
+        Text(
+            glyph,
+            style = CenteredGlyphStyle.copy(
+                fontSize = 28.sp,
+                lineHeight = 28.sp,
+                color = if (enabled) accent else DisabledColor,
+            ),
+        )
     }
 }
