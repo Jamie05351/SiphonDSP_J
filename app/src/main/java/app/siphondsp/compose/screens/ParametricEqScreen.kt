@@ -37,10 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import app.siphondsp.R
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.fragment.PeqApoImport
 import app.siphondsp.fragment.PeqBandEditor
@@ -236,13 +234,17 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     // without it, this Row centers within the ComposeView's full (bezel-padded) height and lands
     // higher than the toolbar's own (padded-then-centered) back arrow -- close enough to read as
     // two misaligned rows fighting for the same line rather than one clean line.
-    val startInset = dimensionResource(R.dimen.dsp_status_strip_margin_start)
+    //
+    // The leading dsp_toolbar_nav_inset gap is applied as a native layout_marginStart on the
+    // ComposeView itself (activity_parametric_eq.xml), not as padding here: a horizontalScroll
+    // Row hit-tests across its whole viewport, empty padding included, so padding alone still
+    // covered the toolbar's back arrow underneath and swallowed its touches.
     Row(
         modifier = modifier
             .fillMaxHeight()
             .padding(top = 25.dp)
             .horizontalScroll(rememberScrollState())
-            .padding(start = startInset, end = 25.dp),
+            .padding(end = 25.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
