@@ -83,7 +83,7 @@ fun BmwSliderRow(
             modifier = Modifier.width(LocalRowTitleColumnWidth.current).height(RowBoxHeight),
         )
         if (toggleChecked != null && onToggleChange != null) {
-            Box(Modifier.width(RowToggleZoneWidth), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.width(RowToggleZoneWidth), contentAlignment = Alignment.Center) {
                 BmwSwitch(checked = toggleChecked, onCheckedChange = onToggleChange, contentDescription = label)
             }
         } else {

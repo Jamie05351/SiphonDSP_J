@@ -23,9 +23,13 @@
     <!-- Where the toolbar's back arrow starts: the rail width plus a real buffer, not flush
          against it. A Toolbar's navigation icon touch target is a Material minimum (48dp)
          centred on the drawn 24dp glyph, not just the glyph's own bounds -- flush against
-         dsp_sidebar_width put that touch target right up against the rail's own click-targets. -->
-    <dimen name="dsp_toolbar_nav_inset">148dp</dimen>
+         dsp_sidebar_width put that touch target right up against the rail's own click-targets.
+         148dp (rail + 24dp) still read as not isolated enough on-device; +35dp gives the arrow
+         real breathing room on the rail side too. -->
+    <dimen name="dsp_toolbar_nav_inset">183dp</dimen>
     <!-- Bypass-state strip / peq_toolbar_actions start here: past the back arrow's touch target
-         (dsp_toolbar_nav_inset + its ~48dp target), with its own buffer for the same reason. -->
-    <dimen name="dsp_status_strip_margin_start">220dp</dimen>
+         (dsp_toolbar_nav_inset + its ~48dp target), with its own buffer for the same reason.
+         Shifted the same +35dp as dsp_toolbar_nav_inset above, so the gap after the arrow's
+         touch target stays the same width it was before this widening. -->
+    <dimen name="dsp_status_strip_margin_start">255dp</dimen>
 </resources>
