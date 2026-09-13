@@ -34,8 +34,8 @@ import app.siphondsp.view.BmwDashboardSkin
  * the sibling card just recomposes off the shared snapshot.
  *
  * The Output page ([HeadroomOutputScreen]) and the bus-limiter page ([CompressorDriverPage],
- * moved here from the compressor pager) are the other two pages of this workspace; `DspPager`
- * hosts all three.
+ * moved here from the compressor pager) are the other two pages of this workspace; a Compose
+ * `HorizontalPager` (see `GainLimiterFragment`) hosts all three.
  */
 @Composable
 fun GainsDelayScreen(modifier: Modifier = Modifier) {

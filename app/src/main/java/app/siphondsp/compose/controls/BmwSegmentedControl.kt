@@ -106,7 +106,9 @@ private fun RowScope.Segment(
     }
 }
 
-private fun DrawScope.drawSegmentTrack() {
+/** Internal, not private: [DspPagerArrows] reuses the same glass capsule shell for visual
+ *  consistency with this segmented control (the app's "boxed toggle group" chrome). */
+internal fun DrawScope.drawSegmentTrack() {
     val borderPx = SegmentBorderWidth.toPx()
     val rect = inset(Rect(0f, 0f, size.width, size.height), borderPx / 2f)
     if (rect.width <= 0f || rect.height <= 0f) return

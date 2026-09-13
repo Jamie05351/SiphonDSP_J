@@ -31,8 +31,9 @@ import app.siphondsp.view.MbcBandGrMeter
  * [BmwSectionHeader] (the "Limiter" sub-header + enable toggle) and an `AndroidView`-hosted
  * live meter ([LimiterGrMeter], the master-limiter gain-reduction bar).
  *
- * `DspPager` hosts this ComposeView alongside the Gains & Delay diagram page and the bus-limiter
- * page ([CompressorDriverPage], moved here from the compressor pager).
+ * A Compose `HorizontalPager` (see `GainLimiterFragment`) hosts this alongside the Gains & Delay
+ * diagram page and the bus-limiter page ([CompressorDriverPage], moved here from the compressor
+ * pager).
  */
 @Composable
 fun HeadroomOutputScreen(modifier: Modifier = Modifier) {

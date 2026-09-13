@@ -98,19 +98,24 @@
                 android:layout_gravity="start|center_vertical"
                 android:layout_marginStart="@dimen/dsp_status_strip_margin_start" />
 
-            <!-- PEQ-only: the Pre EQ/Low/Mid scope switch + action-chip row, relocated onto the
-                 toolbar's own line. Gone/zero-effect for every other DSP workspace screen &#8212;
-                 only ParametricEqualizerActivity finds this id, sets its content, and shows it
-                 (and hides dsp_status_strip alongside it, since there's no room for both on one
-                 line once this row is showing). See PeqToolbarActions.
+            <!-- Shared toolbar-action slot: gone/zero-effect until an activity finds this id and
+                 sets its content. ParametricEqualizerActivity uses it for the Pre EQ/Low/Mid scope
+                 switch + action-chip row (hides dsp_status_strip alongside it, since there's no
+                 room for both on one line once that row is showing: see PeqToolbarActions).
+                 GainLimiterActivity/CrossoverTiltActivity/NativeBmwCompressorActivity use it for
+                 DspPagerArrows (prev/next page buttons, sitting to the right of dsp_status_strip,
+                 which they leave visible).
 
-                 layout_marginStart (not Compose-side padding) keeps the leading dsp_toolbar_nav_inset
-                 gap OUTSIDE this View's own bounds &#8212; a full-width ComposeView with only internal
-                 padding still hit-tests across its entire match_parent bounds (its horizontalScroll
-                 Row installs a drag detector spanning the whole viewport, empty padding included),
-                 which silently ate touches meant for the toolbar's back arrow underneath. -->
+                 layout_marginStart is PEQ's own leading dsp_toolbar_nav_inset gap, kept as the
+                 default since it's harmless (just empty space) for a non-scrolling arrows-only
+                 content: a full-width ComposeView only hit-tests where it actually draws an
+                 interactive composable, unlike PEQ's horizontalScroll Row, which installs a drag
+                 detector spanning its whole viewport and previously ate touches meant for the
+                 toolbar's back arrow underneath (that bug was fixed by moving PEQ's own inset here
+                 rather than as Compose-side padding; DspPagerArrows has no such scrollable
+                 container, so it isn't at risk of repeating it). -->
             <androidx.compose.ui.platform.ComposeView
-                android:id="@+id/peq_toolbar_actions"
+                android:id="@+id/dsp_toolbar_actions"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_marginStart="@dimen/dsp_status_strip_margin_start"

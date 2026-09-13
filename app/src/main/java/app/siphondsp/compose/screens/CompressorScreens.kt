@@ -36,8 +36,8 @@ import app.siphondsp.view.MbcBandGrMeter
 import kotlin.math.roundToInt
 
 /**
- * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five
- * `DspPager` pages on this screen, each its own `ComposeView`:
+ * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five pages
+ * on a Compose `HorizontalPager` (see `NativeBmwCompressorFragment`):
  * - [CompressorVisualiserPage] -- the `CompressorGraph` (Compose port of `CompressorSurface`) +
  *   MBC enable / dry-wet Mix master strip.
  * - [CompressorBandPage] x4 -- per-band enable + stereo-link, a live GR meter, and the
@@ -47,8 +47,9 @@ import kotlin.math.roundToInt
  * here too but hosted on the Gains & Delay pager (with the master limiter), not this screen.
  *
  * Each page polls only the meters it shows, on a `LifecycleStartEffect` `Handler` loop scoped to
- * that page's composition -- and since `DspPager` (a `ViewPager2`) only keeps the current page
- * composed, that's effectively the single ~30fps poll the fragment used to run.
+ * that page's composition -- and since Compose's `HorizontalPager` only composes the current page
+ * by default (same as the old `ViewPager2`-based `DspPager` before it), that's effectively the
+ * single ~30fps poll the fragment used to run.
  */
 
 private const val MeterTickMs = 33L

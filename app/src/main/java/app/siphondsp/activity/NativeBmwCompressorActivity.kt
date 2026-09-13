@@ -2,14 +2,23 @@ package app.siphondsp.activity
 
 import android.os.Bundle
 import android.widget.LinearLayout
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
+import app.siphondsp.compose.controls.DspPagerArrows
+import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.NativeBmwCompressorFragment
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 
 class NativeBmwCompressorActivity : DspWorkspaceActivity() {
+    /** Shared with [NativeBmwCompressorFragment]'s `HorizontalPager` so [DspPagerArrows] (hosted
+     *  here, on the toolbar line) can drive it -- see `dsp_toolbar_actions` in
+     *  activity_parametric_eq.xml. */
+    val pagerState: PagerState by lazy { PagerState(currentPage = 0) { NativeBmwCompressorFragment.PAGE_COUNT } }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parametric_eq)
@@ -25,6 +34,11 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())
                 .commitNow()
+        }
+
+        findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
+            setContent { BmwDspTheme { DspPagerArrows(pagerState) } }
+            visibility = android.view.View.VISIBLE
         }
 
         // Apply the same BMW dashboard chrome as the other DSP workspaces once the fragment

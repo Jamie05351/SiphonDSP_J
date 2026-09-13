@@ -136,7 +136,7 @@ fun CompressorGraph(
     // Reused paths / scratch arrays, like the View's members.
     val scratch = remember { CompressorGraphScratch() }
 
-    // Live spectrum poll, scoped to composition (the DspPager only composes the current page).
+    // Live spectrum poll, scoped to composition (the HorizontalPager only composes the current page).
     val spectrumTick = remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         SpectrumEngine.acquire()
