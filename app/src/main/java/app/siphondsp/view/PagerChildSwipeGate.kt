@@ -34,7 +34,9 @@ import kotlin.math.abs
  * whole intent of a flick, and it sidesteps ViewPager2.fakeDrag needing a long enough event
  * stream to build fling velocity, which a fast flick never has.
  *
- * Built by [DspPager]; not used anywhere else.
+ * Built by `DspFragment`'s `ViewPager2` (the Settings/Shortcuts landing pager) -- the DSP
+ * workspace pagers it used to also serve are Compose `HorizontalPager`s now (see
+ * COMPOSE_MIGRATION_ROADMAP.md Phase 11.1), which arbitrate this natively.
  */
 class PagerChildSwipeGate(context: Context) : FrameLayout(context) {
 

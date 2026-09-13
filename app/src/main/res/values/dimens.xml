@@ -34,9 +34,15 @@
          148dp (rail + 24dp) still read as not isolated enough on-device; +35dp gives the arrow
          real breathing room on the rail side too. -->
     <dimen name="dsp_toolbar_nav_inset">183dp</dimen>
-    <!-- Bypass-state strip / peq_toolbar_actions start here: past the back arrow's touch target
+    <!-- Bypass-state strip / dsp_toolbar_actions start here: past the back arrow's touch target
          (dsp_toolbar_nav_inset + its ~48dp target), with its own buffer for the same reason.
          Shifted the same +35dp as dsp_toolbar_nav_inset above, so the gap after the arrow's
          touch target stays the same width it was before this widening. -->
     <dimen name="dsp_status_strip_margin_start">255dp</dimen>
+    <!-- DspPagerArrows sit on the toolbar's right side but inset this far from the true screen
+         edge, not flush against it: the head unit's screen is sunk into the dash and boxed in by
+         trim, so the extreme edge is physically hard to reach while driving. 50dp is a real
+         measurement from the trim, not a guess. Real-device tuning candidate if it turns out
+         wrong, same as every other value on this line. -->
+    <dimen name="dsp_pager_arrows_margin_end">50dp</dimen>
 </resources>

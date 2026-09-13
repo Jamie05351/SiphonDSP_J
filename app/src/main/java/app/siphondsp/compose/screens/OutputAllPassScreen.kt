@@ -24,7 +24,7 @@ private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
  * `base..base+3` slots (enabled / order / freq / Q) with per-`base` `onCommit` closures, and the
  * shared [rememberBmwDspState] snapshot means recomposition stays scoped per section.
  *
- * `DspPager` (still a View) hosts four of these, one per output.
+ * A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts four of these, one per output.
  */
 @Composable
 fun OutputAllPassScreen(

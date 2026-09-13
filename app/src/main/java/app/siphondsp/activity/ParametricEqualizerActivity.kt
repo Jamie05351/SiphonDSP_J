@@ -51,10 +51,10 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         // it's showing, so it's hidden here specifically; every other DSP workspace screen still
         // shows it untouched.
         binding.dspStatusStrip.visibility = View.GONE
-        binding.peqToolbarActions.setContent {
+        binding.dspToolbarActions.setContent {
             BmwDspTheme { PeqToolbarActions(peqStateHolder) }
         }
-        binding.peqToolbarActions.visibility = View.VISIBLE
+        binding.dspToolbarActions.visibility = View.VISIBLE
 
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
         // is not attached to onStart/onResume or any DSP/service lifecycle callback. styleTree

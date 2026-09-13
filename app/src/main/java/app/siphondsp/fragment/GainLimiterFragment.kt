@@ -4,13 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
-import app.siphondsp.view.DspPager
 
 /**
  * Dedicated Gains & Delay workspace. Swipes between three pages, all Compose:
@@ -22,53 +27,39 @@ import app.siphondsp.view.DspPager
  *   from the compressor pager so every limiter stage lives on one screen.
  *
  * All three read/write the same `NativeBmwDspValues` indices and broadcast the same way via
- * `BmwDspState`, so this fragment is now just a `DspPager` host (see
- * COMPOSE_MIGRATION_ROADMAP.md Phases 5-6).
+ * `BmwDspState`. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the
+ * View-based `DspPager` -- each page already self-refreshes via `rememberBmwDspState`, so the old
+ * per-resume rebuild was redundant (see COMPOSE_MIGRATION_ROADMAP.md Phases 5-6, 11).
+ *
+ * The `PagerState` is owned by [GainLimiterActivity], not `remember`ed here, so
+ * `DspPagerArrows` (hosted on the toolbar line) can drive the same pager -- swiping (off a slider)
+ * still works too, the arrows are the reliable path when a swipe would start on one (see
+ * `DspPagerArrows`'s doc for why Compose can't arbitrate that automatically the way the old
+ * `DspPager` + `PagerChildSwipeGate` did).
  */
 class GainLimiterFragment : Fragment() {
-    private lateinit var container: FrameLayout
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View {
-        this.container = FrameLayout(requireContext())
-        rebuild()
-        return this.container
+    ): View = ComposeView(requireContext()).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        val pagerState = (requireActivity() as GainLimiterActivity).pagerState
+        setContent { GainLimiterPager(pagerState) }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Rebuilt on every resume so a fresh ComposeView (and its BmwDspState) picks up edits
-        // made elsewhere while this screen was stopped.
-        if (::container.isInitialized) rebuild()
+    companion object {
+        const val PAGE_COUNT = 3
     }
+}
 
-    private fun rebuild() {
-        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
-        // creates page 0 otherwise, which snapped this screen back to its first page on every
-        // resume (including just backgrounding and returning to the app).
-        val page = DspPager.currentPage(container.getChildAt(0))
-
-        val diagramPage: View = ComposeView(requireContext()).apply {
-            setContent { GainsDelayScreen() }
+@Composable
+private fun GainLimiterPager(pagerState: PagerState) {
+    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+        when (page) {
+            0 -> GainsDelayScreen()
+            1 -> HeadroomOutputScreen()
+            else -> CompressorDriverPage()
         }
-        val outputPage: View = ComposeView(requireContext()).apply {
-            setContent { HeadroomOutputScreen() }
-        }
-        val busLimiterPage: View = ComposeView(requireContext()).apply {
-            setContent { CompressorDriverPage() }
-        }
-
-        container.removeAllViews()
-        container.addView(
-            DspPager.build(
-                requireContext(),
-                listOf(diagramPage, outputPage, busLimiterPage),
-                initialPage = page,
-            ),
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-        )
     }
 }

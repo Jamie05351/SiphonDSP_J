@@ -106,14 +106,21 @@ private fun RowScope.Segment(
     }
 }
 
-private fun DrawScope.drawSegmentTrack() {
+/** Internal, not private: [DspPagerArrows] reuses the same glass capsule shell for visual
+ *  consistency with this segmented control (the app's "boxed toggle group" chrome) -- with its
+ *  own [rimColor] (cyan, for visibility against these screens' dark backdrop) rather than this
+ *  control's own neutral [SegmentTrackRim] default, and its own (lower) [fillAlpha] so some of
+ *  the workspace backdrop shows through instead of a solid black capsule. Both default to this
+ *  control's own original look, so its other call sites (Pre EQ/Low/Mid, Polarity, ...) are
+ *  unaffected. Stroke width is untouched either way. */
+internal fun DrawScope.drawSegmentTrack(rimColor: Color = SegmentTrackRim, fillAlpha: Float = 1f) {
     val borderPx = SegmentBorderWidth.toPx()
     val rect = inset(Rect(0f, 0f, size.width, size.height), borderPx / 2f)
     if (rect.width <= 0f || rect.height <= 0f) return
     val corner = CornerRadius(rect.height / 2f)
     drawRoundRect(
         brush = Brush.linearGradient(
-            listOf(SegmentTrackFillNear, SegmentTrackFillFar),
+            listOf(SegmentTrackFillNear.copy(alpha = fillAlpha), SegmentTrackFillFar.copy(alpha = fillAlpha)),
             start = Offset(rect.left, rect.top),
             end = Offset(rect.right, rect.bottom),
         ),
@@ -136,14 +143,14 @@ private fun DrawScope.drawSegmentTrack() {
         )
     }
     drawRoundRect(
-        color = SegmentTrackRim,
+        color = rimColor,
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,
         style = Stroke(borderPx * 0.6f),
     )
     drawRoundRect(
-        color = SegmentTrackBorder,
+        color = if (rimColor == SegmentTrackRim) SegmentTrackBorder else rimColor,
         topLeft = Offset(rect.left, rect.top),
         size = Size(rect.width, rect.height),
         cornerRadius = corner,

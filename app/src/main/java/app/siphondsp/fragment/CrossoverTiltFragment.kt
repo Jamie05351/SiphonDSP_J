@@ -4,56 +4,56 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.screens.CrossoversPageScreen
 import app.siphondsp.compose.screens.TonalityTiltScreen
-import app.siphondsp.view.DspPager
 
 /**
- * Crossovers & Tilt workspace -- a [DspPager] of two Compose pages:
+ * Crossovers & Tilt workspace -- two Compose pages:
  * - [CrossoversPageScreen] -- the read-only CrossoverHandoffSurface graph over the Lowpass /
  *   Highpass / Subsonic / Mid-align rows, plus a deep link to the full All-pass screen.
  * - [TonalityTiltScreen] -- Tilt amount / pivot.
  *
- * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the
- * same way, so this fragment is just a `DspPager` host (COMPOSE_MIGRATION_ROADMAP.md Phase 4 +
- * follow-up).
+ * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same
+ * way. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the View-based
+ * `DspPager` -- each page already self-refreshes via `rememberBmwDspState`, so the old per-resume
+ * rebuild was redundant (COMPOSE_MIGRATION_ROADMAP.md Phase 4 + Phase 11).
+ *
+ * The `PagerState` is owned by [CrossoverTiltActivity] (shared with [OutputAllPassFragment], its
+ * other possible content), not `remember`ed here, so `DspPagerArrows` on the toolbar line can
+ * drive it -- see that composable's doc for why a swipe starting on one of this screen's sliders
+ * can't reliably page on its own in Compose.
  */
 class CrossoverTiltFragment : Fragment() {
-    private lateinit var container: FrameLayout
-
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        this.container = FrameLayout(requireContext())
-        rebuild()
-        return this.container
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View = ComposeView(requireContext()).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        val pagerState = (requireActivity() as CrossoverTiltActivity).pagerState
+        setContent { CrossoverTiltPager(pagerState) }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Rebuilt on every resume so a fresh set of ComposeViews (and their BmwDspState) pick up
-        // edits made elsewhere while this screen was stopped.
-        if (::container.isInitialized) rebuild()
+    companion object {
+        const val PAGE_COUNT = 2
     }
+}
 
-    private fun rebuild() {
-        val ctx = requireContext()
-        // Read back whatever page the outgoing pager (if any) was on -- the rebuild below always
-        // creates page 0 otherwise, which snapped this screen back to its first page on every
-        // resume (including just backgrounding and returning to the app).
-        val page = DspPager.currentPage(container.getChildAt(0))
-        container.removeAllViews()
-        container.addView(
-            DspPager.build(
-                ctx,
-                listOf(
-                    ComposeView(ctx).apply { setContent { CrossoversPageScreen() } },
-                    ComposeView(ctx).apply { setContent { TonalityTiltScreen() } },
-                ),
-                initialPage = page,
-            ),
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
-        )
+@Composable
+private fun CrossoverTiltPager(pagerState: PagerState) {
+    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+        when (page) {
+            0 -> CrossoversPageScreen()
+            else -> TonalityTiltScreen()
+        }
     }
 }
