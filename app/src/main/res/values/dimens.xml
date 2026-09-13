@@ -17,12 +17,12 @@
     <!-- Width of the rail baked into the full-screen DSP workspace backdrop
          (dsp_workspace_backdrop_*.png). dsp_sidebar reserves exactly this so DspCrossNavBar's
          invisible click-targets land on the baked tiles. Measured off the 1280x480 art (~124px).
-         Kept separate from dsp_toolbar_nav_inset below -- this one must stay exactly the rail's
+         Kept separate from dsp_toolbar_nav_inset below: this one must stay exactly the rail's
          own width, or the backdrop art and the click-target overlay drift apart. -->
     <dimen name="dsp_sidebar_width">124dp</dimen>
     <!-- Where the toolbar's back arrow starts: the rail width plus a real buffer, not flush
          against it. A Toolbar's navigation icon touch target is a Material minimum (48dp)
-         centred on the drawn 24dp glyph, not just the glyph's own bounds -- flush against
+         centred on the drawn 24dp glyph, not just the glyph's own bounds: flush against
          dsp_sidebar_width put that touch target right up against the rail's own click-targets.
          148dp (rail + 24dp) still read as not isolated enough on-device; +35dp gives the arrow
          real breathing room on the rail side too. -->
