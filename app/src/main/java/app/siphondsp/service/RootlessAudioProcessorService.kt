@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
@@ -92,6 +93,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var activeTrack: AudioTrack? = null
 
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    @Volatile
+    private var outputGain: Float = 1f
+
     private lateinit var engine: JamesDspLocalEngine
     private val isRunning: Boolean
         get() = recorderThread?.isAlive == true
@@ -137,6 +143,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         audioManager = getSystemService<AudioManager>()!!
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
         notificationManager = getSystemService<NotificationManager>()!!
+
+        requestAudioFocus()
 
         sessionManager = RootlessSessionManager(this)
         sessionManager.sessionDatabase.setOnSessionLossListener(onSessionLossListener)
@@ -221,6 +229,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         isServiceDisposing = true
         stopRecording()
         engine.close()
+        abandonAudioFocus()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STOPPED))
@@ -500,6 +509,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         try {
             recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
             track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+            track.setVolume(outputGain)
             activeRecorder = recorder
             activeTrack = track
 
@@ -708,10 +718,52 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         startRecording()
     }
 
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        outputGain = when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> 0f
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> AUDIO_FOCUS_DUCK_GAIN
+            AudioManager.AUDIOFOCUS_GAIN -> 1f
+            else -> outputGain
+        }
+        Timber.d("Audio focus changed: $focusChange; output gain now $outputGain")
+        activeTrack?.setVolume(outputGain)
+    }
+
+    private fun requestAudioFocus() {
+        if (audioFocusRequest != null)
+            return
+
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attributes)
+            .setOnAudioFocusChangeListener(audioFocusChangeListener, Handler(Looper.getMainLooper()))
+            .build()
+
+        if (audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+            audioFocusRequest = request
+        else
+            Timber.w("requestAudioFocus: request denied; continuing without focus-based ducking")
+    }
+
+    private fun abandonAudioFocus() {
+        audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        audioFocusRequest = null
+        outputGain = 1f
+    }
+
     private fun buildAudioTrack(encoding: Int, sampleRate: Int, bufferSizeBytes: Int): AudioTrack {
+        // USAGE_MEDIA/CONTENT_TYPE_MUSIC (not UNKNOWN) so the platform can duck this output for
+        // calls and nav prompts. Safe against a self-capture feedback loop: buildAudioRecord()
+        // excludes this app's own UID from AudioPlaybackCaptureConfiguration regardless of usage
+        // tag, so this re-emitted track is never re-captured by this app's own recorder.
         val attributesBuilder = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_UNKNOWN)
-            .setContentType(AudioAttributes.CONTENT_TYPE_UNKNOWN)
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .setFlags(0)
 
         sdkAbove(Build.VERSION_CODES.Q) {
@@ -847,6 +899,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val CHANNEL_COUNT = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
+        private const val AUDIO_FOCUS_DUCK_GAIN = 0.2f
         const val SESSION_LOSS_MAX_RETRIES = 1
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
