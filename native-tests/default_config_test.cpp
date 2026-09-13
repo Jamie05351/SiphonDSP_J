@@ -145,3 +145,52 @@ TEST_CASE("Mid crossover HPF matches the theoretical LR4 (cascaded Butterworth) 
         CHECK(std::fabs(relMeasured - relExpected) < 0.6);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (PEQ Notch type): makePeq's type==3 branch
+// briefly computed the Allpass mixing (m1 = -2*k) instead of Notch's (m1 = -k) after that
+// migration -- both are unity-gain far from fc, so nothing away from the notch frequency caught
+// it, but Allpass is *also* unity-gain (by construction) right at fc, where a Notch band must
+// dip hard. A "NO" band the on-screen graph (BiquadUtils.kt, a separate Kotlin implementation
+// never touched by the migration) drew as a deep null was silently playing back inaudibly flat.
+TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+
+    constexpr double kNotchFreq = 1000.0;
+    constexpr double kQ = 4.0;
+    // full-bank band: [freq, gainDb (unused by Notch), Q, type=3 (Notch), channel=0 (both)].
+    const double band[5] = {kNotchFreq, 0.0, kQ, 3.0, 0.0};
+    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+
+    const double amp = 0.1;
+    std::vector<float> warm = stereoSine(kNotchFreq, amp, 24000);
+    proc.process(warm.data(), warm.size());
+    std::vector<float> atFc = stereoSine(kNotchFreq, amp, 16384);
+    proc.process(atFc.data(), atFc.size());
+    const double dbAtFc = linToDb(channelMagnitudeAt(atFc, 0, kNotchFreq));
+
+    // A true notch must sit well below unity at its own center frequency; an Allpass (the bug)
+    // measures ~0 dB here since its magnitude is flat everywhere by definition.
+    INFO("gain at fc=", kNotchFreq, " Hz: ", dbAtFc, " dB");
+    CHECK(dbAtFc < -20.0);
+
+    // Away from fc the band must be a no-op -- confirms this isn't just a broadband attenuation
+    // bug wearing a Notch's clothes. channelMagnitudeAt reads back an absolute signal amplitude
+    // (~amp for an untouched frequency, i.e. ~-20 dB here, not 0 dB), so -- same "compare against
+    // a reference measurement" approach every sibling test in this file uses -- this compares
+    // with-notch against a without-notch baseline rather than asserting an absolute dB figure.
+    constexpr double kFarFreq = 200.0;
+    NativeBmwDspProcessor procFar, procBaseline;
+    procFar.setSampleRate(kSampleRate);
+    procBaseline.setSampleRate(kSampleRate);
+    REQUIRE(procFar.configure(cfg.data(), cfg.size()));
+    REQUIRE(procFar.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(procBaseline.configure(cfg.data(), cfg.size()));
+
+    const double dbFar = linToDb(channelMagnitudeAt(renderSteadyState(procFar, cfg, kFarFreq, amp), 0, kFarFreq));
+    const double dbBaseline = linToDb(channelMagnitudeAt(renderSteadyState(procBaseline, cfg, kFarFreq, amp), 0, kFarFreq));
+    INFO("gain away from fc=", kFarFreq, " Hz: with-notch=", dbFar, " dB  baseline=", dbBaseline, " dB");
+    CHECK(std::fabs(dbFar - dbBaseline) < 0.5);
+}
