@@ -288,3 +288,59 @@ TEST_CASE("kStageDelayLeftMs / kStageDelayRightMs delay one summed-bus side") {
     CHECK(std::abs(lag(4.f, 0.f) - ms4) <= 1);        // L delay -> ch1 lags ch0
     CHECK(std::abs(lag(0.f, 4.f) + ms4) <= 1);        // R delay -> ch0 lags ch1
 }
+
+TEST_CASE("kMeasGenType slot injects a signal that fully replaces the real input") {
+    // startHz == endHz degenerates the sweep to a pure tone -- lets this reuse the existing
+    // steady-state magnitude helpers without needing a moving-frequency probe.
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kMeasGenType] = 1.f;
+    c[sch::kMeasGenSweepStartHz] = 5000.f;
+    c[sch::kMeasGenSweepEndHz] = 5000.f;
+    c[sch::kMeasGenSweepDurationS] = 5.f;
+    c[sch::kMeasGenSweepLevelDb] = 0.f;
+
+    // Feed a loud 300 Hz tone as the "real" input -- if the generator is wired in correctly it
+    // never reaches the output at all.
+    auto out = renderSteadyState(proc, c, 300.0, 0.5);
+    const double at300 = channelMagnitudeAt(out, 0, 300.0);
+    const double at5000 = channelMagnitudeAt(out, 0, 5000.0);
+    INFO("300 Hz (fed input) magnitude ", at300, "   5000 Hz (generator) magnitude ", at5000);
+    CHECK(at300 < 0.01);   // fed input did not get through
+    CHECK(at5000 > 0.1);   // generator's tone did
+}
+
+TEST_CASE("kMeasGenSweep* slots actually sweep frequency over time") {
+    NativeBmwDspProcessor early, late;
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kMeasGenType] = 1.f;
+    c[sch::kMeasGenSweepStartHz] = 200.f;
+    c[sch::kMeasGenSweepEndHz] = 8000.f;
+    c[sch::kMeasGenSweepDurationS] = 2.f;
+    c[sch::kMeasGenSweepLevelDb] = 0.f;
+
+    early.setSampleRate(kSampleRate);
+    REQUIRE(early.configure(c.data(), c.size()));
+    auto earlySkip = stereoSine(0.0, 0.0, 500);  // content irrelevant; the generator overrides it
+    early.process(earlySkip.data(), earlySkip.size());
+    auto earlyWindow = stereoSine(0.0, 0.0, 4096);
+    early.process(earlyWindow.data(), earlyWindow.size());
+
+    late.setSampleRate(kSampleRate);
+    REQUIRE(late.configure(c.data(), c.size()));
+    auto lateSkip = stereoSine(0.0, 0.0, static_cast<std::size_t>(1.9 * kSampleRate));
+    late.process(lateSkip.data(), lateSkip.size());
+    auto lateWindow = stereoSine(0.0, 0.0, 4096);
+    late.process(lateWindow.data(), lateWindow.size());
+
+    const double earlyAt200 = channelMagnitudeAt(earlyWindow, 0, 200.0);
+    const double earlyAt8000 = channelMagnitudeAt(earlyWindow, 0, 8000.0);
+    const double lateAt200 = channelMagnitudeAt(lateWindow, 0, 200.0);
+    const double lateAt8000 = channelMagnitudeAt(lateWindow, 0, 8000.0);
+    INFO("early: 200Hz=", earlyAt200, " 8000Hz=", earlyAt8000, "   late: 200Hz=", lateAt200,
+         " 8000Hz=", lateAt8000);
+    CHECK(earlyAt200 > earlyAt8000 * 4.0);  // starts near 200 Hz
+    CHECK(lateAt8000 > lateAt200 * 4.0);    // ends near 8000 Hz
+}
