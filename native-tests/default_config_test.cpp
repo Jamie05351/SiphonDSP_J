@@ -145,3 +145,49 @@ TEST_CASE("Mid crossover HPF matches the theoretical LR4 (cascaded Butterworth) 
         CHECK(std::fabs(relMeasured - relExpected) < 0.6);
     }
 }
+
+// Regression test for the DF2T->SVF biquad migration (PEQ Notch type): makePeq's type==3 branch
+// briefly computed the Allpass mixing (m1 = -2*k) instead of Notch's (m1 = -k) after that
+// migration -- both are unity-gain far from fc, so nothing away from the notch frequency caught
+// it, but Allpass is *also* unity-gain (by construction) right at fc, where a Notch band must
+// dip hard. A "NO" band the on-screen graph (BiquadUtils.kt, a separate Kotlin implementation
+// never touched by the migration) drew as a deep null was silently playing back inaudibly flat.
+TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+
+    constexpr double kNotchFreq = 1000.0;
+    constexpr double kQ = 4.0;
+    // full-bank band: [freq, gainDb (unused by Notch), Q, type=3 (Notch), channel=0 (both)].
+    const double band[5] = {kNotchFreq, 0.0, kQ, 3.0, 0.0};
+    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+
+    const double amp = 0.1;
+    std::vector<float> warm = stereoSine(kNotchFreq, amp, 24000);
+    proc.process(warm.data(), warm.size());
+    std::vector<float> atFc = stereoSine(kNotchFreq, amp, 16384);
+    proc.process(atFc.data(), atFc.size());
+    const double dbAtFc = linToDb(channelMagnitudeAt(atFc, 0, kNotchFreq));
+
+    // A true notch must sit well below unity at its own center frequency; an Allpass (the bug)
+    // measures ~0 dB here since its magnitude is flat everywhere by definition.
+    INFO("gain at fc=", kNotchFreq, " Hz: ", dbAtFc, " dB");
+    CHECK(dbAtFc < -20.0);
+
+    // Away from fc the band must still be inaudible -- confirms this isn't just a broadband
+    // attenuation bug wearing a Notch's clothes.
+    constexpr double kFarFreq = 200.0;
+    NativeBmwDspProcessor procFar;
+    procFar.setSampleRate(kSampleRate);
+    REQUIRE(procFar.configure(cfg.data(), cfg.size()));
+    REQUIRE(procFar.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    std::vector<float> warmFar = stereoSine(kFarFreq, amp, 24000);
+    procFar.process(warmFar.data(), warmFar.size());
+    std::vector<float> farWindow = stereoSine(kFarFreq, amp, 16384);
+    procFar.process(farWindow.data(), farWindow.size());
+    const double dbFar = linToDb(channelMagnitudeAt(farWindow, 0, kFarFreq));
+    INFO("gain away from fc=", kFarFreq, " Hz: ", dbFar, " dB");
+    CHECK(std::fabs(dbFar) < 0.5);
+}

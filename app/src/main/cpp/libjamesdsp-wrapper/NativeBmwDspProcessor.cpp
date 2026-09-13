@@ -497,9 +497,16 @@ bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q
         m1 = k * (1 - A) * A;
         m2 = 1 - A * A;
     } else {
+        // Notch (band-reject), type 3 ("NO"): m1 = -k, not -2*k. Notch = LP + HP by definition
+        // (their m0/m1/m2 mixes add component-wise: (0,0,1) + (1,-k,-1) = (1,-k,0)) -- -2*k is the
+        // Allpass mixing instead (see makeAllPass2/AllPassSection::rebuild), which has unity
+        // magnitude at every frequency by construction. With -2*k here, a user-selected Notch band
+        // played back with no audible cut at all (just a phase twist) while the on-screen graph
+        // (BiquadUtils.kt, a separate Kotlin implementation never touched by this migration) kept
+        // showing the correct deep notch -- silently wrong audio behind a correct-looking curve.
         k = 1. / Q;
         m0 = 1;
-        m1 = -2 * k;
+        m1 = -k;
         m2 = 0;
     }
     const double a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
