@@ -30,9 +30,13 @@ public:
     //   140 -> reclaimed: one-time "stopband offset migrated" marker, written by
     //          NativeBmwDspValues.kt so an existing saved config picks up the new default.
     //          Kotlin-only -- never read in configure().
-    //   141, 142 -> unused. Briefly held a Mid-band independent LPF enable/corner; that feature
-    //          was removed (wrong fix, native processing deleted). Not read in configure(); a
-    //          leftover value from an older save is simply ignored.
+    //   141, 142 -> reclaimed a second time: briefly held a Mid-band independent LPF
+    //          enable/corner (removed, wrong fix), now the stage-centering L/R alignment delay
+    //          (ms) applied to the summed stereo bus after the master limiter -- see
+    //          Params::stageDelay* and processFrame's tail. Read in configure(). (This comment
+    //          previously said "unused... not read in configure()", which stopped being true
+    //          once that reclaim landed -- don't trust a slot's history here without also
+    //          checking configure()'s actual v[] reads.)
     // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
     // never read in configure() either; it only has to be included here so the array length
     // check (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
@@ -117,10 +121,15 @@ public:
     // process() itself -- same "brief, uncontended lock" discipline as configure().
     void startCapture();
     void stopCapture();
+    // Acquire-paired with captureTapOut()'s release store: any caller that reads this (UI-thread
+    // progress polling, or exportCaptureWav() below) is guaranteed to see every capture-buffer
+    // write up to the returned count, not just an up-to-date index with possibly-stale/torn
+    // sample data behind it on a weakly-ordered CPU (this app's target, ARM64).
     std::size_t captureFrameCount() const;
     // Writes 2 float32 WAV files (raw input, final output) from whatever's been captured so far
     // and fills `result` with peak/null-test readings computed from that same data. Safe to call
-    // whether or not capture is still running (reads only up to captureFrameCount() frames).
+    // whether or not capture is still running (reads only up to captureFrameCount() frames, whose
+    // acquire load is what makes that data race-free against a concurrent capture).
     bool exportCaptureWav(const char* rawInPath, const char* outPath,
                           CaptureExportResult& result) const;
 
@@ -562,7 +571,12 @@ private:
         captureOutL_[i] = l;
         captureOutR_[i] = r;
         const std::size_t next = i + 1;
-        captureWriteIndex_.store(next, std::memory_order_relaxed);
+        // Release: publishes the plain-float writes above (and captureTapIn()'s, earlier this
+        // same process() call) so a thread that reads captureFrameCount() with a matching acquire
+        // load is guaranteed to see them -- see captureFrameCount()'s comment. The two loads
+        // inside this class (here and in captureTapIn()) stay relaxed; they're same-thread
+        // bookkeeping reads with no cross-thread consumer of their own.
+        captureWriteIndex_.store(next, std::memory_order_release);
         if (next >= captureCapacity_) {
             captureEnabled_ = false;
         }
