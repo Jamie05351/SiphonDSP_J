@@ -39,6 +39,7 @@ add_executable(native_tests
     input_validation_test.cpp
     limiter_test.cpp
     mbc_test.cpp
+    routing_bypass_test.cpp
     schema_agreement_test.cpp
 )
 

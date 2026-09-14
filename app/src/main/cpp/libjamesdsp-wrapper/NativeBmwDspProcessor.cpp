@@ -1384,8 +1384,14 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
     const std::array<float, NativeBmwRouting::kOutputCount> logical{{lowL, lowR, midL, midR}};
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
-    float oL = (p_.lpfPass && p_.hpfPass) ? sL : stereo.left,
-          oR = (p_.lpfPass && p_.hpfPass) ? sR : stereo.right;
+    // Always use the routed sum here, even with both lpfPass and hpfPass set (crossover filtering
+    // skipped on both bands). routing_.process() and the polarity/mute block above already ran
+    // unconditionally, so lowL/lowR/midL/midR -- and therefore stereo.left/right -- correctly
+    // reflect the user's routing matrix and per-output polarity/mute either way. The old
+    // "fall back to sL/sR" shortcut for the both-bypassed case instead discarded all of that: any
+    // non-identity routing matrix (e.g. mixing both front channels into one output) silently had
+    // no effect whenever both bypass flags were on, with no error or indication why.
+    float oL = stereo.left, oR = stereo.right;
     if (p_.tilt) {
         oL = tiltHiL2_.run(tiltHiL1_.run(tiltLoL2_.run(tiltLoL1_.run(oL))));
         oR = tiltHiR2_.run(tiltHiR1_.run(tiltLoR2_.run(tiltLoR1_.run(oR))));
@@ -1541,19 +1547,41 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
 }
 
 void NativeBmwDspProcessor::startCapture() {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    // Reallocating only when the size actually changes (not on every start) avoids repeatedly
-    // touching ~23MB of memory for repeat captures at the same sample rate.
-    const std::size_t capacity = static_cast<std::size_t>(sampleRate_ * kCaptureMaxSeconds);
-    if (captureRawInL_.size() != capacity) {
-        captureRawInL_.assign(capacity, 0.f);
-        captureRawInR_.assign(capacity, 0.f);
-        captureOutL_.assign(capacity, 0.f);
-        captureOutR_.assign(capacity, 0.f);
+    // The up-to-~46MB assign()/zero below used to run while holding stateMutex_, the same lock
+    // process() takes once per audio buffer -- if a capture (re)allocation landed while the audio
+    // thread was waiting on that lock, the allocation/zeroing time added directly to audio-thread
+    // latency (an audible glitch right when the user starts a capture). Build the new buffers
+    // (when actually needed) into locals first, outside any lock, then swap them in under a
+    // second, brief lock -- vector::swap is O(1), no memory touched while locked.
+    std::size_t capacity;
+    bool needsRealloc;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        capacity = static_cast<std::size_t>(sampleRate_ * kCaptureMaxSeconds);
+        needsRealloc = captureRawInL_.size() != capacity;
     }
-    captureCapacity_ = capacity;
+    std::vector<float> rawInL, rawInR, outL, outR;
+    if (needsRealloc) {
+        rawInL.assign(capacity, 0.f);
+        rawInR.assign(capacity, 0.f);
+        outL.assign(capacity, 0.f);
+        outR.assign(capacity, 0.f);
+    }
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    // sampleRate_ could in principle have changed between the two critical sections above (a
+    // concurrent setSampleRate() call) -- rare and harmless: worst case this capture's buffers
+    // are sized for the sample rate current when this call started, not a rate that changed
+    // mid-call. captureCapacity_ below always reflects the size actually in use, so nothing
+    // downstream can index past what's real.
+    if (needsRealloc) {
+        captureRawInL_.swap(rawInL);
+        captureRawInR_.swap(rawInR);
+        captureOutL_.swap(outL);
+        captureOutR_.swap(outR);
+    }
+    captureCapacity_ = captureRawInL_.size();
     captureWriteIndex_.store(0, std::memory_order_relaxed);
-    captureEnabled_ = capacity > 0;
+    captureEnabled_ = captureCapacity_ > 0;
 }
 
 void NativeBmwDspProcessor::stopCapture() {
@@ -1562,7 +1590,7 @@ void NativeBmwDspProcessor::stopCapture() {
 }
 
 std::size_t NativeBmwDspProcessor::captureFrameCount() const {
-    return captureWriteIndex_.load(std::memory_order_relaxed);
+    return captureWriteIndex_.load(std::memory_order_acquire);
 }
 
 bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* outPath,
