@@ -36,6 +36,7 @@ add_executable(native_tests
     concurrency_test.cpp
     crossover_test.cpp
     default_config_test.cpp
+    input_validation_test.cpp
     limiter_test.cpp
     mbc_test.cpp
     schema_agreement_test.cpp

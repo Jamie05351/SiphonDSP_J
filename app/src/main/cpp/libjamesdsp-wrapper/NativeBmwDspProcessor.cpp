@@ -238,6 +238,13 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.mbcXo[0] = clampf(v[146], 20, 2000);
     next.mbcXo[1] = clampf(v[147], 40, 8000);
     next.mbcXo[2] = clampf(v[148], 80, 20000);
+    // Out-of-order input (e.g. v[147] < v[146]) previously reached rebuildMbc() as-is, where its
+    // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
+    // update being rejected or the values being reordered predictably -- the resulting split
+    // frequencies depended on which slot the clamp chain happened to touch, not on the values the
+    // caller actually sent. Sorting here means rebuildMbc() always receives an already-monotonic
+    // triple with the caller's own three magnitudes intact, just correctly ordered.
+    std::sort(std::begin(next.mbcXo), std::end(next.mbcXo));
     for (int b = 0; b < 4; ++b) {
         const std::size_t base = 149 + b * 8;
         auto& mb = next.mbcBand[b];
@@ -605,8 +612,14 @@ bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q
     // makePeq is the one coefficient builder here with fc unclamped up to true Nyquist (arbitrary
     // user-edited PEQ bands), so it's the one that keeps an explicit finite-result guard -- g can
     // grow very large as f approaches sr/2 (g=tan(w/2) has no asymptote-avoiding margin here the
-    // way the 0.49*sr-clamped builders above do).
-    if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3)) {
+    // way the 0.49*sr-clamped builders above do). m0/m1/m2 need the same guard as a1/a2/a3: an
+    // extreme-but-finite gainDb can underflow A to exactly 0 (bell's k=1/(Q*A) then overflows to
+    // +Infinity, making m1 non-finite) while g stays small enough that a1/a2/a3 alone still pass
+    // -- checking only those would let a non-finite m1/m2 through to Biquad::run, where
+    // m1*v1 = -Infinity*0 = NaN gets silently flushed to 0 by ftzd(), zeroing that band's output
+    // instead of rejecting the malformed config.
+    if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3) || !std::isfinite(m0) ||
+        !std::isfinite(m1) || !std::isfinite(m2)) {
         return false;
     }
     q.topology = Biquad::Topology::Svf2;
@@ -639,6 +652,12 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
         }
         PeqBank x;
         for (std::size_t i = 0; i < n; i += 5) {
+            // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a NaN/Infinity float
+            // to int is UB ([conv.fpint]), so that has to be ruled out before either cast runs,
+            // not deferred to makePeq()'s own isfinite checks (which only cover f/gainDb/Q).
+            if (!std::isfinite(v[i + 3]) || !std::isfinite(v[i + 4])) {
+                return false;
+            }
             int type = static_cast<int>(v[i + 3]);
             Biquad q;
             if (!makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate_)) {
@@ -787,10 +806,16 @@ void NativeBmwDspProcessor::rebuildLimiter() {
 }
 void NativeBmwDspProcessor::rebuildMbc() {
     // LR4 tree crossovers + the all-pass compensators for the lower bands. Splits are forced
-    // monotonic with a little headroom so a mis-ordered config can't collapse a band to nothing.
-    const float f0 = clampf(p_.mbcXo[0], 20.f, sampleRate_ * .45f);
-    const float f1 = clampf(p_.mbcXo[1], f0 * 1.05f, sampleRate_ * .45f);
-    const float f2 = clampf(p_.mbcXo[2], f1 * 1.05f, sampleRate_ * .45f);
+    // monotonic with a little headroom so a mis-ordered config can't collapse a band to nothing
+    // (configure() also now sorts p_.mbcXo ascending before it ever reaches here). Each stage's
+    // lower bound is itself clamped against the ceiling: without that, a low sample rate plus an
+    // f0/f1 already close to the ceiling can make the naive lower bound (f0*1.05f) exceed the
+    // ceiling, and clampf(x, lo, hi) with lo>hi returns lo -- silently landing past the
+    // documented sampleRate_*.45f cap instead of at it.
+    const float ceiling = sampleRate_ * .45f;
+    const float f0 = clampf(p_.mbcXo[0], 20.f, ceiling);
+    const float f1 = clampf(p_.mbcXo[1], std::min(f0 * 1.05f, ceiling), ceiling);
+    const float f2 = clampf(p_.mbcXo[2], std::min(f1 * 1.05f, ceiling), ceiling);
     for (auto& t : mbc_) {
         t.clear();  // explicit -- makeLowPass/makeHighPass below also clear each biquad they
                     // touch, so this is belt-and-braces, but it makes the state-reset intent
