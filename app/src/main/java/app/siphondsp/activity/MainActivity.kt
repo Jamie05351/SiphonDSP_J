@@ -237,6 +237,10 @@ class MainActivity : BaseActivity() {
                     startActivity(Intent(this, MeasurementCaptureActivity::class.java))
                     true
                 }
+                R.id.action_signal_generator -> {
+                    startActivity(Intent(this, SignalGeneratorActivity::class.java))
+                    true
+                }
                 else -> false
             }
         }
