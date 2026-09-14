@@ -445,6 +445,12 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     routing_ = nextRouting;
     outputs_ = nextOutputs;
     outputConfigs_ = nextOutputConfigs;
+    // See mbcEnabledMeterFlag_ etc's declaration: the read*Meter() functions are lock-free and
+    // read these atomics instead of the plain bools inside p_ to avoid racing this assignment.
+    mbcEnabledMeterFlag_.store(p_.mbcEnabled, std::memory_order_relaxed);
+    busLimLowEnabledMeterFlag_.store(p_.busLimLowEnabled, std::memory_order_relaxed);
+    busLimMidEnabledMeterFlag_.store(p_.busLimMidEnabled, std::memory_order_relaxed);
+    masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
     applyDirty(dirty);
     return true;
 }
@@ -612,10 +618,16 @@ bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const dou
                                          std::size_t fullCount, const double* low,
                                          std::size_t lowCount, const double* mid,
                                          std::size_t midCount) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return configurePeqLocked(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount);
+}
+bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, const double* full,
+                                               std::size_t fullCount, const double* low,
+                                               std::size_t lowCount, const double* mid,
+                                               std::size_t midCount) {
     if (!std::isfinite(preampDb) || preampDb < -30 || preampDb > 12) {
         return false;
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
     auto build = [this](const double* v, std::size_t n, PeqBank& b) {
         if (n % 5 || n / 5 > 16 || (n && v == nullptr)) {
             return false;
@@ -1031,8 +1043,12 @@ void NativeBmwDspProcessor::rebuildAll() {
     busLimMidGrDb_.store(0.f);
     updateDelays();
     resetDynamics();
-    configurePeq(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
-                 lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(), midPeqValueCount_);
+    // Locked variant: rebuildAll() runs either from the constructor (no lock needed, object not
+    // yet published) or from setSampleRate() (already holding stateMutex_) -- never call
+    // configurePeq() itself here, it would deadlock re-taking the same non-recursive mutex.
+    configurePeqLocked(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
+                       lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
+                       midPeqValueCount_);
 }
 float NativeBmwDspProcessor::processChannelInput(float x, float& dcX, float& dcY) {
     float y = x - dcX + dcR_ * dcY;
@@ -1469,7 +1485,7 @@ void NativeBmwDspProcessor::readMbcMeter(float* v, std::size_t n) const {
     if (!v || n < 12) {
         return;
     }
-    const bool active = p_.mbcEnabled;
+    const bool active = mbcEnabledMeterFlag_.load(std::memory_order_relaxed);
     for (int b = 0; b < 4; ++b) {
         const auto& m = mbcMeter_[b];
         v[b * 3 + 0] = active ? m.inputDb.load() : -60.f;
@@ -1481,14 +1497,17 @@ void NativeBmwDspProcessor::readBusLimiterMeter(float* v, std::size_t n) const {
     if (!v || n < 2) {
         return;
     }
-    v[0] = p_.busLimLowEnabled ? busLimLowGrDb_.load(std::memory_order_relaxed) : 0.f;
-    v[1] = p_.busLimMidEnabled ? busLimMidGrDb_.load(std::memory_order_relaxed) : 0.f;
+    v[0] = busLimLowEnabledMeterFlag_.load(std::memory_order_relaxed)
+               ? busLimLowGrDb_.load(std::memory_order_relaxed) : 0.f;
+    v[1] = busLimMidEnabledMeterFlag_.load(std::memory_order_relaxed)
+               ? busLimMidGrDb_.load(std::memory_order_relaxed) : 0.f;
 }
 void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) const {
     if (!v || n < 1) {
         return;
     }
-    v[0] = p_.limiterEnabled ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
+    v[0] = masterLimiterEnabledMeterFlag_.load(std::memory_order_relaxed)
+               ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
 }
 
 void NativeBmwDspProcessor::startCapture() {

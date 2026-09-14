@@ -33,6 +33,7 @@ add_executable(native_tests
     test_main.cpp
     drwav_impl.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessor.cpp
+    concurrency_test.cpp
     crossover_test.cpp
     default_config_test.cpp
     limiter_test.cpp

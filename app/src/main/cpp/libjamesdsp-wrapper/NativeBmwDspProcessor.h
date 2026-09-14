@@ -422,6 +422,14 @@ private:
     void processBusLimiter(float& left, float& right, float thresholdDb, float& gain,
                            float releaseMix, std::atomic<float>& grMeterDb);
     void publishIdleMeter(CompressorState& state);
+    // configurePeq()'s body, assuming stateMutex_ is already held by the caller. Exists so
+    // rebuildAll() -- itself called from setSampleRate() while already holding the lock -- can
+    // reapply the PEQ banks without taking stateMutex_ a second time; std::mutex is
+    // non-recursive, so configurePeq() (which takes the lock itself) would deadlock there.
+    bool configurePeqLocked(bool enabled, float preampDb, const double* fullBands,
+                            std::size_t fullValueCount, const double* lowBands,
+                            std::size_t lowValueCount, const double* midBands,
+                            std::size_t midValueCount);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
     void rebuildGains();
@@ -507,6 +515,15 @@ private:
     // Stored every 256 frames from processLimiter(), same discipline as the MBC meter.
     std::atomic<float> masterLimiterGrDb_{0.f};
     uint32_t limiterMeterCounter_ = 0;
+    // Mirrors of p_.mbcEnabled/busLimLowEnabled/busLimMidEnabled/limiterEnabled, published by
+    // configure() right after p_ = next (same spot the rest of this file republishes derived
+    // state). The read*Meter() functions are const and take no lock, so they can't safely read
+    // the plain bools inside p_ directly -- that's a data race against configure()'s whole-struct
+    // p_ = next assignment from the control thread. Same "atomic mirror, no lock" discipline this
+    // file already uses for the GR meters themselves (masterLimiterGrDb_ etc above).
+    std::atomic<bool> mbcEnabledMeterFlag_{false};
+    std::atomic<bool> busLimLowEnabledMeterFlag_{false}, busLimMidEnabledMeterFlag_{false};
+    std::atomic<bool> masterLimiterEnabledMeterFlag_{true};
 
     // Pre-crossover multiband compressor state. mbc_[0] = left chain, mbc_[1] = right chain.
     // mbcCell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band]
