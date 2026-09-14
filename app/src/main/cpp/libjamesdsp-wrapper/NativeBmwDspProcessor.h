@@ -51,7 +51,12 @@ public:
     //   192      measurement generator type (0 off, 1 sweep, 2 pink periodic noise)
     //   193..196 sweep start Hz, end Hz, duration s, level dBFS
     //   197..198 pink noise period s, level dBFS
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 199 };
+    //   199      sweep timing-reference toggle (only meaningful while type == 1)
+    //   200      timing-reference channel design: 0 combined (chirp+sweep both channels),
+    //            1 split (chirp-only / sweep-only) -- only meaningful while 199 is set
+    //   201..202 timing-reference Mid-band sweep start Hz, end Hz
+    //   203..204 timing-reference Low-band sweep start Hz, end Hz
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 205 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -333,12 +338,20 @@ private:
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves = 1;
-        // Measurement signal generator (v[192..198]). 0 = off; nonzero replaces the real input
+        // Measurement signal generator (v[192..199]). 0 = off; nonzero replaces the real input
         // entirely, upstream of captureTapIn() -- see applyMeasurementGenerator(). Ships off.
         int measGenType = 0;
         float measGenSweepStartHz = 20, measGenSweepEndHz = 20000, measGenSweepDurationS = 10,
               measGenSweepLevelDb = -12;
         float measGenPinkPeriodS = 2, measGenPinkLevelDb = -12;
+        // v[199..204]: only meaningful while measGenType == 1. Wraps the sweep in REW's Acoustic
+        // Timing Reference cycle (Mid sweep, Low sweep, Mid sweep, bracketed by timing chirps)
+        // instead of the bare continuously-looping single sweep -- see
+        // NativeBmwMeasurementGenerator::configureTimingRef()/nextTimingRefSample().
+        bool measGenTimingRefEnabled = false;
+        bool measGenTimingRefSplitChannels = false;
+        float measGenTimingRefMidStartHz = 100, measGenTimingRefMidEndHz = 20000;
+        float measGenTimingRefLowStartHz = 20, measGenTimingRefLowEndHz = 400;
         // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
         bool mbcEnabled = false;
         float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)

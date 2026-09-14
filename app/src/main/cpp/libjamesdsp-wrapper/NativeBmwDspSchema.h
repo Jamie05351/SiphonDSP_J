@@ -20,7 +20,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 199;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 205;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -108,7 +108,7 @@ inline constexpr int kBusLimMidRelease = 187;
 inline constexpr int kMasterLimiterEnabled = 189;
 inline constexpr int kMasterLimiterThreshold = 190;
 
-// --- measurement signal generator (192..198), added in the 192 -> 197 -> 199 growths ------
+// --- measurement signal generator (192..199), added in the 192 -> 197 -> 199 -> 200 growths -
 // kMeasGenType: 0 = off, 1 = log sweep, 2 = pink periodic noise.
 inline constexpr int kMeasGenType = 192;
 inline constexpr int kMeasGenSweepStartHz = 193;
@@ -117,6 +117,17 @@ inline constexpr int kMeasGenSweepDurationS = 195;
 inline constexpr int kMeasGenSweepLevelDb = 196;
 inline constexpr int kMeasGenPinkPeriodS = 197;
 inline constexpr int kMeasGenPinkLevelDb = 198;
+// Only meaningful while kMeasGenType == 1 (sweep): wraps the sweep in REW's Acoustic Timing
+// Reference cycle (Mid sweep, Low sweep, Mid sweep, bracketed by timing chirps) instead of the
+// bare continuously-looping single sweep. See
+// NativeBmwMeasurementGenerator::configureTimingRef()/nextTimingRefSample().
+inline constexpr int kMeasGenTimingRefEnabled = 199;
+// 0 = combined (chirp+sweep share both channels), 1 = split (chirp-only l / sweep-only r).
+inline constexpr int kMeasGenTimingRefSplitChannels = 200;
+inline constexpr int kMeasGenTimingRefMidStartHz = 201;
+inline constexpr int kMeasGenTimingRefMidEndHz = 202;
+inline constexpr int kMeasGenTimingRefLowStartHz = 203;
+inline constexpr int kMeasGenTimingRefLowEndHz = 204;
 
 }  // namespace nbschema
 

@@ -10,6 +10,8 @@
 
 namespace {
 constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
+// See rebuildMeasGen()'s DirtyMeasGen branch.
+constexpr float kTimingRefChirpLevelOffsetDb = 4.f;
 inline float ftz(float x) {
     return (!std::isfinite(x) || std::fabs(x) < 1e-20f) ? 0.f : x;
 }
@@ -190,7 +192,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // config. See NativeBmwDspProcessor.h's kConfigSize comment.
     next.measBusStopbandOctaves = clampf(v[139], 0, 4);
 
-    // v[192..198]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
+    // v[192..199]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
     next.measGenType = static_cast<int>(clampf(v[192], 0, 2));
     next.measGenSweepStartHz = clampf(v[193], 10, 24000);
     next.measGenSweepEndHz = clampf(v[194], 10, 24000);
@@ -198,6 +200,12 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.measGenSweepLevelDb = clampf(v[196], -60, 0);
     next.measGenPinkPeriodS = clampf(v[197], 0.1f, 10);
     next.measGenPinkLevelDb = clampf(v[198], -60, 0);
+    next.measGenTimingRefEnabled = v[199] >= .5f;
+    next.measGenTimingRefSplitChannels = v[200] >= .5f;
+    next.measGenTimingRefMidStartHz = clampf(v[201], 10, 24000);
+    next.measGenTimingRefMidEndHz = clampf(v[202], 10, 24000);
+    next.measGenTimingRefLowStartHz = clampf(v[203], 10, 24000);
+    next.measGenTimingRefLowEndHz = clampf(v[204], 10, 24000);
 
     // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
@@ -362,7 +370,13 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
         changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
         changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
-        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb)) {
+        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb) ||
+        next.measGenTimingRefEnabled != p_.measGenTimingRefEnabled ||
+        next.measGenTimingRefSplitChannels != p_.measGenTimingRefSplitChannels ||
+        changed(next.measGenTimingRefMidStartHz, p_.measGenTimingRefMidStartHz) ||
+        changed(next.measGenTimingRefMidEndHz, p_.measGenTimingRefMidEndHz) ||
+        changed(next.measGenTimingRefLowStartHz, p_.measGenTimingRefLowStartHz) ||
+        changed(next.measGenTimingRefLowEndHz, p_.measGenTimingRefLowEndHz)) {
         dirty |= DirtyMeasGen;
     }
 
@@ -823,9 +837,23 @@ void NativeBmwDspProcessor::rebuildMeasGen() {
     // unconditionally for the active type; see the DirtyMeasGen comment in configure() for why
     // that's correct even for a param edit while already running.
     if (p_.measGenType == 1) {
-        measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
-                                p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
-                                sampleRate_);
+        if (p_.measGenTimingRefEnabled) {
+            // Timing chirp runs 4 dB hotter than the sweep (matches the measured ratio in an
+            // actual REW-exported Acoustic Timing Reference file: chirp -8 dBFS vs sweep
+            // -12 dBFS), clamped so a sweep level close to 0 dBFS can't push the chirp into
+            // clipping.
+            const float chirpLevelDb =
+                std::min(0.f, p_.measGenSweepLevelDb + kTimingRefChirpLevelOffsetDb);
+            measGen_.configureTimingRef(p_.measGenTimingRefMidStartHz, p_.measGenTimingRefMidEndHz,
+                                        p_.measGenTimingRefLowStartHz, p_.measGenTimingRefLowEndHz,
+                                        p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
+                                        dbToLin(chirpLevelDb), p_.measGenTimingRefSplitChannels,
+                                        sampleRate_);
+        } else {
+            measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
+                                    p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
+                                    sampleRate_);
+        }
     } else if (p_.measGenType == 2) {
         measGen_.configurePink(p_.measGenPinkPeriodS, dbToLin(p_.measGenPinkLevelDb), sampleRate_);
     }
@@ -1098,9 +1126,15 @@ void NativeBmwDspProcessor::applyMeasurementGenerator(float& l, float& r) {
     // stimulus/response pair for a null test. processFrame() then runs the substituted signal
     // through the identical path real playback does, not a separate tap.
     if (p_.measGenType == 1) {
-        const float g = static_cast<float>(measGen_.nextSweepSample());
-        l = g;
-        r = g;
+        if (p_.measGenTimingRefEnabled) {
+            // Different content per channel (silence / timing chirp on l only / sweep on both) --
+            // see nextTimingRefSample()'s own comment for why this exists.
+            measGen_.nextTimingRefSample(l, r);
+        } else {
+            const float g = static_cast<float>(measGen_.nextSweepSample());
+            l = g;
+            r = g;
+        }
     } else if (p_.measGenType == 2) {
         const float g = static_cast<float>(measGen_.nextPinkSample());
         l = g;
