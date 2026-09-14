@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (197 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (199 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -257,10 +257,12 @@
 -1           # 190 masterLimiterThreshold
 1            # 191 masterLimiterMigrated
 
-# 192..196  measurement signal generator: type (0 off, 1 sweep), sweep start/end Hz,
-#           duration s, level dBFS -- ships off
+# 192..198  measurement signal generator: type (0 off, 1 sweep, 2 pink), sweep start/end Hz,
+#           duration s, level dBFS, pink period s, pink level dBFS -- ships off
 0            # 192 measGenType
 20           # 193 measGenSweepStartHz
 20000        # 194 measGenSweepEndHz
 10           # 195 measGenSweepDurationS
 -12          # 196 measGenSweepLevelDb
+2            # 197 measGenPinkPeriodS
+-12          # 198 measGenPinkLevelDb
