@@ -46,7 +46,7 @@ class NativeBmwDspValuesTest {
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
                 NativeBmwDspValues.CROSSOVER_TYPE_LR4
         }
-        values[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
+        values[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = NativeBmwDspValues.CROSSOVER_TYPE_MIGRATED_MARKER
     }
 
     /** Mirrors [NativeBmwDspValues.migrateDisableLegacyCompressorIfNeeded]. */
