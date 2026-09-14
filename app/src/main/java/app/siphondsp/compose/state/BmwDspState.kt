@@ -62,8 +62,14 @@ class BmwDspState internal constructor(private val appContext: Context) {
         NativeBmwDspValues.save(appContext, values)
     }
 
+    /** Reloads the persisted values and re-broadcasts them so the native engine drops any
+     *  un-persisted [preview] it applied before this composition was paused (e.g. a measurement
+     *  generator type/timing-ref toggle left running) -- otherwise the UI would resync to disk
+     *  while the engine kept running the previewed value. */
     internal fun refreshFromDisk() {
-        values = NativeBmwDspValues.load(appContext)
+        val loaded = NativeBmwDspValues.load(appContext)
+        values = loaded
+        NativeBmwDspValues.broadcast(appContext, loaded)
     }
 
     internal fun onExternalUpdate(incoming: FloatArray) {
