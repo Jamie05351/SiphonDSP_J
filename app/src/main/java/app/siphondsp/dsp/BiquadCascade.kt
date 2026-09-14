@@ -68,6 +68,28 @@ internal class BiquadCascade(maxSections: Int) {
         addNormalised(b0, (-(1.0 + c)) / d, b0, (-2.0 * c) / d, (1.0 - alpha) / d)
     }
 
+    /**
+     * NativeBmwDspProcessor::makeLowPass1 -- true 1-pole (6 dB/oct) TPT lowpass, BW3's low-order
+     * stage. H(z) = a(1+z^-1) / (1-(1-2a)z^-1), a = g/(1+g), derived from the same per-sample TPT
+     * recursion the native side runs (not re-derived independently -- see that function's comment
+     * for the derivation).
+     */
+    fun addLowPass1(fc: Double, sampleRate: Double) {
+        val w = 2.0 * PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate
+        val g = tan(w * .5)
+        val a = g / (1.0 + g)
+        addNormalised(a, a, 0.0, 2.0 * a - 1.0, 0.0)
+    }
+
+    /** NativeBmwDspProcessor::makeHighPass1 -- complementary tap of the same 1-pole TPT filter:
+     *  H(z) = (1-a)(1-z^-1) / (1-(1-2a)z^-1). */
+    fun addHighPass1(fc: Double, sampleRate: Double) {
+        val w = 2.0 * PI * fc.coerceIn(FREQ_MIN, sampleRate * FILTER_NYQUIST_FRACTION) / sampleRate
+        val g = tan(w * .5)
+        val a = g / (1.0 + g)
+        addNormalised(1.0 - a, -(1.0 - a), 0.0, 2.0 * a - 1.0, 0.0)
+    }
+
     /** NativeBmwDspProcessor::makeLowShelf. */
     fun addLowShelf(fc: Double, gainDb: Double, sampleRate: Double) = addShelf(fc, gainDb, sampleRate, high = false)
 

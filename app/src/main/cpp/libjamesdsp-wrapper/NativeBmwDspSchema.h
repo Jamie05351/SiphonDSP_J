@@ -12,7 +12,7 @@
 //
 // Slots configure() deliberately never reads (Kotlin-only migration markers, reserved words, the
 // global crossover/mute/invert/subsonic mirrors that the per-output block supersedes, the legacy
-// global compressor tuple, FIELD_CROSSOVER_LR4) are not listed here.
+// global compressor tuple) are not listed here.
 #ifndef SIPHONDSP_NATIVE_BMW_DSP_SCHEMA_H
 #define SIPHONDSP_NATIVE_BMW_DSP_SCHEMA_H
 
@@ -62,7 +62,8 @@ inline constexpr int kOutputConfigBase = 87;
 inline constexpr int kOutputConfigWidth = 13;
 // field offsets within one output's block:
 inline constexpr int kOutCrossoverFreq = 0;
-// 1 = FIELD_CROSSOVER_LR4, never read (always LR4)
+// 0 = BW2 (12 dB/oct), 1 = BW3 (18 dB/oct), 2 = LR4 (24 dB/oct).
+inline constexpr int kOutCrossoverType = 1;
 inline constexpr int kOutSubsonicEnabled = 2;
 inline constexpr int kOutSubsonicFreq = 3;
 inline constexpr int kOutMuted = 4;

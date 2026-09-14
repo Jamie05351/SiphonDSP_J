@@ -77,6 +77,14 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, field),
     )
 
+    val lowCrossoverType = dsp.get(
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+    ).toInt().coerceIn(0, 2)
+    val midCrossoverType = dsp.get(
+        NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+    ).toInt().coerceIn(0, 2)
+    val crossoverTypeOptions = listOf("BW2", "BW3", "LR4")
+
     BmwDspTheme {
         Column(
             modifier = modifier
@@ -89,7 +97,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                 leanStart = 84.dp,
                 topContentGap = 2.dp,
                 sliderLabels = listOf(
-                    "Lowpass freq (LR4)", "Highpass freq (LR4)", subsonicLabel, "Mid align (all-pass)",
+                    "Lowpass freq", "Highpass freq", subsonicLabel, "Mid align (all-pass)",
                 ),
             ) {
                 // Compose port of NativeBmwDspResponseView (replacing the AndroidView-wrapped
@@ -115,12 +123,48 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                 )
 
                 DspSliderRow(
-                    "Lowpass freq (LR4)", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
+                    "Lowpass freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
                     dsp, lowSlider, mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                 )
+                BmwSegmentedControl(
+                    options = crossoverTypeOptions,
+                    selectedIndex = lowCrossoverType,
+                    onSelect = {
+                        dsp.commit(
+                            NativeBmwDspValues.outputIndex(
+                                NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
+                            ),
+                            it.toFloat(),
+                            lowPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+                        )
+                    },
+                    optionAccents = listOf(lowSlider, lowSlider, lowSlider),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    segmentGap = 4.dp,
+                )
                 DspSliderRow(
-                    "Highpass freq (LR4)", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
+                    "Highpass freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
                     dsp, midSlider, mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                )
+                BmwSegmentedControl(
+                    options = crossoverTypeOptions,
+                    selectedIndex = midCrossoverType,
+                    onSelect = {
+                        dsp.commit(
+                            NativeBmwDspValues.outputIndex(
+                                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
+                            ),
+                            it.toFloat(),
+                            midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+                        )
+                    },
+                    optionAccents = listOf(midSlider, midSlider, midSlider),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    segmentGap = 4.dp,
                 )
 
                 val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)

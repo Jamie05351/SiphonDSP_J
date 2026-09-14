@@ -35,6 +35,18 @@ class NativeBmwDspValuesTest {
         seedIndependentOutputs(values)
         seedMbc(values)
         seedLegacyCompDisabled(values)
+        seedCrossoverTypeMigrated(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateCrossoverTypeIfNeeded]: all 4 outputs forced to LR4,
+     *  marker claimed. Must run after [seedIndependentOutputs] in [migratedDefaults], matching
+     *  load()'s real call order (it overwrites whatever that legacy-copy step wrote). */
+    private fun seedCrossoverTypeMigrated(values: FloatArray) {
+        for (output in 0 until NativeBmwDspValues.OUTPUT_COUNT) {
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_LR4
+        }
+        values[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateDisableLegacyCompressorIfNeeded]. */
@@ -74,7 +86,7 @@ class NativeBmwDspValuesTest {
 
         listOf(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_LOW_RIGHT).forEach { output ->
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = values[NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ]
-            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_LR4)] = values[NativeBmwDspValues.INDEX_LOW_LR4]
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] = values[NativeBmwDspValues.INDEX_LOW_LR4]
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED)] = values[NativeBmwDspValues.INDEX_SUBSONIC_ENABLED]
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_SUBSONIC_FREQ)] = values[NativeBmwDspValues.INDEX_SUBSONIC_FREQ]
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_MUTE)] = values[NativeBmwDspValues.INDEX_LOW_MUTE]
@@ -83,7 +95,7 @@ class NativeBmwDspValuesTest {
         }
         listOf(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT).forEach { output ->
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = values[NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ]
-            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_LR4)] = 1f
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] = 1f
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED)] = 0f
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_SUBSONIC_FREQ)] = values[NativeBmwDspValues.INDEX_SUBSONIC_FREQ]
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_MUTE)] = values[NativeBmwDspValues.INDEX_MID_MUTE]
@@ -112,6 +124,7 @@ class NativeBmwDspValuesTest {
             seedIndependentOutputs(it)
             seedMbc(it)
             seedLegacyCompDisabled(it)
+            seedCrossoverTypeMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)

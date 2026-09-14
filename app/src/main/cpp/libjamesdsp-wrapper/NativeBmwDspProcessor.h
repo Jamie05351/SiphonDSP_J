@@ -15,14 +15,14 @@ class NativeBmwDspProcessor {
 public:
     // 42..45 were Mono Bass enable/freq/blend/makeup. The feature was removed (disabled by
     // default, never proven useful) and the slots were reclaimed in place rather than by
-    // shrinking the array -- same rationale as 139..142 below. Not read in configure(); a
-    // leftover value from an older save is simply ignored. No Kotlin-side migration marker was
-    // added for this removal (unlike 140/181/188/191) -- flag if one turns out to be needed.
+    // shrinking the array -- same rationale as 139..142 below. 43..45 are still not read in
+    // configure(); a leftover value from an older save there is simply ignored. 42 is now
+    // INDEX_CROSSOVER_TYPE_MIGRATED (Kotlin-only migration marker, same pattern as 140/181/
+    // 188/191) -- the "flag if one turns out to be needed" case this comment used to leave open.
     //
     // 139..142 were the Pultec-style bass boost/cut stage; the feature was removed (unused,
     // native processing deleted below) and the slots were reclaimed in place rather than by
-    // shrinking the array -- same as FIELD_CROSSOVER_LR4, since shrinking would shift every
-    // index after it.
+    // shrinking the array -- shrinking would shift every index after it.
     //   139 -> reclaimed: measurement-mute bus brick-wall stopband offset, in octaves. 0 keeps
     //          the LR8 corner exactly on the opposite band's crossover (original behaviour);
     //          >0 walks it that many octaves into the stopband so the isolated band's own
@@ -159,12 +159,23 @@ private:
     // match on magnitude and phase across every filter type/fc/Q/gain this engine uses. Don't
     // simplify this back to DF2T or to float.
     struct Biquad {
-        // firstOrder is the one exception to the SVF topology: a true 1-pole design (used only by
-        // NativeBmwRouting::AllPassSection's optional 1st-order phase-align case) doesn't map
-        // onto SVF's 2-integrator form, so it keeps its original 1-pole recursion untouched,
-        // stored alongside the SVF fields rather than forcing a degenerate-case SVF derivation
-        // nobody asked for. Still per-instance state, no sharing -- just a branch in run().
-        bool firstOrder = false;
+        // topology picks run()'s recursion. Svf2 is the default 2nd-order Cytomic/Simper form
+        // every LP/HP/shelf/bell/notch/allpass2 builder below produces. OnePoleAllpass is the
+        // exception carried over from before the SVF migration: a true 1-pole design (used only
+        // by NativeBmwRouting::AllPassSection's optional 1st-order phase-align case) doesn't map
+        // onto SVF's 2-integrator form, so it keeps its original 1-pole recursion untouched.
+        // OnePoleLowpass/OnePoleHighpass are a second, genuine 1-pole TPT design (Zavalishin,
+        // "The Art of VA Filter Design" 2.2) -- the 6 dB/oct stage a 3rd-order (BW3) crossover
+        // cascades with a 2nd-order Q=1 SVF section (see rebuildLowCrossover/rebuildMidCrossover).
+        // Not the same math as OnePoleAllpass (unity magnitude by construction); these two
+        // actually roll off. Still per-instance state, no sharing -- just a branch in run().
+        enum class Topology : std::uint8_t {
+            Svf2 = 0,
+            OnePoleAllpass = 1,
+            OnePoleLowpass = 2,
+            OnePoleHighpass = 3,
+        };
+        Topology topology = Topology::Svf2;
         double op_z1 = 0, op_a = 0;
         // SVF state (trapezoidal integrators).
         double ic1eq = 0, ic2eq = 0;
@@ -233,9 +244,17 @@ private:
     };
     struct OutputConfig {
         float crossoverFreq = 150;
-        // Always LR4 now -- the 18dB/oct (BW3) option was removed. This field is read (and
-        // forced true) but no longer branched on; see rebuildLowCrossover/processLowCrossover.
-        bool crossoverLr4 = true;
+        // BW2 = one 2nd-order Butterworth stage (12 dB/oct). BW3 = a 1st-order stage cascaded
+        // with a 2nd-order Q=1 stage (18 dB/oct total -- Q=1 is the exact factor of the 3rd-order
+        // Butterworth polynomial's quadratic term, s^2+s+1). LinkwitzRiley4 = two cascaded
+        // 2nd-order Butterworth (Q=1/sqrt(2)) stages (24 dB/oct), unchanged from before this was
+        // selectable. See rebuildLowCrossover/rebuildMidCrossover.
+        enum class CrossoverType : std::uint8_t {
+            Butterworth2 = 0,
+            Butterworth3 = 1,
+            LinkwitzRiley4 = 2,
+        };
+        CrossoverType crossoverType = CrossoverType::LinkwitzRiley4;
         bool subsonicEnabled = false;
         float subsonicFreq = 32;
         bool muted = false;
@@ -372,6 +391,9 @@ private:
     static float dbToLin(float db);
     static void makeLowPass(Biquad& q, float fc, float Q, float sr);
     static void makeHighPass(Biquad& q, float fc, float Q, float sr);
+    static void makeLowPass1(Biquad& q, float fc, float sr);
+    static void makeHighPass1(Biquad& q, float fc, float sr);
+    static void makeIdentity(Biquad& q);
     static void makeLowShelf(Biquad& q, float fc, float gain, float sr);
     static void makeHighShelf(Biquad& q, float fc, float gain, float sr);
     static void makeAllPass2(Biquad& q, float fc, float sr);

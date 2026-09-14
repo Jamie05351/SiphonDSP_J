@@ -116,11 +116,21 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
             }
 
-            // Always LR4 now -- the 18dB/oct option was removed (see
-            // NativeBmwDspProcessor::rebuildLowCrossover/processLowCrossover).
             val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
-            cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
-            cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            val crossoverType = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
+            // Mirrors NativeBmwDspProcessor::rebuildLowCrossover's switch exactly (same threshold
+            // read as configure() -- see that function's comment).
+            when {
+                crossoverType < .5f -> cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                crossoverType < 1.5f -> {
+                    cascade.addLowPass1(crossoverFreq, sampleRate)
+                    cascade.addLowPass(crossoverFreq, BUTTERWORTH3_Q, sampleRate)
+                }
+                else -> {
+                    cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                    cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                }
+            }
             if (peq.enabled) {
                 for (band in peq.lowBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
             }
@@ -134,8 +144,19 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         val output = outputOrdinal(BmwSignalChain.internalIsLeftChainFor(channel), isLow = false)
         if (values[NativeBmwDspValues.INDEX_HPF_PASS] < .5f) {
             val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
-            cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
-            cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            val crossoverType = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
+            // Mirrors NativeBmwDspProcessor::rebuildMidCrossover's switch exactly.
+            when {
+                crossoverType < .5f -> cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                crossoverType < 1.5f -> {
+                    cascade.addHighPass1(crossoverFreq, sampleRate)
+                    cascade.addHighPass(crossoverFreq, BUTTERWORTH3_Q, sampleRate)
+                }
+                else -> {
+                    cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                    cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                }
+            }
             if (peq.enabled) {
                 for (band in peq.midBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
             }
@@ -307,6 +328,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
     companion object {
         private const val BUTTERWORTH_Q = .7071067812
+        // Q of the BW3 crossover's 2nd-order stage -- see NativeBmwDspProcessor.cpp's
+        // kButterworth3Q for the derivation (exact factor of the 3rd-order Butterworth
+        // polynomial's quadratic term).
+        private const val BUTTERWORTH3_Q = 1.0
         private const val DC_BLOCKER_HZ = 10.0
     }
 }
