@@ -281,6 +281,62 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun loadSeedsCrossoverTypeLr4WhenTheMigrationMarkerIsUnset() {
+        // Slot 42 was the legacy Mono Bass enable boolean (0/1), so an old install could easily
+        // have a stored 1f there -- the marker must be a value that boolean never took on its
+        // own (CROSSOVER_TYPE_MIGRATED_MARKER = 2f), not 1f, or a real "already migrated" config
+        // would be misread as still-unmigrated forever. 1f here must still trigger the reseed.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW2
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW3
+            it[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        for (output in 0 until NativeBmwDspValues.OUTPUT_COUNT) {
+            assertEquals(
+                NativeBmwDspValues.CROSSOVER_TYPE_LR4,
+                loaded[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)],
+                0f,
+            )
+        }
+        assertEquals(
+            NativeBmwDspValues.CROSSOVER_TYPE_MIGRATED_MARKER,
+            loaded[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED],
+            0f,
+        )
+    }
+
+    @Test
+    fun loadLeavesADeliberatelySelectedCrossoverTypeAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW2
+            it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW3
+            it[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = NativeBmwDspValues.CROSSOVER_TYPE_MIGRATED_MARKER
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(
+            NativeBmwDspValues.CROSSOVER_TYPE_BW2,
+            loaded[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)],
+            0f,
+        )
+        assertEquals(
+            NativeBmwDspValues.CROSSOVER_TYPE_BW3,
+            loaded[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)],
+            0f,
+        )
+    }
+
+    @Test
     fun loadSeedsMbcBlockDisabledOnConfigsSavedBeforeItExisted() {
         // A pre-MBC config: the block sits at leftover values and the marker is unset. Even if
         // a stray "enabled" made it into the array, load() must bring the feature back OFF and
