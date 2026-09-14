@@ -102,6 +102,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var isProcessorIdle = false
 
+    // Mirrors NativeBmwDspValues[INDEX_MEAS_GEN_TYPE] != 0, kept in step with every config push
+    // (initial load, live broadcast, preset restore) below. Read from runRecorderLoop so it can
+    // bypass the real AudioPlaybackCaptureConfiguration capture entirely while the generator is
+    // active -- see the comment at its read site for why that's necessary, not just an
+    // optimisation.
+    @Volatile
+    private var measGenActive = false
+
     @Volatile
     private var idleSinceMillis = 0L
 
@@ -146,6 +154,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         engine = JamesDspLocalEngine(this, ProcessorMessageHandler())
         engine.syncWithPreferences()
+        measGenActive = isMeasGenActive(NativeBmwDspValues.load(this))
 
         val filter = IntentFilter()
         filter.addAction(ACTION_PREFERENCES_UPDATED)
@@ -273,6 +282,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 ACTION_NATIVE_BMW_DSP_UPDATED -> {
                     intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
+                        measGenActive = isMeasGenActive(it)
                         if (!engine.configureNativeBmwDsp(it)) {
                             Timber.e("Failed to apply native BMW DSP configuration from broadcast")
                         }
@@ -283,12 +293,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
+    private fun isMeasGenActive(values: FloatArray) =
+        values.getOrElse(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE) { 0f } != 0f
+
     // Backup restores broadcast ACTION_PREFERENCES_UPDATED/ACTION_PRESET_LOADED, neither of
     // which otherwise reaches the BMW DSP/PEQ engine state (syncWithPreferences() only knows
     // about the legacy dsp_*.xml namespaces). Re-read both stores from disk and push them to
     // the running engine so a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
-        if (!engine.configureNativeBmwDsp(NativeBmwDspValues.load(this))) {
+        val values = NativeBmwDspValues.load(this)
+        measGenActive = isMeasGenActive(values)
+        if (!engine.configureNativeBmwDsp(values)) {
             Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
         }
         if (!engine.configureNativeBmwPeq(BmwPeqState.load(this), persistOnSuccess = false, source = "preset-restore")) {
@@ -539,7 +554,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     Timber.d("Recorder recreated")
                 }
 
-                if(isProcessorIdle && suspendOnIdle &&
+                if(isProcessorIdle && suspendOnIdle && !measGenActive &&
                     idleSinceMillis != 0L && System.currentTimeMillis() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
                     safeStop(recorder)
                     safeStop(track)
@@ -559,7 +574,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if(track.playState != AudioTrack.PLAYSTATE_PLAYING)
                     track.play()
 
-                val readCount = if(encoding == AudioEncoding.PcmShort)
+                // The measurement generator fully replaces whatever's captured (see
+                // NativeBmwDspProcessor::applyMeasurementGenerator(), called before anything else
+                // in the native process() path), so it doesn't need real captured audio -- and
+                // when no other app is actively playing, which is the normal case for a
+                // deliberate measurement run, it never gets any: AudioPlaybackCaptureConfiguration
+                // taps another app's live mixer output, so with none playing there's no mix
+                // stream to tap, and recorder.read() below would just block forever, silently
+                // starving the generator of any chance to run at all. Feed zero-filled input
+                // instead; writeFully()'s blocking AudioTrack.write() further down still provides
+                // real-time pacing since the output device drains at its own clock regardless.
+                val readCount = if (measGenActive) {
+                    if (encoding == AudioEncoding.PcmShort) shortBuffer.fill(0) else floatBuffer.fill(0f)
+                    bufferSamples
+                } else if(encoding == AudioEncoding.PcmShort)
                     recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
                 else
                     recorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
