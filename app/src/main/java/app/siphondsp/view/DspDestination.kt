@@ -47,8 +47,8 @@ enum class DspDestination(
     COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.dsp_workspace_backdrop_compressor, R.drawable.dsp_workspace_backdrop_compressor_phone, NativeBmwCompressorActivity::class),
     // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
     // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
-    // the native chain). The Measurements / routing rows live in the Settings page's inline
-    // card (NativeBmwDspCardFragment).
+    // the native chain). The Measurements / routing rows now live in the Signal Generator screen
+    // (SignalGeneratorScreen) instead of a Settings-page inline card.
     ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.dsp_workspace_backdrop_allpass, R.drawable.dsp_workspace_backdrop_allpass_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 

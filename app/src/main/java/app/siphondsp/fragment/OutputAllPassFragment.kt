@@ -32,9 +32,7 @@ import app.siphondsp.view.BmwDashboardSkin
  *  drive it -- swiping starting on one of this screen's freq/Q sliders can't reliably page on its
  *  own in Compose (see `DspPagerArrows`'s doc).
  *
- *  (This used to be a `CrossoverDashboardBuilder` page; `NativeBmwDspCardFragment` still renders
- *  the same all-pass slots in the plain-preferences style for its other home, the Settings
- *  page's inline card.) */
+ *  (This used to be a `CrossoverDashboardBuilder` page.) */
 class OutputAllPassFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
