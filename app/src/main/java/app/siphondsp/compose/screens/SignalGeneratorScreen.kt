@@ -36,6 +36,12 @@ import app.siphondsp.model.NativeBmwDspValues
  * stops it. A distinct Start/Stop button next to a type dropdown would need to track that
  * intermediate state purely in the UI, for no behavioural benefit.
  *
+ * Timing reference (only meaningful while SWEEP is selected) wraps the sweep in a REW Acoustic
+ * Timing Reference cycle -- reverse-engineered from real REW-exported measurement files, not
+ * REW's own published spec, see `NativeBmwMeasurementGenerator::configureTimingRef()`. Like the
+ * generator type itself, its enable toggle uses `preview()` not `commit()` for the same
+ * don't-persist-a-surprise-on-restart reason.
+ *
  * Band isolation reuses `INDEX_MEASUREMENT_MUTE` directly (this satisfies the measurement-
  * generator plan's "wire generator state together with meas_mute_sel" step; the stereo-bus
  * mute-leak fix it also asks to confirm was already shipped, see `rebuildMeasBus()`).
@@ -183,6 +189,92 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
                 onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_PINK_LEVEL_DB, it) },
                 onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_PINK_LEVEL_DB, it) },
                 onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_PINK_LEVEL_DB, it) },
+            )
+        }
+
+        val timingRefOn = dsp.isOn(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED)
+        BmwPanel(
+            title = stringResource(R.string.signal_generator_section_timing_ref),
+            modifier = Modifier.fillMaxWidth(),
+            leanStart = 84.dp,
+            sliderLabels = listOf(
+                stringResource(R.string.signal_generator_timing_ref_enabled),
+                stringResource(R.string.signal_generator_timing_ref_split_channels),
+                stringResource(R.string.signal_generator_timing_ref_mid_start),
+                stringResource(R.string.signal_generator_timing_ref_mid_end),
+                stringResource(R.string.signal_generator_timing_ref_low_start),
+                stringResource(R.string.signal_generator_timing_ref_low_end),
+            ),
+        ) {
+            Text(
+                text = stringResource(R.string.signal_generator_timing_ref_explainer),
+                color = BmwTheme.colors.sliderDefault,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_timing_ref_enabled),
+                accentColor = accent,
+                // preview(), not commit(): same reasoning as the OFF/SWEEP/PINK control above --
+                // this must never persist as a "resume where I left off" surprise on restart.
+                toggleChecked = timingRefOn,
+                onToggleChange = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED, if (it) 1f else 0f) },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_timing_ref_split_channels),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS),
+                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS, if (it) 1f else 0f) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_mid_start),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_mid_end),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_low_start),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_low_end),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
             )
         }
 

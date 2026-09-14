@@ -408,3 +408,102 @@ TEST_CASE("kMeasGenPink* slots produce a signal that repeats every period") {
     INFO("period-to-period relative error ", relError);
     CHECK(relError < 0.01);  // two consecutive periods are (near-)identical
 }
+
+// Timing-reference cycle geometry (must track NativeBmwMeasurementGenerator's own constants):
+// lead silence, then the first timing chirp.
+constexpr double kTimingRefLeadSilenceS = 2.9016;
+constexpr double kTimingRefChirpDurationS = 0.340813;
+
+static float peakAbsChannel(const std::vector<float>& interleaved, int channel) {
+    float pk = 0.f;
+    for (std::size_t i = channel; i < interleaved.size(); i += 2) {
+        pk = std::max(pk, std::fabs(interleaved[i]));
+    }
+    return pk;
+}
+
+TEST_CASE("kMeasGenTimingRefEnabled starts silent, then produces a timing chirp") {
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kMeasGenType] = 1.f;
+    c[sch::kMeasGenTimingRefEnabled] = 1.f;
+    c[sch::kMeasGenSweepLevelDb] = 0.f;
+
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+
+    // Well inside the lead silence (which runs ~2.9 s) -- content irrelevant, generator overrides.
+    auto leadWindow = stereoSine(0.0, 0.0, 4096);
+    proc.process(leadWindow.data(), leadWindow.size());
+    const float leadPeak = peakAbs(leadWindow);
+    INFO("peak during lead silence ", leadPeak);
+    CHECK(leadPeak < 0.01f);  // still silent -- the sequence hasn't reached the chirp yet
+
+    // Skip to just past the lead silence, then land solidly inside the first chirp (skipping its
+    // own short fade-in).
+    const std::size_t leadSamples = static_cast<std::size_t>(kTimingRefLeadSilenceS * kSampleRate);
+    auto skipToChirp = stereoSine(0.0, 0.0, leadSamples + 500);
+    proc.process(skipToChirp.data(), skipToChirp.size());
+    auto chirpWindow = stereoSine(0.0, 0.0, 2048);
+    proc.process(chirpWindow.data(), chirpWindow.size());
+    const float chirpPeak = peakAbs(chirpWindow);
+    INFO("peak inside first chirp ", chirpPeak);
+    CHECK(chirpPeak > 0.1f);  // the chirp is playing now
+}
+
+TEST_CASE("kMeasGenTimingRefSplitChannels routes the chirp and sweep to different channels") {
+    NativeBmwDspProcessor combined, split;
+    auto cCombined = defaultConfig();
+    cCombined[sch::kTiltEnabled] = 0.f;
+    cCombined[sch::kMeasGenType] = 1.f;
+    cCombined[sch::kMeasGenTimingRefEnabled] = 1.f;
+    cCombined[sch::kMeasGenTimingRefSplitChannels] = 0.f;
+    cCombined[sch::kMeasGenSweepLevelDb] = 0.f;
+    auto cSplit = cCombined;
+    cSplit[sch::kMeasGenTimingRefSplitChannels] = 1.f;
+
+    combined.setSampleRate(kSampleRate);
+    split.setSampleRate(kSampleRate);
+    REQUIRE(combined.configure(cCombined.data(), cCombined.size()));
+    REQUIRE(split.configure(cSplit.data(), cSplit.size()));
+
+    const std::size_t leadSamples = static_cast<std::size_t>(kTimingRefLeadSilenceS * kSampleRate);
+    auto skip1 = stereoSine(0.0, 0.0, leadSamples + 500);
+    combined.process(skip1.data(), skip1.size());
+    auto skip2 = stereoSine(0.0, 0.0, leadSamples + 500);
+    split.process(skip2.data(), skip2.size());
+
+    auto combinedChirp = stereoSine(0.0, 0.0, 2048);
+    combined.process(combinedChirp.data(), combinedChirp.size());
+    auto splitChirp = stereoSine(0.0, 0.0, 2048);
+    split.process(splitChirp.data(), splitChirp.size());
+
+    const float combinedL = peakAbsChannel(combinedChirp, 0), combinedR = peakAbsChannel(combinedChirp, 1);
+    const float splitL = peakAbsChannel(splitChirp, 0), splitR = peakAbsChannel(splitChirp, 1);
+    INFO("combined: L=", combinedL, " R=", combinedR, "   split: L=", splitL, " R=", splitR);
+    CHECK(combinedL > 0.1f);
+    CHECK(combinedR > 0.1f);  // combined design: chirp plays on both channels
+    CHECK(splitL > 0.1f);
+    CHECK(splitR < 0.01f);    // split design: chirp is reference-channel (l) only
+
+    // Skip ahead into the Mid sweep segment (past chirp1 + its gap) and confirm the split design
+    // puts the sweep on the opposite channel from the chirp.
+    const std::size_t chirpSamples = static_cast<std::size_t>(kTimingRefChirpDurationS * kSampleRate);
+    const std::size_t gapBeforeSweep = static_cast<std::size_t>(0.32 * kSampleRate);
+    // Already consumed leadSamples+500+2048 frames; the chirp segment itself is chirpSamples long,
+    // so advance the remainder of the chirp plus the gap plus a fade-in margin to land inside the
+    // sweep.
+    const std::size_t alreadyConsumed = leadSamples + 500 + 2048;
+    const std::size_t chirpEnd = leadSamples + chirpSamples;
+    const std::size_t sweepStart = chirpEnd + gapBeforeSweep;
+    REQUIRE(sweepStart > alreadyConsumed);
+    auto skip3 = stereoSine(0.0, 0.0, sweepStart - alreadyConsumed + 500);
+    split.process(skip3.data(), skip3.size());
+    auto splitSweep = stereoSine(0.0, 0.0, 2048);
+    split.process(splitSweep.data(), splitSweep.size());
+    const float splitSweepL = peakAbsChannel(splitSweep, 0), splitSweepR = peakAbsChannel(splitSweep, 1);
+    INFO("split during sweep: L=", splitSweepL, " R=", splitSweepR);
+    CHECK(splitSweepL < 0.01f);  // reference channel is silent during the sweep
+    CHECK(splitSweepR > 0.1f);   // sweep plays on the other channel
+}
