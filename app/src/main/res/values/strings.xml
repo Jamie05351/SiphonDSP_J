@@ -466,6 +466,13 @@
     <string name="signal_generator_pink_period">Pink noise period</string>
     <string name="signal_generator_pink_level">Pink noise level</string>
     <string name="signal_generator_band_isolation">Band isolation</string>
+    <string name="signal_generator_meas_mute_stopband">Isolation stopband offset</string>
+    <string name="signal_generator_section_routing">Routing</string>
+    <string name="signal_generator_lpf_passthrough">LPF passthrough</string>
+    <string name="signal_generator_hpf_passthrough">HPF passthrough</string>
+    <string name="signal_generator_mute_low_band">Mute low band</string>
+    <string name="signal_generator_mute_mid_band">Mute mid band</string>
+    <string name="signal_generator_channel_isolation">Channel isolation</string>
 
     <!-- Compatibility issue activity -->
     <string name="title_activity_app_compat">Compatibility issue</string>
