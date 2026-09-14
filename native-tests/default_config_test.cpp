@@ -244,6 +244,28 @@ TEST_CASE("PEQ Low Shelf band shifts the low end by its designed gain, unity at 
     INFO("Low Shelf low-plateau: ", lowPlateau, " dB (want ~", kGainDb, ")  high-plateau: ", highPlateau, " dB (want ~0)");
     CHECK(std::fabs(lowPlateau - kGainDb) < 0.5);
     CHECK(std::fabs(highPlateau) < 0.5);
+
+    // The two plateaus alone pass even if the transition (governed by Q, m1, and the effective
+    // corner) is wrong -- a Q the code silently ignores, or an m1 sized wrong, can still land
+    // both asymptotes right. At fc itself this shelf's magnitude is exactly half the designed
+    // gain in dB regardless of Q (a property of this SVF shelf derivation, confirmed numerically
+    // outside this test) -- a real check that the corner frequency itself is right, not just the
+    // far ends.
+    const double atFc = peqBandGainAt(kFreq, kFreq, kGainDb, kQ, /*type=*/1);
+    INFO("Low Shelf at fc=", kFreq, " Hz: ", atFc, " dB (want ~", kGainDb / 2, ")");
+    CHECK(std::fabs(atFc - kGainDb / 2) < 0.5);
+
+    // One octave below fc, two different Q values give genuinely different transition depths
+    // (higher Q overshoots closer to -- here, past -- the full plateau gain) -- values derived
+    // from this exact SVF shelf math via independent simulation, not a linear guess. Catches a
+    // supplied Q the code ignores (both readings would match) or an m1/corner sized wrong (either
+    // reading, or both, would miss).
+    const double atOctaveLowQ = peqBandGainAt(kFreq / 2.0, kFreq, kGainDb, 0.5, /*type=*/1);
+    const double atOctaveHighQ = peqBandGainAt(kFreq / 2.0, kFreq, kGainDb, 2.0, /*type=*/1);
+    INFO("Low Shelf one octave below fc: Q=0.5 -> ", atOctaveLowQ, " dB (want ~4.78)  Q=2.0 -> ",
+         atOctaveHighQ, " dB (want ~7.52)");
+    CHECK(std::fabs(atOctaveLowQ - 4.78) < 0.5);
+    CHECK(std::fabs(atOctaveHighQ - 7.52) < 0.5);
 }
 
 TEST_CASE("PEQ High Shelf band shifts the high end by its designed gain, unity at DC-ish") {
@@ -253,15 +275,28 @@ TEST_CASE("PEQ High Shelf band shifts the high end by its designed gain, unity a
     INFO("High Shelf low-plateau: ", lowPlateau, " dB (want ~0)  high-plateau: ", highPlateau, " dB (want ~", kGainDb, ")");
     CHECK(std::fabs(lowPlateau) < 0.5);
     CHECK(std::fabs(highPlateau - kGainDb) < 0.5);
+
+    // Same corner/off-corner/Q-sensitivity coverage as the Low Shelf test above, mirrored.
+    const double atFc = peqBandGainAt(kFreq, kFreq, kGainDb, kQ, /*type=*/2);
+    INFO("High Shelf at fc=", kFreq, " Hz: ", atFc, " dB (want ~", kGainDb / 2, ")");
+    CHECK(std::fabs(atFc - kGainDb / 2) < 0.5);
+
+    const double atOctaveLowQ = peqBandGainAt(kFreq * 2.0, kFreq, kGainDb, 0.5, /*type=*/2);
+    const double atOctaveHighQ = peqBandGainAt(kFreq * 2.0, kFreq, kGainDb, 2.0, /*type=*/2);
+    INFO("High Shelf one octave above fc: Q=0.5 -> ", atOctaveLowQ, " dB (want ~4.82)  Q=2.0 -> ",
+         atOctaveHighQ, " dB (want ~7.48)");
+    CHECK(std::fabs(atOctaveLowQ - 4.82) < 0.5);
+    CHECK(std::fabs(atOctaveHighQ - 7.48) < 0.5);
 }
 
 // Regression coverage for the SVF migration's tilt shelf (rebuildTilt): two cascaded makeLowShelf
 // stages (each +g dB) plus two cascaded makeHighShelf stages (each -g dB) at the same corner --
 // a classic tilt EQ. Cascaded identical shelves add their dB directly at each end's asymptote, so
 // the low end should land at +2g and the high end at -2g, independent of the migration's mixing
-// coefficients being right -- exactly the kind of engine-wide-shared-code path a coefficient typo
-// in makeLowShelf/makeHighShelf would silently break for every caller (Tilt, PEQ Low/High Shelf,
-// and Gains & Delay all route through the same two functions).
+// coefficients being right. makeLowShelf/makeHighShelf's only callers are these 8 tilt sections
+// (see rebuildTilt) -- PEQ Low/High Shelf bands go through makePeq's own inline shelf derivation
+// instead, and Gains & Delay is plain gain, no shelf filter at all -- so this test covers tilt
+// specifically, not a shared path those other features also depend on.
 TEST_CASE("Tilt shelf lands at +/-2x its per-stage gain at the low/high asymptotes") {
     auto cfgOn = flatConfig();
     auto cfgOff = flatConfig();  // c[25] already 0 (tilt off) from flatConfig() itself.
@@ -284,5 +319,29 @@ TEST_CASE("Tilt shelf lands at +/-2x its per-stage gain at the low/high asymptot
         const double expected = (f < kTiltFreq) ? kExpectedPerEndDb : -kExpectedPerEndDb;
         INFO("f=", f, " Hz  measured delta=", delta, " dB  expected=", expected, " dB");
         CHECK(std::fabs(delta - expected) < 0.5);
+    }
+
+    // The far asymptotes above stay right even with a wrong kTiltFreq, bandwidth, or SVF
+    // denominator coefficient -- those only reshape the transition between the two plateaus.
+    // Add the corner itself and one octave either side, whose expected values were derived from
+    // this exact cascaded-shelf math via independent simulation (not a linear guess): at the
+    // pivot frequency, the two low-shelf stages' +g/2 and the two high-shelf stages' -g/2 cancel
+    // exactly, so a wrong kTiltFreq shows up immediately as a nonzero reading right here, even
+    // though the far ends above still land on +/-2g.
+    struct TransitionPoint { double freq, expectedDb; };
+    const TransitionPoint transitionPoints[] = {
+        {static_cast<double>(kTiltFreq) / 2.0, 5.28},
+        {kTiltFreq, 0.0},
+        {static_cast<double>(kTiltFreq) * 2.0, -5.30},
+    };
+    for (const auto& p : transitionPoints) {
+        NativeBmwDspProcessor procOn, procOff;
+        procOn.setSampleRate(kSampleRate);
+        procOff.setSampleRate(kSampleRate);
+        const double dbOn = linToDb(channelMagnitudeAt(renderSteadyState(procOn, cfgOn, p.freq, amp), 0, p.freq));
+        const double dbOff = linToDb(channelMagnitudeAt(renderSteadyState(procOff, cfgOff, p.freq, amp), 0, p.freq));
+        const double delta = dbOn - dbOff;
+        INFO("f=", p.freq, " Hz  measured delta=", delta, " dB  expected=", p.expectedDb, " dB");
+        CHECK(std::fabs(delta - p.expectedDb) < 0.5);
     }
 }
