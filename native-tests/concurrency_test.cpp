@@ -25,8 +25,23 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kStartRate);
 
+    // Flattened the same way default_config_test.cpp's flatConfig() does: headroom 0 dB, mid
+    // gain 0 dB (default is -1), tilt off (default is on, 3 dB @ 550 Hz -- a real, sizeable
+    // contribution at 1 kHz that has nothing to do with what this test is actually checking),
+    // legacy/per-output compressors off. The first version of this test only zeroed headroom,
+    // so the measured level included tilt's and mid gain's contributions alongside the PEQ
+    // band's -- the assertion below was checking the wrong number entirely (measured ~1.3 dB
+    // wanting ~6 dB, not because the fix was broken, but because -3.8 dB of tilt and -1 dB of
+    // mid gain were baked into what "measured" meant here).
     auto cfg = defaultConfig();
-    cfg[5] = 0.f;  // headroom 0 dB, so the PEQ boost below is the only source of gain
+    cfg[5] = 0.f;
+    cfg[8] = cfg[9] = 0.f;
+    cfg[12] = 0.f;
+    cfg[25] = 0.f;
+    cfg[28] = cfg[35] = 0.f;
+    cfg[89] = cfg[102] = 0.f;
+    cfg[93] = cfg[106] = 0.f;
+    cfg[119] = cfg[132] = 0.f;
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
 
     // A +6 dB bell at 1 kHz, Q=2 -- same band shape the PEQ regression tests elsewhere use.
@@ -52,5 +67,8 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
 
     const double measuredDb = linToDb(channelMagnitudeAt(window, 0, kFreq, kSampleRate) / amp);
     INFO("Post-setSampleRate PEQ gain at fc=", kFreq, " Hz: ", measuredDb, " dB (want ~", kGainDb, ")");
-    CHECK(std::fabs(measuredDb - kGainDb) < 0.5);
+    // 0.6 dB, matching the "sums flat" test's own tolerance elsewhere in this suite: the
+    // full-range PEQ boost is applied pre-crossover-split, so it also picks up whatever small
+    // ripple the LR4 crossover's flat-sum carries even far from the 150 Hz crossover itself.
+    CHECK(std::fabs(measuredDb - kGainDb) < 0.6);
 }
