@@ -282,9 +282,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 ACTION_NATIVE_BMW_DSP_UPDATED -> {
                     intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
+                        val wasMeasGenActive = measGenActive
                         measGenActive = isMeasGenActive(it)
                         if (!engine.configureNativeBmwDsp(it)) {
                             Timber.e("Failed to apply native BMW DSP configuration from broadcast")
+                        }
+                        if (measGenActive && !wasMeasGenActive) {
+                            unblockRecorderForMeasurementGenerator()
                         }
                     }
                 }
@@ -302,12 +306,32 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // the running engine so a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
         val values = NativeBmwDspValues.load(this)
+        val wasMeasGenActive = measGenActive
         measGenActive = isMeasGenActive(values)
         if (!engine.configureNativeBmwDsp(values)) {
             Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
         }
         if (!engine.configureNativeBmwPeq(BmwPeqState.load(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
+        }
+        if (measGenActive && !wasMeasGenActive) {
+            unblockRecorderForMeasurementGenerator()
+        }
+    }
+
+    // Enabling the generator only flips measGenActive; the worker won't notice until it next
+    // reaches the top of runRecorderLoop. If no other app is playing, the worker is likely
+    // already parked in a blocking AudioRecord.read() that may never return on its own (see the
+    // comment at that read site), so the flag would go unobserved indefinitely and the generator
+    // would stay silent. Force the worker out of that read the same way stopRecording() does --
+    // stop() the live AudioRecord under the lifecycle lock -- and flag a recreate so it rebuilds
+    // a fresh recorder next iteration instead of trying to keep using the now-stopped one.
+    private fun unblockRecorderForMeasurementGenerator() {
+        synchronized(recorderLifecycleLock) {
+            if (recorderThread?.isAlive != true)
+                return
+            recreateRecorderRequested = true
+            safeStop(activeRecorder)
         }
     }
 
@@ -595,6 +619,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if(readCount < 0) {
                     if(isProcessorDisposing)
                         break
+                    // A stop() issued to unblock this read (see
+                    // unblockRecorderForMeasurementGenerator()) can surface here as a negative
+                    // read result depending on the platform's AudioRecord implementation; treat
+                    // it as benign when a recreate is already pending instead of tearing down
+                    // the whole service over an expected interruption.
+                    if(recreateRecorderRequested)
+                        continue
                     throw IOException("AudioRecord.read failed with error $readCount")
                 }
                 if(readCount == 0)
