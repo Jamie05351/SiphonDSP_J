@@ -150,6 +150,16 @@
         </activity>
 
         <activity
+            android:name=".activity.SignalGeneratorActivity"
+            android:exported="false"
+            android:label="@string/title_activity_signal_generator"
+            android:theme="@style/Theme.SiphonDSP">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".activity.MainActivity" />
+        </activity>
+
+        <activity
             android:name=".activity.ParametricEqualizerActivity"
             android:exported="false"
             android:label="@string/title_activity_peq"
