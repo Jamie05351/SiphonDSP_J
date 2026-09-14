@@ -71,8 +71,8 @@
 0            # 41  makeup
 
 # 42..45  reclaimed from the removed Mono Bass feature (enabled, freq Hz, blend %, makeup dB).
-#         Not read natively; a leftover value from an older save is simply ignored.
-0            # 42  unused (was monoBassEnabled)
+#         42 is now crossoverTypeMigrated (Kotlin-only marker); 43..45 still unused/unread.
+0            # 42  crossoverTypeMigrated (Kotlin-only; 0 = unmigrated)
 80           # 43  unused (was monoBassFreq)
 100          # 44  unused (was monoBassBlend)
 0            # 45  unused (was monoBassMakeup)
@@ -125,10 +125,10 @@
 # 86  independent-output schema marker (0 = seed from legacy on next load)
 0            # 86
 
-# 87..99  Low Left output: XO Hz, LR4, subsonic on, subsonic Hz, mute, invert,
+# 87..99  Low Left output: XO Hz, crossoverType, subsonic on, subsonic Hz, mute, invert,
 #         compressor [enabled, threshold, ratio, knee, attack, release, makeup]
 150          # 87  crossoverFreq
-0            # 88  lr4 (unread; always LR4)
+2            # 88  crossoverType (0=BW2, 1=BW3, 2=LR4)
 1            # 89  subsonicEnabled
 32           # 90  subsonicFreq
 0            # 91  muted
@@ -143,7 +143,7 @@
 
 # 100..112  Low Right output
 150          # 100 crossoverFreq
-0            # 101 lr4
+2            # 101 crossoverType
 1            # 102 subsonicEnabled
 32           # 103 subsonicFreq
 0            # 104 muted
@@ -158,7 +158,7 @@
 
 # 113..125  Mid Left output (subsonic fields kept for a uniform block, ignored by native)
 150          # 113 crossoverFreq
-1            # 114 lr4
+2            # 114 crossoverType
 0            # 115 subsonicEnabled
 32           # 116 subsonicFreq
 0            # 117 muted
@@ -173,7 +173,7 @@
 
 # 126..138  Mid Right output
 150          # 126 crossoverFreq
-1            # 127 lr4
+2            # 127 crossoverType
 0            # 128 subsonicEnabled
 32           # 129 subsonicFreq
 0            # 130 muted

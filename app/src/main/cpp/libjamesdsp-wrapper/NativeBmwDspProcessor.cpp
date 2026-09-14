@@ -10,6 +10,10 @@
 
 namespace {
 constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
+// Q of the quadratic factor in the 3rd-order Butterworth polynomial (s^2+s+1 -> Q=1 exactly,
+// from matching s^2 + (1/Q)s + 1). Paired with a 1st-order (6 dB/oct) stage at the same corner,
+// this gives the 18 dB/oct BW3 crossover; see rebuildLowCrossover/rebuildMidCrossover.
+constexpr float kButterworth3Q = 1.f;
 // See rebuildMeasGen()'s DirtyMeasGen branch.
 constexpr float kTimingRefChirpLevelOffsetDb = 4.f;
 inline float ftz(float x) {
@@ -53,26 +57,39 @@ using OutputId = NativeBmwRouting::OutputId;
 
 float NativeBmwDspProcessor::Biquad::run(float x) {
     const double xd = static_cast<double>(x);
-    if (firstOrder) {
-        // Untouched 1-pole all-pass recursion (RBJ cookbook): y = a*x + z1; z1' = x - a*y.
-        const double y = op_a * xd + op_z1;
-        op_z1 = ftzd(xd - op_a * y);
-        return static_cast<float>(ftzd(y));
+    switch (topology) {
+        case Topology::OnePoleAllpass: {
+            // Untouched 1-pole all-pass recursion (RBJ cookbook): y = a*x + z1; z1' = x - a*y.
+            const double y = op_a * xd + op_z1;
+            op_z1 = ftzd(xd - op_a * y);
+            return static_cast<float>(ftzd(y));
+        }
+        case Topology::OnePoleLowpass:
+        case Topology::OnePoleHighpass: {
+            // TPT one-pole (Zavalishin 2.2): single trapezoidal integrator, a1 = g/(1+g).
+            const double v = (xd - ic1eq) * a1;
+            const double lp = v + ic1eq;
+            ic1eq = ftzd(lp + v);
+            return static_cast<float>(ftzd(topology == Topology::OnePoleLowpass ? lp : xd - lp));
+        }
+        case Topology::Svf2:
+        default: {
+            // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form.
+            const double v3 = xd - ic2eq;
+            const double v1 = a1 * ic1eq + a2 * v3;
+            const double v2 = ic2eq + a2 * ic1eq + a3 * v3;
+            ic1eq = ftzd(2.0 * v1 - ic1eq);
+            ic2eq = ftzd(2.0 * v2 - ic2eq);
+            return static_cast<float>(ftzd(m0 * xd + m1 * v1 + m2 * v2));
+        }
     }
-    // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form.
-    const double v3 = xd - ic2eq;
-    const double v1 = a1 * ic1eq + a2 * v3;
-    const double v2 = ic2eq + a2 * ic1eq + a3 * v3;
-    ic1eq = ftzd(2.0 * v1 - ic1eq);
-    ic2eq = ftzd(2.0 * v2 - ic2eq);
-    return static_cast<float>(ftzd(m0 * xd + m1 * v1 + m2 * v2));
 }
 void NativeBmwDspProcessor::Biquad::clear() {
     op_z1 = 0;
     ic1eq = ic2eq = 0;
 }
 void NativeBmwDspProcessor::Biquad::loadAllPass(const NativeBmwRouting::BiquadCoefficients& c) {
-    firstOrder = c.firstOrder;
+    topology = c.firstOrder ? Topology::OnePoleAllpass : Topology::Svf2;
     op_a = c.opA;
     a1 = c.a1;
     a2 = c.a2;
@@ -139,11 +156,13 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
     outputs_[static_cast<std::size_t>(OutputId::MidRight)].id = OutputId::MidRight;
     outputs_[static_cast<std::size_t>(OutputId::MidRight)].isLeftSide = false;
     outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)] = {
-        150.f, true, true, 32.f, false, false, {true, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f}};
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, true, 32.f, false, false,
+        {true, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f}};
     outputConfigs_[static_cast<std::size_t>(OutputId::LowRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)];
     outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)] = {
-        150.f, true, false, 32.f, false, false, {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, false, false,
+        {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
     outputConfigs_[static_cast<std::size_t>(OutputId::MidRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)];
     rebuildAll();
@@ -299,10 +318,12 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
         cfg.crossoverFreq = clampf(v[base], 80, 200);
-        // The 18dB/oct option was removed -- always LR4 now. v[base+1] (FIELD_CROSSOVER_LR4) is left
-        // unread rather than repurposed: shrinking the per-output config width to reclaim it would
-        // shift every compressor field after it, forcing a schema/version bump for no benefit.
-        cfg.crossoverLr4 = true;
+        // v[base+1] (FIELD_CROSSOVER_TYPE): 0 = BW2, 1 = BW3, 2 (or anything else) = LR4. Same
+        // threshold-read convention as the boolean fields below (v[..] >= .5f).
+        const float typeVal = v[base + 1];
+        cfg.crossoverType = typeVal < .5f    ? OutputConfig::CrossoverType::Butterworth2
+                            : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
+                                             : OutputConfig::CrossoverType::LinkwitzRiley4;
         cfg.subsonicEnabled = v[base + 2] >= .5f;
         cfg.subsonicFreq = clampf(v[base + 3], 20, 60);
         cfg.muted = v[base + 4] >= .5f;
@@ -330,7 +351,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         const auto& old = outputConfigs_[out];
         const auto& now = nextOutputConfigs[out];
         const bool low = out <= static_cast<std::size_t>(OutputId::LowRight);
-        if (changed(old.crossoverFreq, now.crossoverFreq)) {
+        if (changed(old.crossoverFreq, now.crossoverFreq) || old.crossoverType != now.crossoverType) {
             dirty |= low ? DirtyLowXo : DirtyMidXo;
             // meas-bus corner tracks the *opposite* band's crossover: rebuild it only if the
             // crossover that just moved is the one the active mute mode actually uses.
@@ -437,7 +458,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) {
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
            a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
@@ -449,13 +470,39 @@ void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) 
 void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr) {
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
            a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
     q.m0 = 1;
     q.m1 = -k;
     q.m2 = -1;
+    q.clear();
+}
+// True 1-pole (6 dB/oct) TPT lowpass/highpass -- BW3's low-order stage (see kButterworth3Q).
+// Same bilinear prewarp as every 2nd-order builder above (g=tan(w/2)); the coefficient is the
+// classic single-integrator one-pole form (Zavalishin 2.2) rather than SVF's two-integrator one.
+void NativeBmwDspProcessor::makeLowPass1(Biquad& q, float fc, float sr) {
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
+    q.topology = Biquad::Topology::OnePoleLowpass;
+    q.a1 = g / (1. + g);
+    q.clear();
+}
+void NativeBmwDspProcessor::makeHighPass1(Biquad& q, float fc, float sr) {
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
+    q.topology = Biquad::Topology::OnePoleHighpass;
+    q.a1 = g / (1. + g);
+    q.clear();
+}
+// Identity pass-through. BW2's crossover only needs one 2nd-order stage; the second Biquad slot
+// (crossover2) is forced inert here rather than skipped per-sample in processLowCrossover/
+// processMidCrossover, so those stay branch-free on the audio-thread hot path.
+void NativeBmwDspProcessor::makeIdentity(Biquad& q) {
+    q.topology = Biquad::Topology::Svf2;
+    q.a1 = q.a2 = q.a3 = 0;
+    q.m0 = 1;
+    q.m1 = 0;
+    q.m2 = 0;
     q.clear();
 }
 // fc clamp matches makeLowPass/makeHighPass/makeAllPass2: every coefficient builder in this file
@@ -467,7 +514,7 @@ void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float gainDb, floa
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) / std::sqrt(A),
            k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
@@ -480,7 +527,7 @@ void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, flo
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) * std::sqrt(A),
            k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
@@ -495,7 +542,7 @@ void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, flo
 void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW,
            a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
@@ -551,7 +598,7 @@ bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q
     if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3)) {
         return false;
     }
-    q.firstOrder = false;
+    q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
     q.a3 = a3;
@@ -651,19 +698,47 @@ void NativeBmwDspProcessor::rebuildSubsonic() {
     }
 }
 void NativeBmwDspProcessor::rebuildLowCrossover() {
+    using CrossoverType = OutputConfig::CrossoverType;
     for (OutputId id : {OutputId::LowLeft, OutputId::LowRight}) {
         auto& out = output(id);
         const auto& cfg = outputConfig(id);
-        makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-        makeLowPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
+        switch (cfg.crossoverType) {
+            case CrossoverType::Butterworth2:
+                makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
+                makeIdentity(out.crossover2);
+                break;
+            case CrossoverType::Butterworth3:
+                makeLowPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
+                makeLowPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
+                break;
+            case CrossoverType::LinkwitzRiley4:
+            default:
+                makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
+                makeLowPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
+                break;
+        }
     }
 }
 void NativeBmwDspProcessor::rebuildMidCrossover() {
+    using CrossoverType = OutputConfig::CrossoverType;
     for (OutputId id : {OutputId::MidLeft, OutputId::MidRight}) {
         auto& out = output(id);
         const auto& cfg = outputConfig(id);
-        makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-        makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
+        switch (cfg.crossoverType) {
+            case CrossoverType::Butterworth2:
+                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
+                makeIdentity(out.crossover2);
+                break;
+            case CrossoverType::Butterworth3:
+                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
+                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
+                break;
+            case CrossoverType::LinkwitzRiley4:
+            default:
+                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
+                makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
+                break;
+        }
     }
 }
 void NativeBmwDspProcessor::updateDelays() {

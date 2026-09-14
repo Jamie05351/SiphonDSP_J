@@ -17,7 +17,7 @@ object NativeBmwDspValues {
     // 87..138 are the independent per-output settings described below. 139..142 were the
     // Pultec-style bass boost/cut stage (global, post-routing); the feature was unused and has
     // been removed. The trailing slots stay put rather than being renumbered (same as
-    // OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_LR4):
+    // OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_TYPE):
     //   139 -> INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES (read natively)
     //   140 -> INDEX_MEAS_MUTE_STOPBAND_MIGRATED, a one-time migration marker (Kotlin-only)
     //   141, 142 -> unused. Briefly a Mid-band independent LPF; that feature was removed
@@ -92,8 +92,10 @@ object NativeBmwDspValues {
     // 42..45 were the Mono Bass enable/freq/blend/makeup (a frequency-dependent mono/stereo
     // blend for the low paths). The feature was removed (disabled by default, never proven
     // useful) and the slots were reclaimed in place rather than by shrinking the array -- same
-    // rationale as 139..142 below. Not read natively; a leftover value from an older save is
-    // simply ignored.
+    // rationale as 139..142 below. 43..45 are still not read natively; a leftover value from an
+    // older save there is simply ignored. 42 is now INDEX_CROSSOVER_TYPE_MIGRATED, a Kotlin-only
+    // migration marker (see migrateCrossoverTypeIfNeeded) -- same pattern as 140/181/188/191.
+    const val INDEX_CROSSOVER_TYPE_MIGRATED = 42
 
     // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
     const val INDEX_ROUTING = 46
@@ -126,7 +128,10 @@ object NativeBmwDspValues {
     const val OUTPUT_MID_RIGHT = 3
 
     const val FIELD_CROSSOVER_FREQ = 0
-    const val FIELD_CROSSOVER_LR4 = 1
+    const val FIELD_CROSSOVER_TYPE = 1
+    const val CROSSOVER_TYPE_BW2 = 0f
+    const val CROSSOVER_TYPE_BW3 = 1f
+    const val CROSSOVER_TYPE_LR4 = 2f
     const val FIELD_SUBSONIC_ENABLED = 2
     const val FIELD_SUBSONIC_FREQ = 3
     const val FIELD_MUTE = 4
@@ -284,7 +289,8 @@ object NativeBmwDspValues {
         1f, 3f, 550f,
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // 42..45: reclaimed from the removed Mono Bass feature. Unused; native never reads them.
+        // 42..45: reclaimed from the removed Mono Bass feature. 42 is now
+        // INDEX_CROSSOVER_TYPE_MIGRATED (0 = unmigrated); 43..45 are still unused/unread.
         0f, 80f, 100f, 0f,
         // Low L, Low R, Mid L, Mid R: [Front L, Front R].
         1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
@@ -295,15 +301,15 @@ object NativeBmwDspValues {
         0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
         // Schema marker. Zero means "seed the independent output block from legacy settings".
         0f,
-        // Low Left: XO Hz, LR4, sub on/Hz, mute, invert, compressor 7-tuple.
-        150f, 0f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        // Low Left: XO Hz, crossoverType (2=LR4), sub on/Hz, mute, invert, compressor 7-tuple.
+        150f, 2f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         // Low Right.
-        150f, 0f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
+        150f, 2f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         // Mid Left: subsonic fields are retained for a uniform block but ignored by native.
         // XO Hz matches Low (both hand off at 150) -- the old 125 default left a 25 Hz gap.
-        150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        150f, 2f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // Mid Right.
-        150f, 1f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        150f, 2f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // 139: meas-mute stopband octaves. 140: 139..142 migration counter (2 = fully migrated
         // on a fresh install). 141/142: stage-centering L/R alignment delay ms (default 0).
         // 139..142 were originally the Pultec stage, then a removed Mid-band LPF at 141/142.
@@ -349,7 +355,28 @@ object NativeBmwDspValues {
         migrateMbcIfNeeded(store, values)
         migrateDisableLegacyCompressorIfNeeded(store, values)
         migrateMasterLimiterIfNeeded(store, values)
+        migrateCrossoverTypeIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed all four outputs' FIELD_CROSSOVER_TYPE slot to LR4 on configs saved before slope
+     * selection existed. That slot (per-output index 1) was always present but never read
+     * natively -- configure() forced LR4 regardless of its stored value -- so an existing save's
+     * actual bytes there are meaningless leftovers (mixed 0/1 across outputs, see DEFAULTS'
+     * pre-migration history), not a real prior choice. Reading them for real without this
+     * migration would silently change some users' crossover topology to BW2/BW3 on update. Runs
+     * once; the reclaimed-from-Mono-Bass 42 marker then stops it so a deliberate later choice of
+     * BW2/BW3 is respected.
+     */
+    private fun migrateCrossoverTypeIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+        if (values[INDEX_CROSSOVER_TYPE_MIGRATED] == 1f) return
+        listOf(OUTPUT_LOW_LEFT, OUTPUT_LOW_RIGHT, OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT).forEach { output ->
+            values[outputIndex(output, FIELD_CROSSOVER_TYPE)] = CROSSOVER_TYPE_LR4
+        }
+        values[INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
+        val saved = store.save(values)
+        Timber.i("BMW DSP seeded crossover type (LR4) for pre-selectable-slope installs success=$saved")
     }
 
     /**
@@ -402,9 +429,15 @@ object NativeBmwDspValues {
             values[outputIndex(output, FIELD_COMPRESSOR_MAKEUP)] = values[legacyBase + 6]
         }
 
+        // FIELD_CROSSOVER_TYPE here just carries over the legacy 2-value bool's raw bytes
+        // (0/1, meaning BW3/LR4 under the pre-removal encoding) -- not correct under the new
+        // 3-value encoding (0/1/2 = BW2/BW3/LR4), but harmless: this whole path only runs for
+        // installs old enough to predate the independent-output block, and
+        // migrateCrossoverTypeIfNeeded() unconditionally forces LR4 afterward for anyone not yet
+        // past that marker, which every such install is.
         listOf(OUTPUT_LOW_LEFT, OUTPUT_LOW_RIGHT).forEach { output ->
             values[outputIndex(output, FIELD_CROSSOVER_FREQ)] = values[INDEX_LOW_CROSSOVER_FREQ]
-            values[outputIndex(output, FIELD_CROSSOVER_LR4)] = values[INDEX_LOW_LR4]
+            values[outputIndex(output, FIELD_CROSSOVER_TYPE)] = values[INDEX_LOW_LR4]
             values[outputIndex(output, FIELD_SUBSONIC_ENABLED)] = values[INDEX_SUBSONIC_ENABLED]
             values[outputIndex(output, FIELD_SUBSONIC_FREQ)] = values[INDEX_SUBSONIC_FREQ]
             values[outputIndex(output, FIELD_MUTE)] = values[INDEX_LOW_MUTE]
@@ -413,7 +446,7 @@ object NativeBmwDspValues {
         }
         listOf(OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT).forEach { output ->
             values[outputIndex(output, FIELD_CROSSOVER_FREQ)] = values[INDEX_MID_CROSSOVER_FREQ]
-            values[outputIndex(output, FIELD_CROSSOVER_LR4)] = 1f
+            values[outputIndex(output, FIELD_CROSSOVER_TYPE)] = 1f
             values[outputIndex(output, FIELD_SUBSONIC_ENABLED)] = 0f
             values[outputIndex(output, FIELD_SUBSONIC_FREQ)] = values[INDEX_SUBSONIC_FREQ]
             values[outputIndex(output, FIELD_MUTE)] = values[INDEX_MID_MUTE]

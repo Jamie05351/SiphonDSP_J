@@ -62,6 +62,7 @@ class NativeBmwSchemaAgreementTest {
         "kOutputConfigBase" to NativeBmwDspValues.INDEX_OUTPUT_CONFIG,
         "kOutputConfigWidth" to NativeBmwDspValues.OUTPUT_CONFIG_WIDTH,
         "kOutCrossoverFreq" to NativeBmwDspValues.FIELD_CROSSOVER_FREQ,
+        "kOutCrossoverType" to NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
         "kOutSubsonicEnabled" to NativeBmwDspValues.FIELD_SUBSONIC_ENABLED,
         "kOutSubsonicFreq" to NativeBmwDspValues.FIELD_SUBSONIC_FREQ,
         "kOutMuted" to NativeBmwDspValues.FIELD_MUTE,
