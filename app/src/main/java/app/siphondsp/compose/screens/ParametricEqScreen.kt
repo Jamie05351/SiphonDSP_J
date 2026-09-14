@@ -534,10 +534,13 @@ private fun applyBackupRestore(
 ) {
     if (holder.applyCandidate(prompt.candidate, "private-backup-restore")) {
         prompt.backup.nativeDspValues?.let { values ->
-            // An older backup carries a shorter, position-encoded array; pad it forward so the
-            // newer MBC/limiter indices land on their shipped defaults instead of tripping
-            // save()'s size check.
-            val restored = NativeBmwDspValues.padToCurrentSize(values.toFloatArray())
+            // An older backup carries a shorter, position-encoded array and/or leftover bytes in
+            // slots this schema has since reclaimed for something else (stage delay, crossover
+            // type, MBC, ...). migrateRestoredValues() pads it AND runs every load()-time
+            // migration those reclaims depend on -- padToCurrentSize() alone would leave a
+            // leftover value from an older field silently reinterpreted as whatever the slot
+            // means today, applied straight to the running DSP below.
+            val restored = NativeBmwDspValues.migrateRestoredValues(context, values.toFloatArray())
             NativeBmwDspValues.save(context, restored)
             NativeBmwDspValues.broadcast(context, restored)
             onValuesRestored(restored)

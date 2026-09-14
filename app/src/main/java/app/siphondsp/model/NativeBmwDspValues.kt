@@ -420,6 +420,30 @@ object NativeBmwDspValues {
         return DEFAULTS.copyOf().also { padded -> values.copyInto(padded, endIndex = values.size) }
     }
 
+    /**
+     * [padToCurrentSize] plus every load()-time reclaimed-slot migration, run in the same order
+     * [load] itself uses. Restoring an old backup does not go through [load] -- the array comes
+     * from the backup file, not disk -- so without this, a backup whose bytes predate a reclaim
+     * (e.g. the short-lived Mid-band LPF that once lived at 141/142, now the stage-centering
+     * delay) gets its leftover value silently reinterpreted as whatever that slot means today and
+     * applied straight to the running DSP. Use this instead of calling [padToCurrentSize] alone
+     * on any array that did not come from [load] (backup restore, imported config, etc.); still
+     * call [save] afterward to persist the final result, same as any other array this returns.
+     */
+    fun migrateRestoredValues(context: Context, values: FloatArray): FloatArray {
+        val padded = padToCurrentSize(values)
+        val store = store(context)
+        padded[INDEX_ENABLED] = 1f
+        migrateIndependentOutputsIfNeeded(store, padded)
+        migrateMeasMuteStopbandIfNeeded(store, padded)
+        migrateStageDelayReclaimIfNeeded(store, padded)
+        migrateMbcIfNeeded(store, padded)
+        migrateDisableLegacyCompressorIfNeeded(store, padded)
+        migrateMasterLimiterIfNeeded(store, padded)
+        migrateCrossoverTypeIfNeeded(store, padded)
+        return padded
+    }
+
     private fun store(context: Context) = NativeBmwDspStore(context.noBackupFilesDir)
 
     private fun migrateIndependentOutputsIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
