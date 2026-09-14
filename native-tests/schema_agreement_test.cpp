@@ -344,3 +344,55 @@ TEST_CASE("kMeasGenSweep* slots actually sweep frequency over time") {
     CHECK(earlyAt200 > earlyAt8000 * 4.0);  // starts near 200 Hz
     CHECK(lateAt8000 > lateAt200 * 4.0);    // ends near 8000 Hz
 }
+
+TEST_CASE("kMeasGenType pink noise slot injects a signal that fully replaces the real input") {
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kMeasGenType] = 2.f;
+    c[sch::kMeasGenPinkPeriodS] = 0.5f;
+    c[sch::kMeasGenPinkLevelDb] = 0.f;
+
+    // Feed a loud 300 Hz tone as the "real" input -- if the generator is wired in correctly it
+    // never reaches the output at all.
+    auto out = renderSteadyState(proc, c, 300.0, 0.5);
+    const double at300 = channelMagnitudeAt(out, 0, 300.0);
+    INFO("300 Hz (fed input) magnitude ", at300, "   output peak ", peakAbs(out));
+    CHECK(at300 < 0.01);          // fed input did not get through
+    CHECK(peakAbs(out) > 0.05);   // broadband noise is coming through instead
+}
+
+TEST_CASE("kMeasGenPink* slots produce a signal that repeats every period") {
+    // Periodicity is the whole point (it's what lets the capture side average synchronously), so
+    // this checks two consecutive periods, well after any filter-startup transient (DC blocker,
+    // crossover, allpass, limiters) has settled into its own periodic steady state, are
+    // near-identical.
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kMeasGenType] = 2.f;
+    c[sch::kMeasGenPinkPeriodS] = 0.1f;  // short period -> fast test, plenty of repeats to settle
+    c[sch::kMeasGenPinkLevelDb] = 0.f;
+
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    const std::size_t periodFrames = static_cast<std::size_t>(0.1 * kSampleRate);
+
+    auto warm = stereoSine(0.0, 0.0, periodFrames * 10);  // content irrelevant; generator overrides
+    proc.process(warm.data(), warm.size());
+
+    auto periodA = stereoSine(0.0, 0.0, periodFrames);
+    proc.process(periodA.data(), periodA.size());
+    auto periodB = stereoSine(0.0, 0.0, periodFrames);
+    proc.process(periodB.data(), periodB.size());
+
+    double sumSq = 0.0, diffSq = 0.0;
+    for (std::size_t i = 0; i < periodA.size(); ++i) {
+        sumSq += static_cast<double>(periodA[i]) * periodA[i];
+        const double d = periodA[i] - periodB[i];
+        diffSq += d * d;
+    }
+    const double relError = std::sqrt(diffSq / std::max(sumSq, 1e-12));
+    INFO("period-to-period relative error ", relError);
+    CHECK(relError < 0.01);  // two consecutive periods are (near-)identical
+}
