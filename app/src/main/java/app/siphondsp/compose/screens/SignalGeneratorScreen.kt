@@ -85,7 +85,12 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
             BmwSegmentedControl(
                 options = listOf("OFF", "SWEEP", "PINK"),
                 selectedIndex = type,
-                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE, it.toFloat()) },
+                // preview(), not commit(): the active generator type must stay transient runtime
+                // state, never written to disk. Otherwise engine init on the next service/device
+                // restart would reload a nonzero type and silently replace normal playback with
+                // the test signal with no new user action. Sweep/pink parameters below still use
+                // onCommit as normal -- only "which generator is currently running" is transient.
+                onSelect = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE, it.toFloat()) },
                 optionAccents = listOf(accent, accent, accent),
                 modifier = Modifier
                     .fillMaxWidth()

@@ -334,7 +334,7 @@ private:
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves = 1;
         // Measurement signal generator (v[192..198]). 0 = off; nonzero replaces the real input
-        // entirely, pre-crossover -- see processFrame(). Ships off.
+        // entirely, upstream of captureTapIn() -- see applyMeasurementGenerator(). Ships off.
         int measGenType = 0;
         float measGenSweepStartHz = 20, measGenSweepEndHz = 20000, measGenSweepDurationS = 10,
               measGenSweepLevelDb = -12;
@@ -368,6 +368,12 @@ private:
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     void processFrame(float& l, float& r);
+    // Substitutes the measurement generator's stimulus for l/r when p_.measGenType != 0. Called
+    // from each process() overload before captureTapIn(), so a measurement run's captured "raw
+    // input" is the actual generated stimulus, not the bypassed real input -- otherwise the
+    // exported raw-input/output WAV pair wouldn't represent stimulus/response and any null test
+    // on them would be invalid.
+    void applyMeasurementGenerator(float& l, float& r);
     void processCompressor(float& sample, const CompressorParams& params, CompressorState& state);
     void processLimiter(float& left, float& right);
     // Pre-crossover multiband compressor: splits the post-headroom stereo bus into 4 bands,
@@ -454,8 +460,9 @@ private:
     bool measBusActive_ = false;
     bool measBusIsHighpass_ = true;
     // Measurement signal generator (own module, see NativeBmwMeasurementGenerator.h). Per-instance
-    // state, only ever touched from processFrame() (audio thread, while p_.measGenType != 0) and
-    // rebuildMeasGen() (control thread, under stateMutex_ like everything else here).
+    // state, only ever touched from applyMeasurementGenerator() (audio thread, while
+    // p_.measGenType != 0) and rebuildMeasGen() (control thread, under stateMutex_ like everything
+    // else here).
     NativeBmwMeasurementGenerator measGen_;
     static constexpr float kLimiterLookaheadMs = 5.f;
     static constexpr float kLimiterCeilingLin = 0.891251f;  // -1 dBFS -- the default threshold

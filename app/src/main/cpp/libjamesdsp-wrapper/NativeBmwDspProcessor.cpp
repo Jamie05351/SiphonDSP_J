@@ -1092,13 +1092,11 @@ float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
     return sample;
 }
 
-void NativeBmwDspProcessor::processFrame(float& l, float& r) {
-    if (!p_.enabled) {
-        return;
-    }
-    // Measurement signal generator: replaces the real input entirely, upstream of everything
-    // else in this function -- DC blocker, input PEQ, headroom, MBC, crossover split -- so a
-    // measurement run exercises the identical path real playback does, not a separate tap.
+void NativeBmwDspProcessor::applyMeasurementGenerator(float& l, float& r) {
+    // Replaces the real input entirely, before captureTapIn() sees it, so a measurement run's
+    // captured "raw input" is the actual stimulus and the raw-input/output WAV pair is a valid
+    // stimulus/response pair for a null test. processFrame() then runs the substituted signal
+    // through the identical path real playback does, not a separate tap.
     if (p_.measGenType == 1) {
         const float g = static_cast<float>(measGen_.nextSweepSample());
         l = g;
@@ -1107,6 +1105,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         const float g = static_cast<float>(measGen_.nextPinkSample());
         l = g;
         r = g;
+    }
+}
+
+void NativeBmwDspProcessor::processFrame(float& l, float& r) {
+    if (!p_.enabled) {
+        return;
     }
     float sL = processChannelInput(l, leftDcX_, leftDcY_),
           sR = processChannelInput(r, rightDcX_, rightDcY_);
@@ -1288,6 +1292,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
     }
     auto* w = const_cast<float*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
+        applyMeasurementGenerator(w[i], w[i + 1]);
         captureTapIn(w[i], w[i + 1]);
         processFrame(w[i], w[i + 1]);
         captureTapOut(w[i], w[i + 1]);
@@ -1306,6 +1311,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     auto* w = const_cast<int16_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
+        applyMeasurementGenerator(l, r);
         captureTapIn(l, r);
         processFrame(l, r);
         captureTapOut(l, r);
@@ -1326,6 +1332,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
     auto* w = const_cast<int32_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
+        applyMeasurementGenerator(l, r);
         captureTapIn(l, r);
         processFrame(l, r);
         captureTapOut(l, r);
