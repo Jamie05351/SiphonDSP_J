@@ -96,6 +96,9 @@ object NativeBmwDspValues {
     // older save there is simply ignored. 42 is now INDEX_CROSSOVER_TYPE_MIGRATED, a Kotlin-only
     // migration marker (see migrateCrossoverTypeIfNeeded) -- same pattern as 140/181/188/191.
     const val INDEX_CROSSOVER_TYPE_MIGRATED = 42
+    // Distinct from the legacy Mono Bass enable boolean (0/1) that used to live in slot 42 -- see
+    // migrateCrossoverTypeIfNeeded.
+    const val CROSSOVER_TYPE_MIGRATED_MARKER = 2f
 
     // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
     const val INDEX_ROUTING = 46
@@ -290,7 +293,8 @@ object NativeBmwDspValues {
         1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
         0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         // 42..45: reclaimed from the removed Mono Bass feature. 42 is now
-        // INDEX_CROSSOVER_TYPE_MIGRATED (0 = unmigrated); 43..45 are still unused/unread.
+        // INDEX_CROSSOVER_TYPE_MIGRATED (0 = unmigrated, CROSSOVER_TYPE_MIGRATED_MARKER once
+        // done); 43..45 are still unused/unread.
         0f, 80f, 100f, 0f,
         // Low L, Low R, Mid L, Mid R: [Front L, Front R].
         1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
@@ -367,14 +371,16 @@ object NativeBmwDspValues {
      * pre-migration history), not a real prior choice. Reading them for real without this
      * migration would silently change some users' crossover topology to BW2/BW3 on update. Runs
      * once; the reclaimed-from-Mono-Bass 42 marker then stops it so a deliberate later choice of
-     * BW2/BW3 is respected.
+     * BW2/BW3 is respected. The marker uses 2f rather than 1f: slot 42 was the legacy Mono Bass
+     * enable boolean, so an existing user who had that on already has a stored 1f there, and
+     * comparing against 1f would misread that as "already migrated" and skip the reseed.
      */
     private fun migrateCrossoverTypeIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
-        if (values[INDEX_CROSSOVER_TYPE_MIGRATED] == 1f) return
+        if (values[INDEX_CROSSOVER_TYPE_MIGRATED] == CROSSOVER_TYPE_MIGRATED_MARKER) return
         listOf(OUTPUT_LOW_LEFT, OUTPUT_LOW_RIGHT, OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT).forEach { output ->
             values[outputIndex(output, FIELD_CROSSOVER_TYPE)] = CROSSOVER_TYPE_LR4
         }
-        values[INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
+        values[INDEX_CROSSOVER_TYPE_MIGRATED] = CROSSOVER_TYPE_MIGRATED_MARKER
         val saved = store.save(values)
         Timber.i("BMW DSP seeded crossover type (LR4) for pre-selectable-slope installs success=$saved")
     }
