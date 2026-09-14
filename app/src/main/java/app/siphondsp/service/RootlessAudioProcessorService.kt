@@ -516,8 +516,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         bufferSamples: Int
     ) {
         // This is the actual real-time buffer loop (read -> native process() -> write) and had
-        // never asked for elevated scheduling -- it ran at the default THREAD_PRIORITY (5),
-        // competing with everything else on the device for CPU time same as any background
+        // never asked for elevated scheduling -- it ran at Android's default thread priority
+        // (Process.THREAD_PRIORITY_DEFAULT, nice value 0; not Java's unrelated
+        // Thread.NORM_PRIORITY = 5, a different scale this loop never set or read), competing
+        // with everything else on the device for CPU time same as any background
         // worker. THREAD_PRIORITY_URGENT_AUDIO is the same class the platform's own audio HAL
         // callback threads use; a foreground service (see startForeground() above) is entitled to
         // ask for it. Doesn't fix any specific slow stage on its own, but widens the scheduling
