@@ -51,7 +51,13 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
     val accent = BmwTheme.colors.sliderDefault
 
     val type = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE).toInt().coerceIn(0, 2)
-    val band = dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 2)
+    // INDEX_MEASUREMENT_MUTE's native values are 0=off, 1=mute-Low (i.e. isolates Mid),
+    // 2=mute-Mid (i.e. isolates Low) -- see NativeBmwDspProcessor::rebuildPolarityAndMute() and
+    // the original bmw_measurement_mute_entries ("Off"/"Mute low"/"Mute mid"). This screen's
+    // segmented control is labelled by the band the user wants to HEAR (LOW/MID), which is the
+    // opposite of "which band is muted", so 1 and 2 are swapped at this boundary in both
+    // directions via swapLowMid(), which is its own inverse.
+    val band = swapLowMid(dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 2))
 
     Column(
         modifier = modifier
@@ -183,11 +189,19 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
             BmwSegmentedControl(
                 options = listOf("OFF", "LOW", "MID"),
                 selectedIndex = band,
-                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, it.toFloat()) },
+                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, swapLowMid(it).toFloat()) },
                 optionAccents = listOf(accent, accent, accent),
                 modifier = Modifier.fillMaxWidth(),
                 segmentGap = 4.dp,
             )
         }
     }
+}
+
+/** Swaps 1<->2, leaves 0 alone. Its own inverse -- see the `band` comment above for why this
+ *  boundary needs it in both directions. */
+private fun swapLowMid(value: Int): Int = when (value) {
+    1 -> 2
+    2 -> 1
+    else -> 0
 }
