@@ -46,7 +46,7 @@ class NativeBmwDspValuesTest {
             values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
                 NativeBmwDspValues.CROSSOVER_TYPE_LR4
         }
-        values[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = 1f
+        values[NativeBmwDspValues.INDEX_CROSSOVER_TYPE_MIGRATED] = NativeBmwDspValues.CROSSOVER_TYPE_MIGRATED_MARKER
     }
 
     /** Mirrors [NativeBmwDspValues.migrateDisableLegacyCompressorIfNeeded]. */
@@ -383,6 +383,28 @@ class NativeBmwDspValuesTest {
         NativeBmwDspValues.save(context, values)
 
         assertArrayEquals(values, NativeBmwDspValues.load(context), 0f)
+    }
+
+    @Test
+    fun migrateRestoredValuesReclaimsStageDelaySlotsLikeLoadDoes() {
+        // A v2 private-backup-shaped array: 192 values (predates the 192 -> 205
+        // measurement-generator growth), captured while the short-lived Mid-band LPF still lived
+        // at 141/142 (enable flag, corner Hz) and before the stage-delay reclaim migration
+        // existed (marker at 140 is 0). Without migrateRestoredValues(), padToCurrentSize() alone
+        // would leave these bytes exactly where they are, and the restore path (ParametricEqScreen
+        // applyBackupRestore) would save+broadcast the leftover corner Hz straight to the running
+        // DSP as a stage delay (clamped to STAGE_DELAY_MAX_MS).
+        val legacy = FloatArray(192) { index -> NativeBmwDspValues.DEFAULTS[index] }
+        legacy[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 0f
+        legacy[NativeBmwDspValues.INDEX_STAGE_DELAY_L] = 1f       // leftover Mid-LPF "enabled"
+        legacy[NativeBmwDspValues.INDEX_STAGE_DELAY_R] = 2000f    // leftover Mid-LPF "corner Hz"
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(context, legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, restored.size)
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
+        assertEquals(2f, restored[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
     }
 
     @Test
