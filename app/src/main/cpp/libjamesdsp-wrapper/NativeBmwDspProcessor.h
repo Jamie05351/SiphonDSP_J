@@ -205,17 +205,20 @@ private:
         unsigned write = 0;
         float delay = 0;
         float run(float x) {
+            // See Delay::run in the .cpp: write and advance unconditionally, even at delay<=0,
+            // so the ring is never stale/silent the moment this delay is first enabled.
+            const unsigned w = write;
+            data[w] = x;
+            write = (w + 1) % data.size();
             if (delay <= 0) {
                 return x;
             }
-            data[write] = x;
-            float read = static_cast<float>(write) - delay;
+            float read = static_cast<float>(w) - delay;
             while (read < 0) {
                 read += data.size();
             }
             unsigned i0 = static_cast<unsigned>(read) % data.size(), i1 = (i0 + 1) % data.size();
             float f = read - std::floor(read), y = data[i0] + (data[i1] - data[i0]) * f;
-            write = (write + 1) % data.size();
             return y;
         }
         void clear() {
