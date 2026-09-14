@@ -479,13 +479,22 @@ TEST_CASE("kMeasGenTimingRefSplitChannels routes the chirp and sweep to differen
     auto splitChirp = stereoSine(0.0, 0.0, 2048);
     split.process(splitChirp.data(), splitChirp.size());
 
-    const float combinedL = peakAbsChannel(combinedChirp, 0), combinedR = peakAbsChannel(combinedChirp, 1);
-    const float splitL = peakAbsChannel(splitChirp, 0), splitR = peakAbsChannel(splitChirp, 1);
-    INFO("combined: L=", combinedL, " R=", combinedR, "   split: L=", splitL, " R=", splitR);
-    CHECK(combinedL > 0.1f);
-    CHECK(combinedR > 0.1f);  // combined design: chirp plays on both channels
-    CHECK(splitL > 0.1f);
-    CHECK(splitR < 0.01f);    // split design: chirp is reference-channel (l) only
+    // processFrame() ends with a deliberate hardware L/R swap (see its own "DO NOT REMOVE OR
+    // FIX THIS" comment, correcting the target vehicle's physically-reversed speaker harness):
+    // content fed into the generator's `l` parameter (the app's own "Left"/reference-channel
+    // convention, matching every other Left-labeled control) ends up written to raw output
+    // buffer index 1, not 0. So "reference channel" below means buffer index 1, the "sweep
+    // channel" buffer index 0 -- the opposite of the raw index a naive stereo-file reading
+    // would suggest, but correct for the app's logical Left/Right, which is what matters for
+    // matching the refL convention and the Channel Isolation control.
+    const float combinedIdx0 = peakAbsChannel(combinedChirp, 0), combinedIdx1 = peakAbsChannel(combinedChirp, 1);
+    const float splitRef = peakAbsChannel(splitChirp, 1), splitSweepCh = peakAbsChannel(splitChirp, 0);
+    INFO("combined: idx0=", combinedIdx0, " idx1=", combinedIdx1, "   split: ref(idx1)=", splitRef,
+         " sweep(idx0)=", splitSweepCh);
+    CHECK(combinedIdx0 > 0.1f);
+    CHECK(combinedIdx1 > 0.1f);  // combined design: chirp plays on both channels
+    CHECK(splitRef > 0.1f);
+    CHECK(splitSweepCh < 0.01f);  // split design: chirp is reference-channel only
 
     // Skip ahead into the Mid sweep segment (past chirp1 + its gap) and confirm the split design
     // puts the sweep on the opposite channel from the chirp.
@@ -502,8 +511,9 @@ TEST_CASE("kMeasGenTimingRefSplitChannels routes the chirp and sweep to differen
     split.process(skip3.data(), skip3.size());
     auto splitSweep = stereoSine(0.0, 0.0, 2048);
     split.process(splitSweep.data(), splitSweep.size());
-    const float splitSweepL = peakAbsChannel(splitSweep, 0), splitSweepR = peakAbsChannel(splitSweep, 1);
-    INFO("split during sweep: L=", splitSweepL, " R=", splitSweepR);
-    CHECK(splitSweepL < 0.01f);  // reference channel is silent during the sweep
-    CHECK(splitSweepR > 0.1f);   // sweep plays on the other channel
+    // Same swap as above: reference channel is buffer index 1, sweep channel is index 0.
+    const float splitSweepRef = peakAbsChannel(splitSweep, 1), splitSweepSweep = peakAbsChannel(splitSweep, 0);
+    INFO("split during sweep: ref(idx1)=", splitSweepRef, " sweep(idx0)=", splitSweepSweep);
+    CHECK(splitSweepRef < 0.01f);   // reference channel is silent during the sweep
+    CHECK(splitSweepSweep > 0.1f);  // sweep plays on the other channel
 }
