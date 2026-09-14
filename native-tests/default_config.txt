@@ -266,3 +266,12 @@
 -12          # 196 measGenSweepLevelDb
 2            # 197 measGenPinkPeriodS
 -12          # 198 measGenPinkLevelDb
+
+# 199..204  measurement generator timing-reference: enable toggle, split-channels toggle,
+#           Mid-band start/end Hz, Low-band start/end Hz -- only meaningful while type == 1, ships off
+0            # 199 measGenTimingRefEnabled
+0            # 200 measGenTimingRefSplitChannels
+100          # 201 measGenTimingRefMidStartHz
+20000        # 202 measGenTimingRefMidEndHz
+20           # 203 measGenTimingRefLowStartHz
+400          # 204 measGenTimingRefLowEndHz

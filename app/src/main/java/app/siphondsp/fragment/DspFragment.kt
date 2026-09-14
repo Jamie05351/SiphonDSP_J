@@ -119,7 +119,6 @@ class DspFragment : Fragment() {
                 R.id.card_output_control, PreferenceGroupFragment.newInstance(Constants.PREF_OUTPUT,
                     R.xml.dsp_output_control_preferences
                 ))
-            .replace(R.id.card_bmw_dsp, NativeBmwDspCardFragment.newInstance())
             .replace(
                 R.id.card_convolver, PreferenceGroupFragment.newInstance(Constants.PREF_CONVOLVER,
                     R.xml.dsp_convolver_preferences

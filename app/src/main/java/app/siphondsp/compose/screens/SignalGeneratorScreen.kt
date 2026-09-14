@@ -36,11 +36,22 @@ import app.siphondsp.model.NativeBmwDspValues
  * stops it. A distinct Start/Stop button next to a type dropdown would need to track that
  * intermediate state purely in the UI, for no behavioural benefit.
  *
- * Band isolation reuses `INDEX_MEASUREMENT_MUTE` directly -- the same field the "Measurement mute"
- * preference on the main BMW DSP card already writes to (`NativeBmwDspCardFragment`) -- rather
- * than inventing a second mechanism, so the two controls always agree (this satisfies the
- * measurement-generator plan's "wire generator state together with meas_mute_sel" step; the
- * stereo-bus mute-leak fix it also asks to confirm was already shipped, see `rebuildMeasBus()`).
+ * Timing reference (only meaningful while SWEEP is selected) wraps the sweep in a REW Acoustic
+ * Timing Reference cycle -- reverse-engineered from real REW-exported measurement files, not
+ * REW's own published spec, see `NativeBmwMeasurementGenerator::configureTimingRef()`. Like the
+ * generator type itself, its enable toggle uses `preview()` not `commit()` for the same
+ * don't-persist-a-surprise-on-restart reason.
+ *
+ * Band isolation reuses `INDEX_MEASUREMENT_MUTE` directly (this satisfies the measurement-
+ * generator plan's "wire generator state together with meas_mute_sel" step; the stereo-bus
+ * mute-leak fix it also asks to confirm was already shipped, see `rebuildMeasBus()`).
+ *
+ * The old "Measurements / routing" card on the main DSP dashboard (formerly
+ * `NativeBmwDspCardFragment`) has been retired and its rows merged in below -- Band isolation
+ * absorbed its Measurement mute + stopband-offset rows (same `INDEX_MEASUREMENT_MUTE`/
+ * `INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES` fields, not duplicated), and the new Routing panel
+ * carries LPF/HPF passthrough, the two band mutes, and channel isolation verbatim. No second
+ * place in the app controls these values anymore.
  *
  * Neutral accent colour throughout ([BmwTheme.colors.sliderDefault]) rather than the low/mid band
  * neon colours -- this screen isn't band-specific in that sense.
@@ -51,7 +62,13 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
     val accent = BmwTheme.colors.sliderDefault
 
     val type = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE).toInt().coerceIn(0, 2)
-    val band = dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 2)
+    // INDEX_MEASUREMENT_MUTE's native values are 0=off, 1=mute-Low (i.e. isolates Mid),
+    // 2=mute-Mid (i.e. isolates Low) -- see NativeBmwDspProcessor::rebuildPolarityAndMute() and
+    // the original bmw_measurement_mute_entries ("Off"/"Mute low"/"Mute mid"). This screen's
+    // segmented control is labelled by the band the user wants to HEAR (LOW/MID), which is the
+    // opposite of "which band is muted", so 1 and 2 are swapped at this boundary in both
+    // directions via swapLowMid(), which is its own inverse.
+    val band = swapLowMid(dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 2))
 
     Column(
         modifier = modifier
@@ -175,19 +192,196 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
             )
         }
 
+        val timingRefOn = dsp.isOn(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED)
+        BmwPanel(
+            title = stringResource(R.string.signal_generator_section_timing_ref),
+            modifier = Modifier.fillMaxWidth(),
+            leanStart = 84.dp,
+            sliderLabels = listOf(
+                stringResource(R.string.signal_generator_timing_ref_enabled),
+                stringResource(R.string.signal_generator_timing_ref_split_channels),
+                stringResource(R.string.signal_generator_timing_ref_mid_start),
+                stringResource(R.string.signal_generator_timing_ref_mid_end),
+                stringResource(R.string.signal_generator_timing_ref_low_start),
+                stringResource(R.string.signal_generator_timing_ref_low_end),
+            ),
+        ) {
+            Text(
+                text = stringResource(R.string.signal_generator_timing_ref_explainer),
+                color = BmwTheme.colors.sliderDefault,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_timing_ref_enabled),
+                accentColor = accent,
+                // preview(), not commit(): same reasoning as the OFF/SWEEP/PINK control above --
+                // this must never persist as a "resume where I left off" surprise on restart.
+                toggleChecked = timingRefOn,
+                onToggleChange = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED, if (it) 1f else 0f) },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_timing_ref_split_channels),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS),
+                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS, if (it) 1f else 0f) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_mid_start),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_mid_end),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_low_start),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ, it) },
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_timing_ref_low_end),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ),
+                valueRange = 10f..24000f,
+                step = 10f,
+                unit = "Hz",
+                accentColor = accent,
+                enabled = type == 1 && timingRefOn,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ, it) },
+            )
+        }
+
         BmwPanel(
             title = stringResource(R.string.signal_generator_band_isolation),
             modifier = Modifier.fillMaxWidth(),
             leanStart = 84.dp,
+            sliderLabels = listOf(stringResource(R.string.signal_generator_meas_mute_stopband)),
         ) {
             BmwSegmentedControl(
                 options = listOf("OFF", "LOW", "MID"),
                 selectedIndex = band,
-                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, it.toFloat()) },
+                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, swapLowMid(it).toFloat()) },
+                optionAccents = listOf(accent, accent, accent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                segmentGap = 4.dp,
+            )
+            BmwSliderRow(
+                label = stringResource(R.string.signal_generator_meas_mute_stopband),
+                value = dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES),
+                valueRange = 0f..4f,
+                step = 0.1f,
+                unit = "oct",
+                accentColor = accent,
+                enabled = band != 0,
+                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES, it) },
+                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES, it) },
+                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES, it) },
+            )
+        }
+
+        BmwPanel(
+            title = stringResource(R.string.signal_generator_section_routing),
+            modifier = Modifier.fillMaxWidth(),
+            leanStart = 84.dp,
+            sliderLabels = listOf(
+                stringResource(R.string.signal_generator_lpf_passthrough),
+                stringResource(R.string.signal_generator_hpf_passthrough),
+                stringResource(R.string.signal_generator_mute_low_band),
+                stringResource(R.string.signal_generator_mute_mid_band),
+                stringResource(R.string.signal_generator_channel_isolation),
+            ),
+        ) {
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_lpf_passthrough),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_LPF_PASS),
+                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_LPF_PASS, if (it) 1f else 0f) },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_hpf_passthrough),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_HPF_PASS),
+                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_HPF_PASS, if (it) 1f else 0f) },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_mute_low_band),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_LOW_MUTE),
+                onToggleChange = {
+                    val v = if (it) 1f else 0f
+                    dsp.commit(
+                        NativeBmwDspValues.INDEX_LOW_MUTE, v,
+                        mirrors = intArrayOf(
+                            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_MUTE),
+                            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_MUTE),
+                        ),
+                    )
+                },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_mute_mid_band),
+                accentColor = accent,
+                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MID_MUTE),
+                onToggleChange = {
+                    val v = if (it) 1f else 0f
+                    dsp.commit(
+                        NativeBmwDspValues.INDEX_MID_MUTE, v,
+                        mirrors = intArrayOf(
+                            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_MUTE),
+                            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE),
+                        ),
+                    )
+                },
+            )
+            BmwSectionHeader(
+                title = stringResource(R.string.signal_generator_channel_isolation),
+                accentColor = accent,
+            )
+            BmwSegmentedControl(
+                options = listOf("BOTH", "MUTE L", "MUTE R"),
+                selectedIndex = dsp.get(NativeBmwDspValues.INDEX_CHANNEL_MUTE).toInt().coerceIn(0, 2),
+                onSelect = { dsp.commit(NativeBmwDspValues.INDEX_CHANNEL_MUTE, it.toFloat()) },
                 optionAccents = listOf(accent, accent, accent),
                 modifier = Modifier.fillMaxWidth(),
                 segmentGap = 4.dp,
             )
         }
     }
+}
+
+/** Swaps 1<->2, leaves 0 alone. Its own inverse -- see the `band` comment above for why this
+ *  boundary needs it in both directions. */
+private fun swapLowMid(value: Int): Int = when (value) {
+    1 -> 2
+    2 -> 1
+    else -> 0
 }

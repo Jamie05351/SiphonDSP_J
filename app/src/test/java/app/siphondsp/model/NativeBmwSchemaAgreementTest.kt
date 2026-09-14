@@ -107,6 +107,12 @@ class NativeBmwSchemaAgreementTest {
         "kMeasGenSweepLevelDb" to NativeBmwDspValues.INDEX_MEAS_GEN_SWEEP_LEVEL_DB,
         "kMeasGenPinkPeriodS" to NativeBmwDspValues.INDEX_MEAS_GEN_PINK_PERIOD_S,
         "kMeasGenPinkLevelDb" to NativeBmwDspValues.INDEX_MEAS_GEN_PINK_LEVEL_DB,
+        "kMeasGenTimingRefEnabled" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED,
+        "kMeasGenTimingRefSplitChannels" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS,
+        "kMeasGenTimingRefMidStartHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ,
+        "kMeasGenTimingRefMidEndHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ,
+        "kMeasGenTimingRefLowStartHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ,
+        "kMeasGenTimingRefLowEndHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ,
     )
 
     @Test

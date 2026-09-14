@@ -466,6 +466,21 @@
     <string name="signal_generator_pink_period">Pink noise period</string>
     <string name="signal_generator_pink_level">Pink noise level</string>
     <string name="signal_generator_band_isolation">Band isolation</string>
+    <string name="signal_generator_meas_mute_stopband">Isolation stopband offset</string>
+    <string name="signal_generator_section_routing">Routing</string>
+    <string name="signal_generator_lpf_passthrough">LPF passthrough</string>
+    <string name="signal_generator_hpf_passthrough">HPF passthrough</string>
+    <string name="signal_generator_mute_low_band">Mute low band</string>
+    <string name="signal_generator_mute_mid_band">Mute mid band</string>
+    <string name="signal_generator_channel_isolation">Channel isolation</string>
+    <string name="signal_generator_section_timing_ref">Timing reference (REW)</string>
+    <string name="signal_generator_timing_ref_explainer">Reverse-engineered from real REW Acoustic Timing Reference files, not REW\'s own spec -- validate against an actual REW measurement before trusting it for tuning. Wraps the sweep in: chirp, Mid sweep, chirp pair, Low sweep, chirp pair, Mid sweep, chirp.</string>
+    <string name="signal_generator_timing_ref_enabled">Timing reference sequence</string>
+    <string name="signal_generator_timing_ref_split_channels">Split channels (chirp ref / sweep)</string>
+    <string name="signal_generator_timing_ref_mid_start">Mid band start</string>
+    <string name="signal_generator_timing_ref_mid_end">Mid band end</string>
+    <string name="signal_generator_timing_ref_low_start">Low band start</string>
+    <string name="signal_generator_timing_ref_low_end">Low band end</string>
 
     <!-- Compatibility issue activity -->
     <string name="title_activity_app_compat">Compatibility issue</string>

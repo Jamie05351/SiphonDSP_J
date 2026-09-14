@@ -32,10 +32,12 @@ object NativeBmwDspValues {
     // save just leaves 144..191 at their DEFAULTS; migrateMbcIfNeeded() claims the marker and
     // force-clears the enables. See the INDEX_MBC_* / INDEX_BUS_LIMITER_* section lower down.
     //
-    // 192..198 are the measurement signal generator (log sweep + pink periodic noise), added in
-    // the 192 -> 197 -> 199 growths. No migration marker needed -- same as the 144 -> 192 growth,
-    // an older save simply leaves the new trailing slots at their DEFAULTS (type off).
-    const val SIZE = 199
+    // 192..204 are the measurement signal generator (log sweep + pink periodic noise, plus a
+    // REW Acoustic Timing Reference sequence mode for the sweep), added in the
+    // 192 -> 197 -> 199 -> 200 -> 205 growths. No migration marker needed -- same as the
+    // 144 -> 192 growth, an older save simply leaves the new trailing slots at their DEFAULTS
+    // (type off / timing reference off).
+    const val SIZE = 205
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -240,9 +242,9 @@ object NativeBmwDspValues {
     const val INDEX_MASTER_LIMITER_MIGRATED = 191
     const val DEFAULT_MASTER_LIMITER_THRESHOLD_DB = -1f
 
-    // Measurement signal generator (192..198). type: 0 off, 1 log sweep, 2 pink periodic noise.
+    // Measurement signal generator (192..199). type: 0 off, 1 log sweep, 2 pink periodic noise.
     // Nonzero replaces the real DSP input entirely, pre-crossover -- see
-    // NativeBmwDspProcessor::processFrame(). Native reads all seven; no migration marker.
+    // NativeBmwDspProcessor::processFrame(). Native reads all eight; no migration marker.
     const val INDEX_MEAS_GEN_TYPE = 192
     const val INDEX_MEAS_GEN_SWEEP_START_HZ = 193
     const val INDEX_MEAS_GEN_SWEEP_END_HZ = 194
@@ -250,6 +252,18 @@ object NativeBmwDspValues {
     const val INDEX_MEAS_GEN_SWEEP_LEVEL_DB = 196
     const val INDEX_MEAS_GEN_PINK_PERIOD_S = 197
     const val INDEX_MEAS_GEN_PINK_LEVEL_DB = 198
+    // Only meaningful while INDEX_MEAS_GEN_TYPE == 1 (sweep): wraps it in REW's Acoustic Timing
+    // Reference cycle (Mid sweep, Low sweep, Mid sweep, bracketed by timing chirps) instead of
+    // the bare continuously-looping single sweep -- see
+    // NativeBmwMeasurementGenerator::configureTimingRef()/nextTimingRefSample().
+    const val INDEX_MEAS_GEN_TIMING_REF_ENABLED = 199
+    // 0 = combined (chirp+sweep share both channels), 1 = split (chirp-only left / sweep-only
+    // right). Only meaningful while INDEX_MEAS_GEN_TIMING_REF_ENABLED is set.
+    const val INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS = 200
+    const val INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ = 201
+    const val INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ = 202
+    const val INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ = 203
+    const val INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ = 204
 
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
@@ -312,9 +326,11 @@ object NativeBmwDspValues {
         // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
         // 189..191: master limiter enabled, threshold dBFS, migrated marker.
         0f, 1f, -1f, 1f,
-        // --- Measurement signal generator (192..198), ships OFF ---
+        // --- Measurement signal generator (192..204), ships OFF ---
         0f, 20f, 20000f, 10f, -12f, // type, sweep start/end Hz, duration s, level dBFS
         2f, -12f, // pink noise period s, level dBFS
+        0f, // timing reference off
+        0f, 100f, 20000f, 20f, 400f, // timing ref: split channels off, Mid Hz, Low Hz
     )
 
     init {
