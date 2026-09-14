@@ -28,19 +28,21 @@ import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
-import kotlin.math.roundToInt
 
 private val Fmt = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 private val MiniLabelWidth = 46.dp // ROW_LABEL_WIDTH_DP
 private val MiniLabelColor = Color(0xFF969EA8) // rgb(150, 158, 168)
 private val PolNormalGreen = Color(BmwDashboardSkin.M_GREEN)
-private val PolInvertRed = Color(BmwDashboardSkin.M_RED)
+// Pink, not the app's usual invert-red -- shares SLIDER_STAGE_COLOR with the stage-timing sliders
+// on this same screen so the "something is offset from normal" cue reads consistently.
+private val PolInvertPink = Color(BmwDashboardSkin.SLIDER_STAGE_COLOR)
+private val PolaritySwitchWidth = 108.dp
 
 /**
  * Compose port of `CrossoverDashboardBuilder.addChannelCard` -- one Gains & Delay channel card:
  * a transparent [strokeColor]-bordered box with a title and DELAY (tap-to-type only), POL
- * (NORMAL/INVERT segmented), GAIN (mini slider + tap-to-type value) rows, and -- Left Low only --
- * a LINK L/R delay switch.
+ * (a [BmwSwitch] recoloured green/pink for normal/invert), GAIN ([BmwGainKnob] + tap-to-type
+ * value) rows, and -- Left Low only -- a LINK L/R delay switch.
  *
  * All state is hoisted. Delay is tap-only (the View's "show where a delay applies, not fine
  * adjustment" rationale); the caller mirrors it onto the sibling card's index when the LINK
@@ -97,14 +99,16 @@ fun BmwChannelCard(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             MiniLabel("POL")
-            BmwSegmentedControl(
-                options = listOf("NORMAL", "INVERT"),
-                selectedIndex = if (polarityInverted) 1 else 0,
-                onSelect = { onPolarityChange(it == 1) },
-                optionAccents = listOf(PolNormalGreen, PolInvertRed),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 8.dp),
+            BmwSwitch(
+                checked = polarityInverted,
+                onCheckedChange = onPolarityChange,
+                contentDescription = "$title polarity",
+                onColor = PolInvertPink,
+                offColor = PolNormalGreen,
+                onLabel = "INVERT",
+                offLabel = "NORMAL",
+                width = PolaritySwitchWidth,
+                modifier = Modifier.padding(start = 8.dp),
             )
         }
         Spacer(Modifier.height(2.dp))
@@ -146,44 +150,40 @@ private fun GainRow(
 ) {
     val context = LocalContext.current
     var drag by remember(value) { mutableFloatStateOf(value) }
-    val steps = remember(range, step) {
-        if (step > 0f) (((range.endInclusive - range.start) / step).roundToInt() - 1).coerceAtLeast(0) else 0
-    }
     val shown = drag.coerceIn(range.start, range.endInclusive)
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         MiniLabel("GAIN")
-        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            BmwSlider(
-                value = shown,
-                onValueChange = {
-                    val s = snapValue(it, range, step)
-                    drag = s
-                    onPreview(s)
+        BmwGainKnob(
+            value = shown,
+            range = range,
+            step = step,
+            accentColor = sliderAccent,
+            onPreview = {
+                drag = it
+                onPreview(it)
+            },
+            onCommit = {
+                drag = it
+                onCommit(it)
+            },
+        )
+        Text(
+            text = Fmt.format(shown),
+            color = labelColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp)
+                .clickable {
+                    context.showBmwNumberInput("GAIN", range.start, range.endInclusive, drag, step, "dB") {
+                        drag = it
+                        onCommit(it)
+                    }
                 },
-                onValueChangeFinished = { onCommit(snapValue(drag, range, step)) },
-                valueRange = range,
-                steps = steps,
-                accentColor = sliderAccent,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = Fmt.format(shown),
-                color = labelColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .width(40.dp)
-                    .padding(start = 6.dp)
-                    .clickable {
-                        context.showBmwNumberInput("GAIN", range.start, range.endInclusive, drag, step, "dB") {
-                            drag = it
-                            onCommit(it)
-                        }
-                    },
-            )
-        }
+        )
     }
 }
 
@@ -197,10 +197,4 @@ private fun MiniLabel(text: String) {
         letterSpacing = 0.03.em,
         modifier = Modifier.width(MiniLabelWidth),
     )
-}
-
-private fun snapValue(raw: Float, range: ClosedFloatingPointRange<Float>, step: Float): Float {
-    if (step <= 0f) return raw.coerceIn(range.start, range.endInclusive)
-    val snapped = range.start + ((raw - range.start) / step).roundToInt() * step
-    return snapped.coerceIn(range.start, range.endInclusive)
 }
