@@ -31,7 +31,11 @@ object NativeBmwDspValues {
     // added in the 144 -> 192 growth. The store keys entries by index, so an older 144-value
     // save just leaves 144..191 at their DEFAULTS; migrateMbcIfNeeded() claims the marker and
     // force-clears the enables. See the INDEX_MBC_* / INDEX_BUS_LIMITER_* section lower down.
-    const val SIZE = 192
+    //
+    // 192..198 are the measurement signal generator (log sweep + pink periodic noise), added in
+    // the 192 -> 197 -> 199 growths. No migration marker needed -- same as the 144 -> 192 growth,
+    // an older save simply leaves the new trailing slots at their DEFAULTS (type off).
+    const val SIZE = 199
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -236,6 +240,17 @@ object NativeBmwDspValues {
     const val INDEX_MASTER_LIMITER_MIGRATED = 191
     const val DEFAULT_MASTER_LIMITER_THRESHOLD_DB = -1f
 
+    // Measurement signal generator (192..198). type: 0 off, 1 log sweep, 2 pink periodic noise.
+    // Nonzero replaces the real DSP input entirely, pre-crossover -- see
+    // NativeBmwDspProcessor::processFrame(). Native reads all seven; no migration marker.
+    const val INDEX_MEAS_GEN_TYPE = 192
+    const val INDEX_MEAS_GEN_SWEEP_START_HZ = 193
+    const val INDEX_MEAS_GEN_SWEEP_END_HZ = 194
+    const val INDEX_MEAS_GEN_SWEEP_DURATION_S = 195
+    const val INDEX_MEAS_GEN_SWEEP_LEVEL_DB = 196
+    const val INDEX_MEAS_GEN_PINK_PERIOD_S = 197
+    const val INDEX_MEAS_GEN_PINK_LEVEL_DB = 198
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -297,6 +312,9 @@ object NativeBmwDspValues {
         // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
         // 189..191: master limiter enabled, threshold dBFS, migrated marker.
         0f, 1f, -1f, 1f,
+        // --- Measurement signal generator (192..198), ships OFF ---
+        0f, 20f, 20000f, 10f, -12f, // type, sweep start/end Hz, duration s, level dBFS
+        2f, -12f, // pink noise period s, level dBFS
     )
 
     init {

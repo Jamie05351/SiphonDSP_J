@@ -9,6 +9,7 @@
     <string name="action_revert">Reset to defaults</string>
     <string name="action_blocked_apps">Excluded apps</string>
     <string name="action_measurement">Measurement</string>
+    <string name="action_signal_generator">Signal Generator</string>
 
     <string name="tile_label_peq">PEQ</string>
     <string name="tile_label_gains">GAINS</string>
@@ -453,6 +454,18 @@
     <string name="measurement_readout">Peak in %1$.1f dB   Peak out %2$.1f dB   Null test RMS %3$.1f dB</string>
     <string name="blocklist_unsupported_apps">Unsupported apps</string>
     <string name="blocklist_unsupported_apps_message"><![CDATA[<p>This app does not support processing apps that block third parties from recording their audio output. To prevent these apps from being muted due to their capture restrictions, they are automatically excluded from audio processing and are not re-routed.</p><p><u>Affected apps:</u><br/>%s</p>]]></string>
+
+    <!-- Signal generator -->
+    <string name="title_activity_signal_generator">Signal Generator</string>
+    <string name="signal_generator_explainer">Generate a sweep or pink noise test signal inside the DSP engine, injected in place of the real audio input, pre-crossover.</string>
+    <string name="signal_generator_section_signal">Signal</string>
+    <string name="signal_generator_sweep_start">Sweep start</string>
+    <string name="signal_generator_sweep_end">Sweep end</string>
+    <string name="signal_generator_sweep_duration">Sweep duration</string>
+    <string name="signal_generator_sweep_level">Sweep level</string>
+    <string name="signal_generator_pink_period">Pink noise period</string>
+    <string name="signal_generator_pink_level">Pink noise level</string>
+    <string name="signal_generator_band_isolation">Band isolation</string>
 
     <!-- Compatibility issue activity -->
     <string name="title_activity_app_compat">Compatibility issue</string>

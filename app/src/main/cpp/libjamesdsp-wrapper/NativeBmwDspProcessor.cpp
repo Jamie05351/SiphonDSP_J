@@ -190,6 +190,15 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // config. See NativeBmwDspProcessor.h's kConfigSize comment.
     next.measBusStopbandOctaves = clampf(v[139], 0, 4);
 
+    // v[192..198]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
+    next.measGenType = static_cast<int>(clampf(v[192], 0, 2));
+    next.measGenSweepStartHz = clampf(v[193], 10, 24000);
+    next.measGenSweepEndHz = clampf(v[194], 10, 24000);
+    next.measGenSweepDurationS = clampf(v[195], 0.5f, 60);
+    next.measGenSweepLevelDb = clampf(v[196], -60, 0);
+    next.measGenPinkPeriodS = clampf(v[197], 0.1f, 10);
+    next.measGenPinkLevelDb = clampf(v[198], -60, 0);
+
     // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
     next.mbcEnabled = v[144] >= .5f;
@@ -344,6 +353,17 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
     if (changed(next.measBusStopbandOctaves, p_.measBusStopbandOctaves)) {
         dirty |= DirtyMeasBus;
+    }
+    // Any generator param change restarts the run, not just a type flip -- editing the sweep
+    // range/duration/level while it's already playing is expected to retrigger it.
+    if (next.measGenType != p_.measGenType ||
+        changed(next.measGenSweepStartHz, p_.measGenSweepStartHz) ||
+        changed(next.measGenSweepEndHz, p_.measGenSweepEndHz) ||
+        changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
+        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
+        changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
+        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb)) {
+        dirty |= DirtyMeasGen;
     }
 
     // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, clears tree state, same cost as
@@ -798,6 +818,18 @@ void NativeBmwDspProcessor::rebuildMeasBus() {
         }
     }
 }
+void NativeBmwDspProcessor::rebuildMeasGen() {
+    // Control-thread only, on a DirtyMeasGen transition -- never per sample. (Re)builds
+    // unconditionally for the active type; see the DirtyMeasGen comment in configure() for why
+    // that's correct even for a param edit while already running.
+    if (p_.measGenType == 1) {
+        measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
+                                p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
+                                sampleRate_);
+    } else if (p_.measGenType == 2) {
+        measGen_.configurePink(p_.measGenPinkPeriodS, dbToLin(p_.measGenPinkLevelDb), sampleRate_);
+    }
+}
 void NativeBmwDspProcessor::rebuildAllPass() {
     for (auto& out : outputs_) {
         for (std::size_t i = 0; i < out.allPass.size(); ++i) {
@@ -847,6 +879,9 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyMeasBus) {
         rebuildMeasBus();
     }
+    if (d & DirtyMeasGen) {
+        rebuildMeasGen();
+    }
     if (d & DirtyMbc) {
         rebuildMbc();
     }
@@ -876,6 +911,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildBusLimiter();
     rebuildPolarityAndMute();
     rebuildMeasBus();
+    rebuildMeasGen();
     rebuildAllPass();
     leftDcX_ = leftDcY_ = rightDcX_ = rightDcY_ = 0;
     for (auto& out : outputs_) {
@@ -1054,6 +1090,22 @@ float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
     sample = out.crossover1.run(sample);
     sample = out.crossover2.run(sample);
     return sample;
+}
+
+void NativeBmwDspProcessor::applyMeasurementGenerator(float& l, float& r) {
+    // Replaces the real input entirely, before captureTapIn() sees it, so a measurement run's
+    // captured "raw input" is the actual stimulus and the raw-input/output WAV pair is a valid
+    // stimulus/response pair for a null test. processFrame() then runs the substituted signal
+    // through the identical path real playback does, not a separate tap.
+    if (p_.measGenType == 1) {
+        const float g = static_cast<float>(measGen_.nextSweepSample());
+        l = g;
+        r = g;
+    } else if (p_.measGenType == 2) {
+        const float g = static_cast<float>(measGen_.nextPinkSample());
+        l = g;
+        r = g;
+    }
 }
 
 void NativeBmwDspProcessor::processFrame(float& l, float& r) {
@@ -1240,6 +1292,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
     }
     auto* w = const_cast<float*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
+        applyMeasurementGenerator(w[i], w[i + 1]);
         captureTapIn(w[i], w[i + 1]);
         processFrame(w[i], w[i + 1]);
         captureTapOut(w[i], w[i + 1]);
@@ -1258,6 +1311,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     auto* w = const_cast<int16_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
+        applyMeasurementGenerator(l, r);
         captureTapIn(l, r);
         processFrame(l, r);
         captureTapOut(l, r);
@@ -1278,6 +1332,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
     auto* w = const_cast<int32_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
+        applyMeasurementGenerator(l, r);
         captureTapIn(l, r);
         processFrame(l, r);
         captureTapOut(l, r);
