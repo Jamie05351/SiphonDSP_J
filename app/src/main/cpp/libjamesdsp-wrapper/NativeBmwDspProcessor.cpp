@@ -190,13 +190,14 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // config. See NativeBmwDspProcessor.h's kConfigSize comment.
     next.measBusStopbandOctaves = clampf(v[139], 0, 4);
 
-    // v[192..196]: measurement signal generator. type is clamped to {0, 1} for now -- 2 (pink
-    // periodic noise) isn't implemented yet and lands in a follow-up growth.
-    next.measGenType = static_cast<int>(clampf(v[192], 0, 1));
+    // v[192..198]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
+    next.measGenType = static_cast<int>(clampf(v[192], 0, 2));
     next.measGenSweepStartHz = clampf(v[193], 10, 24000);
     next.measGenSweepEndHz = clampf(v[194], 10, 24000);
     next.measGenSweepDurationS = clampf(v[195], 0.5f, 60);
     next.measGenSweepLevelDb = clampf(v[196], -60, 0);
+    next.measGenPinkPeriodS = clampf(v[197], 0.1f, 10);
+    next.measGenPinkLevelDb = clampf(v[198], -60, 0);
 
     // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
@@ -359,7 +360,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         changed(next.measGenSweepStartHz, p_.measGenSweepStartHz) ||
         changed(next.measGenSweepEndHz, p_.measGenSweepEndHz) ||
         changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
-        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb)) {
+        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
+        changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
+        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb)) {
         dirty |= DirtyMeasGen;
     }
 
@@ -816,15 +819,16 @@ void NativeBmwDspProcessor::rebuildMeasBus() {
     }
 }
 void NativeBmwDspProcessor::rebuildMeasGen() {
-    // Control-thread only, on a DirtyMeasGen transition -- never per sample. Restarts the run
-    // from t=0 unconditionally; see the DirtyMeasGen comment in configure() for why that's
-    // correct even for a param edit while already running.
-    if (p_.measGenType != 1) {
-        return;
+    // Control-thread only, on a DirtyMeasGen transition -- never per sample. (Re)builds
+    // unconditionally for the active type; see the DirtyMeasGen comment in configure() for why
+    // that's correct even for a param edit while already running.
+    if (p_.measGenType == 1) {
+        measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
+                                p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
+                                sampleRate_);
+    } else if (p_.measGenType == 2) {
+        measGen_.configurePink(p_.measGenPinkPeriodS, dbToLin(p_.measGenPinkLevelDb), sampleRate_);
     }
-    measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
-                            p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
-                            sampleRate_);
 }
 void NativeBmwDspProcessor::rebuildAllPass() {
     for (auto& out : outputs_) {
@@ -1097,6 +1101,10 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // measurement run exercises the identical path real playback does, not a separate tap.
     if (p_.measGenType == 1) {
         const float g = static_cast<float>(measGen_.nextSweepSample());
+        l = g;
+        r = g;
+    } else if (p_.measGenType == 2) {
+        const float g = static_cast<float>(measGen_.nextPinkSample());
         l = g;
         r = g;
     }

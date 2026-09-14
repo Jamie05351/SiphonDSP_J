@@ -48,9 +48,10 @@ public:
     //   188      Kotlin-only "legacy per-output compressor force-disabled" marker -- not read here
     //   189..190 master brick-wall limiter (enable, threshold dBFS) -- both read in configure()
     //   191      Kotlin-only "master limiter migrated" marker -- never read here
-    //   192      measurement generator type (0 off, 1 sweep; pink lands in a follow-up growth)
+    //   192      measurement generator type (0 off, 1 sweep, 2 pink periodic noise)
     //   193..196 sweep start Hz, end Hz, duration s, level dBFS
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 197 };
+    //   197..198 pink noise period s, level dBFS
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 199 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -332,11 +333,12 @@ private:
         // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
         // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
         float measBusStopbandOctaves = 1;
-        // Measurement signal generator (v[192..196]). 0 = off; nonzero replaces the real input
+        // Measurement signal generator (v[192..198]). 0 = off; nonzero replaces the real input
         // entirely, pre-crossover -- see processFrame(). Ships off.
         int measGenType = 0;
         float measGenSweepStartHz = 20, measGenSweepEndHz = 20000, measGenSweepDurationS = 10,
               measGenSweepLevelDb = -12;
+        float measGenPinkPeriodS = 2, measGenPinkLevelDb = -12;
         // Pre-crossover multiband compressor (v[144..180]). Ships disabled.
         bool mbcEnabled = false;
         float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)

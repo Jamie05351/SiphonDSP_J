@@ -105,6 +105,8 @@ class NativeBmwSchemaAgreementTest {
         "kMeasGenSweepEndHz" to NativeBmwDspValues.INDEX_MEAS_GEN_SWEEP_END_HZ,
         "kMeasGenSweepDurationS" to NativeBmwDspValues.INDEX_MEAS_GEN_SWEEP_DURATION_S,
         "kMeasGenSweepLevelDb" to NativeBmwDspValues.INDEX_MEAS_GEN_SWEEP_LEVEL_DB,
+        "kMeasGenPinkPeriodS" to NativeBmwDspValues.INDEX_MEAS_GEN_PINK_PERIOD_S,
+        "kMeasGenPinkLevelDb" to NativeBmwDspValues.INDEX_MEAS_GEN_PINK_LEVEL_DB,
     )
 
     @Test
