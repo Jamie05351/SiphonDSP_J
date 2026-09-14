@@ -19,12 +19,36 @@ import timber.log.Timber
  * from the TileService
  */
 class EngineLauncherActivity : BaseActivity() {
-    private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
+    // Must be registered unconditionally before the activity reaches STARTED, so this
+    // happens once here rather than inside launchEngine(), which onNewIntent() can re-run.
+    private val capturePermissionLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            app.mediaProjectionStartIntent = result.data
+            Timber.d("Using new projection token to start service")
+
+            RootlessAudioProcessorService.start(this, result.data)
+        }
+        finish()
+    }
 
     override val disableAppTheme: Boolean = true
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launchEngine()
+    }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Without FLAG_ACTIVITY_MULTIPLE_TASK, a boot that reuses an already-alive
+        // instance of this task delivers here instead of onCreate() -- without this
+        // override the engine start logic would silently never run on that boot.
+        launchEngine()
+    }
+
+    private fun launchEngine() {
         if (isRoot()) {
             // Root
             RootAudioProcessorService.startServiceEnhanced(this)
@@ -43,18 +67,6 @@ class EngineLauncherActivity : BaseActivity() {
             }
 
             setFinishOnTouchOutside(false)
-
-            capturePermissionLauncher = registerForActivityResult(
-                ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                if (result.resultCode == RESULT_OK) {
-                    app.mediaProjectionStartIntent = result.data
-                    Timber.d("Using new projection token to start service")
-
-                    RootlessAudioProcessorService.start(this, result.data)
-                }
-                finish()
-            }
 
             getSystemService<MediaProjectionManager>()
                 ?.createScreenCaptureIntent()
