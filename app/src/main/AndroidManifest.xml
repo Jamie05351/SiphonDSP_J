@@ -17,10 +17,6 @@
 
     <uses-permission android:name="android.permission.DUMP" tools:ignore="ProtectedPermissions" />
 
-    <permission
-        android:name="${applicationId}.permission.SET_POWER_STATE"
-        android:protectionLevel="signature" />
-
     <uses-feature android:name="android.hardware.audio.output" />
 
     <queries>
@@ -143,16 +139,6 @@
             android:name=".activity.MeasurementCaptureActivity"
             android:exported="false"
             android:label="@string/title_activity_measurement_capture"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.SignalGeneratorActivity"
-            android:exported="false"
-            android:label="@string/title_activity_signal_generator"
             android:theme="@style/Theme.SiphonDSP">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
@@ -292,7 +278,7 @@
             android:name=".receiver.PowerStateReceiver"
             android:enabled="true"
             android:exported="true"
-            android:permission="${applicationId}.permission.SET_POWER_STATE">
+            tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="app.siphondsp.SET_POWER_STATE" />
             </intent-filter>
