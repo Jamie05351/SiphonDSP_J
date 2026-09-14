@@ -26,12 +26,4 @@
         android:icon="@drawable/ic_baseline_waveform_24dp"
         app:showAsAction="never" />
 
-    <item
-        android:id="@+id/action_signal_generator"
-        android:orderInCategory="100"
-        android:title="@string/action_signal_generator"
-        android:iconTint="?attr/actionMenuTextColor"
-        android:icon="@drawable/ic_baseline_waveform_24dp"
-        app:showAsAction="never" />
-
 </menu>

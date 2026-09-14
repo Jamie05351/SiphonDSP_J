@@ -709,18 +709,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     private fun buildAudioTrack(encoding: Int, sampleRate: Int, bufferSizeBytes: Int): AudioTrack {
-        // USAGE_MEDIA/CONTENT_TYPE_MUSIC (not UNKNOWN) so the head unit's own audio policy can
-        // duck this output for calls and nav prompts based on the usage tag alone. Deliberately
-        // NOT paired with an app-side requestAudioFocus(AUDIOFOCUS_GAIN): this service re-emits
-        // another app's playback rather than originating its own, so claiming focus for itself
-        // sends that source app an AUDIOFOCUS_LOSS and can pause/stop the very playback this
-        // service depends on to have anything to capture and process (see PR review on #343).
-        // Safe against a self-capture feedback loop regardless of usage tag: buildAudioRecord()
-        // excludes this app's own UID from AudioPlaybackCaptureConfiguration, so this re-emitted
-        // track is never re-captured by this app's own recorder.
         val attributesBuilder = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .setUsage(AudioAttributes.USAGE_UNKNOWN)
+            .setContentType(AudioAttributes.CONTENT_TYPE_UNKNOWN)
             .setFlags(0)
 
         sdkAbove(Build.VERSION_CODES.Q) {

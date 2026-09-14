@@ -31,17 +31,8 @@ class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
             if(Settings.canDrawOverlays(context) && context.hasProjectMediaAppOp()) {
                 Timber.i("Preconditions for a silent auto-start met")
                 context.startActivity(Intent(context, EngineLauncherActivity::class.java).apply {
-                    // No FLAG_ACTIVITY_MULTIPLE_TASK: that flag forces a brand-new task on every
-                    // single call, never reusing one that's already running. EngineLauncherActivity
-                    // is a one-shot boot-time helper -- there's never a legitimate reason to want
-                    // more than one instance of it alive at once -- and BOOT_COMPLETED fires once
-                    // per device boot (once per ignition cycle in a car), so MULTIPLE_TASK here
-                    // guaranteed a fresh task every single boot, accumulating in Recent Apps over
-                    // many ignition cycles regardless of whether excludeFromRecents (declared both
-                    // here and in the manifest) is honored by the OS build. Dropping it lets
-                    // Android's normal task-affinity matching reuse any still-alive instance
-                    // instead of always creating a new one.
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
                             Intent.FLAG_ACTIVITY_NO_USER_ACTION or
                             Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
                             Intent.FLAG_ACTIVITY_NO_ANIMATION

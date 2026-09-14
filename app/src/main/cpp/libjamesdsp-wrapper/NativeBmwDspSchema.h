@@ -20,7 +20,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 199;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 192;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -107,16 +107,6 @@ inline constexpr int kBusLimMidRelease = 187;
 // --- master brick-wall limiter (189/190; 191 is a Kotlin-only migration marker) ------------
 inline constexpr int kMasterLimiterEnabled = 189;
 inline constexpr int kMasterLimiterThreshold = 190;
-
-// --- measurement signal generator (192..198), added in the 192 -> 197 -> 199 growths ------
-// kMeasGenType: 0 = off, 1 = log sweep, 2 = pink periodic noise.
-inline constexpr int kMeasGenType = 192;
-inline constexpr int kMeasGenSweepStartHz = 193;
-inline constexpr int kMeasGenSweepEndHz = 194;
-inline constexpr int kMeasGenSweepDurationS = 195;
-inline constexpr int kMeasGenSweepLevelDb = 196;
-inline constexpr int kMeasGenPinkPeriodS = 197;
-inline constexpr int kMeasGenPinkLevelDb = 198;
 
 }  // namespace nbschema
 
