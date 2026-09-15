@@ -109,9 +109,29 @@ data class BmwPeqState(
 
         fun empty() = BmwPeqState(false, 0f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
 
-        // PEQ has no enable/disable control anymore -- it's always live -- so every load() result
-        // is coerced on regardless of what's actually persisted (legacy data, migrations, etc.).
-        fun load(context: Context): BmwPeqState = loadStored(context).copy(enabled = true)
+        private data class ActiveSession(val owner: Any, val state: BmwPeqState)
+        private val activeSessions = mutableMapOf<String, ActiveSession>()
+
+        /** UI and response readers see the successfully applied session state, including fallback. */
+        fun load(context: Context): BmwPeqState = synchronized(activeSessions) {
+            activeSessions[context.noBackupFilesDir.absolutePath]?.state?.deepCopy()
+        } ?: loadPersisted(context)
+
+        /** Cold starts and explicit restores must retry the saved configuration, not a fallback. */
+        fun loadPersisted(context: Context): BmwPeqState = loadStored(context).copy(enabled = true)
+
+        internal fun publishActiveSession(context: Context, owner: Any, state: BmwPeqState) {
+            synchronized(activeSessions) {
+                activeSessions[context.noBackupFilesDir.absolutePath] = ActiveSession(owner, state.deepCopy())
+            }
+        }
+
+        internal fun clearActiveSession(context: Context, owner: Any) {
+            synchronized(activeSessions) {
+                val key = context.noBackupFilesDir.absolutePath
+                if (activeSessions[key]?.owner === owner) activeSessions.remove(key)
+            }
+        }
 
         private fun loadStored(context: Context): BmwPeqState {
             val result = store(context).load()
@@ -267,7 +287,7 @@ data class BmwPeqState(
 
         @Suppress("UseKtx") // returns the commit() Boolean; see backupLegacyOnce
         fun backupRejectedPersistedState(context: Context): Boolean {
-            val rejected = load(context)
+            val rejected = loadPersisted(context)
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return prefs.edit()
                 .putInt(KEY_REJECTED_VERSION, VERSION)

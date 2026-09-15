@@ -27,10 +27,14 @@ object BmwOutputRouting {
         frontLeft: Float,
         frontRight: Float,
         matrix: Map<BmwRoutingOutput, BmwRoutingCoefficients> = IDENTITY,
-    ): Map<BmwRoutingOutput, Float> = BmwRoutingOutput.entries.associateWith { output ->
-        val coefficients = matrix.getValue(output)
-        val sum = frontLeft * coefficients.fromFrontLeft + frontRight * coefficients.fromFrontRight
-        if (sum.isFinite()) sum else 0f
+    ): Map<BmwRoutingOutput, Float> {
+        val left = if (frontLeft.isFinite()) frontLeft else 0f
+        val right = if (frontRight.isFinite()) frontRight else 0f
+        return BmwRoutingOutput.entries.associateWith { output ->
+            val coefficients = matrix.getValue(output)
+            val sum = left * coefficients.fromFrontLeft + right * coefficients.fromFrontRight
+            if (sum.isFinite()) sum else 0f
+        }
     }
 
     /** Mirrors `sumToStereo`: Low L + Mid L to Left, Low R + Mid R to Right. */

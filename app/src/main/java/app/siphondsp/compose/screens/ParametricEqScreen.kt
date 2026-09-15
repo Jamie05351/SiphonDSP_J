@@ -107,6 +107,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                         intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
                             ?.takeIf { it.size == NativeBmwDspValues.SIZE }
                             ?.let { systemValues = it.copyOf() }
+                    Constants.ACTION_PARAMETRIC_EQ_CHANGED -> holder.refreshFromDisk()
                     Constants.ACTION_PRESET_LOADED, Constants.ACTION_BACKUP_RESTORED -> reloadEverything()
                 }
             }
@@ -116,6 +117,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
             IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).apply {
                 addAction(Constants.ACTION_PRESET_LOADED)
                 addAction(Constants.ACTION_BACKUP_RESTORED)
+                addAction(Constants.ACTION_PARAMETRIC_EQ_CHANGED)
             },
         )
         onDispose { context.unregisterLocalReceiver(receiver) }

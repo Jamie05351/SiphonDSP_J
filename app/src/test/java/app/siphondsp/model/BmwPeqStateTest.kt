@@ -120,6 +120,61 @@ class BmwPeqStateTest {
     }
 
     @Test
+    fun sessionFallbackIsVisibleWithoutOverwritingSavedConfiguration() {
+        val saved = BmwPeqState.empty().copy(enabled = true, preampDb = -3f)
+        val lastKnownGood = BmwPeqState.empty().copy(enabled = true, preampDb = -6f)
+        assertTrue(lastKnownGood.persist(context))
+        assertTrue(saved.persist(context))
+        val owner = Any()
+        val primaryBefore = noBackupDir.walkTopDown().filter { it.isFile }
+            .associate { it.relativeTo(noBackupDir).path to it.readBytes().toList() }
+
+        for (fallback in listOf(lastKnownGood, BmwPeqState.empty())) {
+            BmwPeqState.publishActiveSession(context, owner, fallback)
+            assertEquals(fallback, BmwPeqState.load(context))
+            assertEquals(fallback, BmwPeqState.load(freshContext()))
+            assertEquals(saved, BmwPeqState.loadPersisted(context))
+            assertEquals(primaryBefore, noBackupDir.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(noBackupDir).path to it.readBytes().toList() })
+        }
+
+        BmwPeqState.clearActiveSession(context, owner)
+        assertEquals(saved, BmwPeqState.load(context))
+    }
+
+    @Test
+    fun sessionSnapshotsAreIsolatedAndOldEngineCannotClearNewEngineState() {
+        val oldOwner = Any()
+        val newOwner = Any()
+        val fallback = BmwPeqState.empty()
+        BmwPeqState.publishActiveSession(context, oldOwner, fallback)
+        fallback.lowBandBands += ParametricEqBand(80.0, -6.0, 1.0)
+        assertTrue(BmwPeqState.load(context).lowBandBands.isEmpty())
+        BmwPeqState.load(context).midBandBands += ParametricEqBand(1000.0, -3.0, 1.0)
+        assertTrue(BmwPeqState.load(context).midBandBands.isEmpty())
+
+        val applied = BmwPeqState.empty().copy(enabled = true, preampDb = -4f)
+        BmwPeqState.publishActiveSession(context, newOwner, applied)
+        BmwPeqState.clearActiveSession(context, oldOwner)
+        assertEquals(applied, BmwPeqState.load(context))
+        assertTrue(applied.persist(context))
+        BmwPeqState.clearActiveSession(context, newOwner)
+        assertEquals(applied, BmwPeqState.load(context))
+    }
+
+    @Test
+    fun rejectedStateBackupReadsDiskEvenWhileFallbackIsActive() {
+        val saved = BmwPeqState.empty().copy(enabled = true, preampDb = -3f)
+        assertTrue(saved.persist(context))
+        val owner = Any()
+        BmwPeqState.publishActiveSession(context, owner, BmwPeqState.empty())
+        assertTrue(BmwPeqState.backupRejectedPersistedState(context))
+        assertEquals(-3f, context.getSharedPreferences("native_bmw_peq", Context.MODE_PRIVATE)
+            .getFloat("rejected_preamp", 0f), 0f)
+        BmwPeqState.clearActiveSession(context, owner)
+    }
+
+    @Test
     fun coldStartWithNothingPersistedReturnsEmptyState() {
         val restored = BmwPeqState.load(context)
 

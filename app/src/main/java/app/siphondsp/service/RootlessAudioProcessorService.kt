@@ -157,6 +157,22 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
         notificationManager = getSystemService<NotificationManager>()!!
 
+        // Called as early as onCreate() can manage -- right after the trivial getSystemService()
+        // lookups above, before any of the slower setup below (session-manager/database wiring,
+        // and especially JamesDspLocalEngine's construction, which does synchronous disk I/O to
+        // load the persisted PEQ/DSP config). Android budgets a limited window for a foreground
+        // service to actually call startForeground() after starting; on slow/contended storage,
+        // that disk I/O finishing first could push this call past the window
+        // (ForegroundServiceDidNotStartInTimeException on Android 12+) or just stall startup
+        // visibly. This doesn't change this call's relationship to mediaProjection (still set up
+        // later, in onStartCommand(), same as before this reorder) -- only its position relative
+        // to the slower unrelated setup steps within this same onCreate().
+        startForeground(
+            Notifications.ID_SERVICE_STATUS,
+            ServiceNotificationHelper.createServiceNotification(this, arrayOf()),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        )
+
         sessionManager = RootlessSessionManager(this)
         sessionManager.sessionDatabase.setOnSessionLossListener(onSessionLossListener)
         sessionManager.sessionDatabase.setOnAppProblemListener(onAppProblemListener)
@@ -184,12 +200,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         blockedApps.observeForever(blockedAppObserver)
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
         recreateRecorderRequested = false
-
-        startForeground(
-            Notifications.ID_SERVICE_STATUS,
-            ServiceNotificationHelper.createServiceNotification(this, arrayOf()),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-        )
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -326,7 +336,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (!dspApplied) {
             Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
         }
-        if (!engine.configureNativeBmwPeq(BmwPeqState.load(this), persistOnSuccess = false, source = "preset-restore")) {
+        if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
         if (dspApplied) {

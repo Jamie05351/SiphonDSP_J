@@ -18,6 +18,8 @@
 
 #include <cstddef>
 
+#include "NativeBmwDspProcessor.h"
+
 namespace nbschema {
 
 inline constexpr std::size_t kSize = 205;  // == NativeBmwDspValues.SIZE
@@ -60,6 +62,17 @@ inline constexpr int kAllPassSectionsPerOutput = 2;
 // --- per-output config: 4 outputs x kOutputConfigWidth, from kOutputConfigBase --------------
 inline constexpr int kOutputConfigBase = 87;
 inline constexpr int kOutputConfigWidth = 13;
+
+// These offsets are also independently derived (from NativeBmwRouting's block sizes) as
+// NativeBmwDspProcessor::kRoutingBase/kAllPassBase/kOutputConfigBase. Both copies exist so this
+// header can list the schema as plain integer constants (NativeBmwSchemaAgreementTest.kt parses
+// them as text), but nothing stops the two copies drifting apart if one side's literal is edited
+// without the other. Pin them together here so such a drift is a build break, not a runtime
+// mismatch only schema_agreement_test.cpp's behavioural probes would eventually catch.
+static_assert(kRoutingBase == NativeBmwDspProcessor::kRoutingBase);
+static_assert(kAllPassBase == NativeBmwDspProcessor::kAllPassBase);
+static_assert(kOutputConfigBase == NativeBmwDspProcessor::kOutputConfigBase);
+static_assert(kOutputConfigWidth == NativeBmwDspProcessor::kOutputConfigWidth);
 // field offsets within one output's block:
 inline constexpr int kOutCrossoverFreq = 0;
 // 0 = BW2 (12 dB/oct), 1 = BW3 (18 dB/oct), 2 = LR4 (24 dB/oct).
