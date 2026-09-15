@@ -19,6 +19,7 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -27,6 +28,7 @@ import java.io.FileInputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MeasurementCaptureFragment : Fragment() {
 
@@ -34,8 +36,10 @@ class MeasurementCaptureFragment : Fragment() {
     private val handler = Handler(Looper.getMainLooper())
     private var capturing = false
 
-    private val rawInFile by lazy { File(requireContext().cacheDir, "capture_raw_in.wav") }
-    private val outFile by lazy { File(requireContext().cacheDir, "capture_output.wav") }
+    // An old view's uncancellable native write may finish after navigation.
+    // Separate files prevent it from overwriting a newer screen's capture.
+    private lateinit var rawInFile: File
+    private lateinit var outFile: File
 
     // Mirrors NativeBmwDspProcessor::kCaptureMaxSeconds -- the fixed capture buffer duration --
     // used here only to render progress/auto-stop the polling loop, not to size anything.
@@ -54,6 +58,9 @@ class MeasurementCaptureFragment : Fragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        val captureId = UUID.randomUUID().toString()
+        rawInFile = File(requireContext().cacheDir, "capture_${captureId}_raw_in.wav")
+        outFile = File(requireContext().cacheDir, "capture_${captureId}_output.wav")
         binding = FragmentMeasurementCaptureBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -77,12 +84,14 @@ class MeasurementCaptureFragment : Fragment() {
         RootlessAudioProcessorService.nativeBmwPeqSampleRate()?.takeIf { it > 0f } ?: 48000f
 
     private fun startCapture() {
+        if (!binding.measurementCaptureButton.isEnabled) return
         if (!RootlessAudioProcessorService.startNativeBmwCapture()) {
             requireContext().toast(getString(R.string.measurement_engine_not_running))
             return
         }
         capturing = true
         binding.measurementReadout.isVisible = false
+        binding.measurementResponseView.isVisible = false
         binding.measurementExportButton.isEnabled = false
         binding.measurementCaptureButton.text = getString(R.string.measurement_stop_capture)
         handler.post(progressTick)
@@ -97,33 +106,42 @@ class MeasurementCaptureFragment : Fragment() {
         val frames = RootlessAudioProcessorService.nativeBmwCaptureFrameCount() ?: 0L
         binding.measurementStatus.text = getString(R.string.measurement_status_captured, frames / currentSampleRate())
 
-        val result = RootlessAudioProcessorService.exportNativeBmwCaptureWav(rawInFile.absolutePath, outFile.absolutePath)
-        if (result != null && result.size >= 3) {
-            binding.measurementReadout.text = getString(R.string.measurement_readout, result[0], result[1], result[2])
-            binding.measurementReadout.isVisible = true
-            binding.measurementExportButton.isEnabled = true
-            analyzeSpectrum()
-        } else {
-            requireContext().toast(getString(R.string.measurement_export_failed))
-        }
-    }
-
-    private fun analyzeSpectrum() {
-        binding.measurementResponseView.isVisible = false
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
-            // A too-short capture (fewer frames than one analysis window) is a normal outcome,
-            // not an error -- the chart just stays hidden rather than showing garbage.
-            val result = try {
-                MeasurementSpectrumAnalyzer.analyze(rawInFile, outFile)
-            } catch (ex: Exception) {
-                Timber.e(ex, "Spectrum analysis failed")
-                null
-            }
-            withContext(Dispatchers.Main) {
-                if (result != null && isAdded) {
-                    binding.measurementResponseView.setData(result.rawInDb, result.outDb, result.sampleRate, result.fftSize)
-                    binding.measurementResponseView.isVisible = true
+        val captureBinding = binding
+        val input = rawInFile
+        val output = outFile
+        captureBinding.measurementCaptureButton.isEnabled = false
+        captureBinding.measurementExportButton.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    RootlessAudioProcessorService.exportNativeBmwCaptureWav(input.absolutePath, output.absolutePath)
                 }
+                if (result == null || result.size < 3) {
+                    requireContext().toast(getString(R.string.measurement_export_failed))
+                    return@launch
+                }
+                captureBinding.measurementReadout.text = getString(R.string.measurement_readout, result[0], result[1], result[2])
+                captureBinding.measurementReadout.isVisible = true
+                val spectrum = withContext(Dispatchers.Default) {
+                    try {
+                        MeasurementSpectrumAnalyzer.analyze(input, output)
+                    } catch (ex: Exception) {
+                        if (ex is CancellationException) throw ex
+                        Timber.e(ex, "Spectrum analysis failed")
+                        null
+                    }
+                }
+                if (spectrum != null) {
+                    captureBinding.measurementResponseView.setData(spectrum.rawInDb, spectrum.outDb, spectrum.sampleRate, spectrum.fftSize)
+                    captureBinding.measurementResponseView.isVisible = true
+                }
+                captureBinding.measurementExportButton.isEnabled = true
+            } catch (ex: Exception) {
+                if (ex is CancellationException) throw ex
+                Timber.e(ex, "Capture export failed")
+                context?.toast(getString(R.string.measurement_export_failed))
+            } finally {
+                captureBinding.measurementCaptureButton.isEnabled = true
             }
         }
     }
@@ -131,17 +149,33 @@ class MeasurementCaptureFragment : Fragment() {
     fun onExportLocationSelected(treeUri: Uri?) {
         treeUri ?: return
         val context = requireContext()
-        context.contentResolver.takePersistableUriPermission(
-            treeUri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-        )
-        val root = UniFile.fromUri(context, treeUri)
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val dir = root?.createDirectory("measurement_$timestamp")
-        val ok = dir != null &&
-            copyFileInto(dir, rawInFile, "input.wav") &&
-            copyFileInto(dir, outFile, "output.wav")
-        context.toast(getString(if (ok) R.string.measurement_export_succeeded else R.string.measurement_export_failed))
+        val captureBinding = binding
+        val input = rawInFile
+        val output = outFile
+        captureBinding.measurementCaptureButton.isEnabled = false
+        captureBinding.measurementExportButton.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val ok = withContext(Dispatchers.IO) {
+                    context.contentResolver.takePersistableUriPermission(
+                        treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                    val root = UniFile.fromUri(context, treeUri)
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                    val dir = root?.createDirectory("measurement_$timestamp")
+                    dir != null && copyFileInto(dir, input, "input.wav") && copyFileInto(dir, output, "output.wav")
+                }
+                context.toast(getString(if (ok) R.string.measurement_export_succeeded else R.string.measurement_export_failed))
+            } catch (ex: Exception) {
+                if (ex is CancellationException) throw ex
+                Timber.e(ex, "Capture file copy failed")
+                context.toast(getString(R.string.measurement_export_failed))
+            } finally {
+                captureBinding.measurementCaptureButton.isEnabled = true
+                captureBinding.measurementExportButton.isEnabled = true
+            }
+        }
     }
 
     private fun copyFileInto(dir: UniFile, source: File, name: String): Boolean {

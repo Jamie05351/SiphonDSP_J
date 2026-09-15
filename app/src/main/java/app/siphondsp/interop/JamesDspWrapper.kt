@@ -41,7 +41,9 @@ object JamesDspWrapper {
     external fun startNativeBmwCapture(self: JamesDspHandle)
     external fun stopNativeBmwCapture(self: JamesDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: JamesDspHandle): Long
-    external fun exportNativeBmwCaptureWav(self: JamesDspHandle, rawInPath: String, outPath: String): FloatArray?
+    external fun takeNativeBmwCaptureSnapshot(self: JamesDspHandle): Long
+    external fun freeNativeBmwCaptureSnapshot(snapshot: Long)
+    external fun exportNativeBmwCaptureWav(snapshot: Long, rawInPath: String, outPath: String): FloatArray?
 
     external fun setLimiter(self: JamesDspHandle, threshold: Float, release: Float): Boolean
     external fun setPostGain(self: JamesDspHandle, postGain: Float): Boolean

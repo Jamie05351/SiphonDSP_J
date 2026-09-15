@@ -197,19 +197,35 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCaptureFrameCount(JNIEnv*
     return static_cast<jlong>(processor->captureFrameCount());
 }
 
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_exportNativeBmwCaptureWav(JNIEnv* env, jobject,
-                                                                     jlong self,
-                                                                     jstring rawInPathObj,
-                                                                     jstring outPathObj) {
-    if (env == nullptr || self == 0 || rawInPathObj == nullptr || outPathObj == nullptr) {
-        return nullptr;
-    }
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_takeNativeBmwCaptureSnapshot(JNIEnv* env, jobject,
+                                                                       jlong self) {
+    if (env == nullptr || self == 0) return 0;
     auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
     auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
+    if (processor == nullptr) return 0;
+    try {
+        return reinterpret_cast<jlong>(processor->takeCaptureSnapshot().release());
+    } catch (const std::bad_alloc&) {
+        return 0;
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_freeNativeBmwCaptureSnapshot(JNIEnv*, jobject,
+                                                                       jlong snapshot) {
+    delete reinterpret_cast<NativeBmwDspProcessor::CaptureSnapshot*>(snapshot);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_exportNativeBmwCaptureWav(JNIEnv* env, jobject,
+                                                                     jlong snapshotHandle,
+                                                                     jstring rawInPathObj,
+                                                                     jstring outPathObj) {
+    if (env == nullptr || snapshotHandle == 0 || rawInPathObj == nullptr || outPathObj == nullptr) {
         return nullptr;
     }
+    auto* snapshot = reinterpret_cast<NativeBmwDspProcessor::CaptureSnapshot*>(snapshotHandle);
     const char* rawInPath = env->GetStringUTFChars(rawInPathObj, nullptr);
     const char* outPath = env->GetStringUTFChars(outPathObj, nullptr);
     if (rawInPath == nullptr || outPath == nullptr) {
@@ -222,7 +238,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_exportNativeBmwCaptureWav(JNIEnv* env
         return nullptr;
     }
     NativeBmwDspProcessor::CaptureExportResult result;
-    const bool ok = processor->exportCaptureWav(rawInPath, outPath, result);
+    const bool ok = snapshot->exportWav(rawInPath, outPath, result);
     env->ReleaseStringUTFChars(rawInPathObj, rawInPath);
     env->ReleaseStringUTFChars(outPathObj, outPath);
     if (!ok) {

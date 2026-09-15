@@ -37,15 +37,14 @@ internal class BmwPeqStore(private val directory: File) {
 
     fun save(state: BmwPeqState): Boolean = synchronized(writeLock) {
         val encoded = encode(state)
-        // Promote whatever is currently in primary (the last successfully-saved
-        // state) into recovery before overwriting primary, so recovery is a true
-        // rollback target rather than a duplicate of the state being written now.
-        // On the very first save there's no previous state yet, so seed recovery
-        // with the same content for redundancy against single-file corruption.
-        val previous = runCatching {
-            primaryFile.takeIf { it.isFile }?.readText(StandardCharsets.UTF_8)
-        }.getOrNull()
-        val recoveryOk = atomicWrite(recoveryFile, previous ?: encoded)
+        // Only promote a validated primary. After restoring from recovery, keep
+        // that fallback intact until a new primary has been saved successfully.
+        val previous = read(primaryFile).state
+        val recoveryOk = when {
+            previous != null -> atomicWrite(recoveryFile, encode(previous))
+            read(recoveryFile).state != null -> true
+            else -> atomicWrite(recoveryFile, encoded)
+        }
         val primaryOk = recoveryOk && atomicWrite(primaryFile, encoded)
         val success = recoveryOk && primaryOk
         Timber.i(

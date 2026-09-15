@@ -1610,12 +1610,27 @@ std::size_t NativeBmwDspProcessor::captureFrameCount() const {
     return captureWriteIndex_.load(std::memory_order_acquire);
 }
 
-bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* outPath,
-                                             CaptureExportResult& result) const {
+std::unique_ptr<NativeBmwDspProcessor::CaptureSnapshot>
+NativeBmwDspProcessor::takeCaptureSnapshot() {
+    auto snapshot = std::make_unique<CaptureSnapshot>();
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    captureEnabled_ = false;
+    snapshot->frames = std::min(captureFrameCount(), captureCapacity_);
+    snapshot->sampleRate = sampleRate_;
+    snapshot->rawInL.swap(captureRawInL_);
+    snapshot->rawInR.swap(captureRawInR_);
+    snapshot->outL.swap(captureOutL_);
+    snapshot->outR.swap(captureOutR_);
+    captureCapacity_ = 0;
+    return snapshot;
+}
+
+bool NativeBmwDspProcessor::CaptureSnapshot::exportWav(const char* rawInPath, const char* outPath,
+                                                       CaptureExportResult& result) const {
     if (!rawInPath || !outPath) {
         return false;
     }
-    const std::size_t n = captureFrameCount();
+    const std::size_t n = frames;
     if (n == 0) {
         return false;
     }
@@ -1626,7 +1641,7 @@ bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* 
         format.container = drwav_container_riff;
         format.format = DR_WAVE_FORMAT_IEEE_FLOAT;
         format.channels = 2;
-        format.sampleRate = static_cast<drwav_uint32>(sampleRate_);
+        format.sampleRate = static_cast<drwav_uint32>(sampleRate);
         format.bitsPerSample = 32;
         if (!drwav_init_file_write(&wav, path, &format, nullptr)) {
             return false;
@@ -1649,10 +1664,10 @@ bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* 
         return totalWritten == n;
     };
 
-    if (!writeStereo(rawInPath, captureRawInL_.data(), captureRawInR_.data())) {
+    if (!writeStereo(rawInPath, rawInL.data(), rawInR.data())) {
         return false;
     }
-    if (!writeStereo(outPath, captureOutL_.data(), captureOutR_.data())) {
+    if (!writeStereo(outPath, outL.data(), outR.data())) {
         return false;
     }
 
@@ -1661,10 +1676,10 @@ bool NativeBmwDspProcessor::exportCaptureWav(const char* rawInPath, const char* 
     // reading pinpoints that *something* in the chain is doing more than expected.
     float peakIn = 0.f, peakOut = 0.f, diffSumSq = 0.f;
     for (std::size_t i = 0; i < n; ++i) {
-        peakIn = std::max({peakIn, std::fabs(captureRawInL_[i]), std::fabs(captureRawInR_[i])});
-        peakOut = std::max({peakOut, std::fabs(captureOutL_[i]), std::fabs(captureOutR_[i])});
-        const float dl = captureOutL_[i] - captureRawInL_[i];
-        const float dr = captureOutR_[i] - captureRawInR_[i];
+        peakIn = std::max({peakIn, std::fabs(rawInL[i]), std::fabs(rawInR[i])});
+        peakOut = std::max({peakOut, std::fabs(outL[i]), std::fabs(outR[i])});
+        const float dl = outL[i] - rawInL[i];
+        const float dr = outR[i] - rawInR[i];
         diffSumSq += dl * dl + dr * dr;
     }
     const float rms = std::sqrt(diffSumSq / static_cast<float>(n * 2));
