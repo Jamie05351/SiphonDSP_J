@@ -20,7 +20,7 @@ inline float ftz(float x) {
     return (!std::isfinite(x) || std::fabs(x) < 1e-20f) ? 0.f : x;
 }
 inline double ftzd(double x) {
-    return (!std::isfinite(x) || std::fabs(x) < 1e-30) ? 0.0 : x;
+    return NativeBmwRouting::flushDenormal(x);
 }
 template<class T>
 T clampInt(float x) {
@@ -270,7 +270,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 
     NativeBmwRouting::RoutingMatrix nextRouting;
     for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
-        const float fromLeft = v[46 + out * 2], fromRight = v[47 + out * 2];
+        const float fromLeft = v[kRoutingBase + out * 2], fromRight = v[kRoutingBase + out * 2 + 1];
         if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
             std::fabs(fromRight) > 2.f) {
             return false;
@@ -283,7 +283,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
              ++section) {
             const std::size_t base =
-                54 +
+                kAllPassBase +
                 (out * NativeBmwRouting::kAllPassSectionsPerOutput + section) * kAllPassValueWidth;
             const float enabledValue = v[base], orderValue = v[base + 1], freqValue = v[base + 2],
                         qValue = v[base + 3];
@@ -300,7 +300,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             // section (eg. a frequency at/above this output's current Nyquist limit).
             // rebuild() already degrades an invalid section to an identity
             // pass-through on its own and leaves every other pending change intact.
-            candidate.rebuild(sampleRate_);
+            (void)candidate.rebuild(sampleRate_);
             const auto& current = outputs_[out].allPass[section];
             const bool sectionChanged = current.enabled != candidate.enabled ||
                                         current.secondOrder != candidate.secondOrder ||
@@ -362,7 +362,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     for (std::size_t out = 0; out < nextOutputConfigs.size(); ++out) {
         const auto& old = outputConfigs_[out];
         const auto& now = nextOutputConfigs[out];
-        const bool low = out <= static_cast<std::size_t>(OutputId::LowRight);
+        const bool low = NativeBmwRouting::isLowBandOutput(out);
         if (changed(old.crossoverFreq, now.crossoverFreq) || old.crossoverType != now.crossoverType) {
             dirty |= low ? DirtyLowXo : DirtyMidXo;
             // meas-bus corner tracks the *opposite* band's crossover: rebuild it only if the
@@ -474,8 +474,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 // machine precision across every filter type/fc/Q/gain this engine uses) before this migration --
 // see PR description, not reproduced as a runtime check.
 void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
-           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
@@ -486,8 +486,8 @@ void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) 
     q.clear();
 }
 void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q,
-           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
@@ -531,7 +531,8 @@ void NativeBmwDspProcessor::makeIdentity(Biquad& q) {
 void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float gainDb, float sr) {
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) / std::sqrt(A),
-           k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+           k = 1. / BW;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
@@ -544,7 +545,8 @@ void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float gainDb, floa
 void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, float sr) {
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) * std::sqrt(A),
-           k = 1. / BW, a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+           k = 1. / BW;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
@@ -558,8 +560,8 @@ void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, flo
 // Matches NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC
 // tree.
 void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW,
-           a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     q.topology = Biquad::Topology::Svf2;
     q.a1 = a1;
     q.a2 = a2;
@@ -608,7 +610,7 @@ bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q
         m1 = -k;
         m2 = 0;
     }
-    const double a1 = 1. / (1. + g * (g + k)), a2 = g * a1, a3 = g * a2;
+    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     // makePeq is the one coefficient builder here with fc unclamped up to true Nyquist (arbitrary
     // user-edited PEQ bands), so it's the one that keeps an explicit finite-result guard -- g can
     // grow very large as f approaches sr/2 (g=tan(w/2) has no asymptote-avoiding margin here the
@@ -894,7 +896,7 @@ void NativeBmwDspProcessor::rebuildPolarityAndMute() {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
         auto& out = outputs_[i];
         const auto& cfg = outputConfigs_[i];
-        const bool isLow = i <= static_cast<std::size_t>(OutputId::LowRight);
+        const bool isLow = NativeBmwRouting::isLowBandOutput(i);
         const bool measurementMuted =
             (p_.measurementMute == 1 && isLow) || (p_.measurementMute == 2 && !isLow);
         out.muted = cfg.muted || measurementMuted;
@@ -978,7 +980,7 @@ void NativeBmwDspProcessor::rebuildMeasGen() {
 void NativeBmwDspProcessor::rebuildAllPass() {
     for (auto& out : outputs_) {
         for (std::size_t i = 0; i < out.allPass.size(); ++i) {
-            out.allPass[i].rebuild(sampleRate_);
+            (void)out.allPass[i].rebuild(sampleRate_);
             out.allPassState[i].loadAllPass(out.allPass[i].coefficients);
         }
     }

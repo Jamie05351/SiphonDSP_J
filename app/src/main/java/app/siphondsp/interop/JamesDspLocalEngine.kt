@@ -17,7 +17,18 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     @Volatile private var peqRestorePending = true
 
     @Volatile
-    private var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
+    private var handle: JamesDspHandle = try {
+        JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
+    } catch (e: Throwable) {
+        // Caught broadly (not just Exception) since the failure this guards against -- native
+        // allocation failing under low memory -- can surface as an OutOfMemoryError, an Error
+        // subtype Exception doesn't catch. Every other method in this class already treats
+        // handle==0L as "native not ready" and degrades gracefully (copyBypass, withHandle's
+        // default-value paths); an uncaught exception here instead crashes the constructor,
+        // which callers (RootlessAudioProcessorService.onCreate()) run before startForeground().
+        Timber.e(e, "JamesDspWrapper.alloc() failed; degrading to a null native handle")
+        0L
+    }
 
     override var sampleRate: Float
         set(value) {
@@ -29,11 +40,20 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                     JamesDspWrapper.setNativeBmwDspSampleRate(current, value)
                 }
             }
-            if (value >= MIN_VALID_SAMPLE_RATE && peqRestorePending) {
+            val attemptingColdStartRestore = value >= MIN_VALID_SAMPLE_RATE && peqRestorePending
+            if (attemptingColdStartRestore) {
                 restoreNativeBmwPeq()
             }
-            synchronized(nativeLock) {
-                if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
+            // restoreNativeBmwPeq() above already applies whatever PEQ state is needed at the
+            // now-current sample rate (set via super.sampleRate = value earlier in this same
+            // call) on success, so re-pushing it again immediately below would redundantly
+            // reload from disk and reconfigure natively a second time under this same lock, for
+            // no reason. Only do the normal "already running, rate changed" re-sync when this
+            // call didn't just attempt a cold-start restore.
+            if (!attemptingColdStartRestore) {
+                synchronized(nativeLock) {
+                    if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
+                }
             }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
@@ -258,14 +278,36 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         persistOnSuccess: Boolean = true,
         source: String = "editor",
     ): Boolean {
-        val result = synchronized(nativeLock) {
-            val previous = bmwPeqState
-            if (!configureNativeBmwPeqLocked(state, source)) return false
-            if (persistOnSuccess && !state.persist(context)) {
-                Timber.e("$source native BMW PEQ applied but persistence commit failed")
-                configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
-                false
-            } else true
+        val previous: BmwPeqState
+        val applied: Boolean
+        synchronized(nativeLock) {
+            previous = bmwPeqState
+            applied = configureNativeBmwPeqLocked(state, source)
+        }
+        if (!applied) return false
+        var result = true
+        if (persistOnSuccess && !state.persist(context)) {
+            Timber.e("$source native BMW PEQ applied but persistence commit failed")
+            synchronized(nativeLock) {
+                // nativeLock is deliberately released during state.persist()'s disk I/O above
+                // (holding it would block the audio-processing hot path, which also takes
+                // nativeLock, for the duration of two fsync'd file writes) -- so another call
+                // could have applied and persisted a different state while this write was in
+                // flight. Only roll back if bmwPeqState still equals what this call itself
+                // applied; otherwise the stale `previous` snapshot from before this call even
+                // started would clobber that newer, already-successful state. All real call
+                // sites serialize on the main thread today so this window is currently latent,
+                // but nothing structurally prevented it before this check.
+                if (bmwPeqState == state) {
+                    configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
+                } else {
+                    Timber.w(
+                        "$source native BMW PEQ persistence-rollback skipped: a newer state " +
+                            "was applied while this write was in flight"
+                    )
+                }
+            }
+            result = false
         }
         context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         return result

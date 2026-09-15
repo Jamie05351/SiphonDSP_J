@@ -7,6 +7,8 @@
 #include <random>
 #include <vector>
 
+#include "NativeBmwRouting.h"
+
 // Native measurement signal generator: produces a log sweep, pink periodic noise, or a REW
 // Acoustic Timing Reference sequence, that NativeBmwDspProcessor::processFrame injects in place
 // of the real audio input, pre-crossover, so a measurement run exercises the identical
@@ -258,7 +260,7 @@ private:
     static constexpr double kFadeSeconds = 0.005;
 
     static double flushDenormal(double x) {
-        return (!std::isfinite(x) || std::fabs(x) < 1e-30) ? 0.0 : x;
+        return NativeBmwRouting::flushDenormal(x);
     }
 
     // Shared closed-form envelope: a short linear fade in/out at the edges of a one-shot segment

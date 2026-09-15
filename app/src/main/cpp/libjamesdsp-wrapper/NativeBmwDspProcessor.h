@@ -69,12 +69,21 @@ public:
     // separate from kDelayLineCapacity so the per-output / limiter Delay instances stay 256.
     enum : unsigned { kStageDelayCapacity = 1024 };
     static constexpr float kStageDelayMaxMs = 10.f;
+    // kRoutingBase is the one literal anchor here (the first slot after the earlier scalar
+    // fields, index 46) -- kAllPassBase/kOutputSchemaMarkerIndex/kOutputConfigBase are all
+    // derived from it and the routing/all-pass block sizes, rather than being independent
+    // literals that would silently misalign with configure()'s actual v[] reads (and with
+    // NativeBmwDspSchema.h's own copies of these same offsets) if kOutputCount/kInputCount/
+    // kAllPassSectionsPerOutput ever changed without every bare-literal copy being updated too.
     enum : std::size_t {
+        kRoutingBase = 46,
         kRoutingValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kInputCount,
+        kAllPassBase = kRoutingBase + kRoutingValueCount,
         kAllPassValueWidth = 4,
         kAllPassValueCount = NativeBmwRouting::kOutputCount *
                              NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
-        kOutputConfigBase = 87,
+        kOutputSchemaMarkerIndex = kAllPassBase + kAllPassValueCount,
+        kOutputConfigBase = kOutputSchemaMarkerIndex + 1,
         kOutputConfigWidth = 13,
     };
     // Capture buffers hold this many seconds at whatever sampleRate_ is current when
