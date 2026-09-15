@@ -14,6 +14,7 @@ import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.extensions.prettyNumberFormat
 
 /**
@@ -148,7 +149,12 @@ class CompressorSurface(context: Context, attrs: AttributeSet?) : View(context, 
         val bottom = plotBottom()
         if (right <= left || bottom <= top) return
 
-        val splits = CompressorSurfaceMath.splitFrequencies(systemValues)
+        val sampleRateHz = RootlessAudioProcessorService.nativeBmwPeqSampleRate()?.toDouble()
+        val splits = if (sampleRateHz != null) {
+            CompressorSurfaceMath.splitFrequencies(systemValues, sampleRateHz)
+        } else {
+            CompressorSurfaceMath.splitFrequencies(systemValues)
+        }
         drawBandRegions(canvas, top, bottom, splits)
         drawGrid(canvas, left, right, top, bottom)
         if (spectrumActive) drawSpectrum(canvas, left, right)

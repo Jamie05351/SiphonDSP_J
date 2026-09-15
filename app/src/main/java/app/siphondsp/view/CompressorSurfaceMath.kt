@@ -23,24 +23,41 @@ object CompressorSurfaceMath {
 
     const val BAND_COUNT = NativeBmwDspValues.MBC_BAND_COUNT
 
+    // NativeBmwDspProcessor.h's sampleRate_ compiled-in default -- used here only when no engine
+    // instance is live to report the real device rate (see splitFrequencies's sampleRateHz param).
+    private const val DEFAULT_SAMPLE_RATE_HZ = 48_000.0
+
     /**
-     * The 3 MBC split frequencies from [values], clamped monotonic with the same 5% spacing
-     * NativeBmwDspProcessor::rebuildMbc enforces, so the shaded regions line up with what the
-     * engine actually crosses over at. NativeBmwDspProcessor::configure sorts the raw magnitudes
-     * before clamping (so an out-of-order stored triple still normalizes the same way regardless
-     * of slot), so the raw values are sorted here too before the same successive-coerce chain.
+     * The 3 MBC split frequencies from [values] at [sampleRateHz], normalized the same two-stage
+     * way NativeBmwDspProcessor is so the shaded regions line up with what the engine actually
+     * crosses over at:
+     *  1. configure() sorts the raw magnitudes ascending, then clamps each to its slot's own
+     *     bounds, so an out-of-order stored triple still normalizes the same way regardless of
+     *     which slot it was stored in.
+     *  2. rebuildMbc() re-clamps against the sample-rate ceiling (0.45 * sampleRateHz), reserving
+     *     the 5% spacing owed to the stage(s) above so two splits can't collapse onto one ceiling.
      */
-    fun splitFrequencies(values: FloatArray): DoubleArray {
+    fun splitFrequencies(values: FloatArray, sampleRateHz: Double = DEFAULT_SAMPLE_RATE_HZ): DoubleArray {
         val raw = doubleArrayOf(
             values[NativeBmwDspValues.INDEX_MBC_XO_0].toDouble(),
             values[NativeBmwDspValues.INDEX_MBC_XO_1].toDouble(),
             values[NativeBmwDspValues.INDEX_MBC_XO_2].toDouble(),
         ).also { it.sort() }
-        val f0 = raw[0].coerceIn(MIN_FREQUENCY, MAX_FREQUENCY)
-        val f1 = raw[1].coerceIn(f0 * 1.05, MAX_FREQUENCY)
-        val f2 = raw[2].coerceIn(f1 * 1.05, MAX_FREQUENCY)
+        val slot0 = clampD(raw[0], 20.0, 2000.0)
+        val slot1 = clampD(raw[1], 40.0, 8000.0)
+        val slot2 = clampD(raw[2], 80.0, 20000.0)
+
+        val ceiling = sampleRateHz * 0.45
+        val f1Ceiling = ceiling / 1.05
+        val f0Ceiling = f1Ceiling / 1.05
+        val f0 = clampD(slot0, MIN_FREQUENCY, f0Ceiling)
+        val f1 = clampD(slot1, minOf(f0 * 1.05, f1Ceiling), f1Ceiling)
+        val f2 = clampD(slot2, minOf(f1 * 1.05, ceiling), ceiling)
         return doubleArrayOf(f0, f1, f2)
     }
+
+    /** Mirrors NativeBmwDspProcessor.cpp's clampf: well-defined (returns [lo]) even if [lo] > [hi]. */
+    private fun clampD(x: Double, lo: Double, hi: Double): Double = maxOf(lo, minOf(hi, x))
 
     /** Which of the 4 bands [frequencyHz] falls in, given ascending [splits] (length 3). */
     fun bandForFrequency(frequencyHz: Double, splits: DoubleArray): Int = when {

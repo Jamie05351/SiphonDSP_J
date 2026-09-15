@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.CompressorSurfaceMath
@@ -158,7 +159,12 @@ fun CompressorGraph(
         val bottom = size.height - PAD_BOTTOM_DP * density
         if (right <= left || bottom <= top) return@ComposeCanvas
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
-        val splits = CompressorSurfaceMath.splitFrequencies(systemValues)
+        val sampleRateHz = RootlessAudioProcessorService.nativeBmwPeqSampleRate()?.toDouble()
+        val splits = if (sampleRateHz != null) {
+            CompressorSurfaceMath.splitFrequencies(systemValues, sampleRateHz)
+        } else {
+            CompressorSurfaceMath.splitFrequencies(systemValues)
+        }
         val mbcOn = systemValues[NativeBmwDspValues.INDEX_MBC_ENABLED] >= .5f
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
