@@ -235,21 +235,22 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
     next.mbcEnabled = v[144] >= .5f;
     next.mbcMix = clampf(v[145], 0, 100) * .01f;
-    float requestedMbcXo[3] = {v[146], v[147], v[148]};
-    if (!std::all_of(std::begin(requestedMbcXo), std::end(requestedMbcXo),
-                     [](float split) { return std::isfinite(split); })) {
-        return false;
-    }
     // Out-of-order input (e.g. v[147] < v[146]) previously reached rebuildMbc() as-is, where its
     // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
     // update being rejected or the values being reordered predictably -- the resulting split
     // frequencies depended on which slot the clamp chain happened to touch, not on the values the
-    // caller actually sent. Sort the requested magnitudes before applying the positional bounds;
-    // otherwise an out-of-range permutation can be clamped differently before it is reordered.
-    std::sort(std::begin(requestedMbcXo), std::end(requestedMbcXo));
-    next.mbcXo[0] = clampf(requestedMbcXo[0], 20, 2000);
-    next.mbcXo[1] = clampf(requestedMbcXo[1], 40, 8000);
-    next.mbcXo[2] = clampf(requestedMbcXo[2], 80, 20000);
+    // caller actually sent. Sorting the raw magnitudes first (before the per-slot clamp below)
+    // means the same three magnitudes always normalize the same way regardless of which slot the
+    // caller put them in. std::sort requires a strict weak ordering that NaN violates, so reject
+    // a non-finite triple up front rather than letting it reach the sort.
+    if (!std::isfinite(v[146]) || !std::isfinite(v[147]) || !std::isfinite(v[148])) {
+        return false;
+    }
+    float mbcXoSorted[3] = {v[146], v[147], v[148]};
+    std::sort(std::begin(mbcXoSorted), std::end(mbcXoSorted));
+    next.mbcXo[0] = clampf(mbcXoSorted[0], 20, 2000);
+    next.mbcXo[1] = clampf(mbcXoSorted[1], 40, 8000);
+    next.mbcXo[2] = clampf(mbcXoSorted[2], 80, 20000);
     for (int b = 0; b < 4; ++b) {
         const std::size_t base = 149 + b * 8;
         auto& mb = next.mbcBand[b];
@@ -659,22 +660,23 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
         }
         PeqBank x;
         for (std::size_t i = 0; i < n; i += 5) {
-            // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a NaN/Infinity float
-            // to int is UB ([conv.fpint]), so that has to be ruled out before either cast runs,
-            // not deferred to makePeq()'s own isfinite checks (which only cover f/gainDb/Q).
-            const double typeValue = v[i + 3], channelValue = v[i + 4];
-            constexpr double kIntMin = static_cast<double>(std::numeric_limits<int>::min());
-            constexpr double kIntMax = static_cast<double>(std::numeric_limits<int>::max());
-            if (!std::isfinite(typeValue) || !std::isfinite(channelValue) || typeValue < kIntMin ||
-                typeValue > kIntMax || channelValue < kIntMin || channelValue > kIntMax) {
+            // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a value outside int's
+            // representable range (including NaN/Infinity, but also a finite-but-huge double from
+            // the raw JNI array) is UB ([conv.fpint]), so both have to be ruled out before either
+            // cast runs, not deferred to makePeq()'s own isfinite checks (which only cover
+            // f/gainDb/Q) or to the type/channel range checks below the casts.
+            constexpr double kIntMin = static_cast<double>(std::numeric_limits<int>::min()),
+                             kIntMax = static_cast<double>(std::numeric_limits<int>::max());
+            if (!std::isfinite(v[i + 3]) || !std::isfinite(v[i + 4]) || v[i + 3] < kIntMin ||
+                v[i + 3] > kIntMax || v[i + 4] < kIntMin || v[i + 4] > kIntMax) {
                 return false;
             }
-            int type = static_cast<int>(typeValue);
+            int type = static_cast<int>(v[i + 3]);
             Biquad q;
             if (!makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate_)) {
                 return false;
             }
-            int ch = static_cast<int>(channelValue);
+            int ch = static_cast<int>(v[i + 4]);
             if (ch < 0 || ch > 2) {
                 return false;
             }
@@ -822,10 +824,14 @@ void NativeBmwDspProcessor::rebuildMbc() {
     // lower bound is itself clamped against the ceiling: without that, a low sample rate plus an
     // f0/f1 already close to the ceiling can make the naive lower bound (f0*1.05f) exceed the
     // ceiling, and clampf(x, lo, hi) with lo>hi returns lo -- silently landing past the
-    // documented sampleRate_*.45f cap instead of at it.
+    // documented sampleRate_*.45f cap instead of at it. f0/f1's own upper bound is likewise pulled
+    // in by the 5% steps still owed to the stages above them, so a low sample rate can't pin two
+    // adjacent splits to the same ceiling value and collapse the band between them to zero width.
     const float ceiling = sampleRate_ * .45f;
-    const float f0 = clampf(p_.mbcXo[0], 20.f, ceiling);
-    const float f1 = clampf(p_.mbcXo[1], std::min(f0 * 1.05f, ceiling), ceiling);
+    const float f1Ceiling = ceiling / 1.05f;
+    const float f0Ceiling = f1Ceiling / 1.05f;
+    const float f0 = clampf(p_.mbcXo[0], 20.f, f0Ceiling);
+    const float f1 = clampf(p_.mbcXo[1], std::min(f0 * 1.05f, f1Ceiling), f1Ceiling);
     const float f2 = clampf(p_.mbcXo[2], std::min(f1 * 1.05f, ceiling), ceiling);
     for (auto& t : mbc_) {
         t.clear();  // explicit -- makeLowPass/makeHighPass below also clear each biquad they
