@@ -67,25 +67,38 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             BmwPeqState.recordRestoreResult(context, "persisted-state")
             return
         }
-        val persistedError = persisted.validate(sampleRate) ?: "native configuration rejected"
+        // A structural validation failure (e.g. a band now above the current sample rate's
+        // Nyquist) means this exact persisted config can never succeed on its own, so it's
+        // correct -- necessary, even -- to permanently replace it below. A bare native-side
+        // rejection with the config structurally valid by Kotlin's own check is different: that
+        // can be a transient native/JNI failure (this app already tracks OOM-class native
+        // failures elsewhere), not a real problem with the saved config. Persisting a fallback
+        // over the user's real config for a one-off glitch would destroy it permanently for no
+        // reason, so only the structural case persists; the transient case falls back for this
+        // session only and leaves the real persisted state on disk for the next cold start to
+        // try again fresh.
+        val persistedValidation = persisted.validate(sampleRate)
+        val persistedError = persistedValidation ?: "native configuration rejected"
+        val structurallyInvalid = persistedValidation != null
+
         val lastKnownGood = BmwPeqState.loadLastKnownGood(context)
         if (lastKnownGood != null &&
-            configureNativeBmwPeq(lastKnownGood, persistOnSuccess = true, source = "cold-start-lkg")
+            configureNativeBmwPeq(lastKnownGood, persistOnSuccess = structurallyInvalid, source = "cold-start-lkg")
         ) {
             peqRestorePending = false
-            Timber.w("Native BMW PEQ recovered from last-known-good state")
+            Timber.w("Native BMW PEQ recovered from last-known-good state (persisted=$structurallyInvalid)")
             BmwPeqState.recordRestoreResult(
                 context, "last-known-good", persistedError, fallbackUsed = true
             )
             return
         }
         val safe = BmwPeqState.empty()
-        if (!BmwPeqState.backupRejectedPersistedState(context)) {
+        if (structurallyInvalid && !BmwPeqState.backupRejectedPersistedState(context)) {
             Timber.e("Failed to preserve rejected BMW PEQ state before safe fallback")
         }
-        val safeOk = configureNativeBmwPeq(safe, persistOnSuccess = true, source = "cold-start-safe")
+        val safeOk = configureNativeBmwPeq(safe, persistOnSuccess = structurallyInvalid, source = "cold-start-safe")
         if (safeOk) peqRestorePending = false
-        Timber.e("Native BMW PEQ used safe fallback result=$safeOk reason=$persistedError")
+        Timber.e("Native BMW PEQ used safe fallback result=$safeOk reason=$persistedError persisted=$structurallyInvalid")
         BmwPeqState.recordRestoreResult(
             context,
             if (safeOk) "safe-empty" else "recovery-failed",
