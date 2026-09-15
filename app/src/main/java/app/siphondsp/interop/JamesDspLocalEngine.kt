@@ -345,8 +345,17 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCaptureFrameCount(): Long =
         withHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
 
-    fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.exportNativeBmwCaptureWav(it, rawInPath, outPath) }
+    // Detach ownership while the engine is protected, then release nativeLock
+    // before file I/O. Closing the engine cannot invalidate this snapshot.
+    fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? {
+        val snapshot = withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
+        if (snapshot == 0L) return null
+        return try {
+            JamesDspWrapper.exportNativeBmwCaptureWav(snapshot, rawInPath, outPath)
+        } finally {
+            JamesDspWrapper.freeNativeBmwCaptureSnapshot(snapshot)
+        }
+    }
 
     companion object {
         private const val MIN_VALID_SAMPLE_RATE = 8000f

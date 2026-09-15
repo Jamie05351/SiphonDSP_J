@@ -3,6 +3,9 @@ package app.siphondsp.model
 import android.content.Context
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import java.io.File
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -461,6 +464,31 @@ class NativeBmwDspValuesTest {
         assertEquals(0f, restored[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
         assertEquals(0f, restored[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
         assertEquals(2f, restored[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED], 0f)
+    }
+
+    @Test
+    fun saveReturnsFalseWhenThePrimaryCannotBeWritten() {
+        val previous = NativeBmwDspValues.load(context)
+        assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
+        val next = previous.copyOf().also { it[NativeBmwDspValues.INDEX_HEADROOM] = -9f }
+
+        assertFalse(NativeBmwDspValues.save(context, next))
+        assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
+    }
+
+    @Test
+    fun preparingAnOldBackupDoesNotWriteAnyIntermediateState() {
+        val previous = NativeBmwDspValues.load(context)
+        val before = File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME).readBytes()
+        val recoveryBefore = File(context.noBackupFilesDir, NativeBmwDspStore.RECOVERY_FILE_NAME).readBytes()
+        val oldBackup = NativeBmwDspValues.DEFAULTS.copyOf(192).also { it[5] = -9f }
+
+        val prepared = NativeBmwDspValues.migrateRestoredValues(context, oldBackup)
+
+        assertEquals(-9f, prepared[5], 0f)
+        assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
+        assertTrue(before.contentEquals(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME).readBytes()))
+        assertTrue(recoveryBefore.contentEquals(File(context.noBackupFilesDir, NativeBmwDspStore.RECOVERY_FILE_NAME).readBytes()))
     }
 
     @Test

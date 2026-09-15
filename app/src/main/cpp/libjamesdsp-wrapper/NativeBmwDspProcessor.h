@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <memory>
 #include <vector>
 #include "NativeBmwMeasurementGenerator.h"
 #include "NativeBmwRouting.h"
@@ -97,6 +98,16 @@ public:
         float nullTestRmsDb = -100.f;
     };
 
+    // Owns a stopped take independently of the processor. Export needs no audio
+    // lock and remains safe after a new capture starts or the engine is closed.
+    struct CaptureSnapshot {
+        std::vector<float> rawInL, rawInR, outL, outR;
+        std::size_t frames = 0;
+        float sampleRate = 48000.f;
+        bool exportWav(const char* rawInPath, const char* outPath,
+                       CaptureExportResult& result) const;
+    };
+
     // setSampleRate()/configure()/configurePeq() (UI/config thread) and process() (audio thread)
     // both touch p_/routing_/outputs_/outputConfigs_/PEQ state, so each takes stateMutex_ --
     // configure family for its whole write, process() once per call (not per sample) around the
@@ -131,16 +142,13 @@ public:
     void startCapture();
     void stopCapture();
     // Acquire-paired with captureTapOut()'s release store: any caller that reads this (UI-thread
-    // progress polling, or exportCaptureWav() below) is guaranteed to see every capture-buffer
+    // progress polling) is guaranteed to see every capture-buffer
     // write up to the returned count, not just an up-to-date index with possibly-stale/torn
     // sample data behind it on a weakly-ordered CPU (this app's target, ARM64).
     std::size_t captureFrameCount() const;
-    // Writes 2 float32 WAV files (raw input, final output) from whatever's been captured so far
-    // and fills `result` with peak/null-test readings computed from that same data. Safe to call
-    // whether or not capture is still running (reads only up to captureFrameCount() frames, whose
-    // acquire load is what makes that data race-free against a concurrent capture).
-    bool exportCaptureWav(const char* rawInPath, const char* outPath,
-                          CaptureExportResult& result) const;
+    // Stops capture and transfers its buffers in O(1) under the audio lock.
+    // The take is consumed; startCapture() allocates fresh buffers for the next take.
+    std::unique_ptr<CaptureSnapshot> takeCaptureSnapshot();
 
 private:
     enum Dirty : uint32_t {
@@ -564,7 +572,7 @@ private:
     // Published gain reduction (dB, >= 0) of each per-bus limiter, for readBusLimiterMeter().
     std::atomic<float> busLimLowGrDb_{0.f}, busLimMidGrDb_{0.f};
 
-    // Capture state -- see startCapture()/stopCapture()/exportCaptureWav(). The buffers and
+    // Capture state -- see startCapture()/stopCapture()/takeCaptureSnapshot(). The buffers and
     // captureEnabled_ are protected by stateMutex_ like everything else here (including from
     // inside process() itself, which already holds stateMutex_ for the whole buffer, so mutating
     // captureEnabled_ there needs no extra locking). captureWriteIndex_ is the one exception --

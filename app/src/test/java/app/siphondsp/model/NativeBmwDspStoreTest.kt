@@ -2,6 +2,7 @@ package app.siphondsp.model
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -49,6 +50,37 @@ class NativeBmwDspStoreTest {
 
         assertArrayEquals(values, restored, 0f)
         assertTrue(recoveryBefore.contentEquals(store.recoveryPath().readBytes()))
+    }
+
+    @Test
+    fun saveAfterCorruptionPreservesRecoveryWhenPrimaryWriteFails() {
+        val store = NativeBmwDspStore(temporaryFolder.newFolder("failed-resave"))
+        val previous = NativeBmwDspValues.DEFAULTS.copyOf()
+        assertTrue(store.save(previous))
+        val recovery = store.recoveryPath().readBytes()
+        store.primaryPath().writeText("corrupt")
+        assertTrue(File(store.primaryPath().path + ".tmp").mkdir())
+        val next = previous.copyOf().also { it[5] = -9f }
+
+        assertFalse(store.save(next))
+
+        assertTrue(recovery.contentEquals(store.recoveryPath().readBytes()))
+        assertArrayEquals(previous, store.load(), 0f)
+    }
+
+    @Test
+    fun saveAfterMissingPrimaryRetainsThePreviousRecovery() {
+        val store = NativeBmwDspStore(temporaryFolder.newFolder("resave-missing"))
+        val previous = NativeBmwDspValues.DEFAULTS.copyOf()
+        assertTrue(store.save(previous))
+        val recovery = store.recoveryPath().readBytes()
+        assertTrue(store.primaryPath().delete())
+        val next = previous.copyOf().also { it[5] = -9f }
+
+        assertTrue(store.save(next))
+
+        assertArrayEquals(next, store.load(), 0f)
+        assertTrue(recovery.contentEquals(store.recoveryPath().readBytes()))
     }
 
     @Test
