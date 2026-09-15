@@ -1,6 +1,7 @@
 package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -68,37 +70,38 @@ fun BmwChannelCard(
     onGainPreview: (Float) -> Unit,
     onGainCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    mirrored: Boolean = false,
 ) {
     val context = LocalContext.current
+    val cardShape = RoundedCornerShape(8.dp)
 
     Column(
         modifier = modifier
-            .border(1.dp, strokeColor, RoundedCornerShape(8.dp))
+            .background(CardBackground, cardShape)
+            .border(1.dp, strokeColor, cardShape)
             .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
-        Text(text = title, color = accentColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = title,
+            color = accentColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = if (mirrored) TextAlign.End else TextAlign.Start,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(3.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MiniLabel("DELAY")
+        val delayBox: @Composable () -> Unit = {
             BoxedValue(
-                text = Fmt.format(delayValue),
-                unit = "ms",
-                accentColor = accentColor,
-                modifier = Modifier
-                    .width(DelayValueWidth)
-                    .height(RowBoxHeight)
-                    .clickable {
-                        context.showBmwNumberInput(
-                            "DELAY", delayRange.start, delayRange.endInclusive, delayValue, 0f, "ms", onDelayCommit,
-                        )
-                    },
+                text = Fmt.format(delayValue), unit = "ms", accentColor = accentColor,
+                modifier = Modifier.width(DelayValueWidth).height(RowBoxHeight).clickable {
+                    context.showBmwNumberInput(
+                        "DELAY", delayRange.start, delayRange.endInclusive, delayValue, 0f, "ms", onDelayCommit,
+                    )
+                },
             )
         }
-        Spacer(Modifier.height(2.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MiniLabel("POL")
+        val polaritySwitch: @Composable () -> Unit = {
             BmwSwitch(
                 checked = polarityInverted,
                 onCheckedChange = onPolarityChange,
@@ -108,10 +111,25 @@ fun BmwChannelCard(
                 onLabel = "INVERT",
                 offLabel = "NORMAL",
                 width = PolaritySwitchWidth,
-                modifier = Modifier.padding(start = 6.dp),
             )
         }
-        Spacer(Modifier.height(2.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (mirrored) {
+                polaritySwitch()
+                Spacer(Modifier.weight(1f))
+                delayBox()
+                Spacer(Modifier.width(6.dp))
+                MiniLabel("DELAY", TextAlign.End)
+            } else {
+                MiniLabel("DELAY")
+                delayBox()
+                Spacer(Modifier.weight(1f))
+                polaritySwitch()
+            }
+        }
 
         GainRow(
             value = gainValue,
@@ -121,6 +139,7 @@ fun BmwChannelCard(
             sliderAccent = gainSliderAccent,
             onPreview = onGainPreview,
             onCommit = onGainCommit,
+            mirrored = mirrored,
         )
 
     }
@@ -135,17 +154,15 @@ private fun GainRow(
     sliderAccent: Color,
     onPreview: (Float) -> Unit,
     onCommit: (Float) -> Unit,
+    mirrored: Boolean,
 ) {
     val context = LocalContext.current
     var drag by remember(value) { mutableFloatStateOf(value) }
     val shown = drag.coerceIn(range.start, range.endInclusive)
 
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MiniLabel("GAIN")
-        BmwSlider(
+    Column(modifier = Modifier.fillMaxWidth()) {
+        val slider: @Composable () -> Unit = {
+            BmwSlider(
             value = shown,
             valueRange = range,
             steps = (((range.endInclusive - range.start) / step).roundToInt() - 1).coerceAtLeast(0),
@@ -156,23 +173,35 @@ private fun GainRow(
                 onPreview(snapped)
             },
             onValueChangeFinished = { onCommit(drag) },
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(6.dp))
-        BoxedValue(
-            text = Fmt.format(shown),
-            unit = "dB",
-            accentColor = labelColor,
-            modifier = Modifier
-                .width(GainValueWidth)
-                .height(RowBoxHeight)
-                .clickable {
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        val valueBox: @Composable () -> Unit = {
+            BoxedValue(
+                text = Fmt.format(shown), unit = "dB", accentColor = labelColor,
+                modifier = Modifier.width(GainValueWidth).height(RowBoxHeight).clickable {
                     context.showBmwNumberInput("GAIN", range.start, range.endInclusive, drag, step, "dB") {
                         drag = it
                         onCommit(it)
                     }
                 },
-        )
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = RowBoxHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (mirrored) {
+                valueBox()
+                Spacer(Modifier.weight(1f))
+                MiniLabel("GAIN", TextAlign.End)
+            } else {
+                MiniLabel("GAIN")
+                Spacer(Modifier.weight(1f))
+                valueBox()
+            }
+        }
+        slider()
     }
 }
 
@@ -187,16 +216,18 @@ private fun snapGain(
 }
 
 @Composable
-private fun MiniLabel(text: String) {
+private fun MiniLabel(text: String, textAlign: TextAlign = TextAlign.Start) {
     Text(
         text = text,
         color = MiniLabelColor,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.03.em,
+        textAlign = textAlign,
         modifier = Modifier.width(MiniLabelWidth),
     )
 }
 
 private val DelayValueWidth = 82.dp
 private val GainValueWidth = 76.dp
+private val CardBackground = Color(0x99100818)

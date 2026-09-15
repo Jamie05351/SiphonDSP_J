@@ -2,11 +2,11 @@ package app.siphondsp.compose.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,18 +58,27 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
     val stageAccent = Color(BmwDashboardSkin.SLIDER_STAGE_COLOR)
 
     BmwDspTheme {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 5.dp),
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
         ) {
+            Image(
+                painter = painterResource(R.drawable.bmw_gains_delay_car),
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth().aspectRatio(CarAspectRatio),
+                contentScale = ContentScale.Fit,
+            )
             Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxSize().padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = ControlTopInset,
+                    bottom = 5.dp,
+                ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxHeight().padding(end = 8.dp),
-                    verticalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.width(SideColumnWidth).fillMaxHeight(),
                 ) {
                     GainsChannelCard(
                         dsp, linked,
@@ -78,6 +87,13 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                         delaySibling = NativeBmwDspValues.INDEX_MID_DELAY_R,
                         gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_L,
                         output = NativeBmwDspValues.OUTPUT_MID_LEFT,
+                    )
+                    StageDelayControl(
+                        dsp = dsp,
+                        label = "STAGE ALIGNMENT",
+                        index = NativeBmwDspValues.INDEX_STAGE_DELAY_L,
+                        accent = stageAccent,
+                        mirrored = false,
                     )
                     GainsChannelCard(
                         dsp, linked,
@@ -88,39 +104,9 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                         output = NativeBmwDspValues.OUTPUT_LOW_LEFT,
                     )
                 }
-                Box(
-                    modifier = Modifier.width(CarColumnWidth).fillMaxHeight(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.bmw_gains_delay_car),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.FillBounds,
-                    )
-                    Row(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "STEREO LINK",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(end = 10.dp),
-                        )
-                        BmwSwitch(
-                            checked = linked,
-                            onCheckedChange = {
-                                dsp.commit(NativeBmwDspValues.INDEX_DELAY_LINKED, if (it) 1f else 0f)
-                            },
-                            contentDescription = "Link left and right speaker delay",
-                        )
-                    }
-                }
+                Spacer(Modifier.weight(1f))
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxHeight().padding(start = 8.dp),
-                    verticalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.width(SideColumnWidth).fillMaxHeight(),
                 ) {
                     GainsChannelCard(
                         dsp, linked,
@@ -129,6 +115,14 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                         delaySibling = NativeBmwDspValues.INDEX_MID_DELAY_L,
                         gainIndex = NativeBmwDspValues.INDEX_MID_GAIN_R,
                         output = NativeBmwDspValues.OUTPUT_MID_RIGHT,
+                        mirrored = true,
+                    )
+                    StageDelayControl(
+                        dsp = dsp,
+                        label = "STAGE ALIGNMENT",
+                        index = NativeBmwDspValues.INDEX_STAGE_DELAY_R,
+                        accent = stageAccent,
+                        mirrored = true,
                     )
                     GainsChannelCard(
                         dsp, linked,
@@ -137,46 +131,69 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                         delaySibling = NativeBmwDspValues.INDEX_LOW_DELAY_L,
                         gainIndex = NativeBmwDspValues.INDEX_LOW_GAIN_R,
                         output = NativeBmwDspValues.OUTPUT_LOW_RIGHT,
+                        mirrored = true,
                     )
                 }
             }
-
-            StageTimingRow(dsp, stageAccent)
+            Row(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "STEREO LINK",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 10.dp),
+                )
+                BmwSwitch(
+                    checked = linked,
+                    onCheckedChange = {
+                        dsp.commit(NativeBmwDspValues.INDEX_DELAY_LINKED, if (it) 1f else 0f)
+                    },
+                    contentDescription = "Link left and right speaker delay",
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StageTimingRow(dsp: BmwDspState, accent: Color) {
+private fun StageDelayControl(
+    dsp: BmwDspState,
+    label: String,
+    index: Int,
+    accent: Color,
+    mirrored: Boolean,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(StageTimingHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "STAGE ALIGNMENT",
-            color = Color.White,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(end = 16.dp),
-        )
-        StageDelayValue(dsp, "LEFT", NativeBmwDspValues.INDEX_STAGE_DELAY_L, accent)
-        Spacer(Modifier.width(18.dp))
-        StageDelayValue(dsp, "RIGHT", NativeBmwDspValues.INDEX_STAGE_DELAY_R, accent)
-        Spacer(Modifier.weight(1f))
+        val title: @Composable () -> Unit = {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        val value: @Composable () -> Unit = { StageDelayValue(dsp, index, accent) }
+        if (mirrored) {
+            value()
+            Spacer(Modifier.weight(1f))
+            title()
+        } else {
+            title()
+            Spacer(Modifier.weight(1f))
+            value()
+        }
     }
 }
 
 @Composable
-private fun StageDelayValue(dsp: BmwDspState, label: String, index: Int, accent: Color) {
+private fun StageDelayValue(dsp: BmwDspState, index: Int, accent: Color) {
     val context = LocalContext.current
-    Text(
-        text = label,
-        color = Color(0xFFB2BBC6),
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(end = 7.dp),
-    )
     BoxedValue(
         text = DelayFormat.format(dsp.get(index)),
         unit = "ms",
@@ -186,7 +203,7 @@ private fun StageDelayValue(dsp: BmwDspState, label: String, index: Int, accent:
             .height(32.dp)
             .clickable {
                 context.showBmwNumberInput(
-                    label = "$label STAGE DELAY",
+                    label = "STAGE ALIGNMENT",
                     min = 0f,
                     max = NativeBmwDspValues.STAGE_DELAY_MAX_MS,
                     current = dsp.get(index),
@@ -209,6 +226,7 @@ private fun GainsChannelCard(
     delaySibling: Int,
     gainIndex: Int,
     output: Int,
+    mirrored: Boolean = false,
 ) {
     val polarityIndex = NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_INVERT)
     val delayMirror = if (linked) intArrayOf(delaySibling) else IntArray(0)
@@ -229,11 +247,14 @@ private fun GainsChannelCard(
         onGainPreview = { dsp.preview(gainIndex, it) },
         onGainCommit = { dsp.commit(gainIndex, it) },
         modifier = Modifier.fillMaxWidth(),
+        mirrored = mirrored,
     )
 }
 
-private val CarColumnWidth = 460.dp
-private val StageTimingHeight = 45.dp
+private val SideColumnWidth = 300.dp
+private const val CarAspectRatio = 1080f / 404f
+private val ControlTopInset = 28.dp
+private val StageTimingHeight = 42.dp
 private val StageValueWidth = 82.dp
 private val DelayFormat = java.text.DecimalFormat(
     "0.##",
