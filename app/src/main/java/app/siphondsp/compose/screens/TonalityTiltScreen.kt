@@ -41,8 +41,8 @@ fun TonalityTiltScreen(modifier: Modifier = Modifier) {
             onToggleChange = { on ->
                 dsp.commit(NativeBmwDspValues.INDEX_TILT_ENABLED, if (on) 1f else 0f)
             },
-            // 4dp (the View page()'s own left pad) + 80dp (dashboardPanel lean indent).
-            leanStart = 84.dp,
+            leanStart = 20.dp,
+            leanEnd = 20.dp,
             topContentGap = 40.dp,
             sliderLabels = listOf(
                 stringResource(R.string.bmw_dsp_tilt_amount),

@@ -51,6 +51,7 @@ fun BmwPanel(
     titleFontSize: TextUnit = 13.sp,
     subtitle: String? = null,
     leanStart: Dp = 80.dp,
+    leanEnd: Dp = 12.dp,
     topContentGap: Dp = 40.dp,
     sliderLabels: List<String> = emptyList(),
     content: @Composable ColumnScope.() -> Unit,
@@ -75,7 +76,7 @@ fun BmwPanel(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(start = leanStart, top = 6.dp, end = 12.dp, bottom = 8.dp),
+                .padding(start = leanStart, top = 6.dp, end = leanEnd, bottom = 8.dp),
         ) {
             if (title.isNotBlank()) {
                 val hasHeaderToggle = toggleChecked != null && onToggleChange != null
