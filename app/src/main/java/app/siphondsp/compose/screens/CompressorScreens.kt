@@ -96,8 +96,8 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
                 onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
                 subtitle = "Mix sets the dry/wet blend: 0% bypasses the compressor, 100% is fully processed. Pre-crossover, 4 bands.",
                 modifier = Modifier.fillMaxWidth(),
-                // 8dp master-container margin + 4dp masterRoot pad + 80dp dashboardPanel lean.
-                leanStart = 92.dp,
+                leanStart = 20.dp,
+                leanEnd = 20.dp,
                 sliderLabels = listOf("Mix"),
             ) {
                 BmwSliderRow(
@@ -143,7 +143,8 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
             BmwPanel(
                 title = "",
                 modifier = Modifier.fillMaxWidth(),
-                leanStart = 84.dp,
+                leanStart = 20.dp,
+                leanEnd = 20.dp,
                 topContentGap = 2.dp,
                 sliderLabels = listOf("Threshold", "Ratio", "Soft knee", "Attack", "Release", "Makeup"),
             ) {
@@ -182,7 +183,8 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
             BmwPanel(
                 title = "Driver protection",
                 modifier = Modifier.fillMaxWidth(),
-                leanStart = 84.dp,
+                leanStart = 20.dp,
+                leanEnd = 20.dp,
                 topContentGap = 2.dp,
                 sliderLabels = listOf("Threshold", "Release", "Low bus", "Mid bus"),
             ) {

@@ -45,8 +45,8 @@ fun OutputAllPassScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
             titleColor = bandColor,
-            // 4dp (View page()'s left pad) + 40dp (dashboardPanel lean indent).
-            leanStart = 44.dp,
+            leanStart = 20.dp,
+            leanEnd = 20.dp,
             topContentGap = 2.dp,
             sliderLabels = listOf("Frequency", "Q"),
         ) {

@@ -94,7 +94,8 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
             BmwPanel(
                 title = "",
                 modifier = Modifier.fillMaxWidth(),
-                leanStart = 84.dp,
+                leanStart = 20.dp,
+                leanEnd = 20.dp,
                 topContentGap = 2.dp,
                 sliderLabels = listOf(
                     "Lowpass freq", "Highpass freq", subsonicLabel, "Mid align (all-pass)",

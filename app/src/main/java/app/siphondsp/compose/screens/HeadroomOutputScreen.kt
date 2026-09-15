@@ -48,8 +48,9 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
         BmwPanel(
             title = "Output",
             modifier = modifier.fillMaxWidth(),
-            // 4dp (the View page()'s left pad) + 40dp (dashboardPanel default lean indent).
-            leanStart = 44.dp,
+            // Match the centered 20dp content frame used by every DSP workspace page.
+            leanStart = 20.dp,
+            leanEnd = 20.dp,
             // dashboardPanel default topContentGapDp -- this panel doesn't bump it.
             topContentGap = 2.dp,
             sliderLabels = listOf(headroom, "Post gain L", "Post gain R", "Threshold", "Limiter"),
