@@ -37,6 +37,19 @@ TEST_CASE("configurePeq rejects a non-finite band type or channel instead of cas
 
     const double infChannel[5] = {1000.0, 3.0, 1.0, 0.0, std::numeric_limits<double>::infinity()};
     CHECK_FALSE(proc.configurePeq(true, 0.f, infChannel, 5, nullptr, 0, nullptr, 0));
+
+    const double hugeType[5] = {1000.0, 3.0, 1.0, std::numeric_limits<double>::max(), 0.0};
+    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeType, 5, nullptr, 0, nullptr, 0));
+
+    const double hugeChannel[5] = {1000.0, 3.0, 1.0, 0.0, -std::numeric_limits<double>::max()};
+    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeChannel, 5, nullptr, 0, nullptr, 0));
+}
+
+TEST_CASE("configure rejects a non-finite MBC crossover before sorting") {
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[146] = std::numeric_limits<float>::quiet_NaN();
+    CHECK_FALSE(proc.configure(c.data(), c.size()));
 }
 
 TEST_CASE("MBC crossover splits sent out of order behave identically to the same splits sorted") {
@@ -81,4 +94,10 @@ TEST_CASE("MBC crossover splits sent out of order behave identically to the same
     const float swappedGr = meterFor(500.f, 80.f, 4000.f);  // same 3 values, first two swapped
     INFO("sorted-input GR=", sortedGr, " dB  swapped-input GR=", swappedGr, " dB");
     CHECK(sortedGr == doctest::Approx(swappedGr).epsilon(0.01));
+
+    const float boundedSortedGr = meterFor(20.f, 30.f, 4000.f);
+    const float boundedPermutedGr = meterFor(4000.f, 20.f, 30.f);
+    INFO("bounded sorted-input GR=", boundedSortedGr,
+         " dB  bounded permuted-input GR=", boundedPermutedGr, " dB");
+    CHECK(boundedSortedGr == doctest::Approx(boundedPermutedGr).epsilon(0.01));
 }

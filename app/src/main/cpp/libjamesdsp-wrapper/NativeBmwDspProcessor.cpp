@@ -235,16 +235,21 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
     next.mbcEnabled = v[144] >= .5f;
     next.mbcMix = clampf(v[145], 0, 100) * .01f;
-    next.mbcXo[0] = clampf(v[146], 20, 2000);
-    next.mbcXo[1] = clampf(v[147], 40, 8000);
-    next.mbcXo[2] = clampf(v[148], 80, 20000);
+    float requestedMbcXo[3] = {v[146], v[147], v[148]};
+    if (!std::all_of(std::begin(requestedMbcXo), std::end(requestedMbcXo),
+                     [](float split) { return std::isfinite(split); })) {
+        return false;
+    }
     // Out-of-order input (e.g. v[147] < v[146]) previously reached rebuildMbc() as-is, where its
     // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
     // update being rejected or the values being reordered predictably -- the resulting split
     // frequencies depended on which slot the clamp chain happened to touch, not on the values the
-    // caller actually sent. Sorting here means rebuildMbc() always receives an already-monotonic
-    // triple with the caller's own three magnitudes intact, just correctly ordered.
-    std::sort(std::begin(next.mbcXo), std::end(next.mbcXo));
+    // caller actually sent. Sort the requested magnitudes before applying the positional bounds;
+    // otherwise an out-of-range permutation can be clamped differently before it is reordered.
+    std::sort(std::begin(requestedMbcXo), std::end(requestedMbcXo));
+    next.mbcXo[0] = clampf(requestedMbcXo[0], 20, 2000);
+    next.mbcXo[1] = clampf(requestedMbcXo[1], 40, 8000);
+    next.mbcXo[2] = clampf(requestedMbcXo[2], 80, 20000);
     for (int b = 0; b < 4; ++b) {
         const std::size_t base = 149 + b * 8;
         auto& mb = next.mbcBand[b];
@@ -657,15 +662,19 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a NaN/Infinity float
             // to int is UB ([conv.fpint]), so that has to be ruled out before either cast runs,
             // not deferred to makePeq()'s own isfinite checks (which only cover f/gainDb/Q).
-            if (!std::isfinite(v[i + 3]) || !std::isfinite(v[i + 4])) {
+            const double typeValue = v[i + 3], channelValue = v[i + 4];
+            constexpr double kIntMin = static_cast<double>(std::numeric_limits<int>::min());
+            constexpr double kIntMax = static_cast<double>(std::numeric_limits<int>::max());
+            if (!std::isfinite(typeValue) || !std::isfinite(channelValue) || typeValue < kIntMin ||
+                typeValue > kIntMax || channelValue < kIntMin || channelValue > kIntMax) {
                 return false;
             }
-            int type = static_cast<int>(v[i + 3]);
+            int type = static_cast<int>(typeValue);
             Biquad q;
             if (!makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate_)) {
                 return false;
             }
-            int ch = static_cast<int>(v[i + 4]);
+            int ch = static_cast<int>(channelValue);
             if (ch < 0 || ch > 2) {
                 return false;
             }
