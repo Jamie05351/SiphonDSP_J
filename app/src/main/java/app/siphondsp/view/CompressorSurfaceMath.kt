@@ -26,12 +26,19 @@ object CompressorSurfaceMath {
     /**
      * The 3 MBC split frequencies from [values], clamped monotonic with the same 5% spacing
      * NativeBmwDspProcessor::rebuildMbc enforces, so the shaded regions line up with what the
-     * engine actually crosses over at.
+     * engine actually crosses over at. NativeBmwDspProcessor::configure sorts the raw magnitudes
+     * before clamping (so an out-of-order stored triple still normalizes the same way regardless
+     * of slot), so the raw values are sorted here too before the same successive-coerce chain.
      */
     fun splitFrequencies(values: FloatArray): DoubleArray {
-        val f0 = values[NativeBmwDspValues.INDEX_MBC_XO_0].toDouble().coerceIn(MIN_FREQUENCY, MAX_FREQUENCY)
-        val f1 = values[NativeBmwDspValues.INDEX_MBC_XO_1].toDouble().coerceIn(f0 * 1.05, MAX_FREQUENCY)
-        val f2 = values[NativeBmwDspValues.INDEX_MBC_XO_2].toDouble().coerceIn(f1 * 1.05, MAX_FREQUENCY)
+        val raw = doubleArrayOf(
+            values[NativeBmwDspValues.INDEX_MBC_XO_0].toDouble(),
+            values[NativeBmwDspValues.INDEX_MBC_XO_1].toDouble(),
+            values[NativeBmwDspValues.INDEX_MBC_XO_2].toDouble(),
+        ).also { it.sort() }
+        val f0 = raw[0].coerceIn(MIN_FREQUENCY, MAX_FREQUENCY)
+        val f1 = raw[1].coerceIn(f0 * 1.05, MAX_FREQUENCY)
+        val f2 = raw[2].coerceIn(f1 * 1.05, MAX_FREQUENCY)
         return doubleArrayOf(f0, f1, f2)
     }
 

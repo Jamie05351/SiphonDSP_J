@@ -18,14 +18,18 @@ class CompressorSurfaceMathTest {
     }
 
     @Test
-    fun splitFrequenciesAreClampedMonotonicLikeNative() {
+    fun splitFrequenciesSortBeforeClampingLikeNative() {
+        // NativeBmwDspProcessor::configure sorts the raw magnitudes before clamping, so a stored
+        // triple that is out of slot order still normalizes by magnitude, not by stored position.
         val values = defaults().also {
             it[NativeBmwDspValues.INDEX_MBC_XO_0] = 900f
             it[NativeBmwDspValues.INDEX_MBC_XO_1] = 300f
             it[NativeBmwDspValues.INDEX_MBC_XO_2] = 100f
         }
         val splits = CompressorSurfaceMath.splitFrequencies(values)
-        assertEquals(900.0, splits[0], 0.0)
+        assertEquals(100.0, splits[0], 0.0)
+        assertEquals(300.0, splits[1], 0.0)
+        assertEquals(900.0, splits[2], 0.0)
         assertTrue(splits[1] >= splits[0] * 1.05)
         assertTrue(splits[2] >= splits[1] * 1.05)
     }
