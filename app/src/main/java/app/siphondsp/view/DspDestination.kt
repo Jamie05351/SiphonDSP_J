@@ -62,12 +62,12 @@ object DspCrossNavBar {
     // each tile's measured bounds within dsp_sidebar's reserved column (see that column's own
     // comment in activity_parametric_eq.xml).
 
-    // Rail geometry: rail top margin 16, five 80-unit tiles with 12-unit inter-tile gaps, 16
-    // bottom margin -- 16 + 5*80 + 4*12 + 16 = 480. populate() applies these as cumulative
-    // fractions of dsp_sidebar's real measured height (so only the ratios matter), matching the
-    // tile layout baked into each destination's backdrop art. Tune both together if the
-    // click-targets drift off the tiles.
-    private val ROW_WEIGHTS = intArrayOf(16, 80, 12, 80, 12, 80, 12, 80, 12, 80, 16)
+    // Measured 1280x480 geometry of the current head-unit templates. The source artwork spaces
+    // the five 74-76px tiles unevenly, so these cumulative boundaries match the baked frames:
+    // 36-110, 119-195, 202-277, 283-359 and 365-440. Keeping the real pixel geometry here makes
+    // touch targets and rotary focus rings land on the visible tiles instead of drifting toward
+    // adjacent destinations near the top and bottom of the rail.
+    private val ROW_WEIGHTS = intArrayOf(36, 74, 9, 76, 7, 75, 6, 76, 6, 75, 40)
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
