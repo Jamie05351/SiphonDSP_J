@@ -326,7 +326,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (!dspApplied) {
             Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
         }
-        if (!engine.configureNativeBmwPeq(BmwPeqState.load(this), persistOnSuccess = false, source = "preset-restore")) {
+        if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
         if (dspApplied) {

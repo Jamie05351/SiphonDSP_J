@@ -13,7 +13,7 @@ import kotlin.math.min
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
-    @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.load(context)
+    @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.loadPersisted(context)
     @Volatile private var peqRestorePending = true
 
     @Volatile
@@ -61,7 +61,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             )
             return
         }
-        val persisted = BmwPeqState.load(context)
+        val persisted = BmwPeqState.loadPersisted(context)
         if (configureNativeBmwPeq(persisted, persistOnSuccess = false, source = "cold-start")) {
             peqRestorePending = false
             BmwPeqState.recordRestoreResult(context, "persisted-state")
@@ -132,7 +132,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 JamesDspWrapper.free(oldHandle)
                 Timber.d("Handle $oldHandle has been freed")
             }
+            BmwPeqState.clearActiveSession(context, this)
         }
+        context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
     }
 
     private fun processedSampleCount(inputSize: Int, outputSize: Int, offset: Int, length: Int): Int {
@@ -219,7 +221,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    // Re-push the BMW three-bank PEQ from disk to the running engine. Called from the
+    // Re-push the active BMW three-bank PEQ (including a session fallback). Called from the
     // sampleRate setter (a rate change invalidates the biquad coefficients).
     private fun refreshEqualizersLocked(): Boolean {
         if (handle == 0L) return false
@@ -244,7 +246,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             state.nativeValues(state.midBandBands),
         )
         BmwPeqState.log(source, state, result)
-        if (result) bmwPeqState = state
+        if (result) {
+            bmwPeqState = state.deepCopy()
+            BmwPeqState.publishActiveSession(context, this, state)
+        }
         return result
     }
 
@@ -253,19 +258,16 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         persistOnSuccess: Boolean = true,
         source: String = "editor",
     ): Boolean {
-        val previous: BmwPeqState
-        val result: Boolean
-        synchronized(nativeLock) {
-            previous = bmwPeqState
-            result = configureNativeBmwPeqLocked(state, source)
-        }
-        if (result && persistOnSuccess && !state.persist(context)) {
-            Timber.e("$source native BMW PEQ applied but persistence commit failed")
-            synchronized(nativeLock) {
+        val result = synchronized(nativeLock) {
+            val previous = bmwPeqState
+            if (!configureNativeBmwPeqLocked(state, source)) return false
+            if (persistOnSuccess && !state.persist(context)) {
+                Timber.e("$source native BMW PEQ applied but persistence commit failed")
                 configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
-            }
-            return false
+                false
+            } else true
         }
+        context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
         return result
     }
 

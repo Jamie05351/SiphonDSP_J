@@ -1,6 +1,9 @@
 package app.siphondsp.fragment
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -17,6 +20,9 @@ import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import kotlin.math.log10
 import kotlin.math.pow
 
@@ -129,8 +135,14 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
         invalidate()
     }
 
+    private val peqReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = refreshPeqState()
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        context.registerLocalReceiver(peqReceiver, IntentFilter(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
+        refreshPeqState()
         if (!spectrumActive) {
             spectrumActive = true
             SpectrumEngine.acquire()
@@ -139,6 +151,7 @@ class NativeBmwDspResponseView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        context.unregisterLocalReceiver(peqReceiver)
         if (spectrumActive) {
             spectrumActive = false
             handler.removeCallbacks(spectrumTick)

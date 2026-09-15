@@ -104,7 +104,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         return true
     }
 
-    /** Reload from disk (resume / after an external edit the receiver reports). */
+    /** Reload the active session, or disk when offline (resume / external update). */
     fun refreshFromDisk() {
         peqState = BmwPeqState.load(appContext)
     }

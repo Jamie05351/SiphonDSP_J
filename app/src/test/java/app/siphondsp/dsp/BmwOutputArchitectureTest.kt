@@ -6,6 +6,32 @@ import org.junit.Test
 class BmwOutputArchitectureTest {
 
     @Test
+    fun nonFiniteInputsDoNotSilenceTheOtherSide() {
+        for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            assertEquals(BmwOutputRouting.route(0f, 1f), BmwOutputRouting.route(invalid, 1f))
+            assertEquals(BmwOutputRouting.route(-2f, 0f), BmwOutputRouting.route(-2f, invalid))
+            assertEquals(BmwOutputRouting.route(0f, 0f), BmwOutputRouting.route(invalid, invalid))
+        }
+    }
+
+    @Test
+    fun mixedRoutingRetainsTheFiniteInputContribution() {
+        val matrix = BmwRoutingOutput.entries.associateWith { BmwRoutingCoefficients(.5f, .25f) }
+        for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            BmwOutputRouting.route(invalid, 4f, matrix).values.forEach { assertEquals(1f, it, 0f) }
+            BmwOutputRouting.route(4f, invalid, matrix).values.forEach { assertEquals(2f, it, 0f) }
+        }
+    }
+
+    @Test
+    fun overflowingFiniteInputProductsStillFallBackToSilence() {
+        val matrix = BmwRoutingOutput.entries.associateWith { BmwRoutingCoefficients(2f, 2f) }
+        BmwOutputRouting.route(Float.MAX_VALUE, Float.MAX_VALUE, matrix).values.forEach {
+            assertEquals(0f, it, 0f)
+        }
+    }
+
+    @Test
     fun defaultRoutingIsIdentity() {
         val routed = BmwOutputRouting.route(3f, -5f)
 
