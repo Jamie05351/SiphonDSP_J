@@ -6,10 +6,13 @@ import android.graphics.Typeface
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
@@ -76,6 +79,7 @@ fun BmwSwitch(
         label = "bmwSwitchProgress",
     )
     val desc = contentDescription
+    val interactionSource = remember { MutableInteractionSource() }
 
     Canvas(
         modifier = modifier
@@ -85,8 +89,11 @@ fun BmwSwitch(
                 value = checked,
                 enabled = enabled,
                 role = Role.Switch,
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
                 onValueChange = onCheckedChange,
             )
+            .bmwFocusRing(interactionSource, cornerRadius = ComponentHeight / 2)
             .then(
                 if (desc != null) Modifier.semantics { this.contentDescription = desc } else Modifier
             ),

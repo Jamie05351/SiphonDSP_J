@@ -1,8 +1,10 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +50,7 @@ fun BmwDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
     Box(modifier) {
         Row(
             modifier = Modifier
@@ -55,7 +58,8 @@ fun BmwDropdown(
                 .heightIn(min = 32.dp)
                 .border(1.dp, DropdownStroke, DropdownShape)
                 .background(DropdownIdle, DropdownShape)
-                .clickable { expanded = true }
+                .clickable(interactionSource = interactionSource, indication = LocalIndication.current) { expanded = true }
+                .bmwFocusRing(interactionSource)
                 .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -1,6 +1,8 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -104,6 +106,7 @@ fun BmwSliderRow(
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(RowValueGap))
+        val valueInteractionSource = remember { MutableInteractionSource() }
         BoxedValue(
             text = ValueFormat.format(shown),
             unit = unit,
@@ -113,14 +116,16 @@ fun BmwSliderRow(
                 .height(RowBoxHeight)
                 .then(
                     if (onValueEntered != null) {
-                        Modifier.clickable {
-                            context.showBmwNumberInput(
-                                label, valueRange.start, valueRange.endInclusive, dragValue, step, unit,
-                            ) { entered ->
-                                dragValue = entered
-                                onValueEntered(entered)
+                        Modifier
+                            .clickable(interactionSource = valueInteractionSource, indication = LocalIndication.current) {
+                                context.showBmwNumberInput(
+                                    label, valueRange.start, valueRange.endInclusive, dragValue, step, unit,
+                                ) { entered ->
+                                    dragValue = entered
+                                    onValueEntered(entered)
+                                }
                             }
-                        }
+                            .bmwFocusRing(valueInteractionSource)
                     } else {
                         Modifier
                     },

@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -68,7 +69,13 @@ fun BmwSlider(
         valueRange = valueRange,
         steps = steps,
         enabled = enabled,
-        modifier = modifier.fillMaxWidth(),
+        // Sliders aren't part of the D-pad/rotary focus chain at all -- like the PEQ graph, they
+        // have no keyboard-driven adjustment story of their own, so a rotary user adjusts a value
+        // via its companion value box (BoxedValue, tap-to-type) instead, same as every other
+        // control on these screens. Without this, Material3's Slider grabs focus and then traps
+        // it -- it treats Up/Down as equivalent to Right/Left, so every D-pad direction just
+        // re-adjusts the slider forever with no way to turn back off it.
+        modifier = modifier.fillMaxWidth().focusProperties { canFocus = false },
         interactionSource = interactionSource,
         colors = SliderDefaults.colors(),
         track = { sliderState -> BmwSliderTrack(sliderState = sliderState, accentColor = accentColor, focused = isFocused) },
