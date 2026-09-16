@@ -6,7 +6,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,15 +32,27 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.fragment.PeqApoImport
 import app.siphondsp.fragment.PeqBandEditor
@@ -56,6 +70,7 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -129,7 +144,39 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     // entry starts on the graph, matching how the toggle always defaulted before a
     // graphPrefs.listModeName restore; swiping during the session is enough on its own.
     val pagerState = rememberPagerState(pageCount = { 2 })
-    Column(modifier.fillMaxSize().padding(12.dp)) {
+    val focusManager = LocalFocusManager.current
+    val pagerScope = rememberCoroutineScope()
+    val contentFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { contentFocusRequester.requestFocus() }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .padding(12.dp)
+            .focusRequester(contentFocusRequester)
+            .focusGroup()
+            // Graph/List paging for a hardware D-pad/rotary controller: swipe is the only way to
+            // turn the page otherwise, and the graph (page 0) has no drag/adjust gesture even for
+            // touch (see PeqGraph) so it holds no focusable content to land D-pad focus on at all.
+            // Left/Right only converts to a page turn once normal focus movement inside this
+            // Compose subtree has nowhere left to go -- e.g. immediately on page 0, or at the
+            // List page's leftmost/rightmost cell -- so it never steals Left/Right away from
+            // moving between a band row's own Hz/dB/Q cells.
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val direction = when (event.key) {
+                    Key.DirectionLeft -> FocusDirection.Left
+                    Key.DirectionRight -> FocusDirection.Right
+                    else -> return@onKeyEvent false
+                }
+                if (focusManager.moveFocus(direction)) return@onKeyEvent true
+                val targetPage = if (direction == FocusDirection.Right) 1 else 0
+                if (pagerState.currentPage != targetPage) {
+                    pagerScope.launch { pagerState.animateScrollToPage(targetPage) }
+                }
+                true
+            },
+    ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 0 -> PeqGraph(
@@ -241,12 +288,16 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     // ComposeView itself (activity_parametric_eq.xml), not as padding here: a horizontalScroll
     // Row hit-tests across its whole viewport, empty padding included, so padding alone still
     // covered the toolbar's back arrow underneath and swallowed its touches.
+    val toolbarFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { toolbarFocusRequester.requestFocus() }
     Row(
         modifier = modifier
             .fillMaxHeight()
             .padding(top = 25.dp)
             .horizontalScroll(rememberScrollState())
-            .padding(end = 25.dp),
+            .padding(end = 25.dp)
+            .focusRequester(toolbarFocusRequester)
+            .focusGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -370,7 +421,13 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 
 @Composable
 private fun Chip(label: String, onClick: () -> Unit) {
-    AssistChip(onClick = onClick, label = { Text(label) })
+    val interactionSource = remember { MutableInteractionSource() }
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label) },
+        interactionSource = interactionSource,
+        modifier = Modifier.bmwFocusRing(interactionSource),
+    )
 }
 
 @Composable
@@ -393,11 +450,14 @@ private fun FilterToolsChip(
     }
 
     Box {
+        val interactionSource = remember { MutableInteractionSource() }
         AssistChip(
             onClick = { expanded = true },
             label = { Text("Filter tools") },
             trailingIcon = { Text("▾") },
             colors = AssistChipDefaults.assistChipColors(),
+            interactionSource = interactionSource,
+            modifier = Modifier.bmwFocusRing(interactionSource),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(

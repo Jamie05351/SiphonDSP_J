@@ -1,9 +1,11 @@
 package app.siphondsp.compose.screens
 
 import android.view.LayoutInflater
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +40,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -238,6 +241,7 @@ private fun PeqBandRow(
 
 @Composable
 private fun RowScope.TapCell(text: String, accent: Color, weight: Float, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
     Text(
         text = text,
         color = accent,
@@ -247,7 +251,8 @@ private fun RowScope.TapCell(text: String, accent: Color, weight: Float, onClick
         modifier = Modifier
             .weight(weight)
             .clip(RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .bmwFocusRing(interactionSource)
             .background(TapCellFill)
             .padding(vertical = 9.dp),
     )
@@ -268,6 +273,7 @@ private fun RowScope.StepperCell(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val valueInteractionSource = remember { MutableInteractionSource() }
         Text(
             text = value,
             color = accent,
@@ -277,7 +283,8 @@ private fun RowScope.StepperCell(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(6.dp))
-                .clickable(onClick = onValueClick)
+                .clickable(interactionSource = valueInteractionSource, indication = LocalIndication.current, onClick = onValueClick)
+                .bmwFocusRing(valueInteractionSource)
                 .background(TapCellFill)
                 .padding(vertical = 12.dp),
         )
@@ -290,11 +297,13 @@ private fun RowScope.StepperCell(
  *  accidental touch next to the value box. */
 @Composable
 private fun Glyph(text: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier
             .clip(RoundedCornerShape(8.dp))
             .background(GlyphButtonFill)
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .bmwFocusRing(interactionSource),
         contentAlignment = Alignment.Center,
     ) {
         Text(text = text, color = tint, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -303,13 +312,15 @@ private fun Glyph(text: String, tint: Color, modifier: Modifier, onClick: () -> 
 
 @Composable
 private fun PeqAddRow(accent: Color, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp, vertical = 6.dp)
             .background(AddGlassFill, RoundedCornerShape(6.dp))
             .border(1.dp, accent, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .bmwFocusRing(interactionSource)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
