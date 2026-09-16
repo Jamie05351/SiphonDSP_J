@@ -107,6 +107,32 @@ class BmwPeqStoreTest {
     }
 
     @Test
+    fun invalidPrimaryIsNotPromotedToRecovery() {
+        val store = BmwPeqStore(temporaryFolder.newFolder("invalid-primary"))
+        val original = populatedState(enabled = true)
+        assertTrue(store.save(original))
+        val recoveryBefore = store.recoveryPath().readBytes()
+
+        // A legacy V1 file has no checksum, so a preamp far outside validate()'s -30..12 dB
+        // range still decodes cleanly -- structurally fine, semantically garbage.
+        val invalidPayload = listOf(
+            "true",
+            "999.0",
+            ParametricEqBandList().serialize(),
+            ParametricEqBandList().serialize(),
+            ParametricEqBandList().serialize(),
+        ).joinToString("\n")
+        store.primaryPath().writeText("BMW_PEQ_STATE_V1\n$invalidPayload")
+
+        val next = original.copy(preampDb = -9f)
+        assertTrue(store.save(next))
+
+        assertTrue(recoveryBefore.contentEquals(store.recoveryPath().readBytes()))
+        assertStateEquals(original, store.loadRecovery())
+        assertStateEquals(next, store.load().state)
+    }
+
+    @Test
     fun saveAfterMissingPrimaryRetainsThePreviousRecovery() {
         val store = BmwPeqStore(temporaryFolder.newFolder("resave-missing"))
         val previous = populatedState(enabled = true)

@@ -39,7 +39,16 @@ internal class BmwPeqStore(private val directory: File) {
         val encoded = encode(state)
         // Only promote a validated primary. After restoring from recovery, keep
         // that fallback intact until a new primary has been saved successfully.
-        val previous = read(primaryFile).state
+        //
+        // decode() only checks that the file parses (and, for V2, that its checksum matches its
+        // own payload) -- neither proves the payload is sane. A legacy V1 file in particular has
+        // no checksum at all, so a hand-edited or corrupted-but-still-parseable V1 primary would
+        // otherwise sail through as "validated" and overwrite a good recovery copy. Run it
+        // through BmwPeqState.validate() before trusting it. This store has no access to the
+        // live session's actual sample rate (it's pure file storage, deliberately unaware of the
+        // engine), so SANITY_CHECK_SAMPLE_RATE stands in -- generously above any real device rate,
+        // so it only ever rejects data validate() would reject at any real sample rate too.
+        val previous = read(primaryFile).state?.takeIf { it.validate(SANITY_CHECK_SAMPLE_RATE) == null }
         val recoveryOk = when {
             previous != null -> atomicWrite(recoveryFile, encode(previous))
             read(recoveryFile).state != null -> true
@@ -214,6 +223,9 @@ internal class BmwPeqStore(private val directory: File) {
         const val VERSION = 2
         const val FILE_NAME = "native_bmw_peq_state.txt"
         const val RECOVERY_FILE_NAME = "native_bmw_peq_state.recovery"
+
+        // Stand-in for validate()'s sample-rate-relative Nyquist check -- see save()'s comment.
+        private const val SANITY_CHECK_SAMPLE_RATE = 192_000f
         private const val HEADER_V2 = "BMW_PEQ_STATE_V2"
         private const val HEADER_V1 = "BMW_PEQ_STATE_V1"
 
