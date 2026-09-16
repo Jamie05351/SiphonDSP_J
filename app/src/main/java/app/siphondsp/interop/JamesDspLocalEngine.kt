@@ -338,23 +338,51 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 
-    fun startNativeBmwCapture() = withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
+    // Starting a fresh capture makes any snapshot retained from a previous failed export
+    // (see exportNativeBmwCaptureWav below) irrelevant -- free it now rather than leaking it
+    // until the next successful export, which may never come if the user just re-records.
+    fun startNativeBmwCapture() {
+        freePendingCaptureSnapshot()
+        withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
+    }
 
     fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }
 
     fun nativeBmwCaptureFrameCount(): Long =
         withHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
 
+    @Volatile
+    private var pendingCaptureSnapshot: Long = 0L
+
+    private fun freePendingCaptureSnapshot() {
+        val stale = pendingCaptureSnapshot
+        if (stale != 0L) {
+            pendingCaptureSnapshot = 0L
+            JamesDspWrapper.freeNativeBmwCaptureSnapshot(stale)
+        }
+    }
+
     // Detach ownership while the engine is protected, then release nativeLock
     // before file I/O. Closing the engine cannot invalidate this snapshot.
+    //
+    // A snapshot is only freed once WAV export from it actually succeeds. On failure (a full
+    // cache partition, a transient write error) it's kept in pendingCaptureSnapshot instead: the
+    // completed native capture is still intact and calling this again retries the export from
+    // the same data, rather than permanently discarding a finished take and forcing another
+    // capture. startNativeBmwCapture() frees a stale pending snapshot once it's no longer the
+    // most recent capture.
     fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? {
-        val snapshot = withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
+        val snapshot = pendingCaptureSnapshot.takeIf { it != 0L }
+            ?: withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
         if (snapshot == 0L) return null
-        return try {
-            JamesDspWrapper.exportNativeBmwCaptureWav(snapshot, rawInPath, outPath)
-        } finally {
+        val result = JamesDspWrapper.exportNativeBmwCaptureWav(snapshot, rawInPath, outPath)
+        if (result != null) {
+            pendingCaptureSnapshot = 0L
             JamesDspWrapper.freeNativeBmwCaptureSnapshot(snapshot)
+        } else {
+            pendingCaptureSnapshot = snapshot
         }
+        return result
     }
 
     companion object {
