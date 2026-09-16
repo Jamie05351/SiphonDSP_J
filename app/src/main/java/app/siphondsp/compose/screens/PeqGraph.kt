@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.BiquadCascade
 import app.siphondsp.dsp.BmwOutputChannel
@@ -1346,8 +1348,13 @@ private fun PeqGraphOptionsButton(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
     Box(modifier) {
-        IconButton(onClick = { expanded = true }) {
+        IconButton(
+            onClick = { expanded = true },
+            interactionSource = interactionSource,
+            modifier = Modifier.bmwFocusRing(interactionSource),
+        ) {
             // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) — glyph it.
             Text("⋮", fontSize = 20.sp, color = Color(0xFFB0B2BA))
         }
