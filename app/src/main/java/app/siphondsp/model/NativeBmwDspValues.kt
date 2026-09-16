@@ -375,13 +375,13 @@ object NativeBmwDspValues {
      * enable boolean, so an existing user who had that on already has a stored 1f there, and
      * comparing against 1f would misread that as "already migrated" and skip the reseed.
      */
-    private fun migrateCrossoverTypeIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateCrossoverTypeIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_CROSSOVER_TYPE_MIGRATED] == CROSSOVER_TYPE_MIGRATED_MARKER) return
         listOf(OUTPUT_LOW_LEFT, OUTPUT_LOW_RIGHT, OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT).forEach { output ->
             values[outputIndex(output, FIELD_CROSSOVER_TYPE)] = CROSSOVER_TYPE_LR4
         }
         values[INDEX_CROSSOVER_TYPE_MIGRATED] = CROSSOVER_TYPE_MIGRATED_MARKER
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP seeded crossover type (LR4) for pre-selectable-slope installs success=$saved")
     }
 
@@ -392,18 +392,18 @@ object NativeBmwDspValues {
      * those users has always had. Runs once; the 191 marker then stops it so a deliberate off is
      * respected.
      */
-    private fun migrateMasterLimiterIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateMasterLimiterIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_MASTER_LIMITER_MIGRATED] == 1f) return
         values[INDEX_MASTER_LIMITER_ENABLED] = 1f
         values[INDEX_MASTER_LIMITER_THRESHOLD] = DEFAULT_MASTER_LIMITER_THRESHOLD_DB
         values[INDEX_MASTER_LIMITER_MIGRATED] = 1f
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP seeded master limiter enable/threshold default success=$saved")
     }
 
-    fun save(context: Context, values: FloatArray) {
+    fun save(context: Context, values: FloatArray): Boolean {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
-        store(context).save(values)
+        return store(context).save(values)
     }
 
     /** Oldest [nativeDspValues] array length a [PrivatePeqBackup] restore will still accept. */
@@ -430,9 +430,12 @@ object NativeBmwDspValues {
      * on any array that did not come from [load] (backup restore, imported config, etc.); still
      * call [save] afterward to persist the final result, same as any other array this returns.
      */
+    @Suppress("UNUSED_PARAMETER") // Keep the existing import/restore call contract.
     fun migrateRestoredValues(context: Context, values: FloatArray): FloatArray {
-        val padded = padToCurrentSize(values)
-        val store = store(context)
+        val padded = padToCurrentSize(values).copyOf()
+        // Preparing a backup must not persist intermediate migrations. The
+        // restore caller performs one checked save after preparation succeeds.
+        val store: NativeBmwDspStore? = null
         padded[INDEX_ENABLED] = 1f
         migrateIndependentOutputsIfNeeded(store, padded)
         migrateMeasMuteStopbandIfNeeded(store, padded)
@@ -446,7 +449,7 @@ object NativeBmwDspValues {
 
     private fun store(context: Context) = NativeBmwDspStore(context.noBackupFilesDir)
 
-    private fun migrateIndependentOutputsIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateIndependentOutputsIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_OUTPUT_SCHEMA_VERSION] >= OUTPUT_SCHEMA_VERSION) return
 
         fun copyCompressor(output: Int, legacyBase: Int) {
@@ -485,7 +488,7 @@ object NativeBmwDspValues {
         }
 
         values[INDEX_OUTPUT_SCHEMA_VERSION] = OUTPUT_SCHEMA_VERSION
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP migrated independent four-output config success=$saved")
     }
 
@@ -495,11 +498,11 @@ object NativeBmwDspValues {
      * which would silently mean "corner exactly on the crossover". Runs once, then the marker at
      * index 140 (>= 1) stops it so a later deliberate 0 is respected.
      */
-    private fun migrateMeasMuteStopbandIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateMeasMuteStopbandIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] >= 1f) return
         values[INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES] = DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES
         values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 1f
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP seeded meas-mute stopband offset default success=$saved")
     }
 
@@ -510,12 +513,12 @@ object NativeBmwDspValues {
      * clamp to the full [STAGE_DELAY_MAX_MS]. Advances the shared 139..142 marker at index 140 to
      * 2; runs after [migrateMeasMuteStopbandIfNeeded] so the marker climbs 0 -> 1 -> 2.
      */
-    private fun migrateStageDelayReclaimIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateStageDelayReclaimIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] >= 2f) return
         values[INDEX_STAGE_DELAY_L] = 0f
         values[INDEX_STAGE_DELAY_R] = 0f
         values[INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 2f
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP zeroed reclaimed slots 141/142 for stage delay success=$saved")
     }
 
@@ -528,14 +531,14 @@ object NativeBmwDspValues {
      * a future build ships it enabled by default. Runs once, then the marker stops it. Mirrors
      * [migrateMeasMuteStopbandIfNeeded].
      */
-    private fun migrateMbcIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateMbcIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_MBC_MIGRATED] == 1f) return
         DEFAULTS.copyInto(values, INDEX_MBC_ENABLED, INDEX_MBC_ENABLED, SIZE)
         values[INDEX_MBC_ENABLED] = 0f
         values[INDEX_BUS_LIMITER_LOW_ENABLED] = 0f
         values[INDEX_BUS_LIMITER_MID_ENABLED] = 0f
         values[INDEX_MBC_MIGRATED] = 1f
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP seeded multiband compressor + bus limiter block disabled success=$saved")
     }
 
@@ -547,7 +550,7 @@ object NativeBmwDspValues {
      * slots and every per-output FIELD_COMPRESSOR_ENABLED, then sets the marker at index 188.
      * Mirrors [migrateMeasMuteStopbandIfNeeded].
      */
-    private fun migrateDisableLegacyCompressorIfNeeded(store: NativeBmwDspStore, values: FloatArray) {
+    private fun migrateDisableLegacyCompressorIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
         if (values[INDEX_LEGACY_COMP_DISABLED_MIGRATED] == 1f) return
         values[INDEX_LOW_COMPRESSOR_ENABLED] = 0f
         values[INDEX_MID_COMPRESSOR_ENABLED] = 0f
@@ -555,7 +558,7 @@ object NativeBmwDspValues {
             values[outputIndex(output, FIELD_COMPRESSOR_ENABLED)] = 0f
         }
         values[INDEX_LEGACY_COMP_DISABLED_MIGRATED] = 1f
-        val saved = store.save(values)
+        val saved = store?.save(values)
         Timber.i("BMW DSP force-disabled legacy per-output compressor success=$saved")
     }
 
@@ -583,10 +586,10 @@ object NativeBmwDspValues {
         )
     }
 
-    fun update(context: Context, mutate: (FloatArray) -> Unit): FloatArray {
+    fun update(context: Context, mutate: (FloatArray) -> Unit): FloatArray? {
         val values = load(context)
         mutate(values)
-        save(context, values)
+        if (!save(context, values)) return null
         broadcast(context, values)
         return values
     }

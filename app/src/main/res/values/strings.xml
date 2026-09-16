@@ -444,6 +444,7 @@
     <string name="measurement_explainer">Capture the signal entering the DSP chain and the signal leaving it, then export both as WAV files for analysis.</string>
     <string name="measurement_start_capture">Start capture</string>
     <string name="measurement_stop_capture">Stop capture</string>
+    <string name="measurement_retry_export">Retry export</string>
     <string name="measurement_export">Export to folder</string>
     <string name="measurement_status_idle">Not capturing</string>
     <string name="measurement_status_capturing">Capturing… %1$.1fs / %2$.1fs</string>

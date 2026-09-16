@@ -16,6 +16,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.toast
 
 /**
  * v1 Compose state layer for the native BMW DSP config (`NativeBmwDspValues`, a `FloatArray`
@@ -56,10 +57,19 @@ class BmwDspState internal constructor(private val appContext: Context) {
         NativeBmwDspValues.broadcast(appContext, next)
     }
 
-    /** Persisted update: [preview] + disk save. Use on slider release and on toggles. */
-    fun commit(index: Int, value: Float, mirrors: IntArray = EmptyMirrors) {
-        preview(index, value, mirrors)
-        NativeBmwDspValues.save(appContext, values)
+    /** Commit only after persistence succeeds; undo any live preview on failure. */
+    fun commit(index: Int, value: Float, mirrors: IntArray = EmptyMirrors): Boolean {
+        val next = values.copyOf()
+        next[index] = value
+        for (m in mirrors) next[m] = value
+        if (!NativeBmwDspValues.save(appContext, next)) {
+            refreshFromDisk()
+            appContext.toast("BMW DSP settings could not be saved; previous settings restored")
+            return false
+        }
+        values = next
+        NativeBmwDspValues.broadcast(appContext, next)
+        return true
     }
 
     /** Reloads the persisted values and re-broadcasts them so the native engine drops any

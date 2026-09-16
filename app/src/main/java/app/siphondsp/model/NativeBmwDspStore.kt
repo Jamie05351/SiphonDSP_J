@@ -27,10 +27,13 @@ internal class NativeBmwDspStore(private val directory: File) {
 
     fun save(values: FloatArray): Boolean = synchronized(writeLock) {
         val encoded = encode(values)
-        val previous = runCatching {
-            primaryFile.takeIf { it.isFile }?.readText(StandardCharsets.UTF_8)
-        }.getOrNull()
-        val recoveryOk = atomicWrite(recoveryFile, previous ?: encoded)
+        // Preserve a valid recovery if the primary is missing or corrupt.
+        val previous = read(primaryFile)
+        val recoveryOk = when {
+            previous != null -> atomicWrite(recoveryFile, encode(previous))
+            read(recoveryFile) != null -> true
+            else -> atomicWrite(recoveryFile, encoded)
+        }
         val primaryOk = recoveryOk && atomicWrite(primaryFile, encoded)
         val success = recoveryOk && primaryOk
         Timber.i(

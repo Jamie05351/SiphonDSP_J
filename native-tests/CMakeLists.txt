@@ -34,6 +34,7 @@ add_executable(native_tests
     drwav_impl.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessor.cpp
     concurrency_test.cpp
+    capture_test.cpp
     crossover_test.cpp
     default_config_test.cpp
     input_validation_test.cpp

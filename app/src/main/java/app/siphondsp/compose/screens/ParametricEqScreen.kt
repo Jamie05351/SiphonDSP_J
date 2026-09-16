@@ -537,7 +537,7 @@ private fun ConfirmDialog(
 
 // --- private-backup export / restore ---------------------------------------------------------
 
-private class PendingBackupRestore(val candidate: BmwPeqState, val backup: PrivatePeqBackup, val message: String)
+internal class PendingBackupRestore(val candidate: BmwPeqState, val backup: PrivatePeqBackup, val message: String)
 
 private fun exportPrivateBackup(
     context: android.content.Context,
@@ -583,7 +583,7 @@ private fun readBackupForConfirm(context: android.content.Context, uri: android.
             if (restoresFullState) append(", plus Gains & Delay, Compressor, and Crossovers & Tilt")
             append(". This replaces all PEQ banks")
             if (restoresFullState) append(" and the rest of the BMW DSP setup")
-            append(", only after the complete state validates and applies successfully.")
+            append(". A failed save is reported; PEQ and DSP settings are saved separately.")
             if (!restoresFullState) append(" (This is an older backup file that only contains PEQ bands.)")
         }
         PendingBackupRestore(candidate, backup, message)
@@ -595,7 +595,7 @@ private fun readBackupForConfirm(context: android.content.Context, uri: android.
     }
 }
 
-private fun applyBackupRestore(
+internal fun applyBackupRestore(
     context: android.content.Context,
     holder: PeqStateHolder,
     graphPrefs: PeqGraphPreferences,
@@ -611,7 +611,12 @@ private fun applyBackupRestore(
             // leftover value from an older field silently reinterpreted as whatever the slot
             // means today, applied straight to the running DSP below.
             val restored = NativeBmwDspValues.migrateRestoredValues(context, values.toFloatArray())
-            NativeBmwDspValues.save(context, restored)
+            if (!NativeBmwDspValues.save(context, restored)) {
+                BmwPeqState.recordBackupRestoreResult(context, "partial: PEQ restored; DSP save failed")
+                Timber.e("Private backup restore incomplete: BMW DSP persistence failed")
+                context.toast("Backup only partly restored: PEQ restored, other DSP settings could not be saved")
+                return
+            }
             NativeBmwDspValues.broadcast(context, restored)
             onValuesRestored(restored)
         }

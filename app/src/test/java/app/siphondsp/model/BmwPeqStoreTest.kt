@@ -89,6 +89,63 @@ class BmwPeqStoreTest {
         assertTrue(restored.state.midBandBands.isNotEmpty())
     }
 
+    @Test
+    fun saveAfterCorruptionPreservesRecoveryWhenPrimaryWriteFails() {
+        val store = BmwPeqStore(temporaryFolder.newFolder("failed-resave"))
+        val previous = populatedState(enabled = true)
+        assertTrue(store.save(previous))
+        val recovery = store.recoveryPath().readBytes()
+        store.primaryPath().writeText("corrupt")
+        // A directory at the temporary-file path deterministically prevents only
+        // the primary write, after recovery promotion would have happened.
+        assertTrue(File(store.primaryPath().path + ".tmp").mkdir())
+
+        assertFalse(store.save(previous.copy(preampDb = -9f)))
+
+        assertTrue(recovery.contentEquals(store.recoveryPath().readBytes()))
+        assertStateEquals(previous, store.load().state)
+    }
+
+    @Test
+    fun invalidPrimaryIsNotPromotedToRecovery() {
+        val store = BmwPeqStore(temporaryFolder.newFolder("invalid-primary"))
+        val original = populatedState(enabled = true)
+        assertTrue(store.save(original))
+        val recoveryBefore = store.recoveryPath().readBytes()
+
+        // A legacy V1 file has no checksum, so a preamp far outside validate()'s -30..12 dB
+        // range still decodes cleanly -- structurally fine, semantically garbage.
+        val invalidPayload = listOf(
+            "true",
+            "999.0",
+            ParametricEqBandList().serialize(),
+            ParametricEqBandList().serialize(),
+            ParametricEqBandList().serialize(),
+        ).joinToString("\n")
+        store.primaryPath().writeText("BMW_PEQ_STATE_V1\n$invalidPayload")
+
+        val next = original.copy(preampDb = -9f)
+        assertTrue(store.save(next))
+
+        assertTrue(recoveryBefore.contentEquals(store.recoveryPath().readBytes()))
+        assertStateEquals(original, store.loadRecovery())
+        assertStateEquals(next, store.load().state)
+    }
+
+    @Test
+    fun saveAfterMissingPrimaryRetainsThePreviousRecovery() {
+        val store = BmwPeqStore(temporaryFolder.newFolder("resave-missing"))
+        val previous = populatedState(enabled = true)
+        assertTrue(store.save(previous))
+        assertTrue(store.primaryPath().delete())
+        val next = previous.copy(preampDb = -9f)
+
+        assertTrue(store.save(next))
+
+        assertStateEquals(next, store.load().state)
+        assertStateEquals(previous, store.loadRecovery())
+    }
+
     private fun populatedState(enabled: Boolean) = BmwPeqState(
         enabled = enabled,
         preampDb = -4.5f,
