@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -30,6 +31,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.siphondsp.view.BmwDashboardSkin
 
@@ -60,6 +67,7 @@ fun BmwSlider(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusManager = LocalFocusManager.current
 
     Slider(
         value = value,
@@ -68,7 +76,24 @@ fun BmwSlider(
         valueRange = valueRange,
         steps = steps,
         enabled = enabled,
-        modifier = modifier.fillMaxWidth(),
+        // Material3's Slider treats Up/Down as equivalent to Right/Left (both nudge the value) --
+        // fine for a from-scratch keyboard/gamepad user, but on a hardware rotary/D-pad it means a
+        // focused slider can never be turned away from: every direction just re-adjusts it forever.
+        // onPreviewKeyEvent runs top-down before Slider's own onKeyEvent gets the event, so
+        // intercepting Up/Down here and asking FocusManager to move instead -- rather than letting
+        // it fall through to Slider's value-adjust handling -- keeps Left/Right as the only value
+        // keys, matching every other control on these screens (rotary turns move focus; only a
+        // control's own left/right axis, here the slider's, ever changes a value).
+        modifier = modifier.fillMaxWidth().onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            val direction = when (event.key) {
+                Key.DirectionUp -> FocusDirection.Up
+                Key.DirectionDown -> FocusDirection.Down
+                else -> return@onPreviewKeyEvent false
+            }
+            focusManager.moveFocus(direction)
+            true
+        },
         interactionSource = interactionSource,
         colors = SliderDefaults.colors(),
         track = { sliderState -> BmwSliderTrack(sliderState = sliderState, accentColor = accentColor, focused = isFocused) },
