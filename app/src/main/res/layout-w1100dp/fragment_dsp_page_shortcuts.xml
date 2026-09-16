@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/page_shortcuts_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- Notices remain part of the binding/API but the fixed head-unit home has no room for
+         transient cards. They remain available on the Settings pager and regular-phone layout. -->
+    <app.siphondsp.view.Card
+        android:id="@+id/translation_notice"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <app.siphondsp.view.Card
+        android:id="@+id/update_notice"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <!-- Measured bounds of the five visible cards in dsp_home_head_unit.png. This row starts at
+         screen y=54 because MainActivity's transparent app bar consumes the first 44dp. -->
+    <LinearLayout
+        android:id="@+id/dsp_destination_cards"
+        android:layout_width="match_parent"
+        android:layout_height="322dp"
+        android:layout_marginStart="7dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="5dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_shortcut_peq"
+            android:layout_width="245dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="9dp"
+            android:clickable="true"
+            android:contentDescription="@string/action_parametric_eq"
+            android:focusable="true"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="9dp"
+            app:cardElevation="0dp"
+            app:rippleColor="#3346B5E8"
+            app:strokeColor="#FF46B5E8"
+            app:strokeWidth="0dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_shortcut_gains_delay"
+            android:layout_width="246dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="10dp"
+            android:clickable="true"
+            android:contentDescription="@string/action_gain_limiter"
+            android:focusable="true"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="9dp"
+            app:cardElevation="0dp"
+            app:rippleColor="#3346B5E8"
+            app:strokeColor="#FF46B5E8"
+            app:strokeWidth="0dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_shortcut_crossovers"
+            android:layout_width="247dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="9dp"
+            android:clickable="true"
+            android:contentDescription="@string/action_crossover_tilt"
+            android:focusable="true"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="9dp"
+            app:cardElevation="0dp"
+            app:rippleColor="#3346B5E8"
+            app:strokeColor="#FF46B5E8"
+            app:strokeWidth="0dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_shortcut_compressor"
+            android:layout_width="245dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="10dp"
+            android:clickable="true"
+            android:contentDescription="@string/action_compressor"
+            android:focusable="true"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="9dp"
+            app:cardElevation="0dp"
+            app:rippleColor="#3346B5E8"
+            app:strokeColor="#FF46B5E8"
+            app:strokeWidth="0dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_shortcut_allpass"
+            android:layout_width="247dp"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:contentDescription="@string/action_allpass"
+            android:focusable="true"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="9dp"
+            app:cardElevation="0dp"
+            app:rippleColor="#3346B5E8"
+            app:strokeColor="#FF46B5E8"
+            app:strokeWidth="0dp" />
+    </LinearLayout>
+</LinearLayout>

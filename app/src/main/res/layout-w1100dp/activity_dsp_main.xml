@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="false"
+    android:background="#FF00050B"
+    tools:context=".activity.MainActivity">
+
+    <!-- The supplied artwork is used only for the authored header and destination panels. The
+         bottom 86dp remains a live Android BottomAppBar with a real power-state control. -->
+    <ImageView
+        android:id="@+id/head_unit_home_backdrop"
+        android:layout_width="match_parent"
+        android:layout_height="394dp"
+        android:layout_gravity="top"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:src="@drawable/dsp_home_head_unit" />
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:statusBarForeground="@android:color/transparent">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Theme.SiphonDSP.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:alpha="0.01"
+            android:background="@android:color/transparent"
+            app:titleCentered="true" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <include layout="@layout/content_main" />
+
+    <!-- The bottom banner is native UI: its buttons, overflow menu and power state remain live. -->
+    <app.siphondsp.view.PositionedBottomAppBar
+        android:id="@+id/bar"
+        android:layout_width="match_parent"
+        android:layout_height="86dp"
+        android:layout_gravity="bottom"
+        android:background="@android:color/transparent"
+        android:contentInsetLeft="0dp"
+        android:contentInsetStart="0dp"
+        app:backgroundTint="#FF0B1B26"
+        app:contentInsetLeft="0dp"
+        app:contentInsetStart="0dp"
+        app:fabAlignmentMode="center"
+        app:fabAnchorMode="cradle"
+        app:menuAlignmentMode="auto"
+        app:navigationIcon="@drawable/ic_twotone_settings_24dp"
+        app:navigationContentDescription="@string/title_activity_settings"
+        app:navigationIconTint="@android:color/white" />
+
+    <app.siphondsp.view.FloatingToggleButton
+        android:id="@+id/power_toggle"
+        android:layout_width="88dp"
+        android:layout_height="72dp"
+        android:contentDescription="@string/power_button_alt"
+        android:hapticFeedbackEnabled="true"
+        app:layout_anchor="@id/bar"
+        app:srcCompat="@drawable/ic_twotone_power_settings_24dp" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
