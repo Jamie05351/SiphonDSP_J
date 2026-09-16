@@ -162,6 +162,15 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
             // Compose subtree has nowhere left to go -- e.g. immediately on page 0, or at the
             // List page's leftmost/rightmost cell -- so it never steals Left/Right away from
             // moving between a band row's own Hz/dB/Q cells.
+            //
+            // LocalFocusManager only searches this ComposeView -- it can never reach the sidebar's
+            // focusable rows (DspCrossNavBar.populate, a sibling View, not part of this Compose
+            // tree) -- so on page 0, Left has nothing to move to and nowhere to page (already the
+            // leftmost page): both moveFocus and the page check are no-ops. Returning true there
+            // anyway would consume the key and stop it from ever reaching Android's own
+            // cross-View focus search, trapping a rotary user in the content area with no way
+            // back to the sidebar. Only report the event as handled when it actually moved focus
+            // or turned the page.
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val direction = when (event.key) {
@@ -171,9 +180,8 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                 }
                 if (focusManager.moveFocus(direction)) return@onKeyEvent true
                 val targetPage = if (direction == FocusDirection.Right) 1 else 0
-                if (pagerState.currentPage != targetPage) {
-                    pagerScope.launch { pagerState.animateScrollToPage(targetPage) }
-                }
+                if (pagerState.currentPage == targetPage) return@onKeyEvent false
+                pagerScope.launch { pagerState.animateScrollToPage(targetPage) }
                 true
             },
     ) {
