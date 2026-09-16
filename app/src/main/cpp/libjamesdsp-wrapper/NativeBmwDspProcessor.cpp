@@ -193,10 +193,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.channelMute = static_cast<int>(clampf(v[3], 0, 2));
     next.measurementMute = static_cast<int>(clampf(v[4], 0, 2));
     next.headroom = clampf(v[5], -12, 0);
-    next.lowGainL = clampf(v[6], -6, 0);
-    next.lowGainR = clampf(v[7], -6, 0);
-    next.midGainL = clampf(v[8], -6, 0);
-    next.midGainR = clampf(v[9], -6, 0);
+    next.lowGainL = clampf(v[6], -6, 6);
+    next.lowGainR = clampf(v[7], -6, 6);
+    next.midGainL = clampf(v[8], -6, 6);
+    next.midGainR = clampf(v[9], -6, 6);
     next.postGainL = clampf(v[10], -6, 6);
     next.postGainR = clampf(v[11], -6, 6);
     next.midDelayL = clampf(v[21], 0, 2.8f);
@@ -1330,14 +1330,15 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         } else {
             publishIdleMeter(dynamics(OutputId::LowRight));
         }
-        // Per-bus brick-wall limiter (stereo-linked), right before the driver gain. No-op while
-        // disabled; independent of the per-output processCompressor path above.
+        lowL *= lowLeft.gain;
+        lowR *= lowRight.gain;
+        // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
+        // bounds the actual level reaching the driver regardless of how much gain is dialed in.
+        // No-op while disabled; independent of the per-output processCompressor path above.
         if (p_.busLimLowEnabled) {
             processBusLimiter(lowL, lowR, p_.busLimLowThreshDb, busLimLowGain_,
                               busLimLowReleaseMix_, busLimLowGrDb_);
         }
-        lowL *= lowLeft.gain;
-        lowR *= lowRight.gain;
     } else {
         publishIdleMeter(dynamics(OutputId::LowLeft));
         publishIdleMeter(dynamics(OutputId::LowRight));
@@ -1364,12 +1365,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         } else {
             publishIdleMeter(dynamics(OutputId::MidRight));
         }
+        midL *= midLeft.gain;
+        midR *= midRight.gain;
         if (p_.busLimMidEnabled) {
             processBusLimiter(midL, midR, p_.busLimMidThreshDb, busLimMidGain_,
                               busLimMidReleaseMix_, busLimMidGrDb_);
         }
-        midL *= midLeft.gain;
-        midR *= midRight.gain;
     } else {
         publishIdleMeter(dynamics(OutputId::MidLeft));
         publishIdleMeter(dynamics(OutputId::MidRight));

@@ -261,5 +261,5 @@ private val DelayFormat = java.text.DecimalFormat(
     java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
 )
 private val DelayRange = 0f..2.8f
-private val GainRange = -6f..0f
+private val GainRange = -6f..6f
 private const val GainStep = 0.5f
