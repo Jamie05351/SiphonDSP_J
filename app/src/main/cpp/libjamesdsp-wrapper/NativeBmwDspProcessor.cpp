@@ -193,10 +193,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.channelMute = static_cast<int>(clampf(v[3], 0, 2));
     next.measurementMute = static_cast<int>(clampf(v[4], 0, 2));
     next.headroom = clampf(v[5], -12, 0);
-    next.lowGainL = clampf(v[6], -6, 0);
-    next.lowGainR = clampf(v[7], -6, 0);
-    next.midGainL = clampf(v[8], -6, 0);
-    next.midGainR = clampf(v[9], -6, 0);
+    next.lowGainL = clampf(v[6], -6, 6);
+    next.lowGainR = clampf(v[7], -6, 6);
+    next.midGainL = clampf(v[8], -6, 6);
+    next.midGainR = clampf(v[9], -6, 6);
     next.postGainL = clampf(v[10], -6, 6);
     next.postGainR = clampf(v[11], -6, 6);
     next.midDelayL = clampf(v[21], 0, 2.8f);
