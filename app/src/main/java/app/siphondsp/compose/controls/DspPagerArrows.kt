@@ -1,7 +1,9 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,11 +114,18 @@ fun DspPagerArrows(pagerState: PagerState, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ArrowSegment(glyph: String, enabled: Boolean, accent: Color, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .height(ArrowBoxHeight)
             .width(ArrowBoxWidth)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
+            .bmwFocusRing(interactionSource),
         contentAlignment = Alignment.Center,
     ) {
         // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) -- glyph it.

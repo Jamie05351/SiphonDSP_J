@@ -1,8 +1,10 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -92,13 +94,16 @@ fun BmwChannelCard(
         Spacer(Modifier.height(3.dp))
 
         val delayBox: @Composable () -> Unit = {
+            val interactionSource = remember { MutableInteractionSource() }
             BoxedValue(
                 text = Fmt.format(delayValue), unit = "ms", accentColor = accentColor,
-                modifier = Modifier.width(DelayValueWidth).height(RowBoxHeight).clickable {
-                    context.showBmwNumberInput(
-                        "DELAY", delayRange.start, delayRange.endInclusive, delayValue, 0f, "ms", onDelayCommit,
-                    )
-                },
+                modifier = Modifier.width(DelayValueWidth).height(RowBoxHeight)
+                    .clickable(interactionSource = interactionSource, indication = LocalIndication.current) {
+                        context.showBmwNumberInput(
+                            "DELAY", delayRange.start, delayRange.endInclusive, delayValue, 0f, "ms", onDelayCommit,
+                        )
+                    }
+                    .bmwFocusRing(interactionSource),
             )
         }
         val polaritySwitch: @Composable () -> Unit = {
@@ -177,14 +182,17 @@ private fun GainRow(
             )
         }
         val valueBox: @Composable () -> Unit = {
+            val interactionSource = remember { MutableInteractionSource() }
             BoxedValue(
                 text = Fmt.format(shown), unit = "dB", accentColor = labelColor,
-                modifier = Modifier.width(GainValueWidth).height(RowBoxHeight).clickable {
-                    context.showBmwNumberInput("GAIN", range.start, range.endInclusive, drag, step, "dB") {
-                        drag = it
-                        onCommit(it)
+                modifier = Modifier.width(GainValueWidth).height(RowBoxHeight)
+                    .clickable(interactionSource = interactionSource, indication = LocalIndication.current) {
+                        context.showBmwNumberInput("GAIN", range.start, range.endInclusive, drag, step, "dB") {
+                            drag = it
+                            onCommit(it)
+                        }
                     }
-                },
+                    .bmwFocusRing(interactionSource),
             )
         }
         Row(
