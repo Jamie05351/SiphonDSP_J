@@ -40,6 +40,7 @@ CI runs it on every push/PR (`.github/workflows/build.yml`, "Run native DSP unit
 | `default_config_test.cpp` | config accepted / size guard; LR4 crossover sums flat through the handoff |
 | `limiter_test.cpp` | master limiter never exceeds −1 dBFS and doesn't touch a quiet signal; per-bus limiter GR engages only when hot / reads 0 when disabled |
 | `mbc_test.cpp` | MBC band GR follows the soft-knee gain computer and is monotone; meter idle while globally disabled |
+| `truth_snapshot_test.cpp` | `captureTruthSnapshot()` reports the actual installed crossover topology (not the requested enum) per slope, changes across a type switch, and never adopts a rejected PEQ configure() call |
 | `third_party/doctest/` | vendored doctest 2.4.11 single header |
 
 ## Adding tests

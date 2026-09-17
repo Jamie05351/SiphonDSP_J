@@ -641,6 +641,9 @@ bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q
     q.clear();
     return true;
 }
+bool NativeBmwDspProcessor::peqBandSkipped(int type, double gain) {
+    return type != 3 && std::fabs(gain) < 1e-9;
+}
 bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const double* full,
                                          std::size_t fullCount, const double* low,
                                          std::size_t lowCount, const double* mid,
@@ -681,7 +684,7 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             if (ch < 0 || ch > 2) {
                 return false;
             }
-            if (type != 3 && std::fabs(v[i + 1]) < 1e-9) {
+            if (peqBandSkipped(type, v[i + 1])) {
                 continue;
             }
             if (ch != 2) {
@@ -1571,6 +1574,75 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
     }
     v[0] = masterLimiterEnabledMeterFlag_.load(std::memory_order_relaxed)
                ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
+}
+
+std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    std::vector<double> out;
+    out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 3 * (3 + 16 * 6));
+    out.push_back(static_cast<double>(sampleRate_));
+    out.push_back(peqEnabled_ ? 1.0 : 0.0);
+    out.push_back(static_cast<double>(peqPreampDb_));
+
+    // Appends one Biquad's topology + every coefficient field (opA is only meaningful for the two
+    // one-pole topologies; SVF's a1/a2/a3/m0/m1/m2 are only meaningful for Svf2 -- the unused half
+    // is still emitted, as whatever that field's default-constructed/last-built value happens to
+    // be, so the block width stays fixed and callers can tell a genuine SVF identity stage
+    // (a1=a2=a3=0, m0=1,m1=0,m2=0) apart from a one-pole stage without a side channel). A local
+    // lambda, not a free function, because Biquad is private to this class.
+    auto appendStage = [&out](const Biquad& stage) {
+        out.push_back(static_cast<double>(static_cast<std::uint8_t>(stage.topology)));
+        out.push_back(stage.a1);
+        out.push_back(stage.a2);
+        out.push_back(stage.a3);
+        out.push_back(stage.m0);
+        out.push_back(stage.m1);
+        out.push_back(stage.m2);
+        out.push_back(stage.op_a);
+    };
+
+    for (OutputId id : {OutputId::LowLeft, OutputId::LowRight, OutputId::MidLeft,
+                        OutputId::MidRight}) {
+        const auto& cfg = outputConfig(id);
+        const auto& rt = output(id);
+        out.push_back(static_cast<double>(cfg.crossoverFreq));
+        out.push_back(static_cast<double>(static_cast<std::uint8_t>(cfg.crossoverType)));
+        // Mid outputs never read subsonicEnabled (see processMidCrossover) -- report that
+        // truthfully rather than echoing back a config field that has no runtime effect there.
+        const bool subsonicApplies = NativeBmwRouting::isLowBandOutput(id) && cfg.subsonicEnabled;
+        out.push_back(subsonicApplies ? 1.0 : 0.0);
+        out.push_back(static_cast<double>(cfg.subsonicFreq));
+        out.push_back(rt.muted ? 1.0 : 0.0);
+        out.push_back(rt.polarityInverted ? 1.0 : 0.0);
+        out.push_back(20.0 * std::log10(std::max(static_cast<double>(rt.gain), 1e-9)));
+        out.push_back(sampleRate_ > 0.f
+                           ? static_cast<double>(rt.delay.delay) * 1000.0 / sampleRate_
+                           : 0.0);
+        appendStage(rt.crossover1);
+        appendStage(rt.crossover2);
+    }
+
+    auto appendBank = [&out](const std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>& values,
+                             std::size_t valueCount, const PeqBank& bank) {
+        const std::size_t bandCount = valueCount / kPeqBandWidth;
+        out.push_back(static_cast<double>(bandCount));
+        out.push_back(static_cast<double>(bank.leftCount));
+        out.push_back(static_cast<double>(bank.rightCount));
+        for (std::size_t i = 0; i < bandCount; ++i) {
+            const double* v = &values[i * kPeqBandWidth];
+            const int type = static_cast<int>(v[3]);
+            out.push_back(v[0]);  // frequency Hz
+            out.push_back(v[1]);  // gain dB
+            out.push_back(v[2]);  // Q
+            out.push_back(v[3]);  // type
+            out.push_back(v[4]);  // channel (0 both, 1 left, 2 right)
+            out.push_back(peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
+        }
+    };
+    appendBank(inputPeqValues_, inputPeqValueCount_, inputPeq_);
+    appendBank(lowPeqValues_, lowPeqValueCount_, lowPeq_);
+    appendBank(midPeqValues_, midPeqValueCount_, midPeq_);
+    return out;
 }
 
 void NativeBmwDspProcessor::startCapture() {

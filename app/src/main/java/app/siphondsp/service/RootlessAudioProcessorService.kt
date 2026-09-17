@@ -32,10 +32,13 @@ import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.interop.JamesDspLocalEngine
+import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.interop.ProcessorMessageHandler
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.debug.NativeDspTruthSnapshot
+import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
 import app.siphondsp.model.preference.AudioEncoding
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
@@ -1282,6 +1285,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         fun nativeBmwPeqHandleReady(): Boolean? = activeInstance?.engine?.isNativeHandleReady()
 
+        fun nativeConfigRevisionStatus(): NativeConfigRevisionStatus? =
+            activeInstance?.engine?.nativeConfigRevisionStatus()
+
+        fun nativeTruthSnapshot(): NativeDspTruthSnapshot? =
+            activeInstance?.engine?.nativeTruthSnapshot()
+
         fun nativeBmwCompressorMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwCompressorMeter()
 
@@ -1305,6 +1314,32 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
 
         fun nativeBmwCaptureFrameCount(): Long? = activeInstance?.engine?.nativeBmwCaptureFrameCount()
+
+        /**
+         * Live rootless-pipeline runtime state for the native-truth debug screen. Every field is
+         * read directly off the running service/AudioRecord/AudioTrack -- recorder/track "active"
+         * queries the actual object's recordingState/playState, not a cached "started" flag -- so
+         * this can't drift from what the audio loop is really doing the way a mirrored boolean
+         * could. Null when the service isn't currently running.
+         */
+        fun pipelineRuntimeSnapshot(): RootlessPipelineRuntimeSnapshot? {
+            val service = activeInstance ?: return null
+            val recorder = service.activeRecorder
+            val track = service.activeTrack
+            return RootlessPipelineRuntimeSnapshot(
+                recorderStateInitialized = recorder?.state == AudioRecord.STATE_INITIALIZED,
+                recorderRecording = recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING,
+                trackStateInitialized = track?.state == AudioTrack.STATE_INITIALIZED,
+                trackPlaying = track?.playState == AudioTrack.PLAYSTATE_PLAYING,
+                recreateRequested = service.recreateRecorderRequested,
+                recreationInProgress = service.recreationInProgress,
+                measurementGeneratorActive = service.measGenActive,
+                processorDisposing = service.isProcessorDisposing,
+                serviceDisposing = service.isServiceDisposing,
+                pipelineHealthState = service.lastHealth?.state?.name,
+                pipelineHealthReason = service.lastHealth?.reason,
+            )
+        }
 
         fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =
             activeInstance?.engine?.exportNativeBmwCaptureWav(rawInPath, outPath)
