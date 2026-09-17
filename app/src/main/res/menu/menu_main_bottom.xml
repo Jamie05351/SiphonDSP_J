@@ -34,4 +34,12 @@
         android:icon="@drawable/ic_baseline_waveform_24dp"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_native_truth"
+        android:orderInCategory="100"
+        android:title="@string/action_native_truth"
+        android:iconTint="?attr/actionMenuTextColor"
+        android:icon="@drawable/ic_twotone_info_24dp"
+        app:showAsAction="never" />
+
 </menu>

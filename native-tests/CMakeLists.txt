@@ -42,6 +42,7 @@ add_executable(native_tests
     mbc_test.cpp
     routing_bypass_test.cpp
     schema_agreement_test.cpp
+    truth_snapshot_test.cpp
 )
 
 target_include_directories(native_tests PRIVATE

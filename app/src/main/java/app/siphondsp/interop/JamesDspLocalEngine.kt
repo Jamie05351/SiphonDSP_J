@@ -2,9 +2,12 @@ package app.siphondsp.interop
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import app.siphondsp.R
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.debug.NativeDspTruthSnapshot
+import app.siphondsp.model.debug.parseNativeTruthSnapshot
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
@@ -20,7 +23,42 @@ data class NativeConfigRevisionStatus(
     val lastPeqApplySuccess: Boolean?,
     val lastDspFailure: String?,
     val lastPeqFailure: String?,
-)
+    // elapsedRealtime() when requestedDspRevision/requestedPeqRevision last advanced (0 if never).
+    // Not "when the mismatch began" in the strictest sense -- if the requested revision keeps
+    // advancing while still unmatched, this tracks the latest request, not the first divergence --
+    // but it's the only "since" timestamp obtainable without polling for the transition, and it's
+    // exactly right in the common case (one request, then a mismatch until it's acknowledged).
+    val dspRevisionRequestedAtMs: Long,
+    val peqRevisionRequestedAtMs: Long,
+) {
+    enum class SyncState { MATCH, STALE, ERROR, UNINITIALIZED }
+
+    private fun syncState(requested: Long, active: Long, lastApplySuccess: Boolean?): SyncState = when {
+        requested == 0L && active == 0L -> SyncState.UNINITIALIZED
+        lastApplySuccess == false -> SyncState.ERROR
+        requested == active -> SyncState.MATCH
+        else -> SyncState.STALE
+    }
+
+    val dspSyncState: SyncState get() = syncState(requestedDspRevision, nativeActiveDspRevision, lastDspApplySuccess)
+    val peqSyncState: SyncState get() = syncState(requestedPeqRevision, nativeActivePeqRevision, lastPeqApplySuccess)
+
+    // Gated on requested != active directly, not on dspSyncState -- ERROR is also entered by a
+    // rejection that never reached next*RevisionLocked() (a size-mismatch/handle-unavailable/
+    // validation failure), which leaves requestedDspRevision == nativeActiveDspRevision (no
+    // mismatch at all) but *RevisionRequestedAtMs still pointing at an earlier, already-resolved
+    // request. Reporting a duration off that stale timestamp would show an ever-growing
+    // "mismatch" for a failure that isn't a revision mismatch and predates the failure itself.
+    fun dspMismatchDurationMs(nowMs: Long = SystemClock.elapsedRealtime()): Long? =
+        if (requestedDspRevision != nativeActiveDspRevision) {
+            (nowMs - dspRevisionRequestedAtMs).coerceAtLeast(0)
+        } else null
+
+    fun peqMismatchDurationMs(nowMs: Long = SystemClock.elapsedRealtime()): Long? =
+        if (requestedPeqRevision != nativeActivePeqRevision) {
+            (nowMs - peqRevisionRequestedAtMs).coerceAtLeast(0)
+        } else null
+}
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
@@ -33,6 +71,8 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     @Volatile private var lastPeqApplySuccess: Boolean? = null
     @Volatile private var lastDspFailure: String? = null
     @Volatile private var lastPeqFailure: String? = null
+    @Volatile private var dspRevisionRequestedAtMs = 0L
+    @Volatile private var peqRevisionRequestedAtMs = 0L
 
     @Volatile
     private var handle: JamesDspHandle = try {
@@ -151,7 +191,34 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             lastPeqApplySuccess = lastPeqApplySuccess,
             lastDspFailure = lastDspFailure,
             lastPeqFailure = lastPeqFailure,
+            dspRevisionRequestedAtMs = dspRevisionRequestedAtMs,
+            peqRevisionRequestedAtMs = peqRevisionRequestedAtMs,
         )
+    }
+
+    /**
+     * Whole-state read-only snapshot of what NativeBmwDspProcessor and the native PEQ engine are
+     * actually running -- for the native-truth debug screen. Null when the native handle doesn't
+     * exist (distinguished from a live-but-never-configured engine, which nativeConfigRevisionStatus()
+     * reports as UNINITIALIZED). Logged at a level well below per-buffer audio-thread logging: this
+     * is only ever called from a debug-screen read, never the audio loop.
+     */
+    fun nativeTruthSnapshot(): NativeDspTruthSnapshot? {
+        val raw = withHandle(null) { JamesDspWrapper.getNativeTruthSnapshot(it) }
+        val snapshot = parseNativeTruthSnapshot(raw)
+        if (raw != null && snapshot == null) {
+            Timber.e(
+                "nativeTruthSnapshot: native returned %d values that failed to parse -- Kotlin/native array schema likely drifted",
+                raw.size,
+            )
+        } else if (snapshot != null) {
+            Timber.d(
+                "nativeTruthSnapshot: sampleRate=%s peqEnabled=%s peqBands(full/low/mid)=%d/%d/%d",
+                snapshot.sampleRate, snapshot.peq.enabled, snapshot.peq.full.bands.size,
+                snapshot.peq.low.bands.size, snapshot.peq.mid.bands.size,
+            )
+        }
+        return snapshot
     }
 
     fun requestedNativeBmwDspRevision(): Long = requestedDspRevision
@@ -169,6 +236,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             return null
         }
         requestedDspRevision += 1L
+        dspRevisionRequestedAtMs = SystemClock.elapsedRealtime()
         return requestedDspRevision
     }
 
@@ -180,6 +248,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             return null
         }
         requestedPeqRevision += 1L
+        peqRevisionRequestedAtMs = SystemClock.elapsedRealtime()
         return requestedPeqRevision
     }
 

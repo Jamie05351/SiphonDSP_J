@@ -198,6 +198,26 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv
     return result;
 }
 
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeTruthSnapshot(JNIEnv* env, jobject,
+                                                                  jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if (processor == nullptr) {
+        return nullptr;
+    }
+    // See NativeBmwDspProcessor::captureTruthSnapshot()'s comment for the exact array layout.
+    const std::vector<double> snapshot = processor->captureTruthSnapshot();
+    jdoubleArray result = env->NewDoubleArray(static_cast<jsize>(snapshot.size()));
+    if (result != nullptr && !snapshot.empty()) {
+        env->SetDoubleArrayRegion(result, 0, static_cast<jsize>(snapshot.size()), snapshot.data());
+    }
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {

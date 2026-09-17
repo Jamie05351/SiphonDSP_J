@@ -241,6 +241,10 @@ class MainActivity : BaseActivity() {
                     startActivity(Intent(this, SignalGeneratorActivity::class.java))
                     true
                 }
+                R.id.action_native_truth -> {
+                    startActivity(Intent(this, NativeTruthActivity::class.java))
+                    true
+                }
                 else -> false
             }
         }

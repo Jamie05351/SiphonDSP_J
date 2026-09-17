@@ -136,6 +136,35 @@ public:
     // 0 while the limiter is bypassed. Lock-free; published by processLimiter().
     void readMasterLimiterMeter(float* values, std::size_t count) const;
 
+    // Read-only whole-state snapshot for the native-truth debug screen (proves what this
+    // processor is actually running, as opposed to what Kotlin/UI last requested). Takes
+    // stateMutex_ once -- the same brief, uncontended-in-practice lock configure()/configurePeq()
+    // already use -- so the crossover and PEQ data returned together represent one consistent
+    // instant: a config change landing mid-read can only be entirely before or entirely after
+    // this call, never torn across it. Not const (stateMutex_ isn't mutable, matching every other
+    // lock-taking method here).
+    //
+    // Every value is a double. Layout:
+    //   [0] sampleRate
+    //   [1] peqEnabled (0/1)                  [2] peqPreampDb
+    //   then 4 fixed-width (kTruthOutputWidth doubles) output blocks, in OutputId order
+    //   (LowLeft, LowRight, MidLeft, MidRight):
+    //     crossoverFreqHz, crossoverType (OutputConfig::CrossoverType ordinal), subsonicEnabled
+    //     (0/1; Mid outputs are always 0 -- subsonic only ever applies to Low, see
+    //     processLowCrossover/processMidCrossover), subsonicFreqHz, muted, polarityInverted,
+    //     gainDb (from the runtime gain actually multiplied in, i.e. what's really applied, not
+    //     replayed from a config field), delayMs,
+    //     stage1: topology (Biquad::Topology ordinal), a1, a2, a3, m0, m1, m2, opA
+    //     stage2: same 8 fields
+    //   then 3 variable-length PEQ bank blocks, in order Full, Low, Mid:
+    //     rawBandCount, leftActiveCount, rightActiveCount (the last two are PeqBank::leftCount/
+    //     rightCount -- the actual number of Biquads process() runs for that bank/channel),
+    //     then rawBandCount * [freqHz, gainDb, q, type, channel, active (0/1)]. "active" mirrors
+    //     configurePeqLocked's build() skip (peqBandSkipped()) -- a band this processor discarded
+    //     as a no-op is reported as inactive even though its raw values are still shown.
+    enum : std::size_t { kTruthOutputWidth = 24 };
+    std::vector<double> captureTruthSnapshot();
+
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
     // process() itself -- same "brief, uncontended lock" discipline as configure().
@@ -429,6 +458,11 @@ private:
     static void makeAllPass2(Biquad& q, float fc, float sr);
     static bool makePeq(Biquad& q, double frequency, double gain, double Q, int type,
                         float sampleRate);
+    // True for a PEQ band configurePeqLocked's build() drops as a no-op: a non-notch band with
+    // ~0 dB gain has no audible effect, so it's never installed as a running Biquad. Shared with
+    // captureTruthSnapshot() so the "active" flag it reports can never drift from what build()
+    // actually does.
+    static bool peqBandSkipped(int type, double gain);
     float processChannelInput(float x, float& dcX, float& dcY);
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample);

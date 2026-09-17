@@ -10,6 +10,7 @@
     <string name="action_blocked_apps">Excluded apps</string>
     <string name="action_measurement">Measurement</string>
     <string name="action_signal_generator">Signal Generator</string>
+    <string name="action_native_truth">Native DSP Truth</string>
 
     <string name="tile_label_peq">PEQ</string>
     <string name="tile_label_gains">GAINS</string>
@@ -458,6 +459,7 @@
 
     <!-- Signal generator -->
     <string name="title_activity_signal_generator">Signal Generator</string>
+    <string name="title_activity_native_truth">Native DSP Truth</string>
     <string name="signal_generator_explainer">Generate a sweep or pink noise test signal inside the DSP engine, injected in place of the real audio input, pre-crossover.</string>
     <string name="signal_generator_section_signal">Signal</string>
     <string name="signal_generator_sweep_start">Sweep start</string>
