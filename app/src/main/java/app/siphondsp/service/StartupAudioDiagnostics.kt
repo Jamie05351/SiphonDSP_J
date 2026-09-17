@@ -88,7 +88,7 @@ internal class StartupAudioDiagnostics private constructor(
 
     @Synchronized
     fun recordRecorderCreated(state: Int, recordingState: Int, actualSampleRate: Int) {
-        if (!isActive()) return
+        if (!isActive() || recorderCreated) return
         recorderCreated = true
         recorderState = state
         recorderRecordingState = recordingState
@@ -98,7 +98,7 @@ internal class StartupAudioDiagnostics private constructor(
 
     @Synchronized
     fun recordTrackCreated(state: Int, playState: Int, actualSampleRate: Int) {
-        if (!isActive()) return
+        if (!isActive() || trackCreated) return
         trackCreated = true
         trackState = state
         trackPlayState = playState
@@ -108,7 +108,7 @@ internal class StartupAudioDiagnostics private constructor(
 
     @Synchronized
     fun recordRecorderStarted(recordingState: Int) {
-        if (!isActive()) return
+        if (!isActive() || recorderStarted) return
         recorderRecordingState = recordingState
         recorderStarted = true
         Timber.i("%s[%s] AudioRecord started recordingState=%s", TAG, attemptId, recordingState)
@@ -116,7 +116,7 @@ internal class StartupAudioDiagnostics private constructor(
 
     @Synchronized
     fun recordTrackStarted(playState: Int) {
-        if (!isActive()) return
+        if (!isActive() || trackPlaying) return
         trackPlayState = playState
         trackPlaying = true
         Timber.i("%s[%s] AudioTrack started playState=%s", TAG, attemptId, playState)
