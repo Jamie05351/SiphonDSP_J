@@ -58,10 +58,26 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             return
         }
 
-        // A session id this dump still reports is not a real re-add even if it's mid-grace-period
-        // below -- it never actually left sessionList, so just cancel the pending removal.
-        dump.sessions.keys.forEach { sid ->
+        // A pending removal is only cancelled -- treating the id's earlier absence as the same
+        // session blipping -- when this dump's entry for that id still IS that same, still-
+        // acceptable session: same uid, not (newly) excluded, still passes
+        // shouldAcceptSessionDump. Android can reuse a session id for a completely unrelated
+        // player while the old one's grace period is still running, or the same id's usage can
+        // itself change to something no longer eligible; either way the id's absence just before
+        // this was real, not a blip. Finalizing the stale entry here (rather than trusting the id
+        // match alone) lets the reappearing entry flow through the normal exclusion/
+        // shouldAcceptSessionDump/shouldAddSession pipeline below as a genuine add -- accepted or
+        // rejected on its own merits -- instead of silently inheriting the old session's effect
+        // and metadata under the guise of "it reappeared."
+        pendingRemovals.keys.toList().forEach { sid ->
+            val reported = dump.sessions[sid] ?: return@forEach // still absent; let it run its course
+            val tracked = sessionList[sid]
+            val stillSameAcceptedSession = tracked != null && reported.uid == tracked.uid &&
+                !excludedUids.contains(reported.uid) && shouldAcceptSessionDump(sid, reported)
             pendingRemovals.remove(sid)?.let { removalHandler.removeCallbacks(it) }
+            if (!stillSameAcceptedSession) {
+                removeSession(sid)
+            }
         }
 
         val removedSessions = sessionList.filter {

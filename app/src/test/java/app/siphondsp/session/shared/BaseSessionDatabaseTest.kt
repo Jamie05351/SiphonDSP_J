@@ -42,7 +42,8 @@ class BaseSessionDatabaseTest {
 
     private class TestSessionDatabase(context: android.content.Context) : BaseSessionDatabase(context) {
         var onRemoved: (IEffectSession) -> Unit = {}
-        override fun shouldAcceptSessionDump(id: Int, session: AudioSessionDumpEntry) = true
+        var accept: (AudioSessionDumpEntry) -> Boolean = { true }
+        override fun shouldAcceptSessionDump(id: Int, session: AudioSessionDumpEntry) = accept(session)
         override fun shouldAddSession(id: Int, uid: Int, packageName: String) = true
         override fun createSession(id: Int, uid: Int, packageName: String): IEffectSession =
             FakeSession(uid, packageName)
@@ -99,5 +100,50 @@ class BaseSessionDatabaseTest {
         }
         assertTrue(db.sessionList.containsKey(1))
         assertTrue(removedCallbacks.isEmpty())
+    }
+
+    @Test fun reusedSessionIdWithDifferentUidDuringGraceWindowReplacesTheOldSession() {
+        // Android can hand the same session id to a completely different player while the old
+        // one's grace period is still running. The id matching alone must not be read as "the
+        // same session reappeared" -- the old (uid 1000) session must actually be torn down, and
+        // the new one (uid 2000) evaluated fresh, not silently ignored because sessionList still
+        // held the old entry under this id.
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000))))
+        db.update(FakeDump(emptyMap()))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+
+        db.update(FakeDump(mapOf(1 to entry(uid = 2000, pkg = "com.other.app"))))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2000))
+
+        assertEquals(listOf(1000), removedCallbacks)
+        assertTrue(db.sessionList.containsKey(1))
+        assertEquals(2000, (db.sessionList[1] as FakeSession).uid)
+    }
+
+    @Test fun reusedSessionIdThatBecomesExcludedDuringGraceWindowIsDropped() {
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000))))
+        db.update(FakeDump(emptyMap()))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+
+        db.setExcludedUids(arrayOf(1000))
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000))))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2000))
+
+        assertFalse("excluded uid must not be silently retained as active", db.sessionList.containsKey(1))
+    }
+
+    @Test fun sameIdAndUidButNowIneligibleDuringGraceWindowIsDropped() {
+        // Same uid/package reappearing under the id doesn't automatically mean "still valid" --
+        // its usage/content can itself have become ineligible in the interim.
+        db.accept = { it.uid != 1000 || it.content != "CONTENT_TYPE_IGNORED" }
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000))))
+        db.update(FakeDump(emptyMap()))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+
+        db.update(FakeDump(mapOf(1 to AudioSessionDumpEntry(1000, "com.spotify.music", "USAGE_MEDIA", "CONTENT_TYPE_IGNORED"))))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2000))
+
+        assertFalse(db.sessionList.containsKey(1))
+        assertEquals(listOf(1000), removedCallbacks)
     }
 }
