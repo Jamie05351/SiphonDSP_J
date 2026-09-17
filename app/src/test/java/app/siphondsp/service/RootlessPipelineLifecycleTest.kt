@@ -1,12 +1,14 @@
 package app.siphondsp.service
 
 import android.media.AudioTrack
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -34,6 +36,12 @@ class RootlessPipelineLifecycleTest {
         set("activeTrack", track)
     }
 
+    @After
+    fun tearDown() {
+        finish.countDown()
+        worker.join(2_000)
+    }
+
     private fun get(name: String): Any? = service.javaClass.getDeclaredField(name).apply {
         isAccessible = true
     }.get(service)
@@ -56,13 +64,20 @@ class RootlessPipelineLifecycleTest {
     }
 
     @Test fun watchdogEscalatesWhenRecoveryCannotRestoreProgress() {
-        repeat(3) {
-            start()
+        // Recovery-budget accounting belongs to the watchdog health path, not to direct
+        // configuration/session recreation requests. Keep presenting a stalled pipeline and
+        // emulate the worker acknowledging each recreation without restoring progress.
+        repeat(AudioPipelineHealth.MAX_RECOVERIES_PER_WINDOW) {
+            set("consecutiveWriteFailures", AudioPipelineHealth.MAX_CONSECUTIVE_FAILURES)
+            (get("healthWatchdog") as Runnable).run()
             assertEquals(true, get("recreateRecorderRequested"))
-            // Emulate worker acknowledgement/completion, with no restored output progress.
             set("recreateRecorderRequested", false)
+            set("recreationInProgress", false)
+            set("consecutiveWriteFailures", 0)
         }
-        start()
+
+        set("consecutiveWriteFailures", AudioPipelineHealth.MAX_CONSECUTIVE_FAILURES)
+        (get("healthWatchdog") as Runnable).run()
         assertEquals(true, get("isServiceDisposing"))
         assertSame(worker, get("recorderThread"))
     }
@@ -78,7 +93,7 @@ class RootlessPipelineLifecycleTest {
 
     @Test fun repeatedZeroFloatWritesYieldToRecoveryInsteadOfSpinningForever() {
         var calls = 0
-        whenever(track.write(any<FloatArray>(), any(), any(), any())).thenAnswer {
+        whenever(track.write(any<FloatArray>(), anyInt(), anyInt(), anyInt())).thenAnswer {
             if (++calls == 4) start()
             check(calls <= 4) { "write loop ignored recreation" }
             0
@@ -100,7 +115,7 @@ class RootlessPipelineLifecycleTest {
 
     @Test fun repeatedNegativeShortWritesYieldToRecovery() {
         var calls = 0
-        whenever(track.write(any<ShortArray>(), any(), any(), any())).thenAnswer {
+        whenever(track.write(any<ShortArray>(), anyInt(), anyInt(), anyInt())).thenAnswer {
             if (++calls == 4) start()
             check(calls <= 4) { "write loop ignored recreation" }
             AudioTrack.ERROR_DEAD_OBJECT
