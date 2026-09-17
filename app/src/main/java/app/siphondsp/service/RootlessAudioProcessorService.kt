@@ -32,8 +32,8 @@ import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.interop.JamesDspLocalEngine
-import app.siphondsp.model.BmwPeqState
 import app.siphondsp.interop.ProcessorMessageHandler
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.preference.AudioEncoding
@@ -119,6 +119,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile private var consecutiveReadFailures = 0
     @Volatile private var consecutiveWriteFailures = 0
     @Volatile private var recorderSuspended = false
+    @Volatile private var startupDiagnostics: StartupAudioDiagnostics? = null
+
+    private val startupDiagnosticsFinisher = Runnable {
+        startupDiagnostics?.finishIfDue()
+    }
 
     private val healthWatchdog = object : Runnable {
         override fun run() {
@@ -271,6 +276,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STARTED))
         }
         else {
+            StartupAudioDiagnostics.logImmediateFailure(
+                "service start",
+                StartupAudioDiagnostics.Result.MEDIA_PROJECTION,
+                "MediaProjection unavailable",
+            )
             Timber.w("Failed to capture audio")
             stopServiceSafely()
         }
@@ -282,6 +292,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (activeInstance === this) activeInstance = null
         synchronized(recorderLifecycleLock) { isServiceDisposing = true }
         healthHandler.removeCallbacks(healthWatchdog)
+        healthHandler.removeCallbacks(startupDiagnosticsFinisher)
+        startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
         val closeEngineNow = synchronized(recorderLifecycleLock) {
             // A stuck native process holds engine.nativeLock. Do not block the main thread
@@ -452,6 +464,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val idle = sessionList.isEmpty()
                 if (isProcessorIdle && !idle) flowExpectedSince = SystemClock.elapsedRealtime()
                 isProcessorIdle = idle
+                if (idle) startupDiagnostics?.markExpectedIdle()
             }
             if(!isProcessorIdle) {
                 sessionLossRetryCount = 0
@@ -560,6 +573,33 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         synchronized(recorderLifecycleLock) { isServiceDisposing = true }
         healthHandler.removeCallbacks(healthWatchdog)
         stopSelf()
+    }
+
+    private fun beginStartupDiagnostics(
+        reason: String,
+        sampleRate: Int,
+        encoding: AudioEncoding,
+        bufferSizeBytes: Int,
+        bufferSamples: Int,
+    ): StartupAudioDiagnostics {
+        startupDiagnostics?.finishIfDue(force = true)
+        healthHandler.removeCallbacks(startupDiagnosticsFinisher)
+        val probe = StartupAudioDiagnostics.begin(
+            reason = reason,
+            sampleRate = sampleRate,
+            encodingName = encoding.name,
+            bufferSizeBytes = bufferSizeBytes,
+            bufferSamples = bufferSamples,
+            mediaProjectionReady = mediaProjection != null,
+            nativeHandleReady = engine.isNativeHandleReady(),
+            measurementGeneratorActive = measGenActive,
+            processorIdle = isProcessorIdle,
+        )
+        startupDiagnostics = probe
+        // This is intentionally Handler-driven rather than audio-loop-driven. If READ_BLOCKING or
+        // WRITE_BLOCKING never returns, the diagnostic still emits at the one-second deadline.
+        healthHandler.postDelayed(startupDiagnosticsFinisher, StartupAudioDiagnostics.WINDOW_MS)
+        return probe
     }
 
     // Called under the existing lifecycle lock so state getters cannot race release().
@@ -679,6 +719,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 engine.sampleRate = sampleRate.toFloat()
             }
 
+            beginStartupDiagnostics("service start", sampleRate, encoding, bufferSizeBytes, bufferSamples)
+
             val worker = Thread({
                 runRecorderLoop(encoding, encodingFormat, sampleRate, bufferSizeBytes, bufferSamples)
             }, "SiphonDSP-RootlessAudio")
@@ -719,10 +761,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         var recorder: AudioRecord? = null
         var track: AudioTrack? = null
+        var diagnostics = startupDiagnostics
 
         try {
             recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+            diagnostics?.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
             track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+            diagnostics?.recordTrackCreated(track.state, track.playState, track.sampleRate)
             synchronized(recorderLifecycleLock) {
                 activeRecorder = recorder
                 activeTrack = track
@@ -761,12 +806,22 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
 
                     if (mediaProjection == null || isProcessorDisposing || isServiceDisposing) {
+                        diagnostics?.finishIfDue(force = true)
                         Timber.e("Media projection handle is null, stopping recorder worker")
                         break
                     }
 
+                    diagnostics = beginStartupDiagnostics(
+                        "recreate: $recreationReason",
+                        sampleRate,
+                        encoding,
+                        bufferSizeBytes,
+                        bufferSamples,
+                    )
                     recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+                    diagnostics?.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
                     track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+                    diagnostics?.recordTrackCreated(track.state, track.playState, track.sampleRate)
                     synchronized(recorderLifecycleLock) {
                         activeRecorder = recorder
                         activeTrack = track
@@ -790,6 +845,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 if(isProcessorIdle && suspendOnIdle && !measGenActive &&
                     idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
+                    diagnostics?.markExpectedIdle()
                     // Locked for the same reason stopRecording() and
                     // unblockRecorderForMeasurementGenerator() lock their own stop() calls: so
                     // this can never race either of those stopping/releasing the same
@@ -819,8 +875,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
                     if(currentRecorder.recordingState == AudioRecord.RECORDSTATE_STOPPED)
                         currentRecorder.startRecording()
+                    diagnostics?.recordRecorderStarted(currentRecorder.recordingState)
                     if(currentTrack.playState != AudioTrack.PLAYSTATE_PLAYING)
                         currentTrack.play()
+                    diagnostics?.recordTrackStarted(currentTrack.playState)
                 }
 
                 // The measurement generator fully replaces whatever's captured (see
@@ -842,6 +900,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 else
                     currentRecorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
 
+                diagnostics?.recordRead(readCount, generatedInput)
                 if(readCount < 0) {
                     if(isProcessorDisposing)
                         break
@@ -872,9 +931,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 }
                 if (recreateRecorderRequested || isProcessorDisposing || isServiceDisposing) continue
 
+                val nativeReady = engine.isNativeHandleReady()
+                diagnostics?.recordDspStart(nativeReady, !engine.enabled || !nativeReady)
+
                 if(encoding == AudioEncoding.PcmShort) {
-                    engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
+                    diagnostics?.recordShortInput(shortBuffer, processCount)
+                    try {
+                        engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
+                    } catch (e: Throwable) {
+                        diagnostics?.recordDspFailure(e)
+                        throw e
+                    }
                     lastSuccessfulProcess = SystemClock.elapsedRealtime()
+                    diagnostics?.recordDspSuccess(processCount)
+                    diagnostics?.recordShortOutput(shortOutBuffer, processCount)
                     if(SpectrumEngine.isActive) {
                         for(i in 0 until processCount) {
                             spectrumScratchDry[i] = shortBuffer[i] / 32768f
@@ -882,29 +952,41 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         }
                         SpectrumEngine.publish(spectrumScratchDry, spectrumScratch, processCount, sampleRate)
                     }
-                    writeFully(currentTrack, shortOutBuffer, processCount)
+                    writeFully(currentTrack, shortOutBuffer, processCount, diagnostics)
                 }
                 else {
-                    engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
+                    diagnostics?.recordFloatInput(floatBuffer, processCount)
+                    try {
+                        engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
+                    } catch (e: Throwable) {
+                        diagnostics?.recordDspFailure(e)
+                        throw e
+                    }
                     lastSuccessfulProcess = SystemClock.elapsedRealtime()
+                    diagnostics?.recordDspSuccess(processCount)
+                    diagnostics?.recordFloatOutput(floatOutBuffer, processCount)
                     if(SpectrumEngine.isActive) SpectrumEngine.publish(floatBuffer, floatOutBuffer, processCount, sampleRate)
-                    writeFully(currentTrack, floatOutBuffer, processCount)
+                    writeFully(currentTrack, floatOutBuffer, processCount, diagnostics)
                 }
             }
         }
         catch (e: IOException) {
+            diagnostics?.finishIfDue(force = true)
             if(!isProcessorDisposing) {
                 Timber.e(e, "Audio worker I/O failure")
                 stopServiceSafely()
             }
         }
         catch (e: Exception) {
+            diagnostics?.finishIfDue(force = true)
             if(!isProcessorDisposing) {
                 Timber.e(e, "Exception in recorder worker")
                 stopServiceSafely()
             }
         }
         finally {
+            diagnostics?.finishIfDue(force = true)
+            healthHandler.removeCallbacks(startupDiagnosticsFinisher)
             // Null the shared references under the lock before releasing so an
             // overlapping stopRecording() call on another thread either sees null
             // (and no-ops) or has already finished its stop() call before we
@@ -928,20 +1010,32 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    private fun writeFully(track: AudioTrack, buffer: ShortArray, length: Int) {
+    private fun writeFully(
+        track: AudioTrack,
+        buffer: ShortArray,
+        length: Int,
+        diagnostics: StartupAudioDiagnostics?,
+    ) {
         var offset = 0
         while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
             val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
+            diagnostics?.recordWrite(written)
             if (!recordWriteResult(written))
                 continue
             offset += written
         }
     }
 
-    private fun writeFully(track: AudioTrack, buffer: FloatArray, length: Int) {
+    private fun writeFully(
+        track: AudioTrack,
+        buffer: FloatArray,
+        length: Int,
+        diagnostics: StartupAudioDiagnostics?,
+    ) {
         var offset = 0
         while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
             val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
+            diagnostics?.recordWrite(written)
             if (!recordWriteResult(written))
                 continue
             offset += written
