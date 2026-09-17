@@ -43,13 +43,19 @@ data class NativeConfigRevisionStatus(
     val dspSyncState: SyncState get() = syncState(requestedDspRevision, nativeActiveDspRevision, lastDspApplySuccess)
     val peqSyncState: SyncState get() = syncState(requestedPeqRevision, nativeActivePeqRevision, lastPeqApplySuccess)
 
+    // Gated on requested != active directly, not on dspSyncState -- ERROR is also entered by a
+    // rejection that never reached next*RevisionLocked() (a size-mismatch/handle-unavailable/
+    // validation failure), which leaves requestedDspRevision == nativeActiveDspRevision (no
+    // mismatch at all) but *RevisionRequestedAtMs still pointing at an earlier, already-resolved
+    // request. Reporting a duration off that stale timestamp would show an ever-growing
+    // "mismatch" for a failure that isn't a revision mismatch and predates the failure itself.
     fun dspMismatchDurationMs(nowMs: Long = SystemClock.elapsedRealtime()): Long? =
-        if (dspSyncState == SyncState.STALE || dspSyncState == SyncState.ERROR) {
+        if (requestedDspRevision != nativeActiveDspRevision) {
             (nowMs - dspRevisionRequestedAtMs).coerceAtLeast(0)
         } else null
 
     fun peqMismatchDurationMs(nowMs: Long = SystemClock.elapsedRealtime()): Long? =
-        if (peqSyncState == SyncState.STALE || peqSyncState == SyncState.ERROR) {
+        if (requestedPeqRevision != nativeActivePeqRevision) {
             (nowMs - peqRevisionRequestedAtMs).coerceAtLeast(0)
         } else null
 }

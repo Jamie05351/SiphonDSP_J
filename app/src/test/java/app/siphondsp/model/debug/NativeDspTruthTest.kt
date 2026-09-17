@@ -142,6 +142,19 @@ class NativeConfigRevisionStatusTest {
         val stale = status(requestedDsp = 4, activeDsp = 3)
         assertEquals(4_000L, stale.dspMismatchDurationMs(nowMs = 5_000L))
     }
+
+    @Test fun errorWithNoActualMismatchReportsNoDuration() {
+        // Reproduces a validation-rejected configureNativeBmwDsp/configurePeqLocked call: the
+        // rejection sets lastDspApplySuccess=false WITHOUT ever reaching next*RevisionLocked(),
+        // so requested still equals active (whatever they last successfully agreed on) and
+        // *RevisionRequestedAtMs still points at that earlier, already-resolved request. ERROR
+        // is correctly reported (a failure did happen), but there is no revision mismatch, so no
+        // duration should be shown -- and definitely not one measured off a stale timestamp that
+        // predates this failure entirely.
+        val s = status(requestedDsp = 3, activeDsp = 3, lastDspSuccess = false)
+        assertEquals(app.siphondsp.interop.NativeConfigRevisionStatus.SyncState.ERROR, s.dspSyncState)
+        assertNull(s.dspMismatchDurationMs(nowMs = 999_999L))
+    }
 }
 
 class ParseNativeTruthSnapshotTest {

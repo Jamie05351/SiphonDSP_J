@@ -1324,21 +1324,30 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
          */
         fun pipelineRuntimeSnapshot(): RootlessPipelineRuntimeSnapshot? {
             val service = activeInstance ?: return null
-            val recorder = service.activeRecorder
-            val track = service.activeTrack
-            return RootlessPipelineRuntimeSnapshot(
-                recorderStateInitialized = recorder?.state == AudioRecord.STATE_INITIALIZED,
-                recorderRecording = recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING,
-                trackStateInitialized = track?.state == AudioTrack.STATE_INITIALIZED,
-                trackPlaying = track?.playState == AudioTrack.PLAYSTATE_PLAYING,
-                recreateRequested = service.recreateRecorderRequested,
-                recreationInProgress = service.recreationInProgress,
-                measurementGeneratorActive = service.measGenActive,
-                processorDisposing = service.isProcessorDisposing,
-                serviceDisposing = service.isServiceDisposing,
-                pipelineHealthState = service.lastHealth?.state?.name,
-                pipelineHealthReason = service.lastHealth?.reason,
-            )
+            // Recorder recreation and stopRecording() both stop()/release() activeRecorder/
+            // activeTrack under recorderLifecycleLock (see requestRecreationLocked()/
+            // stopRecording()'s own comments on why). Without that same lock here, the objects
+            // read below could be released between this function copying the references and its
+            // state/recordingState/playState getters running on them -- querying a retired
+            // AudioRecord/AudioTrack from a since-superseded pipeline generation, the same hazard
+            // checkPipelineHealthLocked() takes this lock to avoid.
+            return synchronized(service.recorderLifecycleLock) {
+                val recorder = service.activeRecorder
+                val track = service.activeTrack
+                RootlessPipelineRuntimeSnapshot(
+                    recorderStateInitialized = recorder?.state == AudioRecord.STATE_INITIALIZED,
+                    recorderRecording = recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING,
+                    trackStateInitialized = track?.state == AudioTrack.STATE_INITIALIZED,
+                    trackPlaying = track?.playState == AudioTrack.PLAYSTATE_PLAYING,
+                    recreateRequested = service.recreateRecorderRequested,
+                    recreationInProgress = service.recreationInProgress,
+                    measurementGeneratorActive = service.measGenActive,
+                    processorDisposing = service.isProcessorDisposing,
+                    serviceDisposing = service.isServiceDisposing,
+                    pipelineHealthState = service.lastHealth?.state?.name,
+                    pipelineHealthReason = service.lastHealth?.reason,
+                )
+            }
         }
 
         fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =
