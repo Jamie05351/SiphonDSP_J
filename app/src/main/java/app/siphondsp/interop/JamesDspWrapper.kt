@@ -20,7 +20,10 @@ object JamesDspWrapper {
     external fun processFloat(self: JamesDspHandle, input: FloatArray, output: FloatArray, offset: Int = -1, length: Int = -1)
 
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
-    external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray): Boolean
+    // Returns the exact revision native acknowledged, or -1 when the configuration was rejected.
+    external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray, revision: Long): Long
+    external fun getNativeBmwDspActiveRevision(self: JamesDspHandle): Long
+    // Returns the exact revision native acknowledged, or -1 when the configuration was rejected.
     external fun configureNativeBmwPeq(
         self: JamesDspHandle,
         enabled: Boolean,
@@ -28,7 +31,9 @@ object JamesDspWrapper {
         fullRangeBands: DoubleArray,
         lowBandBands: DoubleArray,
         midBandBands: DoubleArray,
-    ): Boolean
+        revision: Long,
+    ): Long
+    external fun getNativeBmwPeqActiveRevision(self: JamesDspHandle): Long
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
     external fun getNativeBmwCompressorMeter(self: JamesDspHandle): FloatArray?
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. Null when the native
