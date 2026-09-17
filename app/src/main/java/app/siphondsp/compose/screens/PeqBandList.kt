@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -65,6 +67,15 @@ private const val WValue = 3.0f
 private val CellGap = 6.dp
 private val StepButtonSize = 48.dp
 private val DeleteButtonSize = 40.dp
+// Every tappable cell in a row (channel/type pickers, value boxes, +/- steppers) shares this
+// height so the row reads as one aligned strip instead of boxes of varying heights.
+private val RowControlHeight = StepButtonSize
+// Extra breathing room between the Hz/dB/Q groups (and before the delete column), on top of the
+// tight CellGap already used *within* a group (value box hugging its own -/+ pair).
+private val GroupGap = 10.dp
+// The +/- steppers are a neutral gray (not the band's accent) so the accent-colored value box
+// reads as the thing to look at, not the buttons either side of it.
+private val StepperGlyphColor = IndexColor
 
 /**
  * Compose port of the Parametric EQ filter list (roadmap Phase 10b) -- a keyed [LazyColumn] of
@@ -190,9 +201,10 @@ private fun RowScope.HeaderCell(text: String, weight: Float) {
     Text(
         text = text,
         color = IndexColor,
-        fontSize = 11.sp,
+        fontSize = 22.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
+        maxLines = 1,
         modifier = Modifier.weight(weight),
     )
 }
@@ -235,7 +247,7 @@ private fun PeqBandRow(
         StepperCell(FreqFmt.format(band.frequency), accent, onFreq, { onFreqStep(false) }, { onFreqStep(true) })
         StepperCell(GainFmt.format(band.gain), accent, onGain, { onGainStep(-0.5) }, { onGainStep(0.5) })
         StepperCell(QFmt.format(band.q), accent, onQ, { onQStep(-0.1) }, { onQStep(0.1) })
-        Glyph("×", MRed, Modifier.size(DeleteButtonSize), onDelete)
+        Glyph("×", MRed, Modifier.padding(start = GroupGap).size(DeleteButtonSize), onDelete)
     }
 }
 
@@ -250,11 +262,12 @@ private fun RowScope.TapCell(text: String, accent: Color, weight: Float, onClick
         textAlign = TextAlign.Center,
         modifier = Modifier
             .weight(weight)
+            .height(RowControlHeight)
             .clip(RoundedCornerShape(6.dp))
             .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .bmwFocusRing(interactionSource)
             .background(TapCellFill)
-            .padding(vertical = 9.dp),
+            .wrapContentHeight(Alignment.CenterVertically),
     )
 }
 
@@ -268,8 +281,10 @@ private fun RowScope.StepperCell(
 ) {
     // Value box on the left; the −/+ pair grouped together on the right as big, obvious hit
     // targets so stepping a value isn't a guessing game between three near-touching controls.
+    // Extra horizontal padding on the group as a whole (GroupGap) separates this Hz/dB/Q cluster
+    // from its neighbors, while the tighter spacedBy(6.dp) below keeps value/−/+ visually one unit.
     Row(
-        modifier = Modifier.weight(WValue),
+        modifier = Modifier.weight(WValue).padding(horizontal = GroupGap / 2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -282,14 +297,16 @@ private fun RowScope.StepperCell(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .weight(1f)
+                .height(RowControlHeight)
                 .clip(RoundedCornerShape(6.dp))
                 .clickable(interactionSource = valueInteractionSource, indication = LocalIndication.current, onClick = onValueClick)
                 .bmwFocusRing(valueInteractionSource)
                 .background(TapCellFill)
-                .padding(vertical = 12.dp),
+                .border(1.dp, accent, RoundedCornerShape(6.dp))
+                .wrapContentHeight(Alignment.CenterVertically),
         )
-        Glyph("−", accent, Modifier.size(StepButtonSize), onMinus)
-        Glyph("+", accent, Modifier.size(StepButtonSize), onPlus)
+        Glyph("−", StepperGlyphColor, Modifier.size(StepButtonSize), onMinus)
+        Glyph("+", StepperGlyphColor, Modifier.size(StepButtonSize), onPlus)
     }
 }
 
