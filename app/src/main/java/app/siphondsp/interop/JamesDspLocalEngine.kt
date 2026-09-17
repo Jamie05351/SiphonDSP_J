@@ -346,25 +346,28 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         var result = true
         if (persistOnSuccess && !state.persist(context)) {
             Timber.e("$source native BMW PEQ applied but persistence commit failed")
-            var rollbackRevision: Long? = null
             synchronized(nativeLock) {
+                // Only this call's own status is stale here: if a newer configureNativeBmwPeq
+                // call has already applied a different state (and possibly already reported its
+                // own success) while this write was unlocked on disk I/O, that newer call's
+                // status must survive -- overwriting it here would make
+                // nativeConfigRevisionStatus() combine the newer requested/active revision with
+                // this older call's failure.
                 if (bmwPeqState == state) {
                     val rollbackOk = configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
-                    rollbackRevision = requestedPeqRevision
+                    val rollbackRevision = requestedPeqRevision
                     if (!rollbackOk) {
                         Timber.e("$source native BMW PEQ persistence rollback failed")
                     }
+                    lastPeqApplySuccess = false
+                    lastPeqFailure =
+                        "$source persistence commit failed; previous state requested as rollback revision=$rollbackRevision"
                 } else {
                     Timber.w(
                         "$source native BMW PEQ persistence-rollback skipped: a newer state " +
                             "was applied while this write was in flight"
                     )
                 }
-                lastPeqApplySuccess = false
-                lastPeqFailure = if (rollbackRevision != null)
-                    "$source persistence commit failed; previous state requested as rollback revision=$rollbackRevision"
-                else
-                    "$source persistence commit failed; rollback skipped because a newer state is active"
             }
             result = false
         }
