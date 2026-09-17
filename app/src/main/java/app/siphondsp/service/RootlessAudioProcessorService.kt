@@ -783,6 +783,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             val spectrumScratch = FloatArray(bufferSamples)
 
             while (!isProcessorDisposing && !isServiceDisposing) {
+                if (diagnostics?.isFinished == true) diagnostics = null
                 if(recreateRecorderRequested) {
                     // Stop and release under recorderLifecycleLock so a concurrent
                     // stopRecording() call on another thread can't call stop() on
@@ -819,9 +820,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         bufferSamples,
                     )
                     recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
-                    diagnostics?.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
+                    diagnostics.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
                     track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
-                    diagnostics?.recordTrackCreated(track.state, track.playState, track.sampleRate)
+                    diagnostics.recordTrackCreated(track.state, track.playState, track.sampleRate)
                     synchronized(recorderLifecycleLock) {
                         activeRecorder = recorder
                         activeTrack = track
@@ -1066,7 +1067,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             worker = recorderThread
             if(worker == null)
                 return
-            isProcessorDisposing = true
 
             // Only stop() here to unblock the worker's blocking read()/write() calls; release() is
             // deliberately left to the worker's own finally block so the objects are never released
