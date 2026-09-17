@@ -75,7 +75,7 @@ static_assert(kOutputConfigBase == NativeBmwDspProcessor::kOutputConfigBase);
 static_assert(kOutputConfigWidth == NativeBmwDspProcessor::kOutputConfigWidth);
 // field offsets within one output's block:
 inline constexpr int kOutCrossoverFreq = 0;
-// 0 = BW2 (12 dB/oct), 1 = BW3 (18 dB/oct), 2 = LR4 (24 dB/oct).
+// 0 = BW2 (12 dB/oct), 1 = BW3 (18 dB/oct), 2 = LR4 (24 dB/oct), 3 = BW1 (6 dB/oct).
 inline constexpr int kOutCrossoverType = 1;
 inline constexpr int kOutSubsonicEnabled = 2;
 inline constexpr int kOutSubsonicFreq = 3;

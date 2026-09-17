@@ -121,6 +121,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             // Mirrors NativeBmwDspProcessor::rebuildLowCrossover's switch exactly (same threshold
             // read as configure() -- see that function's comment).
             when {
+                crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
+                    cascade.addLowPass1(crossoverFreq, sampleRate)
                 crossoverType < .5f -> cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
                 crossoverType < 1.5f -> {
                     cascade.addLowPass1(crossoverFreq, sampleRate)
@@ -147,6 +149,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val crossoverType = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
             // Mirrors NativeBmwDspProcessor::rebuildMidCrossover's switch exactly.
             when {
+                crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
+                    cascade.addHighPass1(crossoverFreq, sampleRate)
                 crossoverType < .5f -> cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
                 crossoverType < 1.5f -> {
                     cascade.addHighPass1(crossoverFreq, sampleRate)

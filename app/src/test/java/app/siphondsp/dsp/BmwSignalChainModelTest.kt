@@ -327,6 +327,29 @@ class BmwSignalChainModelTest {
         it[NativeBmwDspValues.INDEX_OUTPUT_SCHEMA_VERSION] = NativeBmwDspValues.OUTPUT_SCHEMA_VERSION
     }
 
+    @Test
+    fun firstOrderCrossoverGraphsMatchAnalyticalResponse() {
+        val values = baseValues()
+        values[NativeBmwDspValues.INDEX_MID_GAIN_L] = 0f
+        values[NativeBmwDspValues.INDEX_MID_GAIN_R] = 0f
+        for (output in 0..3) {
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE, NativeBmwDspValues.CROSSOVER_TYPE_BW1)
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ, 200f)
+            setOutput(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+        }
+        val result = compute(values)
+        for (channel in 0..1) {
+            for (i in curves.frequencies.indices) {
+                val ratio = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE) /
+                    kotlin.math.tan(Math.PI * 200.0 / SAMPLE_RATE)
+                val low = -10.0 * kotlin.math.log10(1.0 + ratio * ratio)
+                val high = 20.0 * kotlin.math.log10(ratio) + low
+                assertEquals(low, result.lowBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-5)
+                assertEquals(high, result.midBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-5)
+            }
+        }
+    }
+
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0
