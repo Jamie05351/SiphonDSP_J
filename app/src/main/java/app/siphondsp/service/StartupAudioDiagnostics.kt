@@ -272,9 +272,9 @@ internal class StartupAudioDiagnostics private constructor(
         !mediaProjectionReady -> Result.MEDIA_PROJECTION
         !recorderCreated -> Result.AUDIO_RECORD_CREATE
         !trackCreated -> Result.AUDIO_TRACK_CREATE
+        successfulReads == 0L && expectedIdle -> Result.EXPECTED_IDLE
         !recorderStarted -> Result.AUDIO_RECORD_START
         !trackPlaying -> Result.AUDIO_TRACK_PLAY
-        successfulReads == 0L && expectedIdle -> Result.EXPECTED_IDLE
         successfulReads == 0L -> Result.AUDIO_RECORD_READ
         dspCalls == 0L || dspFailure != null || nonFiniteOutput -> Result.DSP
         successfulWrites == 0L -> Result.AUDIO_TRACK_WRITE
