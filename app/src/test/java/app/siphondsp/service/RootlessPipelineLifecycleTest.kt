@@ -12,9 +12,11 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when` as whenever
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.util.concurrent.CountDownLatch
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class RootlessPipelineLifecycleTest {
     private lateinit var service: RootlessAudioProcessorService
     private lateinit var track: AudioTrack
