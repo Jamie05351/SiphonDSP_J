@@ -43,6 +43,12 @@ internal class StartupAudioDiagnostics private constructor(
 
     @Volatile private var finished = false
 
+    // Plain volatile read, no lock and no elapsedRealtime() call -- lets callers on the real-time
+    // audio thread drop their reference once the 1s window has closed instead of paying a
+    // synchronized-method call (with isActive()'s default-arg SystemClock.elapsedRealtime() always
+    // evaluated eagerly, short-circuit or not) on every buffer for the rest of the session.
+    val isFinished: Boolean get() = finished
+
     private var recorderCreated = false
     private var recorderState = -1
     private var recorderRecordingState = -1

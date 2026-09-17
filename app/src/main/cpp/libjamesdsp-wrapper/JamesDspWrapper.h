@@ -2,6 +2,8 @@
 #define DSPHOST_H
 
 #include <jni.h>
+#include <atomic>
+#include <cstdint>
 
 /**
  * JNIEnv is thread-local and must never be cached and reused by another thread.
@@ -44,6 +46,11 @@ typedef struct
 {
     void* dsp;
     void* nativeBmwDsp;
+    // Native-side acknowledgement of the last completely accepted logical configuration.
+    // These live with the native handle, not Kotlin/UI state, and are advanced only after the
+    // synchronous NativeBmwDspProcessor configure call has returned success.
+    std::atomic<std::int64_t> nativeBmwDspRevision{0};
+    std::atomic<std::int64_t> nativeBmwPeqRevision{0};
     JniEnvironmentHandle env;
     jobject callbackInterface;
     jmethodID callbackOnLiveprogOutput;
