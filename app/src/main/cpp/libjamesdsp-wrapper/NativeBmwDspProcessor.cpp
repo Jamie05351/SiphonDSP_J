@@ -335,7 +335,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     for (std::size_t out = 0; out < nextOutputConfigs.size(); ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
-        cfg.crossoverFreq = clampf(v[base], 80, 200);
+        cfg.crossoverFreq = clampf(v[base], 80, 320);
         // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1. Keep the old threshold
         // decoding for existing saves; only the explicit new ID selects first-order.
         const float typeVal = v[base + 1];
