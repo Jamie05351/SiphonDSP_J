@@ -340,6 +340,20 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun firstOrderCrossoverSurvivesSaveAndReload() {
+        val values = migratedDefaults()
+        for (output in 0..3) {
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW1
+        }
+        NativeBmwDspValues.save(context, values)
+        val loaded = NativeBmwDspValues.load(context)
+        for (output in 0..3) {
+            assertEquals(3f, loaded[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)], 0f)
+        }
+    }
+
+    @Test
     fun loadSeedsMbcBlockDisabledOnConfigsSavedBeforeItExisted() {
         // A pre-MBC config: the block sits at leftover values and the marker is unset. Even if
         // a stray "enabled" made it into the array, load() must bring the feature back OFF and

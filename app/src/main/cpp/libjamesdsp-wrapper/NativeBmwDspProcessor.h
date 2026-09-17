@@ -282,6 +282,7 @@ private:
             Butterworth2 = 0,
             Butterworth3 = 1,
             LinkwitzRiley4 = 2,
+            Butterworth1 = 3, // single first-order stage, 6 dB/oct
         };
         CrossoverType crossoverType = CrossoverType::LinkwitzRiley4;
         bool subsonicEnabled = false;

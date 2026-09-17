@@ -79,11 +79,11 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
 
     val lowCrossoverType = dsp.get(
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
-    ).toInt().coerceIn(0, 2)
+    ).toInt().coerceIn(0, 3)
     val midCrossoverType = dsp.get(
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
-    ).toInt().coerceIn(0, 2)
-    val crossoverTypeOptions = listOf("BW2", "BW3", "LR4")
+    ).toInt().coerceIn(0, 3)
+    val crossoverTypeOptions = listOf("BW2", "BW3", "LR4", "BW1 (6 dB/oct)")
 
     BmwDspTheme {
         Column(
@@ -139,7 +139,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                             lowPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
                         )
                     },
-                    optionAccents = listOf(lowSlider, lowSlider, lowSlider),
+                    optionAccents = List(crossoverTypeOptions.size) { lowSlider },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
@@ -161,7 +161,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                             midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
                         )
                     },
-                    optionAccents = listOf(midSlider, midSlider, midSlider),
+                    optionAccents = List(crossoverTypeOptions.size) { midSlider },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),

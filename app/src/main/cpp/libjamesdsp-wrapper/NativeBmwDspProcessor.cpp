@@ -336,10 +336,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
         cfg.crossoverFreq = clampf(v[base], 80, 200);
-        // v[base+1] (FIELD_CROSSOVER_TYPE): 0 = BW2, 1 = BW3, 2 (or anything else) = LR4. Same
-        // threshold-read convention as the boolean fields below (v[..] >= .5f).
+        // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1. Keep the old threshold
+        // decoding for existing saves; only the explicit new ID selects first-order.
         const float typeVal = v[base + 1];
-        cfg.crossoverType = typeVal < .5f    ? OutputConfig::CrossoverType::Butterworth2
+        cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
+                            : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
                             : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
                                              : OutputConfig::CrossoverType::LinkwitzRiley4;
         cfg.subsonicEnabled = v[base + 2] >= .5f;
@@ -752,6 +753,10 @@ void NativeBmwDspProcessor::rebuildLowCrossover() {
         auto& out = output(id);
         const auto& cfg = outputConfig(id);
         switch (cfg.crossoverType) {
+            case CrossoverType::Butterworth1:
+                makeLowPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
+                makeIdentity(out.crossover2);
+                break;
             case CrossoverType::Butterworth2:
                 makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
                 makeIdentity(out.crossover2);
@@ -774,6 +779,10 @@ void NativeBmwDspProcessor::rebuildMidCrossover() {
         auto& out = output(id);
         const auto& cfg = outputConfig(id);
         switch (cfg.crossoverType) {
+            case CrossoverType::Butterworth1:
+                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
+                makeIdentity(out.crossover2);
+                break;
             case CrossoverType::Butterworth2:
                 makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
                 makeIdentity(out.crossover2);

@@ -83,9 +83,7 @@ TEST_CASE("Mid crossover BW2/BW3/LR4 each roll off at their real dB/octave slope
 }
 
 TEST_CASE("An out-of-range/garbage crossover-type value safely falls back to LR4") {
-    // configure()'s threshold read (< .5 -> BW2, < 1.5 -> BW3, else LR4) means any unrecognized
-    // value -- not just the in-range 0/1/2 -- lands on the steepest, most conservative option
-    // rather than on undefined behaviour or a silent 1st-order-only response.
+    // Unknown high IDs retain the LR4 fallback; only explicit ID 3 selects BW1.
     constexpr float fc = 200.f;
     const float garbage = stopbandSlopeDbPerOctave(lowOnlyConfig(fc, 7.f), fc * 4, fc * 8);
     const float lr4 = stopbandSlopeDbPerOctave(lowOnlyConfig(fc, kLr4), fc * 4, fc * 8);
@@ -102,4 +100,12 @@ TEST_CASE("Default config resolves to LR4 on both bands (unchanged behaviour pre
     }
     c[sch::kTiltEnabled] = 0.f;
     CHECK(stopbandSlopeDbPerOctave(c, fc * 4, fc * 8) == doctest::Approx(-24.f).epsilon(0.05));
+}
+
+TEST_CASE("First-order crossovers roll off at 6 dB per octave") {
+    constexpr float fc = 200.f;
+    CHECK(stopbandSlopeDbPerOctave(lowOnlyConfig(fc, 3.f), fc * 4, fc * 8) ==
+          doctest::Approx(-6.f).epsilon(0.05));
+    CHECK(stopbandSlopeDbPerOctave(midOnlyConfig(fc, 3.f), fc / 4, fc / 8) ==
+          doctest::Approx(-6.f).epsilon(0.05));
 }
