@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
@@ -75,7 +76,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private lateinit var notificationManager: NotificationManager
     private lateinit var audioManager: AudioManager
 
-    private var mediaProjection: MediaProjection? = null
+    @Volatile private var mediaProjection: MediaProjection? = null
     private var mediaProjectionStartIntent: Intent? = null
 
     private val recorderLifecycleLock = Any()
@@ -83,14 +84,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var recreateRecorderRequested = false
 
-    // Set only by unblockRecorderForMeasurementGenerator() right before its own stop(), and
-    // cleared by the one readCount<0 branch that consumes it. Narrower than
-    // recreateRecorderRequested on purpose: that flag is also set by several unrelated triggers
-    // (blocklist changes, session-policy changes, soft-reboot, the exclude-restricted-sessions
-    // toggle), none of which stop() the recorder themselves -- treating any negative read as
-    // benign whenever recreateRecorderRequested merely happened to be true would silently
-    // swallow a genuine AudioRecord failure that coincides with one of those, instead of only the
-    // specific interruption this flag actually caused.
+    // Set only when recovery/generator switching deliberately stops a blocking read.
+    // Cleared when the worker consumes that interruption or retires that recorder.
     @Volatile
     private var expectingReadInterruption = false
 
@@ -104,8 +99,37 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var activeTrack: AudioTrack? = null
 
     private lateinit var engine: JamesDspLocalEngine
-    private val isRunning: Boolean
+    private val workerAlive: Boolean
         get() = recorderThread?.isAlive == true
+
+    private val healthHandler = Handler(Looper.getMainLooper())
+    // Lifecycle metadata is protected by recorderLifecycleLock. Per-buffer telemetry has one
+    // writer (the recorder worker) and volatile readers; no lock or allocation on the hot path.
+    private var pipelineStartedAt = 0L
+    private var flowExpectedSince = 0L
+    private var recreationSince = -1L
+    private var recreationInProgress = false
+    private var recreationReason = ""
+    private var closeEngineOnWorkerExit = false
+    private var lastHealth: AudioPipelineHealth.Result? = null
+    private val recoveryTimes = ArrayDeque<Long>()
+    @Volatile private var lastSuccessfulRead = -1L
+    @Volatile private var lastSuccessfulProcess = -1L
+    @Volatile private var lastSuccessfulWrite = -1L
+    @Volatile private var consecutiveReadFailures = 0
+    @Volatile private var consecutiveWriteFailures = 0
+    @Volatile private var recorderSuspended = false
+
+    private val healthWatchdog = object : Runnable {
+        override fun run() {
+            synchronized(recorderLifecycleLock) {
+                if (isServiceDisposing || isProcessorDisposing) return
+                checkPipelineHealthLocked()
+                if (!isServiceDisposing && !isProcessorDisposing)
+                    healthHandler.postDelayed(this, AudioPipelineHealth.WATCHDOG_INTERVAL_MS)
+            }
+        }
+    }
 
     private lateinit var sessionManager: RootlessSessionManager
     private var sessionLossRetryCount = 0
@@ -144,9 +168,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
     private val blockedApps by lazy { blockedAppRepository.blocklist.asLiveData() }
     private val blockedAppObserver = Observer<List<BlockedApp>?> {
-        Timber.d("blockedAppObserver: Database changed; ignored=${!isRunning}")
-        if(isRunning)
-            recreateRecorderRequested = true
+        Timber.d("blockedAppObserver: Database changed; ignored=${!workerAlive}")
+        if(workerAlive)
+            requestAudioRecordRecreation("blocklist changed")
     }
 
     override fun onCreate() {
@@ -210,29 +234,37 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             ACTION_START -> Timber.d("Starting service")
             ACTION_STOP -> {
                 Timber.d("Stopping service")
-                stopSelf()
+                stopServiceSafely()
                 return START_NOT_STICKY
             }
         }
 
-        if (isRunning)
-            return START_NOT_STICKY
+        synchronized(recorderLifecycleLock) {
+            if (isServiceDisposing || isProcessorDisposing) return START_NOT_STICKY
+            if (workerAlive) {
+                checkPipelineHealthLocked()
+                return START_NOT_STICKY
+            }
+        }
 
         notificationManager.cancel(Notifications.ID_SERVICE_SESSION_LOSS)
         notificationManager.cancel(Notifications.ID_SERVICE_APPCOMPAT)
 
-        mediaProjectionStartIntent = intent.extras?.getParcelableAs(EXTRA_MEDIA_PROJECTION_DATA)
-        mediaProjection = try {
-            mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, mediaProjectionStartIntent!!)
+        // Reuse a live projection after worker exit; Android projection authorization is not
+        // a reusable token. A revoked projection still follows the existing stop/auth flow.
+        if (mediaProjection == null) {
+            mediaProjectionStartIntent = intent.extras?.getParcelableAs(EXTRA_MEDIA_PROJECTION_DATA)
+            mediaProjection = try {
+                mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, mediaProjectionStartIntent!!)
+            }
+            catch (ex: Exception) {
+                Timber.e("Failed to acquire media projection")
+                sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
+                Timber.e(ex)
+                null
+            }
+            mediaProjection?.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
         }
-        catch (ex: Exception) {
-            Timber.e("Failed to acquire media projection")
-            sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
-            Timber.e(ex)
-            null
-        }
-
-        mediaProjection?.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
 
         if (mediaProjection != null) {
             startRecording()
@@ -240,7 +272,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
         else {
             Timber.w("Failed to capture audio")
-            stopSelf()
+            stopServiceSafely()
         }
 
         return START_REDELIVER_INTENT
@@ -248,9 +280,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     override fun onDestroy() {
         if (activeInstance === this) activeInstance = null
-        isServiceDisposing = true
+        synchronized(recorderLifecycleLock) { isServiceDisposing = true }
+        healthHandler.removeCallbacks(healthWatchdog)
         stopRecording()
-        engine.close()
+        val closeEngineNow = synchronized(recorderLifecycleLock) {
+            // A stuck native process holds engine.nativeLock. Do not block the main thread
+            // indefinitely or dispose its engine while it still owns the audio pipeline.
+            if (workerAlive) {
+                closeEngineOnWorkerExit = true
+                false
+            } else true
+        }
+        if (closeEngineNow) engine.close()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STOPPED))
@@ -289,7 +330,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
 
             notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
-            stopSelf()
+            stopServiceSafely()
         }
     }
 
@@ -355,8 +396,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
      * a clean recreate instead of just letting reads resume on whatever was left sitting there.
      */
     private fun applyMeasGenTransition(newActive: Boolean) {
-        val wasActive = measGenActive
-        measGenActive = newActive
+        val wasActive = synchronized(recorderLifecycleLock) {
+            val previous = measGenActive
+            measGenActive = newActive
+            if (previous != newActive) flowExpectedSince = SystemClock.elapsedRealtime()
+            previous
+        }
         if (newActive && !wasActive) {
             unblockRecorderForMeasurementGenerator()
         } else if (!newActive && wasActive) {
@@ -373,11 +418,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // a fresh recorder next iteration instead of trying to keep using the now-stopped one.
     private fun unblockRecorderForMeasurementGenerator() {
         synchronized(recorderLifecycleLock) {
-            if (recorderThread?.isAlive != true)
-                return
-            recreateRecorderRequested = true
-            expectingReadInterruption = true
-            safeStop(activeRecorder)
+            requestRecreationLocked("measurement generator enabled", unblock = true)
         }
     }
 
@@ -400,20 +441,24 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ServiceNotificationHelper.pushSessionLossNotification(this@RootlessAudioProcessorService, mediaProjectionStartIntent)
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_control_loss_toast), false)
                 Timber.w("Terminating service due to session loss")
-                stopSelf()
+                stopServiceSafely()
             }
         }
     }
 
     private val onSessionChangeListener = object : OnRootlessSessionChangeListener {
         override fun onSessionChanged(sessionList: HashMap<Int, IEffectSession>) {
-            isProcessorIdle = sessionList.isEmpty()
+            synchronized(recorderLifecycleLock) {
+                val idle = sessionList.isEmpty()
+                if (isProcessorIdle && !idle) flowExpectedSince = SystemClock.elapsedRealtime()
+                isProcessorIdle = idle
+            }
             if(!isProcessorIdle) {
                 sessionLossRetryCount = 0
                 idleSinceMillis = 0L
             }
             else if(idleSinceMillis == 0L) {
-                idleSinceMillis = System.currentTimeMillis()
+                idleSinceMillis = SystemClock.elapsedRealtime()
             }
 
             Timber.d("onSessionChanged: isProcessorIdle=$isProcessorIdle")
@@ -451,7 +496,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_app_compat_toast), false)
                 Timber.w("Terminating service due to app incompatibility; redirect user to troubleshooting options")
-                stopSelf()
+                stopServiceSafely()
             }
         }
     }
@@ -490,17 +535,94 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    fun requestAudioRecordRecreation() {
-        if(isProcessorDisposing || isServiceDisposing) {
-            Timber.e("recreateAudioRecorder: service or processor already disposing")
-            return
+    fun requestAudioRecordRecreation(reason: String = "configuration/session policy changed") {
+        // Even configuration changes must unblock an idle read; otherwise the pending request
+        // can never reach the worker's recreation branch while no media is being captured.
+        synchronized(recorderLifecycleLock) { requestRecreationLocked(reason, unblock = true) }
+    }
+
+    private fun requestRecreationLocked(reason: String, unblock: Boolean) {
+        if (isProcessorDisposing || isServiceDisposing || !workerAlive) return
+        if (!recreateRecorderRequested && !recreationInProgress) {
+            recreationSince = SystemClock.elapsedRealtime()
+            recreationReason = reason
+            Timber.i("Audio pipeline recreation requested: %s", reason)
         }
         recreateRecorderRequested = true
+        if (unblock) {
+            expectingReadInterruption = true
+            safeStop(activeRecorder)
+            safeStop(activeTrack)
+        }
+    }
+
+    private fun stopServiceSafely() {
+        synchronized(recorderLifecycleLock) { isServiceDisposing = true }
+        healthHandler.removeCallbacks(healthWatchdog)
+        stopSelf()
+    }
+
+    // Called under the existing lifecycle lock so state getters cannot race release().
+    private fun checkPipelineHealthLocked() {
+        val now = SystemClock.elapsedRealtime()
+        val recorderState = activeRecorder?.state
+        val recordingState = activeRecorder?.recordingState
+        val trackState = activeTrack?.state
+        val playState = activeTrack?.playState
+        val snapshot = AudioPipelineHealth.Snapshot(
+            now, workerAlive, isProcessorDisposing || isServiceDisposing,
+            recorderState == AudioRecord.STATE_INITIALIZED,
+            recordingState == AudioRecord.RECORDSTATE_RECORDING,
+            trackState == AudioTrack.STATE_INITIALIZED, playState == AudioTrack.PLAYSTATE_PLAYING,
+            pipelineStartedAt, flowExpectedSince,
+            lastSuccessfulRead, lastSuccessfulProcess, lastSuccessfulWrite,
+            consecutiveReadFailures, consecutiveWriteFailures,
+            isProcessorIdle, recorderSuspended, measGenActive,
+            recreateRecorderRequested, recreationInProgress, recreationSince,
+        )
+        val health = AudioPipelineHealth.evaluate(snapshot)
+        if (health != lastHealth) {
+            fun age(time: Long) = if (time < 0) -1 else now - time
+            Timber.i(
+                "Audio pipeline %s -> %s: %s; ages read/process/write=%s/%s/%sms; " +
+                    "record=%s/%s track=%s/%s failures=%s/%s idle=%s suspended=%s generator=%s recreate=%s/%s",
+                lastHealth?.state, health.state, health.reason,
+                age(snapshot.lastRead), age(snapshot.lastProcess), age(snapshot.lastWrite),
+                recorderState, recordingState, trackState, playState,
+                snapshot.readFailures, snapshot.writeFailures, isProcessorIdle, recorderSuspended,
+                measGenActive, recreateRecorderRequested, recreationInProgress,
+            )
+            if (health.state == AudioPipelineHealth.State.HEALTHY && recreationSince >= 0) {
+                Timber.i("Audio pipeline recovery succeeded: %s", recreationReason)
+                recreationSince = -1
+            }
+            lastHealth = health
+        }
+        when (health.state) {
+            AudioPipelineHealth.State.STALLED -> {
+                while (recoveryTimes.isNotEmpty() && now - recoveryTimes.first() >= AudioPipelineHealth.RECOVERY_WINDOW_MS)
+                    recoveryTimes.removeFirst()
+                if (recoveryTimes.size >= AudioPipelineHealth.MAX_RECOVERIES_PER_WINDOW) {
+                    lastHealth = AudioPipelineHealth.Result(AudioPipelineHealth.State.FAILED, "recovery budget exhausted")
+                    Timber.e("Audio pipeline recovery failed: retry budget exhausted (%s)", health.reason)
+                    stopServiceSafely()
+                } else {
+                    recoveryTimes.addLast(now)
+                    requestRecreationLocked(health.reason, unblock = true)
+                }
+            }
+            AudioPipelineHealth.State.FAILED -> {
+                Timber.e("Audio pipeline recovery failed: %s", health.reason)
+                stopServiceSafely()
+            }
+            else -> Unit
+        }
     }
 
     @SuppressLint("BinaryOperationInTimber")
     private fun startRecording() {
         synchronized(recorderLifecycleLock) {
+            if (isServiceDisposing || isProcessorDisposing) return
             if(recorderThread?.isAlive == true) {
                 Timber.w("startRecording: recorder thread already running")
                 return
@@ -508,12 +630,24 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
             if (!hasRecordPermission()) {
                 Timber.e("Record audio permission missing. Can't record")
-                stopSelf()
+                stopServiceSafely()
                 return
             }
 
             isProcessorDisposing = false
             recreateRecorderRequested = false
+            recreationInProgress = false
+            recreationSince = -1
+            expectingReadInterruption = false
+            lastSuccessfulRead = -1
+            lastSuccessfulProcess = -1
+            lastSuccessfulWrite = -1
+            consecutiveReadFailures = 0
+            consecutiveWriteFailures = 0
+            recorderSuspended = false
+            pipelineStartedAt = SystemClock.elapsedRealtime()
+            flowExpectedSince = pipelineStartedAt
+            lastHealth = null
 
             val encoding = AudioEncoding.fromInt(
                 preferences.get<String>(R.string.key_audioformat_encoding).toIntOrNull() ?: 1
@@ -551,6 +685,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
             recorderThread = worker
             worker.start()
+            healthHandler.removeCallbacks(healthWatchdog)
+            healthHandler.postDelayed(healthWatchdog, AudioPipelineHealth.WATCHDOG_INTERVAL_MS)
         }
     }
 
@@ -587,8 +723,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         try {
             recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
             track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
-            activeRecorder = recorder
-            activeTrack = track
+            synchronized(recorderLifecycleLock) {
+                activeRecorder = recorder
+                activeTrack = track
+            }
 
             ServiceNotificationHelper.pushServiceNotification(applicationContext, arrayOf())
 
@@ -599,44 +737,69 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             val spectrumScratchDry = FloatArray(bufferSamples)
             val spectrumScratch = FloatArray(bufferSamples)
 
-            while (!isProcessorDisposing) {
+            while (!isProcessorDisposing && !isServiceDisposing) {
                 if(recreateRecorderRequested) {
-                    recreateRecorderRequested = false
-                    Timber.d("Recreating recorder without replacing worker thread...")
-
                     // Stop and release under recorderLifecycleLock so a concurrent
                     // stopRecording() call on another thread can't call stop() on
                     // this AudioRecord while it's being release()'d here (concurrent
                     // stop+release is UB, same hazard as the final-stop path below).
                     synchronized(recorderLifecycleLock) {
+                        if (isProcessorDisposing || isServiceDisposing) break
+                        recreateRecorderRequested = false
+                        recreationInProgress = true
+                        Timber.i("Recreating audio pipeline on existing worker: %s", recreationReason)
                         safeStop(recorder)
                         safeStop(track)
-                        track.flush()
+                        track?.flush()
                         safeRelease(recorder)
+                        safeRelease(track)
                         activeRecorder = null
+                        activeTrack = null
+                        recorder = null
+                        track = null
+                        expectingReadInterruption = false
                     }
 
-                    if (mediaProjection == null || isProcessorDisposing) {
+                    if (mediaProjection == null || isProcessorDisposing || isServiceDisposing) {
                         Timber.e("Media projection handle is null, stopping recorder worker")
                         break
                     }
 
                     recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
-                    activeRecorder = recorder
-                    Timber.d("Recorder recreated")
+                    track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+                    synchronized(recorderLifecycleLock) {
+                        activeRecorder = recorder
+                        activeTrack = track
+                        recreationInProgress = false
+                        // Only this worker resets its telemetry; old buffers cannot certify a
+                        // replacement pipeline as healthy. A request arriving during build is
+                        // retained for the next iteration.
+                        lastSuccessfulRead = -1
+                        lastSuccessfulProcess = -1
+                        lastSuccessfulWrite = -1
+                        consecutiveReadFailures = 0
+                        consecutiveWriteFailures = 0
+                        pipelineStartedAt = SystemClock.elapsedRealtime()
+                    }
+                    Timber.i("Audio pipeline recreated; awaiting successful flow")
+                    continue
                 }
 
+                val currentRecorder = recorder ?: break
+                val currentTrack = track ?: break
+
                 if(isProcessorIdle && suspendOnIdle && !measGenActive &&
-                    idleSinceMillis != 0L && System.currentTimeMillis() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
+                    idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
                     // Locked for the same reason stopRecording() and
                     // unblockRecorderForMeasurementGenerator() lock their own stop() calls: so
                     // this can never race either of those stopping/releasing the same
                     // AudioRecord/AudioTrack concurrently from another thread.
                     synchronized(recorderLifecycleLock) {
-                        safeStop(recorder)
-                        safeStop(track)
+                        recorderSuspended = true
+                        safeStop(currentRecorder)
+                        safeStop(currentTrack)
                     }
-                    track.flush()
+                    currentTrack.flush()
                     try {
                         Thread.sleep(50)
                     }
@@ -647,10 +810,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     continue
                 }
 
-                if(recorder.recordingState == AudioRecord.RECORDSTATE_STOPPED)
-                    recorder.startRecording()
-                if(track.playState != AudioTrack.PLAYSTATE_PLAYING)
-                    track.play()
+                synchronized(recorderLifecycleLock) {
+                    if (isProcessorDisposing || isServiceDisposing) break
+                    if (recreateRecorderRequested) continue
+                    if (recorderSuspended) {
+                        recorderSuspended = false
+                        flowExpectedSince = SystemClock.elapsedRealtime()
+                    }
+                    if(currentRecorder.recordingState == AudioRecord.RECORDSTATE_STOPPED)
+                        currentRecorder.startRecording()
+                    if(currentTrack.playState != AudioTrack.PLAYSTATE_PLAYING)
+                        currentTrack.play()
+                }
 
                 // The measurement generator fully replaces whatever's captured (see
                 // NativeBmwDspProcessor::applyMeasurementGenerator(), called before anything else
@@ -662,41 +833,48 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // starving the generator of any chance to run at all. Feed zero-filled input
                 // instead; writeFully()'s blocking AudioTrack.write() further down still provides
                 // real-time pacing since the output device drains at its own clock regardless.
-                val readCount = if (measGenActive) {
+                val generatedInput = measGenActive
+                val readCount = if (generatedInput) {
                     if (encoding == AudioEncoding.PcmShort) shortBuffer.fill(0) else floatBuffer.fill(0f)
                     bufferSamples
                 } else if(encoding == AudioEncoding.PcmShort)
-                    recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
+                    currentRecorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
                 else
-                    recorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
+                    currentRecorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
 
                 if(readCount < 0) {
                     if(isProcessorDisposing)
                         break
-                    // A stop() issued by unblockRecorderForMeasurementGenerator() to unblock this
-                    // read can surface here as a negative read result depending on the platform's
-                    // AudioRecord implementation; treat it as benign, but only when
-                    // expectingReadInterruption confirms *that specific* stop() caused it --
-                    // recreateRecorderRequested alone isn't specific enough, since several
-                    // unrelated triggers (blocklist/session-policy changes, soft-reboot, the
-                    // exclude-restricted-sessions toggle) also set it without ever stopping the
-                    // recorder themselves, and could otherwise mask a genuine, coincidental
-                    // AudioRecord failure as an expected interruption.
+                    // Only a deliberate stop is exempt from failure accounting.
                     if(expectingReadInterruption) {
                         expectingReadInterruption = false
                         continue
                     }
-                    throw IOException("AudioRecord.read failed with error $readCount")
-                }
-                if(readCount == 0)
+                    consecutiveReadFailures = (consecutiveReadFailures + 1)
+                        .coerceAtMost(AudioPipelineHealth.MAX_CONSECUTIVE_FAILURES)
+                    if (consecutiveReadFailures == 1)
+                        Timber.w("AudioRecord.read failed with error %s", readCount)
+                    Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
                     continue
+                }
+                if(readCount == 0) {
+                    Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
+                    continue
+                }
 
                 val processCount = readCount - (readCount % CHANNEL_COUNT)
                 if(processCount <= 0)
                     continue
 
+                if (!generatedInput) {
+                    lastSuccessfulRead = SystemClock.elapsedRealtime()
+                    consecutiveReadFailures = 0
+                }
+                if (recreateRecorderRequested || isProcessorDisposing || isServiceDisposing) continue
+
                 if(encoding == AudioEncoding.PcmShort) {
                     engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
+                    lastSuccessfulProcess = SystemClock.elapsedRealtime()
                     if(SpectrumEngine.isActive) {
                         for(i in 0 until processCount) {
                             spectrumScratchDry[i] = shortBuffer[i] / 32768f
@@ -704,25 +882,26 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         }
                         SpectrumEngine.publish(spectrumScratchDry, spectrumScratch, processCount, sampleRate)
                     }
-                    writeFully(track, shortOutBuffer, processCount)
+                    writeFully(currentTrack, shortOutBuffer, processCount)
                 }
                 else {
                     engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
+                    lastSuccessfulProcess = SystemClock.elapsedRealtime()
                     if(SpectrumEngine.isActive) SpectrumEngine.publish(floatBuffer, floatOutBuffer, processCount, sampleRate)
-                    writeFully(track, floatOutBuffer, processCount)
+                    writeFully(currentTrack, floatOutBuffer, processCount)
                 }
             }
         }
         catch (e: IOException) {
             if(!isProcessorDisposing) {
                 Timber.e(e, "Audio worker I/O failure")
-                stopSelf()
+                stopServiceSafely()
             }
         }
         catch (e: Exception) {
             if(!isProcessorDisposing) {
                 Timber.e(e, "Exception in recorder worker")
-                stopSelf()
+                stopServiceSafely()
             }
         }
         finally {
@@ -733,26 +912,27 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             synchronized(recorderLifecycleLock) {
                 activeRecorder = null
                 activeTrack = null
+                recreationInProgress = false
             }
             safeStop(recorder)
             safeStop(track)
             safeRelease(recorder)
             safeRelease(track)
 
-            synchronized(recorderLifecycleLock) {
+            val closeEngine = synchronized(recorderLifecycleLock) {
                 if(recorderThread === Thread.currentThread())
                     recorderThread = null
+                closeEngineOnWorkerExit
             }
+            if (closeEngine) engine.close()
         }
     }
 
     private fun writeFully(track: AudioTrack, buffer: ShortArray, length: Int) {
         var offset = 0
-        while(offset < length && !isProcessorDisposing) {
+        while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
             val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
-            if(written < 0)
-                throw IOException("AudioTrack.write failed with error $written")
-            if(written == 0)
+            if (!recordWriteResult(written))
                 continue
             offset += written
         }
@@ -760,19 +940,35 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     private fun writeFully(track: AudioTrack, buffer: FloatArray, length: Int) {
         var offset = 0
-        while(offset < length && !isProcessorDisposing) {
+        while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
             val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
-            if(written < 0)
-                throw IOException("AudioTrack.write failed with error $written")
-            if(written == 0)
+            if (!recordWriteResult(written))
                 continue
             offset += written
         }
     }
 
+    private fun recordWriteResult(written: Int): Boolean {
+        if (written > 0) {
+            lastSuccessfulWrite = SystemClock.elapsedRealtime()
+            consecutiveWriteFailures = 0
+            return true
+        }
+        if (isProcessorDisposing || isServiceDisposing || recreateRecorderRequested) return false
+        consecutiveWriteFailures = (consecutiveWriteFailures + 1)
+            .coerceAtMost(AudioPipelineHealth.MAX_CONSECUTIVE_FAILURES)
+        if (consecutiveWriteFailures == 1)
+            Timber.w("AudioTrack.write made no progress: %s", written)
+        Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
+        return false
+    }
+
     fun stopRecording() {
         val worker: Thread?
         synchronized(recorderLifecycleLock) {
+            healthHandler.removeCallbacks(healthWatchdog)
+            isProcessorDisposing = true
+            checkPipelineHealthLocked()
             worker = recorderThread
             if(worker == null)
                 return
@@ -810,6 +1006,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     fun restartRecording() {
+        // Session callbacks may originate off-main. Serialize stop/join/start with service
+        // commands and destruction; never start a second worker from the old worker itself.
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            healthHandler.post { restartRecording() }
+            return
+        }
         if(isServiceDisposing) {
             Timber.e("restartRecording: service already disposing")
             return
@@ -818,13 +1020,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         stopRecording()
         if(recorderThread?.isAlive == true) {
             Timber.e("restartRecording: previous recorder worker did not terminate")
-            stopSelf()
+            stopServiceSafely()
             return
         }
 
-        isProcessorDisposing = false
-        recreateRecorderRequested = false
-        startRecording()
+        synchronized(recorderLifecycleLock) {
+            if (isServiceDisposing) return
+            isProcessorDisposing = false
+            recreateRecorderRequested = false
+            startRecording()
+        }
     }
 
     private fun buildAudioTrack(encoding: Int, sampleRate: Int, bufferSizeBytes: Int): AudioTrack {
