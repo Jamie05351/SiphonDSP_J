@@ -54,6 +54,17 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         // Note: API 29 & 30 lack a session id
         matches.forEach next@ {
             try {
+                // AudioService retains AudioPlaybackConfiguration entries after a player is
+                // paused/stopped, so presence in the dump is not proof that capture should be
+                // producing buffers. Android reports the player state as `state:started`,
+                // `state:paused`, `state:stopped`, `state:idle`, etc. When that field is present,
+                // only STARTED is an active source. Older/OEM dump formats that omit state retain
+                // the historical behaviour so session discovery does not regress there.
+                if (!isPlaybackConfigurationActive(it.value)) {
+                    Timber.v("Ignoring inactive AudioPlaybackConfiguration: %s", it.value)
+                    return@next
+                }
+
                 var uid: Int? = null
                 var pid: Int? = null
                 var usage: String? = null
@@ -121,5 +132,17 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
 
     companion object {
         const val TARGET_SERVICE = "audio"
+        private val PLAYER_STATE_REGEX = """(?:--\s*)?state:\s*([A-Za-z_]+)""".toRegex(RegexOption.IGNORE_CASE)
+
+        /**
+         * AudioPlaybackConfiguration.isActive() is true only for PLAYER_STATE_STARTED. Mirror
+         * that semantics when AudioService exposes a state token in its text dump. A missing
+         * token means an older/OEM format we cannot classify, so preserve the provider's legacy
+         * behaviour rather than dropping a potentially real session.
+         */
+        internal fun isPlaybackConfigurationActive(line: String): Boolean {
+            val state = PLAYER_STATE_REGEX.find(line)?.groupValues?.getOrNull(1) ?: return true
+            return state.equals("started", ignoreCase = true)
+        }
     }
 }
