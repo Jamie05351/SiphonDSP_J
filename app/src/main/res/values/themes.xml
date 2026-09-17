@@ -12,6 +12,7 @@
 
         <item name="materialSwitchStyle">@style/Theme.SiphonDSP.MaterialSwitch</item>
         <item name="toolbarStyle">@style/Theme.SiphonDSP.Toolbar</item>
+        <item name="toolbarNavigationButtonStyle">@style/Theme.SiphonDSP.Toolbar.NavigationButton</item>
         <item name="bottomAppBarStyle">@style/Theme.SiphonDSP.BottomAppBar</item>
         <item name="alertDialogTheme">@style/AppTheme.AlertDialogTheme</item>
         <item name="materialCardViewStyle">@style/Theme.SiphonDSP.CardView</item>
@@ -127,6 +128,18 @@
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <!-- The Material3 default nav button (~56dp minWidth, plus its own insets) leaves visible
+         empty toolbar space to the button's right that isn't actually part of its touch target,
+         reported as the back arrow being hard to hit despite "so much room" around it. Widening
+         the button and zeroing its insets claims more of that already-empty space as tappable,
+         without moving WHERE the button starts (that's contentInsetStart / the per-screen
+         dsp_toolbar_nav_inset elsewhere, left untouched) or changing the drawn icon itself. -->
+    <style name="Theme.SiphonDSP.Toolbar.NavigationButton" parent="Widget.Material3.Toolbar.Button.Navigation">
+        <item name="android:minWidth">64dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
     </style>
 
     <style name="Theme.SiphonDSP.BottomAppBar" parent="Widget.Material3.BottomAppBar">
