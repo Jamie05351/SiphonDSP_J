@@ -38,12 +38,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     private var handle: JamesDspHandle = try {
         JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
     } catch (e: Throwable) {
-        // Caught broadly (not just Exception) since the failure this guards against -- native
-        // allocation failing under low memory -- can surface as an OutOfMemoryError, an Error
-        // subtype Exception doesn't catch. Every other method in this class already treats
-        // handle==0L as "native not ready" and degrades gracefully (copyBypass, withHandle's
-        // default-value paths); an uncaught exception here instead crashes the constructor,
-        // which callers (RootlessAudioProcessorService.onCreate()) run before startForeground().
         Timber.e(e, "JamesDspWrapper.alloc() failed; degrading to a null native handle")
         0L
     }
@@ -62,16 +56,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             if (attemptingColdStartRestore) {
                 restoreNativeBmwPeq()
             }
-            // restoreNativeBmwPeq() above already applies whatever PEQ state is needed at the
-            // now-current sample rate (set via super.sampleRate = value earlier in this same
-            // call) on success, so re-pushing it again immediately below would redundantly
-            // reload from disk and reconfigure natively a second time under this same lock, for
-            // no reason. Only do the normal "already running, rate changed" re-sync when this
-            // call didn't just attempt a cold-start restore.
-            //
-            // A sample-rate-driven PEQ coefficient rebuild is deliberately a new logical PEQ
-            // revision. That keeps revision semantics simple and truthful: each complete native
-            // configurePeq commit, whether editor-driven or sample-rate-driven, has a unique ack.
             if (!attemptingColdStartRestore) {
                 synchronized(nativeLock) {
                     if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
@@ -109,16 +93,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             BmwPeqState.recordRestoreResult(context, "persisted-state")
             return
         }
-        // A structural validation failure (e.g. a band now above the current sample rate's
-        // Nyquist) means this exact persisted config can never succeed on its own, so it's
-        // correct -- necessary, even -- to permanently replace it below. A bare native-side
-        // rejection with the config structurally valid by Kotlin's own check is different: that
-        // can be a transient native/JNI failure (this app already tracks OOM-class native
-        // failures elsewhere), not a real problem with the saved config. Persisting a fallback
-        // over the user's real config for a one-off glitch would destroy it permanently for no
-        // reason, so only the structural case persists; the transient case falls back for this
-        // session only and leaves the real persisted state on disk for the next cold start to
-        // try again fresh.
         val persistedValidation = persisted.validate(sampleRate)
         val persistedError = persistedValidation ?: "native configuration rejected"
         val structurallyInvalid = persistedValidation != null
@@ -302,14 +276,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         enable: Boolean,
         impulseResponse: FloatArray,
         irChannels: Int,
-        irFrames: Int
+        irFrames: Int,
+        irCrc: Int,
     ): Boolean = withHandle(false) {
+        // The local JNI convolver does not currently use the IR CRC; it is part of the shared
+        // engine contract for parity with the remote AudioEffect implementation.
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
     }
 
-    // Re-push the active BMW three-bank PEQ (including a session fallback). Called from the
-    // sampleRate setter (a rate change invalidates the biquad coefficients). This is treated as a
-    // new logical PEQ revision because native performs a complete coefficient-bank commit.
     private fun refreshEqualizersLocked(): Boolean {
         if (handle == 0L) return false
         return if (peqRestorePending) true
@@ -374,15 +348,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             Timber.e("$source native BMW PEQ applied but persistence commit failed")
             var rollbackRevision: Long? = null
             synchronized(nativeLock) {
-                // nativeLock is deliberately released during state.persist()'s disk I/O above
-                // (holding it would block the audio-processing hot path, which also takes
-                // nativeLock, for the duration of two fsync'd file writes) -- so another call
-                // could have applied and persisted a different state while this write was in
-                // flight. Only roll back if bmwPeqState still equals what this call itself
-                // applied; otherwise the stale `previous` snapshot from before this call even
-                // started would clobber that newer, already-successful state. All real call
-                // sites serialize on the main thread today so this window is currently latent,
-                // but nothing structurally prevented it before this check.
                 if (bmwPeqState == state) {
                     val rollbackOk = configureNativeBmwPeqLocked(previous, "$source-persistence-rollback")
                     rollbackRevision = requestedPeqRevision
@@ -443,21 +408,15 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCompressorMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
-    /** 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. See getNativeBmwMbcMeter. */
     fun nativeBmwMbcMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
 
-    /** 2 floats: [lowBusGrDb, midBusGrDb] -- per-bus limiter gain reduction. */
     fun nativeBmwBusLimiterMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwBusLimiterMeter(it) }
 
-    /** 1 float: [masterLimiterGrDb] -- master limiter gain reduction; 0 while bypassed. */
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 
-    // Starting a fresh capture makes any snapshot retained from a previous failed export
-    // (see exportNativeBmwCaptureWav below) irrelevant -- free it now rather than leaking it
-    // until the next successful export, which may never come if the user just re-records.
     fun startNativeBmwCapture() {
         freePendingCaptureSnapshot()
         withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
@@ -479,15 +438,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
-    // Detach ownership while the engine is protected, then release nativeLock
-    // before file I/O. Closing the engine cannot invalidate this snapshot.
-    //
-    // A snapshot is only freed once WAV export from it actually succeeds. On failure (a full
-    // cache partition, a transient write error) it's kept in pendingCaptureSnapshot instead: the
-    // completed native capture is still intact and calling this again retries the export from
-    // the same data, rather than permanently discarding a finished take and forcing another
-    // capture. startNativeBmwCapture() frees a stale pending snapshot once it's no longer the
-    // most recent capture.
     fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? {
         val snapshot = pendingCaptureSnapshot.takeIf { it != 0L }
             ?: withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
