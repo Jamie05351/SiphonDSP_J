@@ -124,7 +124,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                 )
 
                 DspSliderRow(
-                    "Lowpass freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
+                    "Lowpass freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
                     dsp, lowSlider, mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                 )
                 BmwSegmentedControl(
@@ -146,7 +146,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                     segmentGap = 4.dp,
                 )
                 DspSliderRow(
-                    "Highpass freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..200f, 1f, "Hz",
+                    "Highpass freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
                     dsp, midSlider, mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
                 )
                 BmwSegmentedControl(
