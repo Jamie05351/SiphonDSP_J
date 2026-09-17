@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
@@ -196,12 +197,16 @@ private fun PeqListHeader() {
     }
 }
 
+// Matches TapCell/StepperCell's own 13sp -- big enough to read at a glance (vs. the original
+// 11sp) while still reliably fitting "FILTER", the longest header label, in its column.
+private val HeaderFontSize = 13.sp
+
 @Composable
 private fun RowScope.HeaderCell(text: String, weight: Float) {
     Text(
         text = text,
         color = IndexColor,
-        fontSize = 22.sp,
+        fontSize = HeaderFontSize,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 1,
@@ -228,8 +233,6 @@ private fun PeqBandRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-            .then(if (selected) Modifier.border(1.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
             .padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(CellGap),
         verticalAlignment = Alignment.CenterVertically,
@@ -240,7 +243,17 @@ private fun PeqBandRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.weight(WIndex),
+            modifier = Modifier
+                .weight(WIndex)
+                .then(
+                    if (selected) {
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(accent.copy(alpha = 0.18f))
+                            .border(1.dp, accent, RoundedCornerShape(6.dp))
+                    } else Modifier,
+                )
+                .padding(vertical = 4.dp),
         )
         TapCell(band.channel.displayLabel, accent, WPicker, onChannel)
         TapCell(band.filterType.displayLabel, accent, WPicker, onType)
@@ -297,16 +310,52 @@ private fun RowScope.StepperCell(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .weight(1f)
-                .height(RowControlHeight)
                 .clip(RoundedCornerShape(6.dp))
                 .clickable(interactionSource = valueInteractionSource, indication = LocalIndication.current, onClick = onValueClick)
                 .bmwFocusRing(valueInteractionSource)
                 .background(TapCellFill)
                 .border(1.dp, accent, RoundedCornerShape(6.dp))
-                .wrapContentHeight(Alignment.CenterVertically),
+                .padding(vertical = 12.dp),
         )
-        Glyph("−", StepperGlyphColor, Modifier.size(StepButtonSize), onMinus)
-        Glyph("+", StepperGlyphColor, Modifier.size(StepButtonSize), onPlus)
+        MinusPlusGroup(StepperGlyphColor, onMinus, onPlus)
+    }
+}
+
+// Reclaims the width the old separate −/+ buttons (2x48dp + a gap between them) spent, so the
+// value box -- the thing actually being read -- gets more of it: one pill-shaped control, split
+// by a thin divider in the same gray as the glyphs, rather than two independent buttons.
+private val StepperHalfWidth = 40.dp
+
+@Composable
+private fun MinusPlusGroup(glyphColor: Color, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(RowControlHeight)
+            .clip(RoundedCornerShape(8.dp))
+            .background(GlyphButtonFill),
+    ) {
+        GlyphHalf("−", glyphColor, Modifier.width(StepperHalfWidth).fillMaxHeight(), onMinus)
+        Box(
+            Modifier
+                .width(1.dp)
+                .fillMaxHeight(0.6f)
+                .align(Alignment.CenterVertically)
+                .background(glyphColor),
+        )
+        GlyphHalf("+", glyphColor, Modifier.width(StepperHalfWidth).fillMaxHeight(), onPlus)
+    }
+}
+
+@Composable
+private fun GlyphHalf(text: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .bmwFocusRing(interactionSource),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = text, color = tint, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
