@@ -7,11 +7,13 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Bounded, allocation-light startup telemetry for the rootless read -> DSP -> write pipeline.
+ * Bounded startup telemetry for the rootless read -> DSP -> write pipeline.
  *
  * A fresh instance is created for the initial pipeline and for every recorder recreation. The
- * audio thread updates primitive counters only while [isActive] is true; once the one-second
- * window expires, [finishIfDue] emits one compact summary and all hot-path calls become no-ops.
+ * detailed counters exist only for the first second. Record methods are synchronized because the
+ * one-shot summary is deliberately emitted from the service Handler: that lets the diagnostic
+ * still complete when the audio worker is stuck inside READ_BLOCKING, which is one of the main
+ * startup failure modes this probe is intended to expose.
  */
 internal class StartupAudioDiagnostics private constructor(
     val attemptId: Long,
@@ -39,8 +41,7 @@ internal class StartupAudioDiagnostics private constructor(
         EXPECTED_IDLE,
     }
 
-    @Volatile
-    private var finished = false
+    @Volatile private var finished = false
 
     private var recorderCreated = false
     private var recorderState = -1
@@ -85,30 +86,27 @@ internal class StartupAudioDiagnostics private constructor(
     fun isActive(nowMs: Long = SystemClock.elapsedRealtime()): Boolean =
         !finished && nowMs - startedAtMs <= WINDOW_MS
 
+    @Synchronized
     fun recordRecorderCreated(state: Int, recordingState: Int, actualSampleRate: Int) {
         if (!isActive()) return
         recorderCreated = true
         recorderState = state
         recorderRecordingState = recordingState
         recorderSampleRate = actualSampleRate
-        Timber.i(
-            "%s[%s] AudioRecord created state=%s recordingState=%s sampleRate=%s",
-            TAG, attemptId, state, recordingState, actualSampleRate,
-        )
+        Timber.i("%s[%s] AudioRecord created state=%s recordingState=%s sampleRate=%s", TAG, attemptId, state, recordingState, actualSampleRate)
     }
 
+    @Synchronized
     fun recordTrackCreated(state: Int, playState: Int, actualSampleRate: Int) {
         if (!isActive()) return
         trackCreated = true
         trackState = state
         trackPlayState = playState
         trackSampleRate = actualSampleRate
-        Timber.i(
-            "%s[%s] AudioTrack created state=%s playState=%s sampleRate=%s",
-            TAG, attemptId, state, playState, actualSampleRate,
-        )
+        Timber.i("%s[%s] AudioTrack created state=%s playState=%s sampleRate=%s", TAG, attemptId, state, playState, actualSampleRate)
     }
 
+    @Synchronized
     fun recordRecorderStarted(recordingState: Int) {
         if (!isActive()) return
         recorderRecordingState = recordingState
@@ -116,6 +114,7 @@ internal class StartupAudioDiagnostics private constructor(
         Timber.i("%s[%s] AudioRecord started recordingState=%s", TAG, attemptId, recordingState)
     }
 
+    @Synchronized
     fun recordTrackStarted(playState: Int) {
         if (!isActive()) return
         trackPlayState = playState
@@ -123,6 +122,7 @@ internal class StartupAudioDiagnostics private constructor(
         Timber.i("%s[%s] AudioTrack started playState=%s", TAG, attemptId, playState)
     }
 
+    @Synchronized
     fun recordRead(count: Int, generatedInput: Boolean) {
         if (!isActive()) return
         readCalls++
@@ -142,6 +142,7 @@ internal class StartupAudioDiagnostics private constructor(
         if (generatedInput) expectedIdle = false
     }
 
+    @Synchronized
     fun recordShortInput(buffer: ShortArray, count: Int) {
         if (!isActive() || nonZeroInput) return
         val limit = min(count, buffer.size)
@@ -153,6 +154,7 @@ internal class StartupAudioDiagnostics private constructor(
         }
     }
 
+    @Synchronized
     fun recordFloatInput(buffer: FloatArray, count: Int) {
         if (!isActive() || nonZeroInput) return
         val limit = min(count, buffer.size)
@@ -164,6 +166,7 @@ internal class StartupAudioDiagnostics private constructor(
         }
     }
 
+    @Synchronized
     fun recordDspStart(nativeHandleReady: Boolean, bypassUsed: Boolean) {
         if (!isActive()) return
         dspCalls++
@@ -172,16 +175,19 @@ internal class StartupAudioDiagnostics private constructor(
         if (firstDspAtMs < 0) firstDspAtMs = SystemClock.elapsedRealtime()
     }
 
+    @Synchronized
     fun recordDspSuccess(processCount: Int) {
         if (!isActive()) return
         processedSamples += processCount.toLong()
     }
 
+    @Synchronized
     fun recordDspFailure(error: Throwable) {
         if (!isActive()) return
         dspFailure = "${error::class.java.simpleName}:${error.message.orEmpty()}"
     }
 
+    @Synchronized
     fun recordShortOutput(buffer: ShortArray, count: Int) {
         if (!isActive() || nonZeroOutput) return
         val limit = min(count, buffer.size)
@@ -193,6 +199,7 @@ internal class StartupAudioDiagnostics private constructor(
         }
     }
 
+    @Synchronized
     fun recordFloatOutput(buffer: FloatArray, count: Int) {
         if (!isActive()) return
         val limit = min(count, buffer.size)
@@ -204,6 +211,7 @@ internal class StartupAudioDiagnostics private constructor(
         }
     }
 
+    @Synchronized
     fun recordWrite(written: Int) {
         if (!isActive()) return
         writeCalls++
@@ -220,10 +228,16 @@ internal class StartupAudioDiagnostics private constructor(
         }
     }
 
+    @Synchronized
+    fun markExpectedIdle() {
+        if (!finished) expectedIdle = true
+    }
+
+    @Synchronized
     fun finishIfDue(nowMs: Long = SystemClock.elapsedRealtime(), force: Boolean = false) {
         if (finished || (!force && nowMs - startedAtMs < WINDOW_MS)) return
         finished = true
-        val result = classify()
+        val result = classifyLocked()
         val firstReadMs = elapsed(firstReadAtMs)
         val firstDspMs = elapsed(firstDspAtMs)
         val firstWriteMs = elapsed(firstWriteAtMs)
@@ -251,7 +265,10 @@ internal class StartupAudioDiagnostics private constructor(
 
     private fun elapsed(eventMs: Long): Long = if (eventMs < 0) -1 else eventMs - startedAtMs
 
-    internal fun classify(): Result = when {
+    @Synchronized
+    internal fun classify(): Result = classifyLocked()
+
+    private fun classifyLocked(): Result = when {
         !mediaProjectionReady -> Result.MEDIA_PROJECTION
         !recorderCreated -> Result.AUDIO_RECORD_CREATE
         !trackCreated -> Result.AUDIO_TRACK_CREATE
@@ -294,8 +311,7 @@ internal class StartupAudioDiagnostics private constructor(
                 processorIdleAtStart = processorIdle,
             )
             Timber.i(
-                "%s[%s] BEGIN reason=%s sampleRate=%s encoding=%s bufferBytes=%s bufferSamples=%s " +
-                    "projection=%s nativeHandle=%s generator=%s idle=%s",
+                "%s[%s] BEGIN reason=%s sampleRate=%s encoding=%s bufferBytes=%s bufferSamples=%s projection=%s nativeHandle=%s generator=%s idle=%s",
                 TAG, probe.attemptId, reason, sampleRate, encodingName, bufferSizeBytes, bufferSamples,
                 mediaProjectionReady, nativeHandleReady, measurementGeneratorActive, processorIdle,
             )
