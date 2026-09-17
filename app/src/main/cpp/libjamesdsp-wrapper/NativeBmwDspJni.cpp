@@ -2,44 +2,68 @@
 #include "NativeBmwDspProcessor.h"
 #include "JamesDspWrapper.h"
 
-extern "C" JNIEXPORT jboolean JNICALL
+namespace {
+constexpr jlong kRevisionRejected = -1;
+}
+
+extern "C" JNIEXPORT jlong JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwDsp(JNIEnv* env, jobject, jlong self,
-                                                                 jfloatArray valuesObj) {
-    if (env == nullptr || self == 0 || valuesObj == nullptr) {
-        return false;
+                                                                 jfloatArray valuesObj,
+                                                                 jlong revision) {
+    if (env == nullptr || self == 0 || valuesObj == nullptr || revision <= 0) {
+        return kRevisionRejected;
     }
     auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
     auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     if (processor == nullptr) {
-        return false;
+        return kRevisionRejected;
     }
     const jsize count = env->GetArrayLength(valuesObj);
     if (count != static_cast<jsize>(NativeBmwDspProcessor::kConfigSize)) {
-        return false;
+        return kRevisionRejected;
     }
     jfloat* values = env->GetFloatArrayElements(valuesObj, nullptr);
     if (values == nullptr) {
-        return false;
+        return kRevisionRejected;
     }
     const bool result = processor->configure(values, static_cast<std::size_t>(count));
     env->ReleaseFloatArrayElements(valuesObj, values, JNI_ABORT);
-    return result;
+    if (!result) {
+        return kRevisionRejected;
+    }
+    // configure() is synchronous and returns true only after the processor has installed the
+    // complete logical state and rebuilt all dirty sections. Publish the acknowledgement only
+    // after that commit point; a rejected request can therefore never advance native-active.
+    wrapper->nativeBmwDspRevision.store(static_cast<std::int64_t>(revision),
+                                        std::memory_order_release);
+    return revision;
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwDspActiveRevision(JNIEnv*, jobject,
+                                                                         jlong self) {
+    if (self == 0) {
+        return 0;
+    }
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    return static_cast<jlong>(wrapper->nativeBmwDspRevision.load(std::memory_order_acquire));
+}
+
+extern "C" JNIEXPORT jlong JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jobject, jlong self,
                                                                  jboolean enabled, jfloat preampDb,
                                                                  jdoubleArray fullObj,
                                                                  jdoubleArray lowObj,
-                                                                 jdoubleArray midObj) {
+                                                                 jdoubleArray midObj,
+                                                                 jlong revision) {
     if (env == nullptr || self == 0 || fullObj == nullptr || lowObj == nullptr ||
-        midObj == nullptr) {
-        return false;
+        midObj == nullptr || revision <= 0) {
+        return kRevisionRejected;
     }
     auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
     auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     if (processor == nullptr) {
-        return false;
+        return kRevisionRejected;
     }
     const jsize fullCount = env->GetArrayLength(fullObj), lowCount = env->GetArrayLength(lowObj),
                 midCount = env->GetArrayLength(midObj);
@@ -56,14 +80,29 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
         if (mid) {
             env->ReleaseDoubleArrayElements(midObj, mid, JNI_ABORT);
         }
-        return false;
+        return kRevisionRejected;
     }
     const bool result = processor->configurePeq(enabled == JNI_TRUE, preampDb, full, fullCount, low,
                                                 lowCount, mid, midCount);
     env->ReleaseDoubleArrayElements(fullObj, full, JNI_ABORT);
     env->ReleaseDoubleArrayElements(lowObj, low, JNI_ABORT);
     env->ReleaseDoubleArrayElements(midObj, mid, JNI_ABORT);
-    return result;
+    if (!result) {
+        return kRevisionRejected;
+    }
+    wrapper->nativeBmwPeqRevision.store(static_cast<std::int64_t>(revision),
+                                        std::memory_order_release);
+    return revision;
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwPeqActiveRevision(JNIEnv*, jobject,
+                                                                         jlong self) {
+    if (self == 0) {
+        return 0;
+    }
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    return static_cast<jlong>(wrapper->nativeBmwPeqRevision.load(std::memory_order_acquire));
 }
 
 extern "C" JNIEXPORT void JNICALL
