@@ -13,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -106,7 +107,6 @@ class RootlessPipelineLifecycleTest {
         verify(track).stop()
         verify(recorder, never()).release()
         verify(track, never()).release()
-        // Repeated START while the request is pending must not issue another recovery.
         start()
         verify(recorder).stop()
         verify(track).stop()
@@ -159,7 +159,6 @@ class RootlessPipelineLifecycleTest {
         assertEquals(true, get("recreateRecorderRequested"))
         verify(recorder).stop()
         verify(track).stop()
-        // Cancel only the scheduled check; onDestroy would require the full native service.
         (get("healthHandler") as android.os.Handler).removeCallbacks(get("healthWatchdog") as Runnable)
     }
 
@@ -175,14 +174,17 @@ class RootlessPipelineLifecycleTest {
     }
 
     @Test fun repeatedRecoveriesAreBounded() {
-        repeat(3) {
+        repeat(AudioPipelineHealth.MAX_RECOVERIES_PER_WINDOW) {
             set("lastSuccessfulWrite", -1L)
-            start()
+            (get("healthWatchdog") as Runnable).run()
             assertEquals(true, get("recreateRecorderRequested"))
-            // Emulate worker acknowledgement/completion, with no restored output progress.
             set("recreateRecorderRequested", false)
+            set("recreationInProgress", false)
+            markFlow()
         }
-        start()
+
+        set("lastSuccessfulWrite", -1L)
+        (get("healthWatchdog") as Runnable).run()
         assertEquals(true, get("isServiceDisposing"))
         assertSame(worker, get("recorderThread"))
     }
