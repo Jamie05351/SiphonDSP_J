@@ -819,9 +819,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         bufferSamples,
                     )
                     recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
-                    diagnostics?.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
+                    diagnostics.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
                     track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
-                    diagnostics?.recordTrackCreated(track.state, track.playState, track.sampleRate)
+                    diagnostics.recordTrackCreated(track.state, track.playState, track.sampleRate)
                     synchronized(recorderLifecycleLock) {
                         activeRecorder = recorder
                         activeTrack = track

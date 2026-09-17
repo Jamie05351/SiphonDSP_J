@@ -29,6 +29,8 @@ class RootlessPipelineLifecycleTest {
     fun setUp() {
         service = RootlessAudioProcessorService()
         track = mock(AudioTrack::class.java)
+        whenever(track.state).thenReturn(AudioTrack.STATE_INITIALIZED)
+        whenever(track.playState).thenReturn(AudioTrack.PLAYSTATE_PLAYING)
         finish = CountDownLatch(1)
         worker = Thread { finish.await() }
         worker.start()
