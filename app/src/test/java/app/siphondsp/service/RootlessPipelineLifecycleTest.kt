@@ -203,9 +203,14 @@ class RootlessPipelineLifecycleTest {
             check(calls <= 4) { "write loop ignored recreation" }
             0
         }
-        service.javaClass.getDeclaredMethod("writeFully", AudioTrack::class.java,
-            FloatArray::class.java, Int::class.javaPrimitiveType).apply { isAccessible = true }
-            .invoke(service, track, FloatArray(4), 4)
+        service.javaClass.getDeclaredMethod(
+            "writeFully",
+            AudioTrack::class.java,
+            FloatArray::class.java,
+            Int::class.javaPrimitiveType,
+            StartupAudioDiagnostics::class.java,
+        ).apply { isAccessible = true }
+            .invoke(service, track, FloatArray(4), 4, null)
         assertEquals(4, calls)
         assertEquals(3, get("consecutiveWriteFailures"))
         assertEquals(true, get("recreateRecorderRequested"))
@@ -220,9 +225,14 @@ class RootlessPipelineLifecycleTest {
             check(calls <= 4) { "write loop ignored recreation" }
             AudioTrack.ERROR_DEAD_OBJECT
         }
-        service.javaClass.getDeclaredMethod("writeFully", AudioTrack::class.java,
-            ShortArray::class.java, Int::class.javaPrimitiveType).apply { isAccessible = true }
-            .invoke(service, track, ShortArray(4), 4)
+        service.javaClass.getDeclaredMethod(
+            "writeFully",
+            AudioTrack::class.java,
+            ShortArray::class.java,
+            Int::class.javaPrimitiveType,
+            StartupAudioDiagnostics::class.java,
+        ).apply { isAccessible = true }
+            .invoke(service, track, ShortArray(4), 4, null)
         assertEquals(4, calls)
         assertEquals(3, get("consecutiveWriteFailures"))
         assertEquals(true, get("recreateRecorderRequested"))
