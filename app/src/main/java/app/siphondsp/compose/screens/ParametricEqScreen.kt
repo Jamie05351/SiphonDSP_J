@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.bmwFocusRing
+import app.siphondsp.compose.state.ObserveRepo
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.fragment.PeqApoImport
@@ -90,14 +91,19 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 
     val dsp = rememberBmwDspState()
     val systemValues = dsp.values
+    // holder is constructed directly by ParametricEqualizerActivity (shared with PeqToolbarActions
+    // across two composition roots), not via rememberPeqState() -- so nothing keeps it synced with
+    // BmwPeqRepository unless a composition root using it calls this explicitly. See ObserveRepo's
+    // doc for why PeqToolbarActions needs the same call.
+    holder.ObserveRepo()
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
 
     // graphPrefs are plain SharedPreferences, not reactive -- reload on resume in case another
-    // screen changed them while this one was stopped. systemValues/holder.peqState above stay
-    // current on their own: both observe shared repositories that keep listening for broadcasts
-    // regardless of this composition's lifecycle, so there's no equivalent gap to cover for them.
+    // screen changed them while this one was stopped. systemValues above stays current on its own
+    // (rememberBmwDspState() observes a shared repository that keeps listening for broadcasts
+    // regardless of this composition's lifecycle), so there's no equivalent gap to cover for it.
     LifecycleResumeEffect(Unit) {
         graphMode = graphPrefs.responseMode
         channelDisplay = graphPrefs.channelDisplay
@@ -197,6 +203,9 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val dspRepo = koinInject<BmwDspRepository>()
+    // Separate composition root from ParametricEqScreen sharing this same activity-owned holder --
+    // see ObserveRepo's doc for why each root needs its own call.
+    holder.ObserveRepo()
 
     val apoImport = remember(context, holder) {
         val hostContext = context

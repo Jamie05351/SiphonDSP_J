@@ -18,9 +18,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * clobber each other's change, since each screen's `commit()` only knew about its own copy.
  *
  * Registered as a Koin singleton (see `MainApplication.kt`), so there is exactly one instance and
- * one [values] `StateFlow` for the whole app to observe. Because this is now the *only* writer,
- * [commit] doesn't need to re-read disk before mutating -- its own in-memory copy is always
- * authoritative, unlike the old per-screen copies.
+ * one [values] `StateFlow` for the whole app to observe. [commit] still reads disk fresh before
+ * mutating (see its doc) rather than trusting [values]'s live snapshot, which can carry an
+ * uncommitted [preview] at some other index.
  */
 class BmwDspRepository(private val appContext: Context) {
     private val lock = Any()
@@ -54,10 +54,19 @@ class BmwDspRepository(private val appContext: Context) {
         NativeBmwDspValues.broadcast(appContext, next)
     }
 
-    /** Commit only after persistence succeeds; resets to actual disk state on failure (discarding
-     *  any optimistic [preview] this index may have shown mid-drag). */
+    /**
+     * Commit only after persistence succeeds; resets to actual disk state on failure (discarding
+     * any optimistic [preview] this index may have shown mid-drag).
+     *
+     * Starts from a fresh disk read, not [_values]'s live value: another index can be sitting in
+     * [preview]-only state right now (e.g. SignalGeneratorScreen's generator type / timing-ref
+     * enable, which deliberately never commit so they don't survive a restart) -- building [next]
+     * from the live snapshot would persist that transient value the moment *any* other index gets
+     * committed. Reading disk fresh and only ever touching [index]/[mirrors] on top of it keeps a
+     * commit's write scoped to exactly what it says it's committing.
+     */
     fun commit(index: Int, value: Float, mirrors: IntArray): Boolean = synchronized(lock) {
-        val next = _values.value.copyOf()
+        val next = NativeBmwDspValues.load(appContext)
         next[index] = value
         for (m in mirrors) next[m] = value
         if (!NativeBmwDspValues.save(appContext, next)) {

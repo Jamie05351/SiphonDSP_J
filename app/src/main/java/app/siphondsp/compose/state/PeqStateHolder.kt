@@ -25,11 +25,12 @@ import java.util.UUID
 /**
  * Screen-scoped facade over [BmwPeqRepository]: which scope/band is currently selected is
  * UI-local and stays here (recreating this per PEQ edit would lose the user's selection), while
- * the actual PEQ data ([peqState]) is a mirror of the shared repository, kept in sync by
- * [rememberPeqState]'s collector below as well as by this class's own writes.
+ * the actual PEQ data ([peqState]) is a mirror of the shared repository, kept in sync by this
+ * class's own writes (immediately) and by [ObserveRepo] (for changes that didn't originate here --
+ * see its doc for why every composition root needs to call it, not just [rememberPeqState]'s).
  */
 class PeqStateHolder internal constructor(
-    private val repo: BmwPeqRepository,
+    internal val repo: BmwPeqRepository,
 ) {
     /** Always reassigned wholesale (never mutated in place) so composition tracks it. */
     var peqState: BmwPeqState by mutableStateOf(repo.peq.value)
@@ -151,7 +152,21 @@ class PeqStateHolder internal constructor(
 fun rememberPeqState(): PeqStateHolder {
     val repo = koinInject<BmwPeqRepository>()
     val holder = remember(repo) { PeqStateHolder(repo) }
-    val peq by repo.peq.collectAsStateWithLifecycle()
-    LaunchedEffect(peq) { holder.syncFromRepo(peq) }
+    holder.ObserveRepo()
     return holder
+}
+
+/**
+ * Keeps [PeqStateHolder.peqState] synced with its backing [BmwPeqRepository] for changes that
+ * didn't originate from this holder's own writes (a preset/backup restore, or an engine-originated
+ * PEQ broadcast). [rememberPeqState] calls this for a composition-scoped holder; a holder built
+ * directly (e.g. `ParametricEqualizerActivity`'s activity-scoped instance, shared across two
+ * separate composition roots so it isn't tied to either one's lifecycle) must call it explicitly
+ * from every composition root that displays that holder's state -- safe to call from more than
+ * one, since a redundant [PeqStateHolder.syncFromRepo] with the same value is a no-op in effect.
+ */
+@Composable
+fun PeqStateHolder.ObserveRepo() {
+    val peq by repo.peq.collectAsStateWithLifecycle()
+    LaunchedEffect(peq) { syncFromRepo(peq) }
 }

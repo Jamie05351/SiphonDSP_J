@@ -75,4 +75,21 @@ class BmwDspStateTest {
         assertEquals(1.5f, saved[NativeBmwDspValues.INDEX_LOW_DELAY_L], 0f)
         assertEquals(1.5f, saved[NativeBmwDspValues.INDEX_LOW_DELAY_R], 0f)
     }
+
+    @Test
+    fun committingOneIndexDoesNotPersistAnotherIndexsLivePreview() {
+        val context = context()
+        val repo = BmwDspRepository(context)
+        val state = BmwDspState(context, repo, repo.values.value)
+
+        // Mirrors SignalGeneratorScreen's generator-type / timing-ref toggles: preview-only,
+        // deliberately never committed so they don't survive a restart.
+        state.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED, 1f)
+
+        assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -3f))
+
+        val saved = NativeBmwDspValues.load(context)
+        assertEquals(-3f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
+        assertEquals(0f, saved[NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED], 0f)
+    }
 }
