@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.core.net.toUri
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -17,6 +18,9 @@ import app.siphondsp.backup.BackupRestoreService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.preferences.Preferences
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
 
 class SettingsBackupFragment : SettingsBaseFragment() {
@@ -40,10 +44,15 @@ class SettingsBackupFragment : SettingsBaseFragment() {
         updateSummaries()
 
         create?.setOnPreferenceClickListener {
-            if (!BackupCreatorJob.isManualJobRunning(requireContext())) {
-                openSaveFileSelection()
-            } else {
-                requireContext().toast(R.string.backup_in_progress)
+            lifecycleScope.launch {
+                val running = withContext(Dispatchers.IO) {
+                    BackupCreatorJob.isManualJobRunning(requireContext())
+                }
+                if (!running) {
+                    openSaveFileSelection()
+                } else {
+                    requireContext().toast(R.string.backup_in_progress)
+                }
             }
             true
         }

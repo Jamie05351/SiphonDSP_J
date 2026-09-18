@@ -499,27 +499,36 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCaptureFrameCount(): Long =
         withHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
 
+    private val captureSnapshotLock = Any()
+
     @Volatile
     private var pendingCaptureSnapshot: Long = 0L
 
+    // Atomically reads and clears the pending snapshot so a concurrent freePendingCaptureSnapshot()
+    // and exportNativeBmwCaptureWav() can never both observe the same non-zero handle -- one frees
+    // it natively while the other passes the same (now-freed) handle to a native call.
+    private fun takePendingCaptureSnapshot(): Long = synchronized(captureSnapshotLock) {
+        val current = pendingCaptureSnapshot
+        pendingCaptureSnapshot = 0L
+        current
+    }
+
     private fun freePendingCaptureSnapshot() {
-        val stale = pendingCaptureSnapshot
+        val stale = takePendingCaptureSnapshot()
         if (stale != 0L) {
-            pendingCaptureSnapshot = 0L
             JamesDspWrapper.freeNativeBmwCaptureSnapshot(stale)
         }
     }
 
     fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? {
-        val snapshot = pendingCaptureSnapshot.takeIf { it != 0L }
+        val snapshot = takePendingCaptureSnapshot().takeIf { it != 0L }
             ?: withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
         if (snapshot == 0L) return null
         val result = JamesDspWrapper.exportNativeBmwCaptureWav(snapshot, rawInPath, outPath)
         if (result != null) {
-            pendingCaptureSnapshot = 0L
             JamesDspWrapper.freeNativeBmwCaptureSnapshot(snapshot)
         } else {
-            pendingCaptureSnapshot = snapshot
+            synchronized(captureSnapshotLock) { pendingCaptureSnapshot = snapshot }
         }
         return result
     }
