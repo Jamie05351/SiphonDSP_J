@@ -2,8 +2,6 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.Drawable
@@ -12,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.appcompat.widget.SwitchCompat
-import app.siphondsp.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
@@ -54,67 +51,6 @@ object BmwDashboardSkin {
     val INACTIVE_TILE_SURFACE get() = inactiveSurface
     val INACTIVE_TILE_STROKE get() = inactiveStroke
     private val selectedSurface = Color.rgb(24, 69, 101)
-
-    // Brightness multipliers applied (via ColorMatrix scale) to the same plain-metal crop for the
-    // sidebar's unselected vs. selected tile fills, so the selected tile's darker backing makes it
-    // visibly "pop" against the lighter unselected ones instead of both reading the same shade.
-    private const val UNSELECTED_TILE_BRIGHTNESS = 1.7f
-    internal const val SELECTED_TILE_BRIGHTNESS = 0.55f
-
-    fun brushedPanelDrawable(context: Context): Drawable = PhotoBrushedMetalDrawable(context)
-
-    /** Plain (no stripe, no logo) brushed-metal tile fill for sidebar nav tiles -- [darkened]
-     *  picks the selected (darker) or unselected (lighter) brightness variant of the same crop.
-     *  [strokeColor], if given, is drawn as this drawable's own border (see [MetalTileDrawable]'s
-     *  doc for why it can't just be MaterialButton.strokeColor here). */
-    fun metalTileDrawable(context: Context, darkened: Boolean, strokeColor: Int? = null): Drawable =
-        MetalTileDrawable(context, if (darkened) SELECTED_TILE_BRIGHTNESS else UNSELECTED_TILE_BRIGHTNESS, strokeColor)
-
-    @Volatile private var plainMetalBitmap: Bitmap? = null
-
-    // A dedicated clean texture photo (no stripe or logo baked in, unlike the old composite
-    // asset this replaced) -- decoded once and reused (tiled/stretched, at two different
-    // brightness levels) for every sidebar tile *and* as PhotoBrushedMetalDrawable's full-screen
-    // cover fill. Used near-whole, not a small crop of it: a small crop is fine at sidebar-tile
-    // scale but gets magnified far more to cover a full screen, and on a real device's actual
-    // pixel dimensions (much larger than this source photo's own 1280x480) that over-magnification
-    // blurred a small patch into a flat, washed-out smear -- confirmed on-device (not visible on a
-    // lower-res emulator render). Using nearly the whole photo needs much less magnification to
-    // cover the same bounds, so the grain stays sharp.
-    internal fun loadPlainMetalBitmap(context: Context): Bitmap {
-        plainMetalBitmap?.let { return it }
-        synchronized(this) {
-            plainMetalBitmap?.let { return it }
-            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_workspace_texture)
-            plainMetalBitmap = decoded
-            return decoded
-        }
-    }
-
-    @Volatile private var workspaceBackgroundBitmap: Bitmap? = null
-
-    // The DSP workspace full-screen background: a dedicated asset (distinct from
-    // bmw_workspace_texture, which stays reserved for the sidebar tiles) so this can be swapped
-    // without affecting tile rendering -- decoded once and reused across every workspace Activity.
-    internal fun loadWorkspaceBackgroundBitmap(context: Context): Bitmap {
-        workspaceBackgroundBitmap?.let { return it }
-        synchronized(this) {
-            workspaceBackgroundBitmap?.let { return it }
-            val decoded = BitmapFactory.decodeResource(context.applicationContext.resources, R.drawable.bmw_bg_workspace)
-            workspaceBackgroundBitmap = decoded
-            return decoded
-        }
-    }
-
-    /**
-     * The sidebar's active-tile background: a bright, genuinely "lit" fill (the accent blue
-     * itself, not the muted navy used for selected pills/chips elsewhere -- against the sidebar's
-     * own dark background that muted tone read as barely different from unselected) with a
-     * blurred glow ring around the border so the tile visibly radiates rather than just having a
-     * crisp outline. Requires the host view to run on a software layer -- BlurMaskFilter has no
-     * hardware-accelerated path -- see the LAYER_TYPE_SOFTWARE call in DspCrossNavBar.populate().
-     */
-    fun litTileDrawable(context: Context): Drawable = IlluminatedTileDrawable(context)
 
     /**
      * Transparent everywhere except when the host view has Android keyboard/D-pad focus, in which
@@ -306,28 +242,15 @@ object BmwDashboardSkin {
     // every ON/OFF switch reads the same regardless of which colour-coded row it sits in.
     fun glassSwitchThumbDrawable(context: Context): Drawable = GlassSwitchThumbDrawable(context)
 
-    // NORMAL/INVERT segmented polarity toggle (buildMiniToggleRow), recreated from the dedicated
-    // glass_normal_invert_toggle.xml art -- a fully-rounded stadium capsule rather than
-    // segmentButton's previous small-corner-radius rectangle.
+    // NORMAL/INVERT segmented polarity toggle -- values read directly by the Compose
+    // BmwSegmentedControl (compose/controls/BmwSegmentedControl.kt), which is the only remaining
+    // consumer now that the View-system segment drawables are gone.
     internal const val GLASS_SEGMENT_BORDER_WIDTH_DP = 1.3f
-    internal const val GLASS_SEGMENT_GLOW_WIDTH_DP = 3f
     internal val GLASS_SEGMENT_TRACK_BORDER_COLOR = Color.rgb(0x3E, 0x43, 0x52)
     internal val GLASS_SEGMENT_TRACK_RIM_COLOR = Color.argb(0x29, 0xF0, 0xF0, 0xF0)
     internal val GLASS_SEGMENT_TRACK_FILL_NEAR = Color.rgb(0x0B, 0x0C, 0x10)
     internal val GLASS_SEGMENT_TRACK_FILL_FAR = Color.BLACK
-    internal val GLASS_SEGMENT_FILL_NEAR = Color.rgb(0x4A, 0xA9, 0xD8)
-    internal val GLASS_SEGMENT_FILL_MID = Color.rgb(0x0D, 0x5D, 0x85)
-    internal val GLASS_SEGMENT_FILL_FAR = Color.rgb(0x0A, 0x4F, 0x73)
     internal val GLASS_SEGMENT_BORDER_COLOR = Color.rgb(0x31, 0xD2, 0xFF)
-    internal val GLASS_SEGMENT_GLOW_COLOR = Color.argb(0x50, 0x31, 0xD2, 0xFF)
-    internal val GLASS_SEGMENT_SHEEN_NEAR = Color.argb(0x54, 0xFF, 0xFF, 0xFF)
-    internal val GLASS_SEGMENT_SHEEN_FAR = Color.argb(0x00, 0xFF, 0xFF, 0xFF)
-
-    fun glassSegmentTrackDrawable(context: Context): Drawable = GlassSegmentTrackDrawable(context)
-    // accentColor recolors the selected segment's gradient fill/glow/border, for the two-way
-    // (eg. NORMAL/INVERT) toggle variant -- same blend-toward-accent technique SliderThumbDrawable
-    // uses. (The plain ON/OFF switch has no such hook: it's a fixed red/green status pair.)
-    fun glassSegmentDrawable(context: Context, accentColor: Int? = null): Drawable = GlassSegmentDrawable(context, accentColor)
 
     /** Apply automotive chrome to existing XML-driven cards and controls without touching behavior. */
     fun styleTree(root: View) {

@@ -2,11 +2,13 @@ package app.siphondsp.activity
 
 import android.os.Bundle
 import android.view.View
+import android.widget.LinearLayout
+import androidx.compose.ui.platform.ComposeView
+import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.compose.screens.PeqToolbarActions
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.compose.theme.BmwDspTheme
-import app.siphondsp.databinding.ActivityParametricEqBinding
 import app.siphondsp.fragment.ParametricEqualizerFragment
 import app.siphondsp.model.BmwPeqRepository
 import app.siphondsp.view.BmwDashboardSkin
@@ -28,10 +30,9 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val binding = ActivityParametricEqBinding.inflate(layoutInflater)
-
-        setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
+        setContentView(R.layout.activity_parametric_eq)
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
 
         val fragment = if (savedInstanceState == null) {
             ParametricEqualizerFragment.newInstance().also {
@@ -45,8 +46,8 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
         // show); the backdrop's lit rail tile identifies the screen.
         supportActionBar?.title = null
-        binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        DspCrossNavBar.populate(this, binding.dspCrossNav, DspDestination.PARAMETRIC_EQ) {
+        toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.PARAMETRIC_EQ) {
             fragment.canSwitchDspScreens()
         }
 
@@ -54,16 +55,18 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         // activity_parametric_eq.xml) -- there's no room left for the bypass-state strip once
         // it's showing, so it's hidden here specifically; every other DSP workspace screen still
         // shows it untouched.
-        binding.dspStatusStrip.visibility = View.GONE
-        binding.dspToolbarActions.setContent {
-            BmwDspTheme { PeqToolbarActions(peqStateHolder) }
+        findViewById<View>(R.id.dsp_status_strip).visibility = View.GONE
+        findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
+            setContent { BmwDspTheme { PeqToolbarActions(peqStateHolder) } }
+            visibility = View.VISIBLE
         }
-        binding.dspToolbarActions.visibility = View.VISIBLE
 
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
         // is not attached to onStart/onResume or any DSP/service lifecycle callback. styleTree
         // only (not styleWorkspace): the background half is now painted by DspCrossNavBar's
         // per-destination full-screen workspace backdrop above (R.id.dsp_workspace_backdrop).
-        binding.root.post { BmwDashboardSkin.styleTree(binding.root) }
+        findViewById<View>(android.R.id.content).post {
+            BmwDashboardSkin.styleTree(findViewById(android.R.id.content))
+        }
     }
 }
