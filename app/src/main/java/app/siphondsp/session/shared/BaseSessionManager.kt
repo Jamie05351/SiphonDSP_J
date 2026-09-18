@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -163,8 +164,13 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
     {
         when (sessionUpdateMode) {
             SessionUpdateMode.ContinuousPolling -> {
+                // Cancel any prior loop first, and have the loop check its own job's isActive
+                // rather than the shared continuousPollingJob field -- a duplicate call here (e.g.
+                // a spurious repeat SharedPreferences change callback) previously left the old
+                // loop believing it was still current and running forever alongside the new one.
+                continuousPollingJob?.cancel()
                 continuousPollingJob = pollingScope.launch {
-                    while(continuousPollingJob != null && continuousPollingJob?.isCancelled == false)
+                    while(isActive)
                     {
                         pollSessionDump()
                         delay(pollingTimeout)

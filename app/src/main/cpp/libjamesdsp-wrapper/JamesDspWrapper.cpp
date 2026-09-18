@@ -19,7 +19,7 @@ extern "C" {
 inline JamesDSPLib* cast(void* raw){
     if(raw == nullptr)
     {
-        LOGE("JamesDspWrapper::cast: JamesDSPLib pointer is NULL")
+        LOGE("JamesDspWrapper::cast: JamesDSPLib pointer is NULL");
     }
     return static_cast<JamesDSPLib*>(raw);
 }
@@ -27,7 +27,7 @@ inline JamesDSPLib* cast(void* raw){
 inline JamesDspWrapper* castWrapper(jlong raw){
     if(raw == 0)
     {
-        LOGE("JamesDspWrapper::castWrapper: JamesDspWrapper pointer is NULL")
+        LOGE("JamesDspWrapper::castWrapper: JamesDspWrapper pointer is NULL");
     }
     return reinterpret_cast<JamesDspWrapper*>(raw);
 }
@@ -623,7 +623,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_setLiveprog(JNIEnv *env, jobject obj,
 
     const char *nativeString = env->GetStringUTFChars(liveprogContent, nullptr);
     if(strlen(nativeString) < 1) {
-        LOGD("JamesDspWrapper::setLiveprog: empty file")
+        LOGD("JamesDspWrapper::setLiveprog: empty file");
         env->ReleaseStringUTFChars(liveprogContent, nativeString);
         return true;
     }
@@ -780,6 +780,6 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *, void *)
 #ifndef NO_CRASHLYTICS
     firebase::crashlytics::Initialize();
 #endif
-    LOGD("JNI_OnLoad called")
+    LOGD("JNI_OnLoad called");
     return JNI_VERSION_1_6;
 }

@@ -118,7 +118,7 @@ object Tar {
 
         fun extract(targetFolder: File) : Map<String, String>? {
             if(targetFolder.exists())
-                targetFolder.delete()
+                targetFolder.deleteRecursively()
             targetFolder.mkdirs()
 
             val metadataBytes = ByteArrayOutputStream()
