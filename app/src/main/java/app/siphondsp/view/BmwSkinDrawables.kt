@@ -1,14 +1,10 @@
 package app.siphondsp.view
 
 import android.content.Context
-import android.graphics.BitmapShader
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Rect
@@ -18,112 +14,20 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Drawable.ConstantState
 import androidx.core.graphics.withClip
-// Every design token these drawables read, the dp()/blend() helpers and the two bitmap loaders
-// stay on BmwDashboardSkin -- widened private -> internal for this -- and are pulled in wholesale.
+// Every design token these drawables read and the dp()/blend() helpers stay on BmwDashboardSkin
+// -- widened private -> internal for this -- and are pulled in wholesale.
 import app.siphondsp.view.BmwDashboardSkin.blend
 import app.siphondsp.view.BmwDashboardSkin.dp
-import app.siphondsp.view.BmwDashboardSkin.loadPlainMetalBitmap
-import app.siphondsp.view.BmwDashboardSkin.loadWorkspaceBackgroundBitmap
 import kotlin.math.roundToInt
 
 /*
- * The 11 Canvas [Drawable]s behind BmwDashboardSkin's factory functions, lifted verbatim out of
- * that object so its ~500 lines of colour tokens, factories and view-styling read without ~830
- * lines of pixel geometry in between. Every design token / helper / bitmap loader they use stays
- * on BmwDashboardSkin (widened private -> internal) and is imported here; the public accent
- * constants (LIGHT_BLUE_BRIGHT, SLIDER_DEFAULT_COLOR, SELECTED_TILE_BRIGHTNESS) are still read as
- * BmwDashboardSkin.<name>. No behaviour change.
+ * The Canvas [Drawable]s behind BmwDashboardSkin's factory functions, lifted verbatim out of
+ * that object so its colour tokens, factories and view-styling read without pixel geometry in
+ * between. Every design token / helper / bitmap loader they use stays on BmwDashboardSkin
+ * (widened private -> internal) and is imported here; the public accent constants
+ * (LIGHT_BLUE_BRIGHT, SLIDER_DEFAULT_COLOR) are still read as BmwDashboardSkin.<name>. No
+ * behaviour change.
  */
-
-/**
- * Renders the DSP workspace's designed background image: a center-cropped cover fill,
- * independent of the container's own aspect ratio.
- */
-internal class PhotoBrushedMetalDrawable(context: Context) : Drawable() {
-    private val fillBitmap = loadWorkspaceBackgroundBitmap(context)
-
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        isFilterBitmap = true
-        shader = BitmapShader(fillBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-    }
-    private val fillMatrix = Matrix()
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        if (bounds.width() <= 0 || bounds.height() <= 0) return
-
-        val scale = maxOf(bounds.width().toFloat() / fillBitmap.width, bounds.height().toFloat() / fillBitmap.height)
-        val dx = (bounds.width() - fillBitmap.width * scale) / 2f
-        val dy = (bounds.height() - fillBitmap.height * scale) / 2f
-        fillMatrix.setScale(scale, scale)
-        fillMatrix.postTranslate(bounds.left + dx, bounds.top + dy)
-        (fillPaint.shader as BitmapShader).setLocalMatrix(fillMatrix)
-    }
-
-    override fun draw(canvas: Canvas) {
-        canvas.drawRect(bounds, fillPaint)
-    }
-
-    override fun setAlpha(alpha: Int) {
-        fillPaint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
-        fillPaint.colorFilter = colorFilter
-    }
-
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
-}
-
-/** Plain brushed-metal fill for small sidebar tiles -- see [metalTileDrawable]. Draws its own
- *  optional stroke ([strokeColor]) rather than relying on MaterialButton's built-in stroke:
- *  assigning a custom `background` drawable to a MaterialButton replaces its whole internal
- *  background stack (fill + stroke together), so `MaterialButton.strokeColor` silently stops
- *  drawing anything once `background` is overridden like this -- the stroke has to be part of
- *  this drawable itself. */
-internal class MetalTileDrawable(context: Context, brightness: Float, private val strokeColor: Int? = null) : Drawable() {
-    private val bitmap = loadPlainMetalBitmap(context)
-    private val cornerRadiusPx = dp(context, 6).toFloat()
-    private val strokeWidthPx = dp(context, 1).toFloat()
-    private val rect = RectF()
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        isFilterBitmap = true
-        shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-        colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setScale(brightness, brightness, brightness, 1f) })
-    }
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = strokeWidthPx
-    }
-    private val matrix = Matrix()
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        rect.set(bounds)
-        if (strokeColor != null) rect.inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
-        if (bounds.width() <= 0 || bounds.height() <= 0) return
-        val scale = maxOf(bounds.width().toFloat() / bitmap.width, bounds.height().toFloat() / bitmap.height)
-        val dx = (bounds.width() - bitmap.width * scale) / 2f
-        val dy = (bounds.height() - bitmap.height * scale) / 2f
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(bounds.left + dx, bounds.top + dy)
-        (paint.shader as BitmapShader).setLocalMatrix(matrix)
-    }
-
-    override fun draw(canvas: Canvas) {
-        canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint)
-        if (strokeColor != null) {
-            strokePaint.color = strokeColor
-            canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, strokePaint)
-        }
-    }
-
-    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-}
 
 /**
  * The unified slider thumb: a 3d-lit grey block (top/centre/bottom gradient, a thin outer
@@ -577,141 +481,6 @@ internal class GlassSwitchThumbDrawable(context: Context) : Drawable() {
     override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
 }
 
-/** See [glassSegmentTrackDrawable]. The dark capsule shell a NORMAL/INVERT toggle group sits
- *  in -- shared, unaffected by which segment is checked. */
-internal class GlassSegmentTrackDrawable(context: Context) : Drawable() {
-    private val density = context.resources.displayMetrics.density
-    private val borderWidth = BmwDashboardSkin.GLASS_SEGMENT_BORDER_WIDTH_DP * density
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = borderWidth
-        color = BmwDashboardSkin.GLASS_SEGMENT_TRACK_BORDER_COLOR
-    }
-    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = borderWidth * 0.6f
-        color = BmwDashboardSkin.GLASS_SEGMENT_TRACK_RIM_COLOR
-    }
-    private val trackRect = RectF()
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        trackRect.set(bounds)
-        trackRect.inset(borderWidth / 2f, borderWidth / 2f)
-        if (trackRect.isEmpty) return
-        fillPaint.shader = LinearGradient(
-            trackRect.left, trackRect.top, trackRect.right, trackRect.bottom,
-            BmwDashboardSkin.GLASS_SEGMENT_TRACK_FILL_NEAR, BmwDashboardSkin.GLASS_SEGMENT_TRACK_FILL_FAR, Shader.TileMode.CLAMP,
-        )
-    }
-
-    override fun draw(canvas: Canvas) {
-        if (trackRect.isEmpty) return
-        val corner = trackRect.height() / 2f
-        canvas.drawRoundRect(trackRect, corner, corner, fillPaint)
-        canvas.drawRoundRect(trackRect, corner, corner, rimPaint)
-        canvas.drawRoundRect(trackRect, corner, corner, borderPaint)
-    }
-
-    override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-}
-
-/** See [glassSegmentDrawable]. Stateful on state_selected: fully transparent when unselected
- *  (the track drawable's own dark shell shows through), a glowing gradient pill with a
- *  diagonal glass sheen when selected -- matches the source art's selected-segment treatment
- *  exactly. */
-internal class GlassSegmentDrawable(context: Context, private val accentColor: Int? = null) : Drawable() {
-    private val density = context.resources.displayMetrics.density
-    private val borderWidth = BmwDashboardSkin.GLASS_SEGMENT_BORDER_WIDTH_DP * density
-    private val glowWidth = BmwDashboardSkin.GLASS_SEGMENT_GLOW_WIDTH_DP * density
-    private var checked = false
-    // Same recoloring technique as GlassSwitchThumbDrawable: derive lit/mid/dark shades of
-    // accentColor for the fill gradient, and preserve each fixed color's own alpha for the
-    // (semi-transparent) glow.
-    private val fillNear = accentColor?.let { blend(it, Color.WHITE, 0.25f) } ?: BmwDashboardSkin.GLASS_SEGMENT_FILL_NEAR
-    private val fillMid = accentColor ?: BmwDashboardSkin.GLASS_SEGMENT_FILL_MID
-    private val fillFar = accentColor?.let { blend(it, Color.BLACK, 0.25f) } ?: BmwDashboardSkin.GLASS_SEGMENT_FILL_FAR
-    private val borderColor = accentColor ?: BmwDashboardSkin.GLASS_SEGMENT_BORDER_COLOR
-    private val glowColor = accentColor?.let {
-        Color.argb(Color.alpha(BmwDashboardSkin.GLASS_SEGMENT_GLOW_COLOR), Color.red(it), Color.green(it), Color.blue(it))
-    } ?: BmwDashboardSkin.GLASS_SEGMENT_GLOW_COLOR
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = borderWidth
-        color = borderColor
-    }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = glowWidth
-        color = glowColor
-        maskFilter = BlurMaskFilter(3f * density, BlurMaskFilter.Blur.NORMAL)
-    }
-    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val segRect = RectF()
-    private val sheenPath = android.graphics.Path()
-    private val clipPath = android.graphics.Path()
-
-    override fun isStateful() = true
-
-    // Keyed off state_selected (View.isSelected), not state_checked -- this backs a plain
-    // TextView (see CrossoverDashboardBuilder.glassSegmentView), not a MaterialButton. A
-    // MaterialButton was tried first and rejected: MaterialButtonToggleGroup throws
-    // IllegalStateException ("Attempted to get ShapeAppearance from a MaterialButton which has
-    // an overwritten background") the moment a child's .background is set directly, which this
-    // drawable's gradient+glow rendering requires.
-    override fun onStateChange(state: IntArray): Boolean {
-        val wasChecked = checked
-        checked = state.contains(android.R.attr.state_selected)
-        if (checked != wasChecked) invalidateSelf()
-        return checked != wasChecked
-    }
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        segRect.set(bounds)
-        segRect.inset(borderWidth / 2f, borderWidth / 2f)
-        if (segRect.isEmpty) return
-        fillPaint.shader = LinearGradient(
-            segRect.left, segRect.top, segRect.right, segRect.bottom,
-            intArrayOf(fillNear, fillMid, fillFar),
-            floatArrayOf(0f, 0.18f, 1f), Shader.TileMode.CLAMP,
-        )
-        val corner = segRect.height() / 2f
-        clipPath.reset()
-        clipPath.addRoundRect(segRect, corner, corner, android.graphics.Path.Direction.CW)
-        val w = segRect.width()
-        sheenPath.reset()
-        sheenPath.moveTo(segRect.left + w * 0.12f, segRect.top)
-        sheenPath.lineTo(segRect.left + w * 0.42f, segRect.top)
-        sheenPath.lineTo(segRect.left + w * 0.30f, segRect.bottom)
-        sheenPath.lineTo(segRect.left, segRect.bottom)
-        sheenPath.close()
-        sheenPaint.shader = LinearGradient(
-            segRect.left + w * 0.12f, segRect.top, segRect.left + w * 0.30f, segRect.bottom,
-            BmwDashboardSkin.GLASS_SEGMENT_SHEEN_NEAR, BmwDashboardSkin.GLASS_SEGMENT_SHEEN_FAR, Shader.TileMode.CLAMP,
-        )
-    }
-
-    override fun draw(canvas: Canvas) {
-        if (!checked || segRect.isEmpty) return
-        val corner = segRect.height() / 2f
-        canvas.drawRoundRect(segRect, corner, corner, glowPaint)
-        canvas.drawRoundRect(segRect, corner, corner, fillPaint)
-        canvas.withClip(clipPath) { drawPath(sheenPath, sheenPaint) }
-        canvas.drawRoundRect(segRect, corner, corner, borderPaint)
-    }
-
-    override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-}
-
 /** See [glassBoxDrawable]. */
 internal class GlassBoxDrawable(context: Context, private val showBorder: Boolean, private val accentColor: Int? = null) : Drawable() {
     private val density = context.resources.displayMetrics.density
@@ -786,65 +555,6 @@ internal class GlassBoxDrawable(context: Context, private val showBorder: Boolea
 
     override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
     override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { fillPaint.colorFilter = colorFilter }
-    @Deprecated("Deprecated in Android")
-    override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
-}
-
-/**
- * The sidebar's selected-tile background: a darker brushed-metal fill (vs. the lighter fill
- * unselected tiles get, via [metalTileDrawable]) so the tile itself visibly "pops", plus a
- * blurred glow ring drawn behind a crisp bright stroke so the border visibly radiates instead
- * of just being outlined.
- */
-internal class IlluminatedTileDrawable(context: Context) : Drawable() {
-    private val corner = dp(context, 6).toFloat()
-    private val strokeWidthPx = dp(context, 2).toFloat()
-    private val metalBitmap = loadPlainMetalBitmap(context)
-    private val fillRect = RectF()
-    private val matrix = Matrix()
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        isFilterBitmap = true
-        shader = BitmapShader(metalBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-        colorFilter = ColorMatrixColorFilter(ColorMatrix().apply {
-            setScale(BmwDashboardSkin.SELECTED_TILE_BRIGHTNESS, BmwDashboardSkin.SELECTED_TILE_BRIGHTNESS, BmwDashboardSkin.SELECTED_TILE_BRIGHTNESS, 1f)
-        })
-    }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = BmwDashboardSkin.LIGHT_BLUE_BRIGHT
-        style = Paint.Style.STROKE
-        strokeWidth = strokeWidthPx
-        maskFilter = BlurMaskFilter(dp(context, 5).toFloat(), BlurMaskFilter.Blur.NORMAL)
-    }
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = BmwDashboardSkin.LIGHT_BLUE_BRIGHT
-        style = Paint.Style.STROKE
-        strokeWidth = strokeWidthPx
-    }
-
-    override fun onBoundsChange(bounds: Rect) {
-        super.onBoundsChange(bounds)
-        fillRect.set(bounds)
-        if (bounds.width() <= 0 || bounds.height() <= 0) return
-        val scale = maxOf(bounds.width().toFloat() / metalBitmap.width, bounds.height().toFloat() / metalBitmap.height)
-        val dx = (bounds.width() - metalBitmap.width * scale) / 2f
-        val dy = (bounds.height() - metalBitmap.height * scale) / 2f
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(bounds.left + dx, bounds.top + dy)
-        (fillPaint.shader as BitmapShader).setLocalMatrix(matrix)
-    }
-
-    override fun draw(canvas: Canvas) {
-        canvas.drawRoundRect(fillRect, corner, corner, fillPaint)
-
-        val strokeRect = RectF(bounds).apply {
-            inset(strokeWidthPx / 2f, strokeWidthPx / 2f)
-        }
-        canvas.drawRoundRect(strokeRect, corner, corner, glowPaint)
-        canvas.drawRoundRect(strokeRect, corner, corner, strokePaint)
-    }
-
-    override fun setAlpha(alpha: Int) { fillPaint.alpha = alpha }
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { /* fixed brightness filter owns this slot */ }
     @Deprecated("Deprecated in Android")
     override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
 }
