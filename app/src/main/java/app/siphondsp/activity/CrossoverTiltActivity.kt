@@ -2,7 +2,6 @@ package app.siphondsp.activity
 
 import android.os.Bundle
 import android.view.View
-import android.widget.LinearLayout
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.appbar.MaterialToolbar
@@ -39,7 +38,7 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         // No toolbar title on the full-screen workspace -- the backdrop's lit rail tile already
         // says which screen this is.
         supportActionBar?.title = null
-        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), current)
+        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), current)
 
         if (savedInstanceState == null) {
             val fragment = if (allPassMode) OutputAllPassFragment() else CrossoverTiltFragment()

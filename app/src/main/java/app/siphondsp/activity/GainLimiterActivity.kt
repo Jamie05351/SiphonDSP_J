@@ -1,7 +1,6 @@
 package app.siphondsp.activity
 
 import android.os.Bundle
-import android.widget.LinearLayout
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.appbar.MaterialToolbar
@@ -27,7 +26,7 @@ class GainLimiterActivity : DspWorkspaceActivity() {
         // show); the backdrop's lit rail tile identifies the screen.
         supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        DspCrossNavBar.populate(this, findViewById<LinearLayout>(R.id.dsp_cross_nav), DspDestination.GAINS_DELAY)
+        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), DspDestination.GAINS_DELAY)
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, GainLimiterFragment())

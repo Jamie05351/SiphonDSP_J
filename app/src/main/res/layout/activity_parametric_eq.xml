@@ -5,9 +5,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
 
-    <!-- Full-screen workspace backdrop: per-destination art (rail housing, tile buttons, lit
-         selection glow, background field and the ///M carbon logo all baked in together) &#8212; see
-         DspDestination.backdrop. DspCrossNavBar.populate() swaps this image per destination.
+    <!-- Full-screen workspace backdrop: per-destination art (rail housing, background field and
+         the ///M carbon logo baked in) &#8212; see DspDestination.backdrop. Tile icons and the
+         selected-tile glow are drawn live by dsp_cross_nav's Compose content below, not baked in
+         here. DspCrossNavBar.populate() swaps this image per destination.
          Authored at 1280x480 mdpi, edge to edge (the head unit runs with no system bars), so it
          fills the whole activity behind every other layer. -->
     <ImageView
@@ -24,11 +25,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Full-height column for the rail: the panel/tiles/icons/selection glow are baked into
-             the per-destination backdrop image (R.id.dsp_workspace_backdrop) behind this column,
-             and dsp_cross_nav overlays it with the invisible click-target / focus-ring rows that
-             DspCrossNavBar.populate() lays over each tile's measured bounds. Fixed width &#8212; the
-             rail is a fixed pixel fixture; see @dimen/dsp_sidebar_width. -->
+        <!-- Full-height column for the rail: the panel/background is baked into the per-destination
+             backdrop image (R.id.dsp_workspace_backdrop) behind this column; dsp_cross_nav draws
+             the 5 tile icons and the current destination's glow live (DspSidebarNav, Compose) and
+             hosts their real touch targets, positioned via DspCrossNavBar.populate()'s measured
+             row-weight table. Fixed width, since the rail is a fixed pixel fixture; see
+             @dimen/dsp_sidebar_width. -->
         <FrameLayout
             android:id="@+id/dsp_sidebar"
             android:layout_width="@dimen/dsp_sidebar_width"
@@ -37,12 +39,10 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
-            <LinearLayout
+            <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/dsp_cross_nav"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:gravity="center_horizontal"
                 android:visibility="gone" />
         </FrameLayout>
 
