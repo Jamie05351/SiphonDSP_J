@@ -42,192 +42,94 @@
         app:iconSrc="@drawable/ic_baseline_download_24dp"
         app:iconTint="?attr/colorOnSurfaceVariant" />
 
-    <!-- Single row, all 5 tiles fill the remaining height edge to edge; must never scroll in
-         either direction, so this stays a plain weighted row rather than a grid or ScrollView. -->
-    <LinearLayout
-        android:id="@+id/dsp_destination_cards"
+    <!-- Front page backdrop: replaces the 5 separate tile images with one baked "J_DSP"-style
+         dashboard mockup, using the same technique as the DSP workspace's own
+         dsp_workspace_backdrop_*.png + DspCrossNavBar overlay (see activity_parametric_eq.xml):
+         one full-bleed image, with an invisible weighted click-target row laid over the 5 panel
+         regions it actually draws (PEQ / GAINS / XOVERS / COMPRESSOR / ALL-PASS, left to right).
+         The top ~14% of the image is its own baked header band (not clickable), hence the leading
+         zero-weight spacer row below. Must never scroll, so this stays a plain FrameLayout+weights
+         rather than anything that could. -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="horizontal">
+        android:layout_weight="1">
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_peq"
-            android:layout_width="0dp"
+        <ImageView
+            android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#FF101419"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="0dp"
-            app:rippleColor="#3346B5E8"
-            app:strokeColor="#FF46505A"
-            app:strokeWidth="1dp">
+            android:scaleType="centerCrop"
+            android:src="@drawable/dsp_home_backdrop"
+            android:importantForAccessibility="no" />
 
-            <FrameLayout
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!-- Non-clickable spacer matching the backdrop's own baked header band. -->
+            <View
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="0dp"
+                android:layout_weight="137" />
 
-                <ImageView
-                    android:layout_width="match_parent"
+            <LinearLayout
+                android:id="@+id/dsp_destination_cards"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="863"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/card_shortcut_peq"
+                    android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/tile_peq"
+                    android:layout_weight="420"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:contentDescription="@string/action_parametric_eq" />
 
-                <TextView
-                    style="@style/TextAppearance.SiphonDSP.TileLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top|start"
-                    android:layout_margin="10dp"
-                    android:text="@string/tile_label_peq" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_gains_delay"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#FF101419"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="0dp"
-            app:rippleColor="#3346B5E8"
-            app:strokeColor="#FF46505A"
-            app:strokeWidth="1dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:layout_width="match_parent"
+                <View
+                    android:id="@+id/card_shortcut_gains_delay"
+                    android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/tile_gains_delay"
+                    android:layout_weight="305"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:contentDescription="@string/action_gain_limiter" />
 
-                <TextView
-                    style="@style/TextAppearance.SiphonDSP.TileLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top|start"
-                    android:layout_margin="10dp"
-                    android:text="@string/tile_label_gains" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_crossovers"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#FF101419"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="0dp"
-            app:rippleColor="#3346B5E8"
-            app:strokeColor="#FF46505A"
-            app:strokeWidth="1dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:layout_width="match_parent"
+                <View
+                    android:id="@+id/card_shortcut_crossovers"
+                    android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/tile_crossovers"
+                    android:layout_weight="425"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:contentDescription="@string/action_crossover_tilt" />
 
-                <TextView
-                    style="@style/TextAppearance.SiphonDSP.TileLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top|start"
-                    android:layout_margin="10dp"
-                    android:text="@string/tile_label_xovers" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_compressor"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#FF101419"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="0dp"
-            app:rippleColor="#3346B5E8"
-            app:strokeColor="#FF46505A"
-            app:strokeWidth="1dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:layout_width="match_parent"
+                <View
+                    android:id="@+id/card_shortcut_compressor"
+                    android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/tile_compressor"
+                    android:layout_weight="405"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:contentDescription="@string/action_compressor" />
 
-                <TextView
-                    style="@style/TextAppearance.SiphonDSP.TileLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top|start"
-                    android:layout_margin="10dp"
-                    android:text="@string/tile_label_compressor" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_shortcut_allpass"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#FF101419"
-            app:cardCornerRadius="10dp"
-            app:cardElevation="0dp"
-            app:rippleColor="#3346B5E8"
-            app:strokeColor="#FF46505A"
-            app:strokeWidth="1dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:layout_width="match_parent"
+                <View
+                    android:id="@+id/card_shortcut_allpass"
+                    android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/tile_allpass"
+                    android:layout_weight="395"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:contentDescription="@string/action_allpass" />
-
-                <TextView
-                    style="@style/TextAppearance.SiphonDSP.TileLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top|start"
-                    android:layout_margin="10dp"
-                    android:text="@string/tile_label_allpass" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

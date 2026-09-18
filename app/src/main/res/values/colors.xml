@@ -8,6 +8,11 @@
     <color name="bmw_m_purple">#2B115A</color>
     <color name="bmw_m_red">#F11A22</color>
 
+    <!-- Sampled from the front-page backdrop's (dsp_home_backdrop.png) own panel facia, so the
+         bottom bar's body color reads as part of the same glossy black chrome rather than the
+         app theme's own (lighter, warmer) surface color. -->
+    <color name="dsp_home_banner_gloss_black">#0A0C10</color>
+
     <!-- Elevated panel surface for the bespoke PEQ glass value/choice dialogs (see
          ThemeOverlay.SiphonDSP.GlassDialog): a touch lighter than the near-black value box so
          the dialog reads as a raised sheet, and the grey inner input field

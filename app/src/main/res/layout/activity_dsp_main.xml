@@ -7,12 +7,17 @@
     android:fitsSystemWindows="true"
     tools:context=".activity.MainActivity">
 
+    <!-- The front page's own header is now baked into dsp_home_backdrop.png (see content_main.xml).
+         This toolbar is kept in the tree (MainActivity.kt calls setSupportActionBar() /
+         actionBar?.set*() on it, and LibraryLoadErrorFragment's error state still toggles its
+         visibility) but never shown here, rather than removing it and hunting every reference. -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?android:colorBackground"
         android:fitsSystemWindows="true"
+        android:visibility="gone"
         app:liftOnScroll="true"
         app:liftOnScrollColor="?attr/colorPrimaryContainer"
         app:liftOnScrollTargetViewId="@id/dsp_scrollview"
@@ -37,7 +42,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:layout_gravity="bottom"
-        app:backgroundTint="?attr/colorSurface"
+        app:backgroundTint="@color/dsp_home_banner_gloss_black"
         app:fabAlignmentMode="center"
         app:fabAnchorMode="cradle"
         app:fabCradleMargin="16dp"
