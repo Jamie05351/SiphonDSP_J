@@ -71,7 +71,13 @@ class DumpManager constructor(val context: Context): KoinComponent {
 
                 if(it.key != activeDumpMethod)
                 {
-                    dump = it.value.dump(context)
+                    try {
+                        dump = it.value.dump(context)
+                    } catch (ex: Exception) {
+                        Timber.e("Exception raised while dumping session info using fallback method ${it.key.name} (id ${it.key})")
+                        Timber.e(ex)
+                        dump = null
+                    }
                 }
                 if(dump != null && dump.sessions.isNotEmpty())
                 {

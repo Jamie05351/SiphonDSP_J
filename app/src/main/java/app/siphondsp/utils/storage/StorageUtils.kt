@@ -61,12 +61,10 @@ object StorageUtils {
     }
 
     fun queryName(context: Context, uri: Uri): String? {
-        val returnCursor = context.contentResolver.query(uri, null, null, null, null)
-        returnCursor ?: return null
-        val nameIndex: Int = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        returnCursor.moveToFirst()
-        val name: String = returnCursor.getString(nameIndex)
-        returnCursor.close()
-        return name
+        val returnCursor = context.contentResolver.query(uri, null, null, null, null) ?: return null
+        return returnCursor.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex < 0 || !cursor.moveToFirst()) null else cursor.getString(nameIndex)
+        }
     }
 }

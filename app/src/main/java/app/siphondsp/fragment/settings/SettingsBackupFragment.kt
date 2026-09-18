@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.core.net.toUri
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -17,6 +18,9 @@ import app.siphondsp.backup.BackupRestoreService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.preferences.Preferences
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
 
 class SettingsBackupFragment : SettingsBaseFragment() {
@@ -27,6 +31,12 @@ class SettingsBackupFragment : SettingsBaseFragment() {
     private val location by lazy { findPreference<Preference>(getString(R.string.key_backup_location)) }
 
     private val preferences: Preferences.App by inject()
+
+    // Guards the async check-then-launch below: WorkManager has nothing enqueued yet while the
+    // query is in flight, so a rapid double/triple tap on "Create Backup" would otherwise have
+    // every tap's coroutine independently see "not running" and each open its own Create Document
+    // picker. This serializes that window instead of relying on isManualJobRunning() to catch it.
+    private var checkingBackupJob = false
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = Constants.PREF_APP
@@ -40,10 +50,27 @@ class SettingsBackupFragment : SettingsBaseFragment() {
         updateSummaries()
 
         create?.setOnPreferenceClickListener {
-            if (!BackupCreatorJob.isManualJobRunning(requireContext())) {
-                openSaveFileSelection()
+            if (checkingBackupJob) {
+                true
             } else {
-                requireContext().toast(R.string.backup_in_progress)
+                checkingBackupJob = true
+                create?.isEnabled = false
+                lifecycleScope.launch {
+                    try {
+                        val running = withContext(Dispatchers.IO) {
+                            BackupCreatorJob.isManualJobRunning(requireContext())
+                        }
+                        if (!running) {
+                            openSaveFileSelection()
+                        } else {
+                            requireContext().toast(R.string.backup_in_progress)
+                        }
+                    } finally {
+                        checkingBackupJob = false
+                        create?.isEnabled = true
+                    }
+                }
+                true
             }
             true
         }

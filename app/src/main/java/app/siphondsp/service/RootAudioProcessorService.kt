@@ -12,7 +12,7 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.Observer
 import androidx.lifecycle.asLiveData
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -150,7 +150,10 @@ class RootAudioProcessorService : BaseAudioProcessorService(), KoinComponent,
             AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> {
                 if(!app.isEnhancedProcessing) {
                     val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, -1)
-                    MainScope().launch {
+                    // Main dispatcher pinned deliberately: sessionList is a plain HashMap mutated
+                    // elsewhere on the main thread (e.g. addSessionByIntent above); running this on
+                    // applicationScope's default background dispatcher would race that mutation.
+                    applicationScope.launch(Dispatchers.Main) {
                         if (sessionId != 0)
                             delay(800)
                         app.rootSessionDatabase.removeSessionByIntent(intent)
