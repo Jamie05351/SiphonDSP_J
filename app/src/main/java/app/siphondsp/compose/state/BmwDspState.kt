@@ -57,18 +57,27 @@ class BmwDspState internal constructor(private val appContext: Context) {
         NativeBmwDspValues.broadcast(appContext, next)
     }
 
-    /** Commit only after persistence succeeds; undo any live preview on failure. */
+    /**
+     * Commit only after persistence succeeds; undo any live preview on failure.
+     *
+     * Goes through [NativeBmwDspValues.update] rather than saving [values] directly: this
+     * composition's copy is loaded once and can go stale while another [BmwDspState] instance
+     * (a different composition/screen) commits its own edit in between -- saving our stale copy
+     * would silently overwrite that other edit. update() re-reads from disk immediately before
+     * mutating and saving, under a lock shared by every caller, so concurrent commits from
+     * separate BmwDspState instances serialize correctly instead of racing.
+     */
     fun commit(index: Int, value: Float, mirrors: IntArray = EmptyMirrors): Boolean {
-        val next = values.copyOf()
-        next[index] = value
-        for (m in mirrors) next[m] = value
-        if (!NativeBmwDspValues.save(appContext, next)) {
+        val updated = NativeBmwDspValues.update(appContext) { arr ->
+            arr[index] = value
+            for (m in mirrors) arr[m] = value
+        }
+        if (updated == null) {
             refreshFromDisk()
             appContext.toast("BMW DSP settings could not be saved; previous settings restored")
             return false
         }
-        values = next
-        NativeBmwDspValues.broadcast(appContext, next)
+        values = updated
         return true
     }
 

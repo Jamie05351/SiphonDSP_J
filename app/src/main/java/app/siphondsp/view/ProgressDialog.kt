@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.DialogInterface
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowManager
 import androidx.annotation.UiContext
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.getSystemService
@@ -65,17 +66,27 @@ class ProgressDialog(
         }
 
     init {
+        // create() (not show()) so `dialog` is always a valid reference even if the window
+        // attach below fails -- dismiss()/cancel() are documented no-ops on a dialog that was
+        // never shown, so callers stay safe either way.
         dialog = MaterialAlertDialogBuilder(context)
             .setCancelable(isCancelable)
             .setOnCancelListener(onCancelListener)
             .setNegativeButton(android.R.string.cancel) { dialog, _ -> dialog.cancel() }
             .setView(binding.root)
-            .show()
+            .create()
+        try {
+            dialog.show()
+        } catch (_: WindowManager.BadTokenException) {
+            // Host Activity/Fragment window was already gone by the time this dialog tried to
+            // attach (e.g. destroyed between the caller starting work and this constructor
+            // running). Nothing to show; dismiss()/cancel() below remain safe no-ops.
+        }
         updateProgress()
     }
 
-    fun dismiss() = dialog.dismiss()
-    fun cancel() = dialog.cancel()
+    fun dismiss() { runCatching { dialog.dismiss() } }
+    fun cancel() { runCatching { dialog.cancel() } }
 
     @SuppressLint("SetTextI18n")
     private fun updateProgress() {
