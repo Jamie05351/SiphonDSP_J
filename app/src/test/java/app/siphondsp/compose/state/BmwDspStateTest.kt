@@ -92,4 +92,36 @@ class BmwDspStateTest {
         assertEquals(-3f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
         assertEquals(0f, saved[NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED], 0f)
     }
+
+    @Test
+    fun committingOneIndexDoesNotResetAnotherIndexsLivePreview() {
+        val context = context()
+        val repo = BmwDspRepository(context)
+        val state = BmwDspState(context, repo, repo.values.value)
+
+        // The timing reference is still actively running (preview-only, never persisted) when an
+        // unrelated persisted parameter gets committed. The commit must not silently switch it off
+        // in the UI/native engine just because it isn't allowed to persist it.
+        state.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED, 1f)
+
+        var received: FloatArray? = null
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                received = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
+            }
+        }
+        val broadcasts = LocalBroadcastManager.getInstance(context)
+        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+        try {
+            assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -3f))
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertEquals(-3f, repo.values.value[NativeBmwDspValues.INDEX_HEADROOM], 0f)
+            assertEquals(1f, repo.values.value[NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED], 0f)
+            assertNotNull(received)
+            assertEquals(1f, received!![NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED], 0f)
+        } finally {
+            broadcasts.unregisterReceiver(receiver)
+        }
+    }
 }

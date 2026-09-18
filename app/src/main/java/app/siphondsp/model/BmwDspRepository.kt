@@ -18,9 +18,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * clobber each other's change, since each screen's `commit()` only knew about its own copy.
  *
  * Registered as a Koin singleton (see `MainApplication.kt`), so there is exactly one instance and
- * one [values] `StateFlow` for the whole app to observe. [commit] still reads disk fresh before
- * mutating (see its doc) rather than trusting [values]'s live snapshot, which can carry an
- * uncommitted [preview] at some other index.
+ * one [values] `StateFlow` for the whole app to observe. [commit] saves from a fresh disk read
+ * rather than [values]'s live snapshot (which can carry an uncommitted [preview] at some other
+ * index), but still republishes that live snapshot's other in-flight previews on top before
+ * updating [values] -- see [commit]'s own doc for why both matter.
  */
 class BmwDspRepository(private val appContext: Context) {
     private val lock = Any()
@@ -58,23 +59,37 @@ class BmwDspRepository(private val appContext: Context) {
      * Commit only after persistence succeeds; resets to actual disk state on failure (discarding
      * any optimistic [preview] this index may have shown mid-drag).
      *
-     * Starts from a fresh disk read, not [_values]'s live value: another index can be sitting in
-     * [preview]-only state right now (e.g. SignalGeneratorScreen's generator type / timing-ref
-     * enable, which deliberately never commit so they don't survive a restart) -- building [next]
-     * from the live snapshot would persist that transient value the moment *any* other index gets
-     * committed. Reading disk fresh and only ever touching [index]/[mirrors] on top of it keeps a
-     * commit's write scoped to exactly what it says it's committing.
+     * What gets *saved* is built from a fresh disk read, not [_values]'s live value: another index
+     * can be sitting in [preview]-only state right now (e.g. SignalGeneratorScreen's generator type
+     * / timing-ref enable, which deliberately never commit so they don't survive a restart) --
+     * building the saved array from the live snapshot would persist that transient value the
+     * moment *any* other index gets committed.
+     *
+     * What gets *published* (to [_values] and the broadcast) is different: the freshly-saved disk
+     * state with every index where the live snapshot had already diverged from disk -- i.e. every
+     * still-active [preview] -- re-applied on top. Publishing the disk-only array instead would
+     * still be correct on disk, but would immediately reset any such preview in the UI and the
+     * running native engine (e.g. silently stopping the signal generator) just because an unrelated
+     * parameter got committed.
      */
     fun commit(index: Int, value: Float, mirrors: IntArray): Boolean = synchronized(lock) {
-        val next = NativeBmwDspValues.load(appContext)
+        val oldDisk = NativeBmwDspValues.load(appContext)
+        val next = oldDisk.copyOf()
         next[index] = value
         for (m in mirrors) next[m] = value
         if (!NativeBmwDspValues.save(appContext, next)) {
             refreshFromDiskLocked()
             return@synchronized false
         }
-        _values.value = next
-        NativeBmwDspValues.broadcast(appContext, next)
+        val live = _values.value
+        val published = next.copyOf()
+        for (i in published.indices) {
+            if (live[i] != oldDisk[i]) published[i] = live[i]
+        }
+        published[index] = value
+        for (m in mirrors) published[m] = value
+        _values.value = published
+        NativeBmwDspValues.broadcast(appContext, published)
         true
     }
 
