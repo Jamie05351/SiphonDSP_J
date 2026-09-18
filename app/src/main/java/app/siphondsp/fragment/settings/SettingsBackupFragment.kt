@@ -32,6 +32,12 @@ class SettingsBackupFragment : SettingsBaseFragment() {
 
     private val preferences: Preferences.App by inject()
 
+    // Guards the async check-then-launch below: WorkManager has nothing enqueued yet while the
+    // query is in flight, so a rapid double/triple tap on "Create Backup" would otherwise have
+    // every tap's coroutine independently see "not running" and each open its own Create Document
+    // picker. This serializes that window instead of relying on isManualJobRunning() to catch it.
+    private var checkingBackupJob = false
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = Constants.PREF_APP
         setPreferencesFromResource(R.xml.app_backup_preferences, rootKey)
@@ -44,15 +50,27 @@ class SettingsBackupFragment : SettingsBaseFragment() {
         updateSummaries()
 
         create?.setOnPreferenceClickListener {
-            lifecycleScope.launch {
-                val running = withContext(Dispatchers.IO) {
-                    BackupCreatorJob.isManualJobRunning(requireContext())
+            if (checkingBackupJob) {
+                true
+            } else {
+                checkingBackupJob = true
+                create?.isEnabled = false
+                lifecycleScope.launch {
+                    try {
+                        val running = withContext(Dispatchers.IO) {
+                            BackupCreatorJob.isManualJobRunning(requireContext())
+                        }
+                        if (!running) {
+                            openSaveFileSelection()
+                        } else {
+                            requireContext().toast(R.string.backup_in_progress)
+                        }
+                    } finally {
+                        checkingBackupJob = false
+                        create?.isEnabled = true
+                    }
                 }
-                if (!running) {
-                    openSaveFileSelection()
-                } else {
-                    requireContext().toast(R.string.backup_in_progress)
-                }
+                true
             }
             true
         }
