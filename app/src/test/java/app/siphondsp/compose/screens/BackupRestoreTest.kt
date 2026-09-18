@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.fragment.PeqGraphPreferences
+import app.siphondsp.model.BmwDspRepository
 import app.siphondsp.model.BmwPeqPreset
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspStore
@@ -54,7 +55,7 @@ class BackupRestoreTest {
         assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
         var published = false
 
-        applyBackupRestore(context, holder, graph, prompt(previous.copyOf().also { it[5] = -9f })) { published = true }
+        applyBackupRestore(context, holder, BmwDspRepository(context), graph, prompt(previous.copyOf().also { it[5] = -9f })) { published = true }
 
         assertFalse(published)
         assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
@@ -70,7 +71,7 @@ class BackupRestoreTest {
         val holder = mock<PeqStateHolder> { on { applyCandidate(any(), any()) } doReturn true }
         var published: FloatArray? = null
 
-        applyBackupRestore(context, holder, PeqGraphPreferences(context), prompt(values)) {
+        applyBackupRestore(context, holder, BmwDspRepository(context), PeqGraphPreferences(context), prompt(values)) {
             assertArrayEquals(it, NativeBmwDspValues.load(context), 0f)
             published = it
         }

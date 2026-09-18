@@ -1,45 +1,39 @@
 package app.siphondsp.compose.state
 
-import android.content.Context
-import android.content.Intent
-import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqScope
+import app.siphondsp.model.BmwPeqRepository
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
-import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.BmwDashboardSkin
-import timber.log.Timber
+import org.koin.compose.koinInject
 import java.util.UUID
 
-// Lowest sample rate RootlessAudioProcessorService ever opens the recorder at -- validate
-// against it when the service isn't running so a near-Nyquist band can't pass here and then
-// silently fail once the service starts lower.
-private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
-
 /**
- * Compose state layer for the three-bank Parametric EQ (roadmap Phase 10a). Ports
- * `ParametricEqualizerFragment`'s state + the `applyCandidate` mutation funnel, minus the undo
- * history (the Compose PEQ screen drops Undo/Redo -- see `docs/PEQ_COMPOSE_PLAN.md`). The visible
- * band list is derived from `peqState` + `selectedScope`, not explicitly rebound.
+ * Screen-scoped facade over [BmwPeqRepository]: which scope/band is currently selected is
+ * UI-local and stays here (recreating this per PEQ edit would lose the user's selection), while
+ * the actual PEQ data ([peqState]) is a mirror of the shared repository, kept in sync by this
+ * class's own writes (immediately) and by [ObserveRepo] (for changes that didn't originate here --
+ * see its doc for why every composition root needs to call it, not just [rememberPeqState]'s).
  */
-class PeqStateHolder internal constructor(private val appContext: Context) {
-
+class PeqStateHolder internal constructor(
+    internal val repo: BmwPeqRepository,
+) {
     /** Always reassigned wholesale (never mutated in place) so composition tracks it. */
-    var peqState: BmwPeqState by mutableStateOf(BmwPeqState.load(appContext))
+    var peqState: BmwPeqState by mutableStateOf(repo.peq.value)
         private set
 
     var selectedScope: PeqScope by mutableStateOf(PeqScope.FULL)
@@ -62,57 +56,31 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
         }
 
-    /**
-     * The single mutation funnel -- ported from `ParametricEqualizerFragment.applyCandidate`
-     * (minus undo history). Coerces `enabled = true`, validates at the live (or lowest assumed)
-     * sample rate, then pushes to the running engine or persists to disk; toasts + returns false
-     * on any rejection, leaving the previous state active.
-     */
+    /** Delegates to [BmwPeqRepository.applyCandidate]; adopts the result on success so this
+     *  holder's own view updates immediately rather than waiting for the next collected emission. */
     fun applyCandidate(rawCandidate: BmwPeqState, source: String): Boolean {
-        val candidate = rawCandidate.copy(enabled = true)
-        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: MIN_ASSUMED_SAMPLE_RATE
-        candidate.validate(sampleRate)?.let { validation ->
-            Timber.e("$source ${selectedScope.label} validation failed: $validation")
-            toast("$validation; previous PEQ remains active")
-            return false
-        }
-        // Boolean?: null = service not running (persist); false = running but handle not ready
-        // (must still persist, not route into applyNativeBmwPeq which would drop the edit).
-        val serviceAvailable = RootlessAudioProcessorService.nativeBmwPeqHandleReady() == true
-        val result = if (serviceAvailable) {
-            RootlessAudioProcessorService.applyNativeBmwPeq(candidate)
-        } else {
-            candidate.persist(appContext)
-        }
-        Timber.d(
-            "$source scope=${selectedScope.label} full=${candidate.fullRangeBands.size} " +
-                "low=${candidate.lowBandBands.size} mid=${candidate.midBandBands.size} " +
-                "serviceAvailable=$serviceAvailable result=$result",
-        )
-        if (!result) {
-            toast(
-                if (serviceAvailable) {
-                    "BMW PEQ configuration rejected; previous state remains active"
-                } else {
-                    "BMW PEQ could not be saved; previous state remains active"
-                },
-            )
-            return false
-        }
-        peqState = candidate
-        appContext.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
-        return true
+        val ok = repo.applyCandidate(rawCandidate, source, selectedScope.label)
+        if (ok) peqState = repo.peq.value
+        return ok
     }
 
     /** Reload the active session, or disk when offline (resume / external update). */
     fun refreshFromDisk() {
-        peqState = BmwPeqState.load(appContext)
+        repo.refreshFromDisk()
+        peqState = repo.peq.value
     }
 
     /** Adopt a state produced elsewhere (import / backup restore) without re-validating here --
      *  the caller is expected to have run [applyCandidate] already; this just syncs the snapshot. */
     fun setSnapshot(state: BmwPeqState) {
-        peqState = state.copy(enabled = true)
+        repo.setSnapshot(state)
+        peqState = repo.peq.value
+    }
+
+    /** Called by [rememberPeqState]'s collector when the shared repository changes for a reason
+     *  other than this holder's own writes above (e.g. a broadcast-triggered refresh). */
+    internal fun syncFromRepo(state: BmwPeqState) {
+        peqState = state
     }
 
     // --- convenience edits, all funnelling through applyCandidate ---
@@ -173,19 +141,32 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
                 if (applyCandidate(result.candidate, result.undoSource)) {
                     result.select?.let { selectedUuid = it }
                 }
-            is PeqBandEditResult.Overflow -> toast(PeqBandEditor.overflowToast(result))
+            is PeqBandEditResult.Overflow -> repo.toast(PeqBandEditor.overflowToast(result))
             PeqBandEditResult.Ignored, PeqBandEditResult.NoMatchingChannel -> Unit
         }
         return result
-    }
-
-    private fun toast(message: String) {
-        Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
     }
 }
 
 @Composable
 fun rememberPeqState(): PeqStateHolder {
-    val context = LocalContext.current
-    return remember(context) { PeqStateHolder(context.applicationContext) }
+    val repo = koinInject<BmwPeqRepository>()
+    val holder = remember(repo) { PeqStateHolder(repo) }
+    holder.ObserveRepo()
+    return holder
+}
+
+/**
+ * Keeps [PeqStateHolder.peqState] synced with its backing [BmwPeqRepository] for changes that
+ * didn't originate from this holder's own writes (a preset/backup restore, or an engine-originated
+ * PEQ broadcast). [rememberPeqState] calls this for a composition-scoped holder; a holder built
+ * directly (e.g. `ParametricEqualizerActivity`'s activity-scoped instance, shared across two
+ * separate composition roots so it isn't tied to either one's lifecycle) must call it explicitly
+ * from every composition root that displays that holder's state -- safe to call from more than
+ * one, since a redundant [PeqStateHolder.syncFromRepo] with the same value is a no-op in effect.
+ */
+@Composable
+fun PeqStateHolder.ObserveRepo() {
+    val peq by repo.peq.collectAsStateWithLifecycle()
+    LaunchedEffect(peq) { syncFromRepo(peq) }
 }
