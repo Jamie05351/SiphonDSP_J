@@ -587,4 +587,17 @@ object NativeBmwDspValues {
             Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
         )
     }
+
+    // Serializes the load-mutate-save sequence below: without it, two concurrent update() calls
+    // can each load the same pre-mutation array and save theirs last-write-wins, silently
+    // dropping the other caller's change.
+    private val updateLock = Any()
+
+    fun update(context: Context, mutate: (FloatArray) -> Unit): FloatArray? = synchronized(updateLock) {
+        val values = load(context)
+        mutate(values)
+        if (!save(context, values)) return@synchronized null
+        broadcast(context, values)
+        values
+    }
 }

@@ -8,7 +8,6 @@ import android.content.IntentFilter
 import android.os.Looper
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.test.core.app.ApplicationProvider
-import app.siphondsp.model.BmwDspRepository
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import org.junit.Assert.assertEquals
@@ -31,9 +30,9 @@ class BmwDspStateRefreshTest {
         val context = object : ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) {
             override fun getNoBackupFilesDir() = directory
         }
-        val repo = BmwDspRepository(context)
+        val state = BmwDspState(context)
         val index = NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_ENABLED
-        repo.preview(index, 1f, IntArray(0))
+        state.preview(index, 1f)
         shadowOf(Looper.getMainLooper()).idle()
 
         var broadcastValue: Float? = null
@@ -45,10 +44,10 @@ class BmwDspStateRefreshTest {
         val broadcasts = LocalBroadcastManager.getInstance(context)
         broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
         try {
-            repo.refreshFromDisk()
+            state.refreshFromDisk()
             shadowOf(Looper.getMainLooper()).idle()
 
-            assertEquals(0f, repo.values.value[index], 0f)
+            assertEquals(0f, state.get(index), 0f)
             assertEquals(0f, broadcastValue)
         } finally {
             broadcasts.unregisterReceiver(receiver)

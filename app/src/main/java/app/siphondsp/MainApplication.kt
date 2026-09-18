@@ -24,8 +24,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.flavor.UpdateManager
-import app.siphondsp.model.BmwDspRepository
-import app.siphondsp.model.BmwPeqRepository
 import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
@@ -146,8 +144,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             single { DumpManager(androidContext()) }
             single { Preferences(androidContext()).App() }
             single { Preferences(androidContext()).Var() }
-            single { BmwDspRepository(androidContext()) }
-            single { BmwPeqRepository(androidContext()) }
         }
 
         startKoin {

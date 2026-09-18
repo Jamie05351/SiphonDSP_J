@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First page of the compressor DspPager: the CompressorSurface visualiser (live dry/wet
+     spectrum, the four crossover-band regions, per-band threshold lines and the applied
+     gain-reduction curve) plus the slim master strip (MBC enable + dry/wet mix, built in
+     NativeBmwCompressorFragment). Swipe left from here for the four band pages and the
+     Driver-protection page. Wrapped in a NestedScrollView so the graph + master strip still
+     scroll on very short head-unit displays. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/compressor_surface_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            app:cardCornerRadius="20dp">
+
+            <app.siphondsp.view.CompressorSurface
+                android:id="@+id/compressor_surface"
+                android:layout_width="match_parent"
+                android:layout_height="220dp" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <FrameLayout
+            android:id="@+id/compressor_master_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="8dp" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -11,7 +11,6 @@ import app.siphondsp.utils.Constants
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Shadows.shadowOf
@@ -19,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * BmwDspRepository.commit()'s broadcast step needs a real Context/Looper -- untestable in a
+ * NativeBmwDspValues.update()'s broadcast step needs a real Context/Looper -- untestable in a
  * plain JVM unit test (LocalBroadcastManager throws without one). This is the one thing
  * Robolectric buys here that NativeBmwDspValuesTest (load/save round-trips) can't cover.
  */
@@ -27,9 +26,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class NativeBmwDspValuesBroadcastTest {
     @Test
-    fun commitBroadcastsTheAppliedSnapshot() {
+    fun updateBroadcastsTheAppliedSnapshot() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val repo = BmwDspRepository(context)
         var received: FloatArray? = null
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -39,30 +37,31 @@ class NativeBmwDspValuesBroadcastTest {
         LocalBroadcastManager.getInstance(context)
             .registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
 
-        assertTrue(repo.commit(NativeBmwDspValues.INDEX_HEADROOM, -3f, IntArray(0)))
+        val applied = NativeBmwDspValues.update(context) { values ->
+            values[NativeBmwDspValues.INDEX_HEADROOM] = -3f
+        }
         shadowOf(Looper.getMainLooper()).idle()
 
         assertNotNull("broadcast receiver should have fired", received)
-        assertArrayEquals(repo.values.value, received, 0f)
+        assertArrayEquals(applied, received, 0f)
     }
 
     @Test
-    fun commitPersistsBeforeBroadcasting() {
+    fun updatePersistsBeforeBroadcasting() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val repo = BmwDspRepository(context)
         var persistedAtBroadcastTime: Float? = null
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 // If the receiver can already read the new value back from disk, save()
-                // happened before broadcast() -- exactly the mutate -> save -> broadcast
-                // ordering BmwDspRepository.commit() documents.
+                // happened before broadcast() -- exactly the load -> mutate -> save ->
+                // broadcast ordering NativeBmwDspValues.update() documents.
                 persistedAtBroadcastTime = NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_HEADROOM]
             }
         }
         LocalBroadcastManager.getInstance(context)
             .registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
 
-        repo.commit(NativeBmwDspValues.INDEX_HEADROOM, -7f, IntArray(0))
+        NativeBmwDspValues.update(context) { values -> values[NativeBmwDspValues.INDEX_HEADROOM] = -7f }
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(-7f, persistedAtBroadcastTime)

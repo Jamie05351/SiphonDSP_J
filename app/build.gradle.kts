@@ -202,7 +202,6 @@ dependencies {
 
     // Dependency injection
     implementation("io.insert-koin:koin-android:4.2.2")
-    implementation("io.insert-koin:koin-compose:4.2.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
 
     // Firebase

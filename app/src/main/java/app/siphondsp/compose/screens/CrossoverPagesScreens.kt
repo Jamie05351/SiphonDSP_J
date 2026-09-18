@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.controls.BmwPanel
@@ -31,10 +30,9 @@ import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
-import app.siphondsp.model.BmwPeqRepository
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
-import org.koin.compose.koinInject
 
 private val DefaultAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
 private val NoMirror = IntArray(0)
@@ -53,8 +51,7 @@ private val NoMirror = IntArray(0)
 fun CrossoversPageScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val context = LocalContext.current
-    val peqRepo = koinInject<BmwPeqRepository>()
-    val peqState by peqRepo.peq.collectAsStateWithLifecycle()
+    val peqState = remember { BmwPeqState.load(context) }
     var graphMode by remember { mutableStateOf(CrossoverGraphMode.MAGNITUDE) }
 
     val lowSlider = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
