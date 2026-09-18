@@ -49,12 +49,14 @@ class PreferenceCache(val context: Context) {
     }
 
     companion object {
-        @Suppress("DEPRECATION")
         fun getPreferences(
             context: Context,
             namespace: String,
         ): SharedPreferences {
-            return context.getSharedPreferences(namespace, Context.MODE_MULTI_PROCESS)
+            // No component in this app declares android:process, so everything runs in a single
+            // process -- MODE_MULTI_PROCESS bought nothing here and has been unreliable since
+            // API 23 anyway (doesn't correctly sync SharedPreferences' in-memory cache).
+            return context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
         }
 
         @Suppress("UNCHECKED_CAST")

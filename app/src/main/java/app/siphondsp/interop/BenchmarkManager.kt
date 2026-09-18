@@ -2,6 +2,7 @@ package app.siphondsp.interop
 
 import android.content.Context
 import android.os.Build
+import android.view.WindowManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -85,9 +86,16 @@ object BenchmarkManager : KoinComponent {
             .cancellable()
             .collect {
                 withContext(Dispatchers.Main) {
-                    when (it) {
-                        BenchmarkState.BenchmarkDone -> dialog.dismiss()
-                        BenchmarkState.Benchmarking -> dialog.title = context.getString(R.string.audio_format_optimization_benchmark_ongoing)
+                    // The hosting Activity/Fragment can be torn down (rotation, back press) while
+                    // this unscoped benchmark job is still running; touching the dialog's window
+                    // after that throws BadTokenException instead of a plain view-null check.
+                    try {
+                        when (it) {
+                            BenchmarkState.BenchmarkDone -> dialog.dismiss()
+                            BenchmarkState.Benchmarking -> dialog.title = context.getString(R.string.audio_format_optimization_benchmark_ongoing)
+                        }
+                    } catch (_: WindowManager.BadTokenException) {
+                        // Window already gone; the benchmark itself still completed/persisted.
                     }
                 }
             }

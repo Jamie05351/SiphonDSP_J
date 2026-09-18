@@ -26,6 +26,7 @@ int pthread_join(pthread_t thread, void **value_ptr)
 int pthread_detach(pthread_t thread)
 {
     CloseHandle(thread);
+    return 0;
 }
 // Mutex
 int pthread_mutex_init(pthread_mutex_t *mutex, pthread_mutexattr_t *attr)
@@ -122,12 +123,14 @@ int pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *at
 int pthread_rwlock_destroy(pthread_rwlock_t *rwlock)
 {
     (void)rwlock;
+    return 0;
 }
 int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock)
 {
     if (rwlock == NULL)
         return 1;
     AcquireSRWLockShared(&(rwlock->lock));
+    return 0;
 }
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock)
 {
@@ -141,6 +144,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)
         return 1;
     AcquireSRWLockExclusive(&(rwlock->lock));
     rwlock->exclusive = true;
+    return 0;
 }
 int pthread_rwlock_trywrlock(pthread_rwlock_t  *rwlock)
 {
@@ -163,5 +167,6 @@ int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
     } else {
         ReleaseSRWLockShared(&(rwlock->lock));
     }
+    return 0;
 }
 #endif
