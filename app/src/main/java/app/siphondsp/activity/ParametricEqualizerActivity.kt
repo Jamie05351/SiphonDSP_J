@@ -8,11 +8,15 @@ import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.databinding.ActivityParametricEqBinding
 import app.siphondsp.fragment.ParametricEqualizerFragment
+import app.siphondsp.model.BmwPeqRepository
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import org.koin.android.ext.android.inject
 
 class ParametricEqualizerActivity : DspWorkspaceActivity() {
+
+    private val peqRepository: BmwPeqRepository by inject()
 
     /**
      * Shared with [ParametricEqualizerFragment]'s `ParametricEqScreen` -- one instance so the
@@ -20,7 +24,7 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
      * there, in the fragment) stay in sync. `PeqStateHolder`'s properties are `mutableStateOf`,
      * so Compose observes changes across both composition roots as long as it's the same object.
      */
-    val peqStateHolder: PeqStateHolder by lazy { PeqStateHolder(applicationContext) }
+    val peqStateHolder: PeqStateHolder by lazy { PeqStateHolder(peqRepository) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

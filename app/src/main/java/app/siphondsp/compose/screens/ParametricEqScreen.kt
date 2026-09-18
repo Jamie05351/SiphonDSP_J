@@ -1,9 +1,5 @@
 package app.siphondsp.compose.screens
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusGroup
@@ -31,7 +27,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,11 +49,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.state.PeqStateHolder
+import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.fragment.PeqApoImport
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqGraphPreferences
 import app.siphondsp.fragment.PeqScope
+import app.siphondsp.model.BmwDspRepository
 import app.siphondsp.model.BmwPeqPreset
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
@@ -66,11 +63,9 @@ import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.PeqDiagnosticReport
 import app.siphondsp.model.PrivatePeqBackup
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import timber.log.Timber
 
 /**
@@ -93,49 +88,21 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val graphPrefs = remember(context) { PeqGraphPreferences(context) }
 
-    var systemValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
+    val dsp = rememberBmwDspState()
+    val systemValues = dsp.values
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
 
-    fun reloadEverything() {
-        holder.refreshFromDisk()
-        systemValues = NativeBmwDspValues.load(context)
+    // graphPrefs are plain SharedPreferences, not reactive -- reload on resume in case another
+    // screen changed them while this one was stopped. systemValues/holder.peqState above stay
+    // current on their own: both observe shared repositories that keep listening for broadcasts
+    // regardless of this composition's lifecycle, so there's no equivalent gap to cover for them.
+    LifecycleResumeEffect(Unit) {
         graphMode = graphPrefs.responseMode
         channelDisplay = graphPrefs.channelDisplay
         showOverlays = graphPrefs.showIndividualFilters
-    }
-
-    LifecycleResumeEffect(Unit) {
-        reloadEverything()
         onPauseOrDispose { }
-    }
-
-    // 10g: keep the graph tracking edits made on the other DSP screens (crossover / tilt / gains
-    // / compressor all broadcast ACTION_NATIVE_BMW_DSP_UPDATED) and full-config swaps (preset
-    // load, app-wide backup restore) without needing a screen re-entry.
-    DisposableEffect(holder) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                when (intent.action) {
-                    Constants.ACTION_NATIVE_BMW_DSP_UPDATED ->
-                        intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
-                            ?.takeIf { it.size == NativeBmwDspValues.SIZE }
-                            ?.let { systemValues = it.copyOf() }
-                    Constants.ACTION_PARAMETRIC_EQ_CHANGED -> holder.refreshFromDisk()
-                    Constants.ACTION_PRESET_LOADED, Constants.ACTION_BACKUP_RESTORED -> reloadEverything()
-                }
-            }
-        }
-        context.registerLocalReceiver(
-            receiver,
-            IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).apply {
-                addAction(Constants.ACTION_PRESET_LOADED)
-                addAction(Constants.ACTION_BACKUP_RESTORED)
-                addAction(Constants.ACTION_PARAMETRIC_EQ_CHANGED)
-            },
-        )
-        onDispose { context.unregisterLocalReceiver(receiver) }
     }
 
     // --- layout: two-page horizontal swipe, Graph then List -----------------------------------
@@ -229,6 +196,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
 @Composable
 fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val dspRepo = koinInject<BmwDspRepository>()
 
     val apoImport = remember(context, holder) {
         val hostContext = context
@@ -416,8 +384,8 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                     pendingBackup = null
                     // Just applies + broadcasts; no local systemValues to update here (this
                     // composable doesn't render the graph) -- ParametricEqScreen's own
-                    // ACTION_NATIVE_BMW_DSP_UPDATED receiver picks up the broadcast this sends.
-                    applyBackupRestore(context, holder, PeqGraphPreferences(context), toRestore) {}
+                    // rememberBmwDspState() picks up the shared repository's new value.
+                    applyBackupRestore(context, holder, dspRepo, PeqGraphPreferences(context), toRestore) {}
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { pendingBackup = null }) { Text("Cancel") } },
@@ -598,6 +566,7 @@ private fun readBackupForConfirm(context: android.content.Context, uri: android.
 internal fun applyBackupRestore(
     context: android.content.Context,
     holder: PeqStateHolder,
+    dspRepo: BmwDspRepository,
     graphPrefs: PeqGraphPreferences,
     prompt: PendingBackupRestore,
     onValuesRestored: (FloatArray) -> Unit,
@@ -611,13 +580,12 @@ internal fun applyBackupRestore(
             // leftover value from an older field silently reinterpreted as whatever the slot
             // means today, applied straight to the running DSP below.
             val restored = NativeBmwDspValues.migrateRestoredValues(context, values.toFloatArray())
-            if (!NativeBmwDspValues.save(context, restored)) {
+            if (!dspRepo.restoreFrom(restored)) {
                 BmwPeqState.recordBackupRestoreResult(context, "partial: PEQ restored; DSP save failed")
                 Timber.e("Private backup restore incomplete: BMW DSP persistence failed")
                 context.toast("Backup only partly restored: PEQ restored, other DSP settings could not be saved")
                 return
             }
-            NativeBmwDspValues.broadcast(context, restored)
             onValuesRestored(restored)
         }
         graphPrefs.writeBackupGraphDisplay(

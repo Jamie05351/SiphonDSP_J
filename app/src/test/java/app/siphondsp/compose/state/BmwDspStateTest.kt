@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.os.Looper
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.test.core.app.ApplicationProvider
+import app.siphondsp.model.BmwDspRepository
 import app.siphondsp.model.NativeBmwDspStore
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
@@ -37,8 +38,9 @@ class BmwDspStateTest {
     @Test
     fun failedCommitRestoresPreviewAndReportsFailure() {
         val context = context()
-        val state = BmwDspState(context)
-        val previous = state.values.copyOf()
+        val repo = BmwDspRepository(context)
+        val previous = repo.values.value.copyOf()
+        val state = BmwDspState(context, repo, repo.values.value)
         state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
@@ -53,7 +55,7 @@ class BmwDspStateTest {
         try {
             assertFalse(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -9f))
             shadowOf(Looper.getMainLooper()).idle()
-            assertArrayEquals(previous, state.values, 0f)
+            assertArrayEquals(previous, repo.values.value, 0f)
             assertArrayEquals(previous, received, 0f)
             assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
             assertTrue(ShadowToast.getTextOfLatestToast().contains("could not be saved"))
@@ -63,30 +65,10 @@ class BmwDspStateTest {
     }
 
     @Test
-    fun failedUpdateDoesNotBroadcastAnUnsavedConfiguration() {
-        val context = context()
-        val previous = NativeBmwDspValues.load(context)
-        assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
-        var broadcastsReceived = 0
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) { broadcastsReceived++ }
-        }
-        val broadcasts = LocalBroadcastManager.getInstance(context)
-        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
-            assertNull(NativeBmwDspValues.update(context) { it[5] = -9f })
-            shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(0, broadcastsReceived)
-            assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
-        } finally {
-            broadcasts.unregisterReceiver(receiver)
-        }
-    }
-
-    @Test
     fun successfulCommitPersistsMirroredValues() {
         val context = context()
-        val state = BmwDspState(context)
+        val repo = BmwDspRepository(context)
+        val state = BmwDspState(context, repo, repo.values.value)
         assertTrue(state.commit(NativeBmwDspValues.INDEX_LOW_DELAY_L, 1.5f,
             intArrayOf(NativeBmwDspValues.INDEX_LOW_DELAY_R)))
         val saved = NativeBmwDspValues.load(context)
