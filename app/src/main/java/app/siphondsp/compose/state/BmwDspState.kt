@@ -60,24 +60,26 @@ class BmwDspState internal constructor(private val appContext: Context) {
     /**
      * Commit only after persistence succeeds; undo any live preview on failure.
      *
-     * Goes through [NativeBmwDspValues.update] rather than saving [values] directly: this
-     * composition's copy is loaded once and can go stale while another [BmwDspState] instance
-     * (a different composition/screen) commits its own edit in between -- saving our stale copy
-     * would silently overwrite that other edit. update() re-reads from disk immediately before
-     * mutating and saving, under a lock shared by every caller, so concurrent commits from
-     * separate BmwDspState instances serialize correctly instead of racing.
+     * Builds the saved array from this composition's own [values] directly rather than a fresh
+     * disk read: [NativeBmwDspValues.load] re-runs every one-time migration on each call, and
+     * doing that on every single commit (confirmed by bisecting PR #387, which introduced a
+     * disk-reload here) made committed crossover type/frequency changes unreliable -- a later
+     * commit's fresh reload could re-derive a value that didn't match what was just set. This
+     * reintroduces the narrower, pre-existing risk #387 was trying to close (two separate
+     * BmwDspState instances committing at the same moment can race), which is a real but rare
+     * edge case, unlike this bug, which broke ordinary single-screen editing outright.
      */
     fun commit(index: Int, value: Float, mirrors: IntArray = EmptyMirrors): Boolean {
-        val updated = NativeBmwDspValues.update(appContext) { arr ->
-            arr[index] = value
-            for (m in mirrors) arr[m] = value
-        }
-        if (updated == null) {
+        val next = values.copyOf()
+        next[index] = value
+        for (m in mirrors) next[m] = value
+        if (!NativeBmwDspValues.save(appContext, next)) {
             refreshFromDisk()
             appContext.toast("BMW DSP settings could not be saved; previous settings restored")
             return false
         }
-        values = updated
+        values = next
+        NativeBmwDspValues.broadcast(appContext, next)
         return true
     }
 

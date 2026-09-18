@@ -63,27 +63,6 @@ class BmwDspStateTest {
     }
 
     @Test
-    fun failedUpdateDoesNotBroadcastAnUnsavedConfiguration() {
-        val context = context()
-        val previous = NativeBmwDspValues.load(context)
-        assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
-        var broadcastsReceived = 0
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) { broadcastsReceived++ }
-        }
-        val broadcasts = LocalBroadcastManager.getInstance(context)
-        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
-            assertNull(NativeBmwDspValues.update(context) { it[5] = -9f })
-            shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(0, broadcastsReceived)
-            assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
-        } finally {
-            broadcasts.unregisterReceiver(receiver)
-        }
-    }
-
-    @Test
     fun successfulCommitPersistsMirroredValues() {
         val context = context()
         val state = BmwDspState(context)
@@ -92,5 +71,31 @@ class BmwDspStateTest {
         val saved = NativeBmwDspValues.load(context)
         assertEquals(1.5f, saved[NativeBmwDspValues.INDEX_LOW_DELAY_L], 0f)
         assertEquals(1.5f, saved[NativeBmwDspValues.INDEX_LOW_DELAY_R], 0f)
+    }
+
+    @Test
+    fun successfulCommitPersistsBeforeBroadcasting() {
+        val context = context()
+        val state = BmwDspState(context)
+        var persistedAtBroadcastTime: Float? = null
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                // Deliberately reads via the outer `context` (the test's custom noBackupFilesDir
+                // wrapper), not the receiver's own `ctx` param -- if the receiver can already read
+                // the new value back from disk, save() happened before broadcast() -- the ordering
+                // commit() must preserve so a listener reacting to the broadcast (e.g. the native
+                // engine) never reads a config older than what was just persisted.
+                persistedAtBroadcastTime = NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_HEADROOM]
+            }
+        }
+        val broadcasts = LocalBroadcastManager.getInstance(context)
+        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+        try {
+            assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -7f))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(-7f, persistedAtBroadcastTime)
+        } finally {
+            broadcasts.unregisterReceiver(receiver)
+        }
     }
 }
