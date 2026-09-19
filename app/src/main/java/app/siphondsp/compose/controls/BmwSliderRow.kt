@@ -1,21 +1,27 @@
 package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -23,9 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.sp
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -33,6 +41,22 @@ import kotlin.math.roundToInt
 
 private val ValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 private const val DisabledRowAlpha = 0.4f
+private val DropdownTitleTextSize = 14.sp
+private val DropdownChevronSize = 18.sp
+private val DropdownTitlePadding = 18.dp
+private val DropdownMenuBackground = Color(0xFF14181F)
+
+/**
+ * Turns a [BmwSliderRow]'s title into a dropdown: the one bordered box reads
+ * "[label]  [selected option] v" and opens [options] when tapped. The box also spans the row's
+ * toggle-zone gap (rows using this have no inline switch), so the slider still starts where it
+ * does on every other row.
+ */
+class BmwTitleDropdown(
+    val options: List<String>,
+    val selectedIndex: Int,
+    val onSelect: (Int) -> Unit,
+)
 
 /**
  * Compose equivalent of `CrossoverDashboardBuilder.addSliderRow`: a boxed title, a fixed
@@ -56,6 +80,8 @@ fun BmwSliderRow(
     onCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    // When set, the title becomes a dropdown (see BmwTitleDropdown) and toggleChecked is ignored.
+    titleDropdown: BmwTitleDropdown? = null,
     // When set, tapping the value box opens the numeric-entry dialog (View parity); the parsed,
     // snapped, coerced value is delivered here.
     onValueEntered: ((Float) -> Unit)? = null,
@@ -87,17 +113,26 @@ fun BmwSliderRow(
             .alpha(if (enabled) 1f else DisabledRowAlpha),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BoxedTitle(
-            text = label,
-            accentColor = accentColor,
-            modifier = Modifier.width(LocalRowTitleColumnWidth.current).height(RowBoxHeight),
-        )
-        if (toggleChecked != null && onToggleChange != null) {
-            Box(Modifier.width(RowToggleZoneWidth), contentAlignment = Alignment.Center) {
-                BmwSwitch(checked = toggleChecked, onCheckedChange = onToggleChange, contentDescription = label)
-            }
+        if (titleDropdown != null) {
+            BoxedDropdownTitle(
+                label = label,
+                dropdown = titleDropdown,
+                accentColor = accentColor,
+                modifier = Modifier.width(LocalRowTitleColumnWidth.current + RowToggleZoneWidth).height(RowBoxHeight),
+            )
         } else {
-            Spacer(Modifier.width(RowToggleZoneWidth))
+            BoxedTitle(
+                text = label,
+                accentColor = accentColor,
+                modifier = Modifier.width(LocalRowTitleColumnWidth.current).height(RowBoxHeight),
+            )
+            if (toggleChecked != null && onToggleChange != null) {
+                Box(Modifier.width(RowToggleZoneWidth), contentAlignment = Alignment.Center) {
+                    BmwSwitch(checked = toggleChecked, onCheckedChange = onToggleChange, contentDescription = label)
+                }
+            } else {
+                Spacer(Modifier.width(RowToggleZoneWidth))
+            }
         }
         CompositionLocalProvider(
             LocalMinimumInteractiveComponentSize provides
@@ -144,6 +179,68 @@ fun BmwSliderRow(
                     },
                 ),
         )
+    }
+}
+
+@Composable
+private fun BoxedDropdownTitle(
+    label: String,
+    dropdown: BmwTitleDropdown,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val selectedText = dropdown.options.getOrElse(dropdown.selectedIndex) { "" }
+    Box(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .bmwGlassBox(accentColor)
+                .clickable(interactionSource = interactionSource, indication = LocalIndication.current) { expanded = true }
+                .bmwFocusRing(interactionSource)
+                .padding(horizontal = DropdownTitlePadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = DropdownTitleTextSize,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = selectedText,
+                color = accentColor,
+                fontSize = DropdownTitleTextSize,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(text = "\u25BE", color = accentColor, fontSize = DropdownChevronSize)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(DropdownMenuBackground),
+        ) {
+            dropdown.options.forEachIndexed { index, option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option,
+                            color = if (index == dropdown.selectedIndex) accentColor else Color.White,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        dropdown.onSelect(index)
+                    },
+                )
+            }
+        }
     }
 }
 

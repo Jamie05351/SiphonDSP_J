@@ -27,6 +27,7 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSliderRow
+import app.siphondsp.compose.controls.BmwTitleDropdown
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -119,18 +120,18 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                     peqState = peqState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
+                        // 180dp -> 164dp: the graph lost its 16dp legend strip (PAD_TOP_DP 24 -> 8),
+                        // so the plot keeps its height and everything below moves up.
+                        .height(164.dp)
                         .padding(bottom = 4.dp),
                 )
 
+                // The slope picker lives in the row's title box (a dropdown) rather than a
+                // segmented control on its own line, so it costs no extra height.
                 DspSliderRow(
                     "Lowpass freq", NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
                     dsp, lowSlider, mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                )
-                BmwSegmentedControl(
-                    options = crossoverTypeOptions,
-                    selectedIndex = lowCrossoverType,
-                    onSelect = {
+                    titleDropdown = BmwTitleDropdown(crossoverTypeOptions, lowCrossoverType) {
                         dsp.commit(
                             NativeBmwDspValues.outputIndex(
                                 NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
@@ -139,20 +140,11 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                             lowPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
                         )
                     },
-                    optionAccents = List(crossoverTypeOptions.size) { lowSlider },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    segmentGap = 4.dp,
                 )
                 DspSliderRow(
                     "Highpass freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
                     dsp, midSlider, mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-                )
-                BmwSegmentedControl(
-                    options = crossoverTypeOptions,
-                    selectedIndex = midCrossoverType,
-                    onSelect = {
+                    titleDropdown = BmwTitleDropdown(crossoverTypeOptions, midCrossoverType) {
                         dsp.commit(
                             NativeBmwDspValues.outputIndex(
                                 NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
@@ -161,11 +153,6 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                             midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
                         )
                     },
-                    optionAccents = List(crossoverTypeOptions.size) { midSlider },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    segmentGap = 4.dp,
                 )
 
                 val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)
@@ -230,6 +217,7 @@ private fun DspSliderRow(
     dsp: BmwDspState,
     accent: Color,
     mirrors: IntArray = NoMirror,
+    titleDropdown: BmwTitleDropdown? = null,
 ) {
     BmwSliderRow(
         label = label,
@@ -241,5 +229,6 @@ private fun DspSliderRow(
         onPreview = { dsp.preview(index, it, mirrors) },
         onCommit = { dsp.commit(index, it, mirrors) },
         onValueEntered = { dsp.commit(index, it, mirrors) },
+        titleDropdown = titleDropdown,
     )
 }
