@@ -2,6 +2,7 @@ package app.siphondsp.compose.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,12 +74,17 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                     start = 20.dp,
                     end = 20.dp,
                     top = ControlTopInset,
-                    bottom = 5.dp,
+                    // The columns spread their cards over the full height (SpaceBetween), so the
+                    // bottom inset has to keep the Low cards clear of the bezel.
+                    bottom = 30.dp,
                 ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(
                     modifier = Modifier.width(SideColumnWidth).fillMaxHeight(),
+                    // The one-line gain row leaves spare height: spread it between the cards and
+                    // the stage-alignment row instead of pooling it at the bottom.
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     GainsChannelCard(
                         dsp, linked,
@@ -107,6 +113,9 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
                 Spacer(Modifier.weight(1f))
                 Column(
                     modifier = Modifier.width(SideColumnWidth).fillMaxHeight(),
+                    // The one-line gain row leaves spare height: spread it between the cards and
+                    // the stage-alignment row instead of pooling it at the bottom.
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     GainsChannelCard(
                         dsp, linked,
@@ -251,7 +260,9 @@ private fun GainsChannelCard(
     )
 }
 
-private val SideColumnWidth = 300.dp
+// As wide as the car art allows: the speaker rings sit ~490 dp / ~930 dp from the content's left
+// edge, so 330 dp columns clear them.
+private val SideColumnWidth = 330.dp
 private const val CarAspectRatio = 1080f / 404f
 private val ControlTopInset = 28.dp
 private val StageTimingHeight = 42.dp
