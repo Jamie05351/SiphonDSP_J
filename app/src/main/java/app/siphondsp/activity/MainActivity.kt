@@ -24,11 +24,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.core.content.getSystemService
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.net.toUri
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
-import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
@@ -79,7 +77,7 @@ import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.utils.storage.StorageUtils
-import app.siphondsp.view.FloatingToggleButton
+import app.siphondsp.view.PowerHotspot
 import org.koin.core.component.inject
 import timber.log.Timber
 import java.io.File
@@ -166,7 +164,7 @@ class MainActivity : BaseActivity() {
 
         // Setup views
         setContentView(binding.root)
-        applyBottomBarInsets()
+        binding.powerToggle.linkedLed = binding.powerLed
         setSupportActionBar(binding.toolbar)
 
         actionBar?.setDisplayHomeAsUpEnabled(true)
@@ -179,6 +177,8 @@ class MainActivity : BaseActivity() {
 
         // Load main fragment
         dspFragment = DspFragment.newInstance()
+        // The power / cog / overflow overlay belongs to the artwork page only.
+        dspFragment.onPageChanged = { page -> binding.homeChrome.isVisible = page == 0 }
         if(!hasLoadFailed)
             supportFragmentManager.beginTransaction()
                 .replace(R.id.dsp_fragment_container, dspFragment)
@@ -197,57 +197,15 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        // Inflate bottom bar menu. PEQ/Gains&Delay/Compressor/Crossovers are reachable as
-        // dedicated tiles on the main shortcuts grid, so the bar only carries what isn't:
-        // presets/revert/blocklist/measurement (collapsed into the "more" overflow, since none
-        // of them are `showAsAction="always"`), the settings gear (navigation icon), and the
-        // power toggle.
-        binding.bar.setNavigationOnClickListener {
+        // The front page is one piece of artwork (see fragment_dsp_page_shortcuts.xml). PEQ /
+        // Gains & Delay / Compressor / Crossovers / All-pass are touch areas on it; the settings
+        // cog and the "more" overflow (revert / blocklist / measurement / signal generator /
+        // native truth) are transparent-backed icons in the overlay, and the power button is a
+        // hotspot over the artwork's own button.
+        binding.actionSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        binding.bar.inflateMenu(R.menu.menu_main_bottom)
-
-        if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))
-            binding.bar.menu.removeItem(R.id.action_blocklist)
-
-        binding.bar.setOnMenuItemClickListener { arg0 ->
-            when (arg0.itemId) {
-                R.id.action_blocklist -> {
-                    if(!app.isEnhancedProcessing && isRoot()) {
-                        showAlert(
-                            R.string.enhanced_processing_feature_unavailable,
-                            R.string.enhanced_processing_feature_unavailable_content
-                        )
-                    }
-                    else
-                        startActivity(Intent(this, BlocklistActivity::class.java))
-                    true
-                }
-                R.id.action_revert -> {
-                    this.showYesNoAlert(
-                        R.string.revert_confirmation_title,
-                        R.string.revert_confirmation
-                    ) {
-                        if(it)
-                            restoreDspSettings()
-                    }
-                    true
-                }
-                R.id.action_measurement -> {
-                    startActivity(Intent(this, MeasurementCaptureActivity::class.java))
-                    true
-                }
-                R.id.action_signal_generator -> {
-                    startActivity(Intent(this, SignalGeneratorActivity::class.java))
-                    true
-                }
-                R.id.action_native_truth -> {
-                    startActivity(Intent(this, NativeTruthActivity::class.java))
-                    true
-                }
-                else -> false
-            }
-        }
+        binding.actionOverflow.setOnClickListener { showOverflowMenu(it) }
 
         IntentFilter(Constants.ACTION_SERVICE_STOPPED).apply {
             addAction(Constants.ACTION_SERVICE_STARTED)
@@ -258,7 +216,7 @@ class MainActivity : BaseActivity() {
 
         // Rootless: don't toggle on click, we handle that in the onClickListener
         binding.powerToggle.toggleOnClick = false
-        binding.powerToggle.setOnToggleClickListener(object : FloatingToggleButton.OnToggleClickListener{
+        binding.powerToggle.setOnToggleClickListener(object : PowerHotspot.OnToggleClickListener {
             override fun onClick() {
                 sdkAbove(Build.VERSION_CODES.R) {
                     binding.powerToggle.performHapticFeedback(
@@ -389,32 +347,60 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if(key == getString(R.string.key_appearance_nav_hide)) {
-            binding.bar.hideOnScroll = prefsApp.get(R.string.key_appearance_nav_hide)
-        }
-        else if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
+        if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
             binding.powerToggle.isToggled = prefsApp.get(R.string.key_powered_on)
         }
 
         super.onSharedPreferenceChanged(sharedPreferences, key)
     }
 
-    private fun applyBottomBarInsets() {
-        val initialLeftPadding = binding.bar.paddingLeft
-        val initialRightPadding = binding.bar.paddingRight
-        ViewCompat.setOnApplyWindowInsetsListener(binding.bar) { bar, windowInsets ->
-            // Left/right only, to keep the quick actions clear of a landscape gesture-nav strip
-            // on either display edge. Deliberately NOT pushing bottomMargin by the navigation-bar
-            // inset here -- that was leaving a visible gap between the bar and the true bottom
-            // edge, which reads as the bar floating rather than sitting flush against the screen.
-            val navigationInsets = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            bar.updatePadding(
-                left = initialLeftPadding + navigationInsets.left,
-                right = initialRightPadding + navigationInsets.right,
-            )
-            windowInsets
+    /** The front page's 3-dot menu: same items and actions the old bottom bar's overflow had. */
+    private fun showOverflowMenu(anchor: android.view.View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.menu_main_bottom, popup.menu)
+
+        if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))
+            popup.menu.removeItem(R.id.action_blocklist)
+
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_blocklist -> {
+                    if(!app.isEnhancedProcessing && isRoot()) {
+                        showAlert(
+                            R.string.enhanced_processing_feature_unavailable,
+                            R.string.enhanced_processing_feature_unavailable_content
+                        )
+                    }
+                    else
+                        startActivity(Intent(this, BlocklistActivity::class.java))
+                    true
+                }
+                R.id.action_revert -> {
+                    this.showYesNoAlert(
+                        R.string.revert_confirmation_title,
+                        R.string.revert_confirmation
+                    ) {
+                        if(it)
+                            restoreDspSettings()
+                    }
+                    true
+                }
+                R.id.action_measurement -> {
+                    startActivity(Intent(this, MeasurementCaptureActivity::class.java))
+                    true
+                }
+                R.id.action_signal_generator -> {
+                    startActivity(Intent(this, SignalGeneratorActivity::class.java))
+                    true
+                }
+                R.id.action_native_truth -> {
+                    startActivity(Intent(this, NativeTruthActivity::class.java))
+                    true
+                }
+                else -> false
+            }
         }
-        ViewCompat.requestApplyInsets(binding.bar)
+        popup.show()
     }
 
     override fun onSaveInstanceState(outState: Bundle, outPersistentState: PersistableBundle) {
@@ -595,6 +581,8 @@ class MainActivity : BaseActivity() {
 
         binding.powerToggle.isToggled = false
         binding.toolbar.isVisible = false
+        // No artwork page behind the overlay in the load-error state.
+        binding.homeChrome.isVisible = false
     }
 
     private fun bindProcessorService() {

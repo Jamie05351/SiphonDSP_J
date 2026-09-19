@@ -37,30 +37,57 @@
 
     <include layout="@layout/content_main" />
 
-    <app.siphondsp.view.PositionedBottomAppBar
-        android:id="@+id/bar"
+    <!-- Touch overlay for the front page's power button, LED, settings cog and overflow menu,
+         laid over the artwork by the same HomeArtLayout mapping as the page beneath it. It
+         replaces the old bottom bar and power FAB. MainActivity hides it while the pager is on
+         its second (settings) page. Empty areas pass touches through to the pager. -->
+    <app.siphondsp.view.HomeArtLayout
+        android:id="@+id/home_chrome"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:layout_gravity="bottom"
-        app:backgroundTint="@color/dsp_home_banner_gloss_black"
-        app:fabAlignmentMode="center"
-        app:fabAnchorMode="cradle"
-        app:fabCradleMargin="16dp"
-        app:menuAlignmentMode="auto"
-        app:navigationIcon="@drawable/ic_twotone_settings_24dp"
-        app:navigationIconTint="?attr/actionMenuTextColor"
-        android:contentInsetStart="0.0dip"
-        android:contentInsetLeft="0dp"
-        app:contentInsetLeft="0dp"
-        app:contentInsetStart="0dp" />
+        android:layout_height="match_parent">
 
-    <app.siphondsp.view.FloatingToggleButton
-        android:id="@+id/power_toggle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_anchor="@id/bar"
-        app:srcCompat="@drawable/ic_twotone_power_settings_24dp"
-        android:hapticFeedbackEnabled="true"
-        android:contentDescription="@string/power_button_alt" />
+        <app.siphondsp.view.PowerHotspot
+            android:id="@+id/power_toggle"
+            android:tag="power_btn"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:hapticFeedbackEnabled="true"
+            android:contentDescription="@string/power_button_alt" />
+
+        <app.siphondsp.view.PowerLed
+            android:id="@+id/power_led"
+            android:tag="power_led"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
+
+        <ImageView
+            android:id="@+id/action_settings"
+            android:tag="cog"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_twotone_settings_24dp"
+            app:tint="#B8C4D0"
+            android:contentDescription="@string/title_activity_settings" />
+
+        <ImageView
+            android:id="@+id/action_overflow"
+            android:tag="overflow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_baseline_more_vert_24dp"
+            app:tint="#B8C4D0"
+            android:contentDescription="@string/abc_action_menu_overflow_description" />
+    </app.siphondsp.view.HomeArtLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

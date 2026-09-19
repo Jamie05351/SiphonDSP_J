@@ -8,11 +8,13 @@ import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.EngineLauncherActivity
 import app.siphondsp.activity.GainLimiterActivity
@@ -45,6 +47,19 @@ class DspStatusStrip @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : LinearLayout(context, attrs) {
+
+    /**
+     * Front-page mode (`app:stacked="true"`): the same cells stacked vertically inside the
+     * artwork's left display, with no separators and text sized from the box height instead of
+     * fixed sp.
+     */
+    private val stacked: Boolean = context.obtainStyledAttributes(attrs, R.styleable.DspStatusStrip).let {
+        try {
+            it.getBoolean(R.styleable.DspStatusStrip_stacked, false)
+        } finally {
+            it.recycle()
+        }
+    }
 
     private class Segment(
         val label: String,
@@ -92,17 +107,19 @@ class DspStatusStrip @JvmOverloads constructor(
         }
     }
 
+    private val cells = mutableListOf<TextView>()
+
     init {
-        orientation = HORIZONTAL
+        orientation = if (stacked) VERTICAL else HORIZONTAL
         // Sits just past the toolbar's back arrow, centred on the toolbar line. No background of
         // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
         // the toolbar's own (see activity_parametric_eq.xml / dsp_workspace_toolbar_height) so this
         // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
         gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        setPadding(0, dp(25), 0, 0)
+        if (!stacked) setPadding(0, dp(25), 0, 0)
 
         segments.forEachIndexed { index, segment ->
-            if (index > 0) addView(separator())
+            if (index > 0 && !stacked) addView(separator())
             val cell = TextView(context).apply {
                 textSize = 11f
                 includeFontPadding = false
@@ -110,10 +127,31 @@ class DspStatusStrip @JvmOverloads constructor(
                 setOnClickListener { open(segment) }
             }
             segment.view = cell
+            cells += cell
             addView(cell)
         }
-        addView(separator())
+        if (!stacked) addView(separator())
+        cells += healthView
         addView(healthView)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (!stacked || h <= 0) return
+        // Four rows share the display's height: text takes ~62% of a row, the rest is padding.
+        // Posted, not applied here: a requestLayout() raised from inside the layout pass doesn't
+        // reliably re-measure the wrap_content cells, which left the three bypass rows at their
+        // old height with the enlarged text clipped (only the health row, which re-lays itself
+        // out every second, came out right).
+        val rowPx = h / cells.size.toFloat()
+        val padX = (rowPx * 0.25f).roundToInt()
+        val padY = (rowPx * 0.08f).roundToInt()
+        post {
+            cells.forEach {
+                it.setTextSize(TypedValue.COMPLEX_UNIT_PX, rowPx * 0.62f)
+                it.setPadding(padX, padY, padX, padY)
+            }
+        }
     }
 
     override fun onAttachedToWindow() {
