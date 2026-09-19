@@ -72,7 +72,7 @@ enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
 // --- geometry / constants, 1:1 with NativeBmwDspResponseView ---------------------------------
 private const val PAD_LEFT_DP = 42f
 private const val PAD_RIGHT_DP = 12f
-private const val PAD_TOP_DP = 24f
+private const val PAD_TOP_DP = 8f
 private const val PAD_BOTTOM_DP = 28f
 private const val LABEL_TEXT_SP = 10f
 private const val LEGEND_TEXT_SP = 11f
@@ -277,7 +277,7 @@ fun CrossoverResponseGraph(
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
-            drawLegend(nc, mode, left, top - 10f * density, density, lowPaint, midPaint, legendPaint)
+            if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
                     { v -> dbToY(v, top, bottom) }
@@ -334,28 +334,13 @@ private fun drawGrid(
     }
 }
 
-private fun drawLegend(
-    nc: Canvas,
-    mode: CrossoverGraphMode,
-    left: Float,
-    baseline: Float,
-    density: Float,
-    lowPaint: Paint,
-    midPaint: Paint,
-    legendPaint: Paint,
-) {
-    if (mode == CrossoverGraphMode.GROUP_DELAY) {
-        nc.drawText("GROUP DELAY · FINAL SUM", left, baseline, legendPaint)
-        return
-    }
-    nc.drawText("LOW", left, baseline, lowPaint)
-    nc.drawText("MID", left + 42f * density, baseline, midPaint)
-    val label = when (mode) {
-        CrossoverGraphMode.PHASE -> "PHASE · FINAL SUM · PEQ · TILT · GAINS"
-        CrossoverGraphMode.MAGNITUDE_PHASE -> "SOLID = MAGNITUDE, DASHED = PHASE"
-        else -> "FINAL SUM · PEQ · TILT · GAINS"
-    }
-    nc.drawText(label, left + 88f * density, baseline, legendPaint)
+/**
+ * BOTH overlays two curve types on one plot; this line is the only place that says which is which.
+ * (The old LOW / MID colour key above the plot is gone -- the Lowpass / Highpass rows below are
+ * already tinted to the same colours.)
+ */
+private fun drawBothModeKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint) {
+    nc.drawText("SOLID = MAGNITUDE, DASHED = PHASE", left + 8f * density, top + 14f * density, legendPaint)
 }
 
 /** = `NativeBmwDspResponseView.drawSpectrum`. `tick` only forces the snapshot read to count. */
