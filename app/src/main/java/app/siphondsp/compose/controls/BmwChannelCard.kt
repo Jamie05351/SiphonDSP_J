@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -82,6 +83,7 @@ fun BmwChannelCard(
             .background(CardBackground, cardShape)
             .border(1.dp, strokeColor, cardShape)
             .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = title,
@@ -91,7 +93,6 @@ fun BmwChannelCard(
             textAlign = if (mirrored) TextAlign.End else TextAlign.Start,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(3.dp))
 
         val delayBox: @Composable () -> Unit = {
             val interactionSource = remember { MutableInteractionSource() }
@@ -165,20 +166,22 @@ private fun GainRow(
     var drag by remember(value) { mutableFloatStateOf(value) }
     val shown = drag.coerceIn(range.start, range.endInclusive)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        val slider: @Composable () -> Unit = {
+    // GAIN label, value box and slider share one line: the slider takes whatever width the label
+    // and box leave over, which frees a full row of height for the rest of the card.
+    run {
+        val slider: @Composable (Modifier) -> Unit = { sliderModifier ->
             BmwSlider(
-            value = shown,
-            valueRange = range,
-            steps = (((range.endInclusive - range.start) / step).roundToInt() - 1).coerceAtLeast(0),
-            accentColor = sliderAccent,
-            onValueChange = {
-                val snapped = snapGain(it, range, step)
-                drag = snapped
-                onPreview(snapped)
-            },
-            onValueChangeFinished = { onCommit(drag) },
-                modifier = Modifier.fillMaxWidth(),
+                value = shown,
+                valueRange = range,
+                steps = (((range.endInclusive - range.start) / step).roundToInt() - 1).coerceAtLeast(0),
+                accentColor = sliderAccent,
+                onValueChange = {
+                    val snapped = snapGain(it, range, step)
+                    drag = snapped
+                    onPreview(snapped)
+                },
+                onValueChangeFinished = { onCommit(drag) },
+                modifier = sliderModifier,
             )
         }
         val valueBox: @Composable () -> Unit = {
@@ -200,16 +203,18 @@ private fun GainRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (mirrored) {
+                slider(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 valueBox()
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(6.dp))
                 MiniLabel("GAIN", TextAlign.End)
             } else {
                 MiniLabel("GAIN")
-                Spacer(Modifier.weight(1f))
                 valueBox()
+                Spacer(Modifier.width(8.dp))
+                slider(Modifier.weight(1f))
             }
         }
-        slider()
     }
 }
 
@@ -237,5 +242,6 @@ private fun MiniLabel(text: String, textAlign: TextAlign = TextAlign.Start) {
 }
 
 private val DelayValueWidth = 82.dp
-private val GainValueWidth = 76.dp
+// Same width as the delay box so the two value boxes stack in one column.
+private val GainValueWidth = DelayValueWidth
 private val CardBackground = Color(0x99100818)
