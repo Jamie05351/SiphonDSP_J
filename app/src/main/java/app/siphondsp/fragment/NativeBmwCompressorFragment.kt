@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -57,7 +58,14 @@ class NativeBmwCompressorFragment : Fragment() {
 
 @Composable
 private fun NativeBmwCompressorPager(pagerState: PagerState) {
-    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+    // verticalAlignment = Top: the pager centres each page by default, so a page shorter than the
+    // pane (the visualiser: graph + Mix row) floated ~20dp below the toolbar with the same again
+    // left empty underneath, pushing its bottom slider toward the bezel.
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.Top,
+    ) { page ->
         if (page == 0) CompressorVisualiserPage() else CompressorBandPage(page - 1)
     }
 }
