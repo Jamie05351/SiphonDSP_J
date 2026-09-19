@@ -161,6 +161,8 @@ fun BmwTitleRowWithSwitches(
                     modifier = Modifier.padding(end = 10.dp),
                 )
                 BmwSwitch(checked = secondChecked, onCheckedChange = onSecondChange, contentDescription = secondLabel)
+                // Pull the switch in from the panel's right edge (it used to sit flush against it).
+                Spacer(Modifier.width(18.dp))
             }
         }
         if (!subheading.isNullOrBlank()) {

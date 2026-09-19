@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -158,12 +159,12 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
                     onSecondChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
                 )
                 BmwGrMeter(gr, Modifier.padding(top = 1.dp, bottom = 4.dp))
-                CompressorSliderRow("Threshold", idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD), -48f..0f, 0.5f, "dB", dsp)
-                CompressorSliderRow("Ratio", idx(NativeBmwDspValues.MBC_FIELD_RATIO), 1f..20f, 0.1f, ":1", dsp)
-                CompressorSliderRow("Soft knee", idx(NativeBmwDspValues.MBC_FIELD_KNEE), 0f..24f, 1f, "dB", dsp)
-                CompressorSliderRow("Attack", idx(NativeBmwDspValues.MBC_FIELD_ATTACK), 1f..200f, 1f, "ms", dsp)
-                CompressorSliderRow("Release", idx(NativeBmwDspValues.MBC_FIELD_RELEASE), 20f..1000f, 5f, "ms", dsp)
-                CompressorSliderRow("Makeup", idx(NativeBmwDspValues.MBC_FIELD_MAKEUP), 0f..12f, 0.1f, "dB", dsp)
+                CompressorSliderRow("Threshold", idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD), -48f..0f, 0.5f, "dB", dsp, compact = true)
+                CompressorSliderRow("Ratio", idx(NativeBmwDspValues.MBC_FIELD_RATIO), 1f..20f, 0.1f, ":1", dsp, compact = true)
+                CompressorSliderRow("Soft knee", idx(NativeBmwDspValues.MBC_FIELD_KNEE), 0f..24f, 1f, "dB", dsp, compact = true)
+                CompressorSliderRow("Attack", idx(NativeBmwDspValues.MBC_FIELD_ATTACK), 1f..200f, 1f, "ms", dsp, compact = true)
+                CompressorSliderRow("Release", idx(NativeBmwDspValues.MBC_FIELD_RELEASE), 20f..1000f, 5f, "ms", dsp, compact = true)
+                CompressorSliderRow("Makeup", idx(NativeBmwDspValues.MBC_FIELD_MAKEUP), 0f..12f, 0.1f, "dB", dsp, compact = true)
             }
         }
     }
@@ -220,6 +221,7 @@ private fun CompressorSliderRow(
     step: Float,
     unit: String,
     dsp: BmwDspState,
+    compact: Boolean = false,
 ) {
     BmwSliderRow(
         label = label,
@@ -231,6 +233,9 @@ private fun CompressorSliderRow(
         onPreview = { dsp.preview(index, it) },
         onCommit = { dsp.commit(index, it) },
         onValueEntered = { dsp.commit(index, it) },
+        // The band page stacks six rows plus the title and meter; 40dp keeps a fingertip-sized
+        // target while fitting them all on the 480dp head unit without scrolling.
+        sliderMinTouchHeight = if (compact) 40.dp else Dp.Unspecified,
     )
 }
 
