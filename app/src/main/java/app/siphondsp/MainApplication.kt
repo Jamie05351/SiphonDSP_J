@@ -99,6 +99,9 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
     override fun onCreate() {
         instance = this
+        // A fresh process after a head-unit reset shows up in the audio health log, so a missing
+        // "PIPELINE START" after this line means the engine was never started.
+        app.siphondsp.service.AudioHealthLog.record(this, "APP PROCESS START")
 
         Timber.plant(DebugTree())
 
