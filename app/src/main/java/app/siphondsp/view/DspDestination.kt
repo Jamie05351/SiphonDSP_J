@@ -65,12 +65,13 @@ object DspCrossNavBar {
     // column (see that column's own comment in activity_parametric_eq.xml) -- populate() just
     // sets the backdrop image and pushes this destination's state into that ComposeView.
 
-    // Measured 1280x480 geometry of the current head-unit templates. The source artwork spaces
-    // the five 74-76px tiles unevenly, so these cumulative boundaries match the baked frames:
-    // 36-110, 119-195, 202-277, 283-359 and 365-440. Keeping the real pixel geometry here makes
-    // touch targets and rotary focus rings land on the visible tiles instead of drifting toward
-    // adjacent destinations near the top and bottom of the rail.
-    private val ROW_WEIGHTS = intArrayOf(36, 74, 9, 76, 7, 75, 6, 76, 6, 75, 40)
+    // Dialed in against the real empty-tile-slot backdrop PNGs with an HTML/JS calibrator (sliders
+    // over the actual art, live-updating this array) rather than eyeballed -- see DspSidebarNav's
+    // TILE_LEFT_INSET_FRACTION/TILE_RIGHT_INSET_FRACTION for the matching horizontal inset, which
+    // came from the same tool. These are weights (a ratio), not absolute pixels, so the source
+    // images' native resolution doesn't need to match the on-device render size -- only the
+    // proportions matter.
+    private val ROW_WEIGHTS = intArrayOf(56, 135, 21, 140, 18, 130, 18, 140, 21, 135, 62)
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
