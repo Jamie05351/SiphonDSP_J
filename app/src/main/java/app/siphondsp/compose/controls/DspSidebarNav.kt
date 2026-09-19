@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -31,15 +34,43 @@ import androidx.compose.ui.unit.dp
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspDestination
 
-private val TileGlowColor = Color(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+// Saturated neon blue for the lit tile, deliberately brighter than the skin's pale
+// LIGHT_BLUE_BRIGHT so the selected tile pops against the dark rail.
+private val TileGlowColor = Color(0xFF19B5FF)
 private val TileGlowStrokeWidth = 2.dp
 private val TileGlowWidth = 5.dp
+private val TileGlowHaloWidth = 10.dp
 private val TileGlowCornerRadius = 6.dp
 
 // Icon sits inside the glow ring, both centered and inset from the tile's own bounds -- the
 // backdrop's baked-in tile square is slightly larger than either, so neither touches its edges.
-private const val TileGlowFraction = 0.84f
-private const val TileIconFraction = 0.68f
+// All of these (and the insets/offsets below) were measured against the real backdrop art with
+// the HTML sidebar calibrator, not eyeballed -- see the tile-position PR for the tool.
+private const val TileGlowFraction = 1.000f
+private const val TileIconFraction = 0.620f
+
+// The rail's visible tile squares don't span the full 140dp sidebar column -- they sit inset
+// from the column's own glass-facia edges. Fractions of the column's own width, not the screen.
+private const val TILE_LEFT_INSET_FRACTION = 0.1330f
+private const val TILE_RIGHT_INSET_FRACTION = 0.1560f
+
+// A couple of the source icon PNGs bake in far more transparent padding than the others (e.g.
+// Gains & Delay's is a 1080x1080 canvas vs. the others' tightly-cropped glyphs), so the same
+// TileIconFraction renders them visibly smaller. Scales the icon up per-destination to compensate
+// without re-exporting the art.
+private val ICON_SCALE = mapOf(
+    DspDestination.PARAMETRIC_EQ to 1.31f,
+    DspDestination.GAINS_DELAY to 1.96f,
+    DspDestination.CROSSOVER_TILT to 1.38f,
+    DspDestination.COMPRESSOR to 1.45f,
+    DspDestination.ALLPASS to 1.29f,
+)
+
+// Small nudges off dead-center, as a fraction of the tile's own size (+x = right, +y = down).
+private const val TileIconOffsetXFraction = -0.0050f
+private const val TileIconOffsetYFraction = 0.0250f
+private const val TileGlowOffsetXFraction = 0.0000f
+private const val TileGlowOffsetYFraction = 0.0000f
 
 /**
  * The sidebar rail's 5 nav tiles, drawn live over a background-only backdrop image: this owns the
@@ -74,8 +105,10 @@ fun DspSidebarNav(
                 (boundary - previousBoundary).also { previousBoundary = boundary }
             }
         }
+        val leftInset = maxWidth * TILE_LEFT_INSET_FRACTION
+        val rightInset = maxWidth * TILE_RIGHT_INSET_FRACTION
 
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(start = leftInset, end = rightInset)) {
             heightsPx.forEachIndexed { i, heightPx ->
                 val heightDp = with(density) { heightPx.toDp() }
                 if (i % 2 == 0) {
@@ -102,7 +135,7 @@ private fun DspSidebarTile(
     modifier: Modifier = Modifier,
 ) {
     val label = stringResource(destination.labelRes)
-    Box(
+    BoxWithConstraints(
         modifier = modifier.then(
             // The selected tile shows its own permanent glow instead -- excluded from click/focus
             // entirely, matching the old View rows' isClickable=false/isFocusable=false for the
@@ -119,13 +152,26 @@ private fun DspSidebarTile(
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
-            TileGlow(Modifier.fillMaxSize(TileGlowFraction))
+            TileGlow(
+                Modifier
+                    .fillMaxSize(TileGlowFraction)
+                    .offset(x = maxWidth * TileGlowOffsetXFraction, y = maxHeight * TileGlowOffsetYFraction)
+            )
         }
+        // A couple of the source icon PNGs bake in far more padding than the others -- see
+        // ICON_SCALE -- so the per-destination multiplier keeps them visually consistent without
+        // re-exporting the art. requiredSize, not fillMaxSize(fraction): fillMaxSize coerces the
+        // fraction to the incoming max constraints, so a scaled fraction above 1.0 (Gains &
+        // Delay: 0.62 * 1.96) would silently stop at the tile size. The oversized box is mostly
+        // transparent padding, so it never draws outside the tile.
+        val iconFraction = TileIconFraction * (ICON_SCALE[destination] ?: 1f)
         Image(
             painter = painterResource(if (selected) destination.iconOn else destination.iconOff),
             // Decorative: the clickable tile above already carries the label via onClickLabel.
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(TileIconFraction),
+            modifier = Modifier
+                .requiredSize(maxWidth * iconFraction, maxHeight * iconFraction)
+                .offset(x = maxWidth * TileIconOffsetXFraction, y = maxHeight * TileIconOffsetYFraction),
         )
     }
 }
@@ -146,13 +192,22 @@ private fun DrawScope.drawBmwTileGlow(cornerRadius: Dp) {
     val corner = CornerRadius(cornerRadius.toPx())
     val topLeft = Offset(inset, inset)
     val ringSize = Size(size.width - strokePx, size.height - strokePx)
+    // Outermost, faintest layer: fakes a soft bloom without a real blur.
+    drawRoundRect(
+        color = TileGlowColor,
+        topLeft = topLeft,
+        size = ringSize,
+        cornerRadius = corner,
+        style = Stroke(TileGlowHaloWidth.toPx()),
+        alpha = 0.16f,
+    )
     drawRoundRect(
         color = TileGlowColor,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
         style = Stroke(TileGlowWidth.toPx()),
-        alpha = 0.35f,
+        alpha = 0.45f,
     )
     drawRoundRect(
         color = TileGlowColor,
