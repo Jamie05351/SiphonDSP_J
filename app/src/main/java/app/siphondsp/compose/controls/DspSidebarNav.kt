@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -159,14 +160,17 @@ private fun DspSidebarTile(
         }
         // A couple of the source icon PNGs bake in far more padding than the others -- see
         // ICON_SCALE -- so the per-destination multiplier keeps them visually consistent without
-        // re-exporting the art.
+        // re-exporting the art. requiredSize, not fillMaxSize(fraction): fillMaxSize coerces the
+        // fraction to the incoming max constraints, so a scaled fraction above 1.0 (Gains &
+        // Delay: 0.62 * 1.96) would silently stop at the tile size. The oversized box is mostly
+        // transparent padding, so it never draws outside the tile.
         val iconFraction = TileIconFraction * (ICON_SCALE[destination] ?: 1f)
         Image(
             painter = painterResource(if (selected) destination.iconOn else destination.iconOff),
             // Decorative: the clickable tile above already carries the label via onClickLabel.
             contentDescription = null,
             modifier = Modifier
-                .fillMaxSize(iconFraction)
+                .requiredSize(maxWidth * iconFraction, maxHeight * iconFraction)
                 .offset(x = maxWidth * TileIconOffsetXFraction, y = maxHeight * TileIconOffsetYFraction),
         )
     }
