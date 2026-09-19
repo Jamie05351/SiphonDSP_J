@@ -7,12 +7,16 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
+import kotlin.math.sqrt
 
 /**
  * Compact gain-reduction meter used on the multiband-compressor screen -- one per band page and
  * one per bus / for the master limiter on the Driver-protection and Gains pages. A thin
- * horizontal track with a bar that grows from the right as reduction increases, plus a
- * slow-decaying peak-hold tick and a digital `x.x dB` readout with a one-word state.
+ * horizontal track with a bar that grows from the left as reduction increases, plus a
+ * slow-decaying peak-hold tick and a digital `x.x dB` readout with a one-word state. Bar length
+ * follows a square-root curve of the reduction (see [fractionForDb]) rather than a linear one:
+ * real-world reduction sits in the first few dB, so a linear 12/18 dB span left most of the bar
+ * unused and made small threshold / ratio adjustments hard to read.
  *
  * Everything is coloured by a health zone rather than always-red, so a glance says whether the
  * attached stage is idle (green / CLEAR), doing normal work (amber / WORKING) or being driven
@@ -30,7 +34,7 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         val clearMaxDb: Float,
         /** GR below this reads as amber / WORKING; at or above it is red / CLAMPING. */
         val workingMaxDb: Float,
-        /** Bar full-scale, chosen so the stage's useful GR range fills a readable span. */
+        /** Bar full-scale (the right end of the track). */
         val fullScaleDb: Float,
     ) {
         COMPRESSOR_BAND(clearMaxDb = 1.5f, workingMaxDb = 6f, fullScaleDb = 18f),
@@ -62,6 +66,10 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         invalidate()
     }
 
+    /** 0..1 position along the track for [db] of reduction: sqrt-curved so small values get room. */
+    private fun fractionForDb(db: Float): Float =
+        sqrt((db / stage.fullScaleDb).coerceIn(0f, 1f))
+
     private fun zoneColor(db: Float): Int = when {
         db < stage.clearMaxDb -> CLEAR_GREEN
         db < stage.workingMaxDb -> WORKING_AMBER
@@ -77,7 +85,7 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(
             getDefaultSize(suggestedMinimumWidth, widthMeasureSpec),
-            resolveSize((20f * density).toInt(), heightMeasureSpec),
+            resolveSize((26f * density).toInt(), heightMeasureSpec),
         )
     }
 
@@ -95,13 +103,13 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         val left = labelW + 8f * density
         val right = width.toFloat()
         if (right <= left) return
-        val trackH = 6f * density
+        val trackH = 12f * density
         val top = midY - trackH / 2f
         val bot = midY + trackH / 2f
         canvas.drawRoundRect(left, top, right, bot, trackH / 2f, trackH / 2f, trackPaint)
 
         val span = right - left
-        fun xForDb(db: Float) = right - span * (db / stage.fullScaleDb)
+        fun xForDb(db: Float) = left + span * fractionForDb(db)
 
         // faint threshold ticks: past the amber tick = working, past the red tick = clamping
         for (mark in floatArrayOf(stage.clearMaxDb, stage.workingMaxDb)) {
@@ -109,10 +117,10 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
             canvas.drawLine(x, top - 2f * density, x, bot + 2f * density, tickPaint)
         }
 
-        val barW = span * (grDb / stage.fullScaleDb)
+        val barW = span * fractionForDb(grDb)
         if (barW > 0.5f) {
             barPaint.color = zone
-            canvas.drawRoundRect(right - barW, top, right, bot, trackH / 2f, trackH / 2f, barPaint)
+            canvas.drawRoundRect(left, top, left + barW, bot, trackH / 2f, trackH / 2f, barPaint)
         }
 
         // peak-hold tick in a brighter tint of the held value's zone
