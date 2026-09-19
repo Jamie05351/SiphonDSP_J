@@ -123,6 +123,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile private var consecutiveWriteFailures = 0
     @Volatile private var recorderSuspended = false
     @Volatile private var startupDiagnostics: StartupAudioDiagnostics? = null
+    @Volatile private var totalRecoveries = 0
 
     private val startupDiagnosticsFinisher = Runnable {
         startupDiagnostics?.finishIfDue()
@@ -242,7 +243,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             ACTION_START -> Timber.d("Starting service")
             ACTION_STOP -> {
                 Timber.d("Stopping service")
-                stopServiceSafely()
+                stopServiceSafely("stop requested (ACTION_STOP)")
                 return START_NOT_STICKY
             }
         }
@@ -285,13 +286,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 "MediaProjection unavailable",
             )
             Timber.w("Failed to capture audio")
-            stopServiceSafely()
+            stopServiceSafely("MediaProjection unavailable, failed to capture audio")
         }
 
         return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {
+        AudioHealthLog.record(this, "SERVICE DESTROYED")
         if (activeInstance === this) activeInstance = null
         synchronized(recorderLifecycleLock) { isServiceDisposing = true }
         healthHandler.removeCallbacks(healthWatchdog)
@@ -345,7 +347,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
 
             notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
-            stopServiceSafely()
+            stopServiceSafely("capture permission revoked")
         }
     }
 
@@ -456,7 +458,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ServiceNotificationHelper.pushSessionLossNotification(this@RootlessAudioProcessorService, mediaProjectionStartIntent)
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_control_loss_toast), false)
                 Timber.w("Terminating service due to session loss")
-                stopServiceSafely()
+                stopServiceSafely("session control lost to another app")
             }
         }
     }
@@ -512,7 +514,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 this@RootlessAudioProcessorService.toast(getString(R.string.session_app_compat_toast), false)
                 Timber.w("Terminating service due to app incompatibility; redirect user to troubleshooting options")
-                stopServiceSafely()
+                stopServiceSafely("app incompatible with capture")
             }
         }
     }
@@ -572,7 +574,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    private fun stopServiceSafely() {
+    private fun stopServiceSafely(reason: String) {
+        AudioHealthLog.record(this, "SERVICE STOP: $reason")
         synchronized(recorderLifecycleLock) { isServiceDisposing = true }
         healthHandler.removeCallbacks(healthWatchdog)
         stopSelf()
@@ -635,6 +638,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 snapshot.readFailures, snapshot.writeFailures, isProcessorIdle, recorderSuspended,
                 measGenActive, recreateRecorderRequested, recreationInProgress,
             )
+            AudioHealthLog.record(this, "PIPELINE ${lastHealth?.state ?: "-"} -> ${health.state}: ${health.reason}")
             if (health.state == AudioPipelineHealth.State.HEALTHY && recreationSince >= 0) {
                 Timber.i("Audio pipeline recovery succeeded: %s", recreationReason)
                 recreationSince = -1
@@ -648,15 +652,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if (recoveryTimes.size >= AudioPipelineHealth.MAX_RECOVERIES_PER_WINDOW) {
                     lastHealth = AudioPipelineHealth.Result(AudioPipelineHealth.State.FAILED, "recovery budget exhausted")
                     Timber.e("Audio pipeline recovery failed: retry budget exhausted (%s)", health.reason)
-                    stopServiceSafely()
+                    stopServiceSafely("recovery budget exhausted (${health.reason})")
                 } else {
                     recoveryTimes.addLast(now)
+                    totalRecoveries++
+                    AudioHealthLog.record(this, "RECOVERY #$totalRecoveries: ${health.reason}")
                     requestRecreationLocked(health.reason, unblock = true)
                 }
             }
             AudioPipelineHealth.State.FAILED -> {
                 Timber.e("Audio pipeline recovery failed: %s", health.reason)
-                stopServiceSafely()
+                stopServiceSafely("pipeline failed (${health.reason})")
             }
             else -> Unit
         }
@@ -673,7 +679,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
             if (!hasRecordPermission()) {
                 Timber.e("Record audio permission missing. Can't record")
-                stopServiceSafely()
+                stopServiceSafely("record audio permission missing")
                 return
             }
 
@@ -722,6 +728,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 engine.sampleRate = sampleRate.toFloat()
             }
 
+            AudioHealthLog.record(
+                this,
+                "PIPELINE START: ${sampleRate}Hz ${encoding.name} buffer=${bufferSamples} samples",
+            )
             beginStartupDiagnostics("service start", sampleRate, encoding, bufferSizeBytes, bufferSamples)
 
             val worker = Thread({
@@ -978,14 +988,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             diagnostics?.finishIfDue(force = true)
             if(!isProcessorDisposing) {
                 Timber.e(e, "Audio worker I/O failure")
-                stopServiceSafely()
+                stopServiceSafely("audio worker I/O failure (${e.message})")
             }
         }
         catch (e: Exception) {
             diagnostics?.finishIfDue(force = true)
             if(!isProcessorDisposing) {
                 Timber.e(e, "Exception in recorder worker")
-                stopServiceSafely()
+                stopServiceSafely("audio worker exception (${e.message})")
             }
         }
         finally {
@@ -1117,7 +1127,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         stopRecording()
         if(recorderThread?.isAlive == true) {
             Timber.e("restartRecording: previous recorder worker did not terminate")
-            stopServiceSafely()
+            stopServiceSafely("previous recorder worker did not terminate")
             return
         }
 
@@ -1346,8 +1356,27 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     serviceDisposing = service.isServiceDisposing,
                     pipelineHealthState = service.lastHealth?.state?.name,
                     pipelineHealthReason = service.lastHealth?.reason,
+                    underrunCount = try { track?.underrunCount ?: 0 } catch (_: Exception) { 0 },
+                    recoveriesThisSession = service.totalRecoveries,
+                    lastFlowAgeMs = service.lastSuccessfulWrite.let {
+                        if (it < 0) -1L else SystemClock.elapsedRealtime() - it
+                    },
                 )
             }
+        }
+
+        /**
+         * Rebuilds the recorder/track pair on the running service (the same recreation the
+         * watchdog performs when audio stalls). False when the engine isn't running -- in that
+         * case it has to be started again, which needs a fresh capture permission.
+         */
+        fun requestPipelineRestart(): Boolean {
+            val service = activeInstance ?: return false
+            AudioHealthLog.record(service, "MANUAL RESTART requested from the status badge")
+            synchronized(service.recorderLifecycleLock) {
+                service.requestRecreationLocked("manual restart from status badge", unblock = true)
+            }
+            return true
         }
 
         fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? =

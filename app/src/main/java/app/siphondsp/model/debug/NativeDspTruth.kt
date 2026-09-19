@@ -157,6 +157,12 @@ data class RootlessPipelineRuntimeSnapshot(
     val serviceDisposing: Boolean,
     val pipelineHealthState: String?,
     val pipelineHealthReason: String?,
+    /** AudioTrack underruns since the current track was created (0 when unavailable). */
+    val underrunCount: Int = 0,
+    /** Watchdog-triggered pipeline recreations since this service instance started. */
+    val recoveriesThisSession: Int = 0,
+    /** Milliseconds since audio was last written out; -1 if none yet. */
+    val lastFlowAgeMs: Long = -1,
 )
 
 private const val HEADER_WIDTH = 3

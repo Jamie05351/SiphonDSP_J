@@ -5,15 +5,22 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.activity.EngineLauncherActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.service.AudioHealthLog
+import app.siphondsp.service.DspHealthBadge
+import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
@@ -26,6 +33,10 @@ import kotlin.math.roundToInt
  * of the global stages that are otherwise only visible after navigating to their own screen --
  * Tilt, MBC, and the master limiter (with its threshold) -- dimmed when off, each
  * tappable to jump straight to the screen that owns it.
+ *
+ * A fourth cell shows the audio path's health (DSP ok / idle / starting / recovering / NO AUDIO /
+ * DSP off), polled once a second while attached; tapping it opens the details -- reason, underruns,
+ * recoveries, the saved event log -- with a Restart button. The log outlives a head-unit reset.
  *
  * Refreshes itself: on attach, whenever the window regains focus (returning from another
  * screen), and on the ACTION_NATIVE_BMW_DSP_UPDATED local broadcast that every edit sends.
@@ -61,6 +72,20 @@ class DspStatusStrip @JvmOverloads constructor(
         ),
     )
 
+    private val healthView = TextView(context).apply {
+        textSize = 11f
+        includeFontPadding = false
+        setPadding(dp(6), dp(4), dp(6), dp(4))
+        setOnClickListener { showHealthDialog() }
+    }
+    private val handler = Handler(Looper.getMainLooper())
+    private val healthPoll = object : Runnable {
+        override fun run() {
+            refreshHealth()
+            handler.postDelayed(this, HEALTH_POLL_MS)
+        }
+    }
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             refresh(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
@@ -87,15 +112,19 @@ class DspStatusStrip @JvmOverloads constructor(
             segment.view = cell
             addView(cell)
         }
+        addView(separator())
+        addView(healthView)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
         refresh(null)
+        handler.post(healthPoll)
     }
 
     override fun onDetachedFromWindow() {
+        handler.removeCallbacks(healthPoll)
         context.unregisterLocalReceiver(receiver)
         super.onDetachedFromWindow()
     }
@@ -119,6 +148,63 @@ class DspStatusStrip @JvmOverloads constructor(
         }
     }
 
+    private fun refreshHealth() {
+        val badge = DspHealthBadge.evaluate(RootlessAudioProcessorService.pipelineRuntimeSnapshot())
+        healthView.text = "\u25CF ${badge.label}"
+        healthView.setTextColor(
+            when (badge.level) {
+                DspHealthBadge.Level.OK -> onColor
+                DspHealthBadge.Level.IDLE -> offColor
+                DspHealthBadge.Level.WARN -> WARN_COLOR
+                DspHealthBadge.Level.BAD -> BmwDashboardSkin.M_RED
+            },
+        )
+    }
+
+    private fun showHealthDialog() {
+        val snapshot = RootlessAudioProcessorService.pipelineRuntimeSnapshot()
+        val badge = DspHealthBadge.evaluate(snapshot)
+        val message = buildString {
+            appendLine("${badge.label}: ${badge.detail}")
+            if (snapshot != null) {
+                appendLine()
+                appendLine("State: ${snapshot.pipelineHealthState ?: "-"}")
+                appendLine(
+                    "Last audio out: " +
+                        if (snapshot.lastFlowAgeMs < 0) "none yet" else "${snapshot.lastFlowAgeMs / 1000} s ago",
+                )
+                appendLine("Underruns: ${snapshot.underrunCount}")
+                appendLine("Recoveries this session: ${snapshot.recoveriesThisSession}")
+                appendLine(
+                    "Recorder: ${if (snapshot.recorderRecording) "recording" else "not recording"}  " +
+                        "Track: ${if (snapshot.trackPlaying) "playing" else "not playing"}",
+                )
+            }
+            val log = AudioHealthLog.read(context)
+            appendLine()
+            if (log.isEmpty()) {
+                append("No events recorded yet.")
+            } else {
+                appendLine("Recent events (newest last):")
+                log.takeLast(LOG_LINES_SHOWN).forEach { appendLine(it) }
+            }
+        }
+        AlertDialog.Builder(context)
+            .setTitle("DSP audio health")
+            .setMessage(message.trimEnd())
+            .setPositiveButton(if (snapshot == null) "Start audio" else "Restart audio") { _, _ ->
+                if (snapshot == null || !RootlessAudioProcessorService.requestPipelineRestart()) {
+                    // Not running (or gone since the dialog opened): the engine needs a fresh
+                    // capture permission, which the launcher activity requests.
+                    context.startActivity(
+                        Intent(context, EngineLauncherActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun formatDb(value: Float): String =
         if (value == value.roundToInt().toFloat()) value.roundToInt().toString() else "%.1f".format(value)
 
@@ -138,4 +224,10 @@ class DspStatusStrip @JvmOverloads constructor(
     }
 
     private fun dp(value: Int): Int = (value * density).roundToInt()
+
+    private companion object {
+        const val HEALTH_POLL_MS = 1_000L
+        const val LOG_LINES_SHOWN = 12
+        val WARN_COLOR = Color.rgb(0xF2, 0xB3, 0x3D)
+    }
 }
