@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -21,7 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -59,6 +63,10 @@ fun BmwSliderRow(
     // slider (the View's addSliderRow `toggleIndex` case -- e.g. the compressor Mix row).
     toggleChecked: Boolean? = null,
     onToggleChange: ((Boolean) -> Unit)? = null,
+    // Material3's Slider pads itself out to a 48dp touch target, which is what sets the row
+    // pitch (48dp + padding vs. 30dp boxes). Pages that need to fit more rows on the 480dp head
+    // unit pass a smaller target here; Unspecified keeps the Material default.
+    sliderMinTouchHeight: Dp = Dp.Unspecified,
 ) {
     val context = LocalContext.current
     var dragValue by remember(value) { mutableFloatStateOf(value) }
@@ -91,20 +99,25 @@ fun BmwSliderRow(
         } else {
             Spacer(Modifier.width(RowToggleZoneWidth))
         }
-        BmwSlider(
-            value = shown,
-            onValueChange = {
-                val snapped = snapToStep(it, valueRange, step)
-                dragValue = snapped
-                onPreview(snapped)
-            },
-            onValueChangeFinished = { onCommit(snapToStep(dragValue, valueRange, step)) },
-            valueRange = valueRange,
-            steps = steps,
-            accentColor = accentColor,
-            enabled = enabled,
-            modifier = Modifier.weight(1f),
-        )
+        CompositionLocalProvider(
+            LocalMinimumInteractiveComponentSize provides
+                if (sliderMinTouchHeight.isSpecified) sliderMinTouchHeight else LocalMinimumInteractiveComponentSize.current,
+        ) {
+            BmwSlider(
+                value = shown,
+                onValueChange = {
+                    val snapped = snapToStep(it, valueRange, step)
+                    dragValue = snapped
+                    onPreview(snapped)
+                },
+                onValueChangeFinished = { onCommit(snapToStep(dragValue, valueRange, step)) },
+                valueRange = valueRange,
+                steps = steps,
+                accentColor = accentColor,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Spacer(Modifier.width(RowValueGap))
         val valueInteractionSource = remember { MutableInteractionSource() }
         BoxedValue(
