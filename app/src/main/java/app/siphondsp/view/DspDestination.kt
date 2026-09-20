@@ -106,22 +106,23 @@ object DspCrossNavBar {
 
     private fun applyPhoneRailGeometry(activity: FragmentActivity) {
         val backdrop = activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop) ?: return
-        backdrop.doOnLayout {
-            val scale = max(it.width / PHONE_ART_WIDTH, it.height / PHONE_ART_HEIGHT)
-            val railPx = (RAIL_ART_WIDTH * scale).roundToInt()
-            val density = activity.resources.displayMetrics.density
-            val navInset = railPx + (NAV_INSET_BUFFER_DP * density).roundToInt()
-            val stripStart = navInset + (STATUS_STRIP_GAP_DP * density).roundToInt()
+        // doOnLayout fires while the parent ConstraintLayout is still mid-layout, and layoutParams
+        // changes made there were sometimes swallowed (sidebar stayed 140dp while the toolbar
+        // margin took effect). Posting runs the update after that pass, so it always lands.
+        backdrop.doOnLayout { view -> view.post { applyRailGeometry(activity, view.width, view.height) } }
+    }
 
-            activity.findViewById<View>(R.id.dsp_sidebar)?.updateLayoutParams { width = railPx }
-            activity.findViewById<Toolbar>(R.id.toolbar)?.let { toolbar ->
-                toolbar.setPaddingRelative(navInset, toolbar.paddingTop, toolbar.paddingEnd, toolbar.paddingBottom)
-                toolbar.setContentInsetsRelative(navInset, toolbar.contentInsetEnd)
-                toolbar.contentInsetStartWithNavigation = navInset
-            }
-            for (id in intArrayOf(R.id.dsp_status_strip, R.id.dsp_toolbar_actions)) {
-                activity.findViewById<View>(id)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = stripStart }
-            }
+    private fun applyRailGeometry(activity: FragmentActivity, viewWidth: Int, viewHeight: Int) {
+        val scale = max(viewWidth / PHONE_ART_WIDTH, viewHeight / PHONE_ART_HEIGHT)
+        val railPx = (RAIL_ART_WIDTH * scale).roundToInt()
+        val density = activity.resources.displayMetrics.density
+        val stripStart = railPx + ((NAV_INSET_BUFFER_DP + STATUS_STRIP_GAP_DP) * density).roundToInt()
+
+        activity.findViewById<View>(R.id.dsp_sidebar)?.updateLayoutParams { width = railPx }
+        // The toolbar starts at the rail's edge (its own 43dp padding is the gap to the arrow).
+        activity.findViewById<Toolbar>(R.id.toolbar)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = railPx }
+        for (id in intArrayOf(R.id.dsp_status_strip, R.id.dsp_toolbar_actions)) {
+            activity.findViewById<View>(id)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = stripStart }
         }
     }
 

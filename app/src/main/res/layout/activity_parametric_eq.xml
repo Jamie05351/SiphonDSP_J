@@ -77,6 +77,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
+            <!-- Starts at the rail's edge (layout_marginStart), not at x=0 with a big paddingStart:
+                 a Toolbar swallows every touch inside its bounds, so a full-width one covered the
+                 top of the rail and made the first tile (PEQ) dead over its upper part. The back
+                 arrow still lands at the same x: rail + dsp_toolbar_nav_inset. -->
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/toolbar"
                 style="@style/Theme.SiphonDSP.Toolbar"
@@ -84,6 +88,7 @@
                 android:layout_height="@dimen/dsp_workspace_toolbar_height"
                 android:background="@android:color/transparent"
                 android:paddingTop="25dp"
+                android:layout_marginStart="@dimen/dsp_sidebar_width"
                 android:paddingStart="@dimen/dsp_toolbar_nav_inset"
                 android:paddingEnd="24dp"
                 app:contentInsetStart="@dimen/dsp_toolbar_nav_inset"
