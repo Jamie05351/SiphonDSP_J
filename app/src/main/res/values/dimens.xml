@@ -33,13 +33,14 @@
          Kept separate from dsp_toolbar_nav_inset below: this one must stay exactly the rail's
          own width, or the backdrop art and the click-target overlay drift apart. -->
     <dimen name="dsp_sidebar_width">140dp</dimen>
-    <!-- Where the toolbar's back arrow starts: the rail width plus a real buffer, not flush
-         against it. A Toolbar's navigation icon touch target is a Material minimum (48dp)
-         centred on the drawn 24dp glyph, not just the glyph's own bounds: flush against
-         dsp_sidebar_width put that touch target right up against the rail's own click-targets.
-         148dp (rail + 24dp) still read as not isolated enough on-device; +35dp gives the arrow
-         real breathing room on the rail side too. -->
-    <dimen name="dsp_toolbar_nav_inset">183dp</dimen>
+    <!-- Gap between the rail's right edge and the toolbar's back arrow: the toolbar itself now
+         starts at the rail's edge (dsp_sidebar_width, see activity_parametric_eq.xml), so this is
+         just the buffer past the rail, not an offset from the screen edge. A Toolbar's navigation
+         icon touch target is a Material minimum (48dp) centred on the drawn 24dp glyph, not just
+         the glyph's own bounds, so flush against the rail put that touch target right up against
+         the rail's own click-targets; 43dp gives it real breathing room. The arrow's x is
+         unchanged from before (140dp rail + 43dp = the old 183dp). -->
+    <dimen name="dsp_toolbar_nav_inset">43dp</dimen>
     <!-- Bypass-state strip / dsp_toolbar_actions start here: past the back arrow's touch target
          (dsp_toolbar_nav_inset + its ~48dp target), with its own buffer for the same reason.
          Shifted the same +35dp as dsp_toolbar_nav_inset above, so the gap after the arrow's
