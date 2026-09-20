@@ -1,135 +1,145 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/page_shortcuts_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_marginHorizontal="16dp"
-    android:orientation="vertical"
-    android:paddingTop="4dp"
-    android:paddingBottom="16dp"
     tools:context=".fragment.DspFragment"
     tools:ignore="SpeakableTextPresentCheck">
 
-    <app.siphondsp.view.Card
-        android:id="@+id/translation_notice"
+    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.png, 2340x878, drawn
+         for the 1280x480 head unit) with no margins, padding, header or bottom bar around it.
+         Everything live is laid over the artwork's own regions by HomeArtLayout, which places each
+         child by its tag (see HomeArt.kt) using the same centerCrop mapping as this ImageView:
+         the 5 menu tiles (touch only), and the three top displays - left status, centre PEQ
+         curve (read-only) and right L/R level bars. The power button, LED, settings cog and
+         overflow live in the activity's own overlay (activity_dsp_main.xml), since MainActivity
+         owns those actions. Must never scroll. -->
+    <ImageView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="1dp"
-        android:layout_marginBottom="8dp"
-        android:clickable="true"
-        app:bodyText="@string/translation_notice_summary"
-        app:titleText="@string/translation_notice"
-        app:cardBackground="?attr/colorSurfaceVariant"
-        app:cardMargin="0dp"
-        app:closeButtonVisible="true"
-        app:iconSrc="@drawable/ic_twotone_translate_24dp"
-        app:iconTint="?attr/colorOnSurfaceVariant" />
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/dsp_home_backdrop"
+        android:importantForAccessibility="no" />
 
-    <app.siphondsp.view.Card
-        android:id="@+id/update_notice"
+    <app.siphondsp.view.HomeArtLayout
+        android:id="@+id/dsp_destination_cards"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="1dp"
-        android:layout_marginBottom="8dp"
-        android:clickable="true"
-        app:bodyText="@string/self_update_notice_summary"
-        app:titleText="@string/self_update_notice"
-        app:cardBackground="?attr/colorSurfaceVariant"
-        app:cardMargin="0dp"
-        app:closeButtonVisible="true"
-        app:iconSrc="@drawable/ic_baseline_download_24dp"
-        app:iconTint="?attr/colorOnSurfaceVariant" />
+        android:layout_height="match_parent">
 
-    <!-- Front page backdrop: replaces the 5 separate tile images with one baked "J_DSP"-style
-         dashboard mockup, using the same technique as the DSP workspace's own
-         dsp_workspace_backdrop_*.png + DspCrossNavBar overlay (see activity_parametric_eq.xml):
-         one full-bleed image, with an invisible weighted click-target row laid over the 5 panel
-         regions it actually draws (PEQ / GAINS / XOVERS / COMPRESSOR / ALL-PASS, left to right).
-         The top ~14% of the image is its own baked header band (not clickable), hence the leading
-         zero-weight spacer row below. Must never scroll, so this stays a plain FrameLayout+weights
-         rather than anything that could. -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <ImageView
+        <View
+            android:id="@+id/card_shortcut_peq"
+            android:tag="tile_peq"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:src="@drawable/dsp_home_backdrop"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:contentDescription="@string/action_parametric_eq" />
+
+        <View
+            android:id="@+id/card_shortcut_gains_delay"
+            android:tag="tile_gains"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:contentDescription="@string/action_gain_limiter" />
+
+        <View
+            android:id="@+id/card_shortcut_crossovers"
+            android:tag="tile_xovers"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:contentDescription="@string/action_crossover_tilt" />
+
+        <View
+            android:id="@+id/card_shortcut_compressor"
+            android:tag="tile_compressor"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:contentDescription="@string/action_compressor" />
+
+        <View
+            android:id="@+id/card_shortcut_allpass"
+            android:tag="tile_allpass"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:contentDescription="@string/action_allpass" />
+
+        <app.siphondsp.view.DspStatusStrip
+            android:id="@+id/home_status_strip"
+            android:tag="box_left"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:stacked="true" />
+
+        <app.siphondsp.view.NoTouchFrameLayout
+            android:tag="box_centre"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/home_peq_graph"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </app.siphondsp.view.NoTouchFrameLayout>
+
+        <app.siphondsp.view.HomeLevelBars
+            android:id="@+id/home_level_bars"
+            android:tag="box_right"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:importantForAccessibility="no" />
+    </app.siphondsp.view.HomeArtLayout>
 
-        <LinearLayout
+    <!-- Notices float over the top of the artwork instead of pushing it down. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginHorizontal="16dp"
+        android:orientation="vertical">
+
+        <app.siphondsp.view.Card
+            android:id="@+id/translation_notice"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp"
+            android:layout_marginTop="4dp"
+            android:clickable="true"
+            app:bodyText="@string/translation_notice_summary"
+            app:titleText="@string/translation_notice"
+            app:cardBackground="?attr/colorSurfaceVariant"
+            app:cardMargin="0dp"
+            app:closeButtonVisible="true"
+            app:iconSrc="@drawable/ic_twotone_translate_24dp"
+            app:iconTint="?attr/colorOnSurfaceVariant" />
 
-            <!-- Non-clickable spacer matching the backdrop's own baked header band. -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="137" />
-
-            <LinearLayout
-                android:id="@+id/dsp_destination_cards"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="863"
-                android:orientation="horizontal">
-
-                <View
-                    android:id="@+id/card_shortcut_peq"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="420"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/action_parametric_eq" />
-
-                <View
-                    android:id="@+id/card_shortcut_gains_delay"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="305"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/action_gain_limiter" />
-
-                <View
-                    android:id="@+id/card_shortcut_crossovers"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="425"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/action_crossover_tilt" />
-
-                <View
-                    android:id="@+id/card_shortcut_compressor"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="405"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/action_compressor" />
-
-                <View
-                    android:id="@+id/card_shortcut_allpass"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="395"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:contentDescription="@string/action_allpass" />
-            </LinearLayout>
-        </LinearLayout>
-    </FrameLayout>
-</LinearLayout>
+        <app.siphondsp.view.Card
+            android:id="@+id/update_notice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp"
+            android:layout_marginTop="4dp"
+            android:clickable="true"
+            app:bodyText="@string/self_update_notice_summary"
+            app:titleText="@string/self_update_notice"
+            app:cardBackground="?attr/colorSurfaceVariant"
+            app:cardMargin="0dp"
+            app:closeButtonVisible="true"
+            app:iconSrc="@drawable/ic_baseline_download_24dp"
+            app:iconTint="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
+</FrameLayout>

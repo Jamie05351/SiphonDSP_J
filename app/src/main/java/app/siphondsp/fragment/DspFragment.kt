@@ -6,12 +6,15 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.launch
 import app.siphondsp.R
+import app.siphondsp.compose.screens.HomePeqGraph
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
@@ -35,6 +38,9 @@ class DspFragment : Fragment() {
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
 
+    /** Called with the pager's current page (0 = artwork front page, 1 = settings). */
+    var onPageChanged: ((Int) -> Unit)? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -56,8 +62,25 @@ class DspFragment : Fragment() {
             pages = listOf(shortcutsBinding.root, settingsBinding.root),
             onPageAttached = { position -> if (position == 1) setUpSettingsPage() },
         )
+        binding.dspPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                onPageSelectedInternal(position)
+            }
+        })
 
         return binding.root
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-assert the current page after a restore, where onPageSelected doesn't fire.
+        onPageSelectedInternal(binding.dspPager.currentItem)
+    }
+
+    private fun onPageSelectedInternal(position: Int) {
+        // The artwork page stays attached while off screen, so its live meters have to be told.
+        shortcutsBinding.homeLevelBars.pageActive = position == 0
+        onPageChanged?.invoke(position)
     }
 
     private fun setUpShortcutsPage() {
@@ -74,11 +97,17 @@ class DspFragment : Fragment() {
             updateNoticeOnClick?.invoke()
         }
 
-        // Primary BMW DSP shortcuts. Each card's background is one of the pre-built tile images
-        // set directly in the XML, with a text label view drawn on top -- only the click targets
-        // are wired here. These open the same activities the old bottom bar icons did. Settings
-        // moved back to the bottom bar's gear icon, so there's no System tile anymore. The 5th
-        // tile opens the all-pass screen directly -- see DspDestination.ALLPASS.
+        // Centre display: read-only PEQ curve. Disposed with the fragment's view, not the
+        // window, since ViewPager2 keeps the page attached while it's off screen.
+        shortcutsBinding.homePeqGraph.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
+        shortcutsBinding.homePeqGraph.setContent { HomePeqGraph() }
+
+        // Primary BMW DSP shortcuts: transparent touch areas over the 5 tiles drawn in the
+        // front-page artwork -- only the click targets are wired here. The settings cog, overflow
+        // menu and power button are in the activity's overlay. The 5th tile opens the all-pass
+        // screen directly -- see DspDestination.ALLPASS.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
