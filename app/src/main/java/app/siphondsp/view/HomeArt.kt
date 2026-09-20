@@ -17,6 +17,9 @@ object HomeArt {
     const val IMAGE_WIDTH = 2340f
     const val IMAGE_HEIGHT = 878f
 
+    /** The phone art (`dsp_home_backdrop_phone.png`) is the same 2340 wide but 1080 tall. */
+    const val PHONE_IMAGE_HEIGHT = 1080f
+
     /** Image-fraction rect: left, top, width, height. */
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
 
@@ -38,12 +41,31 @@ object HomeArt {
         "box_right" to Frac(0.7459f, 0.0827f, 0.1631f, 0.297f),
     )
 
-    fun frac(key: String): Frac? = rects[key]
+    // Same keys for the phone artwork (`dsp_home_backdrop_phone.png`, 2340x1080). Placed in the
+    // same layout-placer page (REW/_UI/home_layout_placer_phone.html) against Main_Menu_phone.png.
+    private val phoneRects = mapOf(
+        "tile_peq" to Frac(0.1175f, 0.468f, 0.134f, 0.426f),
+        "tile_gains" to Frac(0.2605f, 0.468f, 0.1325f, 0.426f),
+        "tile_xovers" to Frac(0.402f, 0.468f, 0.1325f, 0.426f),
+        "tile_compressor" to Frac(0.5435f, 0.468f, 0.1325f, 0.426f),
+        "tile_allpass" to Frac(0.685f, 0.468f, 0.1335f, 0.426f),
+        "power_btn" to Frac(0.02f, 0.5385f, 0.075f, 0.185f),
+        "power_led" to Frac(0.052f, 0.777f, 0.01f, 0.022f),
+        "cog" to Frac(0.02f, 0.1f, 0.045f, 0.12f),
+        "overflow" to Frac(0.935f, 0.1f, 0.045f, 0.12f),
+        "box_left" to Frac(0.0815f, 0.0704f, 0.162f, 0.317f),
+        "box_centre" to Frac(0.2555f, 0.0704f, 0.488f, 0.317f),
+        "box_right" to Frac(0.755f, 0.0704f, 0.164f, 0.317f),
+    )
 
-    fun map(frac: Frac, viewWidth: Int, viewHeight: Int): Px {
-        val scale = max(viewWidth / IMAGE_WIDTH, viewHeight / IMAGE_HEIGHT)
+    /** [phone] selects the phone artwork's rects; the default is the head-unit set, unchanged. */
+    fun frac(key: String, phone: Boolean = false): Frac? = (if (phone) phoneRects else rects)[key]
+
+    /** [imageHeight] is the art's own height; the default is the head-unit art's. */
+    fun map(frac: Frac, viewWidth: Int, viewHeight: Int, imageHeight: Float = IMAGE_HEIGHT): Px {
+        val scale = max(viewWidth / IMAGE_WIDTH, viewHeight / imageHeight)
         val shownW = IMAGE_WIDTH * scale
-        val shownH = IMAGE_HEIGHT * scale
+        val shownH = imageHeight * scale
         val offX = (viewWidth - shownW) / 2f
         val offY = (viewHeight - shownH) / 2f
         return Px(

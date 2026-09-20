@@ -42,8 +42,13 @@ class HomeArtLayout @JvmOverloads constructor(
         }
     }
 
+    // Phone screens use their own (taller) artwork and rect set; the head unit's path is the
+    // untouched default of HomeArt.frac/map.
+    private val phone = !context.isHeadUnitDisplay()
+
     private fun pxFor(child: View, w: Int, h: Int): HomeArt.Px {
-        val frac = (child.tag as? String)?.let(HomeArt::frac)
-        return if (frac != null) HomeArt.map(frac, w, h) else HomeArt.Px(0, 0, w, h)
+        val frac = (child.tag as? String)?.let { HomeArt.frac(it, phone) }
+        if (frac == null) return HomeArt.Px(0, 0, w, h)
+        return if (phone) HomeArt.map(frac, w, h, HomeArt.PHONE_IMAGE_HEIGHT) else HomeArt.map(frac, w, h)
     }
 }
