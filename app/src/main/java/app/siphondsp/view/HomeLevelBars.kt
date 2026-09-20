@@ -26,8 +26,9 @@ import kotlin.math.roundToInt
  * [SpectrumEngine]'s analyzer, with a peak-hold tick) and the L / R post-gain readout beneath.
  *
  * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this view holds
- * it only while its window is actually visible, so nothing extra runs once the user has moved on
- * to a DSP screen.
+ * it only while it is attached, its window and view are visible, and [pageActive] is true (the
+ * pager is on the artwork page), so nothing extra runs once the user has moved on to a DSP
+ * screen or swiped to the settings page.
  */
 class HomeLevelBars @JvmOverloads constructor(
     context: Context,
@@ -91,8 +92,21 @@ class HomeLevelBars @JvmOverloads constructor(
         updateRunning()
     }
 
+    /**
+     * False while the pager is showing another page. The artwork page stays attached and
+     * "visible" to the window when swiped away (ViewPager2 only translates it, and DspFragment
+     * keeps offscreenPageLimit = 1), so window/view visibility alone can't tell whether the bars
+     * are actually on screen; the fragment drives this from the pager selection.
+     */
+    var pageActive: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            updateRunning()
+        }
+
     private fun updateRunning() {
-        if (isAttachedToWindow && windowVisibility == VISIBLE && visibility == VISIBLE) start() else stop()
+        if (pageActive && isAttachedToWindow && windowVisibility == VISIBLE && visibility == VISIBLE) start() else stop()
     }
 
     private fun start() {

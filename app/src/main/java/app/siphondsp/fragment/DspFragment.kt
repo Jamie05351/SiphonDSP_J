@@ -64,7 +64,7 @@ class DspFragment : Fragment() {
         )
         binding.dspPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
-                onPageChanged?.invoke(position)
+                onPageSelectedInternal(position)
             }
         })
 
@@ -74,7 +74,13 @@ class DspFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
-        onPageChanged?.invoke(binding.dspPager.currentItem)
+        onPageSelectedInternal(binding.dspPager.currentItem)
+    }
+
+    private fun onPageSelectedInternal(position: Int) {
+        // The artwork page stays attached while off screen, so its live meters have to be told.
+        shortcutsBinding.homeLevelBars.pageActive = position == 0
+        onPageChanged?.invoke(position)
     }
 
     private fun setUpShortcutsPage() {
