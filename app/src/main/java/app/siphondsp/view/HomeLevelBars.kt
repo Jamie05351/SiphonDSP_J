@@ -22,7 +22,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import kotlin.math.roundToInt
 
 /**
- * The front page's right-hand display: live L / R output level bars (post-DSP, from
+ * The front page's right-hand display: live L / R output level bars (post-DSP RMS fill + peak-hold tick, from
  * [SpectrumEngine]'s analyzer, with a peak-hold tick) and the L / R post-gain readout beneath.
  *
  * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this view holds
@@ -140,22 +140,27 @@ class HomeLevelBars @JvmOverloads constructor(
         if (w <= 0f || h <= 0f) return
 
         // Three rows: L bar, R bar, gain readout. Sizes follow the box height, not dp, so the
-        // layout holds on any display density.
-        val pad = h * 0.10f
+        // layout holds on any display density. Kept deliberately small so the whole readout sits
+        // comfortably inside the art's display with margin, and the gain line always fits.
+        val pad = h * 0.16f
         val rowH = (h - pad * 2f) / 3f
-        val labelW = rowH * 0.9f
-        val barH = rowH * 0.56f
+        val labelW = rowH * 0.7f
+        val barH = rowH * 0.38f
         val barLeft = pad + labelW
         val barRight = w - pad
-        textPaint.textSize = rowH * 0.62f
+        textPaint.textSize = rowH * 0.46f
 
         drawBar(canvas, "L", leftMeter, pad, pad, barLeft, barRight, barH, rowH)
         drawBar(canvas, "R", rightMeter, pad, pad + rowH, barLeft, barRight, barH, rowH)
 
-        textPaint.textSize = rowH * 0.5f
-        textPaint.color = Color.rgb(140, 150, 162)
         val gainText = "POST GAIN  L ${formatDb(gainL)}   R ${formatDb(gainR)} dB"
-        canvas.drawText(gainText, pad, pad + rowH * 2f + rowH * 0.72f, textPaint)
+        textPaint.textSize = rowH * 0.36f
+        // Shrink to fit if the gain values are long (e.g. "-12.5"), never clip.
+        val maxW = w - pad * 2f
+        val textW = textPaint.measureText(gainText)
+        if (textW > maxW) textPaint.textSize *= maxW / textW
+        textPaint.color = Color.rgb(140, 150, 162)
+        canvas.drawText(gainText, pad, pad + rowH * 2f + rowH * 0.66f, textPaint)
         textPaint.color = Color.rgb(184, 196, 208)
     }
 
@@ -164,13 +169,15 @@ class HomeLevelBars @JvmOverloads constructor(
         left: Float, top: Float, barLeft: Float, barRight: Float, barH: Float, rowH: Float,
     ) {
         val barTop = top + (rowH - barH) / 2f
-        canvas.drawText(label, left, top + rowH * 0.72f, textPaint)
+        canvas.drawText(label, left, top + rowH * 0.66f, textPaint)
 
         val radius = barH * 0.3f
         rect.set(barLeft, barTop, barRight, barTop + barH)
         canvas.drawRoundRect(rect, radius, radius, trackPaint)
 
-        val fraction = PeakHoldMeter.fractionFor(meter.peakDb, FLOOR_DB, CEILING_DB)
+        // Bar = RMS (average loudness); the white tick = peak hold. Filling to instantaneous peak
+        // pinned the bar near full on any mastered music.
+        val fraction = PeakHoldMeter.fractionFor(meter.rmsDb, FLOOR_DB, CEILING_DB)
         if (fraction > 0f) {
             fillPaint.shader = LinearGradient(
                 barLeft, 0f, barRight, 0f,

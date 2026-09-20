@@ -78,6 +78,8 @@ import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.utils.storage.StorageUtils
 import app.siphondsp.view.PowerHotspot
+import app.siphondsp.view.isHeadUnitDisplay
+import app.siphondsp.view.isHeadUnitDisplay
 import org.koin.core.component.inject
 import timber.log.Timber
 import java.io.File
@@ -164,7 +166,9 @@ class MainActivity : BaseActivity() {
 
         // Setup views
         setContentView(binding.root)
-        binding.powerToggle.linkedLed = binding.powerLed
+        // The head-unit art draws its own power icon (the hotspot glows/dims it); no LED dot there.
+        if(isHeadUnitDisplay()) binding.powerLed.isVisible = false
+        else binding.powerToggle.linkedLed = binding.powerLed
         setSupportActionBar(binding.toolbar)
 
         actionBar?.setDisplayHomeAsUpEnabled(true)

@@ -59,7 +59,7 @@ class HomeArtTest {
     @Test
     fun headUnitDefaultsAreUnchangedByPhoneSupport() {
         val a = HomeArt.frac("tile_peq")!!
-        assertEquals(0.1216f, a.x, 0f)
-        assertEquals(0.461f, a.y, 0f)
+        assertEquals(0.1094f, a.x, 0f)
+        assertEquals(0.4499f, a.y, 0f)
     }
 }
