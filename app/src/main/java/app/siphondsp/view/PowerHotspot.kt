@@ -13,8 +13,8 @@ import android.view.View
  * so MainActivity's power logic is unchanged.
  *
  * Head unit: the art draws only the dark disc (its icon is erased); this view paints the whole
- * indicator -- the disc's outline ring and the power symbol -- neon green while on, red while
- * off, each with a faint halo. No LED dot there (the view is hidden). Phone: unchanged -- paints
+ * indicator -- the disc's outline ring and the power symbol -- as crisp solid strokes, neon green
+ * while on, red while off. No LED dot there (the view is hidden). Phone: unchanged -- paints
  * a green power symbol over the art's white one and lights [linkedLed] (the small dot under the
  * button).
  */
@@ -71,20 +71,11 @@ class PowerHotspot @JvmOverloads constructor(
     private fun drawArtIndicator(canvas: Canvas) {
         val cx = width / 2f
         val cy = height / 2f
-        val on = isToggled
-        val core = if (on) BmwDashboardSkin.TOGGLE_ON_GREEN else INDICATOR_OFF_RED
-        val halo = core and 0x00FFFFFF
+        val core = if (isToggled) BmwDashboardSkin.TOGGLE_ON_GREEN else INDICATOR_OFF_RED
+        // Crisp, solid strokes only -- no halo, so the edges stay sharp.
         // The hotspot box is the art's disc; the ring sits just inside its edge.
         val ringR = width * 0.5f - width * 0.032f
         arc.set(cx - ringR, cy - ringR, cx + ringR, cy + ringR)
-        // Wide faint strokes first, crisp ring on top -- no blur filter, which isn't reliable
-        // under the head unit's software renderer.
-        ringPaint.color = halo or 0x28000000
-        ringPaint.strokeWidth = width * 0.116f
-        canvas.drawArc(arc, 0f, 360f, false, ringPaint)
-        ringPaint.color = halo or 0x5A000000
-        ringPaint.strokeWidth = width * 0.074f
-        canvas.drawArc(arc, 0f, 360f, false, ringPaint)
         ringPaint.color = core
         ringPaint.strokeWidth = width * 0.042f
         canvas.drawArc(arc, 0f, 360f, false, ringPaint)
@@ -95,8 +86,6 @@ class PowerHotspot @JvmOverloads constructor(
         val sy = cy + width * 0.022f
         val sr = width * 0.176f
         arc.set(sx - sr, sy - sr, sx + sr, sy + sr)
-        drawSymbol(canvas, sx, sy, sr, width * 0.098f, halo or 0x28000000)
-        drawSymbol(canvas, sx, sy, sr, width * 0.08f, halo or 0x5A000000)
         drawSymbol(canvas, sx, sy, sr, width * 0.063f, core)
     }
 
