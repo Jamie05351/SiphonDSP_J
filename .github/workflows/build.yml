@@ -124,16 +124,20 @@ jobs:
           EOF
 
       # The Crashlytics native-symbol upload (finalizer of assemble*) hits Google's servers and
-      # occasionally 503s, which used to fail the whole build (run 35512987199). If the build
-      # fails, retry once without the upload so a flaky network never blocks the APK. A genuine
-      # compile error still fails the retry, so real breakage is not masked.
+      # occasionally 503s, which used to fail the whole build (run 35512987199). Only when the log
+      # shows that upload task itself FAILED do we rebuild without it, so the APK ships. Any other
+      # failure (compile error, daemon crash, dependency outage) still fails the step.
       - name: Build APKs
         shell: bash
         run: |
-          ./gradlew "${{ env.GRADLE_TASK }}" || {
-            echo "::warning::Build failed; retrying without Crashlytics symbol upload"
-            ./gradlew "${{ env.GRADLE_TASK }}" -x uploadCrashlyticsSymbolFileRelease
-          }
+          if ! ./gradlew "${{ env.GRADLE_TASK }}" 2>&1 | tee "$RUNNER_TEMP/build.log"; then
+            if grep -q "Task :app:uploadCrashlyticsSymbolFileRelease FAILED" "$RUNNER_TEMP/build.log"; then
+              echo "::warning::Crashlytics symbol upload failed; rebuilding without it (no native symbols for this build)"
+              ./gradlew "${{ env.GRADLE_TASK }}" -x uploadCrashlyticsSymbolFileRelease
+            else
+              exit 1
+            fi
+          fi
 
       - name: Run Android unit tests and lint
         if: github.event_name == 'pull_request'
