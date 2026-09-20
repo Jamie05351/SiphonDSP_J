@@ -123,8 +123,17 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
 
+      # The Crashlytics native-symbol upload (finalizer of assemble*) hits Google's servers and
+      # occasionally 503s, which used to fail the whole build (run 35512987199). If the build
+      # fails, retry once without the upload so a flaky network never blocks the APK. A genuine
+      # compile error still fails the retry, so real breakage is not masked.
       - name: Build APKs
-        run: ./gradlew "${{ env.GRADLE_TASK }}"
+        shell: bash
+        run: |
+          ./gradlew "${{ env.GRADLE_TASK }}" || {
+            echo "::warning::Build failed; retrying without Crashlytics symbol upload"
+            ./gradlew "${{ env.GRADLE_TASK }}" -x uploadCrashlyticsSymbolFileRelease
+          }
 
       - name: Run Android unit tests and lint
         if: github.event_name == 'pull_request'
