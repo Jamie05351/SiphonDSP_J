@@ -8,7 +8,7 @@
     tools:context=".fragment.DspFragment"
     tools:ignore="SpeakableTextPresentCheck">
 
-    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.png, 2340x878, drawn
+    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.jpg, 2340x878, drawn
          for the 1280x480 head unit) with no margins, padding, header or bottom bar around it.
          Everything live is laid over the artwork's own regions by HomeArtLayout, which places each
          child by its tag (see HomeArt.kt) using the same centerCrop mapping as this ImageView:

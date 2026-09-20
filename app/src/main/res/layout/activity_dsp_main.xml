@@ -7,7 +7,7 @@
     android:fitsSystemWindows="true"
     tools:context=".activity.MainActivity">
 
-    <!-- The front page's own header is now baked into dsp_home_backdrop.png (see content_main.xml).
+    <!-- The front page's own header is now baked into dsp_home_backdrop.jpg (see content_main.xml).
          This toolbar is kept in the tree (MainActivity.kt calls setSupportActionBar() /
          actionBar?.set*() on it, and LibraryLoadErrorFragment's error state still toggles its
          visibility) but never shown here, rather than removing it and hunting every reference. -->
