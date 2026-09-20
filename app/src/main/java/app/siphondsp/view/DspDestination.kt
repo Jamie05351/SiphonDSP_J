@@ -2,11 +2,15 @@ package app.siphondsp.view
 
 import android.content.Intent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.view.doOnLayout
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.FragmentActivity
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
@@ -15,6 +19,8 @@ import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.compose.controls.DspSidebarNav
 import app.siphondsp.compose.theme.BmwDspTheme
+import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 enum class DspDestination(
@@ -81,8 +87,43 @@ object DspCrossNavBar {
     // with this switch -- it was sized against the head unit's 1280dp-wide layout. The phone
     // backdrop art bakes in roughly the same rail-to-width proportion, but a real device may not
     // land pixel-for-pixel; worth a quick on-device check of tap-target alignment.
-    private fun isHeadUnitDisplay(activity: FragmentActivity): Boolean =
-        activity.resources.configuration.screenWidthDp >= 1100
+    private fun isHeadUnitDisplay(activity: FragmentActivity): Boolean = activity.isHeadUnitDisplay()
+
+    // Phone only (populate() never calls this on the head unit, whose fixed dp dimens --
+    // dsp_sidebar_width, dsp_toolbar_nav_inset, dsp_status_strip_margin_start -- stay exactly as
+    // authored). Both backdrop arts are 2340px wide with the rail's tile column 256px wide (the
+    // head unit's 140dp column at its 2340/1280 art scale), and the phone art's tile rows are the
+    // head-unit rows scaled by 1080/878, so ROW_WEIGHTS and the tile insets in DspSidebarNav
+    // already fit it. Only the column width and the toolbar insets built on it need to follow the
+    // art's own centerCrop scale, since a fixed 140dp is ~50% too wide on a ~832dp phone. The dp
+    // buffers past the rail (43dp to the back arrow, +72dp to the status strip) are touch-target
+    // spacing, so they're kept as-is.
+    private const val PHONE_ART_WIDTH = 2340f
+    private const val PHONE_ART_HEIGHT = 1080f
+    private const val RAIL_ART_WIDTH = 256f
+    private const val NAV_INSET_BUFFER_DP = 43
+    private const val STATUS_STRIP_GAP_DP = 72
+
+    private fun applyPhoneRailGeometry(activity: FragmentActivity) {
+        val backdrop = activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop) ?: return
+        backdrop.doOnLayout {
+            val scale = max(it.width / PHONE_ART_WIDTH, it.height / PHONE_ART_HEIGHT)
+            val railPx = (RAIL_ART_WIDTH * scale).roundToInt()
+            val density = activity.resources.displayMetrics.density
+            val navInset = railPx + (NAV_INSET_BUFFER_DP * density).roundToInt()
+            val stripStart = navInset + (STATUS_STRIP_GAP_DP * density).roundToInt()
+
+            activity.findViewById<View>(R.id.dsp_sidebar)?.updateLayoutParams { width = railPx }
+            activity.findViewById<Toolbar>(R.id.toolbar)?.let { toolbar ->
+                toolbar.setPaddingRelative(navInset, toolbar.paddingTop, toolbar.paddingEnd, toolbar.paddingBottom)
+                toolbar.setContentInsetsRelative(navInset, toolbar.contentInsetEnd)
+                toolbar.contentInsetStartWithNavigation = navInset
+            }
+            for (id in intArrayOf(R.id.dsp_status_strip, R.id.dsp_toolbar_actions)) {
+                activity.findViewById<View>(id)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = stripStart }
+            }
+        }
+    }
 
     fun populate(
         activity: FragmentActivity,
@@ -97,6 +138,7 @@ object DspCrossNavBar {
         // see isHeadUnitDisplay().
         val backdrop = if (isHeadUnitDisplay(activity)) current.backdrop else current.backdropPhone
         activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
+        if (!isHeadUnitDisplay(activity)) applyPhoneRailGeometry(activity)
 
         container.setContent {
             BmwDspTheme {

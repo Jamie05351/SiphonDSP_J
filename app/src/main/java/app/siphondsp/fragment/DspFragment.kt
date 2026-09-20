@@ -25,6 +25,7 @@ import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.view.StaticPagerAdapter
+import app.siphondsp.view.isHeadUnitDisplay
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
@@ -84,6 +85,11 @@ class DspFragment : Fragment() {
     }
 
     private fun setUpShortcutsPage() {
+        // The layout's own src is the head-unit art (left untouched); a phone swaps in the
+        // taller phone art, which HomeArtLayout maps its own rect set onto.
+        if (!requireContext().isHeadUnitDisplay()) {
+            shortcutsBinding.homeBackdrop.setImageResource(R.drawable.dsp_home_backdrop_phone)
+        }
         shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
         shortcutsBinding.translationNotice.setOnRootClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/project/siphondsp".toUri()))

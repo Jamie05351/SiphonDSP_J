@@ -36,4 +36,30 @@ class HomeArtTest {
         assertEquals(-full.left, full.right - 1000)
         assert(full.left < 0)
     }
+
+    @Test
+    fun everyLiveElementHasAPhoneRect() {
+        val keys = listOf(
+            "tile_peq", "tile_gains", "tile_xovers", "tile_compressor", "tile_allpass",
+            "power_btn", "power_led", "cog", "overflow", "box_left", "box_centre", "box_right",
+        )
+        keys.forEach { assertNotNull("missing phone rect for $it", HomeArt.frac(it, phone = true)) }
+    }
+
+    @Test
+    fun phoneArtMapsStraightAcrossAtItsNativeSize() {
+        // 2340x1080 is the phone art's own size: fractions map 1:1 with no crop.
+        val px = HomeArt.map(HomeArt.Frac(0.5f, 0.5f, 0.1f, 0.1f), 2340, 1080, HomeArt.PHONE_IMAGE_HEIGHT)
+        assertEquals(1170.0, px.left.toDouble(), 1.0)
+        assertEquals(540.0, px.top.toDouble(), 1.0)
+        assertEquals(234.0, (px.right - px.left).toDouble(), 1.0)
+        assertEquals(108.0, (px.bottom - px.top).toDouble(), 1.0)
+    }
+
+    @Test
+    fun headUnitDefaultsAreUnchangedByPhoneSupport() {
+        val a = HomeArt.frac("tile_peq")!!
+        assertEquals(0.1216f, a.x, 0f)
+        assertEquals(0.461f, a.y, 0f)
+    }
 }
