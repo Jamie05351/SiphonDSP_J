@@ -118,19 +118,15 @@ TEST_CASE("BW4 crossovers roll off at 24 dB per octave on both bands") {
           doctest::Approx(-24.f).epsilon(0.05));
 }
 
-TEST_CASE("BW4 is -3 dB at the corner where LR4 is -6 dB (proves it is not just LR4 again)") {
+TEST_CASE("BW4 sits 3 dB above LR4 at the corner (-3 dB vs -6 dB; proves it is not just LR4 again)") {
     constexpr float fc = 200.f;
     for (bool low : {true, false}) {
         auto cfgFor = [&](float type) { return low ? lowOnlyConfig(fc, type) : midOnlyConfig(fc, type); };
-        // Measure relative to a passband reference (2 octaves inside it) so headroom/gain in the
-        // default config cancel out.
-        const double refHz = low ? fc / 4 : fc * 4;
-        NativeBmwDspProcessor bw4Proc, bw4Ref, lr4Proc, lr4Ref;
-        const float bw4 = outLevelDbAt(bw4Proc, cfgFor(kBw4), fc) -
-                          outLevelDbAt(bw4Ref, cfgFor(kBw4), refHz);
-        const float lr4 = outLevelDbAt(lr4Proc, cfgFor(kLr4), fc) -
-                          outLevelDbAt(lr4Ref, cfgFor(kLr4), refHz);
-        CHECK(bw4 == doctest::Approx(-3.f).epsilon(0.1));
-        CHECK(lr4 == doctest::Approx(-6.f).epsilon(0.1));
+        // Compare the two types at the same frequency in the same config, so any absolute level
+        // offset (headroom, gain, low-frequency rolloff elsewhere in the chain) cancels out.
+        NativeBmwDspProcessor bw4Proc, lr4Proc;
+        const float bw4 = outLevelDbAt(bw4Proc, cfgFor(kBw4), fc);
+        const float lr4 = outLevelDbAt(lr4Proc, cfgFor(kLr4), fc);
+        CHECK(bw4 - lr4 == doctest::Approx(3.01f).epsilon(0.05));
     }
 }
