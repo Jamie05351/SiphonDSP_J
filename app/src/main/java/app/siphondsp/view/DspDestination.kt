@@ -18,6 +18,8 @@ import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.compose.controls.DspSidebarNav
+import app.siphondsp.compose.controls.TILE_LEFT_INSET_FRACTION
+import app.siphondsp.compose.controls.TILE_RIGHT_INSET_FRACTION
 import app.siphondsp.compose.theme.BmwDspTheme
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -43,7 +45,8 @@ enum class DspDestination(
     // `backdrop` is a full-screen, per-destination piece of art (rail housing and background baked
     // in) -- hand-authored per destination, not generated. Tile icons and the selected-tile glow
     // are drawn live by DspCrossNavBar's Compose tiles instead (`iconOn`/`iconOff` below), not
-    // baked into this image.
+    // baked into this image -- except the head-unit art, which has icons, labels and the lit strip
+    // baked in and only gets a live selection ring (in that page's strip colour).
     //
     // `backdropPhone` is a second, separately-authored set for a regular phone screen (drawable-
     // nodpi, since it's picked by name at runtime -- see DspCrossNavBar.isHeadUnitDisplay --
@@ -78,6 +81,13 @@ object DspCrossNavBar {
     // images' native resolution doesn't need to match the on-device render size -- only the
     // proportions matter.
     private val ROW_WEIGHTS = intArrayOf(56, 135, 21, 140, 18, 130, 18, 140, 21, 135, 62)
+
+    // Same measurement for the head-unit art (2340x878, tiles/labels/strips baked in, so the tile
+    // slots are wider and differently spaced than the empty-slot phone art above): tile outlines at
+    // y 38-178, 200-346, 366-500, 520-666, 688-828 and x 27-217.5 of the 256px rail column.
+    private val HEAD_UNIT_ROW_WEIGHTS = intArrayOf(38, 140, 22, 146, 20, 134, 20, 146, 22, 140, 50)
+    private const val HEAD_UNIT_TILE_LEFT_INSET = 27f / 256f
+    private const val HEAD_UNIT_TILE_RIGHT_INSET = (256f - 217.5f) / 256f
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
@@ -141,12 +151,16 @@ object DspCrossNavBar {
         activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
         if (!isHeadUnitDisplay(activity)) applyPhoneRailGeometry(activity)
 
+        val headUnit = isHeadUnitDisplay(activity)
         container.setContent {
             BmwDspTheme {
                 DspSidebarNav(
                     destinations = destinations,
                     current = current,
-                    weights = ROW_WEIGHTS,
+                    weights = if (headUnit) HEAD_UNIT_ROW_WEIGHTS else ROW_WEIGHTS,
+                    leftInsetFraction = if (headUnit) HEAD_UNIT_TILE_LEFT_INSET else TILE_LEFT_INSET_FRACTION,
+                    rightInsetFraction = if (headUnit) HEAD_UNIT_TILE_RIGHT_INSET else TILE_RIGHT_INSET_FRACTION,
+                    bakedInArt = headUnit,
                     canNavigate = canNavigate,
                     onNavigate = { destination ->
                         // Rail navigation is a clean cut, not a transition: picking another DSP
