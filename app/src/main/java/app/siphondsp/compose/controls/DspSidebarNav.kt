@@ -35,11 +35,27 @@ import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspDestination
 
 // Saturated neon blue for the lit tile, deliberately brighter than the skin's pale
-// LIGHT_BLUE_BRIGHT so the selected tile pops against the dark rail.
+// LIGHT_BLUE_BRIGHT so the selected tile pops against the dark rail. Fallback only: the head-unit
+// art lights a different-coloured strip per tile, so the ring follows TILE_GLOW_COLORS instead.
 private val TileGlowColor = Color(0xFF19B5FF)
+
+// Each head-unit backdrop lights the selected tile's bottom strip in that tile's own colour; the
+// selection ring is drawn in the same colour so ring and strip read as one lit control. Sampled
+// from the brightest strip pixels of the five authored backdrops (not eyeballed).
+private val TILE_GLOW_COLORS = mapOf(
+    DspDestination.PARAMETRIC_EQ to Color(0xFF06FCFD),
+    DspDestination.GAINS_DELAY to Color(0xFF00FAC3),
+    DspDestination.CROSSOVER_TILT to Color(0xFFFDFB02),
+    DspDestination.COMPRESSOR to Color(0xFFAF00FC),
+    DspDestination.ALLPASS to Color(0xFF05FCFC),
+)
 private val TileGlowStrokeWidth = 2.dp
 private val TileGlowWidth = 5.dp
 private val TileGlowHaloWidth = 10.dp
+// Head-unit art is already crisp line art, so its ring drops the bloom: the wide, faint layers
+// read as blur against it. A tight 3dp underlay at low alpha just keeps the line from looking thin.
+private val CrispRingWidth = 2.5.dp
+private val CrispRingUnderlayWidth = 3.5.dp
 private val TileGlowCornerRadius = 6.dp
 
 // Icon sits inside the glow ring, both centered and inset from the tile's own bounds -- the
@@ -51,8 +67,9 @@ private const val TileIconFraction = 0.620f
 
 // The rail's visible tile squares don't span the full 140dp sidebar column -- they sit inset
 // from the column's own glass-facia edges. Fractions of the column's own width, not the screen.
-private const val TILE_LEFT_INSET_FRACTION = 0.1330f
-private const val TILE_RIGHT_INSET_FRACTION = 0.1560f
+// Defaults are for the empty-slot phone art; the head-unit art has its own (wider) tiles.
+const val TILE_LEFT_INSET_FRACTION = 0.1330f
+const val TILE_RIGHT_INSET_FRACTION = 0.1560f
 
 // A couple of the source icon PNGs bake in far more transparent padding than the others (e.g.
 // Gains & Delay's is a 1080x1080 canvas vs. the others' tightly-cropped glyphs), so the same
@@ -91,6 +108,12 @@ fun DspSidebarNav(
     canNavigate: () -> Boolean,
     onNavigate: (DspDestination) -> Unit,
     modifier: Modifier = Modifier,
+    leftInsetFraction: Float = TILE_LEFT_INSET_FRACTION,
+    rightInsetFraction: Float = TILE_RIGHT_INSET_FRACTION,
+    // True for the head-unit art, which already has each tile's icon, label and lit/dim strip baked
+    // in: a tile is then just the touch target plus a selection ring in that page's strip colour,
+    // with no live icon drawn over the art's own.
+    bakedInArt: Boolean = false,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -105,8 +128,8 @@ fun DspSidebarNav(
                 (boundary - previousBoundary).also { previousBoundary = boundary }
             }
         }
-        val leftInset = maxWidth * TILE_LEFT_INSET_FRACTION
-        val rightInset = maxWidth * TILE_RIGHT_INSET_FRACTION
+        val leftInset = maxWidth * leftInsetFraction
+        val rightInset = maxWidth * rightInsetFraction
 
         Column(Modifier.fillMaxWidth().padding(start = leftInset, end = rightInset)) {
             heightsPx.forEachIndexed { i, heightPx ->
@@ -118,6 +141,7 @@ fun DspSidebarNav(
                     DspSidebarTile(
                         destination = destination,
                         selected = destination == current,
+                        bakedInArt = bakedInArt,
                         onClick = { if (canNavigate()) onNavigate(destination) },
                         modifier = Modifier.fillMaxWidth().height(heightDp),
                     )
@@ -131,6 +155,7 @@ fun DspSidebarNav(
 private fun DspSidebarTile(
     destination: DspDestination,
     selected: Boolean,
+    bakedInArt: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -153,7 +178,9 @@ private fun DspSidebarTile(
     ) {
         if (selected) {
             TileGlow(
-                Modifier
+                crisp = bakedInArt,
+                color = if (bakedInArt) TILE_GLOW_COLORS[destination] ?: TileGlowColor else TileGlowColor,
+                modifier = Modifier
                     .fillMaxSize(TileGlowFraction)
                     .offset(x = maxWidth * TileGlowOffsetXFraction, y = maxHeight * TileGlowOffsetYFraction)
             )
@@ -164,15 +191,17 @@ private fun DspSidebarTile(
         // fraction to the incoming max constraints, so a scaled fraction above 1.0 (Gains &
         // Delay: 0.62 * 1.96) would silently stop at the tile size. The oversized box is mostly
         // transparent padding, so it never draws outside the tile.
-        val iconFraction = TileIconFraction * (ICON_SCALE[destination] ?: 1f)
-        Image(
-            painter = painterResource(if (selected) destination.iconOn else destination.iconOff),
-            // Decorative: the clickable tile above already carries the label via onClickLabel.
-            contentDescription = null,
-            modifier = Modifier
-                .requiredSize(maxWidth * iconFraction, maxHeight * iconFraction)
-                .offset(x = maxWidth * TileIconOffsetXFraction, y = maxHeight * TileIconOffsetYFraction),
-        )
+        if (!bakedInArt) {
+            val iconFraction = TileIconFraction * (ICON_SCALE[destination] ?: 1f)
+            Image(
+                painter = painterResource(if (selected) destination.iconOn else destination.iconOff),
+                // Decorative: the clickable tile above already carries the label via onClickLabel.
+                contentDescription = null,
+                modifier = Modifier
+                    .requiredSize(maxWidth * iconFraction, maxHeight * iconFraction)
+                    .offset(x = maxWidth * TileIconOffsetXFraction, y = maxHeight * TileIconOffsetYFraction),
+            )
+        }
     }
 }
 
@@ -180,13 +209,30 @@ private fun DspSidebarTile(
  *  one, not a real blur -- the app's established "lit tile" technique, see
  *  BmwSkinDrawables.TileFocusRingDrawable), gated on selection instead of D-pad focus. */
 @Composable
-private fun TileGlow(modifier: Modifier = Modifier) {
+private fun TileGlow(color: Color, crisp: Boolean, modifier: Modifier = Modifier) {
     Canvas(modifier) {
-        drawBmwTileGlow(TileGlowCornerRadius)
+        if (crisp) drawCrispTileRing(color, TileGlowCornerRadius) else drawBmwTileGlow(color, TileGlowCornerRadius)
     }
 }
 
-private fun DrawScope.drawBmwTileGlow(cornerRadius: Dp) {
+private fun DrawScope.drawCrispTileRing(color: Color, cornerRadius: Dp) {
+    val strokePx = CrispRingWidth.toPx()
+    val inset = strokePx / 2f
+    val corner = CornerRadius(cornerRadius.toPx())
+    val topLeft = Offset(inset, inset)
+    val ringSize = Size(size.width - strokePx, size.height - strokePx)
+    drawRoundRect(
+        color = color,
+        topLeft = topLeft,
+        size = ringSize,
+        cornerRadius = corner,
+        style = Stroke(CrispRingUnderlayWidth.toPx()),
+        alpha = 0.3f,
+    )
+    drawRoundRect(color = color, topLeft = topLeft, size = ringSize, cornerRadius = corner, style = Stroke(strokePx))
+}
+
+private fun DrawScope.drawBmwTileGlow(color: Color, cornerRadius: Dp) {
     val strokePx = TileGlowStrokeWidth.toPx()
     val inset = strokePx / 2f
     val corner = CornerRadius(cornerRadius.toPx())
@@ -194,7 +240,7 @@ private fun DrawScope.drawBmwTileGlow(cornerRadius: Dp) {
     val ringSize = Size(size.width - strokePx, size.height - strokePx)
     // Outermost, faintest layer: fakes a soft bloom without a real blur.
     drawRoundRect(
-        color = TileGlowColor,
+        color = color,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
@@ -202,7 +248,7 @@ private fun DrawScope.drawBmwTileGlow(cornerRadius: Dp) {
         alpha = 0.16f,
     )
     drawRoundRect(
-        color = TileGlowColor,
+        color = color,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
@@ -210,7 +256,7 @@ private fun DrawScope.drawBmwTileGlow(cornerRadius: Dp) {
         alpha = 0.45f,
     )
     drawRoundRect(
-        color = TileGlowColor,
+        color = color,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
