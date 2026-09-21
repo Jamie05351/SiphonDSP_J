@@ -137,6 +137,7 @@ object NativeBmwDspValues {
     const val CROSSOVER_TYPE_LR4 = 2f
     // Append to preserve existing persisted topology IDs.
     const val CROSSOVER_TYPE_BW1 = 3f
+    const val CROSSOVER_TYPE_BW4 = 4f
     const val FIELD_SUBSONIC_ENABLED = 2
     const val FIELD_SUBSONIC_FREQ = 3
     const val FIELD_MUTE = 4

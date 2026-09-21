@@ -89,6 +89,22 @@ TEST_CASE("Truth snapshot: BW2 reports one second-order stage with the unused st
     CHECK(isIdentity(stageAt(snap, 0, 2)));
 }
 
+TEST_CASE("Truth snapshot: BW4 reports two second-order stages with different Qs") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = lowOnlyConfig(200.f, 4.f);
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    auto snap = proc.captureTruthSnapshot();
+    const auto s1 = stageAt(snap, 0, 1);
+    const auto s2 = stageAt(snap, 0, 2);
+    CHECK(s1.topology == 0);  // Biquad::Topology::Svf2
+    CHECK(s2.topology == 0);
+    CHECK_FALSE(isIdentity(s1));
+    CHECK_FALSE(isIdentity(s2));
+    // LR4 uses the same Q twice; BW4 must not.
+    CHECK(s1.a1 != doctest::Approx(s2.a1));
+}
+
 TEST_CASE("Truth snapshot: BW1 reports one one-pole stage with the unused stage identity") {
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);

@@ -350,6 +350,35 @@ class BmwSignalChainModelTest {
         }
     }
 
+    @Test
+    fun bw4CrossoverGraphsMatchButterworthFourthOrderResponse() {
+        val values = baseValues()
+        values[NativeBmwDspValues.INDEX_MID_GAIN_L] = 0f
+        values[NativeBmwDspValues.INDEX_MID_GAIN_R] = 0f
+        for (output in 0..3) {
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE, NativeBmwDspValues.CROSSOVER_TYPE_BW4)
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ, 200f)
+            setOutput(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+        }
+        val result = compute(values)
+        for (channel in 0..1) {
+            for (i in curves.frequencies.indices) {
+                // |H_LP|^2 = 1 / (1 + (w/wc)^8); the digital bilinear warp uses tan(pi f / fs).
+                val ratio = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE) /
+                    kotlin.math.tan(Math.PI * 200.0 / SAMPLE_RATE)
+                val low = -10.0 * kotlin.math.log10(1.0 + Math.pow(ratio, 8.0))
+                val high = 20.0 * kotlin.math.log10(Math.pow(ratio, 4.0)) + low
+                // Float biquads bottom out around -110 dB, so only compare above -90 dB.
+                if (low > -90.0) {
+                    assertEquals(low, result.lowBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-4)
+                }
+                if (high > -90.0) {
+                    assertEquals(high, result.midBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-4)
+                }
+            }
+        }
+    }
+
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0

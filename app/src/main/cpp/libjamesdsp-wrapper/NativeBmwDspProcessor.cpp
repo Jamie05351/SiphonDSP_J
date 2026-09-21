@@ -14,6 +14,11 @@ constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
 // from matching s^2 + (1/Q)s + 1). Paired with a 1st-order (6 dB/oct) stage at the same corner,
 // this gives the 18 dB/oct BW3 crossover; see rebuildLowCrossover/rebuildMidCrossover.
 constexpr float kButterworth3Q = 1.f;
+// Qs of the two quadratic factors in the 4th-order Butterworth polynomial: Q_k = 1/(2cos(theta_k))
+// for theta = pi/8 and 3pi/8 -> 0.5412 and 1.3066. Cascading these (not two Q=1/sqrt(2) stages,
+// which is LR4) gives the BW4 crossover's maximally-flat 24 dB/oct with a -3 dB corner.
+constexpr float kButterworth4QLow = 0.5411961f;
+constexpr float kButterworth4QHigh = 1.3065630f;
 // See rebuildMeasGen()'s DirtyMeasGen branch.
 constexpr float kTimingRefChirpLevelOffsetDb = 4.f;
 inline float ftz(float x) {
@@ -336,10 +341,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
         cfg.crossoverFreq = clampf(v[base], 80, 320);
-        // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1. Keep the old threshold
-        // decoding for existing saves; only the explicit new ID selects first-order.
+        // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1, 4 = BW4. Keep the old threshold
+        // decoding for existing saves; only the explicit new IDs select first-order / BW4.
         const float typeVal = v[base + 1];
         cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
+                            : typeVal == 4.f ? OutputConfig::CrossoverType::Butterworth4
                             : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
                             : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
                                              : OutputConfig::CrossoverType::LinkwitzRiley4;
@@ -768,6 +774,10 @@ void NativeBmwDspProcessor::rebuildLowCrossover() {
                 makeLowPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
                 makeLowPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
                 break;
+            case CrossoverType::Butterworth4:
+                makeLowPass(out.crossover1, cfg.crossoverFreq, kButterworth4QLow, sampleRate_);
+                makeLowPass(out.crossover2, cfg.crossoverFreq, kButterworth4QHigh, sampleRate_);
+                break;
             case CrossoverType::LinkwitzRiley4:
             default:
                 makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
@@ -793,6 +803,10 @@ void NativeBmwDspProcessor::rebuildMidCrossover() {
             case CrossoverType::Butterworth3:
                 makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
                 makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
+                break;
+            case CrossoverType::Butterworth4:
+                makeHighPass(out.crossover1, cfg.crossoverFreq, kButterworth4QLow, sampleRate_);
+                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth4QHigh, sampleRate_);
                 break;
             case CrossoverType::LinkwitzRiley4:
             default:

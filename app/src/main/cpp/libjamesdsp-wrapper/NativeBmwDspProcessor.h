@@ -306,12 +306,15 @@ private:
         // with a 2nd-order Q=1 stage (18 dB/oct total -- Q=1 is the exact factor of the 3rd-order
         // Butterworth polynomial's quadratic term, s^2+s+1). LinkwitzRiley4 = two cascaded
         // 2nd-order Butterworth (Q=1/sqrt(2)) stages (24 dB/oct), unchanged from before this was
-        // selectable. See rebuildLowCrossover/rebuildMidCrossover.
+        // selectable. Butterworth4 = two cascaded 2nd-order stages at the 4th-order Butterworth
+        // polynomial's Qs (0.5412 / 1.3066): 24 dB/oct like LR4 but -3 dB (not -6 dB) at the
+        // corner. See rebuildLowCrossover/rebuildMidCrossover.
         enum class CrossoverType : std::uint8_t {
             Butterworth2 = 0,
             Butterworth3 = 1,
             LinkwitzRiley4 = 2,
             Butterworth1 = 3, // single first-order stage, 6 dB/oct
+            Butterworth4 = 4, // two 2nd-order stages, 24 dB/oct, -3 dB at the corner
         };
         CrossoverType crossoverType = CrossoverType::LinkwitzRiley4;
         bool subsonicEnabled = false;

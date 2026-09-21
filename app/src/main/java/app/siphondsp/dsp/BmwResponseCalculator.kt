@@ -123,6 +123,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             when {
                 crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
                     cascade.addLowPass1(crossoverFreq, sampleRate)
+                crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
+                    cascade.addLowPass(crossoverFreq, BUTTERWORTH4_Q_LOW, sampleRate)
+                    cascade.addLowPass(crossoverFreq, BUTTERWORTH4_Q_HIGH, sampleRate)
+                }
                 crossoverType < .5f -> cascade.addLowPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
                 crossoverType < 1.5f -> {
                     cascade.addLowPass1(crossoverFreq, sampleRate)
@@ -151,6 +155,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             when {
                 crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
                     cascade.addHighPass1(crossoverFreq, sampleRate)
+                crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
+                    cascade.addHighPass(crossoverFreq, BUTTERWORTH4_Q_LOW, sampleRate)
+                    cascade.addHighPass(crossoverFreq, BUTTERWORTH4_Q_HIGH, sampleRate)
+                }
                 crossoverType < .5f -> cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
                 crossoverType < 1.5f -> {
                     cascade.addHighPass1(crossoverFreq, sampleRate)
@@ -336,6 +344,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // kButterworth3Q for the derivation (exact factor of the 3rd-order Butterworth
         // polynomial's quadratic term).
         private const val BUTTERWORTH3_Q = 1.0
+        // Qs of the BW4 crossover's two 2nd-order stages -- see NativeBmwDspProcessor.cpp's
+        // kButterworth4QLow/kButterworth4QHigh (1/(2cos(pi/8)) and 1/(2cos(3pi/8))).
+        private const val BUTTERWORTH4_Q_LOW = 0.5411961
+        private const val BUTTERWORTH4_Q_HIGH = 1.3065630
         private const val DC_BLOCKER_HZ = 10.0
     }
 }

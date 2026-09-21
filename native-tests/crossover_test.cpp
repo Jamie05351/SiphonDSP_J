@@ -19,7 +19,7 @@ float outLevelDbAt(NativeBmwDspProcessor& proc, const std::array<float, kConfigS
 }
 
 // Slot values, matching NativeBmwDspValues.CROSSOVER_TYPE_* / OutputConfig::CrossoverType.
-constexpr float kBw2 = 0.f, kBw3 = 1.f, kLr4 = 2.f;
+constexpr float kBw2 = 0.f, kBw3 = 1.f, kLr4 = 2.f, kBw4 = 4.f;
 
 std::array<float, kConfigSize> lowOnlyConfig(float fc, float type) {
     auto c = defaultConfig();
@@ -83,7 +83,7 @@ TEST_CASE("Mid crossover BW2/BW3/LR4 each roll off at their real dB/octave slope
 }
 
 TEST_CASE("An out-of-range/garbage crossover-type value safely falls back to LR4") {
-    // Unknown high IDs retain the LR4 fallback; only explicit ID 3 selects BW1.
+    // Unknown high IDs retain the LR4 fallback; only explicit IDs 3 / 4 select BW1 / BW4.
     constexpr float fc = 200.f;
     const float garbage = stopbandSlopeDbPerOctave(lowOnlyConfig(fc, 7.f), fc * 4, fc * 8);
     const float lr4 = stopbandSlopeDbPerOctave(lowOnlyConfig(fc, kLr4), fc * 4, fc * 8);
@@ -108,4 +108,25 @@ TEST_CASE("First-order crossovers roll off at 6 dB per octave") {
           doctest::Approx(-6.f).epsilon(0.05));
     CHECK(stopbandSlopeDbPerOctave(midOnlyConfig(fc, 3.f), fc / 4, fc / 8) ==
           doctest::Approx(-6.f).epsilon(0.05));
+}
+
+TEST_CASE("BW4 crossovers roll off at 24 dB per octave on both bands") {
+    constexpr float fc = 200.f;
+    CHECK(stopbandSlopeDbPerOctave(lowOnlyConfig(fc, kBw4), fc * 4, fc * 8) ==
+          doctest::Approx(-24.f).epsilon(0.05));
+    CHECK(stopbandSlopeDbPerOctave(midOnlyConfig(fc, kBw4), fc / 4, fc / 8) ==
+          doctest::Approx(-24.f).epsilon(0.05));
+}
+
+TEST_CASE("BW4 sits 3 dB above LR4 at the corner (-3 dB vs -6 dB; proves it is not just LR4 again)") {
+    constexpr float fc = 200.f;
+    for (bool low : {true, false}) {
+        auto cfgFor = [&](float type) { return low ? lowOnlyConfig(fc, type) : midOnlyConfig(fc, type); };
+        // Compare the two types at the same frequency in the same config, so any absolute level
+        // offset (headroom, gain, low-frequency rolloff elsewhere in the chain) cancels out.
+        NativeBmwDspProcessor bw4Proc, lr4Proc;
+        const float bw4 = outLevelDbAt(bw4Proc, cfgFor(kBw4), fc);
+        const float lr4 = outLevelDbAt(lr4Proc, cfgFor(kLr4), fc);
+        CHECK(bw4 - lr4 == doctest::Approx(3.01f).epsilon(0.05));
+    }
 }
