@@ -82,12 +82,11 @@ object DspCrossNavBar {
     // proportions matter.
     private val ROW_WEIGHTS = intArrayOf(56, 135, 21, 140, 18, 130, 18, 140, 21, 135, 62)
 
-    // Same measurement for the head-unit art (2340x878, tiles/labels/strips baked in, so the tile
-    // slots are wider and differently spaced than the empty-slot phone art above): tile outlines at
-    // y 38-178, 200-346, 366-500, 520-666, 688-828 and x 27-217.5 of the 256px rail column.
-    private val HEAD_UNIT_ROW_WEIGHTS = intArrayOf(38, 140, 22, 146, 20, 134, 20, 146, 22, 140, 50)
-    private const val HEAD_UNIT_TILE_LEFT_INSET = 27f / 256f
-    private const val HEAD_UNIT_TILE_RIGHT_INSET = (256f - 217.5f) / 256f
+    // Head-unit art (2340x878, tiles/labels/strips baked in): same tile rows as ROW_WEIGHTS (outlines
+    // measured within ~1px of it), but the tiles sit 4px further left than the empty-slot art, so
+    // it needs its own horizontal insets: outlines at x 30-212 of the 256px rail column.
+    private const val HEAD_UNIT_TILE_LEFT_INSET = 30f / 256f
+    private const val HEAD_UNIT_TILE_RIGHT_INSET = (256f - 212f) / 256f
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
@@ -157,7 +156,7 @@ object DspCrossNavBar {
                 DspSidebarNav(
                     destinations = destinations,
                     current = current,
-                    weights = if (headUnit) HEAD_UNIT_ROW_WEIGHTS else ROW_WEIGHTS,
+                    weights = ROW_WEIGHTS,
                     leftInsetFraction = if (headUnit) HEAD_UNIT_TILE_LEFT_INSET else TILE_LEFT_INSET_FRACTION,
                     rightInsetFraction = if (headUnit) HEAD_UNIT_TILE_RIGHT_INSET else TILE_RIGHT_INSET_FRACTION,
                     bakedInArt = headUnit,
