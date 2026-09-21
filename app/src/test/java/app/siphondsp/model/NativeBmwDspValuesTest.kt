@@ -340,6 +340,20 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun bw4CrossoverSurvivesSaveAndReload() {
+        val values = migratedDefaults()
+        for (output in 0..3) {
+            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
+                NativeBmwDspValues.CROSSOVER_TYPE_BW4
+        }
+        NativeBmwDspValues.save(context, values)
+        val loaded = NativeBmwDspValues.load(context)
+        for (output in 0..3) {
+            assertEquals(4f, loaded[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)], 0f)
+        }
+    }
+
+    @Test
     fun firstOrderCrossoverSurvivesSaveAndReload() {
         val values = migratedDefaults()
         for (output in 0..3) {

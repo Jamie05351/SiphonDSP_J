@@ -80,11 +80,11 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
 
     val lowCrossoverType = dsp.get(
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
-    ).toInt().coerceIn(0, 3)
+    ).toInt().coerceIn(0, 4)
     val midCrossoverType = dsp.get(
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
-    ).toInt().coerceIn(0, 3)
-    val crossoverTypeOptions = listOf("BW2", "BW3", "LR4", "BW1 (6 dB/oct)")
+    ).toInt().coerceIn(0, 4)
+    val crossoverTypeOptions = listOf("BW2", "BW3", "LR4", "BW1 (6 dB/oct)", "BW4")
 
     BmwDspTheme {
         Column(

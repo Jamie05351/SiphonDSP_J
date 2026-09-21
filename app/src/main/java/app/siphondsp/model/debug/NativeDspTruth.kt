@@ -81,6 +81,7 @@ enum class NativeCrossoverType(val nativeValue: Int, val label: String, val dbPe
     BUTTERWORTH3(1, "BW3", 18),
     LINKWITZ_RILEY4(2, "LR4", 24),
     BUTTERWORTH1(3, "BW1", 6),
+    BUTTERWORTH4(4, "BW4", 24),
     UNKNOWN(-1, "?", 0);
 
     companion object {
