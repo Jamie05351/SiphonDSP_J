@@ -149,7 +149,10 @@ TEST_CASE("BW4 sits 3 dB above LR4 at the corner (-3 dB vs -6 dB; proves it is n
 // uses midOnlyConfig(), which never touches the upper-corner indices, so Mid stays HPF-only
 // exactly as before this feature existed.
 TEST_CASE("Mid's upper crossover corner rolls off above it at its real dB/octave slope") {
-    constexpr float fcLow = 200.f, fcHigh = 4000.f;
+    // fcHigh kept low enough that fcHigh*8 stays well under the 48 kHz test sample rate's
+    // Nyquist (24 kHz) -- a test point at or above Nyquist aliases and reads as ~0 dB slope
+    // regardless of the real filter response.
+    constexpr float fcLow = 200.f, fcHigh = 1000.f;
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kBw2), fcHigh * 4, fcHigh * 8) ==
           doctest::Approx(-12.f).epsilon(0.05));
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcHigh * 4, fcHigh * 8) ==
@@ -159,7 +162,7 @@ TEST_CASE("Mid's upper crossover corner rolls off above it at its real dB/octave
 TEST_CASE("Mid's upper crossover corner still rolls off correctly at the lower corner too (true bandpass)") {
     // Confirms enabling the upper corner didn't disturb the existing lower (Low/Mid) HPF slope --
     // the two corners' filter stages are independent cascade stages, not a shared/overwritten one.
-    constexpr float fcLow = 200.f, fcHigh = 4000.f;
+    constexpr float fcLow = 200.f, fcHigh = 1000.f;
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcLow / 4, fcLow / 8) ==
           doctest::Approx(-24.f).epsilon(0.05));
 }
