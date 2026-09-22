@@ -9,7 +9,7 @@ package app.siphondsp.dsp
  * a divergence there is a display-only concern, not an audible one). Keep this in exact
  * lockstep with NativeBmwRouting.h's RoutingMatrix if that ever changes.
  */
-enum class BmwRoutingOutput { LOW_LEFT, LOW_RIGHT, MID_LEFT, MID_RIGHT }
+enum class BmwRoutingOutput { LOW_LEFT, LOW_RIGHT, MID_LEFT, MID_RIGHT, HIGH_LEFT, HIGH_RIGHT }
 
 data class BmwRoutingCoefficients(val fromFrontLeft: Float, val fromFrontRight: Float)
 
@@ -20,6 +20,8 @@ object BmwOutputRouting {
         BmwRoutingOutput.LOW_RIGHT to BmwRoutingCoefficients(0f, 1f),
         BmwRoutingOutput.MID_LEFT to BmwRoutingCoefficients(1f, 0f),
         BmwRoutingOutput.MID_RIGHT to BmwRoutingCoefficients(0f, 1f),
+        BmwRoutingOutput.HIGH_LEFT to BmwRoutingCoefficients(1f, 0f),
+        BmwRoutingOutput.HIGH_RIGHT to BmwRoutingCoefficients(0f, 1f),
     )
 
     /** Mirrors `RoutingMatrix::process`. */
@@ -37,10 +39,12 @@ object BmwOutputRouting {
         }
     }
 
-    /** Mirrors `sumToStereo`: Low L + Mid L to Left, Low R + Mid R to Right. */
+    /** Mirrors `sumToStereo`: Low L + Mid L + High L to Left, same for Right. */
     fun reconstruct(outputs: Map<BmwRoutingOutput, Float>): Pair<Float, Float> {
-        val left = outputs.getValue(BmwRoutingOutput.LOW_LEFT) + outputs.getValue(BmwRoutingOutput.MID_LEFT)
-        val right = outputs.getValue(BmwRoutingOutput.LOW_RIGHT) + outputs.getValue(BmwRoutingOutput.MID_RIGHT)
+        val left = outputs.getValue(BmwRoutingOutput.LOW_LEFT) + outputs.getValue(BmwRoutingOutput.MID_LEFT) +
+            outputs.getValue(BmwRoutingOutput.HIGH_LEFT)
+        val right = outputs.getValue(BmwRoutingOutput.LOW_RIGHT) + outputs.getValue(BmwRoutingOutput.MID_RIGHT) +
+            outputs.getValue(BmwRoutingOutput.HIGH_RIGHT)
         return (if (left.isFinite()) left else 0f) to (if (right.isFinite()) right else 0f)
     }
 }

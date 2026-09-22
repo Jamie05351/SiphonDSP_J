@@ -39,6 +39,8 @@ class BmwOutputArchitectureTest {
         assertEquals(-5f, routed.getValue(BmwRoutingOutput.LOW_RIGHT), 0f)
         assertEquals(3f, routed.getValue(BmwRoutingOutput.MID_LEFT), 0f)
         assertEquals(-5f, routed.getValue(BmwRoutingOutput.MID_RIGHT), 0f)
+        assertEquals(3f, routed.getValue(BmwRoutingOutput.HIGH_LEFT), 0f)
+        assertEquals(-5f, routed.getValue(BmwRoutingOutput.HIGH_RIGHT), 0f)
     }
 
     @Test
@@ -50,21 +52,25 @@ class BmwOutputArchitectureTest {
         assertEquals(0f, routed.getValue(BmwRoutingOutput.LOW_RIGHT), 0f)
         assertEquals(1f, routed.getValue(BmwRoutingOutput.MID_LEFT), 0f)
         assertEquals(0f, routed.getValue(BmwRoutingOutput.MID_RIGHT), 0f)
+        assertEquals(1f, routed.getValue(BmwRoutingOutput.HIGH_LEFT), 0f)
+        assertEquals(0f, routed.getValue(BmwRoutingOutput.HIGH_RIGHT), 0f)
     }
 
     @Test
-    fun finalStereoReconstructionSumsLowAndMidPerSide() {
+    fun finalStereoReconstructionSumsAllThreeBandsPerSide() {
         val outputs = mapOf(
             BmwRoutingOutput.LOW_LEFT to 2f,
             BmwRoutingOutput.LOW_RIGHT to -1f,
             BmwRoutingOutput.MID_LEFT to 0.5f,
             BmwRoutingOutput.MID_RIGHT to 3f,
+            BmwRoutingOutput.HIGH_LEFT to 1f,
+            BmwRoutingOutput.HIGH_RIGHT to -0.5f,
         )
 
         val (left, right) = BmwOutputRouting.reconstruct(outputs)
 
-        assertEquals(2.5f, left, 1e-6f)
-        assertEquals(2f, right, 1e-6f)
+        assertEquals(3.5f, left, 1e-6f)
+        assertEquals(1.5f, right, 1e-6f)
     }
 
     @Test
@@ -72,11 +78,10 @@ class BmwOutputArchitectureTest {
         val routed = BmwOutputRouting.route(4f, -2f)
         val (left, right) = BmwOutputRouting.reconstruct(routed)
 
-        // Each side is fed straight through to both bands, so summing Low+Mid on a side
-        // doubles that side's input under default (pre-routing-matrix) unity coefficients --
-        // this is the existing two-way crossover topology (Low + Mid recombine to full range).
-        assertEquals(8f, left, 1e-6f)
-        assertEquals(-4f, right, 1e-6f)
+        // Each side is fed straight through to all three bands, so summing Low+Mid+High on a
+        // side triples that side's input under default (pre-routing-matrix) unity coefficients.
+        assertEquals(12f, left, 1e-6f)
+        assertEquals(-6f, right, 1e-6f)
     }
 
     @Test
@@ -86,6 +91,8 @@ class BmwOutputArchitectureTest {
             BmwRoutingOutput.LOW_RIGHT to BmwRoutingCoefficients(0f, 1f),
             BmwRoutingOutput.MID_LEFT to BmwRoutingCoefficients(1f, 0f),
             BmwRoutingOutput.MID_RIGHT to BmwRoutingCoefficients(0f, 1f),
+            BmwRoutingOutput.HIGH_LEFT to BmwRoutingCoefficients(1f, 0f),
+            BmwRoutingOutput.HIGH_RIGHT to BmwRoutingCoefficients(0f, 1f),
         )
 
         val routed = BmwOutputRouting.route(2f, 4f, blended)
@@ -100,6 +107,8 @@ class BmwOutputArchitectureTest {
             BmwRoutingOutput.LOW_RIGHT to BmwRoutingCoefficients(0f, 1f),
             BmwRoutingOutput.MID_LEFT to BmwRoutingCoefficients(1f, 0f),
             BmwRoutingOutput.MID_RIGHT to BmwRoutingCoefficients(0f, 1f),
+            BmwRoutingOutput.HIGH_LEFT to BmwRoutingCoefficients(1f, 0f),
+            BmwRoutingOutput.HIGH_RIGHT to BmwRoutingCoefficients(0f, 1f),
         )
 
         val routed = BmwOutputRouting.route(1f, 1f, poisoned)

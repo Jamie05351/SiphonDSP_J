@@ -103,6 +103,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
                 listOf(
                     NativeDspOutput.LOW_LEFT, NativeDspOutput.LOW_RIGHT,
                     NativeDspOutput.MID_LEFT, NativeDspOutput.MID_RIGHT,
+                    NativeDspOutput.HIGH_LEFT, NativeDspOutput.HIGH_RIGHT,
                 ),
             ) { output ->
                 crossovers[output]?.let { CrossoverCard(output, it) }
@@ -321,6 +322,8 @@ private fun CrossoverCard(output: NativeDspOutput, snapshot: NativeCrossoverSnap
         KeyValueRow("Active stage count", snapshot.activeStageCount.toString())
         KeyValueRow("Stage 1", snapshot.stage1.describe())
         KeyValueRow("Stage 2", snapshot.stage2.describe())
+        KeyValueRow("Stage 3", snapshot.stage3.describe())
+        KeyValueRow("Stage 4", snapshot.stage4.describe())
         KeyValueRow(
             "Topology fingerprint",
             snapshot.topologyFingerprint(),

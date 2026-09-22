@@ -126,6 +126,78 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     CHECK(at260Moved - at260Default > 5.f);
 }
 
+TEST_CASE("kHighGainL/kHighGainR slots shape the High band's level") {
+    // Isolate High (mute Low/Mid, un-bypass/un-mute High), then prove kHighGainL/R actually
+    // shape its level -- not just that some field at those indices exists.
+    auto base = defaultConfig();
+    base[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        base[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    for (int slot = 0; slot < 2; ++slot) {
+        base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    }
+    base[sch::kHighXoPass] = 0.f;
+
+    auto boosted = base;
+    boosted[sch::kHighGainL] = 6.f;
+    boosted[sch::kHighGainR] = 6.f;
+    NativeBmwDspProcessor unityProc, boostedProc;
+    unityProc.setSampleRate(kSampleRate);
+    boostedProc.setSampleRate(kSampleRate);
+    const float unityDb = outLevelDbAt(unityProc, base, 3000.0);
+    const float boostedDb = outLevelDbAt(boostedProc, boosted, 3000.0);
+    CHECK(boostedDb - unityDb == doctest::Approx(6.f).epsilon(0.05));
+}
+
+TEST_CASE("kHighXoPass alone fully silences High, unlike kLpfPass/kHpfPass's filter-only bypass") {
+    // Deliberately NOT the same contract as the existing kLpfPass/kHpfPass flags (see
+    // processFrame()'s own comment on that, and the design doc's note on why this flag's
+    // semantics differ for High specifically): a tweeter with no HPF ahead of it is a real
+    // speaker-damage risk from raw bass, and kHighXoPass doubles as the 3-way master-off
+    // switch's single write for High, so it must silence the band on its own -- proven here with
+    // mute left explicitly off.
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    for (int slot = 0; slot < 2; ++slot) {
+        c[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    }
+    c[sch::kHighXoPass] = 1.f;
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto buf = stereoSine(3000.0, 0.3, 8192, kSampleRate);
+    proc.process(buf.data(), buf.size());
+    CHECK(peakAbs(buf) < 1e-4f);
+}
+
+TEST_CASE("kHighRoutingBase locates High's routing coefficients") {
+    // Isolate High, then zero just its routing coefficients (215..218) -- if those are really
+    // what feeds High's input, the output must go silent despite High's crossover/gain/mute
+    // otherwise being fully "on".
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    c[sch::kHighXoPass] = 0.f;
+    for (int slot = 0; slot < 2; ++slot) {
+        c[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    }
+    for (int i = 0; i < 4; ++i) {
+        c[sch::kHighRoutingBase + i] = 0.f;
+    }
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto buf = stereoSine(3000.0, 0.3, 8192, kSampleRate);
+    proc.process(buf.data(), buf.size());
+    CHECK(peakAbs(buf) < 1e-4f);
+}
+
 TEST_CASE("kMidUpperXo block enables and locates Mid's upper (Mid/High) bandpass corner") {
     // Isolate Mid (mute Low), enable the upper corner well below a test tone, and check that tone
     // comes back down heavily -- only kMidUpperXoEnabled/kMidUpperXoFreq can do that, since the

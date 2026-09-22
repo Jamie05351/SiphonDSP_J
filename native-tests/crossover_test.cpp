@@ -47,6 +47,23 @@ std::array<float, kConfigSize> midOnlyConfig(float fc, float type) {
     return c;
 }
 
+std::array<float, kConfigSize> highOnlyConfig(float fc, float type) {
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {  // mute Low L/R, Mid L/R, isolate the High crossover
+        c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    // High ships muted/bypassed by default -- un-mute and un-bypass it, then set its corner.
+    c[sch::kHighXoPass] = 0.f;
+    for (int slot = 0; slot < 2; ++slot) {  // High Left, High Right
+        const std::size_t base = sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth;
+        c[base + sch::kOutMuted] = 0.f;
+        c[base + sch::kOutCrossoverFreq] = fc;
+        c[base + sch::kOutCrossoverType] = type;
+    }
+    return c;
+}
+
 // dB over one octave, between two points both 2-3 octaves deep in the stopband (fNearHz closer to
 // the corner, fFarHz one octave further from it) -- far enough in that a real 2nd/3rd/4th-order
 // filter has converged to its asymptotic slope, so this reads very close to -6*order dB/oct.
@@ -169,4 +186,36 @@ TEST_CASE("Mid's upper crossover corner still rolls off correctly at the lower c
     constexpr float fcLow = 200.f, fcHigh = 1000.f;
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcLow / 4, fcLow / 8) ==
           doctest::Approx(-24.f).epsilon(0.05));
+}
+
+// High band -- Phase 3 of the 2-way -> 3-way output crossover work. HPF-only, same shape as Mid
+// was before Phase 2. Ships muted/bypassed by default; that default (not exercised here) is
+// covered implicitly the same way as Mid's disabled upper corner: every other test file in this
+// suite builds on defaultConfig() and would fail if High's default state produced audible output.
+TEST_CASE("High crossover BW2/BW3/LR4 each roll off at their real dB/octave slope") {
+    constexpr float fc = 3000.f;
+    CHECK(stopbandSlopeDbPerOctave(highOnlyConfig(fc, kBw2), fc / 4, fc / 8) ==
+          doctest::Approx(-12.f).epsilon(0.05));
+    CHECK(stopbandSlopeDbPerOctave(highOnlyConfig(fc, kBw3), fc / 4, fc / 8) ==
+          doctest::Approx(-18.f).epsilon(0.05));
+    CHECK(stopbandSlopeDbPerOctave(highOnlyConfig(fc, kLr4), fc / 4, fc / 8) ==
+          doctest::Approx(-24.f).epsilon(0.05));
+}
+
+TEST_CASE("High: kHighXoPass alone fully silences it, independent of the per-output mute field") {
+    // Deliberately NOT the same contract as kLpfPass/kHpfPass (which only bypass the crossover
+    // filter, letting the raw routed signal through -- an accepted pre-existing risk for
+    // Low/Mid). A tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass,
+    // and kHighXoPass is also the 3-way master-off switch's single write for High, so it must be
+    // sufficient on its own -- proven here by leaving mute explicitly OFF and confirming bypass
+    // alone still produces silence, not just their combination.
+    constexpr float fc = 3000.f;
+    auto bypassed = highOnlyConfig(fc, kLr4);
+    bypassed[sch::kHighXoPass] = 1.f;  // re-bypass despite highOnlyConfig() clearing it; mute stays off
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(bypassed.data(), bypassed.size()));
+    auto buf = stereoSine(fc, 0.3, 8192, kSampleRate);
+    proc.process(buf.data(), buf.size());
+    CHECK(peakAbs(buf) < 1e-4f);
 }

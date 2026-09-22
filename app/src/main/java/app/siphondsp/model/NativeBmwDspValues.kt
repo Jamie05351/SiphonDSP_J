@@ -43,7 +43,13 @@ object NativeBmwDspValues {
     // crossover work. Only Mid has this field; Low/High don't. 209 is a one-time migration
     // marker: migrateMidUpperCrossoverIfNeeded() seeds it disabled for existing saves, same
     // pattern as migrateMbcIfNeeded().
-    const val SIZE = 210
+    //
+    // 210..261 are the High band -- Phase 3 of the same work, a genuinely new third output.
+    // Kept in its own tail sub-blocks (routing/all-pass/output-config) rather than growing the
+    // legacy per-output block, same reasoning as the offset-freeze in NativeBmwDspProcessor.h.
+    // Ships muted/disabled. 261 is a one-time migration marker: migrateHighBandIfNeeded() seeds
+    // the whole block muted for existing saves, same pattern as migrateMbcIfNeeded().
+    const val SIZE = 262
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -305,6 +311,58 @@ object NativeBmwDspValues {
         return INDEX_MID_UPPER_XO + slot * MID_UPPER_XO_WIDTH + field
     }
 
+    // High band (210..261) -- a genuinely new third output, added in the 210 -> 262 growth
+    // (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). Kept entirely in the schema's tail (its own
+    // routing/all-pass/output-config sub-blocks) rather than growing OUTPUT_COUNT/outputIndex()
+    // to 6: those stay pinned at 4 forever so the legacy INDEX_ROUTING/INDEX_ALL_PASS/
+    // INDEX_OUTPUT_CONFIG block offsets -- which every existing saved config already relies on --
+    // can never shift. Use highOutputIndex()/highAllPassIndex() rather than outputIndex() for
+    // High. Ships silent via INDEX_HIGH_XO_PASS (both default true) -- unlike
+    // INDEX_LPF_PASS/INDEX_HPF_PASS (which only bypass the crossover filter, an accepted
+    // pre-existing risk for Low/Mid), true here fully silences High: a tweeter with no HPF ahead
+    // of it is a speaker-damage risk from raw bass, and this flag is also the 3-way master-off
+    // switch's single write for High, so it must not depend on the per-output mute field also
+    // being set correctly. Same conservative opt-in launch as MBC and the bus limiters.
+    const val OUTPUT_HIGH_LEFT = 4
+    const val OUTPUT_HIGH_RIGHT = 5
+
+    const val INDEX_HIGH_XO_PASS = 210
+    const val INDEX_HIGH_GAIN_L = 211
+    const val INDEX_HIGH_GAIN_R = 212
+    const val INDEX_HIGH_DELAY_L = 213
+    const val INDEX_HIGH_DELAY_R = 214
+
+    const val INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT = 215
+    const val INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT = 216
+    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT = 217
+    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT = 218
+
+    const val INDEX_HIGH_ALL_PASS = 219
+    const val INDEX_HIGH_OUTPUT_CONFIG = 235
+    // One-time marker: 1 once an existing saved config has had the whole High block (210..260)
+    // seeded muted/disabled. Kotlin-only -- native never reads this index. See
+    // migrateHighBandIfNeeded.
+    const val INDEX_HIGH_BAND_MIGRATED = 261
+
+    fun highOutputIndex(output: Int, field: Int): Int {
+        require(output == OUTPUT_HIGH_LEFT || output == OUTPUT_HIGH_RIGHT) {
+            "Invalid BMW High output $output"
+        }
+        require(field in 0 until OUTPUT_CONFIG_WIDTH) { "Invalid BMW High output field $field" }
+        val slot = if (output == OUTPUT_HIGH_LEFT) 0 else 1
+        return INDEX_HIGH_OUTPUT_CONFIG + slot * OUTPUT_CONFIG_WIDTH + field
+    }
+
+    fun highAllPassIndex(output: Int, section: Int, field: Int): Int {
+        require(output == OUTPUT_HIGH_LEFT || output == OUTPUT_HIGH_RIGHT) {
+            "Invalid BMW High output $output"
+        }
+        require(section in 0 until ALL_PASS_SECTIONS_PER_OUTPUT) { "Invalid BMW High all-pass section $section" }
+        require(field in 0 until ALL_PASS_SECTION_WIDTH) { "Invalid BMW High all-pass field $field" }
+        val slot = if (output == OUTPUT_HIGH_LEFT) 0 else 1
+        return INDEX_HIGH_ALL_PASS + (slot * ALL_PASS_SECTIONS_PER_OUTPUT + section) * ALL_PASS_SECTION_WIDTH + field
+    }
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -377,6 +435,22 @@ object NativeBmwDspValues {
         DEFAULT_MID_UPPER_XO_FREQ, 0f, // 205..206 Mid Left: freq, enabled
         DEFAULT_MID_UPPER_XO_FREQ, 0f, // 207..208 Mid Right: freq, enabled
         0f, // 209 migration marker (0 = seed the block disabled on next load)
+        // --- High band (210..261), ships silent via per-output mute below ---
+        1f, // 210 highXoPass -- true fully silences High (not just the crossover filter)
+        0f, 0f, // 211..212 highGainL, highGainR
+        0f, 0f, // 213..214 highDelayL, highDelayR
+        // High Left, High Right: [Front L, Front R] -- same identity default as Low/Mid.
+        1f, 0f, 0f, 1f,
+        // Two disabled second-order all-pass sections per High output.
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
+        // High Left: XO Hz (same default as Mid's upper corner), crossoverType (2=LR4), sub
+        // fields retained for a uniform block but ignored by native (same as Mid), muted, invert,
+        // compressor 7-tuple.
+        DEFAULT_MID_UPPER_XO_FREQ, 2f, 0f, 32f, 1f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        // High Right.
+        DEFAULT_MID_UPPER_XO_FREQ, 2f, 0f, 32f, 1f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
+        0f, // 261 migration marker (0 = seed the block muted on next load)
     )
 
     init {
@@ -397,7 +471,30 @@ object NativeBmwDspValues {
         migrateMasterLimiterIfNeeded(store, values)
         migrateCrossoverTypeIfNeeded(store, values)
         migrateMidUpperCrossoverIfNeeded(store, values)
+        migrateHighBandIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed the whole High band (indices 210..261, added in the 210 -> 262 growth) silent on
+     * configs saved before it existed. Sets both `highXoPass` (true fully silences High --
+     * unlike `INDEX_LPF_PASS`/`INDEX_HPF_PASS`, which only bypass the crossover filter) and the
+     * per-output mute field, so the band stays silent even if some future caller sets only one
+     * of the two. Same conservative opt-in launch as [migrateMbcIfNeeded]. The index-keyed
+     * [NativeBmwDspStore] already backfills a missing index from [DEFAULTS] on load -- DEFAULTS
+     * already ships this muted -- so this mostly just claims the marker at index 261,
+     * guaranteeing the band stays off for existing users even if a later build ever ships a
+     * different default. Runs once; the marker then stops it so a deliberate later enable is
+     * respected.
+     */
+    private fun migrateHighBandIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
+        if (values[INDEX_HIGH_BAND_MIGRATED] == 1f) return
+        values[INDEX_HIGH_XO_PASS] = 1f
+        values[highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_MUTE)] = 1f
+        values[highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_MUTE)] = 1f
+        values[INDEX_HIGH_BAND_MIGRATED] = 1f
+        val saved = store?.save(values)
+        Timber.i("BMW DSP seeded High band muted success=$saved")
     }
 
     /**
@@ -500,6 +597,7 @@ object NativeBmwDspValues {
         migrateMasterLimiterIfNeeded(store, padded)
         migrateCrossoverTypeIfNeeded(store, padded)
         migrateMidUpperCrossoverIfNeeded(store, padded)
+        migrateHighBandIfNeeded(store, padded)
         return padded
     }
 

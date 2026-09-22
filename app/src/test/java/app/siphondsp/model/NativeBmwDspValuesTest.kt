@@ -40,6 +40,7 @@ class NativeBmwDspValuesTest {
         seedLegacyCompDisabled(values)
         seedCrossoverTypeMigrated(values)
         seedMidUpperCrossoverMigrated(values)
+        seedHighBandMigrated(values)
     }
 
     /** Mirrors [NativeBmwDspValues.migrateMidUpperCrossoverIfNeeded]: marker claimed. DEFAULTS
@@ -47,6 +48,13 @@ class NativeBmwDspValuesTest {
      *  load()'s real call order. */
     private fun seedMidUpperCrossoverMigrated(values: FloatArray) {
         values[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED] = 1f
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateHighBandIfNeeded]: marker claimed. DEFAULTS already
+     *  ships the block muted, so this only flips the marker. Must run last, matching load()'s
+     *  real call order. */
+    private fun seedHighBandMigrated(values: FloatArray) {
+        values[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateCrossoverTypeIfNeeded]: all 4 outputs forced to LR4,
@@ -137,6 +145,7 @@ class NativeBmwDspValuesTest {
             seedLegacyCompDisabled(it)
             seedCrossoverTypeMigrated(it)
             seedMidUpperCrossoverMigrated(it)
+            seedHighBandMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -448,6 +457,71 @@ class NativeBmwDspValuesTest {
             0f,
         )
         assertEquals(1f, restored[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadSeedsHighBandMutedOnConfigsSavedBeforeItExisted() {
+        // A pre-feature config: the block sits at leftover/uninitialized values and the marker
+        // is unset. Even if a stray "enabled" made it into the array, load() must bring High
+        // back muted/bypassed and claim the marker.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_HIGH_XO_PASS], 0f)
+        assertEquals(
+            1f,
+            loaded[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)],
+            0f,
+        )
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadLeavesADeliberatelyEnabledHighBandAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 4000f
+            it[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_HIGH_XO_PASS], 0f)
+        assertEquals(
+            0f,
+            loaded[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)],
+            0f,
+        )
+        assertEquals(
+            4000f,
+            loaded[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)],
+            0f,
+        )
+    }
+
+    @Test
+    fun migrateRestoredValuesSeedsHighBandMutedLikeLoadDoes() {
+        // A pre-High private-backup-shaped array (210 values, predates the 210 -> 262 growth).
+        val legacy = FloatArray(210) { index -> NativeBmwDspValues.DEFAULTS[index] }
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(context, legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, restored.size)
+        assertEquals(1f, restored[NativeBmwDspValues.INDEX_HIGH_XO_PASS], 0f)
+        assertEquals(
+            1f,
+            restored[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)],
+            0f,
+        )
+        assertEquals(1f, restored[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED], 0f)
     }
 
     @Test

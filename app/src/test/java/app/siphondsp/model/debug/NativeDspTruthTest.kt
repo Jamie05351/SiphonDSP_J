@@ -43,10 +43,16 @@ class NativeCrossoverSnapshotTest {
     private fun onePoleStage(opA: Double) =
         NativeBiquadStage(NativeBiquadStage.TOPOLOGY_ONE_POLE_LOWPASS, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, opA)
 
-    private fun crossover(type: NativeCrossoverType, stage1: NativeBiquadStage, stage2: NativeBiquadStage) =
-        NativeCrossoverSnapshot(
-            NativeDspOutput.LOW_LEFT, 150.0, type, false, 32.0, false, false, 0.0, 0.0, stage1, stage2,
-        )
+    private fun crossover(
+        type: NativeCrossoverType,
+        stage1: NativeBiquadStage,
+        stage2: NativeBiquadStage,
+        stage3: NativeBiquadStage = identityStage(),
+        stage4: NativeBiquadStage = identityStage(),
+    ) = NativeCrossoverSnapshot(
+        NativeDspOutput.LOW_LEFT, 150.0, type, false, 32.0, false, false, 0.0, 0.0,
+        stage1, stage2, stage3, stage4,
+    )
 
     @Test fun lr4HasTwoActiveStages() {
         val lr4 = crossover(NativeCrossoverType.LINKWITZ_RILEY4, stage(0.5), stage(0.5))
@@ -86,6 +92,17 @@ class NativeCrossoverSnapshotTest {
         val enabled = crossover(NativeCrossoverType.BUTTERWORTH2, stage(0.5), identityStage())
         val disabled = crossover(NativeCrossoverType.BUTTERWORTH2, identityStage(), identityStage())
         assertNotEquals(enabled.topologyFingerprint(), disabled.topologyFingerprint())
+    }
+
+    @Test fun midsUpperBandpassCornerCountsStage3AndStage4WhenActive() {
+        // Mid with its optional upper corner enabled: HPF pair (stage1/2) + LPF pair (stage3/4),
+        // all four genuinely active -- the shape rebuildMidCrossover() installs for LR4.
+        val bandpass = crossover(
+            NativeCrossoverType.LINKWITZ_RILEY4, stage(0.5), stage(0.5), stage(0.3), stage(0.3),
+        )
+        assertEquals(4, bandpass.activeStageCount)
+        val hpfOnly = crossover(NativeCrossoverType.LINKWITZ_RILEY4, stage(0.5), stage(0.5))
+        assertNotEquals(bandpass.topologyFingerprint(), hpfOnly.topologyFingerprint())
     }
 }
 
@@ -165,16 +182,16 @@ class ParseNativeTruthSnapshotTest {
         freq: Double = 150.0, type: Double = 2.0, subsonicEnabled: Double = 0.0,
         subsonicFreq: Double = 32.0, muted: Double = 0.0, polarityInverted: Double = 0.0,
         gainDb: Double = 0.0, delayMs: Double = 0.0, stage1: DoubleArray = stage(),
-        stage2: DoubleArray = stage(),
+        stage2: DoubleArray = stage(), stage3: DoubleArray = stage(), stage4: DoubleArray = stage(),
     ): DoubleArray = doubleArrayOf(
         freq, type, subsonicEnabled, subsonicFreq, muted, polarityInverted, gainDb, delayMs,
-    ) + stage1 + stage2
+    ) + stage1 + stage2 + stage3 + stage4
 
     private fun emptyBank(): DoubleArray = doubleArrayOf(0.0, 0.0, 0.0)
 
     private fun buildArray(peqEnabled: Boolean = false, fullBank: DoubleArray = emptyBank()): DoubleArray {
         val header = doubleArrayOf(48000.0, if (peqEnabled) 1.0 else 0.0, 0.0)
-        val outputs = outputBlock() + outputBlock() + outputBlock() + outputBlock()
+        val outputs = outputBlock() + outputBlock() + outputBlock() + outputBlock() + outputBlock() + outputBlock()
         val low = emptyBank()
         val mid = emptyBank()
         return header + outputs + fullBank + low + mid
@@ -184,7 +201,7 @@ class ParseNativeTruthSnapshotTest {
         val snapshot = parseNativeTruthSnapshot(buildArray())
         assertNotNull(snapshot)
         assertEquals(48000.0, snapshot!!.sampleRate, 0.0)
-        assertEquals(4, snapshot.crossovers.size)
+        assertEquals(6, snapshot.crossovers.size)
     }
 
     @Test fun nullOnTooShortArray() {

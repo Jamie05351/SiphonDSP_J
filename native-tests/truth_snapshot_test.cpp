@@ -15,7 +15,9 @@ constexpr std::size_t kHeaderWidth = 3;
 constexpr std::size_t kOutputBlockWidth = NativeBmwDspProcessor::kTruthOutputWidth;
 constexpr std::size_t kScalarFieldsPerOutput = 8;
 constexpr std::size_t kStageWidth = 8;
-constexpr std::size_t kPeqSectionOffset = kHeaderWidth + 4 * kOutputBlockWidth;
+// 6 output blocks now (Low/Mid/High x L/R), not 4 -- see docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+constexpr std::size_t kPeqSectionOffset =
+    kHeaderWidth + NativeBmwRouting::kOutputCount * kOutputBlockWidth;
 
 // Slot values, matching NativeBmwDspValues.CROSSOVER_TYPE_* / OutputConfig::CrossoverType.
 constexpr float kBw2 = 0.f, kBw3 = 1.f, kLr4 = 2.f, kBw1 = 3.f;
@@ -227,4 +229,39 @@ TEST_CASE("Truth snapshot never adopts a rejected PEQ configuration") {
     CHECK(before[1] == after[1]);  // peqEnabled unchanged (still true, not the rejected false)
     CHECK(after[kPeqSectionOffset + 3] == doctest::Approx(1000.0));  // still the accepted band
     CHECK(after[kPeqSectionOffset + 4] == doctest::Approx(3.0));
+}
+
+TEST_CASE("Truth snapshot: Mid's upper crossover corner reports real stage3/stage4, not identity") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = defaultConfig();
+    for (int out = 2; out < 4; ++out) {  // Mid Left, Mid Right (outputIndex 2, 3)
+        const int slot = out - 2;
+        cfg[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 3000.f;
+        cfg[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+    }
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    auto snap = proc.captureTruthSnapshot();
+    // Mid Left is truth-snapshot output index 2 (Low L, Low R, Mid L, ...).
+    CHECK_FALSE(isIdentity(stageAt(snap, 2, 3)));
+    CHECK_FALSE(isIdentity(stageAt(snap, 2, 4)));
+}
+
+TEST_CASE("Truth snapshot: High is its own output block with its own crossover corner") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = defaultConfig();
+    // Un-mute/un-bypass High so its crossover is actually built and worth inspecting.
+    cfg[sch::kHighXoPass] = 0.f;
+    cfg[sch::kHighOutputConfigBase + sch::kOutMuted] = 0.f;
+    cfg[sch::kHighOutputConfigBase + sch::kOutCrossoverFreq] = 3500.f;
+    cfg[sch::kHighOutputConfigBase + sch::kOutCrossoverType] = kLr4;
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    auto snap = proc.captureTruthSnapshot();
+    // High Left is truth-snapshot output index 4 (Low L, Low R, Mid L, Mid R, High L, ...).
+    const std::size_t base = kHeaderWidth + 4 * kOutputBlockWidth;
+    CHECK(snap[base + 0] == doctest::Approx(3500.0));  // crossoverFreqHz
+    CHECK(snap[base + 4] == 0.0);                      // muted (explicitly un-muted above)
+    CHECK_FALSE(isIdentity(stageAt(snap, 4, 1)));
+    CHECK_FALSE(isIdentity(stageAt(snap, 4, 2)));
 }

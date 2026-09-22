@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 210;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 262;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -151,6 +151,25 @@ inline constexpr int kMidUpperXoWidth = 2;
 inline constexpr int kMidUpperXoFreq = 0;
 inline constexpr int kMidUpperXoEnabled = 1;
 inline constexpr int kMidUpperXoMigrated = 209;
+
+// --- High band (210..261), added in the 210 -> 262 growth. A genuinely new third output. -----
+inline constexpr int kHighXoPass = 210;
+inline constexpr int kHighGainL = 211;
+inline constexpr int kHighGainR = 212;
+inline constexpr int kHighDelayL = 213;
+inline constexpr int kHighDelayR = 214;
+
+// High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR].
+inline constexpr int kHighRoutingBase = 215;
+inline constexpr int kHighRoutingStride = 2;
+
+// High all-pass: 2 outputs x kAllPassSectionsPerOutput x [enabled, order, freq, q].
+inline constexpr int kHighAllPassBase = 219;
+
+// High output-config: 2 outputs x kOutputConfigWidth, same field layout as kOutputConfigBase.
+inline constexpr int kHighOutputConfigBase = 235;
+
+inline constexpr int kHighBandMigrated = 261;  // Kotlin-only, never read natively.
 
 }  // namespace nbschema
 
