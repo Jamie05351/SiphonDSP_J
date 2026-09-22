@@ -38,6 +38,12 @@ fun OutputAllPassScreen(
     val dsp = rememberBmwDspState()
     val bandColor = Color(bandColorArgb)
     val sliderColor = Color(sliderColorArgb)
+    val isHigh = output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT
+    // High only plays above the Mid/High corner (1 kHz+), so the Low/Mid 20..1000 Hz range would
+    // leave its all-pass unable to reach the band it acts on. UI-only: native accepts any
+    // frequency below Nyquist.
+    val freqRange = if (isHigh) 1000f..16000f else 20f..1000f
+    val freqStep = if (isHigh) 10f else 1f
 
     BmwDspTheme {
         BmwPanel(
@@ -53,7 +59,7 @@ fun OutputAllPassScreen(
         ) {
             repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
                 // High's all-pass block lives in the schema tail, not the legacy 4-output block.
-                val base = if (output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT) {
+                val base = if (isHigh) {
                     NativeBmwDspValues.highAllPassIndex(output, section, 0)
                 } else {
                     NativeBmwDspValues.INDEX_ALL_PASS +
@@ -73,8 +79,8 @@ fun OutputAllPassScreen(
                 BmwSliderRow(
                     label = "Frequency",
                     value = dsp.get(base + 2),
-                    valueRange = 20f..1000f,
-                    step = 1f,
+                    valueRange = freqRange,
+                    step = freqStep,
                     unit = "Hz",
                     accentColor = sliderColor,
                     onPreview = { dsp.preview(base + 2, it) },
