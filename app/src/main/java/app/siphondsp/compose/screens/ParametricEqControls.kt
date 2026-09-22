@@ -17,8 +17,9 @@ import app.siphondsp.fragment.PeqScope
 import app.siphondsp.view.BmwDashboardSkin
 
 /**
- * The Pre EQ / Low Band / Mid Band scope switch -- a [BmwSegmentedControl] over [PeqScope],
- * each segment in its bank's accent (Full = white, Low = blue, Mid = yellow). Shared by the
+ * The Pre EQ / Low Band / Mid Band / High Band scope switch -- a [BmwSegmentedControl] over [PeqScope],
+ * each segment in its bank's accent (Full = white, Low = blue, Mid = yellow,
+ * High = pink). Shared by the
  * graph and list halves of the ported Parametric EQ screen (roadmap Phase 10).
  */
 @Composable
@@ -35,6 +36,7 @@ fun PeqScopeControl(
             Color.White,
             Color(BmwDashboardSkin.LIGHT_BLUE),
             Color(BmwDashboardSkin.MID_BAND_YELLOW),
+            Color(BmwDashboardSkin.HIGH_BAND_PINK),
         ),
         modifier = modifier,
     )

@@ -43,6 +43,7 @@ object PeqBandEditor {
         PeqScope.FULL -> state.fullRangeBands
         PeqScope.LOW -> state.lowBandBands
         PeqScope.MID -> state.midBandBands
+        PeqScope.HIGH -> state.highBandBands
     }
 
     fun replaceScopeBands(state: BmwPeqState, scope: PeqScope, replacement: ParametricEqBandList) {

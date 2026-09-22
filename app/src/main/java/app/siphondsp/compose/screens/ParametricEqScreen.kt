@@ -309,17 +309,17 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Default height (24dp) restored -- 32dp made the 3 segments cramped enough at a narrow
+        // Default height (24dp) restored -- 32dp made the segments cramped enough at a narrow
         // width to look degraded rather than just smaller. Needs an explicit bounded width here
         // (unlike its old Modifier.weight(1f), which only works in a plain, non-scrolling Row):
         // BmwSegmentedControl's own segments use weight(1f) internally, which requires a bounded
         // parent width to distribute -- inside this horizontalScroll Row, an unconstrained
-        // modifier would give it an unbounded width and crash. 300dp keeps each of the 3 labels
-        // ("PRE EQ"/"LOW"/"MID") comfortably unscrunched.
+        // modifier would give it an unbounded width and crash. 100dp per segment keeps each of the 4
+        // labels ("PRE EQ"/"LOW"/"MID"/"HIGH") comfortably unscrunched.
         PeqScopeControl(
             selected = holder.selectedScope,
             onSelect = { holder.selectedScope = it },
-            modifier = Modifier.width(300.dp),
+            modifier = Modifier.width(400.dp),
         )
         Chip("Reset") { showResetConfirm = true }
         Chip("Import") { importLauncher.launch(arrayOf("text/plain", "text/*")) }
@@ -579,7 +579,7 @@ private fun readBackupForConfirm(context: android.content.Context, uri: android.
         val restoresFullState = backup.nativeDspValues != null
         val message = buildString {
             append("Full Range ${candidate.fullRangeBands.size}, Low ${candidate.lowBandBands.size}, ")
-            append("Mid ${candidate.midBandBands.size}, preamp ${candidate.preampDb} dB")
+            append("Mid ${candidate.midBandBands.size}, High ${candidate.highBandBands.size}, preamp ${candidate.preampDb} dB")
             if (restoresFullState) append(", plus Gains & Delay, Compressor, and Crossovers & Tilt")
             append(". This replaces all PEQ banks")
             if (restoresFullState) append(" and the rest of the BMW DSP setup")
