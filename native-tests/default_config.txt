@@ -283,3 +283,68 @@
 3000         # 207 midUpperXoRightFreq
 0            # 208 midUpperXoRightEnabled
 0            # 209 midUpperXoMigrated (0 = seed the block disabled on next load)
+
+# 210..261  High band -- a genuinely new third output. Ships MUTED (both highXoPass and the
+#           per-output mute field below).
+1            # 210 highXoPass
+0            # 211 highGainL
+0            # 212 highGainR
+0            # 213 highDelayL
+0            # 214 highDelayR
+
+# 215..218  High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR]
+#           -- same identity default as Low/Mid.
+1            # 215 routeHighLeftFrontLeft
+0            # 216 routeHighLeftFrontRight
+0            # 217 routeHighRightFrontLeft
+1            # 218 routeHighRightFrontRight
+
+# 219..234  High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
+0            # 219 highLeft section0 enabled
+2            # 220 highLeft section0 order
+150          # 221 highLeft section0 freq
+0.70710677   # 222 highLeft section0 q
+0            # 223 highLeft section1 enabled
+2            # 224 highLeft section1 order
+150          # 225 highLeft section1 freq
+0.70710677   # 226 highLeft section1 q
+0            # 227 highRight section0 enabled
+2            # 228 highRight section0 order
+150          # 229 highRight section0 freq
+0.70710677   # 230 highRight section0 q
+0            # 231 highRight section1 enabled
+2            # 232 highRight section1 order
+150          # 233 highRight section1 freq
+0.70710677   # 234 highRight section1 q
+
+# 235..260  High output-config: 2 outputs x 13-wide, same layout as the Low/Mid block. XO Hz
+#           matches Mid's upper-corner default; sub fields retained for a uniform block but
+#           ignored by native (same as Mid); muted (1 = ships muted).
+3000         # 235 highLeft crossoverFreq
+2            # 236 highLeft crossoverType (LR4)
+0            # 237 highLeft subsonicEnabled
+32           # 238 highLeft subsonicFreq
+1            # 239 highLeft muted
+0            # 240 highLeft invert
+0            # 241 highLeft compressorEnabled
+-10          # 242 highLeft compressorThreshold
+1.5          # 243 highLeft compressorRatio
+6            # 244 highLeft compressorKnee
+10           # 245 highLeft compressorAttack
+180          # 246 highLeft compressorRelease
+0            # 247 highLeft compressorMakeup
+3000         # 248 highRight crossoverFreq
+2            # 249 highRight crossoverType (LR4)
+0            # 250 highRight subsonicEnabled
+32           # 251 highRight subsonicFreq
+1            # 252 highRight muted
+0            # 253 highRight invert
+0            # 254 highRight compressorEnabled
+-10          # 255 highRight compressorThreshold
+1.5          # 256 highRight compressorRatio
+6            # 257 highRight compressorKnee
+10           # 258 highRight compressorAttack
+180          # 259 highRight compressorRelease
+0            # 260 highRight compressorMakeup
+
+0            # 261 highBandMigrated (0 = seed the block muted on next load)

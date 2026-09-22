@@ -11,7 +11,7 @@ import java.lang.Double.doubleToLongBits
  */
 
 /** Order matches NativeBmwRouting::OutputId and the fixed block order in the native array. */
-enum class NativeDspOutput { LOW_LEFT, LOW_RIGHT, MID_LEFT, MID_RIGHT }
+enum class NativeDspOutput { LOW_LEFT, LOW_RIGHT, MID_LEFT, MID_RIGHT, HIGH_LEFT, HIGH_RIGHT }
 
 /**
  * One Biquad's actual installed coefficients (topology + every coefficient field), read straight
@@ -101,12 +101,17 @@ data class NativeCrossoverSnapshot(
     val delayMs: Double,
     val stage1: NativeBiquadStage,
     val stage2: NativeBiquadStage,
+    // Mid's optional upper-corner LPF pair; identity/inert for Low/High, which never touch
+    // crossover3/4 -- reported truthfully either way, same as stage1/stage2 above. See
+    // NativeBmwDspProcessor::rebuildMidCrossover() and docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+    val stage3: NativeBiquadStage,
+    val stage4: NativeBiquadStage,
 ) {
-    val activeStageCount: Int get() = (if (stage1.isActive) 1 else 0) + (if (stage2.isActive) 1 else 0)
+    val activeStageCount: Int get() = listOf(stage1, stage2, stage3, stage4).count { it.isActive }
 
-    /** Combined fingerprint of both stages -- changes iff the actual installed topology does. */
+    /** Combined fingerprint of all four stages -- changes iff the actual installed topology does. */
     fun topologyFingerprint(): String =
-        java.lang.Long.toHexString(stage1.fingerprint()) + java.lang.Long.toHexString(stage2.fingerprint())
+        listOf(stage1, stage2, stage3, stage4).joinToString("") { java.lang.Long.toHexString(it.fingerprint()) }
 }
 
 data class NativePeqBand(
@@ -167,9 +172,10 @@ data class RootlessPipelineRuntimeSnapshot(
 )
 
 private const val HEADER_WIDTH = 3
-private const val OUTPUT_BLOCK_WIDTH = 24
+private const val OUTPUT_BLOCK_WIDTH = 40
 private val OUTPUT_ORDER = listOf(
     NativeDspOutput.LOW_LEFT, NativeDspOutput.LOW_RIGHT, NativeDspOutput.MID_LEFT, NativeDspOutput.MID_RIGHT,
+    NativeDspOutput.HIGH_LEFT, NativeDspOutput.HIGH_RIGHT,
 )
 
 /**
@@ -208,9 +214,11 @@ fun parseNativeTruthSnapshot(raw: DoubleArray?): NativeDspTruthSnapshot? {
         val delayMs = next()
         val stage1 = readStage()
         val stage2 = readStage()
+        val stage3 = readStage()
+        val stage4 = readStage()
         NativeCrossoverSnapshot(
             output, crossoverFreqHz, crossoverType, subsonicEnabled, subsonicFreqHz, muted,
-            polarityInverted, gainDb, delayMs, stage1, stage2,
+            polarityInverted, gainDb, delayMs, stage1, stage2, stage3, stage4,
         )
     }
 

@@ -68,7 +68,20 @@ public:
     //   205      Mid Left upper corner, Hz         206  Mid Left upper corner enabled
     //   207      Mid Right upper corner, Hz         208  Mid Right upper corner enabled
     //   209      Kotlin-only migration marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 210 };
+    //
+    // 210..261 -- the High band, added in the 210 -> 262 growth (see
+    // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). A genuinely new third output, not carried-but-
+    // ignored like Low/Mid's mutual subsonic fields -- ships muted (outputConfigs_[High*].muted
+    // seeded true) and highXoPass initially set so it's silent by default either way:
+    //   210      highXoPass (mirrors lpfPass/hpfPass)
+    //   211..212 highGainL, highGainR                 213..214 highDelayL, highDelayR
+    //   215..218 routing: High Left [fromFrontL, fromFrontR], High Right [fromFrontL, fromFrontR]
+    //   219..234 all-pass: 2 outputs x 2 sections x [enabled, order, freq, q]
+    //   235..260 output-config: 2 outputs x 13-wide, same layout as the Low/Mid block
+    //            (crossoverFreq [High's single HPF corner], crossoverType, subsonicEnabled/Freq
+    //            [carried but ignored, same as Mid], mute, invert, compressor 7-tuple)
+    //   261      Kotlin-only migration marker -- never read here
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 262 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -163,22 +176,26 @@ public:
     // Every value is a double. Layout:
     //   [0] sampleRate
     //   [1] peqEnabled (0/1)                  [2] peqPreampDb
-    //   then 4 fixed-width (kTruthOutputWidth doubles) output blocks, in OutputId order
-    //   (LowLeft, LowRight, MidLeft, MidRight):
+    //   then 6 fixed-width (kTruthOutputWidth doubles) output blocks, in OutputId order
+    //   (LowLeft, LowRight, MidLeft, MidRight, HighLeft, HighRight):
     //     crossoverFreqHz, crossoverType (OutputConfig::CrossoverType ordinal), subsonicEnabled
-    //     (0/1; Mid outputs are always 0 -- subsonic only ever applies to Low, see
-    //     processLowCrossover/processMidCrossover), subsonicFreqHz, muted, polarityInverted,
-    //     gainDb (from the runtime gain actually multiplied in, i.e. what's really applied, not
-    //     replayed from a config field), delayMs,
+    //     (0/1; Mid/High outputs are always 0 -- subsonic only ever applies to Low, see
+    //     processLowCrossover/processMidCrossover/processHighCrossover), subsonicFreqHz, muted,
+    //     polarityInverted, gainDb (from the runtime gain actually multiplied in, i.e. what's
+    //     really applied, not replayed from a config field), delayMs,
     //     stage1: topology (Biquad::Topology ordinal), a1, a2, a3, m0, m1, m2, opA
     //     stage2: same 8 fields
+    //     stage3: same 8 fields (Mid's optional upper-corner LPF; identity/inert for Low/High,
+    //             which never touch crossover3/4 -- reported truthfully either way, same
+    //             "actual installed state, not requested" contract as everything else here)
+    //     stage4: same 8 fields
     //   then 3 variable-length PEQ bank blocks, in order Full, Low, Mid:
     //     rawBandCount, leftActiveCount, rightActiveCount (the last two are PeqBank::leftCount/
     //     rightCount -- the actual number of Biquads process() runs for that bank/channel),
     //     then rawBandCount * [freqHz, gainDb, q, type, channel, active (0/1)]. "active" mirrors
     //     configurePeqLocked's build() skip (peqBandSkipped()) -- a band this processor discarded
     //     as a no-op is reported as inactive even though its raw values are still shown.
-    enum : std::size_t { kTruthOutputWidth = 24 };
+    enum : std::size_t { kTruthOutputWidth = 40 };
     std::vector<double> captureTruthSnapshot();
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
@@ -214,6 +231,7 @@ private:
         DirtyBusLimiter = 1u << 14,
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
+        DirtyHighXo = 1u << 18,
         DirtyAll = 0xffffffffu,
     };
 
@@ -442,6 +460,13 @@ private:
         float headroom = -6, lowGainL = 0, lowGainR = 0, midGainL = -1, midGainR = -1,
               postGainL = 0, postGainR = 0;
         float midDelayL = 0, midDelayR = 0, lowDelayL = 0, lowDelayR = 0;
+        // High band (v[210..214], added in the 210 -> 262 growth). highXoPass mirrors
+        // lpfPass/hpfPass -- true skips the whole High chain, contributing silence. Ships muted
+        // via outputConfigs_[High*].muted (seeded by DEFAULTS/migration), independent of this
+        // flag; both default to "inaudible" for the conservative opt-in launch. See
+        // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+        bool highXoPass = false;
+        float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
         // Stage-centering L/R alignment delay (ms), applied to the summed stereo bus after the
         // master limiter -- the last thing before the deliberate hardware L/R swap. A separate
         // correction layer from the per-output crossover/driver-alignment delays above (v[141]
@@ -501,6 +526,7 @@ private:
     float processChannelInput(float x, float& dcX, float& dcY);
     float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
+    float processHighCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
     void processFrame(float& l, float& r);
     // Substitutes the measurement generator's stimulus for l/r when p_.measGenType != 0. Called
     // from each process() overload before captureTapIn(), so a measurement run's captured "raw
@@ -535,6 +561,7 @@ private:
     void rebuildSubsonic();
     void rebuildLowCrossover();
     void rebuildMidCrossover();
+    void rebuildHighCrossover();
     void updateDelays();
     void rebuildTilt();
     void rebuildCompressorTiming();

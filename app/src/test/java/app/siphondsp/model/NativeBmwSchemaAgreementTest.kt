@@ -120,6 +120,17 @@ class NativeBmwSchemaAgreementTest {
         "kMidUpperXoFreq" to NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
         "kMidUpperXoEnabled" to NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
         "kMidUpperXoMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED,
+
+        "kHighXoPass" to NativeBmwDspValues.INDEX_HIGH_XO_PASS,
+        "kHighGainL" to NativeBmwDspValues.INDEX_HIGH_GAIN_L,
+        "kHighGainR" to NativeBmwDspValues.INDEX_HIGH_GAIN_R,
+        "kHighDelayL" to NativeBmwDspValues.INDEX_HIGH_DELAY_L,
+        "kHighDelayR" to NativeBmwDspValues.INDEX_HIGH_DELAY_R,
+        "kHighRoutingBase" to NativeBmwDspValues.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT,
+        "kHighRoutingStride" to 2,
+        "kHighAllPassBase" to NativeBmwDspValues.INDEX_HIGH_ALL_PASS,
+        "kHighOutputConfigBase" to NativeBmwDspValues.INDEX_HIGH_OUTPUT_CONFIG,
+        "kHighBandMigrated" to NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED,
     )
 
     @Test
