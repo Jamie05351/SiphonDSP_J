@@ -33,10 +33,12 @@ import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.ThreeWayCrossover
 import app.siphondsp.view.BmwDashboardSkin
 
 private val DefaultAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
 private val NoMirror = IntArray(0)
+private const val MidHighLabel = "3-way Mid/High"
 
 /**
  * Phase 4 follow-up (COMPOSE_MIGRATION_ROADMAP.md) -- the other two Crossovers & Tilt pages,
@@ -57,6 +59,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
 
     val lowSlider = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
     val midSlider = Color(BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+    val highSlider = Color(BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
     val linkBlue = Color(BmwDashboardSkin.LIGHT_BLUE)
     val subsonicLabel = stringResource(R.string.bmw_dsp_subsonic_freq)
 
@@ -99,7 +102,7 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                 leanEnd = 20.dp,
                 topContentGap = 2.dp,
                 sliderLabels = listOf(
-                    "Lowpass freq", "Highpass freq", subsonicLabel, "Mid align (all-pass)",
+                    "Lowpass freq", "Highpass freq", MidHighLabel, subsonicLabel, "Mid align (all-pass)",
                 ),
             ) {
                 // Compose port of NativeBmwDspResponseView (replacing the AndroidView-wrapped
@@ -144,15 +147,31 @@ fun CrossoversPageScreen(modifier: Modifier = Modifier) {
                 DspSliderRow(
                     "Highpass freq", NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
                     dsp, midSlider, mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+                    // Mid's type also shapes its upper (Mid/High) lowpass natively, so High's
+                    // highpass follows it -- see ThreeWayCrossover.typeMirrors.
                     titleDropdown = BmwTitleDropdown(crossoverTypeOptions, midCrossoverType) {
                         dsp.commit(
                             NativeBmwDspValues.outputIndex(
                                 NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
                             ),
                             it.toFloat(),
-                            midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
+                            midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE) + ThreeWayCrossover.typeMirrors,
                         )
                     },
+                )
+
+                // Mid/High corner. Its inline switch is the master 3-way on/off: off is
+                // bit-identical to the old 2-way crossover (see ThreeWayCrossover).
+                BmwSliderRow(
+                    label = MidHighLabel,
+                    value = dsp.get(ThreeWayCrossover.cornerIndex),
+                    valueRange = 1000f..8000f, step = 10f, unit = "Hz",
+                    accentColor = highSlider,
+                    onPreview = { dsp.preview(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
+                    onCommit = { dsp.commit(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
+                    onValueEntered = { dsp.commit(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
+                    toggleChecked = ThreeWayCrossover.isEnabled(dsp.values),
+                    onToggleChange = { on -> dsp.commitAll(ThreeWayCrossover.updates(dsp.values, on)) },
                 )
 
                 val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)

@@ -24,7 +24,8 @@ private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
  * `base..base+3` slots (enabled / order / freq / Q) with per-`base` `onCommit` closures, and the
  * shared [rememberBmwDspState] snapshot means recomposition stays scoped per section.
  *
- * A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts four of these, one per output.
+ * A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts six of these, one per output
+ * (Low / Mid / High x L/R).
  */
 @Composable
 fun OutputAllPassScreen(
@@ -51,9 +52,14 @@ fun OutputAllPassScreen(
             sliderLabels = listOf("Frequency", "Q"),
         ) {
             repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
-                val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                    (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) *
-                    NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+                // High's all-pass block lives in the schema tail, not the legacy 4-output block.
+                val base = if (output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT) {
+                    NativeBmwDspValues.highAllPassIndex(output, section, 0)
+                } else {
+                    NativeBmwDspValues.INDEX_ALL_PASS +
+                        (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) *
+                        NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+                }
 
                 val order = dsp.get(base + 1)
                 val selectedOrder = OrderOptions.indices.minByOrNull { abs(OrderOptions[it].second - order) } ?: 0

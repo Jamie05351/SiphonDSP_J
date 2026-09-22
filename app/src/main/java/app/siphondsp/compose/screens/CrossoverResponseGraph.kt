@@ -30,6 +30,7 @@ import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.ThreeWayCrossover
 import kotlinx.coroutines.delay
 import kotlin.math.log10
 import kotlin.math.pow
@@ -111,6 +112,7 @@ fun CrossoverResponseGraph(
     val density = LocalDensity.current.density
     val lowArgb = BmwTheme.colors.sliderLowBand.toArgb()
     val midArgb = BmwTheme.colors.midBandYellow.toArgb()
+    val highArgb = BmwTheme.colors.highBandPink.toArgb()
     val sumArgb = android.graphics.Color.WHITE
     val gridArgb = remember(context) { themeColor(context, android.R.attr.textColorSecondary) }
     val legendArgb = remember(context) { themeColor(context, android.R.attr.textColorPrimary) }
@@ -175,6 +177,14 @@ fun CrossoverResponseGraph(
             strokeWidth = 2.1f * density
             alpha = 180
             color = midArgb
+        }
+    }
+    val highPaint = remember(density, highArgb) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.1f * density
+            alpha = 180
+            color = highArgb
         }
     }
     val sumPaint = remember(density, sumArgb) {
@@ -300,7 +310,7 @@ fun CrossoverResponseGraph(
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
                 drawSumAreaFill(nc, curves, left, right, top, bottom, areaFillPaint)
             }
-            drawResponse(nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, sumPaint, sumGlowPaint, phasePaint)
+            drawResponse(nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint)
         }
     }
 }
@@ -374,7 +384,8 @@ private fun drawSpectrum(
 }
 
 /**
- * = `NativeBmwDspResponseView.drawResponse` (Low / Mid / Sum, per display mode), plus
+ * = `NativeBmwDspResponseView.drawResponse` (Low / Mid / Sum, per display mode, plus the 3-way
+ * High branch whenever it's audible), plus
  * ANALYZER_VISUAL_SPEC §1: the summed curve is stroked twice -- a blurred [sumGlowPaint] pass
  * then the crisp [sumPaint] -- while the low/mid branch curves stay plain.
  */
@@ -388,6 +399,7 @@ private fun drawResponse(
     bottom: Float,
     lowPaint: Paint,
     midPaint: Paint,
+    highPaint: Paint,
     sumPaint: Paint,
     sumGlowPaint: Paint,
     phasePaint: Paint,
@@ -406,20 +418,26 @@ private fun drawResponse(
     }
     val l = BmwOutputChannel.LEFT
     val r = BmwOutputChannel.RIGHT
+    // High is silent (highXoPass / muted) unless 3-way is on; a silent branch would otherwise
+    // draw as a flat line pinned to the -24 dB floor.
+    val drawHigh = curves.highBranchActive
     when (mode) {
         CrossoverGraphMode.MAGNITUDE -> {
             nc.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(l)[i], curves.lowBranchDbFor(r)[i]), top, bottom) }, lowPaint)
             nc.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(l)[i], curves.midBranchDbFor(r)[i]), top, bottom) }, midPaint)
+            if (drawHigh) nc.drawPath(pathFor { i -> dbToY(averageDb(curves.highBranchDbFor(l)[i], curves.highBranchDbFor(r)[i]), top, bottom) }, highPaint)
             strokeSum(pathFor { i -> dbToY(averageDb(curves.sumDbFor(l)[i], curves.sumDbFor(r)[i]), top, bottom) })
         }
         CrossoverGraphMode.PHASE -> {
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.lowBranchPhaseFor(l)[i], curves.lowBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, lowPaint)
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.midBranchPhaseFor(l)[i], curves.midBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, midPaint)
+            if (drawHigh) nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.highBranchPhaseFor(l)[i], curves.highBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, highPaint)
             strokeSum(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) })
         }
         CrossoverGraphMode.MAGNITUDE_PHASE -> {
             nc.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(l)[i], curves.lowBranchDbFor(r)[i]), top, bottom) }, lowPaint)
             nc.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(l)[i], curves.midBranchDbFor(r)[i]), top, bottom) }, midPaint)
+            if (drawHigh) nc.drawPath(pathFor { i -> dbToY(averageDb(curves.highBranchDbFor(l)[i], curves.highBranchDbFor(r)[i]), top, bottom) }, highPaint)
             strokeSum(pathFor { i -> dbToY(averageDb(curves.sumDbFor(l)[i], curves.sumDbFor(r)[i]), top, bottom) })
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) }, phasePaint)
         }
@@ -477,7 +495,8 @@ private fun drawSumAreaFill(
 }
 
 /**
- * Dashed vertical marker + Hz label at the Lowpass / Highpass corner frequencies. Not in
+ * Dashed vertical marker + Hz label at the Lowpass / Highpass corner frequencies (and the 3-way
+ * Mid/High corner while 3-way is on). Not in
  * `NativeBmwDspResponseView`; matches what `CrossoverHandoffSurface.drawCornerMarker` showed on
  * this page.
  */
@@ -492,15 +511,19 @@ private fun drawCrossoverMarkers(
     markerPaint: Paint,
     labelPaint: Paint,
 ) {
-    if (values.size <= NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ) return
-    intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ)
-        .forEach { index ->
-            val freq = values[index]
-            if (freq < 20f || freq > 20_000f) return@forEach
-            val x = frequencyToX(freq, left, right).coerceIn(left, right)
-            nc.drawLine(x, top, x, bottom, markerPaint)
-            nc.drawText("${freq.toInt()}", x + 2f * density, top + 10f * density, labelPaint)
-        }
+    if (values.size != BmwSignalChain.VALUE_COUNT) return
+    val markers = if (ThreeWayCrossover.isEnabled(values)) {
+        intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, ThreeWayCrossover.cornerIndex)
+    } else {
+        intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ)
+    }
+    markers.forEach { index ->
+        val freq = values[index]
+        if (freq < 20f || freq > 20_000f) return@forEach
+        val x = frequencyToX(freq, left, right).coerceIn(left, right)
+        nc.drawLine(x, top, x, bottom, markerPaint)
+        nc.drawText("${freq.toInt()}", x + 2f * density, top + 10f * density, labelPaint)
+    }
 }
 
 // --- axis mapping, 1:1 with the View's private helpers -------------------------------------
