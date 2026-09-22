@@ -55,9 +55,10 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
                                                                  jdoubleArray fullObj,
                                                                  jdoubleArray lowObj,
                                                                  jdoubleArray midObj,
+                                                                 jdoubleArray highObj,
                                                                  jlong revision) {
     if (env == nullptr || self == 0 || fullObj == nullptr || lowObj == nullptr ||
-        midObj == nullptr || revision <= 0) {
+        midObj == nullptr || highObj == nullptr || revision <= 0) {
         return kRevisionRejected;
     }
     auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
@@ -66,11 +67,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
         return kRevisionRejected;
     }
     const jsize fullCount = env->GetArrayLength(fullObj), lowCount = env->GetArrayLength(lowObj),
-                midCount = env->GetArrayLength(midObj);
+                midCount = env->GetArrayLength(midObj), highCount = env->GetArrayLength(highObj);
     jdouble* full = env->GetDoubleArrayElements(fullObj, nullptr);
     jdouble* low = env->GetDoubleArrayElements(lowObj, nullptr);
     jdouble* mid = env->GetDoubleArrayElements(midObj, nullptr);
-    if (full == nullptr || low == nullptr || mid == nullptr) {
+    jdouble* high = env->GetDoubleArrayElements(highObj, nullptr);
+    if (full == nullptr || low == nullptr || mid == nullptr || high == nullptr) {
         if (full) {
             env->ReleaseDoubleArrayElements(fullObj, full, JNI_ABORT);
         }
@@ -80,13 +82,17 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
         if (mid) {
             env->ReleaseDoubleArrayElements(midObj, mid, JNI_ABORT);
         }
+        if (high) {
+            env->ReleaseDoubleArrayElements(highObj, high, JNI_ABORT);
+        }
         return kRevisionRejected;
     }
     const bool result = processor->configurePeq(enabled == JNI_TRUE, preampDb, full, fullCount, low,
-                                                lowCount, mid, midCount);
+                                                lowCount, mid, midCount, high, highCount);
     env->ReleaseDoubleArrayElements(fullObj, full, JNI_ABORT);
     env->ReleaseDoubleArrayElements(lowObj, low, JNI_ABORT);
     env->ReleaseDoubleArrayElements(midObj, mid, JNI_ABORT);
+    env->ReleaseDoubleArrayElements(highObj, high, JNI_ABORT);
     if (!result) {
         return kRevisionRejected;
     }

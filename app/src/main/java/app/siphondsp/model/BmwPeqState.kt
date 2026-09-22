@@ -12,6 +12,7 @@ data class BmwPeqState(
     val fullRangeBands: ParametricEqBandList,
     val lowBandBands: ParametricEqBandList,
     val midBandBands: ParametricEqBandList,
+    val highBandBands: ParametricEqBandList,
 ) {
     fun deepCopy() = BmwPeqState(
         enabled,
@@ -19,12 +20,14 @@ data class BmwPeqState(
         fullRangeBands.deepCopy(),
         lowBandBands.deepCopy(),
         midBandBands.deepCopy(),
+        highBandBands.deepCopy(),
     )
 
     fun validate(sampleRate: Float): String? {
         if (!preampDb.isFinite() || preampDb !in -30f..12f) return "preamp is outside -30..12 dB"
         if (!sampleRate.isFinite() || sampleRate < 8000f) return "invalid sample rate"
-        val allIds = (fullRangeBands.asSequence() + lowBandBands.asSequence() + midBandBands.asSequence())
+        val allIds = (fullRangeBands.asSequence() + lowBandBands.asSequence() + midBandBands.asSequence() +
+            highBandBands.asSequence())
             .map { it.uuid }
             .toList()
         if (allIds.size != allIds.toSet().size) return "PEQ contains duplicate filter identities"
@@ -32,6 +35,7 @@ data class BmwPeqState(
             "Full Range" to fullRangeBands,
             "Low Band" to lowBandBands,
             "Mid Band" to midBandBands,
+            "High Band" to highBandBands,
         ).firstNotNullOfOrNull { (name, bands) ->
             when {
                 bands.size > MAX_BANDS -> "$name has more than $MAX_BANDS bands"
@@ -104,10 +108,14 @@ data class BmwPeqState(
         private const val KEY_REJECTED_FULL = "rejected_full_range"
         private const val KEY_REJECTED_LOW = "rejected_low_band"
         private const val KEY_REJECTED_MID = "rejected_mid_band"
+        private const val KEY_REJECTED_HIGH = "rejected_high_band"
         private const val KEY_REJECTED_TIMESTAMP = "rejected_timestamp"
         private const val KEY_LAST_BACKUP_RESTORE = "last_backup_restore"
 
-        fun empty() = BmwPeqState(false, 0f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
+        fun empty() = BmwPeqState(
+            false, 0f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList(),
+            ParametricEqBandList(),
+        )
 
         private data class ActiveSession(val owner: Any, val state: BmwPeqState)
         private val activeSessions = mutableMapOf<String, ActiveSession>()
@@ -150,7 +158,8 @@ data class BmwPeqState(
                 Timber.i(
                     "BMW PEQ restore source=preference-migration version=$VERSION " +
                         "enabled=${fallback.enabled} full=${fallback.fullRangeBands.size} " +
-                        "low=${fallback.lowBandBands.size} mid=${fallback.midBandBands.size} success=$migrated"
+                        "low=${fallback.lowBandBands.size} mid=${fallback.midBandBands.size} " +
+                        "high=${fallback.highBandBands.size} success=$migrated"
                 )
                 if (migrated) clearObsoleteStatePreferences(context)
                 return fallback
@@ -161,7 +170,7 @@ data class BmwPeqState(
                 Timber.i(
                     "BMW PEQ restore source=legacy-pref-migration version=$VERSION " +
                         "enabled=${fallback.enabled} full=${fallback.fullRangeBands.size} " +
-                        "low=0 mid=0 success=$migrated"
+                        "low=0 mid=0 high=0 success=$migrated"
                 )
                 return fallback
             }
@@ -183,6 +192,7 @@ data class BmwPeqState(
                 bands(KEY_LKG_FULL),
                 bands(KEY_LKG_LOW),
                 bands(KEY_LKG_MID),
+                ParametricEqBandList(),
             )
         }
 
@@ -200,6 +210,7 @@ data class BmwPeqState(
                 bands(KEY_FULL),
                 bands(KEY_LOW),
                 bands(KEY_MID),
+                ParametricEqBandList(),
             )
         }
 
@@ -214,6 +225,7 @@ data class BmwPeqState(
                 prefs.getBoolean(context.getString(R.string.key_peq_enable), false),
                 prefs.getFloat(context.getString(R.string.key_peq_preamp), 0f),
                 bands,
+                ParametricEqBandList(),
                 ParametricEqBandList(),
                 ParametricEqBandList(),
             )
@@ -296,6 +308,7 @@ data class BmwPeqState(
                 .putString(KEY_REJECTED_FULL, rejected.fullRangeBands.serialize())
                 .putString(KEY_REJECTED_LOW, rejected.lowBandBands.serialize())
                 .putString(KEY_REJECTED_MID, rejected.midBandBands.serialize())
+                .putString(KEY_REJECTED_HIGH, rejected.highBandBands.serialize())
                 .putLong(KEY_REJECTED_TIMESTAMP, System.currentTimeMillis())
                 .commit()
         }
@@ -303,7 +316,8 @@ data class BmwPeqState(
         fun log(prefix: String, state: BmwPeqState, result: Boolean? = null) {
             Timber.d(
                 "$prefix PEQ state v$VERSION enabled=${state.enabled} preamp=${state.preampDb} " +
-                    "full=${state.fullRangeBands.size} low=${state.lowBandBands.size} mid=${state.midBandBands.size}" +
+                    "full=${state.fullRangeBands.size} low=${state.lowBandBands.size} " +
+                    "mid=${state.midBandBands.size} high=${state.highBandBands.size}" +
                     (result?.let { " nativeApply=$it" } ?: "")
             )
         }

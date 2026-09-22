@@ -4,8 +4,8 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 
-/** Which of the three independently-editable PEQ banks a band or graph node belongs to. */
-enum class BmwPeqBank { FULL, LOW, MID }
+/** Which of the four independently-editable PEQ banks a band or graph node belongs to. */
+enum class BmwPeqBank { FULL, LOW, MID, HIGH }
 
 /**
  * The physically-perceived output channel, as heard through the car's speakers.

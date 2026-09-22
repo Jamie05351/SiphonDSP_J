@@ -19,6 +19,12 @@ constexpr std::size_t kStageWidth = 8;
 constexpr std::size_t kPeqSectionOffset =
     kHeaderWidth + NativeBmwRouting::kOutputCount * kOutputBlockWidth;
 
+float outLevelDbAt(NativeBmwDspProcessor& proc, const std::array<float, kConfigSize>& cfg,
+                   double freqHz, double amp = 0.05) {
+    auto out = renderSteadyState(proc, cfg, freqHz, amp);
+    return static_cast<float>(linToDb(channelMagnitudeAt(out, 0, freqHz) / amp));
+}
+
 // Slot values, matching NativeBmwDspValues.CROSSOVER_TYPE_* / OutputConfig::CrossoverType.
 constexpr float kBw2 = 0.f, kBw3 = 1.f, kLr4 = 2.f, kBw1 = 3.f;
 
@@ -185,7 +191,7 @@ TEST_CASE("Truth snapshot reflects actual configured PEQ bands") {
     auto cfg = defaultConfig();
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
     double full[5] = {1000.0, 3.0, 0.7, 0.0, 0.0};  // freq, gain, Q, type=bell, channel=both
-    REQUIRE(proc.configurePeq(true, 0.f, full, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(proc.configurePeq(true, 0.f, full, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     auto snap = proc.captureTruthSnapshot();
     CHECK(snap[1] == 1.0);  // peqEnabled
@@ -203,7 +209,7 @@ TEST_CASE("Truth snapshot reports a near-zero-gain non-notch band as inactive") 
     auto cfg = defaultConfig();
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
     double band[5] = {1000.0, 0.0, 0.7, 0.0, 0.0};  // bell, ~0 dB -> configurePeqLocked drops it
-    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     auto snap = proc.captureTruthSnapshot();
     CHECK(snap[kPeqSectionOffset + 0] == 1.0);  // raw value still reported
@@ -218,12 +224,12 @@ TEST_CASE("Truth snapshot never adopts a rejected PEQ configuration") {
     auto cfg = defaultConfig();
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
     double good[5] = {1000.0, 3.0, 0.7, 0.0, 0.0};
-    REQUIRE(proc.configurePeq(true, 0.f, good, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(proc.configurePeq(true, 0.f, good, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     auto before = proc.captureTruthSnapshot();
 
     // preampDb outside [-30, 12] -> configurePeqLocked rejects before touching any state.
     double rejected[5] = {2000.0, 6.0, 1.0, 0.0, 0.0};
-    CHECK_FALSE(proc.configurePeq(false, 999.f, rejected, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(false, 999.f, rejected, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     auto after = proc.captureTruthSnapshot();
 
     CHECK(before[1] == after[1]);  // peqEnabled unchanged (still true, not the rejected false)
@@ -264,4 +270,58 @@ TEST_CASE("Truth snapshot: High is its own output block with its own crossover c
     CHECK(snap[base + 4] == 0.0);                      // muted (explicitly un-muted above)
     CHECK_FALSE(isIdentity(stageAt(snap, 4, 1)));
     CHECK_FALSE(isIdentity(stageAt(snap, 4, 2)));
+}
+
+TEST_CASE("Truth snapshot reflects actual configured High-band PEQ bands (Phase 4)") {
+    // Same shape as "Truth snapshot reflects actual configured PEQ bands" (full bank), proving
+    // configurePeq()'s new high/highCount parameters actually reach highPeq_ end to end, not
+    // just that the JNI/native signatures happen to agree on arity.
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = defaultConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    double high[5] = {6000.0, 2.5, 0.9, 0.0, 0.0};  // freq, gain, Q, type=bell, channel=both
+    REQUIRE(proc.configurePeq(true, 0.f, nullptr, 0, nullptr, 0, nullptr, 0, high, 5));
+
+    auto snap = proc.captureTruthSnapshot();
+    // Full/Low/Mid banks are all empty here, so each is exactly 3 header values (rawBandCount=0,
+    // leftActiveCount=0, rightActiveCount=0) with no band data -- High starts 9 values in.
+    const std::size_t highBase = kPeqSectionOffset + 3 * 3;
+    CHECK(snap[1] == 1.0);  // peqEnabled
+    CHECK(snap[highBase + 0] == 1.0);  // rawBandCount
+    CHECK(snap[highBase + 1] == 1.0);  // leftActiveCount
+    CHECK(snap[highBase + 2] == 1.0);  // rightActiveCount
+    CHECK(snap[highBase + 3] == doctest::Approx(6000.0));  // freq
+    CHECK(snap[highBase + 4] == doctest::Approx(2.5));     // gain
+    CHECK(snap[highBase + 8] == 1.0);  // active
+}
+
+TEST_CASE("High-band PEQ actually filters audio, not just reports in the truth snapshot") {
+    // Isolate High (mute Low/Mid, un-bypass/un-mute High, flat wide crossover well below the
+    // probe tone so it doesn't confound the measurement), then prove a High-band PEQ boost
+    // actually changes the rendered level -- the same "index exists" vs "index does something"
+    // distinction every other schema-probe test in this suite draws.
+    auto base = defaultConfig();
+    base[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        base[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    base[sch::kHighXoPass] = 0.f;
+    for (int slot = 0; slot < 2; ++slot) {
+        base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+        base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = 500.f;
+    }
+
+    NativeBmwDspProcessor flatProc, boostedProc;
+    flatProc.setSampleRate(kSampleRate);
+    boostedProc.setSampleRate(kSampleRate);
+    REQUIRE(flatProc.configure(base.data(), base.size()));
+    REQUIRE(boostedProc.configure(base.data(), base.size()));
+
+    double boost[5] = {6000.0, 12.0, 1.0, 0.0, 0.0};  // +12 dB bell at the probe frequency
+    REQUIRE(boostedProc.configurePeq(true, 0.f, nullptr, 0, nullptr, 0, nullptr, 0, boost, 5));
+
+    const float flatDb = outLevelDbAt(flatProc, base, 6000.0);
+    const float boostedDb = outLevelDbAt(boostedProc, base, 6000.0);
+    CHECK(boostedDb - flatDb == doctest::Approx(12.f).epsilon(0.1));
 }

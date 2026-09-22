@@ -381,6 +381,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             state.nativeValues(state.fullRangeBands),
             state.nativeValues(state.lowBandBands),
             state.nativeValues(state.midBandBands),
+            state.nativeValues(state.highBandBands),
             revision,
         )
         val active = JamesDspWrapper.getNativeBmwPeqActiveRevision(current)

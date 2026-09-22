@@ -963,6 +963,9 @@ private fun referenceCurveForBank(ctx: PeqDrawContext, bank: BmwPeqBank): Double
         BmwPeqBank.FULL -> ctx.curves.preSplitDb
         BmwPeqBank.LOW -> ctx.curves.lowBranchDb
         BmwPeqBank.MID -> ctx.curves.midBranchDb
+        // Not yet reachable from the PEQ editing screen (PeqScope has no High entry yet -- that's
+        // Phase 5), but BmwResponseCurves already computes it, so this stays correct if/when it is.
+        BmwPeqBank.HIGH -> ctx.curves.highBranchDb
     }
     val channelIndex =
         if (ctx.channelDisplay == PeqChannelDisplay.RIGHT) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal
@@ -1306,6 +1309,7 @@ private fun bankLabel(bank: BmwPeqBank): String = when (bank) {
     BmwPeqBank.FULL -> "Pre EQ"
     BmwPeqBank.LOW -> "Low Band"
     BmwPeqBank.MID -> "Mid Band"
+    BmwPeqBank.HIGH -> "High Band"
 }
 
 /** The tapped-node detail card — the [drawInfoCard] content, as a small Compose surface. */
@@ -1429,6 +1433,9 @@ private class PeqDrawContext(
         BmwPeqBank.FULL -> 0
         BmwPeqBank.LOW -> fullBands.size
         BmwPeqBank.MID -> fullBands.size + lowBands.size
+        // Not yet reachable (forEachVisibleBank/hitTestAnyBank don't enumerate High -- PeqScope
+        // has no High entry yet, that's Phase 5), kept correct for when it is.
+        BmwPeqBank.HIGH -> fullBands.size + lowBands.size + midBands.size
     }
 
     inline fun forEachVisibleBank(action: (BmwPeqBank, List<ParametricEqBand>) -> Unit) {

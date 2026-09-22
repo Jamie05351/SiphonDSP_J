@@ -114,6 +114,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             item { PeqBankCard("Full-range", peq.full) }
             item { PeqBankCard("Low band", peq.low) }
             item { PeqBankCard("Mid band", peq.mid) }
+            item { PeqBankCard("High band", peq.high) }
         }
         item { SyncErrorsSection(revision) }
     }

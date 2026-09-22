@@ -37,7 +37,10 @@ class BackupRestoreTest {
     }
 
     private fun prompt(values: FloatArray): PendingBackupRestore {
-        val candidate = BmwPeqState(true, -3f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList())
+        val candidate = BmwPeqState(
+            true, -3f, ParametricEqBandList(), ParametricEqBandList(), ParametricEqBandList(),
+            ParametricEqBandList(),
+        )
         return PendingBackupRestore(candidate, PrivatePeqBackup(
             createdAtEpochMs = 1L,
             state = BmwPeqPreset.fromState(candidate),

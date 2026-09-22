@@ -136,6 +136,7 @@ data class NativePeqSnapshot(
     val full: NativePeqBank,
     val low: NativePeqBank,
     val mid: NativePeqBank,
+    val high: NativePeqBank,
 )
 
 data class NativeDspTruthSnapshot(
@@ -244,10 +245,11 @@ fun parseNativeTruthSnapshot(raw: DoubleArray?): NativeDspTruthSnapshot? {
     val full = readBank() ?: return null
     val low = readBank() ?: return null
     val mid = readBank() ?: return null
+    val high = readBank() ?: return null
 
     return NativeDspTruthSnapshot(
         sampleRate = sampleRate,
         crossovers = crossovers,
-        peq = NativePeqSnapshot(peqEnabled, peqPreampDb, full, low, mid),
+        peq = NativePeqSnapshot(peqEnabled, peqPreampDb, full, low, mid, high),
     )
 }

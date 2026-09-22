@@ -15,26 +15,31 @@ class BmwResponseCurves(val pointCount: Int) {
     val sumDb = Array(2) { DoubleArray(pointCount) }
     val lowBranchDb = Array(2) { DoubleArray(pointCount) }
     val midBranchDb = Array(2) { DoubleArray(pointCount) }
+    val highBranchDb = Array(2) { DoubleArray(pointCount) }
     val preSplitDb = Array(2) { DoubleArray(pointCount) }
 
     /** Wrapped phase in radians, (-pi, pi]. Indexed by [BmwOutputChannel.ordinal]. */
     val sumPhase = Array(2) { DoubleArray(pointCount) }
     val lowBranchPhase = Array(2) { DoubleArray(pointCount) }
     val midBranchPhase = Array(2) { DoubleArray(pointCount) }
+    val highBranchPhase = Array(2) { DoubleArray(pointCount) }
 
     var processorEnabled = true
     var lowBranchActive = true
     var midBranchActive = true
+    var highBranchActive = true
     var bothCrossoversBypassed = false
 
     fun sumDbFor(channel: BmwOutputChannel): DoubleArray = sumDb[channel.ordinal]
     fun lowBranchDbFor(channel: BmwOutputChannel): DoubleArray = lowBranchDb[channel.ordinal]
     fun midBranchDbFor(channel: BmwOutputChannel): DoubleArray = midBranchDb[channel.ordinal]
+    fun highBranchDbFor(channel: BmwOutputChannel): DoubleArray = highBranchDb[channel.ordinal]
     fun preSplitDbFor(channel: BmwOutputChannel): DoubleArray = preSplitDb[channel.ordinal]
 
     fun sumPhaseFor(channel: BmwOutputChannel): DoubleArray = sumPhase[channel.ordinal]
     fun lowBranchPhaseFor(channel: BmwOutputChannel): DoubleArray = lowBranchPhase[channel.ordinal]
     fun midBranchPhaseFor(channel: BmwOutputChannel): DoubleArray = midBranchPhase[channel.ordinal]
+    fun highBranchPhaseFor(channel: BmwOutputChannel): DoubleArray = highBranchPhase[channel.ordinal]
 
     /**
      * Group delay in milliseconds at each point, derived from the finite difference of

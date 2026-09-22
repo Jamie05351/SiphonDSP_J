@@ -15,7 +15,7 @@ import kotlin.math.sin
  */
 class BmwResponseCalculator(private val pointCount: Int = 192) {
 
-    enum class Stage { FULL_BANK, LOW_BRANCH, MID_BRANCH, TILT }
+    enum class Stage { FULL_BANK, LOW_BRANCH, MID_BRANCH, HIGH_BRANCH, TILT }
 
     var includeDcBlocker: Boolean = true
         set(value) {
@@ -40,8 +40,12 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     // 2 HPF sections + up to 2 optional LPF sections (Mid's upper bandpass corner) + up to
     // 16 mid-bank PEQ = 20; 24 keeps headroom.
     private val midCascade = arrayOf(BiquadCascade(24), BiquadCascade(24))
+    // High is HPF-only (2 stages, same shape Mid had before Phase 2's bandpass) + up to 16
+    // high-bank PEQ = 18; 20 keeps headroom, matching fullCascade's sizing.
+    private val highCascade = arrayOf(BiquadCascade(20), BiquadCascade(20))
     private val lowAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
+    private val highAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val tiltCascade = BiquadCascade(4)
 
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
@@ -72,6 +76,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             BmwPeqBank.FULL -> dirty.add(Stage.FULL_BANK)
             BmwPeqBank.LOW -> dirty.add(Stage.LOW_BRANCH)
             BmwPeqBank.MID -> dirty.add(Stage.MID_BRANCH)
+            BmwPeqBank.HIGH -> dirty.add(Stage.HIGH_BRANCH)
         }
     }
 
@@ -205,10 +210,65 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         rebuildAllPassCascade(midAllPass[channel.ordinal], values, output)
     }
 
+    private fun rebuildHighCascade(values: FloatArray, peq: BmwPeqState, channel: BmwOutputChannel) {
+        val cascade = highCascade[channel.ordinal]
+        cascade.clear()
+        val output = if (BmwSignalChain.internalIsLeftChainFor(channel)) {
+            NativeBmwDspValues.OUTPUT_HIGH_LEFT
+        } else {
+            NativeBmwDspValues.OUTPUT_HIGH_RIGHT
+        }
+        val crossoverFreq = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
+        val crossoverType = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
+        // Mirrors NativeBmwDspProcessor::rebuildHighCrossover's switch exactly -- HPF-only, the
+        // same shape Mid had before Phase 2 added its optional lowpass pair. Built unconditionally
+        // (no highXoPass gate here, matching native's rebuildHighCrossover which doesn't gate on
+        // it either): highXoPass is a silence toggle applied at the value level in compute(), not
+        // a "build an identity cascade instead" bypass the way lpfPass/hpfPass are for Low/Mid.
+        when {
+            crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
+                cascade.addHighPass1(crossoverFreq, sampleRate)
+            crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
+                cascade.addHighPass(crossoverFreq, BUTTERWORTH4_Q_LOW, sampleRate)
+                cascade.addHighPass(crossoverFreq, BUTTERWORTH4_Q_HIGH, sampleRate)
+            }
+            crossoverType < .5f -> cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            crossoverType < 1.5f -> {
+                cascade.addHighPass1(crossoverFreq, sampleRate)
+                cascade.addHighPass(crossoverFreq, BUTTERWORTH3_Q, sampleRate)
+            }
+            else -> {
+                cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+            }
+        }
+        if (peq.enabled) {
+            for (band in peq.highBandBands) if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
+        }
+        rebuildHighAllPassCascade(highAllPass[channel.ordinal], values, output)
+    }
+
     /** Native OutputId ordinal: LowLeft=0, LowRight=1, MidLeft=2, MidRight=3. */
     private fun outputOrdinal(internalLeft: Boolean, isLow: Boolean): Int {
         val base = if (isLow) 0 else 2
         return base + if (internalLeft) 0 else 1
+    }
+
+    private fun highOutputValue(values: FloatArray, output: Int, field: Int): Float =
+        values[NativeBmwDspValues.highOutputIndex(output, field)]
+
+    private fun rebuildHighAllPassCascade(cascade: BiquadCascade, values: FloatArray, output: Int) {
+        cascade.clear()
+        repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
+            val base = NativeBmwDspValues.highAllPassIndex(output, section, 0)
+            cascade.addAllPass(
+                enabled = values[base] >= .5f,
+                secondOrder = values[base + 1] >= 1.5f,
+                frequencyHz = values[base + 2].toDouble(),
+                q = values[base + 3].toDouble(),
+                sampleRate = sampleRate,
+            )
+        }
     }
 
     private fun outputValue(values: FloatArray, outputOrdinal: Int, field: Int): Float =
@@ -249,6 +309,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         val lpfPass = values[NativeBmwDspValues.INDEX_LPF_PASS] >= .5f
         val hpfPass = values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f
         val bothBypassed = lpfPass && hpfPass
+        // Unlike lpfPass/hpfPass (raw passthrough), highXoPass fully silences High -- see
+        // NativeBmwDspProcessor::processFrame's else-branch comment on why. Folded into
+        // highMuted below rather than into a "bothBypassed"-style raw-passthrough shortcut.
+        val highXoPass = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f
         val channelMuteMode = values[NativeBmwDspValues.INDEX_CHANNEL_MUTE].toInt()
         // measurementMute only zeroes the excluded branch here. The native engine also drops an
         // LR8 brick-wall on the summed bus (NativeBmwDspProcessor::rebuildMeasBus, offset by
@@ -262,31 +326,39 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             if (Stage.FULL_BANK in dirty) rebuildFullCascade(peq, channel)
             if (Stage.LOW_BRANCH in dirty) rebuildLowCascade(values, peq, channel)
             if (Stage.MID_BRANCH in dirty) rebuildMidCascade(values, peq, channel)
+            if (Stage.HIGH_BRANCH in dirty) rebuildHighCascade(values, peq, channel)
         }
         if (Stage.TILT in dirty) rebuildTiltCascade(values)
         dirty.clear()
 
         var anyLowActive = false
         var anyMidActive = false
+        var anyHighActive = false
 
         for (channel in BmwOutputChannel.entries) {
             val ch = channel.ordinal
             val internalLeft = BmwSignalChain.internalIsLeftChainFor(channel)
             val lowOutput = outputOrdinal(internalLeft, isLow = true)
             val midOutput = outputOrdinal(internalLeft, isLow = false)
+            val highOutput = if (internalLeft) NativeBmwDspValues.OUTPUT_HIGH_LEFT else NativeBmwDspValues.OUTPUT_HIGH_RIGHT
 
             val lowGainDb = if (internalLeft) values[NativeBmwDspValues.INDEX_LOW_GAIN_L] else values[NativeBmwDspValues.INDEX_LOW_GAIN_R]
             val lowDelayMs = if (internalLeft) values[NativeBmwDspValues.INDEX_LOW_DELAY_L] else values[NativeBmwDspValues.INDEX_LOW_DELAY_R]
             val midGainDb = if (internalLeft) values[NativeBmwDspValues.INDEX_MID_GAIN_L] else values[NativeBmwDspValues.INDEX_MID_GAIN_R]
             val midDelayMs = if (internalLeft) values[NativeBmwDspValues.INDEX_MID_DELAY_L] else values[NativeBmwDspValues.INDEX_MID_DELAY_R]
+            val highGainDb = if (internalLeft) values[NativeBmwDspValues.INDEX_HIGH_GAIN_L] else values[NativeBmwDspValues.INDEX_HIGH_GAIN_R]
+            val highDelayMs = if (internalLeft) values[NativeBmwDspValues.INDEX_HIGH_DELAY_L] else values[NativeBmwDspValues.INDEX_HIGH_DELAY_R]
             val postGainDb = if (internalLeft) values[NativeBmwDspValues.INDEX_POST_GAIN_L] else values[NativeBmwDspValues.INDEX_POST_GAIN_R]
 
             val lowMuted = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || measurementMute == 1
             val midMuted = outputValue(values, midOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || measurementMute == 2
+            val highMuted = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || highXoPass
             val lowInvert = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
             val midInvert = outputValue(values, midOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
+            val highInvert = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
             anyLowActive = anyLowActive || !lowMuted
             anyMidActive = anyMidActive || !midMuted
+            anyHighActive = anyHighActive || !highMuted
 
             val muteThisOutput = (channelMuteMode == 1 && channel == BmwOutputChannel.RIGHT) ||
                 (channelMuteMode == 2 && channel == BmwOutputChannel.LEFT)
@@ -298,9 +370,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                     out.preSplitDb[ch][i] = 0.0
                     out.lowBranchDb[ch][i] = 0.0
                     out.midBranchDb[ch][i] = 0.0
+                    out.highBranchDb[ch][i] = 0.0
                     out.sumDb[ch][i] = 0.0
                     out.lowBranchPhase[ch][i] = 0.0
                     out.midBranchPhase[ch][i] = 0.0
+                    out.highBranchPhase[ch][i] = 0.0
                     out.sumPhase[ch][i] = 0.0
                     continue
                 }
@@ -337,12 +411,24 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 if (midMuted) branchAcc.setZero()
                 out.midBranchDb[ch][i] = branchAcc.magnitudeDb()
                 out.midBranchPhase[ch][i] = branchAcc.phase()
+                val midRe = branchAcc.re
+                val midIm = branchAcc.im
+
+                branchAcc.setFrom(pre)
+                highCascade[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
+                highAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
+                applyDelay(branchAcc, frequencies[i], highDelayMs.toDouble())
+                branchAcc.scale(dbToLinear(highGainDb.toDouble()))
+                if (highInvert) branchAcc.scale(-1.0)
+                if (highMuted) branchAcc.setZero()
+                out.highBranchDb[ch][i] = branchAcc.magnitudeDb()
+                out.highBranchPhase[ch][i] = branchAcc.phase()
 
                 if (bothBypassed) {
                     sumAcc.setFrom(pre)
                 } else {
-                    sumAcc.re = lowRe + branchAcc.re
-                    sumAcc.im = lowIm + branchAcc.im
+                    sumAcc.re = lowRe + midRe + branchAcc.re
+                    sumAcc.im = lowIm + midIm + branchAcc.im
                 }
 
                 tiltCascade.accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], sumAcc)
@@ -356,6 +442,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         out.processorEnabled = processorEnabled
         out.lowBranchActive = anyLowActive
         out.midBranchActive = anyMidActive
+        out.highBranchActive = anyHighActive
         out.bothCrossoversBypassed = bothBypassed
     }
 

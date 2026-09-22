@@ -47,7 +47,7 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
     // A +6 dB bell at 1 kHz, Q=2 -- same band shape the PEQ regression tests elsewhere use.
     constexpr double kFreq = 1000.0, kGainDb = 6.0, kQ = 2.0;
     const double band[5] = {kFreq, kGainDb, kQ, 0.0, 0.0};
-    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     // The actual deadlock trigger: a second setSampleRate() call to a rate that genuinely
     // differs from the current one -- exactly the path a real sample-rate change takes in the

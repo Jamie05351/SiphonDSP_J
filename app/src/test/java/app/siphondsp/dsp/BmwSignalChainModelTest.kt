@@ -23,6 +23,7 @@ class BmwSignalChainModelTest {
         val sumDb: Array<DoubleArray>,
         val lowBranchDb: Array<DoubleArray>,
         val midBranchDb: Array<DoubleArray>,
+        val highBranchDb: Array<DoubleArray>,
         val preSplitDb: Array<DoubleArray>,
         val processorEnabled: Boolean,
         val bothCrossoversBypassed: Boolean,
@@ -36,6 +37,7 @@ class BmwSignalChainModelTest {
             sumDb = Array(2) { curves.sumDb[it].copyOf() },
             lowBranchDb = Array(2) { curves.lowBranchDb[it].copyOf() },
             midBranchDb = Array(2) { curves.midBranchDb[it].copyOf() },
+            highBranchDb = Array(2) { curves.highBranchDb[it].copyOf() },
             preSplitDb = Array(2) { curves.preSplitDb[it].copyOf() },
             processorEnabled = curves.processorEnabled,
             bothCrossoversBypassed = curves.bothCrossoversBypassed,
@@ -57,6 +59,7 @@ class BmwSignalChainModelTest {
         full: List<ParametricEqBand> = emptyList(),
         low: List<ParametricEqBand> = emptyList(),
         mid: List<ParametricEqBand> = emptyList(),
+        high: List<ParametricEqBand> = emptyList(),
         preampDb: Float = 0f,
     ) = BmwPeqState(
         enabled = true,
@@ -64,6 +67,7 @@ class BmwSignalChainModelTest {
         fullRangeBands = ParametricEqBandList().apply { addAll(full) },
         lowBandBands = ParametricEqBandList().apply { addAll(low) },
         midBandBands = ParametricEqBandList().apply { addAll(mid) },
+        highBandBands = ParametricEqBandList().apply { addAll(high) },
     )
 
     private fun setOutput(values: FloatArray, output: Int, field: Int, value: Float) {
@@ -141,6 +145,24 @@ class BmwSignalChainModelTest {
 
         assertEquals(0.0, filtered.lowBranchDb[0][i] - baseline.lowBranchDb[0][i], 1e-6)
         assertTrue(abs(filtered.midBranchDb[0][i] - baseline.midBranchDb[0][i]) > 6.0)
+    }
+
+    @Test
+    fun highBandPeqAffectsOnlyHighBranch() {
+        // High ships muted/bypassed (highXoPass) by default -- un-mute and un-bypass it so its
+        // branch is actually audible/comparable, mirroring the native crossover_test.cpp pattern.
+        fun unmuteHigh(values: FloatArray) = values.also {
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+        }
+        val baseline = compute(unmuteHigh(baseValues()))
+        val filtered = compute(unmuteHigh(baseValues()), peqWith(high = listOf(band(6_000.0, -12.0))))
+        val i = nearestIndex(6_000.0)
+
+        assertEquals(0.0, filtered.lowBranchDb[0][i] - baseline.lowBranchDb[0][i], 1e-6)
+        assertEquals(0.0, filtered.midBranchDb[0][i] - baseline.midBranchDb[0][i], 1e-6)
+        assertTrue(abs(filtered.highBranchDb[0][i] - baseline.highBranchDb[0][i]) > 6.0)
     }
 
     @Test

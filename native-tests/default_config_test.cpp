@@ -162,7 +162,7 @@ TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
     constexpr double kQ = 4.0;
     // full-bank band: [freq, gainDb (unused by Notch), Q, type=3 (Notch), channel=0 (both)].
     const double band[5] = {kNotchFreq, 0.0, kQ, 3.0, 0.0};
-    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     const double amp = 0.1;
     std::vector<float> warm = stereoSine(kNotchFreq, amp, 24000);
@@ -186,7 +186,7 @@ TEST_CASE("PEQ Notch band actually nulls at its center frequency") {
     procFar.setSampleRate(kSampleRate);
     procBaseline.setSampleRate(kSampleRate);
     REQUIRE(procFar.configure(cfg.data(), cfg.size()));
-    REQUIRE(procFar.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(procFar.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     REQUIRE(procBaseline.configure(cfg.data(), cfg.size()));
 
     const double dbFar = linToDb(channelMagnitudeAt(renderSteadyState(procFar, cfg, kFarFreq, amp), 0, kFarFreq));
@@ -205,7 +205,7 @@ static double peqBandGainAt(double freq, double bandFreq, double gainDb, double 
     NativeBmwDspProcessor withBand;
     withBand.setSampleRate(kSampleRate);
     REQUIRE(withBand.configure(cfg.data(), cfg.size()));
-    REQUIRE(withBand.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    REQUIRE(withBand.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     const double dbWith = linToDb(channelMagnitudeAt(renderSteadyState(withBand, cfg, freq, amp), 0, freq));
 
     NativeBmwDspProcessor baseline;

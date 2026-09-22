@@ -10,7 +10,8 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 
 /**
- * The single persistent store for the complete three-bank PEQ state.
+ * The single persistent store for the complete PEQ state -- Full/Low/Mid/High bands (High
+ * added in the V2 -> V3 growth; not yet user-editable, see [BmwPeqState.highBandBands]).
  *
  * [primaryFile] is authoritative. [recoveryFile] is the previous/last-known-good
  * transaction copy and is consulted only when the primary is missing or corrupt.
@@ -120,6 +121,8 @@ internal class BmwPeqStore(private val directory: File) {
         return runCatching {
             val text = file.readText(StandardCharsets.UTF_8)
             when {
+                text.startsWith("$HEADER_V3\n") ->
+                    ReadAttempt(decodeV3(text), sourceFor(file, legacy = false))
                 text.startsWith("$HEADER_V2\n") ->
                     ReadAttempt(decodeV2(text), sourceFor(file, legacy = false))
                 text.startsWith("$HEADER_V1\n") ->
@@ -171,8 +174,20 @@ internal class BmwPeqStore(private val directory: File) {
             state.fullRangeBands.serialize(),
             state.lowBandBands.serialize(),
             state.midBandBands.serialize(),
+            state.highBandBands.serialize(),
         ).joinToString("\n")
-        return "$HEADER_V2\n${sha256(payload)}\n$payload"
+        return "$HEADER_V3\n${sha256(payload)}\n$payload"
+    }
+
+    private fun decodeV3(text: String): BmwPeqState {
+        val lines = text.split('\n')
+        require(lines.size == 8) { "unexpected field count" }
+        val payload = lines.drop(2).joinToString("\n")
+        require(MessageDigest.isEqual(
+            lines[1].toByteArray(StandardCharsets.US_ASCII),
+            sha256(payload).toByteArray(StandardCharsets.US_ASCII),
+        )) { "checksum mismatch" }
+        return decodeFields(lines, 2, highLine = lines[7])
     }
 
     private fun decodeV2(text: String): BmwPeqState {
@@ -183,6 +198,10 @@ internal class BmwPeqStore(private val directory: File) {
             lines[1].toByteArray(StandardCharsets.US_ASCII),
             sha256(payload).toByteArray(StandardCharsets.US_ASCII),
         )) { "checksum mismatch" }
+        // No High band in V2 -- decodeFields() defaults it to empty, exactly matching a config
+        // that never had High PEQ configured. Not force-migrated to V3 on read; save() writes
+        // V3 unconditionally, so this file upgrades itself the next time the user changes any
+        // PEQ setting. See docs on the equivalent choice for the native flat-config schema.
         return decodeFields(lines, 2)
     }
 
@@ -192,7 +211,7 @@ internal class BmwPeqStore(private val directory: File) {
         return decodeFields(lines, 1)
     }
 
-    private fun decodeFields(lines: List<String>, offset: Int): BmwPeqState {
+    private fun decodeFields(lines: List<String>, offset: Int, highLine: String? = null): BmwPeqState {
         fun bands(value: String) = ParametricEqBandList().apply { deserialize(value) }
         return BmwPeqState(
             enabled = lines[offset].toBooleanStrict(),
@@ -200,6 +219,7 @@ internal class BmwPeqStore(private val directory: File) {
             fullRangeBands = bands(lines[offset + 2]),
             lowBandBands = bands(lines[offset + 3]),
             midBandBands = bands(lines[offset + 4]),
+            highBandBands = highLine?.let(::bands) ?: ParametricEqBandList(),
         )
     }
 
@@ -217,15 +237,16 @@ internal class BmwPeqStore(private val directory: File) {
 
     private fun summary(state: BmwPeqState): String =
         "enabled=${state.enabled} full=${state.fullRangeBands.size} " +
-            "low=${state.lowBandBands.size} mid=${state.midBandBands.size}"
+            "low=${state.lowBandBands.size} mid=${state.midBandBands.size} high=${state.highBandBands.size}"
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         const val FILE_NAME = "native_bmw_peq_state.txt"
         const val RECOVERY_FILE_NAME = "native_bmw_peq_state.recovery"
 
         // Stand-in for validate()'s sample-rate-relative Nyquist check -- see save()'s comment.
         private const val SANITY_CHECK_SAMPLE_RATE = 192_000f
+        private const val HEADER_V3 = "BMW_PEQ_STATE_V3"
         private const val HEADER_V2 = "BMW_PEQ_STATE_V2"
         private const val HEADER_V1 = "BMW_PEQ_STATE_V1"
 

@@ -257,6 +257,7 @@ class BmwPeqStateTest {
             },
             lowBandBands = ParametricEqBandList(),
             midBandBands = ParametricEqBandList(),
+            highBandBands = ParametricEqBandList(),
         )
         assertTrue(state.persist(context))
 
