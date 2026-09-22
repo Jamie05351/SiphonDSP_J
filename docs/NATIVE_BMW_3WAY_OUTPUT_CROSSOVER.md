@@ -1,11 +1,13 @@
 # Native BMW output architecture: 2-way → 3-way crossover (Low/Mid/High)
 
 Extends the four-output-channel architecture in `docs/NATIVE_BMW_OUTPUT_ARCHITECTURE.md` with a
-third band (High), and turns Mid from HPF-only into a true bandpass. Ships on a dedicated branch
-(`feat/3way-crossover`, off `master`), landed as a sequence of small, independently verified PRs
-against that branch — see the approved implementation plan for the full phase breakdown. This doc
-is Phase 0: it nails down the exact index table and the one rule every later phase must not
-violate.
+third band (High), and turns Mid from HPF-only into a true bandpass. Landed as a sequence of
+small, independently verified PRs directly against `master`, each behind the "byte-identical
+until its migration marker is reached" contract described below — see the approved
+implementation plan for the full phase breakdown. The `pre-3way-crossover` tag marks `master`'s
+tip immediately before this work began, as an explicit rollback point if the feature needs to be
+abandoned. This doc is Phase 0: it nails down the exact index table and the one rule every later
+phase must not violate.
 
 ## Why a third band needs more than "just add two outputs"
 
