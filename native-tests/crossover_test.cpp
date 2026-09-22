@@ -60,6 +60,19 @@ float stopbandSlopeDbPerOctave(const std::array<float, kConfigSize>& cfg, double
     return far - near;
 }
 
+// Same isolated Mid setup as midOnlyConfig(), plus Mid's optional upper (Mid/High) bandpass
+// corner enabled at fcHigh -- turns Mid from HPF-only into a true bandpass. Both corners share
+// the same crossoverType, matching how the UI presents one slope selector per band.
+std::array<float, kConfigSize> midBandpassConfig(float fcLow, float fcHigh, float type) {
+    auto c = midOnlyConfig(fcLow, type);
+    for (int out = 2; out < 4; ++out) {  // Mid L, Mid R
+        const int slot = out - 2;  // Mid's upper-corner block is 2-wide (Left, Right), not 4-wide.
+        c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = fcHigh;
+        c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+    }
+    return c;
+}
+
 }  // namespace
 
 TEST_CASE("Low crossover BW2/BW3/LR4 each roll off at their real dB/octave slope") {
@@ -129,4 +142,31 @@ TEST_CASE("BW4 sits 3 dB above LR4 at the corner (-3 dB vs -6 dB; proves it is n
         const float lr4 = outLevelDbAt(lr4Proc, cfgFor(kLr4), fc);
         CHECK(bw4 - lr4 == doctest::Approx(3.01f).epsilon(0.05));
     }
+}
+
+// Mid's upper (Mid/High) bandpass corner -- Phase 2 of the 2-way -> 3-way output crossover work.
+// Disabled (defaultConfig()'s shipped state) is covered implicitly: every test above this one
+// uses midOnlyConfig(), which never touches the upper-corner indices, so Mid stays HPF-only
+// exactly as before this feature existed.
+TEST_CASE("Mid's upper crossover corner rolls off above it at its real dB/octave slope") {
+    // fcHigh kept low enough that fcHigh*8 stays well under the 48 kHz test sample rate's
+    // Nyquist (24 kHz) -- a test point at or above Nyquist aliases and reads as ~0 dB slope
+    // regardless of the real filter response. Even well under Nyquist, fcHigh*8 (8 kHz) is a
+    // much larger fraction of it (33%) than the other tests' fc*8 (fc=200 -> 1.6 kHz, 6.7%), so
+    // the bilinear transform's frequency warping measurably steepens the apparent slope here
+    // (observed ~11% high). A wider epsilon than the other slope tests' 0.05 is expected and
+    // correct, not a loosened correctness bar -- BW2 (12) vs LR4 (24) stay unambiguous at 0.15.
+    constexpr float fcLow = 200.f, fcHigh = 1000.f;
+    CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kBw2), fcHigh * 4, fcHigh * 8) ==
+          doctest::Approx(-12.f).epsilon(0.15));
+    CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcHigh * 4, fcHigh * 8) ==
+          doctest::Approx(-24.f).epsilon(0.15));
+}
+
+TEST_CASE("Mid's upper crossover corner still rolls off correctly at the lower corner too (true bandpass)") {
+    // Confirms enabling the upper corner didn't disturb the existing lower (Low/Mid) HPF slope --
+    // the two corners' filter stages are independent cascade stages, not a shared/overwritten one.
+    constexpr float fcLow = 200.f, fcHigh = 1000.f;
+    CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcLow / 4, fcLow / 8) ==
+          doctest::Approx(-24.f).epsilon(0.05));
 }

@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 205;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 210;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -143,6 +143,14 @@ inline constexpr int kMeasGenTimingRefMidStartHz = 201;
 inline constexpr int kMeasGenTimingRefMidEndHz = 202;
 inline constexpr int kMeasGenTimingRefLowStartHz = 203;
 inline constexpr int kMeasGenTimingRefLowEndHz = 204;
+
+// --- Mid's optional upper (Mid/High) bandpass corner (205..209), added in the 205 -> 210 growth.
+// Only Mid has this field; Low/High don't. 209 is a Kotlin-only migration marker.
+inline constexpr int kMidUpperXo = 205;
+inline constexpr int kMidUpperXoWidth = 2;
+inline constexpr int kMidUpperXoFreq = 0;
+inline constexpr int kMidUpperXoEnabled = 1;
+inline constexpr int kMidUpperXoMigrated = 209;
 
 }  // namespace nbschema
 

@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (199 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (210 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -275,3 +275,11 @@
 20000        # 202 measGenTimingRefMidEndHz
 20           # 203 measGenTimingRefLowStartHz
 400          # 204 measGenTimingRefLowEndHz
+
+# 205..209  Mid's optional upper (Mid/High) bandpass corner -- freq/enabled per side, ships
+#           disabled. Only Mid has this field; Low/High don't.
+3000         # 205 midUpperXoLeftFreq
+0            # 206 midUpperXoLeftEnabled
+3000         # 207 midUpperXoRightFreq
+0            # 208 midUpperXoRightEnabled
+0            # 209 midUpperXoMigrated (0 = seed the block disabled on next load)

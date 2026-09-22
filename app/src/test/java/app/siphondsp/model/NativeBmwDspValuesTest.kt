@@ -39,6 +39,14 @@ class NativeBmwDspValuesTest {
         seedMbc(values)
         seedLegacyCompDisabled(values)
         seedCrossoverTypeMigrated(values)
+        seedMidUpperCrossoverMigrated(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateMidUpperCrossoverIfNeeded]: marker claimed. DEFAULTS
+     *  already ships the block disabled, so this only flips the marker. Must run last, matching
+     *  load()'s real call order. */
+    private fun seedMidUpperCrossoverMigrated(values: FloatArray) {
+        values[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateCrossoverTypeIfNeeded]: all 4 outputs forced to LR4,
@@ -128,6 +136,7 @@ class NativeBmwDspValuesTest {
             seedMbc(it)
             seedLegacyCompDisabled(it)
             seedCrossoverTypeMigrated(it)
+            seedMidUpperCrossoverMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -365,6 +374,80 @@ class NativeBmwDspValuesTest {
         for (output in 0..3) {
             assertEquals(3f, loaded[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)], 0f)
         }
+    }
+
+    @Test
+    fun loadSeedsMidUpperCrossoverDisabledOnConfigsSavedBeforeItExisted() {
+        // A pre-feature config: the block sits at leftover/uninitialized values and the marker
+        // is unset. Even if a stray "enabled" made it into the array, load() must bring the
+        // upper corner back OFF and claim the marker.
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )] = 1f
+            it[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(
+            0f,
+            loaded[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )],
+            0f,
+        )
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadLeavesADeliberatelyEnabledMidUpperCrossoverAloneOnceMigrated() {
+        val values = migratedDefaults().also {
+            it[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )] = 1f
+            it[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
+            )] = 3500f
+            it[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED] = 1f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(
+            1f,
+            loaded[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )],
+            0f,
+        )
+        assertEquals(
+            3500f,
+            loaded[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
+            )],
+            0f,
+        )
+    }
+
+    @Test
+    fun migrateRestoredValuesSeedsMidUpperCrossoverDisabledLikeLoadDoes() {
+        // A pre-feature private-backup-shaped array (205 values, predates the 205 -> 210 growth).
+        val legacy = FloatArray(205) { index -> NativeBmwDspValues.DEFAULTS[index] }
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(context, legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, restored.size)
+        assertEquals(
+            0f,
+            restored[NativeBmwDspValues.midUpperXoIndex(
+                NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )],
+            0f,
+        )
+        assertEquals(1f, restored[NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED], 0f)
     }
 
     @Test

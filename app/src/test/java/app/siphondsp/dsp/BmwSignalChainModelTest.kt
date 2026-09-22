@@ -379,6 +379,48 @@ class BmwSignalChainModelTest {
         }
     }
 
+    @Test
+    fun midUpperCrossoverTurnsMidIntoABandpass() {
+        // Disabled (the DEFAULTS/baseValues() state) is covered implicitly by every other test in
+        // this file still passing unmodified -- they all build on baseValues(), where the upper
+        // corner is off, so Mid stays HPF-only exactly as before this feature existed.
+        val values = baseValues()
+        values[NativeBmwDspValues.INDEX_MID_GAIN_L] = 0f
+        values[NativeBmwDspValues.INDEX_MID_GAIN_R] = 0f
+        val lowerFreq = 150.0
+        val upperFreq = 3000.0
+        for (output in intArrayOf(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT)) {
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE, NativeBmwDspValues.CROSSOVER_TYPE_LR4)
+            setOutput(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ, lowerFreq.toFloat())
+            values[NativeBmwDspValues.midUpperXoIndex(output, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED)] = 1f
+            values[NativeBmwDspValues.midUpperXoIndex(output, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ)] = upperFreq.toFloat()
+        }
+        val result = compute(values)
+        for (channel in 0..1) {
+            for (i in curves.frequencies.indices) {
+                // Cascaded LTI stages multiply in linear magnitude, i.e. add in dB: the bandpass's
+                // response is the independently-warped HPF (at lowerFreq) and LPF (at upperFreq)
+                // LR4 contributions summed. |H_LP,LR4|^2 = 1/(1+ratio^4)^2 (-6 dB at the corner,
+                // not BW4's -3 dB); the complementary HPF term differs by the general
+                // 10*log10(ratio^(2*order)) relationship also used by the BW4 test above.
+                val hpRatio = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE) /
+                    kotlin.math.tan(Math.PI * lowerFreq / SAMPLE_RATE)
+                val hpLow = -20.0 * kotlin.math.log10(1.0 + Math.pow(hpRatio, 4.0))
+                val hp = 20.0 * kotlin.math.log10(Math.pow(hpRatio, 4.0)) + hpLow
+
+                val lpRatio = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE) /
+                    kotlin.math.tan(Math.PI * upperFreq / SAMPLE_RATE)
+                val lp = -20.0 * kotlin.math.log10(1.0 + Math.pow(lpRatio, 4.0))
+
+                val expected = hp + lp
+                // Float biquads bottom out around -110 dB, so only compare above -90 dB.
+                if (expected > -90.0) {
+                    assertEquals(expected, result.midBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-3)
+                }
+            }
+        }
+    }
+
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0
