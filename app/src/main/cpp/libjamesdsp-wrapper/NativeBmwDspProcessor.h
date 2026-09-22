@@ -71,11 +71,13 @@ public:
     //
     // 210..261 -- the High band, added in the 210 -> 262 growth (see
     // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). A genuinely new third output, not carried-but-
-    // ignored like Low/Mid's mutual subsonic fields -- ships silent via
-    // outputConfigs_[High*].muted (seeded true). highXoPass ships true too, but -- exactly like
-    // lpfPass/hpfPass -- that only bypasses the crossover *filter*, letting the raw routed
-    // signal through; it is muted, not highXoPass, that actually silences High:
-    //   210      highXoPass (mirrors lpfPass/hpfPass -- bypasses filtering, not a mute)
+    // ignored like Low/Mid's mutual subsonic fields -- ships silent via both highXoPass and
+    // outputConfigs_[High*].muted (both seeded true). Unlike lpfPass/hpfPass (which only bypass
+    // the crossover filter, letting the raw routed signal through -- an accepted, pre-existing
+    // risk for Low/Mid), highXoPass=true fully silences High: a tweeter with no HPF ahead of it
+    // is a real speaker-damage risk from raw bass, and it also doubles as the 3-way master-off
+    // switch's single write for High, independent of the per-output mute field:
+    //   210      highXoPass (true = High fully silent; NOT the same contract as lpfPass/hpfPass)
     //   211..212 highGainL, highGainR                 213..214 highDelayL, highDelayR
     //   215..218 routing: High Left [fromFrontL, fromFrontR], High Right [fromFrontL, fromFrontR]
     //   219..234 all-pass: 2 outputs x 2 sections x [enabled, order, freq, q]
@@ -462,11 +464,12 @@ private:
         float headroom = -6, lowGainL = 0, lowGainR = 0, midGainL = -1, midGainR = -1,
               postGainL = 0, postGainR = 0;
         float midDelayL = 0, midDelayR = 0, lowDelayL = 0, lowDelayR = 0;
-        // High band (v[210..214], added in the 210 -> 262 growth). highXoPass mirrors
-        // lpfPass/hpfPass exactly: true bypasses only the crossover *filter* stage, letting the
-        // raw routed signal through -- it is not a mute (see processFrame()'s own comment on
-        // this for Low/Mid). Actual silence comes from outputConfigs_[High*].muted (seeded true
-        // by DEFAULTS/migration), independent of this flag. See
+        // High band (v[210..214], added in the 210 -> 262 growth). Unlike lpfPass/hpfPass
+        // (which only bypass the crossover *filter*, letting the raw routed signal through --
+        // see processFrame()'s own comment on this for Low/Mid), highXoPass=true fully silences
+        // High: a tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass,
+        // not just an audio-quality one, so this flag alone is sufficient to silence it, with no
+        // reliance on outputConfigs_[High*].muted also being set correctly. See
         // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
         bool highXoPass = false;
         float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;

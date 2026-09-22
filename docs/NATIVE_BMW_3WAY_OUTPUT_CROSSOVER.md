@@ -67,7 +67,7 @@ through slots 3/4 only when enabled.
 
 | Index | Name | Meaning |
 |---|---|---|
-| 210 | `INDEX_HIGH_XO_PASS` | Mirrors `INDEX_LPF_PASS`/`INDEX_HPF_PASS` exactly: bypasses the crossover **filter** only, letting the raw routed signal through. It is not a mute — the per-output mute field below is what actually silences High. |
+| 210 | `INDEX_HIGH_XO_PASS` | **Not** the same contract as `INDEX_LPF_PASS`/`INDEX_HPF_PASS` (which only bypass the crossover filter, an accepted pre-existing risk for Low/Mid). `true` here fully silences High: a tweeter with no HPF ahead of it is a speaker-damage risk from raw bass, not just an audio-quality one, so this flag alone is sufficient — it does not depend on the per-output mute field also being set. It is also the 3-way master-off switch's single write for High. |
 | 211 | `INDEX_HIGH_GAIN_L` | |
 | 212 | `INDEX_HIGH_GAIN_R` | |
 | 213 | `INDEX_HIGH_DELAY_L` | |
@@ -97,14 +97,21 @@ format.
 
 ## The "3-way on/off" master toggle
 
-Not a new persisted index. The UI writes to existing flags at once: off = every Mid output's
-`midUpperXoIndex(output, 1)` (upper-corner enable) set to 0 **and** both High outputs'
-`highOutputIndex(output, FIELD_MUTE)` set to 1 — which is exactly today's 2-way behavior,
-bit-identical. `INDEX_HIGH_XO_PASS` is deliberately **not** part of this toggle: as the index
-table above says, it only bypasses High's crossover filter (mirroring `INDEX_LPF_PASS`/
-`INDEX_HPF_PASS`), not the whole band, so setting it alone would not silence High — this was
-caught by a native-tests failure during Phase 3's own review, not assumed. On = the upper-corner
-enables and High's mute cleared per the user's saved band settings.
+Not a new persisted index. The UI writes to two existing flags at once: off = every Mid output's
+`midUpperXoIndex(output, 1)` (upper-corner enable) set to 0 **and** `INDEX_HIGH_XO_PASS` set to
+1 — which is exactly today's 2-way behavior, bit-identical, and (per the corrected semantics
+above) is on its own sufficient to fully silence High regardless of the per-output mute field.
+On = the upper-corner enables cleared and `INDEX_HIGH_XO_PASS` cleared, per the user's saved
+band settings.
+
+This flag's semantics went through two wrong drafts before landing here, both caught by
+native-tests failures during Phase 3's own review rather than assumed correct: the first draft
+had `INDEX_HIGH_XO_PASS` mirror `INDEX_LPF_PASS`/`INDEX_HPF_PASS` (bypass the filter only, not a
+mute); a review then pointed out that leaves a real speaker-damage path (raw bass reaching a
+tweeter) and breaks the "master toggle off is bit-identical to 2-way" contract if the per-output
+mute field isn't *also* kept in lockstep by every caller. Since High is a genuinely new band with
+no shipped users yet, its bypass flag was redefined to fully silence on its own instead of
+inheriting Low/Mid's pre-existing, already-accepted bypass-only behavior.
 
 ## Persistence and migration
 

@@ -1641,6 +1641,17 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         // No High-bus limiter yet (deferred follow-up, mirrors busLimLow/busLimMid) -- see
         // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     } else {
+        // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed
+        // signal through unfiltered -- see processFrame()'s own comment on that, further down).
+        // highXoPass is the 3-way master-off switch's single write for High: a tweeter with no
+        // HPF ahead of it is a real speaker-damage risk from raw bass, not just an audio-quality
+        // one the way an unfiltered woofer/mid is, and leaving highL/highR at their raw routed
+        // value here would also add a duplicate full-range path into sumToStereo(), breaking the
+        // "master toggle off is bit-identical to today's 2-way output" contract. Zeroing here
+        // makes highXoPass alone sufficient to silence High, independent of the per-output mute
+        // field -- no reliance on the caller keeping two flags in lockstep.
+        highL = 0.f;
+        highR = 0.f;
         publishIdleMeter(dynamics(OutputId::HighLeft));
         publishIdleMeter(dynamics(OutputId::HighRight));
     }
