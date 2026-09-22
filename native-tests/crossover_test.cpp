@@ -202,27 +202,31 @@ TEST_CASE("High crossover BW2/BW3/LR4 each roll off at their real dB/octave slop
           doctest::Approx(-24.f).epsilon(0.05));
 }
 
-TEST_CASE("High crossover: un-bypassing and un-muting are both required to hear it") {
-    // Belt-and-suspenders default (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md): confirms each half
-    // of the "ships silent" contract independently actually silences High, not just together.
+TEST_CASE("High: mute silences it outright; bypass alone still passes the raw signal through") {
+    // kHighXoPass mirrors kLpfPass/kHpfPass's existing contract exactly (see processFrame()'s own
+    // comment on that): "bypass" skips only the crossover *filter* stage, letting the raw routed
+    // signal through -- it is not a mute, for either band. Only the per-output mute field
+    // silences a band outright. DEFAULTS ships both flags in their "off" state (muted=1,
+    // highXoPass=1), so High is silent out of the box -- but that silence comes from the mute
+    // flag, not the bypass flag, exactly as it already does for Low/Mid.
     constexpr float fc = 3000.f;
-    auto bypassedOnly = highOnlyConfig(fc, kLr4);
-    bypassedOnly[sch::kHighXoPass] = 1.f;  // re-bypass despite highOnlyConfig() clearing it
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(bypassedOnly.data(), bypassedOnly.size()));
+    auto muted = highOnlyConfig(fc, kLr4);
+    for (int slot = 0; slot < 2; ++slot) {
+        muted[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    NativeBmwDspProcessor mutedProc;
+    mutedProc.setSampleRate(kSampleRate);
+    REQUIRE(mutedProc.configure(muted.data(), muted.size()));
     auto buf = stereoSine(fc, 0.3, 8192, kSampleRate);
-    proc.process(buf.data(), buf.size());
+    mutedProc.process(buf.data(), buf.size());
     CHECK(peakAbs(buf) < 1e-4f);
 
-    auto mutedOnly = highOnlyConfig(fc, kLr4);
-    for (int slot = 0; slot < 2; ++slot) {
-        mutedOnly[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
-    }
-    NativeBmwDspProcessor proc2;
-    proc2.setSampleRate(kSampleRate);
-    REQUIRE(proc2.configure(mutedOnly.data(), mutedOnly.size()));
+    auto bypassed = highOnlyConfig(fc, kLr4);
+    bypassed[sch::kHighXoPass] = 1.f;  // re-bypass despite highOnlyConfig() clearing it; mute stays off
+    NativeBmwDspProcessor bypassedProc;
+    bypassedProc.setSampleRate(kSampleRate);
+    REQUIRE(bypassedProc.configure(bypassed.data(), bypassed.size()));
     auto buf2 = stereoSine(fc, 0.3, 8192, kSampleRate);
-    proc2.process(buf2.data(), buf2.size());
-    CHECK(peakAbs(buf2) < 1e-4f);
+    bypassedProc.process(buf2.data(), buf2.size());
+    CHECK(peakAbs(buf2) > 0.05f);  // raw signal still passes through -- bypass isn't a mute
 }

@@ -67,7 +67,7 @@ through slots 3/4 only when enabled.
 
 | Index | Name | Meaning |
 |---|---|---|
-| 210 | `INDEX_HIGH_XO_PASS` | Global bypass — skip the entire High band chain (mirrors `INDEX_LPF_PASS`/`INDEX_HPF_PASS`) |
+| 210 | `INDEX_HIGH_XO_PASS` | Mirrors `INDEX_LPF_PASS`/`INDEX_HPF_PASS` exactly: bypasses the crossover **filter** only, letting the raw routed signal through. It is not a mute — the per-output mute field below is what actually silences High. |
 | 211 | `INDEX_HIGH_GAIN_L` | |
 | 212 | `INDEX_HIGH_GAIN_R` | |
 | 213 | `INDEX_HIGH_DELAY_L` | |
@@ -97,10 +97,14 @@ format.
 
 ## The "3-way on/off" master toggle
 
-Not a new persisted index. The UI writes to both existing flags at once: off = every output's
-`midUpperXoIndex(output, 1)` set to 0 **and** `INDEX_HIGH_XO_PASS` set to 1 — which is exactly
-today's 2-way behavior, bit-identical. On = both cleared/enabled per the user's saved band
-settings.
+Not a new persisted index. The UI writes to existing flags at once: off = every Mid output's
+`midUpperXoIndex(output, 1)` (upper-corner enable) set to 0 **and** both High outputs'
+`highOutputIndex(output, FIELD_MUTE)` set to 1 — which is exactly today's 2-way behavior,
+bit-identical. `INDEX_HIGH_XO_PASS` is deliberately **not** part of this toggle: as the index
+table above says, it only bypasses High's crossover filter (mirroring `INDEX_LPF_PASS`/
+`INDEX_HPF_PASS`), not the whole band, so setting it alone would not silence High — this was
+caught by a native-tests failure during Phase 3's own review, not assumed. On = the upper-corner
+enables and High's mute cleared per the user's saved band settings.
 
 ## Persistence and migration
 

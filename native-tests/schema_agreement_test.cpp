@@ -126,10 +126,9 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     CHECK(at260Moved - at260Default > 5.f);
 }
 
-TEST_CASE("kHighXoPass/kHighGainL/kHighGainR slots gate and shape the High band") {
-    // Isolate High (mute Low/Mid, un-bypass/un-mute High), then prove kHighXoPass actually
-    // silences it and kHighGainL/R actually shape its level -- not just that some field at
-    // those indices exists.
+TEST_CASE("kHighGainL/kHighGainR slots shape the High band's level") {
+    // Isolate High (mute Low/Mid, un-bypass/un-mute High), then prove kHighGainL/R actually
+    // shape its level -- not just that some field at those indices exists.
     auto base = defaultConfig();
     base[sch::kTiltEnabled] = 0.f;
     for (int out = 0; out < 4; ++out) {
@@ -138,27 +137,48 @@ TEST_CASE("kHighXoPass/kHighGainL/kHighGainR slots gate and shape the High band"
     for (int slot = 0; slot < 2; ++slot) {
         base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
     }
+    base[sch::kHighXoPass] = 0.f;
 
-    auto bypassed = base;
-    bypassed[sch::kHighXoPass] = 1.f;
-    NativeBmwDspProcessor bypassedProc;
-    bypassedProc.setSampleRate(kSampleRate);
-    REQUIRE(bypassedProc.configure(bypassed.data(), bypassed.size()));
-    auto buf = stereoSine(3000.0, 0.3, 8192, kSampleRate);
-    bypassedProc.process(buf.data(), buf.size());
-    CHECK(peakAbs(buf) < 1e-4f);
-
-    auto unity = base;
-    unity[sch::kHighXoPass] = 0.f;
-    auto boosted = unity;
+    auto boosted = base;
     boosted[sch::kHighGainL] = 6.f;
     boosted[sch::kHighGainR] = 6.f;
     NativeBmwDspProcessor unityProc, boostedProc;
     unityProc.setSampleRate(kSampleRate);
     boostedProc.setSampleRate(kSampleRate);
-    const float unityDb = outLevelDbAt(unityProc, unity, 3000.0);
+    const float unityDb = outLevelDbAt(unityProc, base, 3000.0);
     const float boostedDb = outLevelDbAt(boostedProc, boosted, 3000.0);
     CHECK(boostedDb - unityDb == doctest::Approx(6.f).epsilon(0.05));
+}
+
+TEST_CASE("kHighXoPass bypasses the crossover filter, not the whole band (mirrors kLpfPass/kHpfPass)") {
+    // Same contract as the existing kLpfPass/kHpfPass flags (see processFrame()'s own comment on
+    // that): bypassing skips only the crossover *filter* stage, letting the raw routed signal
+    // through. A tone well below High's HPF corner is heavily attenuated with the filter active,
+    // but passes through near-unaffected once bypassed -- proving kHighXoPass is wired to the
+    // filter stage, not a second mute.
+    auto base = defaultConfig();
+    base[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        base[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    for (int slot = 0; slot < 2; ++slot) {
+        base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+        // Default High crossoverFreq (3000 Hz) is well above the 200 Hz probe tone below.
+    }
+
+    auto filtered = base;
+    filtered[sch::kHighXoPass] = 0.f;
+    NativeBmwDspProcessor filteredProc;
+    filteredProc.setSampleRate(kSampleRate);
+    const float filteredDb = outLevelDbAt(filteredProc, filtered, 200.0);
+
+    auto bypassed = base;
+    bypassed[sch::kHighXoPass] = 1.f;
+    NativeBmwDspProcessor bypassedProc;
+    bypassedProc.setSampleRate(kSampleRate);
+    const float bypassedDb = outLevelDbAt(bypassedProc, bypassed, 200.0);
+
+    CHECK(bypassedDb - filteredDb > 20.f);
 }
 
 TEST_CASE("kHighRoutingBase locates High's routing coefficients") {
