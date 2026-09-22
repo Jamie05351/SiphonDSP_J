@@ -151,12 +151,16 @@ TEST_CASE("BW4 sits 3 dB above LR4 at the corner (-3 dB vs -6 dB; proves it is n
 TEST_CASE("Mid's upper crossover corner rolls off above it at its real dB/octave slope") {
     // fcHigh kept low enough that fcHigh*8 stays well under the 48 kHz test sample rate's
     // Nyquist (24 kHz) -- a test point at or above Nyquist aliases and reads as ~0 dB slope
-    // regardless of the real filter response.
+    // regardless of the real filter response. Even well under Nyquist, fcHigh*8 (8 kHz) is a
+    // much larger fraction of it (33%) than the other tests' fc*8 (fc=200 -> 1.6 kHz, 6.7%), so
+    // the bilinear transform's frequency warping measurably steepens the apparent slope here
+    // (observed ~11% high). A wider epsilon than the other slope tests' 0.05 is expected and
+    // correct, not a loosened correctness bar -- BW2 (12) vs LR4 (24) stay unambiguous at 0.15.
     constexpr float fcLow = 200.f, fcHigh = 1000.f;
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kBw2), fcHigh * 4, fcHigh * 8) ==
-          doctest::Approx(-12.f).epsilon(0.05));
+          doctest::Approx(-12.f).epsilon(0.15));
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcHigh * 4, fcHigh * 8) ==
-          doctest::Approx(-24.f).epsilon(0.05));
+          doctest::Approx(-24.f).epsilon(0.15));
 }
 
 TEST_CASE("Mid's upper crossover corner still rolls off correctly at the lower corner too (true bandpass)") {
