@@ -6,6 +6,7 @@ import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.model.ThreeWayCrossover
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -472,6 +473,59 @@ class BmwSignalChainModelTest {
                 if (expected > -90.0) {
                     assertEquals(expected, result.midBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-3)
                 }
+            }
+        }
+    }
+
+    @Test
+    fun threeWayToggleDefaultsOffAndOnMakesHighAudible() {
+        val defaults = baseValues()
+        assertTrue(!ThreeWayCrossover.isEnabled(defaults))
+
+        val on = defaults.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        assertTrue(ThreeWayCrossover.isEnabled(on))
+        // Mid's upper lowpass and High's highpass must come up at the same corner and slope.
+        val corner = on[ThreeWayCrossover.cornerIndex]
+        ThreeWayCrossover.cornerMirrors.forEach { assertEquals(corner, on[it], 0f) }
+        val midType = on[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)]
+        ThreeWayCrossover.typeMirrors.forEach { assertEquals(midType, on[it], 0f) }
+
+        val result = compute(on)
+        // 10 kHz is well above the 3 kHz default corner: High must be near unity, not silent.
+        val i = nearestIndex(10_000.0)
+        assertTrue(
+            "expected High audible at 10 kHz once 3-way is on",
+            result.highBranchDb[0][i] - result.preSplitDb[0][i] > -3.0,
+        )
+    }
+
+    @Test
+    fun threeWayWithOnlyOneMidUpperCornerEnabledReadsAsOffAndToggleNormalizesIt() {
+        val on = baseValues().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        val rightUpper = NativeBmwDspValues.midUpperXoIndex(
+            NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+        )
+        val asymmetric = on.copyOf().also { it[rightUpper] = 0f }
+        assertTrue(!ThreeWayCrossover.isEnabled(asymmetric))
+
+        val normalized = asymmetric.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        assertTrue(ThreeWayCrossover.isEnabled(normalized))
+        assertEquals(1f, normalized[rightUpper], 0f)
+    }
+
+    @Test
+    fun threeWayToggleOffIsBitIdenticalToTwoWay() {
+        val defaults = baseValues()
+        val on = defaults.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        val off = on.copyOf().also { v -> ThreeWayCrossover.updates(v, false).forEach { (i, x) -> v[i] = x } }
+        assertTrue(!ThreeWayCrossover.isEnabled(off))
+
+        val twoWay = compute(defaults)
+        val toggledOff = compute(off)
+        for (channel in 0..1) {
+            for (i in twoWay.sumDb[channel].indices) {
+                assertEquals(twoWay.sumDb[channel][i], toggledOff.sumDb[channel][i], 0.0)
+                assertEquals(twoWay.midBranchDb[channel][i], toggledOff.midBranchDb[channel][i], 0.0)
             }
         }
     }

@@ -611,18 +611,20 @@ private fun drawLegend(
         PeqGraphMode.PHASE -> {
             nc.drawText("LOW", g.left, baseline, tinted(p.bankColorLow))
             nc.drawText("MID", g.left + 38f * density, baseline, tinted(p.bankColorMid))
+            nc.drawText("HIGH", g.left + 76f * density, baseline, tinted(p.bankColorHigh))
             nc.drawText(
                 "FINAL SUM PHASE (L solid / R dashed) · compressor not shown (nonlinear)",
-                g.left + 76f * density, baseline, p.unifiedLegendPaint,
+                g.left + 114f * density, baseline, p.unifiedLegendPaint,
             )
         }
         PeqGraphMode.MAGNITUDE -> {
             nc.drawText("FULL", g.left, baseline, tinted(p.bankColorFull))
             nc.drawText("LOW", g.left + 38f * density, baseline, tinted(p.bankColorLow))
             nc.drawText("MID", g.left + 74f * density, baseline, tinted(p.bankColorMid))
+            nc.drawText("HIGH", g.left + 112f * density, baseline, tinted(p.bankColorHigh))
             nc.drawText(
                 "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)",
-                g.left + 112f * density, baseline, p.unifiedLegendPaint,
+                g.left + 152f * density, baseline, p.unifiedLegendPaint,
             )
         }
     }
@@ -656,6 +658,10 @@ private fun drawGlowStroke(nc: Canvas, glass: PeqGlassPaints, path: Path, paint:
 private fun drawBranchCurves(nc: Canvas, ctx: PeqDrawContext) {
     drawBranchChannelPair(nc, ctx, ctx.curves.lowBranchDb, ctx.paints.lowBranchPaint, ctx.paints.lowBranchPaintDashed)
     drawBranchChannelPair(nc, ctx, ctx.curves.midBranchDb, ctx.paints.midBranchPaint, ctx.paints.midBranchPaintDashed)
+    // High is silent unless the Crossovers page's 3-way switch is on; skip its flat floor trace.
+    if (ctx.curves.highBranchActive) {
+        drawBranchChannelPair(nc, ctx, ctx.curves.highBranchDb, ctx.paints.highBranchPaint, ctx.paints.highBranchPaintDashed)
+    }
 }
 
 private fun drawBranchChannelPair(
@@ -718,6 +724,7 @@ private fun drawPhaseCurves(nc: Canvas, ctx: PeqDrawContext) {
     val toY: (Double) -> Float = { ctx.geometry.yForPhaseDeg(Math.toDegrees(it)) }
     drawCurveAverage(nc, ctx, ctx.curves.lowBranchPhase, ctx.paints.lowBranchPaint, toY)
     drawCurveAverage(nc, ctx, ctx.curves.midBranchPhase, ctx.paints.midBranchPaint, toY)
+    if (ctx.curves.highBranchActive) drawCurveAverage(nc, ctx, ctx.curves.highBranchPhase, ctx.paints.highBranchPaint, toY)
     if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) {
         drawCurveForChannel(nc, ctx, ctx.curves.sumPhase[BmwOutputChannel.LEFT.ordinal], ctx.paints.sumPaintSolid, toY)
     }
@@ -963,8 +970,6 @@ private fun referenceCurveForBank(ctx: PeqDrawContext, bank: BmwPeqBank): Double
         BmwPeqBank.FULL -> ctx.curves.preSplitDb
         BmwPeqBank.LOW -> ctx.curves.lowBranchDb
         BmwPeqBank.MID -> ctx.curves.midBranchDb
-        // Not yet reachable from the PEQ editing screen (PeqScope has no High entry yet -- that's
-        // Phase 5), but BmwResponseCurves already computes it, so this stays correct if/when it is.
         BmwPeqBank.HIGH -> ctx.curves.highBranchDb
     }
     val channelIndex =
@@ -1285,6 +1290,7 @@ private fun hitTestAnyBank(
     val full = peqState.fullRangeBands.toList()
     val low = peqState.lowBandBands.toList()
     val mid = peqState.midBandBands.toList()
+    val high = peqState.highBandBands.toList()
     val radius = NODE_TOUCH_RADIUS_DP * density
     var best: NodeHit? = null
     var bestDistance = Float.MAX_VALUE
@@ -1302,6 +1308,7 @@ private fun hitTestAnyBank(
     consider(full, BmwPeqBank.FULL, 0)
     consider(low, BmwPeqBank.LOW, full.size)
     consider(mid, BmwPeqBank.MID, full.size + low.size)
+    consider(high, BmwPeqBank.HIGH, full.size + low.size + mid.size)
     return best
 }
 
@@ -1427,14 +1434,13 @@ private class PeqDrawContext(
     val fullBands: List<ParametricEqBand> = peqState.fullRangeBands.toList()
     val lowBands: List<ParametricEqBand> = peqState.lowBandBands.toList()
     val midBands: List<ParametricEqBand> = peqState.midBandBands.toList()
+    val highBands: List<ParametricEqBand> = peqState.highBandBands.toList()
 
-    /** Global 1-based filter numbering: Full, then Low, then Mid — = ParametricEqSurface.bankNumberOffset. */
+    /** Global 1-based filter numbering: Full, then Low, then Mid, then High — = ParametricEqSurface.bankNumberOffset. */
     fun bankNumberOffset(bank: BmwPeqBank): Int = when (bank) {
         BmwPeqBank.FULL -> 0
         BmwPeqBank.LOW -> fullBands.size
         BmwPeqBank.MID -> fullBands.size + lowBands.size
-        // Not yet reachable (forEachVisibleBank/hitTestAnyBank don't enumerate High -- PeqScope
-        // has no High entry yet, that's Phase 5), kept correct for when it is.
         BmwPeqBank.HIGH -> fullBands.size + lowBands.size + midBands.size
     }
 
@@ -1442,6 +1448,7 @@ private class PeqDrawContext(
         action(BmwPeqBank.FULL, fullBands)
         action(BmwPeqBank.LOW, lowBands)
         action(BmwPeqBank.MID, midBands)
+        action(BmwPeqBank.HIGH, highBands)
     }
 }
 

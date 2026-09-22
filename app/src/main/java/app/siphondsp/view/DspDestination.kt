@@ -135,6 +135,15 @@ object DspCrossNavBar {
         }
     }
 
+    /** Swaps the workspace backdrop for the head-unit or phone art, per [isHeadUnitDisplay]. Also
+     *  used after [populate] by workspaces whose art changes per pager page (Gains & Delay's
+     *  per-band car art); every variant must share its tier's exact pixel size, or centerCrop
+     *  drifts the baked-in rail away from the live sidebar tiles. */
+    fun showBackdrop(activity: FragmentActivity, headUnit: Int, phone: Int) {
+        val backdrop = if (isHeadUnitDisplay(activity)) headUnit else phone
+        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
+    }
+
     fun populate(
         activity: FragmentActivity,
         container: ComposeView,
@@ -146,8 +155,7 @@ object DspCrossNavBar {
         // The rail visual: swap in this destination's own backdrop (housing + background baked
         // in). Picks the head-unit or phone art per-destination based on the live screen width --
         // see isHeadUnitDisplay().
-        val backdrop = if (isHeadUnitDisplay(activity)) current.backdrop else current.backdropPhone
-        activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
+        showBackdrop(activity, current.backdrop, current.backdropPhone)
         if (!isHeadUnitDisplay(activity)) applyPhoneRailGeometry(activity)
 
         val headUnit = isHeadUnitDisplay(activity)

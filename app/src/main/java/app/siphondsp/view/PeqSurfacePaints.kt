@@ -54,10 +54,11 @@ class PeqSurfacePaints(
     val bankColorFull = Color.rgb(255, 255, 255)
     val bankColorLow = Color.rgb(0, 209, 255)
     val bankColorMid = Color.rgb(255, 224, 0)
+    val bankColorHigh = BmwDashboardSkin.HIGH_BAND_PINK
     val sumColor = Color.rgb(255, 255, 255)
 
     // Per-band palette (FabFilter Pro-Q-style): each filter gets its own colour, cycling by its
-    // GLOBAL number (Input Correction, then Low, then Mid -- see bankNumberOffset), so no two
+    // GLOBAL number (Input Correction, then Low, then Mid, then High -- see bankNumberOffset), so no two
     // filters on the graph share a colour until there are more than perBandPalette.size of them.
     // The SAME colour is used for that filter's node dot, its isolated-response overlay line,
     // its shaded fill, and its tap-info card, so "this dot" and "this shape" are unmistakably the
@@ -124,6 +125,10 @@ class PeqSurfacePaints(
         pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
     }
     val midBranchPaintDashed = Paint(midBranchPaint).apply {
+        pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
+    }
+    val highBranchPaint = Paint(midBranchPaint).apply { color = bankColorHigh }
+    val highBranchPaintDashed = Paint(highBranchPaint).apply {
         pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
     }
     val sumPaintSolid = Paint(Paint.ANTI_ALIAS_FLAG).apply {

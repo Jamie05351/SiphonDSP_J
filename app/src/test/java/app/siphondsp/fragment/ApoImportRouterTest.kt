@@ -37,6 +37,13 @@ class ApoImportRouterTest {
     }
 
     @Test
+    fun highAndTweeterRouteToHighWithTheSideToken() {
+        assertEquals(PeqScope.HIGH to ParametricEqChannel.LEFT, route("high_left.txt"))
+        assertEquals(PeqScope.HIGH to ParametricEqChannel.RIGHT, route("Tweeter R.txt"))
+        assertEquals(PeqScope.HIGH to ParametricEqChannel.LEFT_RIGHT, route("tweeter.txt"))
+    }
+
+    @Test
     fun unrecognisedNamesRouteNowhere() {
         assertNull(route("random export.txt"))
         assertNull(route("speaker7.txt"))

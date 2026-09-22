@@ -60,6 +60,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             PeqScope.FULL -> android.graphics.Color.WHITE
             PeqScope.LOW -> BmwDashboardSkin.LIGHT_BLUE
             PeqScope.MID -> BmwDashboardSkin.MID_BAND_YELLOW
+            PeqScope.HIGH -> BmwDashboardSkin.HIGH_BAND_PINK
         }
 
     /**
@@ -86,7 +87,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         }
         Timber.d(
             "$source scope=${selectedScope.label} full=${candidate.fullRangeBands.size} " +
-                "low=${candidate.lowBandBands.size} mid=${candidate.midBandBands.size} " +
+                "low=${candidate.lowBandBands.size} mid=${candidate.midBandBands.size} high=${candidate.highBandBands.size} " +
                 "serviceAvailable=$serviceAvailable result=$result",
         )
         if (!result) {

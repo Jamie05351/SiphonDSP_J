@@ -24,7 +24,8 @@ private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
  * `base..base+3` slots (enabled / order / freq / Q) with per-`base` `onCommit` closures, and the
  * shared [rememberBmwDspState] snapshot means recomposition stays scoped per section.
  *
- * A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts four of these, one per output.
+ * A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts six of these, one per output
+ * (Low / Mid / High x L/R).
  */
 @Composable
 fun OutputAllPassScreen(
@@ -37,6 +38,12 @@ fun OutputAllPassScreen(
     val dsp = rememberBmwDspState()
     val bandColor = Color(bandColorArgb)
     val sliderColor = Color(sliderColorArgb)
+    val isHigh = output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT
+    // High only plays above the Mid/High corner (1 kHz+), so the Low/Mid 20..1000 Hz range would
+    // leave its all-pass unable to reach the band it acts on. UI-only: native accepts any
+    // frequency below Nyquist.
+    val freqRange = if (isHigh) 1000f..16000f else 20f..1000f
+    val freqStep = if (isHigh) 10f else 1f
 
     BmwDspTheme {
         BmwPanel(
@@ -51,15 +58,31 @@ fun OutputAllPassScreen(
             sliderLabels = listOf("Frequency", "Q"),
         ) {
             repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
-                val base = NativeBmwDspValues.INDEX_ALL_PASS +
-                    (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) *
-                    NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+                // High's all-pass block lives in the schema tail, not the legacy 4-output block.
+                val base = if (isHigh) {
+                    NativeBmwDspValues.highAllPassIndex(output, section, 0)
+                } else {
+                    NativeBmwDspValues.INDEX_ALL_PASS +
+                        (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) *
+                        NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
+                }
 
                 val order = dsp.get(base + 1)
                 val selectedOrder = OrderOptions.indices.minByOrNull { abs(OrderOptions[it].second - order) } ?: 0
                 BmwDropdownRow(
                     toggleChecked = dsp.isOn(base),
-                    onToggleChange = { dsp.commit(base, if (it) 1f else 0f) },
+                    onToggleChange = { on ->
+                        // High's sections are stored at the shared 150 Hz default, below its
+                        // range, so the slider shows a coerced value native isn't using. Commit
+                        // that shown value with the enable so what plays matches what's shown.
+                        val freq = dsp.get(base + 2)
+                        val shown = freq.coerceIn(freqRange.start, freqRange.endInclusive)
+                        if (on && shown != freq) {
+                            dsp.commitAll(mapOf(base to 1f, base + 2 to shown))
+                        } else {
+                            dsp.commit(base, if (on) 1f else 0f)
+                        }
+                    },
                     options = OrderOptions.map { it.first },
                     selectedIndex = selectedOrder,
                     onSelect = { dsp.commit(base + 1, OrderOptions[it].second) },
@@ -67,8 +90,8 @@ fun OutputAllPassScreen(
                 BmwSliderRow(
                     label = "Frequency",
                     value = dsp.get(base + 2),
-                    valueRange = 20f..1000f,
-                    step = 1f,
+                    valueRange = freqRange,
+                    step = freqStep,
                     unit = "Hz",
                     accentColor = sliderColor,
                     onPreview = { dsp.preview(base + 2, it) },

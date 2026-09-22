@@ -83,6 +83,24 @@ class BmwDspState internal constructor(private val appContext: Context) {
         return true
     }
 
+    /**
+     * [commit] for several indices with different values, persisted and broadcast as one update
+     * -- for switches that must flip a group of fields together (e.g. the Crossovers page's 3-way
+     * toggle) without the engine ever seeing a half-applied intermediate state.
+     */
+    fun commitAll(updates: Map<Int, Float>): Boolean {
+        val next = values.copyOf()
+        for ((index, value) in updates) next[index] = value
+        if (!NativeBmwDspValues.save(appContext, next)) {
+            refreshFromDisk()
+            appContext.toast("BMW DSP settings could not be saved; previous settings restored")
+            return false
+        }
+        values = next
+        NativeBmwDspValues.broadcast(appContext, next)
+        return true
+    }
+
     /** Reloads the persisted values and re-broadcasts them so the native engine drops any
      *  un-persisted [preview] it applied before this composition was paused (e.g. a measurement
      *  generator type/timing-ref toggle left running) -- otherwise the UI would resync to disk

@@ -3,7 +3,7 @@ package app.siphondsp.fragment
 import app.siphondsp.dsp.BmwPeqBank
 
 /**
- * The three PEQ banks as presented by the Parametric EQ screen's Pre EQ / Low / Mid scope
+ * The four PEQ banks as presented by the Parametric EQ screen's Pre EQ / Low / Mid / High scope
  * control ([app.siphondsp.compose.screens.PeqScopeControl]).
  *
  * Extracted from `ParametricEqualizerFragment` (where it was a private nested enum) so the pure
@@ -18,4 +18,5 @@ enum class PeqScope(
     FULL("Pre EQ", "input_correction_parametric_eq.txt", BmwPeqBank.FULL),
     LOW("Low Band", "low_band_parametric_eq.txt", BmwPeqBank.LOW),
     MID("Mid Band", "mid_band_parametric_eq.txt", BmwPeqBank.MID),
+    HIGH("High Band", "high_band_parametric_eq.txt", BmwPeqBank.HIGH),
 }

@@ -19,7 +19,7 @@ import app.siphondsp.view.BmwDashboardSkin
 
 /** Output all-pass workspace: the two cascaded all-pass filter sections per physical output.
  *  Each output is a swipe page ([OutputAllPassScreen], Compose -- see
- *  COMPOSE_MIGRATION_ROADMAP.md Phase 9), colour-coded Low=blue / Mid=yellow the same way Gains
+ *  COMPOSE_MIGRATION_ROADMAP.md Phase 9), colour-coded Low=blue / Mid=yellow / High=pink the same way Gains
  *  & Delay and Crossovers & Tilt are, so which output you're on reads at a glance.
  *
  *  Phase 11.1: hosted directly by Compose's own `HorizontalPager` (see `ParametricEqScreen` for
@@ -45,7 +45,7 @@ class OutputAllPassFragment : Fragment() {
     }
 
     companion object {
-        const val PAGE_COUNT = 4
+        const val PAGE_COUNT = 6
     }
 }
 
@@ -56,7 +56,9 @@ private fun OutputAllPassPager(pagerState: PagerState) {
             0 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
             1 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
             2 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
-            else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            3 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            4 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_LEFT, "Left High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
+            else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, "Right High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
         }
     }
 }

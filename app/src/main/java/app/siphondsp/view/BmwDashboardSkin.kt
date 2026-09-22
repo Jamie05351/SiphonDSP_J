@@ -32,6 +32,9 @@ object BmwDashboardSkin {
     // Mid-band accent, paired with LIGHT_BLUE for the app-wide Low=blue / Mid=yellow convention
     // (PEQ visualizer, Gains & Delay channel cards/sliders, Crossovers Lowpass/Highpass sliders).
     const val MID_BAND_YELLOW = 0xFFFFCA28.toInt()
+    // High-band (tweeter) accent, completing Low=blue / Mid=yellow / High=pink for the 3-way
+    // crossover. Taken from the pink tweeter callouts in the 3-way Gains & Delay backdrop art.
+    const val HIGH_BAND_PINK = 0xFFFF1F8F.toInt()
     // Solid, flat fill for the sidebar panel -- deliberately not the photo texture the workspace
     // background/cards use, so it reads as a distinct, well-defined fixture rather than blending
     // into the content behind it. Not near-black, so it sits alongside the main panel without the
@@ -163,6 +166,7 @@ object BmwDashboardSkin {
     // without recoloring anything else on the row.
     const val SLIDER_LOW_BAND_COLOR = 0xFF3D6BFF.toInt()
     const val SLIDER_MID_BAND_COLOR = 0xFFFFE500.toInt()
+    const val SLIDER_HIGH_BAND_COLOR = 0xFFFF2EB4.toInt()
     const val SLIDER_HEADROOM_COLOR = 0xFFB14DFF.toInt()
     // Tonality Tilt: a bright neon orange, distinct from the Mid band's pure yellow.
     const val SLIDER_TILT_COLOR = 0xFFFF6A00.toInt()

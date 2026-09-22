@@ -32,7 +32,7 @@ object ApoImportRouter {
 
     /**
      * Map a REW/APO export filename onto a (bank, channel). "input" / "correction" / "full" go
-     * to Input Correction as L+R; "low" / "mid" pick up a side from a left/right (or _l/_r,
+     * to Input Correction as L+R; "low" / "mid" / "high" (or "tweeter") pick up a side from a left/right (or _l/_r,
      * -l/-r) token in the name, otherwise L+R.
      */
     fun routeApoFileName(name: String): Pair<PeqScope, ParametricEqChannel>? {
@@ -47,6 +47,7 @@ object ApoImportRouter {
                 PeqScope.FULL to ParametricEqChannel.LEFT_RIGHT
             "low" in base -> PeqScope.LOW to (side ?: ParametricEqChannel.LEFT_RIGHT)
             "mid" in base -> PeqScope.MID to (side ?: ParametricEqChannel.LEFT_RIGHT)
+            "high" in base || "tweeter" in base -> PeqScope.HIGH to (side ?: ParametricEqChannel.LEFT_RIGHT)
             else -> null
         }
     }
