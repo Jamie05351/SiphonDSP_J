@@ -49,8 +49,12 @@ object ThreeWayCrossover {
         highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_CROSSOVER_TYPE),
     )
 
+    /** Both Mid upper-corner flags are persisted independently, so a restored/imported array can
+     *  have only one set -- native would then play High on that side with the other Mid branch
+     *  unbounded. Only the fully consistent state counts as on, so an asymmetric one shows as off
+     *  and turning the switch on normalizes it via [updates]. */
     fun isEnabled(values: FloatArray): Boolean =
-        values[INDEX_HIGH_XO_PASS] < .5f && values[midUpperEnabledL] >= .5f
+        values[INDEX_HIGH_XO_PASS] < .5f && values[midUpperEnabledL] >= .5f && values[midUpperEnabledR] >= .5f
 
     fun updates(values: FloatArray, enabled: Boolean): Map<Int, Float> {
         if (!enabled) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,7 +47,8 @@ import app.siphondsp.view.BmwDashboardSkin
  * ([band]'s `backdrop`, swapped in by `GainLimiterFragment` as the pager moves) with the car and
  * that band's speakers + leader lines baked in. The cards sit at the height of those leader
  * lines, measured off the 2340x878 head-unit art at its 1280x480 render scale (~0.547 dp/px)
- * minus the 69 dp toolbar. Fixed-height, designed for the head unit, never scrolls.
+ * minus the 69 dp toolbar. Designed for the head unit and never scrolls; on a shorter screen the
+ * columns move up rather than clip (see [clampedTop]).
  *
  * High only makes sound with the Crossovers page's 3-way switch on; with it off the High page
  * stays in the pager (so the page count never changes) but greyed out and inert, with a pointer
@@ -110,7 +112,7 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier) {
         Box(modifier = modifier.fillMaxSize()) {
             BandColumn(
                 inactive,
-                Modifier.align(Alignment.TopStart).padding(start = SideInset, top = band.cardTop),
+                Modifier.align(Alignment.TopStart).padding(start = SideInset).clampedTop(band.cardTop),
             ) {
                 GainsChannelCard(
                     dsp, linked, band,
@@ -122,7 +124,7 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier) {
             }
             BandColumn(
                 inactive,
-                Modifier.align(Alignment.TopEnd).padding(end = SideInset, top = band.cardTop),
+                Modifier.align(Alignment.TopEnd).padding(end = SideInset).clampedTop(band.cardTop),
             ) {
                 GainsChannelCard(
                     dsp, linked, band,
@@ -191,6 +193,17 @@ private fun BandColumn(
             )
         }
     }
+}
+
+/** Places the column at [preferredTop] (the art's leader-line height), but moved up if that
+ *  would push its bottom past [BottomInset] -- a landscape phone's content frame can be ~120 dp
+ *  shorter than the head unit's 411 dp, which would clip the Low card and Stage Alignment. A
+ *  no-op on the head unit, where every band's column fits at its preferred top. */
+private fun Modifier.clampedTop(preferredTop: Dp): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minHeight = 0))
+    val height = constraints.maxHeight
+    val top = minOf(preferredTop.roundToPx(), height - placeable.height - BottomInset.roundToPx())
+    layout(placeable.width, height) { placeable.place(0, top.coerceAtLeast(0)) }
 }
 
 @Composable
@@ -290,6 +303,8 @@ private const val InactiveAlpha = 0.35f
 // right of the car there is only ~245 dp -- needs a head-unit look.
 private val ColumnWidth = 292.dp
 private val SideInset = 16.dp
+// Keeps the lowest column clear of the bezel, as the old single-page layout's bottom padding did.
+private val BottomInset = 30.dp
 private val CardStageGap = 8.dp
 private val StageTimingHeight = 42.dp
 private val StageValueWidth = 82.dp

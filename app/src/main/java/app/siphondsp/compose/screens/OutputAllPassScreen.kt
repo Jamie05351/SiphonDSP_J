@@ -71,7 +71,18 @@ fun OutputAllPassScreen(
                 val selectedOrder = OrderOptions.indices.minByOrNull { abs(OrderOptions[it].second - order) } ?: 0
                 BmwDropdownRow(
                     toggleChecked = dsp.isOn(base),
-                    onToggleChange = { dsp.commit(base, if (it) 1f else 0f) },
+                    onToggleChange = { on ->
+                        // High's sections are stored at the shared 150 Hz default, below its
+                        // range, so the slider shows a coerced value native isn't using. Commit
+                        // that shown value with the enable so what plays matches what's shown.
+                        val freq = dsp.get(base + 2)
+                        val shown = freq.coerceIn(freqRange.start, freqRange.endInclusive)
+                        if (on && shown != freq) {
+                            dsp.commitAll(mapOf(base to 1f, base + 2 to shown))
+                        } else {
+                            dsp.commit(base, if (on) 1f else 0f)
+                        }
+                    },
                     options = OrderOptions.map { it.first },
                     selectedIndex = selectedOrder,
                     onSelect = { dsp.commit(base + 1, OrderOptions[it].second) },

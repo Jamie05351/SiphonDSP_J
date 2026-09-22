@@ -500,6 +500,20 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun threeWayWithOnlyOneMidUpperCornerEnabledReadsAsOffAndToggleNormalizesIt() {
+        val on = baseValues().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        val rightUpper = NativeBmwDspValues.midUpperXoIndex(
+            NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+        )
+        val asymmetric = on.copyOf().also { it[rightUpper] = 0f }
+        assertTrue(!ThreeWayCrossover.isEnabled(asymmetric))
+
+        val normalized = asymmetric.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        assertTrue(ThreeWayCrossover.isEnabled(normalized))
+        assertEquals(1f, normalized[rightUpper], 0f)
+    }
+
+    @Test
     fun threeWayToggleOffIsBitIdenticalToTwoWay() {
         val defaults = baseValues()
         val on = defaults.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
