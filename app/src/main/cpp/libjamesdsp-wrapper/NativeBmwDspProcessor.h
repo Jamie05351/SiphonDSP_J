@@ -74,14 +74,23 @@ public:
     // fields, index 46) -- kAllPassBase/kOutputSchemaMarkerIndex/kOutputConfigBase are all
     // derived from it and the routing/all-pass block sizes, rather than being independent
     // literals that would silently misalign with configure()'s actual v[] reads (and with
-    // NativeBmwDspSchema.h's own copies of these same offsets) if kOutputCount/kInputCount/
+    // NativeBmwDspSchema.h's own copies of these same offsets) if kLegacyOutputCount/kInputCount/
     // kAllPassSectionsPerOutput ever changed without every bare-literal copy being updated too.
+    //
+    // Deliberately derived from NativeBmwRouting::kLegacyOutputCount (4), NOT kOutputCount (6):
+    // these four offsets are the persisted-schema layout every existing saved config already
+    // relies on. If they were derived from kOutputCount instead, adding the High band would
+    // silently shift every index from 87 onward (the whole 139->205 tail: measurement-mute,
+    // MBC, bus limiters, master limiter, measurement generator) and corrupt every existing
+    // user's save on their next launch. High's own persisted block lives in the schema's tail
+    // (appended after index 204) instead of growing this block in place. See
+    // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     enum : std::size_t {
         kRoutingBase = 46,
-        kRoutingValueCount = NativeBmwRouting::kOutputCount * NativeBmwRouting::kInputCount,
+        kRoutingValueCount = NativeBmwRouting::kLegacyOutputCount * NativeBmwRouting::kInputCount,
         kAllPassBase = kRoutingBase + kRoutingValueCount,
         kAllPassValueWidth = 4,
-        kAllPassValueCount = NativeBmwRouting::kOutputCount *
+        kAllPassValueCount = NativeBmwRouting::kLegacyOutputCount *
                              NativeBmwRouting::kAllPassSectionsPerOutput * kAllPassValueWidth,
         kOutputSchemaMarkerIndex = kAllPassBase + kAllPassValueCount,
         kOutputConfigBase = kOutputSchemaMarkerIndex + 1,
@@ -331,6 +340,11 @@ private:
         float gain = 1.0f;
         Biquad subsonic1;
         Biquad crossover1, crossover2;
+        // Second filter-pair slot, only consumed by Mid's future bandpass (an LPF cascade at a
+        // second corner, cascaded after crossover1/2's HPF) -- unused by Low/High, which only
+        // ever need one filter direction. Inert (identity pass-through, Biquad's default) until
+        // wired up. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+        Biquad crossover3, crossover4;
         Delay delay;
         std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>
             allPass{};
@@ -348,6 +362,8 @@ private:
             subsonic1.clear();
             crossover1.clear();
             crossover2.clear();
+            crossover3.clear();
+            crossover4.clear();
             delay.clear();
             for (auto& section : allPassState) {
                 section.clear();
