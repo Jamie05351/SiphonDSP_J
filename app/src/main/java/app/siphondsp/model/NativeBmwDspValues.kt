@@ -37,7 +37,13 @@ object NativeBmwDspValues {
     // 192 -> 197 -> 199 -> 200 -> 205 growths. No migration marker needed -- same as the
     // 144 -> 192 growth, an older save simply leaves the new trailing slots at their DEFAULTS
     // (type off / timing reference off).
-    const val SIZE = 205
+    //
+    // 205..209 are Mid's optional upper (Mid/High) bandpass corner, added in the 205 -> 210
+    // growth (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md) -- Phase 2 of the 2-way -> 3-way output
+    // crossover work. Only Mid has this field; Low/High don't. 209 is a one-time migration
+    // marker: migrateMidUpperCrossoverIfNeeded() seeds it disabled for existing saves, same
+    // pattern as migrateMbcIfNeeded().
+    const val SIZE = 210
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -276,6 +282,29 @@ object NativeBmwDspValues {
     const val INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ = 203
     const val INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ = 204
 
+    // Mid's optional upper (Mid/High) bandpass corner (205..209) -- turns Mid from HPF-only into
+    // a true bandpass. Only Mid has this; Low/High don't. A 2-slot (Left/Right) tail block, not
+    // folded into the per-output INDEX_OUTPUT_CONFIG block above -- growing that block's width in
+    // place would shift every index from 139 onward for every output, not just Mid. Use
+    // midUpperXoIndex(OUTPUT_MID_LEFT/RIGHT, field) rather than these base constants directly.
+    const val INDEX_MID_UPPER_XO = 205
+    const val MID_UPPER_XO_WIDTH = 2
+    const val MID_UPPER_XO_FIELD_FREQ = 0
+    const val MID_UPPER_XO_FIELD_ENABLED = 1
+    // One-time marker: 1 once an existing saved config has had the Mid upper-corner block seeded
+    // disabled. Kotlin-only -- native never reads this index. See migrateMidUpperCrossoverIfNeeded.
+    const val INDEX_MID_UPPER_XO_MIGRATED = 209
+    const val DEFAULT_MID_UPPER_XO_FREQ = 3000f
+
+    fun midUpperXoIndex(output: Int, field: Int): Int {
+        require(output == OUTPUT_MID_LEFT || output == OUTPUT_MID_RIGHT) {
+            "Mid upper crossover corner only exists for Mid outputs, got $output"
+        }
+        require(field in 0 until MID_UPPER_XO_WIDTH) { "Invalid Mid upper XO field $field" }
+        val slot = if (output == OUTPUT_MID_LEFT) 0 else 1
+        return INDEX_MID_UPPER_XO + slot * MID_UPPER_XO_WIDTH + field
+    }
+
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_ENABLED = INDEX_LOW_COMPRESSOR_ENABLED
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_THRESHOLD = INDEX_LOW_COMPRESSOR_THRESHOLD
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RATIO = INDEX_LOW_COMPRESSOR_RATIO
@@ -344,6 +373,10 @@ object NativeBmwDspValues {
         2f, -12f, // pink noise period s, level dBFS
         0f, // timing reference off
         0f, 100f, 20000f, 20f, 400f, // timing ref: split channels off, Mid Hz, Low Hz
+        // --- Mid upper (Mid/High) bandpass corner (205..209), ships DISABLED ---
+        DEFAULT_MID_UPPER_XO_FREQ, 0f, // 205..206 Mid Left: freq, enabled
+        DEFAULT_MID_UPPER_XO_FREQ, 0f, // 207..208 Mid Right: freq, enabled
+        0f, // 209 migration marker (0 = seed the block disabled on next load)
     )
 
     init {
@@ -363,7 +396,26 @@ object NativeBmwDspValues {
         migrateDisableLegacyCompressorIfNeeded(store, values)
         migrateMasterLimiterIfNeeded(store, values)
         migrateCrossoverTypeIfNeeded(store, values)
+        migrateMidUpperCrossoverIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed Mid's upper (Mid/High) bandpass corner disabled (indices 205..209, added in the
+     * 205 -> 210 growth) on configs saved before it existed. The index-keyed [NativeBmwDspStore]
+     * already backfills a missing index from [DEFAULTS] on load -- DEFAULTS already ships this
+     * disabled -- so this mostly just claims the marker at index 209, mirroring
+     * [migrateMbcIfNeeded]: it stays OFF for existing users even if a later build ever ships a
+     * different default. Runs once; the marker then stops it so a deliberate later enable is
+     * respected.
+     */
+    private fun migrateMidUpperCrossoverIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
+        if (values[INDEX_MID_UPPER_XO_MIGRATED] == 1f) return
+        values[midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_ENABLED)] = 0f
+        values[midUpperXoIndex(OUTPUT_MID_RIGHT, MID_UPPER_XO_FIELD_ENABLED)] = 0f
+        values[INDEX_MID_UPPER_XO_MIGRATED] = 1f
+        val saved = store?.save(values)
+        Timber.i("BMW DSP seeded Mid upper crossover corner disabled success=$saved")
     }
 
     /**
@@ -447,6 +499,7 @@ object NativeBmwDspValues {
         migrateDisableLegacyCompressorIfNeeded(store, padded)
         migrateMasterLimiterIfNeeded(store, padded)
         migrateCrossoverTypeIfNeeded(store, padded)
+        migrateMidUpperCrossoverIfNeeded(store, padded)
         return padded
     }
 

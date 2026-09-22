@@ -126,6 +126,29 @@ TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
     CHECK(at260Moved - at260Default > 5.f);
 }
 
+TEST_CASE("kMidUpperXo block enables and locates Mid's upper (Mid/High) bandpass corner") {
+    // Isolate Mid (mute Low), enable the upper corner well below a test tone, and check that tone
+    // comes back down heavily -- only kMidUpperXoEnabled/kMidUpperXoFreq can do that, since the
+    // (untouched) lower HPF corner stays at its default 150 Hz and would otherwise pass it.
+    NativeBmwDspProcessor off, on;
+    auto base = defaultConfig();
+    base[sch::kTiltEnabled] = 0.f;
+    for (int out = 0; out < 2; ++out) {  // Low Left, Low Right
+        base[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
+    }
+    auto enabled = base;
+    for (int out = 2; out < 4; ++out) {  // Mid Left, Mid Right
+        const int slot = out - 2;
+        enabled[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 1000.f;
+        enabled[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+    }
+
+    const float at4kOff = outLevelDbAt(off, base, 4000.0);
+    const float at4kOn = outLevelDbAt(on, enabled, 4000.0);
+    INFO("4 kHz: upper XO off ", at4kOff, " dB   upper XO@1kHz on ", at4kOn, " dB");
+    CHECK(at4kOff - at4kOn > 10.f);
+}
+
 TEST_CASE("kTiltEnabled / kTiltAmount / kTiltFreq slots") {
     auto balanceDb = [](float enabled, float amount, float freq) {
         // Low-vs-high balance: enable + amount move this a lot.

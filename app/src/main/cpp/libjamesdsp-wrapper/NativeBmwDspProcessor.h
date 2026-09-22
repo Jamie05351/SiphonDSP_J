@@ -61,7 +61,14 @@ public:
     //            1 split (chirp-only / sweep-only) -- only meaningful while 199 is set
     //   201..202 timing-reference Mid-band sweep start Hz, end Hz
     //   203..204 timing-reference Low-band sweep start Hz, end Hz
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 205 };
+    //
+    // 205..209 -- Mid's optional upper (Mid/High) bandpass corner, added in the 205 -> 210
+    // growth (see docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). Only Mid has this field; Low/High
+    // don't. Indices match NativeBmwDspValues.INDEX_MID_UPPER_XO* / midUpperXoIndex():
+    //   205      Mid Left upper corner, Hz         206  Mid Left upper corner enabled
+    //   207      Mid Right upper corner, Hz         208  Mid Right upper corner enabled
+    //   209      Kotlin-only migration marker -- never read here
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 210 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -331,6 +338,15 @@ private:
         bool muted = false;
         bool polarityInverted = false;
         CompressorParams compressor{};
+        // Mid's optional upper (Mid/High) bandpass corner -- only meaningful when the owning
+        // output is Mid; carried-but-ignored for Low/High, same as subsonicEnabled/subsonicFreq
+        // above being carried-but-ignored outside Low. Appended at the end of this struct (not
+        // grouped with crossoverFreq/crossoverType above) so the existing positional aggregate
+        // initializers in the constructor keep working unchanged -- default-initializes to
+        // disabled for all three of them. See rebuildMidCrossover() and
+        // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+        bool upperCrossoverEnabled = false;
+        float upperCrossoverFreq = 3000;
     };
     struct OutputRuntime {
         NativeBmwRouting::OutputId id = NativeBmwRouting::OutputId::LowLeft;

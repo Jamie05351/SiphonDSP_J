@@ -114,6 +114,12 @@ class NativeBmwSchemaAgreementTest {
         "kMeasGenTimingRefMidEndHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ,
         "kMeasGenTimingRefLowStartHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ,
         "kMeasGenTimingRefLowEndHz" to NativeBmwDspValues.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ,
+
+        "kMidUpperXo" to NativeBmwDspValues.INDEX_MID_UPPER_XO,
+        "kMidUpperXoWidth" to NativeBmwDspValues.MID_UPPER_XO_WIDTH,
+        "kMidUpperXoFreq" to NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
+        "kMidUpperXoEnabled" to NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+        "kMidUpperXoMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_MIGRATED,
     )
 
     @Test

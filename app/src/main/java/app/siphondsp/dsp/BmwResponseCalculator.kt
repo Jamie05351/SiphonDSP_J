@@ -37,8 +37,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
     private val fullCascade = arrayOf(BiquadCascade(20), BiquadCascade(20))
     private val lowCascade = arrayOf(BiquadCascade(22), BiquadCascade(22))
-    // 2 HPF sections + up to 16 mid-bank PEQ = 18; 22 keeps headroom.
-    private val midCascade = arrayOf(BiquadCascade(22), BiquadCascade(22))
+    // 2 HPF sections + up to 2 optional LPF sections (Mid's upper bandpass corner) + up to
+    // 16 mid-bank PEQ = 20; 24 keeps headroom.
+    private val midCascade = arrayOf(BiquadCascade(24), BiquadCascade(24))
     private val lowAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val tiltCascade = BiquadCascade(4)
@@ -167,6 +168,34 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 else -> {
                     cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
                     cascade.addHighPass(crossoverFreq, BUTTERWORTH_Q, sampleRate)
+                }
+            }
+            // Optional upper (Mid/High) bandpass corner -- mirrors
+            // NativeBmwDspProcessor::rebuildMidCrossover's second switch exactly, cascaded after
+            // the HPF pair above and before PEQ, matching processMidCrossover's stage order.
+            val upperEnabled = values[NativeBmwDspValues.midUpperXoIndex(
+                output, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
+            )] >= .5f
+            if (upperEnabled) {
+                val upperFreq = values[NativeBmwDspValues.midUpperXoIndex(
+                    output, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
+                )].toDouble()
+                when {
+                    crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
+                        cascade.addLowPass1(upperFreq, sampleRate)
+                    crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
+                        cascade.addLowPass(upperFreq, BUTTERWORTH4_Q_LOW, sampleRate)
+                        cascade.addLowPass(upperFreq, BUTTERWORTH4_Q_HIGH, sampleRate)
+                    }
+                    crossoverType < .5f -> cascade.addLowPass(upperFreq, BUTTERWORTH_Q, sampleRate)
+                    crossoverType < 1.5f -> {
+                        cascade.addLowPass1(upperFreq, sampleRate)
+                        cascade.addLowPass(upperFreq, BUTTERWORTH3_Q, sampleRate)
+                    }
+                    else -> {
+                        cascade.addLowPass(upperFreq, BUTTERWORTH_Q, sampleRate)
+                        cascade.addLowPass(upperFreq, BUTTERWORTH_Q, sampleRate)
+                    }
                 }
             }
             if (peq.enabled) {

@@ -375,6 +375,27 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         readComp(cfg.compressor, base + 6);
     }
 
+    // Mid's optional upper (Mid/High) bandpass corner -- tail block v[205..208], added in the
+    // 205 -> 210 growth (see docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). Read directly into
+    // Mid Left/Right rather than folding into the per-output loop above, since this field only
+    // exists for Mid (Low/High don't have it) and lives in the schema's tail, not the per-output
+    // block. Disabled (the DEFAULTS/migrated state) leaves rebuildMidCrossover() building only
+    // the existing HPF pair, byte-identical to before this growth.
+    {
+        auto& midLeftCfg = nextOutputConfigs[static_cast<std::size_t>(OutputId::MidLeft)];
+        auto& midRightCfg = nextOutputConfigs[static_cast<std::size_t>(OutputId::MidRight)];
+        const float midLeftFreq = v[205], midLeftEnabled = v[206];
+        const float midRightFreq = v[207], midRightEnabled = v[208];
+        if (!std::isfinite(midLeftFreq) || !std::isfinite(midLeftEnabled) ||
+            !std::isfinite(midRightFreq) || !std::isfinite(midRightEnabled)) {
+            return false;
+        }
+        midLeftCfg.upperCrossoverFreq = clampf(midLeftFreq, 300, 8000);
+        midLeftCfg.upperCrossoverEnabled = midLeftEnabled >= .5f;
+        midRightCfg.upperCrossoverFreq = clampf(midRightFreq, 300, 8000);
+        midRightCfg.upperCrossoverEnabled = midRightEnabled >= .5f;
+    }
+
     uint32_t dirty = DirtyNone;
     if (changed(next.headroom, p_.headroom) || changed(next.lowGainL, p_.lowGainL) ||
         changed(next.lowGainR, p_.lowGainR) || changed(next.midGainL, p_.midGainL) ||
@@ -402,6 +423,14 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             if ((next.measurementMute == 1 && !low) || (next.measurementMute == 2 && low)) {
                 dirty |= DirtyMeasBus;
             }
+        }
+        // Mid's upper corner (v[205..208], read above) only exists for Mid -- !low also covers
+        // High once a later phase adds it to this loop, but High has no upper-corner field, so
+        // this check is a no-op for it (upperCrossoverFreq/Enabled stay at their constructor
+        // defaults, never written for High).
+        if (!low && (changed(old.upperCrossoverFreq, now.upperCrossoverFreq) ||
+                     old.upperCrossoverEnabled != now.upperCrossoverEnabled)) {
+            dirty |= DirtyMidXo;
         }
         if (low && (old.subsonicEnabled != now.subsonicEnabled ||
                     changed(old.subsonicFreq, now.subsonicFreq))) {
@@ -831,6 +860,39 @@ void NativeBmwDspProcessor::rebuildMidCrossover() {
             default:
                 makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
                 makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
+                break;
+        }
+        // Optional upper (Mid/High) corner -- turns Mid from HPF-only into a true bandpass.
+        // Same crossoverType table as the HPF pair above, mirrored as a lowpass and cascaded
+        // after it in processMidCrossover(). Forced to identity when disabled (rather than
+        // skipped per-sample) so processMidCrossover stays branch-free on the audio-thread hot
+        // path -- same pattern as crossover2 being forced inert for BW1/BW2 above.
+        if (!cfg.upperCrossoverEnabled) {
+            makeIdentity(out.crossover3);
+            makeIdentity(out.crossover4);
+            continue;
+        }
+        switch (cfg.crossoverType) {
+            case CrossoverType::Butterworth1:
+                makeLowPass1(out.crossover3, cfg.upperCrossoverFreq, sampleRate_);
+                makeIdentity(out.crossover4);
+                break;
+            case CrossoverType::Butterworth2:
+                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, BW, sampleRate_);
+                makeIdentity(out.crossover4);
+                break;
+            case CrossoverType::Butterworth3:
+                makeLowPass1(out.crossover3, cfg.upperCrossoverFreq, sampleRate_);
+                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, kButterworth3Q, sampleRate_);
+                break;
+            case CrossoverType::Butterworth4:
+                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, kButterworth4QLow, sampleRate_);
+                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, kButterworth4QHigh, sampleRate_);
+                break;
+            case CrossoverType::LinkwitzRiley4:
+            default:
+                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, BW, sampleRate_);
+                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, BW, sampleRate_);
                 break;
         }
     }
@@ -1296,10 +1358,13 @@ float NativeBmwDspProcessor::processLowCrossover(OutputRuntime& out, const Outpu
 float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
                                                  [[maybe_unused]] const OutputConfig& cfg,
                                                  float sample) {
-    // Kept symmetric with processLowCrossover (which still reads cfg.subsonicEnabled); the Mid
-    // side is just the HPF pair now.
+    // HPF pair (Low/Mid corner), then the optional LPF pair (Mid/High corner) -- crossover3/4
+    // are forced to an identity pass-through by rebuildMidCrossover() when the upper corner is
+    // disabled, so running them unconditionally here stays correct (and branch-free) either way.
     sample = out.crossover1.run(sample);
     sample = out.crossover2.run(sample);
+    sample = out.crossover3.run(sample);
+    sample = out.crossover4.run(sample);
     return sample;
 }
 
