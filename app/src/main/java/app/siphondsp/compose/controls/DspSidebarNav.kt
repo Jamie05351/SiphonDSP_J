@@ -166,13 +166,16 @@ private fun DspSidebarTile(
             // entirely, matching the old View rows' isClickable=false/isFocusable=false for the
             // current destination (its own screen, tapping it again is a no-op).
             if (selected) Modifier
-            else Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(),
-                role = Role.Button,
-                onClickLabel = label,
-                onClick = onClick,
-            )
+            else {
+                val interactionSource = remember { MutableInteractionSource() }
+                Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(),
+                    role = Role.Button,
+                    onClickLabel = label,
+                    onClick = onClick,
+                ).bmwFocusRing(interactionSource)
+            }
         ),
         contentAlignment = Alignment.Center,
     ) {
