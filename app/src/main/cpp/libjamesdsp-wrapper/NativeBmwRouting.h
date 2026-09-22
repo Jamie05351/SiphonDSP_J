@@ -10,15 +10,23 @@
 /**
  * Generic stereo-to-output routing model for the native BMW DSP path.
  *
- * The first integration target intentionally remains four logical outputs:
- * Low Left, Low Right, Mid Left and Mid Right. The model is generic so the
- * processor no longer needs to encode those bands directly in its routing
- * logic, while the current audible stereo reconstruction can remain unchanged.
+ * Six logical outputs: Low/Mid/High, each Left and Right. The model is generic so the
+ * processor no longer needs to encode those bands directly in its routing logic, while the
+ * default audible stereo reconstruction stays a straight sum of all three bands.
+ *
+ * `kLegacyOutputCount` (4) is deliberately kept separate from `kOutputCount` (6): the persisted
+ * schema's routing/all-pass/output-config block offsets in NativeBmwDspProcessor.h
+ * (kRoutingBase/kAllPassBase/kOutputConfigBase/kOutputConfigWidth) are derived from
+ * kLegacyOutputCount, not kOutputCount, so that growing the in-memory output count never shifts
+ * an index an existing saved config already relies on. High's own persisted block (added in a
+ * later phase) lives entirely in the schema's tail instead. See
+ * docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
  */
 namespace NativeBmwRouting {
 
 constexpr std::size_t kInputCount = 2;
-constexpr std::size_t kOutputCount = 4;
+constexpr std::size_t kLegacyOutputCount = 4;
+constexpr std::size_t kOutputCount = 6;
 constexpr std::size_t kAllPassSectionsPerOutput = 2;
 
 enum class OutputId : std::size_t {
@@ -26,16 +34,49 @@ enum class OutputId : std::size_t {
     LowRight = 1,
     MidLeft = 2,
     MidRight = 3,
+    HighLeft = 4,
+    HighRight = 5,
+};
+
+/** The three crossover bands an OutputId belongs to. */
+enum class Band {
+    Low,
+    Mid,
+    High,
 };
 
 /**
- * True for the two Low-band outputs. Call sites used to spell this as an ordinal comparison
- * (`index <= 1`, relying on LowLeft/LowRight sorting before MidLeft/MidRight above), which
- * silently breaks if OutputId's declaration order ever changes without every call site being
- * found and updated. This is the one place that band/id mapping is allowed to live.
+ * Maps an output to its band. This is the one place that band/id mapping is allowed to live --
+ * call sites used to spell "is this a Low output" as an ordinal comparison (`index <= 1`, relying
+ * on declaration order), which silently breaks if OutputId's declaration order ever changes
+ * without every call site being found and updated.
+ */
+constexpr Band band(OutputId id) {
+    switch (id) {
+        case OutputId::LowLeft:
+        case OutputId::LowRight:
+            return Band::Low;
+        case OutputId::MidLeft:
+        case OutputId::MidRight:
+            return Band::Mid;
+        case OutputId::HighLeft:
+        case OutputId::HighRight:
+        default:
+            return Band::High;
+    }
+}
+
+constexpr Band band(std::size_t index) {
+    return band(static_cast<OutputId>(index));
+}
+
+/**
+ * True for the two Low-band outputs. Predates the three-way `band()` classifier above and is
+ * kept for the existing Low-vs-everything-else call sites (e.g. the measurement-mute bus, which
+ * is still a binary Low/not-Low concept) -- equivalent to `band(id) == Band::Low`.
  */
 constexpr bool isLowBandOutput(OutputId id) {
-    return id == OutputId::LowLeft || id == OutputId::LowRight;
+    return band(id) == Band::Low;
 }
 
 constexpr bool isLowBandOutput(std::size_t index) {
@@ -235,12 +276,14 @@ struct AllPassSection {
     }
 };
 
-/** Reconstruct the existing final stereo output after per-output processing. */
+/** Reconstruct the final stereo output after per-output processing, summing all three bands. */
 inline StereoFrame sumToStereo(const std::array<float, kOutputCount>& outputs) {
     const float left = outputs[static_cast<std::size_t>(OutputId::LowLeft)] +
-                       outputs[static_cast<std::size_t>(OutputId::MidLeft)];
+                       outputs[static_cast<std::size_t>(OutputId::MidLeft)] +
+                       outputs[static_cast<std::size_t>(OutputId::HighLeft)];
     const float right = outputs[static_cast<std::size_t>(OutputId::LowRight)] +
-                        outputs[static_cast<std::size_t>(OutputId::MidRight)];
+                        outputs[static_cast<std::size_t>(OutputId::MidRight)] +
+                        outputs[static_cast<std::size_t>(OutputId::HighRight)];
     return {
         std::isfinite(left) ? left : 0.0f,
         std::isfinite(right) ? right : 0.0f,

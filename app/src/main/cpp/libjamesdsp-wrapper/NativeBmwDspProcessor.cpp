@@ -175,6 +175,18 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
         {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
     outputConfigs_[static_cast<std::size_t>(OutputId::MidRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)];
+    // High has no persisted schema slots yet (added in a later phase) -- default it muted/silent
+    // so it stays inert. processFrame() also hardcodes its contribution to sumToStereo() as 0
+    // until that phase wires up real routing/processing, so this mute is belt-and-suspenders.
+    outputs_[static_cast<std::size_t>(OutputId::HighLeft)].id = OutputId::HighLeft;
+    outputs_[static_cast<std::size_t>(OutputId::HighLeft)].isLeftSide = true;
+    outputs_[static_cast<std::size_t>(OutputId::HighRight)].id = OutputId::HighRight;
+    outputs_[static_cast<std::size_t>(OutputId::HighRight)].isLeftSide = false;
+    outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)] = {
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, true, false,
+        {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
+    outputConfigs_[static_cast<std::size_t>(OutputId::HighRight)] =
+        outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)];
     rebuildAll();
 }
 NativeBmwDspProcessor::~NativeBmwDspProcessor() = default;
@@ -279,8 +291,15 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.limiterEnabled = v[189] >= .5f;
     next.limiterThreshDb = clampf(v[190], -12, 0);
 
+    // These four loops (routing, all-pass, output-config x2) are deliberately scoped to
+    // kLegacyOutputCount (4), not the in-memory kOutputCount (6): High has no persisted schema
+    // slots yet, so reading v[] at the offsets a 6-output loop would visit for outputs 4/5 would
+    // read into the *next* block (all-pass would misread output-config bytes as its own, etc).
+    // High's runtime entries (outputs_[4]/[5], outputConfigs_[4]/[5]) are left at their
+    // constructor defaults -- muted, identity routing -- untouched by configure() until a later
+    // phase adds its own tail block. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     NativeBmwRouting::RoutingMatrix nextRouting;
-    for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
+    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const float fromLeft = v[kRoutingBase + out * 2], fromRight = v[kRoutingBase + out * 2 + 1];
         if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
             std::fabs(fromRight) > 2.f) {
@@ -290,7 +309,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
 
     auto nextOutputs = outputs_;
-    for (std::size_t out = 0; out < nextOutputs.size(); ++out) {
+    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
              ++section) {
             const std::size_t base =
@@ -337,7 +356,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         c.release = clampf(v[base + 5], 20, 800);
         c.makeup = clampf(v[base + 6], 0, 6);
     };
-    for (std::size_t out = 0; out < nextOutputConfigs.size(); ++out) {
+    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
         cfg.crossoverFreq = clampf(v[base], 80, 320);
@@ -372,7 +391,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         dirty |= DirtyTilt;
     }
 
-    for (std::size_t out = 0; out < nextOutputConfigs.size(); ++out) {
+    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const auto& old = outputConfigs_[out];
         const auto& now = nextOutputConfigs[out];
         const bool low = NativeBmwRouting::isLowBandOutput(out);
@@ -1426,7 +1445,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (midRight.muted) {
         midR = 0;
     }
-    const std::array<float, NativeBmwRouting::kOutputCount> logical{{lowL, lowR, midL, midR}};
+    // High has no real processing yet (added in a later phase) -- hardcoded silent here rather
+    // than relying on outputs_[High*] defaults, so this stays correct even once those defaults
+    // are no longer muted-by-construction.
+    const std::array<float, NativeBmwRouting::kOutputCount> logical{
+        {lowL, lowR, midL, midR, 0.f, 0.f}};
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
     // Always use the routed sum here, even with both lpfPass and hpfPass set (crossover filtering
     // skipped on both bands). routing_.process() and the polarity/mute block above already ran
