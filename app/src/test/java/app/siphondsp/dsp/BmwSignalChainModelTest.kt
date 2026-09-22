@@ -23,6 +23,7 @@ class BmwSignalChainModelTest {
         val sumDb: Array<DoubleArray>,
         val lowBranchDb: Array<DoubleArray>,
         val midBranchDb: Array<DoubleArray>,
+        val highBranchDb: Array<DoubleArray>,
         val preSplitDb: Array<DoubleArray>,
         val processorEnabled: Boolean,
         val bothCrossoversBypassed: Boolean,
@@ -36,6 +37,7 @@ class BmwSignalChainModelTest {
             sumDb = Array(2) { curves.sumDb[it].copyOf() },
             lowBranchDb = Array(2) { curves.lowBranchDb[it].copyOf() },
             midBranchDb = Array(2) { curves.midBranchDb[it].copyOf() },
+            highBranchDb = Array(2) { curves.highBranchDb[it].copyOf() },
             preSplitDb = Array(2) { curves.preSplitDb[it].copyOf() },
             processorEnabled = curves.processorEnabled,
             bothCrossoversBypassed = curves.bothCrossoversBypassed,
@@ -57,6 +59,7 @@ class BmwSignalChainModelTest {
         full: List<ParametricEqBand> = emptyList(),
         low: List<ParametricEqBand> = emptyList(),
         mid: List<ParametricEqBand> = emptyList(),
+        high: List<ParametricEqBand> = emptyList(),
         preampDb: Float = 0f,
     ) = BmwPeqState(
         enabled = true,
@@ -64,6 +67,7 @@ class BmwSignalChainModelTest {
         fullRangeBands = ParametricEqBandList().apply { addAll(full) },
         lowBandBands = ParametricEqBandList().apply { addAll(low) },
         midBandBands = ParametricEqBandList().apply { addAll(mid) },
+        highBandBands = ParametricEqBandList().apply { addAll(high) },
     )
 
     private fun setOutput(values: FloatArray, output: Int, field: Int, value: Float) {
@@ -144,6 +148,24 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun highBandPeqAffectsOnlyHighBranch() {
+        // High ships muted/bypassed (highXoPass) by default -- un-mute and un-bypass it so its
+        // branch is actually audible/comparable, mirroring the native crossover_test.cpp pattern.
+        fun unmuteHigh(values: FloatArray) = values.also {
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+        }
+        val baseline = compute(unmuteHigh(baseValues()))
+        val filtered = compute(unmuteHigh(baseValues()), peqWith(high = listOf(band(6_000.0, -12.0))))
+        val i = nearestIndex(6_000.0)
+
+        assertEquals(0.0, filtered.lowBranchDb[0][i] - baseline.lowBranchDb[0][i], 1e-6)
+        assertEquals(0.0, filtered.midBranchDb[0][i] - baseline.midBranchDb[0][i], 1e-6)
+        assertTrue(abs(filtered.highBranchDb[0][i] - baseline.highBranchDb[0][i]) > 6.0)
+    }
+
+    @Test
     fun lowCrossoverBypassAlsoBypassesSubsonicLikeNative() {
         val withSubsonicConfigured = compute(baseValues().also { it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f })
         val subsonicDisabled = compute(baseValues().also {
@@ -191,7 +213,13 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun bothCrossoversBypassedReturnsPreSplitSignalNotDoubled() {
+    fun bothCrossoversBypassedDoublesPreSplitSignalMatchingNativeRoutedSum() {
+        // Native's processFrame() has no bothBypassed shortcut -- it always feeds Low+Mid+High
+        // into sumToStereo() unconditionally (see NativeBmwDspProcessor.cpp's "Always use the
+        // routed sum here" comment). Under default routing, Low and Mid each independently carry
+        // the full pre-split signal (RoutingMatrix's default coefficients route the same channel
+        // to both), so bypassing both crossover filters means the sum is genuinely 2x pre, not
+        // 1x -- with High left at its default muted/silent state contributing nothing on top.
         val result = compute(baseValues().also {
             it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
             it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
@@ -199,8 +227,35 @@ class BmwSignalChainModelTest {
         })
         assertTrue(result.bothCrossoversBypassed)
         for (i in result.sumDb[0].indices) {
-            assertEquals(result.preSplitDb[0][i], result.sumDb[0][i], 1e-6)
+            assertEquals(result.preSplitDb[0][i] + 20.0 * kotlin.math.log10(2.0), result.sumDb[0][i], 1e-6)
         }
+    }
+
+    @Test
+    fun bothCrossoversBypassedWithHighActiveIncludesHighBranchInSum() {
+        // Regression for the finding that bothBypassed's old sumAcc.setFrom(pre) shortcut
+        // silently dropped High's entire contribution from the response graph whenever both
+        // legacy crossovers were bypassed, even with High fully active -- a materially different
+        // displayed sum than the audible native output, which always includes High.
+        val result = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
+            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.INDEX_HIGH_GAIN_L] = 6f
+            it[NativeBmwDspValues.INDEX_HIGH_GAIN_R] = 6f
+        })
+        assertTrue(result.bothCrossoversBypassed)
+        // 10 kHz is well above the default 3 kHz LR4 High crossover corner, so the HPF itself
+        // contributes negligible attenuation here -- isolating the assertion to "did High's
+        // branch get summed in at all" rather than also depending on the filter's exact shape.
+        val i = nearestIndex(10_000.0)
+        assertTrue(
+            "expected High's contribution to raise the sum above plain 2x pre",
+            result.sumDb[0][i] > result.preSplitDb[0][i] + 20.0 * kotlin.math.log10(2.0) + 0.5,
+        )
     }
 
     @Test

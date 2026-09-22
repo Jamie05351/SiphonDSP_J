@@ -17,6 +17,7 @@ data class BmwPeqPreset(
     val fullRange: List<PresetBand>,
     val lowBand: List<PresetBand>,
     val midBand: List<PresetBand>,
+    val highBand: List<PresetBand> = emptyList(),
 ) {
     @Serializable
     data class PresetBand(
@@ -55,11 +56,14 @@ data class BmwPeqPreset(
                 )
             }
         }
-        return BmwPeqState(enabled, preampDb, decode(fullRange), decode(lowBand), decode(midBand))
+        return BmwPeqState(enabled, preampDb, decode(fullRange), decode(lowBand), decode(midBand), decode(highBand))
     }
 
     companion object {
-        const val CURRENT_VERSION = 1
+        // v2 added highBand. ignoreUnknownKeys + highBand's List default make a v1 JSON preset
+        // (no "highBand" key at all) deserialize cleanly with an empty High bank -- no explicit
+        // migration step needed, matching decode()'s existing tolerance.
+        const val CURRENT_VERSION = 2
         private val json = Json {
             prettyPrint = true
             ignoreUnknownKeys = true
@@ -87,6 +91,7 @@ data class BmwPeqPreset(
                 fullRange = encode(state.fullRangeBands),
                 lowBand = encode(state.lowBandBands),
                 midBand = encode(state.midBandBands),
+                highBand = encode(state.highBandBands),
             )
         }
 

@@ -153,7 +153,8 @@ public:
     bool configure(const float* values, std::size_t count);
     bool configurePeq(bool enabled, float preampDb, const double* fullBands,
                       std::size_t fullValueCount, const double* lowBands, std::size_t lowValueCount,
-                      const double* midBands, std::size_t midValueCount);
+                      const double* midBands, std::size_t midValueCount, const double* highBands,
+                      std::size_t highValueCount);
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
@@ -193,7 +194,7 @@ public:
     //             which never touch crossover3/4 -- reported truthfully either way, same
     //             "actual installed state, not requested" contract as everything else here)
     //     stage4: same 8 fields
-    //   then 3 variable-length PEQ bank blocks, in order Full, Low, Mid:
+    //   then 4 variable-length PEQ bank blocks, in order Full, Low, Mid, High:
     //     rawBandCount, leftActiveCount, rightActiveCount (the last two are PeqBank::leftCount/
     //     rightCount -- the actual number of Biquads process() runs for that bank/channel),
     //     then rawBandCount * [freqHz, gainDb, q, type, channel, active (0/1)]. "active" mirrors
@@ -560,7 +561,8 @@ private:
     bool configurePeqLocked(bool enabled, float preampDb, const double* fullBands,
                             std::size_t fullValueCount, const double* lowBands,
                             std::size_t lowValueCount, const double* midBands,
-                            std::size_t midValueCount);
+                            std::size_t midValueCount, const double* highBands,
+                            std::size_t highValueCount);
     void rebuildAll();
     void applyDirty(uint32_t dirty);
     void rebuildGains();
@@ -608,13 +610,15 @@ private:
     std::array<CompressorState, NativeBmwRouting::kOutputCount> outputDynamics_{};
     NativeBmwRouting::RoutingMatrix routing_{};
     float leftDcX_ = 0, leftDcY_ = 0, rightDcX_ = 0, rightDcY_ = 0;
-    PeqBank inputPeq_, lowPeq_, midPeq_;
+    PeqBank inputPeq_, lowPeq_, midPeq_, highPeq_;
     bool peqEnabled_ = false;
     float peqPreampDb_ = 0, peqPreamp_ = 1;
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> inputPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> lowPeqValues_{};
     std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> midPeqValues_{};
-    std::size_t inputPeqValueCount_ = 0, lowPeqValueCount_ = 0, midPeqValueCount_ = 0;
+    std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth> highPeqValues_{};
+    std::size_t inputPeqValueCount_ = 0, lowPeqValueCount_ = 0, midPeqValueCount_ = 0,
+                highPeqValueCount_ = 0;
     float sampleRate_ = 48000.0f, dcR_ = 0.0f;
     float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
     float rmsMix_ = 0, peakRelease_ = 0;

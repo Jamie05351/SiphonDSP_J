@@ -20,7 +20,7 @@ TEST_CASE("makePeq rejects an extreme-but-finite bell gain instead of silently z
 
     constexpr double kExtremeGainDb = -20000.0;  // finite, but A underflows to 0.0
     const double band[5] = {1000.0, kExtremeGainDb, 2.0, 0.0, 0.0};
-    CHECK_FALSE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 }
 
 TEST_CASE("configurePeq rejects a non-finite band type or channel instead of casting it") {
@@ -33,16 +33,16 @@ TEST_CASE("configurePeq rejects a non-finite band type or channel instead of cas
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
 
     const double nanType[5] = {1000.0, 3.0, 1.0, std::numeric_limits<double>::quiet_NaN(), 0.0};
-    CHECK_FALSE(proc.configurePeq(true, 0.f, nanType, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(true, 0.f, nanType, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     const double infChannel[5] = {1000.0, 3.0, 1.0, 0.0, std::numeric_limits<double>::infinity()};
-    CHECK_FALSE(proc.configurePeq(true, 0.f, infChannel, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(true, 0.f, infChannel, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     const double hugeType[5] = {1000.0, 3.0, 1.0, std::numeric_limits<double>::max(), 0.0};
-    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeType, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeType, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     const double hugeChannel[5] = {1000.0, 3.0, 1.0, 0.0, -std::numeric_limits<double>::max()};
-    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeChannel, 5, nullptr, 0, nullptr, 0));
+    CHECK_FALSE(proc.configurePeq(true, 0.f, hugeChannel, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 }
 
 TEST_CASE("configure rejects a non-finite MBC crossover before sorting") {

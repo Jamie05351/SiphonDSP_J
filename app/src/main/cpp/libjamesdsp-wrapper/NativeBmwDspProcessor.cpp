@@ -778,14 +778,17 @@ bool NativeBmwDspProcessor::peqBandSkipped(int type, double gain) {
 bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const double* full,
                                          std::size_t fullCount, const double* low,
                                          std::size_t lowCount, const double* mid,
-                                         std::size_t midCount) {
+                                         std::size_t midCount, const double* high,
+                                         std::size_t highCount) {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    return configurePeqLocked(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount);
+    return configurePeqLocked(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount,
+                              high, highCount);
 }
 bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, const double* full,
                                                std::size_t fullCount, const double* low,
                                                std::size_t lowCount, const double* mid,
-                                               std::size_t midCount) {
+                                               std::size_t midCount, const double* high,
+                                               std::size_t highCount) {
     if (!std::isfinite(preampDb) || preampDb < -30 || preampDb > 12) {
         return false;
     }
@@ -828,8 +831,9 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
         b = x;
         return true;
     };
-    PeqBank f, l, m;
-    if (!build(full, fullCount, f) || !build(low, lowCount, l) || !build(mid, midCount, m)) {
+    PeqBank f, l, m, h;
+    if (!build(full, fullCount, f) || !build(low, lowCount, l) || !build(mid, midCount, m) ||
+        !build(high, highCount, h)) {
         return false;
     }
     auto save = [](auto& target, std::size_t& count, const double* source,
@@ -843,9 +847,11 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
     save(inputPeqValues_, inputPeqValueCount_, full, fullCount);
     save(lowPeqValues_, lowPeqValueCount_, low, lowCount);
     save(midPeqValues_, midPeqValueCount_, mid, midCount);
+    save(highPeqValues_, highPeqValueCount_, high, highCount);
     inputPeq_ = f;
     lowPeq_ = l;
     midPeq_ = m;
+    highPeq_ = h;
     peqEnabled_ = enabled;
     peqPreampDb_ = preampDb;
     peqPreamp_ = dbToLin(preampDb);
@@ -1319,7 +1325,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     // configurePeq() itself here, it would deadlock re-taking the same non-recursive mutex.
     configurePeqLocked(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
                        lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
-                       midPeqValueCount_);
+                       midPeqValueCount_, highPeqValues_.data(), highPeqValueCount_);
 }
 float NativeBmwDspProcessor::processChannelInput(float x, float& dcX, float& dcY) {
     float y = x - dcX + dcR_ * dcY;
@@ -1620,8 +1626,10 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (!p_.highXoPass) {
         highL = processHighCrossover(highLeft, highLeftCfg, highL);
         highR = processHighCrossover(highRight, highRightCfg, highR);
-        // No High PEQ bank yet (added in a later phase) -- see
-        // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+        if (peqEnabled_) {
+            highL = highPeq_.processLeft(highL);
+            highR = highPeq_.processRight(highR);
+        }
         highL = highLeft.processAllPass(highL);
         highR = highRight.processAllPass(highR);
         highL = highLeft.delay.run(highL);
@@ -1860,7 +1868,7 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     std::lock_guard<std::mutex> lock(stateMutex_);
     std::vector<double> out;
-    out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 3 * (3 + 16 * 6));
+    out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 4 * (3 + 16 * 6));
     out.push_back(static_cast<double>(sampleRate_));
     out.push_back(peqEnabled_ ? 1.0 : 0.0);
     out.push_back(static_cast<double>(peqPreampDb_));
@@ -1926,6 +1934,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     appendBank(inputPeqValues_, inputPeqValueCount_, inputPeq_);
     appendBank(lowPeqValues_, lowPeqValueCount_, lowPeq_);
     appendBank(midPeqValues_, midPeqValueCount_, midPeq_);
+    appendBank(highPeqValues_, highPeqValueCount_, highPeq_);
     return out;
 }
 

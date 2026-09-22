@@ -91,9 +91,31 @@ Mid's original HPF-only code (before Phase 2's bandpass addition) at the shared 
 
 PEQ bands are a separate ABI (`configurePeq(enabled, preampDb, fullBands, lowBands, midBands, ...)`
 over `double[]`, not the flat `float[205..262]` config array). High-band PEQ adds a 4th
-`(const double*, size_t)` pair to that call and to `BmwPeqState`'s own persistence — no index table
-entry here, but the same "never break an old save" discipline applies to `BmwPeqState`'s backup
-format.
+`(const double*, size_t)` pair all the way through: `NativeBmwDspProcessor::configurePeq`/
+`configurePeqLocked` → `NativeBmwDspJni.cpp`'s JNI bridge → `JamesDspWrapper.configureNativeBmwPeq`
+→ `JamesDspLocalEngine`. `highPeq_` (a `PeqBank`, same as `inputPeq_`/`lowPeq_`/`midPeq_`) runs in
+`processFrame()`'s High branch, and `captureTruthSnapshot()` grows from 3 PEQ bank blocks
+(Full/Low/Mid) to 4.
+
+`BmwPeqState` gains `highBandBands`, threaded through every place `lowBandBands`/`midBandBands`
+already were. This forced two real file-format migrations (not just a Kotlin field addition), both
+following the same "never break an old save" discipline as the native schema:
+- `BmwPeqStore`'s on-disk format grows `V2 → V3` (a 6th payload line). `decodeV2`/`decodeV1` are
+  kept for backward-compatible reads — an old file simply decodes with `highBandBands` empty — and
+  are not force-migrated on load; the file upgrades itself to V3 the next time it's saved.
+- `BmwPeqPreset`'s JSON format grows to `CURRENT_VERSION = 2`, adding `highBand: List<PresetBand>`
+  with a default so `ignoreUnknownKeys` + the default make an old (no `"highBand"` key) preset
+  decode cleanly.
+
+`BmwPeqBank` (the four independently-editable PEQ banks) gains `HIGH`, which forced real cases
+into every exhaustive `when` over it — most substantially `BmwResponseCalculator`, which gains a
+`highCascade`/`highAllPass`/`rebuildHighCascade()` mirroring Mid's original HPF-only shape (before
+Phase 2's bandpass addition), and `BmwResponseCurves` gains `highBranchDb`/`highBranchPhase`.
+Unlike `lpfPass`/`hpfPass` (raw passthrough when bypassed), `highXoPass` fully silences the High
+branch in the response graph too, matching the native semantics decided during Phase 3's review.
+`PeqScope` (the actual PEQ editing screen's Pre EQ/Low/Mid scope selector) is deliberately **not**
+extended to a High entry here — that's Phase 5; High's data model and native processing are fully
+wired, but nothing in the UI can reach it yet.
 
 ## The "3-way on/off" master toggle
 

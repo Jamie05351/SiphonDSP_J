@@ -194,7 +194,8 @@ class ParseNativeTruthSnapshotTest {
         val outputs = outputBlock() + outputBlock() + outputBlock() + outputBlock() + outputBlock() + outputBlock()
         val low = emptyBank()
         val mid = emptyBank()
-        return header + outputs + fullBank + low + mid
+        val high = emptyBank()
+        return header + outputs + fullBank + low + mid + high
     }
 
     @Test fun parsesSampleRateAndOutputCount() {

@@ -15,7 +15,7 @@ class BmwPeqStoreTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun cacheClearAndColdStartPreserveEveryThreeBankField() {
+    fun cacheClearAndColdStartPreserveEveryBankField() {
         val appData = temporaryFolder.newFolder("app-data")
         val persistent = File(appData, "no_backup")
         val cache = File(appData, "cache").apply { mkdirs() }
@@ -133,6 +133,35 @@ class BmwPeqStoreTest {
     }
 
     @Test
+    fun aV2FileFromBeforeHighBandExistedLoadsWithAnEmptyHighBank() {
+        // A real pre-High V2 save (added in the V2 -> V3 growth): no High line in the payload at
+        // all, not an empty one -- exactly what every existing user's on-disk file looks like.
+        val store = BmwPeqStore(temporaryFolder.newFolder("v2-no-high"))
+        val payload = listOf(
+            "true",
+            "-2.5",
+            ParametricEqBandList().serialize(),
+            ParametricEqBandList().apply { add(ParametricEqBand(90.0, 1.0, 1.0, uuid = UUID.randomUUID())) }.serialize(),
+            ParametricEqBandList().serialize(),
+        ).joinToString("\n")
+        val checksum = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(payload.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        store.primaryPath().writeText("BMW_PEQ_STATE_V2\n$checksum\n$payload")
+
+        val loaded = store.load()
+
+        assertEquals(BmwPeqStore.Source.PRIMARY, loaded.source)
+        requireNotNull(loaded.state)
+        assertEquals(0, loaded.state.highBandBands.size)
+        assertEquals(1, loaded.state.lowBandBands.size)
+
+        // Not force-migrated on read -- the file upgrades itself to V3 the next time it's saved.
+        assertTrue(store.save(loaded.state))
+        assertTrue(store.primaryPath().readText().startsWith("BMW_PEQ_STATE_V3\n"))
+    }
+
+    @Test
     fun saveAfterMissingPrimaryRetainsThePreviousRecovery() {
         val store = BmwPeqStore(temporaryFolder.newFolder("resave-missing"))
         val previous = populatedState(enabled = true)
@@ -161,6 +190,10 @@ class BmwPeqStoreTest {
             add(band(250.0, -2.0, 1.1, ParametricEqFilterType.PEAKING, ParametricEqChannel.LEFT_RIGHT, 5))
             add(band(1800.0, 0.75, 0.8, ParametricEqFilterType.PEAKING, ParametricEqChannel.LEFT, 6))
         },
+        highBandBands = ParametricEqBandList().apply {
+            add(band(6000.0, 1.0, 1.0, ParametricEqFilterType.PEAKING, ParametricEqChannel.LEFT_RIGHT, 7))
+            add(band(12000.0, -1.25, 0.95, ParametricEqFilterType.PEAKING, ParametricEqChannel.RIGHT, 8))
+        },
     )
 
     private fun band(
@@ -186,6 +219,7 @@ class BmwPeqStoreTest {
         assertBandsEqual(expected.fullRangeBands, actual.fullRangeBands)
         assertBandsEqual(expected.lowBandBands, actual.lowBandBands)
         assertBandsEqual(expected.midBandBands, actual.midBandBands)
+        assertBandsEqual(expected.highBandBands, actual.highBandBands)
     }
 
     private fun assertBandsEqual(expected: ParametricEqBandList, actual: ParametricEqBandList) {

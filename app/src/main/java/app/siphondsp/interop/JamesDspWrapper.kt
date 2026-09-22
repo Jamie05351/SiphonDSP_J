@@ -31,6 +31,7 @@ object JamesDspWrapper {
         fullRangeBands: DoubleArray,
         lowBandBands: DoubleArray,
         midBandBands: DoubleArray,
+        highBandBands: DoubleArray,
         revision: Long,
     ): Long
     external fun getNativeBmwPeqActiveRevision(self: JamesDspHandle): Long
