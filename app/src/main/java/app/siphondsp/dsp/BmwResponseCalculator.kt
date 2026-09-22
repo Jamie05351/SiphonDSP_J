@@ -424,12 +424,15 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 out.highBranchDb[ch][i] = branchAcc.magnitudeDb()
                 out.highBranchPhase[ch][i] = branchAcc.phase()
 
-                if (bothBypassed) {
-                    sumAcc.setFrom(pre)
-                } else {
-                    sumAcc.re = lowRe + midRe + branchAcc.re
-                    sumAcc.im = lowIm + midIm + branchAcc.im
-                }
+                // No bothBypassed shortcut: native's processFrame() always feeds Low+Mid+High into
+                // sumToStereo() unconditionally, even with both legacy crossovers bypassed. Under
+                // default routing that genuinely means Low and Mid each carry the full pre-split
+                // signal independently (see RoutingMatrix's default identity coefficients), so a
+                // both-bypassed sum is 2x pre (+ High's contribution), not 1x pre -- matching that
+                // here, rather than special-casing to `pre`, keeps this graph equivalent to the
+                // audible output in every routing/bypass combination, not just the default one.
+                sumAcc.re = lowRe + midRe + branchAcc.re
+                sumAcc.im = lowIm + midIm + branchAcc.im
 
                 tiltCascade.accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], sumAcc)
                 sumAcc.scale(dbToLinear(postGainDb.toDouble()))
