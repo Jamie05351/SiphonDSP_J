@@ -129,6 +129,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         startupDiagnostics?.finishIfDue()
     }
 
+    // Debounced cancellation of idleSinceMillis -- see onSessionChanged()'s comment. Scheduled
+    // (not run immediately) when the session list becomes non-empty, and cancelled via
+    // removeCallbacks() if it flaps back to idle before firing, so a brief flap never touches
+    // idleSinceMillis at all -- only a return to activity that genuinely persists for
+    // IDLE_SUSPEND_DEBOUNCE_MS clears it.
+    private val idleTimerResetRunnable = Runnable {
+        synchronized(recorderLifecycleLock) {
+            if (!isProcessorIdle) idleSinceMillis = 0L
+        }
+    }
+
     private val healthWatchdog = object : Runnable {
         override fun run() {
             synchronized(recorderLifecycleLock) {
@@ -298,6 +309,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         synchronized(recorderLifecycleLock) { isServiceDisposing = true }
         healthHandler.removeCallbacks(healthWatchdog)
         healthHandler.removeCallbacks(startupDiagnosticsFinisher)
+        healthHandler.removeCallbacks(idleTimerResetRunnable)
         startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
         val closeEngineNow = synchronized(recorderLifecycleLock) {
@@ -473,10 +485,26 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             if(!isProcessorIdle) {
                 sessionLossRetryCount = 0
-                idleSinceMillis = 0L
+                // Don't clear idleSinceMillis synchronously here -- some apps (observed with
+                // Spotify loaded-but-paused) intermittently register/unregister their audio
+                // session while producing no real audio, flapping sessionList empty<->non-empty
+                // faster than IDLE_SUSPEND_DEBOUNCE_MS. Clearing immediately on every such blip
+                // means idleSinceMillis never accumulates the continuous idle time suspend-on-idle
+                // requires, so the recorder/track never suspend and the pipeline (and its
+                // MEDIA_PROJECTION foreground-service wake lock) stays live indefinitely even
+                // though nothing is actually playing. Only clear it once "not idle" has genuinely
+                // persisted for that same window -- idleTimerResetRunnable, cancelled below if it
+                // flaps back to idle first. Remove-then-post so a repeated not-idle event (no
+                // idle transition in between) restarts one fresh window rather than stacking
+                // redundant pending callbacks.
+                healthHandler.removeCallbacks(idleTimerResetRunnable)
+                healthHandler.postDelayed(idleTimerResetRunnable, IDLE_SUSPEND_DEBOUNCE_MS)
             }
-            else if(idleSinceMillis == 0L) {
-                idleSinceMillis = SystemClock.elapsedRealtime()
+            else {
+                healthHandler.removeCallbacks(idleTimerResetRunnable)
+                if(idleSinceMillis == 0L) {
+                    idleSinceMillis = SystemClock.elapsedRealtime()
+                }
             }
 
             Timber.d("onSessionChanged: isProcessorIdle=$isProcessorIdle")
