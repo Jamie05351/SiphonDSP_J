@@ -33,18 +33,25 @@ void processCompressor(float& sample, const CompressorParams& p, CompressorState
                        const DetectorTiming& detector) {
     float pk = std::fabs(sample);
     bool pub = (++s.meterCounter & 255u) == 0;
-    float db = 20 * std::log10(std::max(pk, 1e-12f));
+    // Detector level in dB. Enabled: the smoothed detector, which the gain computer needs every
+    // sample. Disabled: the raw peak, which only the meter publish below reads -- so it's only
+    // computed on publish frames (1 in 256) instead of paying a log10 every sample.
+    float db = 0;
     if (p.enabled) {
         s.rmsPower = ftz(s.rmsPower + (pk * pk - s.rmsPower) * detector.rmsMix);
         s.peakEnv = pk > s.peakEnv ? pk : ftz(s.peakEnv * detector.peakRelease);
         float det = std::max(std::sqrt(std::max(0.f, s.rmsPower)), s.peakEnv * .5f);
         db = 20 * std::log10(std::max(det, 1e-12f));
         float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-        float target = dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
+        // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
+        float target = gr == 0 ? 1.f : dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
         s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
         sample *= s.gain * s.makeupLin;
     } else {
         s.gain = 1;
+        if (pub) {
+            db = 20 * std::log10(std::max(pk, 1e-12f));
+        }
     }
     if (pub) {
         float red = -20 * std::log10(std::max(s.gain, 1e-12f));
@@ -89,19 +96,36 @@ void MasterLimiter::process(float& l, float& r) {
 
 // ---- Per-bus brick-wall limiter ----------------------------------------------------------------
 void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix) {
-    const float ceilingLin = dbToLin(thresholdDb);
+    // The threshold only changes on configure(), so its pow is cached rather than paid every
+    // sample. Recomputed from the same input, so the ceiling is the identical value.
+    if (thresholdDb != cachedThresholdDb_) {
+        cachedThresholdDb_ = thresholdDb;
+        cachedCeilingLin_ = dbToLin(thresholdDb);
+    }
+    const float ceilingLin = cachedCeilingLin_;
     const float pk = std::max(std::fabs(l), std::fabs(r));
     const float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
     const float mix = target < gain ? attackMix : releaseMix;
     gain = std::min(1.f, ftz(gain + (target - gain) * mix));
-    grDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
+    // Meter: republish only when the gain moved since the last store. Same gain -> same log10 ->
+    // same stored value, so skipping the repeat is unobservable (it used to log10 every sample,
+    // including the whole time the limiter sits idle at gain 1).
+    if (!(gain == meteredGain_)) {
+        meteredGain_ = gain;
+        grDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
+    }
     l = ftz(l * gain);
     r = ftz(r * gain);
+}
+void BusLimiter::zeroMeter() {
+    grDb.store(0.f);
+    meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 }
 void BusLimiter::reset() {
     if (gain != 1.f) {
         gain = 1.f;
         grDb.store(0.f, std::memory_order_relaxed);
+        meteredGain_ = std::numeric_limits<float>::quiet_NaN();
     }
 }
 
@@ -215,7 +239,9 @@ float MultibandCompressor::bandGain(float peakAbs, const MbcBandParams& p, Cell&
     float db = 20 * std::log10(std::max(det, 1e-12f));
     s.lastDetectorDb = db;
     float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-    float target = dbToLin(gr), mix = target < s.gain ? attackMix_[band] : releaseMix_[band];
+    // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
+    float target = gr == 0 ? 1.f : dbToLin(gr),
+          mix = target < s.gain ? attackMix_[band] : releaseMix_[band];
     s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
     return s.gain;
 }
@@ -262,34 +288,40 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
     for (int b = 0; b < kMbcBandCount; ++b) {
         const auto& bp = bands[b];
         float sL = band[0][b], sR = band[1][b];
-        float meterDb, reductionDb;
+        float gWorst = 1.f;
         if (bp.enabled) {
-            float gWorst;
             if (bp.stereoLink) {
                 const float g =
                     bandGain(std::max(std::fabs(sL), std::fabs(sR)), bp, cell_[0][b], b, detector);
                 sL *= g;
                 sR *= g;
-                meterDb = cell_[0][b].lastDetectorDb;
                 gWorst = g;
             } else {
                 const float gL = bandGain(std::fabs(sL), bp, cell_[0][b], b, detector);
                 const float gR = bandGain(std::fabs(sR), bp, cell_[1][b], b, detector);
                 sL *= gL;
                 sR *= gR;
-                meterDb = std::max(cell_[0][b].lastDetectorDb, cell_[1][b].lastDetectorDb);
                 gWorst = std::min(gL, gR);
             }
             sL *= makeupLin_[b];
             sR *= makeupLin_[b];
-            reductionDb = -20.f * std::log10(std::max(gWorst, 1e-12f));
-        } else {
-            // Disabled band: meter still shows the band's input level (no reduction), same spirit as
-            // processCompressor's idle publish.
-            meterDb = 20.f * std::log10(std::max(std::max(std::fabs(sL), std::fabs(sR)), 1e-12f));
-            reductionDb = 0.f;
         }
+        // Meter values are only read on publish frames (1 in 256), so their log10s are only
+        // computed there -- they used to run every sample for every band.
         if (publishMeter) {
+            float meterDb, reductionDb;
+            if (bp.enabled) {
+                meterDb = bp.stereoLink
+                              ? cell_[0][b].lastDetectorDb
+                              : std::max(cell_[0][b].lastDetectorDb, cell_[1][b].lastDetectorDb);
+                reductionDb = -20.f * std::log10(std::max(gWorst, 1e-12f));
+            } else {
+                // Disabled band: meter still shows the band's input level (no reduction), same
+                // spirit as processCompressor's idle publish. sL/sR are untouched while disabled.
+                meterDb =
+                    20.f * std::log10(std::max(std::max(std::fabs(sL), std::fabs(sR)), 1e-12f));
+                reductionDb = 0.f;
+            }
             auto& m = meter_[b];
             m.inputDb.store(clampf(meterDb, -60.f, 6.f));
             m.gainReductionDb.store(clampf(reductionDb, 0.f, 60.f));
