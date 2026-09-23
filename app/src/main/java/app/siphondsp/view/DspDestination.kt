@@ -18,8 +18,6 @@ import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.compose.controls.DspSidebarNav
-import app.siphondsp.compose.controls.TILE_LEFT_INSET_FRACTION
-import app.siphondsp.compose.controls.TILE_RIGHT_INSET_FRACTION
 import app.siphondsp.compose.theme.BmwDspTheme
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -82,11 +80,12 @@ object DspCrossNavBar {
     // proportions matter.
     private val ROW_WEIGHTS = intArrayOf(56, 135, 21, 140, 18, 130, 18, 140, 21, 135, 62)
 
-    // Head-unit art (2340x878, tiles/labels/strips baked in): same tile rows as ROW_WEIGHTS (outlines
-    // measured within ~1px of it), but the tiles sit 4px further left than the empty-slot art, so
-    // it needs its own horizontal insets: outlines at x 30-212 of the 256px rail column.
-    private const val HEAD_UNIT_TILE_LEFT_INSET = 30f / 256f
-    private const val HEAD_UNIT_TILE_RIGHT_INSET = (256f - 212f) / 256f
+    // Both art tiers -- head unit (2340x878) and phone (2340x1080) -- have tiles/labels/strips
+    // baked in: same tile rows as ROW_WEIGHTS (outlines measured within ~1px of it), but the tiles
+    // sit 4px further left than the old empty-slot art, so they need their own horizontal insets:
+    // outlines at x 30-212 of the 256px rail column, measured identically on both tiers.
+    private const val BAKED_ART_TILE_LEFT_INSET = 30f / 256f
+    private const val BAKED_ART_TILE_RIGHT_INSET = (256f - 212f) / 256f
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
@@ -158,16 +157,15 @@ object DspCrossNavBar {
         showBackdrop(activity, current.backdrop, current.backdropPhone)
         if (!isHeadUnitDisplay(activity)) applyPhoneRailGeometry(activity)
 
-        val headUnit = isHeadUnitDisplay(activity)
         container.setContent {
             BmwDspTheme {
                 DspSidebarNav(
                     destinations = destinations,
                     current = current,
                     weights = ROW_WEIGHTS,
-                    leftInsetFraction = if (headUnit) HEAD_UNIT_TILE_LEFT_INSET else TILE_LEFT_INSET_FRACTION,
-                    rightInsetFraction = if (headUnit) HEAD_UNIT_TILE_RIGHT_INSET else TILE_RIGHT_INSET_FRACTION,
-                    bakedInArt = headUnit,
+                    leftInsetFraction = BAKED_ART_TILE_LEFT_INSET,
+                    rightInsetFraction = BAKED_ART_TILE_RIGHT_INSET,
+                    bakedInArt = true,
                     canNavigate = canNavigate,
                     onNavigate = { destination ->
                         // Rail navigation is a clean cut, not a transition: picking another DSP
