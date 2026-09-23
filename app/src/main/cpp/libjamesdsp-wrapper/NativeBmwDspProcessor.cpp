@@ -3,278 +3,15 @@
 #include <cmath>
 #include <limits>
 #include <vector>
-// Declarations only -- NOT defining DR_WAV_IMPLEMENTATION here. JdspImpResToolbox.c already
-// defines it once and jamesdsp-wrapper links against jdspimprestoolbox (see CMakeLists.txt),
-// so the actual drwav_* function bodies are resolved from there at link time.
-#include "../libjdspimptoolbox/dr_wav.h"
-
-// NEON path: arm64 only (the only ABI the app ships -- see SUPPORTED_ABIS in app/build.gradle.kts).
-// Every other target (the x86-64 host running native-tests, CI) builds the scalar path alone.
-// -DSIPHON_DISABLE_NEON forces scalar on arm64 too, for NEON-vs-scalar parity runs
-// (scripts/run-neon-parity.sh).
-#if defined(__aarch64__) && defined(__ARM_NEON) && !defined(SIPHON_DISABLE_NEON)
-#include <arm_neon.h>
-#define SIPHON_NEON 1
-#else
-#define SIPHON_NEON 0
-#endif
+#include "NativeBmwDspMath.h"
 
 namespace {
-constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
-// Q of the quadratic factor in the 3rd-order Butterworth polynomial (s^2+s+1 -> Q=1 exactly,
-// from matching s^2 + (1/Q)s + 1). Paired with a 1st-order (6 dB/oct) stage at the same corner,
-// this gives the 18 dB/oct BW3 crossover; see rebuildLowCrossover/rebuildMidCrossover.
-constexpr float kButterworth3Q = 1.f;
-// Qs of the two quadratic factors in the 4th-order Butterworth polynomial: Q_k = 1/(2cos(theta_k))
-// for theta = pi/8 and 3pi/8 -> 0.5412 and 1.3066. Cascading these (not two Q=1/sqrt(2) stages,
-// which is LR4) gives the BW4 crossover's maximally-flat 24 dB/oct with a -3 dB corner.
-constexpr float kButterworth4QLow = 0.5411961f;
-constexpr float kButterworth4QHigh = 1.3065630f;
-// See rebuildMeasGen()'s DirtyMeasGen branch.
-constexpr float kTimingRefChirpLevelOffsetDb = 4.f;
-inline float ftz(float x) {
-    return (!std::isfinite(x) || std::fabs(x) < 1e-20f) ? 0.f : x;
-}
-inline double ftzd(double x) {
-    return NativeBmwRouting::flushDenormal(x);
-}
-// a*b + c. On arm64 this is pinned to one fused multiply-add: exactly the fmadd/fnmsub clang's
-// default -ffp-contract=on already emitted for Biquad::run's Svf2 expressions before the NEON
-// path existed (checked in the arm64 disassembly). Pinning it explicitly makes the scalar and
-// NEON (vfmaq_f64) paths round identically by construction, not by compiler choice. Other
-// targets keep the plain expression, i.e. whatever they computed before.
-inline double mulAdd(double a, double b, double c) {
-#if defined(__aarch64__)
-    return __builtin_fma(a, b, c);
-#else
-    return a * b + c;
-#endif
-}
-// One step of the trapezoidal SVF (Andy Simper / Cytomic) -- Biquad::run's Svf2 case and the
-// scalar lanes of PeqBank. Same operations and fused-rounding points as svf2StepX2() below.
-inline double svf2Step(double xd, double a1, double a2, double a3, double m0, double m1,
-                       double m2, double& ic1eq, double& ic2eq) {
-    const double v3 = xd - ic2eq;
-    const double v1 = mulAdd(a1, ic1eq, a2 * v3);              // a1*ic1eq + a2*v3
-    const double v2 = mulAdd(a3, v3, mulAdd(a2, ic1eq, ic2eq));  // ic2eq + a2*ic1eq + a3*v3
-    ic1eq = ftzd(mulAdd(2.0, v1, -ic1eq));                      // 2*v1 - ic1eq
-    ic2eq = ftzd(mulAdd(2.0, v2, -ic2eq));                      // 2*v2 - ic2eq
-    return ftzd(mulAdd(m2, v2, mulAdd(m0, xd, m1 * v1)));       // m0*x + m1*v1 + m2*v2
-}
-#if SIPHON_NEON
-// ---- NEON (arm64) --------------------------------------------------------------------------
-// The filter core is double precision, so a NEON register holds 2 lanes: lane 0 = left channel,
-// lane 1 = right channel of the same frame. (IIR recursion makes each sample depend on the
-// previous one, so consecutive frames can't share a register.) Every lane op below is the same
-// IEEE double operation the scalar path does, with vfmaq_f64 exactly where svf2Step() uses
-// mulAdd(), so each lane is bit-identical to svf2Step().
-
-// ftzd() on both lanes: keeps x only when 1e-30 <= |x| < inf. NaN fails both compares, so NaN,
-// +/-inf and tiny values (including -0.0) all become +0.0, same as the scalar ftzd().
-inline float64x2_t ftzdX2(float64x2_t x) {
-    const float64x2_t ax = vabsq_f64(x);
-    const uint64x2_t keep =
-        vandq_u64(vcgeq_f64(ax, vdupq_n_f64(1e-30)),
-                  vcltq_f64(ax, vdupq_n_f64(std::numeric_limits<double>::infinity())));
-    return vreinterpretq_f64_u64(vandq_u64(vreinterpretq_u64_f64(x), keep));
-}
-// svf2Step() on both channels at once. x holds {left, right} as float, and the float<->double
-// conversions at each end match the scalar static_casts (exact widen, round-to-nearest narrow).
-inline float32x2_t svf2StepX2(float32x2_t x, float64x2_t a1, float64x2_t a2, float64x2_t a3,
-                              float64x2_t m0, float64x2_t m1, float64x2_t m2,
-                              float64x2_t& ic1eq, float64x2_t& ic2eq) {
-    const float64x2_t xd = vcvt_f64_f32(x);
-    const float64x2_t two = vdupq_n_f64(2.0);
-    const float64x2_t v3 = vsubq_f64(xd, ic2eq);
-    const float64x2_t v1 = vfmaq_f64(vmulq_f64(a2, v3), a1, ic1eq);
-    const float64x2_t v2 = vfmaq_f64(vfmaq_f64(ic2eq, a2, ic1eq), a3, v3);
-    ic1eq = ftzdX2(vfmaq_f64(vnegq_f64(ic1eq), two, v1));
-    ic2eq = ftzdX2(vfmaq_f64(vnegq_f64(ic2eq), two, v2));
-    const float64x2_t y = vfmaq_f64(vfmaq_f64(vmulq_f64(m1, v1), m0, xd), m2, v2);
-    return vcvt_f32_f64(ftzdX2(y));
-}
-inline float64x2_t lanes(double left, double right) {
-    return vcombine_f64(vdup_n_f64(left), vdup_n_f64(right));
-}
-inline float32x2_t lanes(float left, float right) {
-    return vset_lane_f32(right, vdup_n_f32(left), 1);
-}
-#endif
-template<class T>
-T clampInt(float x) {
-    const double lo = static_cast<double>(std::numeric_limits<T>::min()),
-                 hi = static_cast<double>(std::numeric_limits<T>::max());
-    return static_cast<T>(std::llrint(std::max(lo, std::min(hi, static_cast<double>(x)))));
-}
-inline float clampf(float x, float lo, float hi) {
-    return std::max(lo, std::min(hi, x));
-}
-inline bool changed(float a, float b) {
-    return std::fabs(a - b) > 1e-6f;
-}
-// Soft-knee gain reduction (dB, <= 0) for a detector level `overDb` dB above threshold, given
-// `ratio` and knee width `kneeDb`. Shared by processCompressor's per-output path and
-// mbcBandGain's per-band path -- deliberately identical math, one place for a knee-shape fix.
-inline float softKneeGainReductionDb(float overDb, float ratio, float kneeDb) {
-    const float slope = 1 - 1 / std::max(1.001f, ratio);
-    if (kneeDb > 0) {
-        const float kh = kneeDb * .5f;
-        if (overDb >= kh) {
-            return -overDb * slope;
-        }
-        if (overDb > -kh) {
-            const float x = overDb + kh;
-            return -slope * x * x / (2 * kneeDb);
-        }
-        return 0.f;
-    }
-    return overDb > 0 ? -overDb * slope : 0.f;
-}
+using NativeBmwDsp::clampf;
+using NativeBmwDsp::changed;
+using NativeBmwDsp::dbToLin;
+using NativeBmwDsp::measurementMuteIsolates;
 using OutputId = NativeBmwRouting::OutputId;
 }  // namespace
-
-float NativeBmwDspProcessor::Biquad::run(float x) {
-    const double xd = static_cast<double>(x);
-    switch (topology) {
-        case Topology::OnePoleAllpass: {
-            // Untouched 1-pole all-pass recursion (RBJ cookbook): y = a*x + z1; z1' = x - a*y.
-            const double y = op_a * xd + op_z1;
-            op_z1 = ftzd(xd - op_a * y);
-            return static_cast<float>(ftzd(y));
-        }
-        case Topology::OnePoleLowpass:
-        case Topology::OnePoleHighpass: {
-            // TPT one-pole (Zavalishin 2.2): single trapezoidal integrator, a1 = g/(1+g).
-            const double v = (xd - ic1eq) * a1;
-            const double lp = v + ic1eq;
-            ic1eq = ftzd(lp + v);
-            return static_cast<float>(ftzd(topology == Topology::OnePoleLowpass ? lp : xd - lp));
-        }
-        case Topology::Svf2:
-        default: {
-            // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form -- see svf2Step().
-            return static_cast<float>(svf2Step(xd, a1, a2, a3, m0, m1, m2, ic1eq, ic2eq));
-        }
-    }
-}
-void NativeBmwDspProcessor::Biquad::runPair(Biquad& l, Biquad& r, float& xl, float& xr) {
-#if SIPHON_NEON
-    if (l.topology == Topology::Svf2 && r.topology == Topology::Svf2) {
-        // NEON: gather the two Biquads' coefficients/state into {l, r} lanes, run one
-        // svf2StepX2(), scatter the state back.
-        float64x2_t ic1 = lanes(l.ic1eq, r.ic1eq), ic2 = lanes(l.ic2eq, r.ic2eq);
-        const float32x2_t y =
-            svf2StepX2(lanes(xl, xr), lanes(l.a1, r.a1), lanes(l.a2, r.a2), lanes(l.a3, r.a3),
-                       lanes(l.m0, r.m0), lanes(l.m1, r.m1), lanes(l.m2, r.m2), ic1, ic2);
-        l.ic1eq = vgetq_lane_f64(ic1, 0);
-        r.ic1eq = vgetq_lane_f64(ic1, 1);
-        l.ic2eq = vgetq_lane_f64(ic2, 0);
-        r.ic2eq = vgetq_lane_f64(ic2, 1);
-        xl = vget_lane_f32(y, 0);
-        xr = vget_lane_f32(y, 1);
-        return;
-    }
-#endif
-    xl = l.run(xl);
-    xr = r.run(xr);
-}
-void NativeBmwDspProcessor::Biquad::clear() {
-    op_z1 = 0;
-    ic1eq = ic2eq = 0;
-}
-void NativeBmwDspProcessor::Biquad::loadAllPass(const NativeBmwRouting::BiquadCoefficients& c) {
-    topology = c.firstOrder ? Topology::OnePoleAllpass : Topology::Svf2;
-    op_a = c.opA;
-    a1 = c.a1;
-    a2 = c.a2;
-    a3 = c.a3;
-    m0 = c.m0;
-    m1 = c.m1;
-    m2 = c.m2;
-    clear();
-}
-void NativeBmwDspProcessor::PeqBank::append(std::size_t lane, const Biquad& q) {
-    std::size_t& count = lane == kLeftLane ? leftCount : rightCount;
-    Section& s = sections[count++];
-    s.a1[lane] = q.a1;
-    s.a2[lane] = q.a2;
-    s.a3[lane] = q.a3;
-    s.m0[lane] = q.m0;
-    s.m1[lane] = q.m1;
-    s.m2[lane] = q.m2;
-    s.ic1eq[lane] = 0;
-    s.ic2eq[lane] = 0;
-}
-void NativeBmwDspProcessor::PeqBank::process(float& left, float& right) {
-    std::size_t i = 0;
-#if SIPHON_NEON
-    // NEON: the sections both channels have run as {left, right} pairs, loaded straight from the
-    // SoA arrays.
-    const std::size_t paired = std::min(leftCount, rightCount);
-    if (paired > 0) {
-        float32x2_t x = lanes(left, right);
-        for (; i < paired; ++i) {
-            Section& s = sections[i];
-            float64x2_t ic1 = vld1q_f64(s.ic1eq), ic2 = vld1q_f64(s.ic2eq);
-            x = svf2StepX2(x, vld1q_f64(s.a1), vld1q_f64(s.a2), vld1q_f64(s.a3), vld1q_f64(s.m0),
-                           vld1q_f64(s.m1), vld1q_f64(s.m2), ic1, ic2);
-            vst1q_f64(s.ic1eq, ic1);
-            vst1q_f64(s.ic2eq, ic2);
-        }
-        left = vget_lane_f32(x, 0);
-        right = vget_lane_f32(x, 1);
-    }
-#endif
-    // Scalar: the longer channel's remaining sections (or every section, without NEON).
-    auto runLane = [this](std::size_t lane, std::size_t from, std::size_t to, float sample) {
-        for (std::size_t j = from; j < to; ++j) {
-            Section& s = sections[j];
-            sample = static_cast<float>(svf2Step(static_cast<double>(sample), s.a1[lane],
-                                                 s.a2[lane], s.a3[lane], s.m0[lane], s.m1[lane],
-                                                 s.m2[lane], s.ic1eq[lane], s.ic2eq[lane]));
-        }
-        return sample;
-    };
-    left = runLane(kLeftLane, i, leftCount, left);
-    right = runLane(kRightLane, i, rightCount, right);
-}
-void NativeBmwDspProcessor::PeqBank::clear() {
-    for (auto& s : sections) {
-        s.ic1eq[kLeftLane] = s.ic1eq[kRightLane] = 0;
-        s.ic2eq[kLeftLane] = s.ic2eq[kRightLane] = 0;
-    }
-}
-float NativeBmwDspProcessor::Delay::run(float x) {
-    // Write and advance unconditionally, even at delay<=0 -- otherwise the ring never records
-    // audio while the delay sits at its default zero, so enabling it later either plays back
-    // silence (buffer still all-zero from clear()) or stale audio from a previous enabled period,
-    // instead of the audio that actually just played.
-    const unsigned w = write;
-    data[w] = x;
-    write = (w + 1) % data.size();
-    if (delay <= 0) {
-        return x;
-    }
-    float read = static_cast<float>(w) - delay;
-    while (read < 0) {
-        read += data.size();
-    }
-    unsigned i0 = static_cast<unsigned>(read) % data.size(), i1 = (i0 + 1) % data.size();
-    float f = read - std::floor(read), y = data[i0] + (data[i1] - data[i0]) * f;
-    return y;
-}
-void NativeBmwDspProcessor::Delay::clear() {
-    data.fill(0);
-    write = 0;
-}
-void NativeBmwDspProcessor::Limiter::clear() {
-    delayL.clear();
-    delayR.clear();
-    gain = 1;
-}
-float NativeBmwDspProcessor::dbToLin(float db) {
-    return std::pow(10.f, db / 20.f);
-}
 
 NativeBmwDspProcessor::NativeBmwDspProcessor() {
     outputs_[static_cast<std::size_t>(OutputId::LowLeft)].id = OutputId::LowLeft;
@@ -318,1388 +55,87 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
     }
 }
 
-bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
-    if (!v || n != kConfigSize) {
-        return false;
+// ---- Per-frame signal path ---------------------------------------------------------------------
+namespace {
+struct BandOutputs {
+    OutputId left, right;
+};
+BandOutputs bandOutputs(NativeBmwRouting::Band band) {
+    switch (band) {
+        case NativeBmwRouting::Band::Low:
+            return {OutputId::LowLeft, OutputId::LowRight};
+        case NativeBmwRouting::Band::Mid:
+            return {OutputId::MidLeft, OutputId::MidRight};
+        case NativeBmwRouting::Band::High:
+        default:
+            return {OutputId::HighLeft, OutputId::HighRight};
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    Params next = p_;
-    next.enabled = v[0] >= .5f;
-    next.lpfPass = v[1] >= .5f;
-    next.hpfPass = v[2] >= .5f;
-    next.channelMute = static_cast<int>(clampf(v[3], 0, 2));
-    // 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High -- see rebuildMeasBus().
-    next.measurementMute = static_cast<int>(clampf(v[4], 0, 3));
-    next.headroom = clampf(v[5], -12, 0);
-    next.lowGainL = clampf(v[6], -6, 6);
-    next.lowGainR = clampf(v[7], -6, 6);
-    next.midGainL = clampf(v[8], -6, 6);
-    next.midGainR = clampf(v[9], -6, 6);
-    next.postGainL = clampf(v[10], -6, 6);
-    next.postGainR = clampf(v[11], -6, 6);
-    next.midDelayL = clampf(v[21], 0, 2.8f);
-    next.midDelayR = clampf(v[22], 0, 2.8f);
-    next.lowDelayL = clampf(v[23], 0, 2.8f);
-    next.lowDelayR = clampf(v[24], 0, 2.8f);
-    // v[141] / v[142] -- reclaimed from the removed Mid-band LPF -- are the stage-centering L/R
-    // alignment delay (ms). See Params::stageDelay* and processFrame's tail.
-    next.stageDelayL = clampf(v[141], 0, kStageDelayMaxMs);
-    next.stageDelayR = clampf(v[142], 0, kStageDelayMaxMs);
-    next.tilt = v[25] >= .5f;
-    next.tiltAmount = clampf(v[26], -6, 6);
-    next.tiltFreq = clampf(v[27], 200, 2000);
-    // v[139]: measurement-mute bus brick-wall stopband offset in octaves (see rebuildMeasBus()).
-    // v[140] is a Kotlin-only migration marker; v[141..142] (formerly the removed Pultec bass
-    // stage) now carry the Mid-band independent LPF -- read further down with the per-output
-    // config. See NativeBmwDspProcessor.h's kConfigSize comment.
-    next.measBusStopbandOctaves = clampf(v[139], 0, 4);
-
-    // v[192..199]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
-    next.measGenType = static_cast<int>(clampf(v[192], 0, 2));
-    next.measGenSweepStartHz = clampf(v[193], 10, 24000);
-    next.measGenSweepEndHz = clampf(v[194], 10, 24000);
-    next.measGenSweepDurationS = clampf(v[195], 0.5f, 60);
-    next.measGenSweepLevelDb = clampf(v[196], -60, 0);
-    next.measGenPinkPeriodS = clampf(v[197], 0.1f, 10);
-    next.measGenPinkLevelDb = clampf(v[198], -60, 0);
-    next.measGenTimingRefEnabled = v[199] >= .5f;
-    next.measGenTimingRefSplitChannels = v[200] >= .5f;
-    next.measGenTimingRefMidStartHz = clampf(v[201], 10, 24000);
-    next.measGenTimingRefMidEndHz = clampf(v[202], 10, 24000);
-    next.measGenTimingRefLowStartHz = clampf(v[203], 10, 24000);
-    next.measGenTimingRefLowEndHz = clampf(v[204], 10, 24000);
-
-    // High band scalars (v[210..214], added in the 210 -> 262 growth). Routing/all-pass/
-    // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
-    next.highXoPass = v[210] >= .5f;
-    next.highGainL = clampf(v[211], -6, 6);
-    next.highGainR = clampf(v[212], -6, 6);
-    next.highDelayL = clampf(v[213], 0, 2.8f);
-    next.highDelayR = clampf(v[214], 0, 2.8f);
-
-    // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
-    // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
-    next.mbcEnabled = v[144] >= .5f;
-    next.mbcMix = clampf(v[145], 0, 100) * .01f;
-    // Out-of-order input (e.g. v[147] < v[146]) previously reached rebuildMbc() as-is, where its
-    // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
-    // update being rejected or the values being reordered predictably -- the resulting split
-    // frequencies depended on which slot the clamp chain happened to touch, not on the values the
-    // caller actually sent. Sorting the raw magnitudes first (before the per-slot clamp below)
-    // means the same three magnitudes always normalize the same way regardless of which slot the
-    // caller put them in. std::sort requires a strict weak ordering that NaN violates, so reject
-    // a non-finite triple up front rather than letting it reach the sort.
-    if (!std::isfinite(v[146]) || !std::isfinite(v[147]) || !std::isfinite(v[148])) {
-        return false;
-    }
-    float mbcXoSorted[3] = {v[146], v[147], v[148]};
-    std::sort(std::begin(mbcXoSorted), std::end(mbcXoSorted));
-    next.mbcXo[0] = clampf(mbcXoSorted[0], 20, 2000);
-    next.mbcXo[1] = clampf(mbcXoSorted[1], 40, 8000);
-    next.mbcXo[2] = clampf(mbcXoSorted[2], 80, 20000);
-    for (int b = 0; b < 4; ++b) {
-        const std::size_t base = 149 + b * 8;
-        auto& mb = next.mbcBand[b];
-        mb.enabled = v[base] >= .5f;
-        mb.threshold = clampf(v[base + 1], -48, 0);
-        mb.ratio = clampf(v[base + 2], 1, 20);
-        mb.knee = clampf(v[base + 3], 0, 24);
-        mb.attack = clampf(v[base + 4], 1, 200);
-        mb.release = clampf(v[base + 5], 20, 1000);
-        mb.makeup = clampf(v[base + 6], 0, 12);
-        mb.stereoLink = v[base + 7] >= .5f;
-    }
-    next.busLimLowEnabled = v[182] >= .5f;
-    next.busLimLowThreshDb = clampf(v[183], -24, 0);
-    next.busLimLowReleaseMs = clampf(v[184], 20, 800);
-    next.busLimMidEnabled = v[185] >= .5f;
-    next.busLimMidThreshDb = clampf(v[186], -24, 0);
-    next.busLimMidReleaseMs = clampf(v[187], 20, 800);
-    // High-bus limiter (v[262..264], added in the 262 -> 266 growth); v[265] is the
-    // Kotlin-only migration marker.
-    next.busLimHighEnabled = v[262] >= .5f;
-    next.busLimHighThreshDb = clampf(v[263], -24, 0);
-    next.busLimHighReleaseMs = clampf(v[264], 20, 800);
-    // v[189/190]: master limiter enable + threshold dBFS (v[191] is a Kotlin-only migration
-    // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
-    next.limiterEnabled = v[189] >= .5f;
-    next.limiterThreshDb = clampf(v[190], -12, 0);
-
-    // These four loops (routing, all-pass, output-config x2) are deliberately scoped to
-    // kLegacyOutputCount (4), not the in-memory kOutputCount (6): High has no persisted schema
-    // slots yet, so reading v[] at the offsets a 6-output loop would visit for outputs 4/5 would
-    // read into the *next* block (all-pass would misread output-config bytes as its own, etc).
-    // High's runtime entries (outputs_[4]/[5], outputConfigs_[4]/[5]) are left at their
-    // constructor defaults -- muted, identity routing -- untouched by configure() until a later
-    // phase adds its own tail block. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
-    NativeBmwRouting::RoutingMatrix nextRouting;
-    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
-        const float fromLeft = v[kRoutingBase + out * 2], fromRight = v[kRoutingBase + out * 2 + 1];
-        if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
-            std::fabs(fromRight) > 2.f) {
-            return false;
-        }
-        nextRouting.outputs[out] = {fromLeft, fromRight};
-    }
-
-    auto nextOutputs = outputs_;
-    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
-        for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
-             ++section) {
-            const std::size_t base =
-                kAllPassBase +
-                (out * NativeBmwRouting::kAllPassSectionsPerOutput + section) * kAllPassValueWidth;
-            const float enabledValue = v[base], orderValue = v[base + 1], freqValue = v[base + 2],
-                        qValue = v[base + 3];
-            if (!std::isfinite(enabledValue) || !std::isfinite(orderValue) ||
-                !std::isfinite(freqValue) || !std::isfinite(qValue)) {
-                return false;
-            }
-            NativeBmwRouting::AllPassSection candidate;
-            candidate.enabled = enabledValue >= .5f;
-            candidate.secondOrder = orderValue >= 1.5f;
-            candidate.frequencyHz = freqValue;
-            candidate.q = qValue;
-            // Do not reject the whole 139-value config over one out-of-range all-pass
-            // section (eg. a frequency at/above this output's current Nyquist limit).
-            // rebuild() already degrades an invalid section to an identity
-            // pass-through on its own and leaves every other pending change intact.
-            (void)candidate.rebuild(sampleRate_);
-            const auto& current = outputs_[out].allPass[section];
-            const bool sectionChanged = current.enabled != candidate.enabled ||
-                                        current.secondOrder != candidate.secondOrder ||
-                                        changed(current.frequencyHz, candidate.frequencyHz) ||
-                                        changed(current.q, candidate.q);
-            nextOutputs[out].allPass[section] = candidate;
-            // Keep the delay history when an unrelated setting is configured. Clearing an
-            // active all-pass section here creates a phase discontinuity even though its
-            // coefficients did not change.
-            if (sectionChanged) {
-                nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
-            }
-        }
-    }
-
-    auto nextOutputConfigs = outputConfigs_;
-    auto readComp = [&](CompressorParams& c, std::size_t base) {
-        c.enabled = v[base] >= .5f;
-        c.threshold = clampf(v[base + 1], -24, 0);
-        c.ratio = clampf(v[base + 2], 1, 10);
-        c.knee = clampf(v[base + 3], 0, 12);
-        c.attack = clampf(v[base + 4], 1, 100);
-        c.release = clampf(v[base + 5], 20, 800);
-        c.makeup = clampf(v[base + 6], 0, 6);
-    };
-    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
-        const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
-        auto& cfg = nextOutputConfigs[out];
-        cfg.crossoverFreq = clampf(v[base], 80, 320);
-        // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1, 4 = BW4. Keep the old threshold
-        // decoding for existing saves; only the explicit new IDs select first-order / BW4.
-        const float typeVal = v[base + 1];
-        cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
-                            : typeVal == 4.f ? OutputConfig::CrossoverType::Butterworth4
-                            : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
-                            : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
-                                             : OutputConfig::CrossoverType::LinkwitzRiley4;
-        cfg.subsonicEnabled = v[base + 2] >= .5f;
-        cfg.subsonicFreq = clampf(v[base + 3], 20, 60);
-        cfg.muted = v[base + 4] >= .5f;
-        cfg.polarityInverted = v[base + 5] >= .5f;
-        readComp(cfg.compressor, base + 6);
-    }
-
-    // Mid's optional upper (Mid/High) bandpass corner -- tail block v[205..208], added in the
-    // 205 -> 210 growth (see docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). Read directly into
-    // Mid Left/Right rather than folding into the per-output loop above, since this field only
-    // exists for Mid (Low/High don't have it) and lives in the schema's tail, not the per-output
-    // block. Disabled (the DEFAULTS/migrated state) leaves rebuildMidCrossover() building only
-    // the existing HPF pair, byte-identical to before this growth.
-    {
-        auto& midLeftCfg = nextOutputConfigs[static_cast<std::size_t>(OutputId::MidLeft)];
-        auto& midRightCfg = nextOutputConfigs[static_cast<std::size_t>(OutputId::MidRight)];
-        const float midLeftFreq = v[205], midLeftEnabled = v[206];
-        const float midRightFreq = v[207], midRightEnabled = v[208];
-        if (!std::isfinite(midLeftFreq) || !std::isfinite(midLeftEnabled) ||
-            !std::isfinite(midRightFreq) || !std::isfinite(midRightEnabled)) {
-            return false;
-        }
-        midLeftCfg.upperCrossoverFreq = clampf(midLeftFreq, 300, 8000);
-        midLeftCfg.upperCrossoverEnabled = midLeftEnabled >= .5f;
-        midRightCfg.upperCrossoverFreq = clampf(midRightFreq, 300, 8000);
-        midRightCfg.upperCrossoverEnabled = midRightEnabled >= .5f;
-    }
-
-    // High band: routing/all-pass/output-config, v[215..260] (added in the 210 -> 262 growth).
-    // A genuinely new third output -- unlike Mid's tail block above, this populates real
-    // nextRouting/nextOutputs/nextOutputConfigs entries for OutputId::HighLeft/HighRight, the
-    // same shape as the Low/Mid loops earlier in this function, just at the schema's tail
-    // instead of the legacy per-output block (kOutputConfigBase etc are frozen at their
-    // kLegacyOutputCount-derived offsets -- see NativeBmwDspProcessor.h's kRoutingBase comment).
-    for (std::size_t slot = 0; slot < 2; ++slot) {
-        const std::size_t out = static_cast<std::size_t>(OutputId::HighLeft) + slot;
-        const std::size_t routingBase = 215 + slot * 2;
-        const float fromLeft = v[routingBase], fromRight = v[routingBase + 1];
-        if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
-            std::fabs(fromRight) > 2.f) {
-            return false;
-        }
-        nextRouting.outputs[out] = {fromLeft, fromRight};
-
-        for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
-             ++section) {
-            const std::size_t base =
-                219 + (slot * NativeBmwRouting::kAllPassSectionsPerOutput + section) * kAllPassValueWidth;
-            const float enabledValue = v[base], orderValue = v[base + 1], freqValue = v[base + 2],
-                        qValue = v[base + 3];
-            if (!std::isfinite(enabledValue) || !std::isfinite(orderValue) ||
-                !std::isfinite(freqValue) || !std::isfinite(qValue)) {
-                return false;
-            }
-            NativeBmwRouting::AllPassSection candidate;
-            candidate.enabled = enabledValue >= .5f;
-            candidate.secondOrder = orderValue >= 1.5f;
-            candidate.frequencyHz = freqValue;
-            candidate.q = qValue;
-            (void)candidate.rebuild(sampleRate_);
-            const auto& current = outputs_[out].allPass[section];
-            const bool sectionChanged = current.enabled != candidate.enabled ||
-                                        current.secondOrder != candidate.secondOrder ||
-                                        changed(current.frequencyHz, candidate.frequencyHz) ||
-                                        changed(current.q, candidate.q);
-            nextOutputs[out].allPass[section] = candidate;
-            if (sectionChanged) {
-                nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
-            }
-        }
-
-        const std::size_t cfgBase = 235 + slot * kOutputConfigWidth;
-        auto& cfg = nextOutputConfigs[out];
-        // Same 300-8000 Hz range as Mid's upper corner (v[205]/v[207]): High's single corner is
-        // the same Mid/High boundary, just approached from above instead of below.
-        cfg.crossoverFreq = clampf(v[cfgBase], 300, 8000);
-        const float typeVal = v[cfgBase + 1];
-        cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
-                            : typeVal == 4.f ? OutputConfig::CrossoverType::Butterworth4
-                            : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
-                            : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
-                                             : OutputConfig::CrossoverType::LinkwitzRiley4;
-        cfg.subsonicEnabled = v[cfgBase + 2] >= .5f;  // carried but ignored, same as Mid
-        cfg.subsonicFreq = clampf(v[cfgBase + 3], 20, 60);
-        cfg.muted = v[cfgBase + 4] >= .5f;
-        cfg.polarityInverted = v[cfgBase + 5] >= .5f;
-        readComp(cfg.compressor, cfgBase + 6);
-    }
-
-    uint32_t dirty = DirtyNone;
-    if (changed(next.headroom, p_.headroom) || changed(next.lowGainL, p_.lowGainL) ||
-        changed(next.lowGainR, p_.lowGainR) || changed(next.midGainL, p_.midGainL) ||
-        changed(next.midGainR, p_.midGainR) || changed(next.highGainL, p_.highGainL) ||
-        changed(next.highGainR, p_.highGainR) || changed(next.postGainL, p_.postGainL) ||
-        changed(next.postGainR, p_.postGainR)) {
-        dirty |= DirtyGains;
-    }
-    if (changed(next.lowDelayL, p_.lowDelayL) || changed(next.lowDelayR, p_.lowDelayR) ||
-        changed(next.midDelayL, p_.midDelayL) || changed(next.midDelayR, p_.midDelayR) ||
-        changed(next.highDelayL, p_.highDelayL) || changed(next.highDelayR, p_.highDelayR) ||
-        changed(next.stageDelayL, p_.stageDelayL) || changed(next.stageDelayR, p_.stageDelayR)) {
-        dirty |= DirtyDelays;
-    }
-    if (changed(next.tiltAmount, p_.tiltAmount) || changed(next.tiltFreq, p_.tiltFreq)) {
-        dirty |= DirtyTilt;
-    }
-
-    for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
-        const auto& old = outputConfigs_[out];
-        const auto& now = nextOutputConfigs[out];
-        const auto band = NativeBmwRouting::band(out);
-        const bool low = band == NativeBmwRouting::Band::Low;
-        if (changed(old.crossoverFreq, now.crossoverFreq) || old.crossoverType != now.crossoverType) {
-            dirty |= band == NativeBmwRouting::Band::Low  ? DirtyLowXo
-                    : band == NativeBmwRouting::Band::Mid ? DirtyMidXo
-                                                          : DirtyHighXo;
-            // The meas-bus corner tracks the isolated band's own crossover: rebuild it only
-            // if the crossover that just moved belongs to the band the active mode keeps.
-            if (measurementMuteIsolates(next.measurementMute, band)) {
-                dirty |= DirtyMeasBus;
-            }
-        }
-        // Mid's upper corner (v[205..208], read above) only exists for Mid; explicitly Mid-only
-        // now that band() gives a real three-way classifier (was "!low", back when High wasn't
-        // in this loop yet and that was equivalent to Mid-only by construction).
-        if (band == NativeBmwRouting::Band::Mid &&
-            (changed(old.upperCrossoverFreq, now.upperCrossoverFreq) ||
-             old.upperCrossoverEnabled != now.upperCrossoverEnabled)) {
-            dirty |= DirtyMidXo;
-            // Isolate-Mid's upper bus LPF follows Mid's upper corner (and its enable).
-            if (next.measurementMute == 1) {
-                dirty |= DirtyMeasBus;
-            }
-        }
-        if (low && (old.subsonicEnabled != now.subsonicEnabled ||
-                    changed(old.subsonicFreq, now.subsonicFreq))) {
-            dirty |= DirtySubsonic;
-        }
-        if (old.muted != now.muted || old.polarityInverted != now.polarityInverted) {
-            dirty |= DirtyPolarity;
-        }
-        if (changed(old.compressor.attack, now.compressor.attack) ||
-            changed(old.compressor.release, now.compressor.release)) {
-            dirty |= DirtyCompTiming;
-        }
-        if (old.compressor.enabled != now.compressor.enabled) {
-            dirty |= DirtyCompState;
-        }
-        if (changed(old.compressor.makeup, now.compressor.makeup)) {
-            dirty |= DirtyGains;
-        }
-    }
-    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it, so they
-    // still hold whatever was playing when 3-way was switched off. Clear them on the way back
-    // on, or that stale audio replays as a burst for the first few milliseconds.
-    if (p_.highXoPass && !next.highXoPass) {
-        dirty |= DirtyHighResume;
-    }
-    if (next.measurementMute != p_.measurementMute) {
-        dirty |= DirtyPolarity | DirtyMeasBus;
-    }
-    if (changed(next.measBusStopbandOctaves, p_.measBusStopbandOctaves)) {
-        dirty |= DirtyMeasBus;
-    }
-    // Any generator param change restarts the run, not just a type flip -- editing the sweep
-    // range/duration/level while it's already playing is expected to retrigger it.
-    if (next.measGenType != p_.measGenType ||
-        changed(next.measGenSweepStartHz, p_.measGenSweepStartHz) ||
-        changed(next.measGenSweepEndHz, p_.measGenSweepEndHz) ||
-        changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
-        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
-        changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
-        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb) ||
-        next.measGenTimingRefEnabled != p_.measGenTimingRefEnabled ||
-        next.measGenTimingRefSplitChannels != p_.measGenTimingRefSplitChannels ||
-        changed(next.measGenTimingRefMidStartHz, p_.measGenTimingRefMidStartHz) ||
-        changed(next.measGenTimingRefMidEndHz, p_.measGenTimingRefMidEndHz) ||
-        changed(next.measGenTimingRefLowStartHz, p_.measGenTimingRefLowStartHz) ||
-        changed(next.measGenTimingRefLowEndHz, p_.measGenTimingRefLowEndHz)) {
-        dirty |= DirtyMeasGen;
-    }
-
-    // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, clears tree state, same cost as
-    // the band crossovers). mix/makeup/attack/release -> DirtyMbcTiming (scalars only, no click).
-    // threshold/ratio/knee are read live in mbcBandGain() and need no rebuild. enable or
-    // stereo-link flips -> DirtyMbcState (reset cells + tree so a re-enabled band starts clean
-    // and stale unlinked-[1] state can't leak in).
-    if (changed(next.mbcMix, p_.mbcMix)) {
-        dirty |= DirtyMbcTiming;
-    }
-    for (int i = 0; i < 3; ++i) {
-        if (changed(next.mbcXo[i], p_.mbcXo[i])) {
-            dirty |= DirtyMbc;
-        }
-    }
-    if (next.mbcEnabled != p_.mbcEnabled) {
-        dirty |= DirtyMbcState;
-    }
-    for (int b = 0; b < 4; ++b) {
-        const auto& cur = p_.mbcBand[b];
-        const auto& nxt = next.mbcBand[b];
-        if (changed(cur.attack, nxt.attack) || changed(cur.release, nxt.release) ||
-            changed(cur.makeup, nxt.makeup)) {
-            dirty |= DirtyMbcTiming;
-        }
-        if (cur.enabled != nxt.enabled || cur.stereoLink != nxt.stereoLink) {
-            dirty |= DirtyMbcState;
-        }
-    }
-    // Bus limiter: threshold is read live per sample, so only enable/release need a rebuild.
-    if (next.busLimLowEnabled != p_.busLimLowEnabled ||
-        next.busLimMidEnabled != p_.busLimMidEnabled ||
-        next.busLimHighEnabled != p_.busLimHighEnabled ||
-        changed(next.busLimLowReleaseMs, p_.busLimLowReleaseMs) ||
-        changed(next.busLimMidReleaseMs, p_.busLimMidReleaseMs) ||
-        changed(next.busLimHighReleaseMs, p_.busLimHighReleaseMs)) {
-        dirty |= DirtyBusLimiter;
-    }
-    // Master limiter: enable is checked live in processFrame; only the threshold -> ceiling
-    // scalar needs a (cheap, state-free) recompute.
-    if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
-        dirty |= DirtyLimiter;
-    }
-
-    p_ = next;
-    routing_ = nextRouting;
-    outputs_ = nextOutputs;
-    outputConfigs_ = nextOutputConfigs;
-    // See mbcEnabledMeterFlag_ etc's declaration: the read*Meter() functions are lock-free and
-    // read these atomics instead of the plain bools inside p_ to avoid racing this assignment.
-    mbcEnabledMeterFlag_.store(p_.mbcEnabled, std::memory_order_relaxed);
-    busLimLowEnabledMeterFlag_.store(p_.busLimLowEnabled, std::memory_order_relaxed);
-    busLimMidEnabledMeterFlag_.store(p_.busLimMidEnabled, std::memory_order_relaxed);
-    busLimHighEnabledMeterFlag_.store(p_.busLimHighEnabled, std::memory_order_relaxed);
-    masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
-    applyDirty(dirty);
-    return true;
 }
+}  // namespace
 
-// Trapezoidal SVF, Andy Simper/Cytomic form: g = tan(w/2) (w = 2*pi*fc/sr, the usual bilinear
-// prewarp), k = 1/Q. a1/a2/a3 are shared by every 2nd-order type below; m0/m1/m2 pick the type by
-// mixing the input with the two integrator outputs (v1, v2) in Biquad::run. Verified against this
-// file's previous RBJ DF2T formulas by direct time-domain simulation (magnitude+phase match to
-// machine precision across every filter type/fc/Q/gain this engine uses) before this migration --
-// see PR description, not reproduced as a runtime check.
-void NativeBmwDspProcessor::makeLowPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 0;
-    q.m1 = 0;
-    q.m2 = 1;
-    q.clear();
-}
-void NativeBmwDspProcessor::makeHighPass(Biquad& q, float fc, float Q, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = -k;
-    q.m2 = -1;
-    q.clear();
-}
-// True 1-pole (6 dB/oct) TPT lowpass/highpass -- BW3's low-order stage (see kButterworth3Q).
-// Same bilinear prewarp as every 2nd-order builder above (g=tan(w/2)); the coefficient is the
-// classic single-integrator one-pole form (Zavalishin 2.2) rather than SVF's two-integrator one.
-void NativeBmwDspProcessor::makeLowPass1(Biquad& q, float fc, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
-    q.topology = Biquad::Topology::OnePoleLowpass;
-    q.a1 = g / (1. + g);
-    q.clear();
-}
-void NativeBmwDspProcessor::makeHighPass1(Biquad& q, float fc, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
-    q.topology = Biquad::Topology::OnePoleHighpass;
-    q.a1 = g / (1. + g);
-    q.clear();
-}
-// Identity pass-through. BW2's crossover only needs one 2nd-order stage; the second Biquad slot
-// (crossover2) is forced inert here rather than skipped per-sample in processLowCrossover/
-// processMidCrossover, so those stay branch-free on the audio-thread hot path.
-void NativeBmwDspProcessor::makeIdentity(Biquad& q) {
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = q.a2 = q.a3 = 0;
-    q.m0 = 1;
-    q.m1 = 0;
-    q.m2 = 0;
-    q.clear();
-}
-// fc clamp matches makeLowPass/makeHighPass/makeAllPass2: every coefficient builder in this file
-// keeps its corner inside [20 Hz, 0.49*sr] so w stays well below pi -- g=tan(w/2) then stays
-// large-but-finite instead of approaching the asymptote at w/2=pi/2 (fc -> Nyquist). Callers
-// already clamp (tilt freq is [200,2000]); this is belt-and-braces so a future caller can't feed
-// it a near-Nyquist corner and get non-finite coefficients with no identity fallback.
-void NativeBmwDspProcessor::makeLowShelf(Biquad& q, float fc, float gainDb, float sr) {
-    double A = std::pow(10., static_cast<double>(gainDb) / 40.),
-           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) / std::sqrt(A),
-           k = 1. / BW;
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = k * (A - 1);
-    q.m2 = A * A - 1;
-    q.clear();
-}
-void NativeBmwDspProcessor::makeHighShelf(Biquad& q, float fc, float gainDb, float sr) {
-    double A = std::pow(10., static_cast<double>(gainDb) / 40.),
-           w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) * std::sqrt(A),
-           k = 1. / BW;
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = A * A;
-    q.m1 = k * (1 - A) * A;
-    q.m2 = 1 - A * A;
-    q.clear();
-}
-// SVF all-pass, Q = 1/sqrt(2). Unity magnitude everywhere, -360 deg phase sweep through fc.
-// Matches NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC
-// tree.
-void NativeBmwDspProcessor::makeAllPass2(Biquad& q, float fc, float sr) {
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW;
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = -2 * k;
-    q.m2 = 0;
-    q.clear();
-}
-bool NativeBmwDspProcessor::makePeq(Biquad& q, double f, double gainDb, double Q, int type, float sr) {
-    if (!std::isfinite(f) || !std::isfinite(gainDb) || !std::isfinite(Q) || f < 20 || f >= sr * .5 ||
-        Q < .1 || Q > 30 || type < 0 || type > 3) {
-        return false;
-    }
-    double A = std::pow(10., gainDb / 40.), w = 2. * PI * f / sr, g = std::tan(w * .5), k, m0, m1, m2;
-    if (type == 0) {
-        // Bell/peak: k folds A into the Q term rather than into g (the shelf types below do the
-        // opposite) -- this is the standard Cytomic bell derivation, confirmed against the old
-        // RBJ bell formula's response, not read off intuition.
-        k = 1. / (Q * A);
-        m0 = 1;
-        m1 = k * (A * A - 1);
-        m2 = 0;
-    } else if (type == 1) {
-        g /= std::sqrt(A);
-        k = 1. / Q;
-        m0 = 1;
-        m1 = k * (A - 1);
-        m2 = A * A - 1;
-    } else if (type == 2) {
-        g *= std::sqrt(A);
-        k = 1. / Q;
-        m0 = A * A;
-        m1 = k * (1 - A) * A;
-        m2 = 1 - A * A;
+void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float& xl, float& xr) {
+    using Band = NativeBmwRouting::Band;
+    const BandOutputs ids = bandOutputs(band);
+    auto& left = output(ids.left);
+    auto& right = output(ids.right);
+    const auto& leftCfg = outputConfig(ids.left);
+    const auto& rightCfg = outputConfig(ids.right);
+    // Filter stages run L and R together (NEON pairs on arm64); see NativeBmwCrossovers.h.
+    if (band == Band::Low) {
+        NativeBmwDsp::processLowCrossover(left, leftCfg, right, rightCfg, xl, xr);
+    } else if (band == Band::Mid) {
+        NativeBmwDsp::processMidCrossover(left, right, xl, xr);
     } else {
-        // Notch (band-reject), type 3 ("NO"): m1 = -k, not -2*k. Notch = LP + HP by definition
-        // (their m0/m1/m2 mixes add component-wise: (0,0,1) + (1,-k,-1) = (1,-k,0)) -- -2*k is the
-        // Allpass mixing instead (see makeAllPass2/AllPassSection::rebuild), which has unity
-        // magnitude at every frequency by construction. With -2*k here, a user-selected Notch band
-        // played back with no audible cut at all (just a phase twist) while the on-screen graph
-        // (BiquadUtils.kt, a separate Kotlin implementation never touched by this migration) kept
-        // showing the correct deep notch -- silently wrong audio behind a correct-looking curve.
-        k = 1. / Q;
-        m0 = 1;
-        m1 = -k;
-        m2 = 0;
+        NativeBmwDsp::processHighCrossover(left, right, xl, xr);
     }
-    const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    // makePeq is the one coefficient builder here with fc unclamped up to true Nyquist (arbitrary
-    // user-edited PEQ bands), so it's the one that keeps an explicit finite-result guard -- g can
-    // grow very large as f approaches sr/2 (g=tan(w/2) has no asymptote-avoiding margin here the
-    // way the 0.49*sr-clamped builders above do). m0/m1/m2 need the same guard as a1/a2/a3: an
-    // extreme-but-finite gainDb can underflow A to exactly 0 (bell's k=1/(Q*A) then overflows to
-    // +Infinity, making m1 non-finite) while g stays small enough that a1/a2/a3 alone still pass
-    // -- checking only those would let a non-finite m1/m2 through to Biquad::run, where
-    // m1*v1 = -Infinity*0 = NaN gets silently flushed to 0 by ftzd(), zeroing that band's output
-    // instead of rejecting the malformed config.
-    if (!std::isfinite(a1) || !std::isfinite(a2) || !std::isfinite(a3) || !std::isfinite(m0) ||
-        !std::isfinite(m1) || !std::isfinite(m2)) {
-        return false;
+    if (peqEnabled_) {
+        (band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_).process(xl, xr);
     }
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = m0;
-    q.m1 = m1;
-    q.m2 = m2;
-    q.clear();
-    return true;
-}
-bool NativeBmwDspProcessor::peqBandSkipped(int type, double gain) {
-    return type != 3 && std::fabs(gain) < 1e-9;
-}
-bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const double* full,
-                                         std::size_t fullCount, const double* low,
-                                         std::size_t lowCount, const double* mid,
-                                         std::size_t midCount, const double* high,
-                                         std::size_t highCount) {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    return configurePeqLocked(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount,
-                              high, highCount);
-}
-bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, const double* full,
-                                               std::size_t fullCount, const double* low,
-                                               std::size_t lowCount, const double* mid,
-                                               std::size_t midCount, const double* high,
-                                               std::size_t highCount) {
-    if (!std::isfinite(preampDb) || preampDb < -30 || preampDb > 12) {
-        return false;
-    }
-    auto build = [this](const double* v, std::size_t n, PeqBank& b) {
-        if (n % 5 || n / 5 > 16 || (n && v == nullptr)) {
-            return false;
-        }
-        PeqBank x;
-        for (std::size_t i = 0; i < n; i += 5) {
-            // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a value outside int's
-            // representable range (including NaN/Infinity, but also a finite-but-huge double from
-            // the raw JNI array) is UB ([conv.fpint]), so both have to be ruled out before either
-            // cast runs, not deferred to makePeq()'s own isfinite checks (which only cover
-            // f/gainDb/Q) or to the type/channel range checks below the casts.
-            constexpr double kIntMin = static_cast<double>(std::numeric_limits<int>::min()),
-                             kIntMax = static_cast<double>(std::numeric_limits<int>::max());
-            if (!std::isfinite(v[i + 3]) || !std::isfinite(v[i + 4]) || v[i + 3] < kIntMin ||
-                v[i + 3] > kIntMax || v[i + 4] < kIntMin || v[i + 4] > kIntMax) {
-                return false;
-            }
-            int type = static_cast<int>(v[i + 3]);
-            Biquad q;
-            if (!makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate_)) {
-                return false;
-            }
-            int ch = static_cast<int>(v[i + 4]);
-            if (ch < 0 || ch > 2) {
-                return false;
-            }
-            if (peqBandSkipped(type, v[i + 1])) {
-                continue;
-            }
-            if (ch != 2) {
-                x.append(PeqBank::kLeftLane, q);
-            }
-            if (ch != 1) {
-                x.append(PeqBank::kRightLane, q);
-            }
-        }
-        b = x;
-        return true;
-    };
-    PeqBank f, l, m, h;
-    if (!build(full, fullCount, f) || !build(low, lowCount, l) || !build(mid, midCount, m) ||
-        !build(high, highCount, h)) {
-        return false;
-    }
-    auto save = [](auto& target, std::size_t& count, const double* source,
-                   std::size_t sourceCount) {
-        target.fill(0);
-        if (sourceCount > 0) {
-            std::copy_n(source, sourceCount, target.begin());
-        }
-        count = sourceCount;
-    };
-    save(inputPeqValues_, inputPeqValueCount_, full, fullCount);
-    save(lowPeqValues_, lowPeqValueCount_, low, lowCount);
-    save(midPeqValues_, midPeqValueCount_, mid, midCount);
-    save(highPeqValues_, highPeqValueCount_, high, highCount);
-    inputPeq_ = f;
-    lowPeq_ = l;
-    midPeq_ = m;
-    highPeq_ = h;
-    peqEnabled_ = enabled;
-    peqPreampDb_ = preampDb;
-    peqPreamp_ = dbToLin(preampDb);
-    return true;
-}
-
-void NativeBmwDspProcessor::resetDynamics() {
-    for (auto& s : outputDynamics_) {
-        s.gain = 1;
-        s.rmsPower = s.peakEnv = 0;
-        s.meterCounter = 0;
-        s.inputDb.store(-60);
-        s.outputDb.store(-60);
-        s.gainReductionDb.store(0);
-    }
-}
-void NativeBmwDspProcessor::rebuildGains() {
-    headroom_ = dbToLin(p_.headroom);
-    postGainL_ = dbToLin(p_.postGainL);
-    postGainR_ = dbToLin(p_.postGainR);
-    output(OutputId::LowLeft).gain = dbToLin(p_.lowGainL);
-    output(OutputId::LowRight).gain = dbToLin(p_.lowGainR);
-    output(OutputId::MidLeft).gain = dbToLin(p_.midGainL);
-    output(OutputId::MidRight).gain = dbToLin(p_.midGainR);
-    output(OutputId::HighLeft).gain = dbToLin(p_.highGainL);
-    output(OutputId::HighRight).gain = dbToLin(p_.highGainR);
-    for (std::size_t i = 0; i < outputDynamics_.size(); ++i) {
-        outputDynamics_[i].makeupLin = dbToLin(outputConfigs_[i].compressor.makeup);
-    }
-}
-void NativeBmwDspProcessor::rebuildSubsonic() {
-    for (OutputId id : {OutputId::LowLeft, OutputId::LowRight}) {
-        auto& out = output(id);
-        const auto& cfg = outputConfig(id);
-        makeHighPass(out.subsonic1, cfg.subsonicFreq, BW, sampleRate_);
-    }
-}
-void NativeBmwDspProcessor::rebuildLowCrossover() {
-    using CrossoverType = OutputConfig::CrossoverType;
-    for (OutputId id : {OutputId::LowLeft, OutputId::LowRight}) {
-        auto& out = output(id);
-        const auto& cfg = outputConfig(id);
-        switch (cfg.crossoverType) {
-            case CrossoverType::Butterworth1:
-                makeLowPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth2:
-                makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth3:
-                makeLowPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeLowPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
-                break;
-            case CrossoverType::Butterworth4:
-                makeLowPass(out.crossover1, cfg.crossoverFreq, kButterworth4QLow, sampleRate_);
-                makeLowPass(out.crossover2, cfg.crossoverFreq, kButterworth4QHigh, sampleRate_);
-                break;
-            case CrossoverType::LinkwitzRiley4:
-            default:
-                makeLowPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeLowPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
-                break;
-        }
-    }
-}
-void NativeBmwDspProcessor::rebuildMidCrossover() {
-    using CrossoverType = OutputConfig::CrossoverType;
-    for (OutputId id : {OutputId::MidLeft, OutputId::MidRight}) {
-        auto& out = output(id);
-        const auto& cfg = outputConfig(id);
-        switch (cfg.crossoverType) {
-            case CrossoverType::Butterworth1:
-                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth2:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth3:
-                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
-                break;
-            case CrossoverType::Butterworth4:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, kButterworth4QLow, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth4QHigh, sampleRate_);
-                break;
-            case CrossoverType::LinkwitzRiley4:
-            default:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
-                break;
-        }
-        // Optional upper (Mid/High) corner -- turns Mid from HPF-only into a true bandpass.
-        // Same crossoverType table as the HPF pair above, mirrored as a lowpass and cascaded
-        // after it in processMidCrossover(). Forced to identity when disabled (rather than
-        // skipped per-sample) so processMidCrossover stays branch-free on the audio-thread hot
-        // path -- same pattern as crossover2 being forced inert for BW1/BW2 above.
-        if (!cfg.upperCrossoverEnabled) {
-            makeIdentity(out.crossover3);
-            makeIdentity(out.crossover4);
-            continue;
-        }
-        switch (cfg.crossoverType) {
-            case CrossoverType::Butterworth1:
-                makeLowPass1(out.crossover3, cfg.upperCrossoverFreq, sampleRate_);
-                makeIdentity(out.crossover4);
-                break;
-            case CrossoverType::Butterworth2:
-                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, BW, sampleRate_);
-                makeIdentity(out.crossover4);
-                break;
-            case CrossoverType::Butterworth3:
-                makeLowPass1(out.crossover3, cfg.upperCrossoverFreq, sampleRate_);
-                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, kButterworth3Q, sampleRate_);
-                break;
-            case CrossoverType::Butterworth4:
-                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, kButterworth4QLow, sampleRate_);
-                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, kButterworth4QHigh, sampleRate_);
-                break;
-            case CrossoverType::LinkwitzRiley4:
-            default:
-                makeLowPass(out.crossover3, cfg.upperCrossoverFreq, BW, sampleRate_);
-                makeLowPass(out.crossover4, cfg.upperCrossoverFreq, BW, sampleRate_);
-                break;
-        }
-    }
-}
-void NativeBmwDspProcessor::rebuildHighCrossover() {
-    // HPF-only, same shape as rebuildMidCrossover() before Phase 2 added its optional lowpass
-    // pair -- High is the top band, nothing above it to band-limit against.
-    using CrossoverType = OutputConfig::CrossoverType;
-    for (OutputId id : {OutputId::HighLeft, OutputId::HighRight}) {
-        auto& out = output(id);
-        const auto& cfg = outputConfig(id);
-        switch (cfg.crossoverType) {
-            case CrossoverType::Butterworth1:
-                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth2:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeIdentity(out.crossover2);
-                break;
-            case CrossoverType::Butterworth3:
-                makeHighPass1(out.crossover1, cfg.crossoverFreq, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth3Q, sampleRate_);
-                break;
-            case CrossoverType::Butterworth4:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, kButterworth4QLow, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, kButterworth4QHigh, sampleRate_);
-                break;
-            case CrossoverType::LinkwitzRiley4:
-            default:
-                makeHighPass(out.crossover1, cfg.crossoverFreq, BW, sampleRate_);
-                makeHighPass(out.crossover2, cfg.crossoverFreq, BW, sampleRate_);
-                break;
-        }
-    }
-}
-void NativeBmwDspProcessor::updateDelays() {
-    auto d = [this](float ms) {
-        return clampf(ms * sampleRate_ * .001f, 0, kDelayLineCapacity - 1.f);
-    };
-    output(OutputId::LowLeft).delay.delay = d(p_.lowDelayL);
-    output(OutputId::LowRight).delay.delay = d(p_.lowDelayR);
-    output(OutputId::MidLeft).delay.delay = d(p_.midDelayL);
-    output(OutputId::MidRight).delay.delay = d(p_.midDelayR);
-    output(OutputId::HighLeft).delay.delay = d(p_.highDelayL);
-    output(OutputId::HighRight).delay.delay = d(p_.highDelayR);
-    // Stage-centering delay -- its own (larger) ring buffer, so clamp to kStageDelayCapacity.
-    auto dStage = [this](float ms) {
-        return clampf(ms * sampleRate_ * .001f, 0, kStageDelayCapacity - 1.f);
-    };
-    stageDelayL_.delay = dStage(p_.stageDelayL);
-    stageDelayR_.delay = dStage(p_.stageDelayR);
-}
-void NativeBmwDspProcessor::rebuildLimiter() {
-    float lookahead = clampf(kLimiterLookaheadMs * sampleRate_ * .001f, 0.f,
-                             static_cast<float>(kDelayLineCapacity - 1));
-    limiter_.delayL.delay = lookahead;
-    limiter_.delayR.delay = lookahead;
-    float attackSeconds = (kLimiterLookaheadMs * .001f) / 5.f;
-    limiter_.attackMix = 1 - std::exp(-1 / (attackSeconds * sampleRate_));
-    float releaseSeconds = .080f;
-    limiter_.releaseMix = 1 - std::exp(-1 / (releaseSeconds * sampleRate_));
-    limiterCeilingLin_ = dbToLin(clampf(p_.limiterThreshDb, -12.f, 0.f));
-    masterLimiterGrDb_.store(0.f);
-}
-void NativeBmwDspProcessor::rebuildMbc() {
-    // LR4 tree crossovers + the all-pass compensators for the lower bands. Splits are forced
-    // monotonic with a little headroom so a mis-ordered config can't collapse a band to nothing
-    // (configure() also now sorts p_.mbcXo ascending before it ever reaches here). Each stage's
-    // lower bound is itself clamped against the ceiling: without that, a low sample rate plus an
-    // f0/f1 already close to the ceiling can make the naive lower bound (f0*1.05f) exceed the
-    // ceiling, and clampf(x, lo, hi) with lo>hi returns lo -- silently landing past the
-    // documented sampleRate_*.45f cap instead of at it. f0/f1's own upper bound is likewise pulled
-    // in by the 5% steps still owed to the stages above them, so a low sample rate can't pin two
-    // adjacent splits to the same ceiling value and collapse the band between them to zero width.
-    const float ceiling = sampleRate_ * .45f;
-    const float f1Ceiling = ceiling / 1.05f;
-    const float f0Ceiling = f1Ceiling / 1.05f;
-    const float f0 = clampf(p_.mbcXo[0], 20.f, f0Ceiling);
-    const float f1 = clampf(p_.mbcXo[1], std::min(f0 * 1.05f, f1Ceiling), f1Ceiling);
-    const float f2 = clampf(p_.mbcXo[2], std::min(f1 * 1.05f, ceiling), ceiling);
-    for (auto& t : mbc_) {
-        t.clear();  // explicit -- makeLowPass/makeHighPass below also clear each biquad they
-                    // touch, so this is belt-and-braces, but it makes the state-reset intent
-                    // visible here rather than relying on a side effect three lines down.
-        makeLowPass(t.lp0a, f0, BW, sampleRate_);
-        makeLowPass(t.lp0b, f0, BW, sampleRate_);
-        makeHighPass(t.hp0a, f0, BW, sampleRate_);
-        makeHighPass(t.hp0b, f0, BW, sampleRate_);
-        makeLowPass(t.lp1a, f1, BW, sampleRate_);
-        makeLowPass(t.lp1b, f1, BW, sampleRate_);
-        makeHighPass(t.hp1a, f1, BW, sampleRate_);
-        makeHighPass(t.hp1b, f1, BW, sampleRate_);
-        makeLowPass(t.lp2a, f2, BW, sampleRate_);
-        makeLowPass(t.lp2b, f2, BW, sampleRate_);
-        makeHighPass(t.hp2a, f2, BW, sampleRate_);
-        makeHighPass(t.hp2b, f2, BW, sampleRate_);
-        // band 0 (below f0) picks up the phase of the f1 and f2 splits; band 1 (f0..f1) that of f2.
-        makeAllPass2(t.apB0X1, f1, sampleRate_);
-        makeAllPass2(t.apB0X2, f2, sampleRate_);
-        makeAllPass2(t.apB1X2, f2, sampleRate_);
-    }
-    rebuildMbcTiming();
-}
-void NativeBmwDspProcessor::rebuildMbcTiming() {
-    // threshold/ratio/knee are read live in mbcBandGain() -- only these smoothing scalars are
-    // precomputed, and none of it touches the crossover filter state.
-    mbcMix_ = clampf(p_.mbcMix, 0.f, 1.f);
-    for (int b = 0; b < 4; ++b) {
-        mbcMakeupLin_[b] = dbToLin(p_.mbcBand[b].makeup);
-        mbcAttackMix_[b] =
-            1 - std::exp(-1 / (std::max(1.f, p_.mbcBand[b].attack) * .001f * sampleRate_));
-        mbcReleaseMix_[b] =
-            1 - std::exp(-1 / (std::max(1.f, p_.mbcBand[b].release) * .001f * sampleRate_));
-    }
-}
-void NativeBmwDspProcessor::resetMbcState() {
-    for (auto& t : mbc_) {
-        t.clear();
-    }
-    for (auto& row : mbcCell_) {
-        for (auto& c : row) {
-            c.rms = 0;
-            c.peak = 0;
-            c.gain = 1;
-            c.lastDetectorDb = -60.f;
-        }
-    }
-    for (auto& m : mbcMeter_) {
-        m.inputDb.store(-60.f);
-        m.outputDb.store(-60.f);
-        m.gainReductionDb.store(0.f);
-    }
-    mbcMeterCounter_ = 0;
-}
-void NativeBmwDspProcessor::rebuildBusLimiter() {
-    busLimAttackMix_ = 1 - std::exp(-1 / (.001f * sampleRate_));
-    busLimLowGrDb_.store(0.f);
-    busLimMidGrDb_.store(0.f);
-    busLimHighGrDb_.store(0.f);
-    busLimLowReleaseMix_ =
-        1 - std::exp(-1 / (std::max(20.f, p_.busLimLowReleaseMs) * .001f * sampleRate_));
-    busLimMidReleaseMix_ =
-        1 - std::exp(-1 / (std::max(20.f, p_.busLimMidReleaseMs) * .001f * sampleRate_));
-    busLimHighReleaseMix_ =
-        1 - std::exp(-1 / (std::max(20.f, p_.busLimHighReleaseMs) * .001f * sampleRate_));
-}
-void NativeBmwDspProcessor::rebuildTilt() {
-    float g = p_.tiltAmount * .75f;
-    makeLowShelf(tiltLoL1_, p_.tiltFreq, g, sampleRate_);
-    makeLowShelf(tiltLoL2_, p_.tiltFreq, g, sampleRate_);
-    makeHighShelf(tiltHiL1_, p_.tiltFreq, -g, sampleRate_);
-    makeHighShelf(tiltHiL2_, p_.tiltFreq, -g, sampleRate_);
-    makeLowShelf(tiltLoR1_, p_.tiltFreq, g, sampleRate_);
-    makeLowShelf(tiltLoR2_, p_.tiltFreq, g, sampleRate_);
-    makeHighShelf(tiltHiR1_, p_.tiltFreq, -g, sampleRate_);
-    makeHighShelf(tiltHiR2_, p_.tiltFreq, -g, sampleRate_);
-}
-void NativeBmwDspProcessor::rebuildPolarityAndMute() {
-    for (std::size_t i = 0; i < outputs_.size(); ++i) {
-        auto& out = outputs_[i];
-        const auto& cfg = outputConfigs_[i];
-        // Every band except the isolated one is muted while measurement mute is on.
-        const bool measurementMuted =
-            p_.measurementMute != 0 &&
-            !measurementMuteIsolates(p_.measurementMute, NativeBmwRouting::band(i));
-        out.muted = cfg.muted || measurementMuted;
-        out.polarityInverted = cfg.polarityInverted;
-    }
-}
-void NativeBmwDspProcessor::rebuildMeasBus() {
-    // Option A: measurement-mute output-bus brick-wall. Only ever inserted into processFrame's
-    // signal path while p_.measurementMute != 0; all coefficient work happens here, on a
-    // measurementMute (or relevant crossover) transition via DirtyMeasBus -- never per sample.
-    // Each mode keeps one band and cuts the bus where the external split would otherwise route
-    // that band's residual skirt to a neighbouring driver:
-    // isolate Mid  (==1) -> HPF the bus below the MID lower crossover, plus (only while Mid's
-    //                       upper Mid/High corner is on, i.e. 3-way) an LPF above that corner
-    // isolate Low  (==2) -> LPF the bus above the LOW crossover
-    // isolate High (==3) -> HPF the bus below the HIGH crossover (the Mid/High corner)
-    // LR8 per side: 4x cascaded Butterworth Q=1/sqrt(2), 48 dB/oct.
-    //
-    // The corner is not placed on the crossover itself: sitting an LR8 exactly on the opposite
-    // band's crossover also chews ~12 dB out of the band that is still playing, right where its
-    // own transition lives, so an isolated measurement rolls off well short of the real acoustic
-    // crossover. measBusStopbandOctaves walks the corner that many octaves *into the stopband*
-    // (down for an HPF, up for an LPF) so the surviving band keeps its own transition region
-    // intact while the brick-wall still kills the deep residual skirt. 0 = original on-crossover
-    // behaviour.
-    const int mode = p_.measurementMute;
-    measBusActive_ = mode != 0;
-    measBusUpperActive_ = mode == 1 && outputConfig(OutputId::MidLeft).upperCrossoverEnabled;
-    for (auto* bank : {&measBusL_, &measBusR_, &measBusUpperL_, &measBusUpperR_}) {
-        for (auto& b : *bank) {
-            b.clear();
-        }
-    }
-    if (!measBusActive_) {
-        return;
-    }
-    const bool highpass = mode != 2;
-    const float down = std::exp2(-p_.measBusStopbandOctaves);
-    const float up = std::exp2(p_.measBusStopbandOctaves);
-    const float nyquistGuard = sampleRate_ * 0.45f;
-    auto corner = [&](float crossoverHz, float shift) {
-        return clampf(crossoverHz * shift, 10.f, nyquistGuard);
-    };
-    const OutputId sourceL = mode == 1 ? OutputId::MidLeft : mode == 2 ? OutputId::LowLeft : OutputId::HighLeft;
-    const OutputId sourceR = mode == 1 ? OutputId::MidRight : mode == 2 ? OutputId::LowRight : OutputId::HighRight;
-    const float fcL = corner(outputConfig(sourceL).crossoverFreq, highpass ? down : up);
-    const float fcR = corner(outputConfig(sourceR).crossoverFreq, highpass ? down : up);
-    for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-        if (highpass) {
-            makeHighPass(measBusL_[i], fcL, BW, sampleRate_);
-            makeHighPass(measBusR_[i], fcR, BW, sampleRate_);
-        } else {
-            makeLowPass(measBusL_[i], fcL, BW, sampleRate_);
-            makeLowPass(measBusR_[i], fcR, BW, sampleRate_);
-        }
-    }
-    if (measBusUpperActive_) {
-        const float fcUpL = corner(outputConfig(OutputId::MidLeft).upperCrossoverFreq, up);
-        const float fcUpR = corner(outputConfig(OutputId::MidRight).upperCrossoverFreq, up);
-        for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-            makeLowPass(measBusUpperL_[i], fcUpL, BW, sampleRate_);
-            makeLowPass(measBusUpperR_[i], fcUpR, BW, sampleRate_);
-        }
-    }
-}
-void NativeBmwDspProcessor::rebuildMeasGen() {
-    // Control-thread only, on a DirtyMeasGen transition -- never per sample. (Re)builds
-    // unconditionally for the active type; see the DirtyMeasGen comment in configure() for why
-    // that's correct even for a param edit while already running.
-    if (p_.measGenType == 1) {
-        if (p_.measGenTimingRefEnabled) {
-            // Timing chirp runs 4 dB hotter than the sweep (matches the measured ratio in an
-            // actual REW-exported Acoustic Timing Reference file: chirp -8 dBFS vs sweep
-            // -12 dBFS), clamped so a sweep level close to 0 dBFS can't push the chirp into
-            // clipping.
-            const float chirpLevelDb =
-                std::min(0.f, p_.measGenSweepLevelDb + kTimingRefChirpLevelOffsetDb);
-            measGen_.configureTimingRef(p_.measGenTimingRefMidStartHz, p_.measGenTimingRefMidEndHz,
-                                        p_.measGenTimingRefLowStartHz, p_.measGenTimingRefLowEndHz,
-                                        p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
-                                        dbToLin(chirpLevelDb), p_.measGenTimingRefSplitChannels,
-                                        sampleRate_);
-        } else {
-            measGen_.configureSweep(p_.measGenSweepStartHz, p_.measGenSweepEndHz,
-                                    p_.measGenSweepDurationS, dbToLin(p_.measGenSweepLevelDb),
-                                    sampleRate_);
-        }
-    } else if (p_.measGenType == 2) {
-        measGen_.configurePink(p_.measGenPinkPeriodS, dbToLin(p_.measGenPinkLevelDb), sampleRate_);
-    }
-}
-void NativeBmwDspProcessor::rebuildAllPass() {
-    for (auto& out : outputs_) {
-        for (std::size_t i = 0; i < out.allPass.size(); ++i) {
-            (void)out.allPass[i].rebuild(sampleRate_);
-            out.allPassState[i].loadAllPass(out.allPass[i].coefficients);
-        }
-    }
-}
-void NativeBmwDspProcessor::rebuildCompressorTiming() {
-    rmsMix_ = 1 - std::exp(-1 / (.050f * sampleRate_));
-    peakRelease_ = std::exp(-1 / (.080f * sampleRate_));
-    for (std::size_t i = 0; i < outputDynamics_.size(); ++i) {
-        const auto& p = outputConfigs_[i].compressor;
-        auto& s = outputDynamics_[i];
-        s.attackMix = 1 - std::exp(-1 / (p.attack * .001f * sampleRate_));
-        s.releaseMix = 1 - std::exp(-1 / (p.release * .001f * sampleRate_));
-    }
-}
-void NativeBmwDspProcessor::applyDirty(uint32_t d) {
-    if (d & DirtyGains) {
-        rebuildGains();
-    }
-    if (d & DirtySubsonic) {
-        rebuildSubsonic();
-    }
-    if (d & DirtyLowXo) {
-        rebuildLowCrossover();
-    }
-    if (d & DirtyMidXo) {
-        rebuildMidCrossover();
-    }
-    if (d & DirtyHighXo) {
-        rebuildHighCrossover();
-    }
-    if (d & DirtyHighResume) {
-        output(OutputId::HighLeft).clearState();
-        output(OutputId::HighRight).clearState();
-        highPeq_.clear();
-    }
-    if (d & DirtyDelays) {
-        updateDelays();
-    }
-    if (d & DirtyTilt) {
-        rebuildTilt();
-    }
-    if (d & DirtyCompTiming) {
-        rebuildCompressorTiming();
-    }
-    if (d & DirtyCompState) {
-        resetDynamics();
-    }
-    if (d & DirtyPolarity) {
-        rebuildPolarityAndMute();
-    }
-    if (d & DirtyMeasBus) {
-        rebuildMeasBus();
-    }
-    if (d & DirtyMeasGen) {
-        rebuildMeasGen();
-    }
-    if (d & DirtyMbc) {
-        rebuildMbc();
-    }
-    if (d & DirtyMbcTiming) {
-        rebuildMbcTiming();
-    }
-    if (d & DirtyMbcState) {
-        resetMbcState();
-    }
-    if (d & DirtyBusLimiter) {
-        rebuildBusLimiter();
-    }
-    if (d & DirtyLimiter) {
-        rebuildLimiter();
-    }
-}
-void NativeBmwDspProcessor::rebuildAll() {
-    dcR_ = std::exp(-2 * PI * 10 / sampleRate_);
-    rebuildGains();
-    rebuildSubsonic();
-    rebuildLowCrossover();
-    rebuildMidCrossover();
-    rebuildHighCrossover();
-    rebuildTilt();
-    rebuildCompressorTiming();
-    rebuildLimiter();
-    rebuildMbc();
-    rebuildBusLimiter();
-    rebuildPolarityAndMute();
-    rebuildMeasBus();
-    rebuildMeasGen();
-    rebuildAllPass();
-    leftDcX_ = leftDcY_ = rightDcX_ = rightDcY_ = 0;
-    for (auto& out : outputs_) {
-        out.clearState();
-    }
-    limiter_.clear();
-    stageDelayL_.clear();
-    stageDelayR_.clear();
-    masterLimiterGrDb_.store(0.f);
-    limiterMeterCounter_ = 0;
-    resetMbcState();
-    busLimLowGain_ = busLimMidGain_ = busLimHighGain_ = 1.f;
-    busLimLowGrDb_.store(0.f);
-    busLimMidGrDb_.store(0.f);
-    busLimHighGrDb_.store(0.f);
-    updateDelays();
-    resetDynamics();
-    // Locked variant: rebuildAll() runs either from the constructor (no lock needed, object not
-    // yet published) or from setSampleRate() (already holding stateMutex_) -- never call
-    // configurePeq() itself here, it would deadlock re-taking the same non-recursive mutex.
-    configurePeqLocked(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
-                       lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
-                       midPeqValueCount_, highPeqValues_.data(), highPeqValueCount_);
-}
-float NativeBmwDspProcessor::processChannelInput(float x, float& dcX, float& dcY) {
-    float y = x - dcX + dcR_ * dcY;
-    dcX = x;
-    dcY = ftz(y);
-    return dcY;
-}
-void NativeBmwDspProcessor::publishIdleMeter(CompressorState& s) {
-    if ((++s.meterCounter & 255u) == 0) {
-        s.inputDb.store(-60);
-        s.outputDb.store(-60);
-        s.gainReductionDb.store(0);
-    }
-}
-void NativeBmwDspProcessor::processCompressor(float& sample, const CompressorParams& p,
-                                              CompressorState& s) {
-    float pk = std::fabs(sample);
-    bool pub = (++s.meterCounter & 255u) == 0;
-    float db = 20 * std::log10(std::max(pk, 1e-12f));
-    if (p.enabled) {
-        s.rmsPower = ftz(s.rmsPower + (pk * pk - s.rmsPower) * rmsMix_);
-        s.peakEnv = pk > s.peakEnv ? pk : ftz(s.peakEnv * peakRelease_);
-        float det = std::max(std::sqrt(std::max(0.f, s.rmsPower)), s.peakEnv * .5f);
-        db = 20 * std::log10(std::max(det, 1e-12f));
-        float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-        float target = dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
-        s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
-        sample *= s.gain * s.makeupLin;
+    OutputRuntime::processAllPassPair(left, right, xl, xr);
+    xl = left.delay.run(xl);
+    xr = right.delay.run(xr);
+    if (!left.muted) {
+        NativeBmwDsp::processCompressor(xl, leftCfg.compressor, dynamics(ids.left), detector_);
     } else {
-        s.gain = 1;
+        NativeBmwDsp::publishIdleMeter(dynamics(ids.left));
     }
-    if (pub) {
-        float red = -20 * std::log10(std::max(s.gain, 1e-12f));
-        s.inputDb.store(clampf(db, -60, 6));
-        s.outputDb.store(clampf(db - red + (p.enabled ? p.makeup : 0), -60, 6));
-        s.gainReductionDb.store(clampf(red, 0, 60));
+    if (!right.muted) {
+        NativeBmwDsp::processCompressor(xr, rightCfg.compressor, dynamics(ids.right), detector_);
+    } else {
+        NativeBmwDsp::publishIdleMeter(dynamics(ids.right));
     }
-}
-void NativeBmwDspProcessor::processLimiter(float& l, float& r) {
-    float pk = std::max(std::fabs(l), std::fabs(r));
-    float target = pk > limiterCeilingLin_ ? limiterCeilingLin_ / pk : 1.f;
-    float mix = target < limiter_.gain ? limiter_.attackMix : limiter_.releaseMix;
-    limiter_.gain = std::min(1.f, ftz(limiter_.gain + (target - limiter_.gain) * mix));
-    float dl = limiter_.delayL.run(l), dr = limiter_.delayR.run(r);
-    l = ftz(dl * limiter_.gain);
-    r = ftz(dr * limiter_.gain);
-    if ((++limiterMeterCounter_ & 255u) == 0) {
-        masterLimiterGrDb_.store(-20.f * std::log10(std::max(limiter_.gain, 1e-12f)),
-                                 std::memory_order_relaxed);
-    }
-}
-
-// RMS+peak detector and soft-knee gain computer -- shares softKneeGainReductionDb with
-// processCompressor's per-output path (rmsMix_/peakRelease_ are shared too), just factored out
-// so a stereo-linked band can feed it one combined level. Returns the smoothed linear gain (<=1).
-float NativeBmwDspProcessor::mbcBandGain(float peakAbs, const MbcBandParams& p, MbcCell& s,
-                                         int band) {
-    s.rms = ftz(s.rms + (peakAbs * peakAbs - s.rms) * rmsMix_);
-    s.peak = peakAbs > s.peak ? peakAbs : ftz(s.peak * peakRelease_);
-    float det = std::max(std::sqrt(std::max(0.f, s.rms)), s.peak * .5f);
-    float db = 20 * std::log10(std::max(det, 1e-12f));
-    s.lastDetectorDb = db;
-    float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-    float target = dbToLin(gr), mix = target < s.gain ? mbcAttackMix_[band] : mbcReleaseMix_[band];
-    s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
-    return s.gain;
-}
-void NativeBmwDspProcessor::processMbc(float& l, float& r) {
-    if (!p_.mbcEnabled) {
-        return;
-    }
-    const float dryL = l, dryR = r;
-    float band[2][4];
-    for (int ch = 0; ch < 2; ++ch) {
-        auto& t = mbc_[ch];
-        const float x = ch == 0 ? l : r;
-        const float low0 = t.lp0b.run(t.lp0a.run(x));
-        const float rest0 = t.hp0b.run(t.hp0a.run(x));
-        const float low1 = t.lp1b.run(t.lp1a.run(rest0));
-        const float rest1 = t.hp1b.run(t.hp1a.run(rest0));
-        const float low2 = t.lp2b.run(t.lp2a.run(rest1));
-        const float high2 = t.hp2b.run(t.hp2a.run(rest1));
-        band[ch][0] = t.apB0X2.run(t.apB0X1.run(low0));
-        band[ch][1] = t.apB1X2.run(low1);
-        band[ch][2] = low2;
-        band[ch][3] = high2;
-    }
-    const bool publishMeter = (++mbcMeterCounter_ & 255u) == 0;
-    float wetL = 0, wetR = 0;
-    for (int b = 0; b < 4; ++b) {
-        const auto& bp = p_.mbcBand[b];
-        float sL = band[0][b], sR = band[1][b];
-        float meterDb, reductionDb;
-        if (bp.enabled) {
-            float gWorst;
-            if (bp.stereoLink) {
-                const float g =
-                    mbcBandGain(std::max(std::fabs(sL), std::fabs(sR)), bp, mbcCell_[0][b], b);
-                sL *= g;
-                sR *= g;
-                meterDb = mbcCell_[0][b].lastDetectorDb;
-                gWorst = g;
-            } else {
-                const float gL = mbcBandGain(std::fabs(sL), bp, mbcCell_[0][b], b);
-                const float gR = mbcBandGain(std::fabs(sR), bp, mbcCell_[1][b], b);
-                sL *= gL;
-                sR *= gR;
-                meterDb = std::max(mbcCell_[0][b].lastDetectorDb, mbcCell_[1][b].lastDetectorDb);
-                gWorst = std::min(gL, gR);
-            }
-            sL *= mbcMakeupLin_[b];
-            sR *= mbcMakeupLin_[b];
-            reductionDb = -20.f * std::log10(std::max(gWorst, 1e-12f));
-        } else {
-            // Disabled band: meter still shows the band's input level (no reduction), same spirit as
-            // processCompressor's idle publish.
-            meterDb = 20.f * std::log10(std::max(std::max(std::fabs(sL), std::fabs(sR)), 1e-12f));
-            reductionDb = 0.f;
-        }
-        if (publishMeter) {
-            auto& m = mbcMeter_[b];
-            m.inputDb.store(clampf(meterDb, -60.f, 6.f));
-            m.gainReductionDb.store(clampf(reductionDb, 0.f, 60.f));
-            m.outputDb.store(
-                clampf(meterDb - reductionDb + (bp.enabled ? bp.makeup : 0.f), -60.f, 6.f));
-        }
-        wetL += sL;
-        wetR += sR;
-    }
-    l = ftz(dryL * (1.f - mbcMix_) + wetL * mbcMix_);
-    r = ftz(dryR * (1.f - mbcMix_) + wetR * mbcMix_);
-}
-void NativeBmwDspProcessor::processBusLimiter(float& l, float& r, float thresholdDb, float& gain,
-                                              float releaseMix, std::atomic<float>& grMeterDb) {
-    const float ceilingLin = dbToLin(thresholdDb);
-    const float pk = std::max(std::fabs(l), std::fabs(r));
-    const float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
-    const float mix = target < gain ? busLimAttackMix_ : releaseMix;
-    gain = std::min(1.f, ftz(gain + (target - gain) * mix));
-    grMeterDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
-    l = ftz(l * gain);
-    r = ftz(r * gain);
-}
-void NativeBmwDspProcessor::resetBusLimiter(float& gain, std::atomic<float>& grMeterDb) {
-    // Called whenever a bus limiter is skipped (disabled, or its band bypassed/silenced) so
-    // it neither leaves the meter stuck on its last reading nor carries stale gain
-    // reduction into the next time it runs -- which would fade that band back in over the
-    // release time. Guarded so the steady skipped state costs no atomic store per sample.
-    if (gain != 1.f) {
-        gain = 1.f;
-        grMeterDb.store(0.f, std::memory_order_relaxed);
+    xl *= left.gain;
+    xr *= right.gain;
+    // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
+    // bounds the actual level reaching the driver regardless of how much gain is dialed in.
+    // No-op while disabled; independent of the per-output compressor path above.
+    BusLimiter& limiter = band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_;
+    const bool limiterEnabled = band == Band::Low   ? p_.busLimLowEnabled
+                                : band == Band::Mid ? p_.busLimMidEnabled
+                                                    : p_.busLimHighEnabled;
+    const float limiterThreshDb = band == Band::Low   ? p_.busLimLowThreshDb
+                                  : band == Band::Mid ? p_.busLimMidThreshDb
+                                                      : p_.busLimHighThreshDb;
+    if (limiterEnabled) {
+        limiter.process(xl, xr, limiterThreshDb, busLimAttackMix_);
+    } else {
+        limiter.reset();
     }
 }
-// The three crossover chains below run a band's left and right outputs stage by stage through
-// Biquad::runPair() -- one NEON pass per stage when both sides are Svf2 (BW1/BW3's one-pole
-// stages fall back to scalar inside runPair). Each side still sees its own stages in its own
-// order; L and R share no state, so this is identical to running each side's chain alone.
-void NativeBmwDspProcessor::processLowCrossover(OutputRuntime& left,
-                                                const OutputConfig& leftConfig,
-                                                OutputRuntime& right,
-                                                const OutputConfig& rightConfig, float& xl,
-                                                float& xr) {
-    if (leftConfig.subsonicEnabled && rightConfig.subsonicEnabled) {
-        Biquad::runPair(left.subsonic1, right.subsonic1, xl, xr);
-    } else if (leftConfig.subsonicEnabled) {
-        xl = left.subsonic1.run(xl);
-    } else if (rightConfig.subsonicEnabled) {
-        xr = right.subsonic1.run(xr);
-    }
-    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
-    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
-}
-void NativeBmwDspProcessor::processMidCrossover(OutputRuntime& left, OutputRuntime& right,
-                                                float& xl, float& xr) {
-    // HPF pair (Low/Mid corner), then the optional LPF pair (Mid/High corner) -- crossover3/4
-    // are forced to an identity pass-through by rebuildMidCrossover() when the upper corner is
-    // disabled, so running them unconditionally here stays correct (and branch-free) either way.
-    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
-    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
-    Biquad::runPair(left.crossover3, right.crossover3, xl, xr);
-    Biquad::runPair(left.crossover4, right.crossover4, xl, xr);
-}
-void NativeBmwDspProcessor::processHighCrossover(OutputRuntime& left, OutputRuntime& right,
-                                                 float& xl, float& xr) {
-    // HPF-only, mirrors processMidCrossover() before Phase 2 added its optional lowpass pair.
-    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
-    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
-}
-
-void NativeBmwDspProcessor::applyMeasurementGenerator(float& l, float& r) {
-    // Replaces the real input entirely, before captureTapIn() sees it, so a measurement run's
-    // captured "raw input" is the actual stimulus and the raw-input/output WAV pair is a valid
-    // stimulus/response pair for a null test. processFrame() then runs the substituted signal
-    // through the identical path real playback does, not a separate tap.
-    if (p_.measGenType == 1) {
-        if (p_.measGenTimingRefEnabled) {
-            // Different content per channel (silence / timing chirp on l only / sweep on both) --
-            // see nextTimingRefSample()'s own comment for why this exists.
-            measGen_.nextTimingRefSample(l, r);
-        } else {
-            const float g = static_cast<float>(measGen_.nextSweepSample());
-            l = g;
-            r = g;
-        }
-    } else if (p_.measGenType == 2) {
-        const float g = static_cast<float>(measGen_.nextPinkSample());
-        l = g;
-        r = g;
-    }
+void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
+    using Band = NativeBmwRouting::Band;
+    const BandOutputs ids = bandOutputs(band);
+    (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).reset();
+    NativeBmwDsp::publishIdleMeter(dynamics(ids.left));
+    NativeBmwDsp::publishIdleMeter(dynamics(ids.right));
 }
 
 void NativeBmwDspProcessor::processFrame(float& l, float& r) {
+    using Band = NativeBmwRouting::Band;
     if (!p_.enabled) {
         return;
     }
-    float sL = processChannelInput(l, leftDcX_, leftDcY_),
-          sR = processChannelInput(r, rightDcX_, rightDcY_);
+    float sL = inputDcL_.run(l, dcR_), sR = inputDcR_.run(r, dcR_);
     if (peqEnabled_) {
         sL *= peqPreamp_;
         sR *= peqPreamp_;
@@ -1707,9 +143,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
     sL *= headroom_;
     sR *= headroom_;
-    // Pre-crossover multiband compressor: full-range stereo, before any band split. No-op branch
-    // while disabled (how it ships).
-    processMbc(sL, sR);
+    // Pre-crossover multiband compressor: full-range stereo, before any band split. Skipped
+    // entirely while disabled (how it ships).
+    if (p_.mbcEnabled) {
+        mbc_.process(sL, sR, p_.mbcBand, detector_);
+    }
     const auto routed = routing_.process({sL, sR});
     float lowL = routed[static_cast<std::size_t>(OutputId::LowLeft)],
           lowR = routed[static_cast<std::size_t>(OutputId::LowRight)];
@@ -1717,168 +155,45 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
           midR = routed[static_cast<std::size_t>(OutputId::MidRight)];
     float highL = routed[static_cast<std::size_t>(OutputId::HighLeft)],
           highR = routed[static_cast<std::size_t>(OutputId::HighRight)];
-    auto& lowLeft = output(OutputId::LowLeft);
-    auto& lowRight = output(OutputId::LowRight);
-    auto& midLeft = output(OutputId::MidLeft);
-    auto& midRight = output(OutputId::MidRight);
-    auto& highLeft = output(OutputId::HighLeft);
-    auto& highRight = output(OutputId::HighRight);
-    const auto& lowLeftCfg = outputConfig(OutputId::LowLeft);
-    const auto& lowRightCfg = outputConfig(OutputId::LowRight);
-    const auto& midLeftCfg = outputConfig(OutputId::MidLeft);
-    const auto& midRightCfg = outputConfig(OutputId::MidRight);
-    const auto& highLeftCfg = outputConfig(OutputId::HighLeft);
-    const auto& highRightCfg = outputConfig(OutputId::HighRight);
 
     if (!p_.lpfPass) {
-        // Filter stages run L and R together (NEON pairs on arm64); see processLowCrossover().
-        processLowCrossover(lowLeft, lowLeftCfg, lowRight, lowRightCfg, lowL, lowR);
-        if (peqEnabled_) {
-            lowPeq_.process(lowL, lowR);
-        }
-        OutputRuntime::processAllPassPair(lowLeft, lowRight, lowL, lowR);
-        lowL = lowLeft.delay.run(lowL);
-        lowR = lowRight.delay.run(lowR);
-        if (!lowLeft.muted) {
-            processCompressor(lowL, lowLeftCfg.compressor, dynamics(OutputId::LowLeft));
-        } else {
-            publishIdleMeter(dynamics(OutputId::LowLeft));
-        }
-        if (!lowRight.muted) {
-            processCompressor(lowR, lowRightCfg.compressor, dynamics(OutputId::LowRight));
-        } else {
-            publishIdleMeter(dynamics(OutputId::LowRight));
-        }
-        lowL *= lowLeft.gain;
-        lowR *= lowRight.gain;
-        // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
-        // bounds the actual level reaching the driver regardless of how much gain is dialed in.
-        // No-op while disabled; independent of the per-output processCompressor path above.
-        if (p_.busLimLowEnabled) {
-            processBusLimiter(lowL, lowR, p_.busLimLowThreshDb, busLimLowGain_,
-                              busLimLowReleaseMix_, busLimLowGrDb_);
-        } else {
-            resetBusLimiter(busLimLowGain_, busLimLowGrDb_);
-        }
+        processBandChain(Band::Low, lowL, lowR);
     } else {
-        resetBusLimiter(busLimLowGain_, busLimLowGrDb_);
-        publishIdleMeter(dynamics(OutputId::LowLeft));
-        publishIdleMeter(dynamics(OutputId::LowRight));
+        idleBandChain(Band::Low);
     }
-
     if (!p_.hpfPass) {
-        processMidCrossover(midLeft, midRight, midL, midR);
-        if (peqEnabled_) {
-            midPeq_.process(midL, midR);
-        }
-        OutputRuntime::processAllPassPair(midLeft, midRight, midL, midR);
-        midL = midLeft.delay.run(midL);
-        midR = midRight.delay.run(midR);
-        if (!midLeft.muted) {
-            processCompressor(midL, midLeftCfg.compressor, dynamics(OutputId::MidLeft));
-        } else {
-            publishIdleMeter(dynamics(OutputId::MidLeft));
-        }
-        if (!midRight.muted) {
-            processCompressor(midR, midRightCfg.compressor, dynamics(OutputId::MidRight));
-        } else {
-            publishIdleMeter(dynamics(OutputId::MidRight));
-        }
-        midL *= midLeft.gain;
-        midR *= midRight.gain;
-        if (p_.busLimMidEnabled) {
-            processBusLimiter(midL, midR, p_.busLimMidThreshDb, busLimMidGain_,
-                              busLimMidReleaseMix_, busLimMidGrDb_);
-        } else {
-            resetBusLimiter(busLimMidGain_, busLimMidGrDb_);
-        }
+        processBandChain(Band::Mid, midL, midR);
     } else {
-        resetBusLimiter(busLimMidGain_, busLimMidGrDb_);
-        publishIdleMeter(dynamics(OutputId::MidLeft));
-        publishIdleMeter(dynamics(OutputId::MidRight));
+        idleBandChain(Band::Mid);
     }
-
     if (!p_.highXoPass) {
-        processHighCrossover(highLeft, highRight, highL, highR);
-        if (peqEnabled_) {
-            highPeq_.process(highL, highR);
-        }
-        OutputRuntime::processAllPassPair(highLeft, highRight, highL, highR);
-        highL = highLeft.delay.run(highL);
-        highR = highRight.delay.run(highR);
-        if (!highLeft.muted) {
-            processCompressor(highL, highLeftCfg.compressor, dynamics(OutputId::HighLeft));
-        } else {
-            publishIdleMeter(dynamics(OutputId::HighLeft));
-        }
-        if (!highRight.muted) {
-            processCompressor(highR, highRightCfg.compressor, dynamics(OutputId::HighRight));
-        } else {
-            publishIdleMeter(dynamics(OutputId::HighRight));
-        }
-        highL *= highLeft.gain;
-        highR *= highRight.gain;
-        if (p_.busLimHighEnabled) {
-            processBusLimiter(highL, highR, p_.busLimHighThreshDb, busLimHighGain_,
-                              busLimHighReleaseMix_, busLimHighGrDb_);
-        } else {
-            resetBusLimiter(busLimHighGain_, busLimHighGrDb_);
-        }
+        processBandChain(Band::High, highL, highR);
     } else {
         // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed
-        // signal through unfiltered -- see processFrame()'s own comment on that, further down).
-        // highXoPass is the 3-way master-off switch's single write for High: a tweeter with no
-        // HPF ahead of it is a real speaker-damage risk from raw bass, not just an audio-quality
-        // one the way an unfiltered woofer/mid is, and leaving highL/highR at their raw routed
-        // value here would also add a duplicate full-range path into sumToStereo(), breaking the
-        // "master toggle off is bit-identical to today's 2-way output" contract. Zeroing here
-        // makes highXoPass alone sufficient to silence High, independent of the per-output mute
-        // field -- no reliance on the caller keeping two flags in lockstep.
+        // signal through unfiltered -- see the comment on the routed sum below). highXoPass is
+        // the 3-way master-off switch's single write for High: a tweeter with no HPF ahead of it
+        // is a real speaker-damage risk from raw bass, not just an audio-quality one the way an
+        // unfiltered woofer/mid is, and leaving highL/highR at their raw routed value here would
+        // also add a duplicate full-range path into sumToStereo(), breaking the "master toggle
+        // off is bit-identical to today's 2-way output" contract. Zeroing here makes highXoPass
+        // alone sufficient to silence High, independent of the per-output mute field -- no
+        // reliance on the caller keeping two flags in lockstep.
         highL = 0.f;
         highR = 0.f;
-        resetBusLimiter(busLimHighGain_, busLimHighGrDb_);
-        publishIdleMeter(dynamics(OutputId::HighLeft));
-        publishIdleMeter(dynamics(OutputId::HighRight));
+        idleBandChain(Band::High);
     }
 
-    if (lowLeft.polarityInverted) {
-        lowL = -lowL;
-    }
-    if (lowRight.polarityInverted) {
-        lowR = -lowR;
-    }
-    if (midLeft.polarityInverted) {
-        midL = -midL;
-    }
-    if (midRight.polarityInverted) {
-        midR = -midR;
-    }
-    if (highLeft.polarityInverted) {
-        highL = -highL;
-    }
-    if (highRight.polarityInverted) {
-        highR = -highR;
-    }
-    if (lowLeft.muted) {
-        lowL = 0;
-    }
-    if (lowRight.muted) {
-        lowR = 0;
-    }
-    if (midLeft.muted) {
-        midL = 0;
-    }
-    if (midRight.muted) {
-        midR = 0;
-    }
-    if (highLeft.muted) {
-        highL = 0;
-    }
-    if (highRight.muted) {
-        highR = 0;
-    }
-    const std::array<float, NativeBmwRouting::kOutputCount> logical{
+    // Per-output polarity, then mute. Indexed in OutputId order.
+    std::array<float, NativeBmwRouting::kOutputCount> logical{
         {lowL, lowR, midL, midR, highL, highR}};
+    for (std::size_t i = 0; i < logical.size(); ++i) {
+        if (outputs_[i].polarityInverted) {
+            logical[i] = -logical[i];
+        }
+        if (outputs_[i].muted) {
+            logical[i] = 0;
+        }
+    }
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
     // Always use the routed sum here, even with both lpfPass and hpfPass set (crossover filtering
     // skipped on both bands). routing_.process() and the polarity/mute block above already ran
@@ -1889,11 +204,7 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // no effect whenever both bypass flags were on, with no error or indication why.
     float oL = stereo.left, oR = stereo.right;
     if (p_.tilt) {
-        // Same Lo1 -> Lo2 -> Hi1 -> Hi2 order per channel, L/R as NEON pairs.
-        Biquad::runPair(tiltLoL1_, tiltLoR1_, oL, oR);
-        Biquad::runPair(tiltLoL2_, tiltLoR2_, oL, oR);
-        Biquad::runPair(tiltHiL1_, tiltHiR1_, oL, oR);
-        Biquad::runPair(tiltHiL2_, tiltHiR2_, oL, oR);
+        tilt_.process(oL, oR);
     }
     oL *= postGainL_;
     oR *= postGainR_;
@@ -1903,35 +214,26 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (p_.channelMute == 2) {
         oR = 0;
     }
-    oL = ftz(oL);
-    oR = ftz(oR);
+    oL = NativeBmwDsp::ftz(oL);
+    oR = NativeBmwDsp::ftz(oR);
     // Option A measurement-mute bus brick-wall. Operates on logical L/R, AFTER the band sum,
-    // tilt, post-gain and ch_mute, but BEFORE processLimiter and BEFORE the deliberate L/R
-    // hardware swap below -- measBusL_ always filters the LowLeft/MidLeft chain. Fully bypassed
-    // (single branch, no state advanced) whenever measurement mute is off; see rebuildMeasBus().
-    if (measBusActive_) {
-        for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-            Biquad::runPair(measBusL_[i], measBusR_[i], oL, oR);
-        }
-        if (measBusUpperActive_) {
-            for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-                Biquad::runPair(measBusUpperL_[i], measBusUpperR_[i], oL, oR);
-            }
-        }
-        oL = ftz(oL);
-        oR = ftz(oR);
+    // tilt, post-gain and ch_mute, but BEFORE the master limiter and BEFORE the deliberate L/R
+    // hardware swap below -- the left bus always filters the LowLeft/MidLeft chain. Fully
+    // bypassed (single branch, no state advanced) whenever measurement mute is off.
+    if (measBus_.active()) {
+        measBus_.process(oL, oR);
     }
     // Master brick-wall limiter. enabled == false is a true bypass: the stage is skipped
     // entirely and nothing constrains the summed output level.
     if (p_.limiterEnabled) {
-        processLimiter(oL, oR);
+        limiter_.process(oL, oR);
     }
     // Stage-centering L/R alignment delay -- the last processing before the hardware swap. A
     // pure fractional delay on the already-limited summed bus (delaying a brick-walled signal
     // changes nothing about its level), independent of the per-output lowDelay*/midDelay*
     // lines and the per-output all-pass sections, which all run pre-sum.
-    oL = ftz(stageDelayL_.run(oL));
-    oR = ftz(stageDelayR_.run(oR));
+    oL = NativeBmwDsp::ftz(stageDelayL_.run(oL));
+    oR = NativeBmwDsp::ftz(stageDelayR_.run(oR));
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap
@@ -1956,10 +258,10 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
     }
     auto* w = const_cast<float*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
-        applyMeasurementGenerator(w[i], w[i + 1]);
-        captureTapIn(w[i], w[i + 1]);
+        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
+        capture_.tapIn(w[i], w[i + 1]);
         processFrame(w[i], w[i + 1]);
-        captureTapOut(w[i], w[i + 1]);
+        capture_.tapOut(w[i], w[i + 1]);
     }
     return s;
 }
@@ -1975,12 +277,12 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     auto* w = const_cast<int16_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
-        applyMeasurementGenerator(l, r);
-        captureTapIn(l, r);
+        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
+        capture_.tapIn(l, r);
         processFrame(l, r);
-        captureTapOut(l, r);
-        w[i] = clampInt<int16_t>(l * scale);
-        w[i + 1] = clampInt<int16_t>(r * scale);
+        capture_.tapOut(l, r);
+        w[i] = NativeBmwDsp::clampInt<int16_t>(l * scale);
+        w[i + 1] = NativeBmwDsp::clampInt<int16_t>(r * scale);
     }
     return s;
 }
@@ -1996,12 +298,12 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
     auto* w = const_cast<int32_t*>(s);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
-        applyMeasurementGenerator(l, r);
-        captureTapIn(l, r);
+        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
+        capture_.tapIn(l, r);
         processFrame(l, r);
-        captureTapOut(l, r);
-        w[i] = clampInt<int32_t>(l * scale);
-        w[i + 1] = clampInt<int32_t>(r * scale);
+        capture_.tapOut(l, r);
+        w[i] = NativeBmwDsp::clampInt<int32_t>(l * scale);
+        w[i + 1] = NativeBmwDsp::clampInt<int32_t>(r * scale);
     }
     return s;
 }
@@ -2024,25 +326,19 @@ void NativeBmwDspProcessor::readMbcMeter(float* v, std::size_t n) const {
     if (!v || n < 12) {
         return;
     }
-    const bool active = mbcEnabledMeterFlag_.load(std::memory_order_relaxed);
-    for (int b = 0; b < 4; ++b) {
-        const auto& m = mbcMeter_[b];
-        v[b * 3 + 0] = active ? m.inputDb.load() : -60.f;
-        v[b * 3 + 1] = active ? m.outputDb.load() : -60.f;
-        v[b * 3 + 2] = active ? m.gainReductionDb.load() : 0.f;
-    }
+    mbc_.readMeter(v, mbcEnabledMeterFlag_.load(std::memory_order_relaxed));
 }
 void NativeBmwDspProcessor::readBusLimiterMeter(float* v, std::size_t n) const {
     if (!v || n < 2) {
         return;
     }
     v[0] = busLimLowEnabledMeterFlag_.load(std::memory_order_relaxed)
-               ? busLimLowGrDb_.load(std::memory_order_relaxed) : 0.f;
+               ? busLimLow_.grDb.load(std::memory_order_relaxed) : 0.f;
     v[1] = busLimMidEnabledMeterFlag_.load(std::memory_order_relaxed)
-               ? busLimMidGrDb_.load(std::memory_order_relaxed) : 0.f;
+               ? busLimMid_.grDb.load(std::memory_order_relaxed) : 0.f;
     if (n >= 3) {
         v[2] = busLimHighEnabledMeterFlag_.load(std::memory_order_relaxed)
-                   ? busLimHighGrDb_.load(std::memory_order_relaxed) : 0.f;
+                   ? busLimHigh_.grDb.load(std::memory_order_relaxed) : 0.f;
     }
 }
 void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) const {
@@ -2050,7 +346,7 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
         return;
     }
     v[0] = masterLimiterEnabledMeterFlag_.load(std::memory_order_relaxed)
-               ? masterLimiterGrDb_.load(std::memory_order_relaxed) : 0.f;
+               ? limiter_.grDb() : 0.f;
 }
 
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
@@ -2065,8 +361,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     // one-pole topologies; SVF's a1/a2/a3/m0/m1/m2 are only meaningful for Svf2 -- the unused half
     // is still emitted, as whatever that field's default-constructed/last-built value happens to
     // be, so the block width stays fixed and callers can tell a genuine SVF identity stage
-    // (a1=a2=a3=0, m0=1,m1=0,m2=0) apart from a one-pole stage without a side channel). A local
-    // lambda, not a free function, because Biquad is private to this class.
+    // (a1=a2=a3=0, m0=1,m1=0,m2=0) apart from a one-pole stage without a side channel).
     auto appendStage = [&out](const Biquad& stage) {
         out.push_back(static_cast<double>(static_cast<std::uint8_t>(stage.topology)));
         out.push_back(stage.a1);
@@ -2116,7 +411,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
             out.push_back(v[2]);  // Q
             out.push_back(v[3]);  // type
             out.push_back(v[4]);  // channel (0 both, 1 left, 2 right)
-            out.push_back(peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
+            out.push_back(NativeBmwDsp::peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
         }
     };
     appendBank(inputPeqValues_, inputPeqValueCount_, inputPeq_);
@@ -2138,7 +433,7 @@ void NativeBmwDspProcessor::startCapture() {
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         capacity = static_cast<std::size_t>(sampleRate_ * kCaptureMaxSeconds);
-        needsRealloc = captureRawInL_.size() != capacity;
+        needsRealloc = !capture_.sizedFor(capacity);
     }
     std::vector<float> rawInL, rawInR, outL, outR;
     if (needsRealloc) {
@@ -2151,103 +446,26 @@ void NativeBmwDspProcessor::startCapture() {
     // sampleRate_ could in principle have changed between the two critical sections above (a
     // concurrent setSampleRate() call) -- rare and harmless: worst case this capture's buffers
     // are sized for the sample rate current when this call started, not a rate that changed
-    // mid-call. captureCapacity_ below always reflects the size actually in use, so nothing
+    // mid-call. The recorder's capacity always reflects the size actually in use, so nothing
     // downstream can index past what's real.
-    if (needsRealloc) {
-        captureRawInL_.swap(rawInL);
-        captureRawInR_.swap(rawInR);
-        captureOutL_.swap(outL);
-        captureOutR_.swap(outR);
-    }
-    captureCapacity_ = captureRawInL_.size();
-    captureWriteIndex_.store(0, std::memory_order_relaxed);
-    captureEnabled_ = captureCapacity_ > 0;
+    capture_.start(needsRealloc, rawInL, rawInR, outL, outR);
 }
 
 void NativeBmwDspProcessor::stopCapture() {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    captureEnabled_ = false;
+    capture_.stop();
 }
 
 std::size_t NativeBmwDspProcessor::captureFrameCount() const {
-    return captureWriteIndex_.load(std::memory_order_acquire);
+    return capture_.frameCount();
 }
 
 std::unique_ptr<NativeBmwDspProcessor::CaptureSnapshot>
 NativeBmwDspProcessor::takeCaptureSnapshot() {
     auto snapshot = std::make_unique<CaptureSnapshot>();
     std::lock_guard<std::mutex> lock(stateMutex_);
-    captureEnabled_ = false;
-    snapshot->frames = std::min(captureFrameCount(), captureCapacity_);
     snapshot->sampleRate = sampleRate_;
-    snapshot->rawInL.swap(captureRawInL_);
-    snapshot->rawInR.swap(captureRawInR_);
-    snapshot->outL.swap(captureOutL_);
-    snapshot->outR.swap(captureOutR_);
-    captureCapacity_ = 0;
+    snapshot->frames =
+        capture_.take(snapshot->rawInL, snapshot->rawInR, snapshot->outL, snapshot->outR);
     return snapshot;
-}
-
-bool NativeBmwDspProcessor::CaptureSnapshot::exportWav(const char* rawInPath, const char* outPath,
-                                                       CaptureExportResult& result) const {
-    if (!rawInPath || !outPath) {
-        return false;
-    }
-    const std::size_t n = frames;
-    if (n == 0) {
-        return false;
-    }
-
-    auto writeStereo = [&](const char* path, const float* left, const float* right) -> bool {
-        drwav wav;
-        drwav_data_format format;
-        format.container = drwav_container_riff;
-        format.format = DR_WAVE_FORMAT_IEEE_FLOAT;
-        format.channels = 2;
-        format.sampleRate = static_cast<drwav_uint32>(sampleRate);
-        format.bitsPerSample = 32;
-        if (!drwav_init_file_write(&wav, path, &format, nullptr)) {
-            return false;
-        }
-        // Stream in fixed-size chunks rather than materializing the whole interleaved buffer up
-        // front -- at the max 30s capture window that's ~11.5MB per call, on top of the ~46MB
-        // already held across the four capture buffers.
-        constexpr std::size_t kChunkFrames = 4096;
-        std::array<float, kChunkFrames * 2> chunk{};
-        drwav_uint64 totalWritten = 0;
-        for (std::size_t offset = 0; offset < n; offset += kChunkFrames) {
-            const std::size_t count = std::min(kChunkFrames, n - offset);
-            for (std::size_t i = 0; i < count; ++i) {
-                chunk[i * 2] = left[offset + i];
-                chunk[i * 2 + 1] = right[offset + i];
-            }
-            totalWritten += drwav_write_pcm_frames(&wav, count, chunk.data());
-        }
-        drwav_uninit(&wav);
-        return totalWritten == n;
-    };
-
-    if (!writeStereo(rawInPath, rawInL.data(), rawInR.data())) {
-        return false;
-    }
-    if (!writeStereo(outPath, outL.data(), outR.data())) {
-        return false;
-    }
-
-    // Null test: RMS of (final output - raw input) across both channels. Near-silent when the
-    // DSP genuinely isn't changing the signal beyond headroom/tilt/limiter defaults; a nonzero
-    // reading pinpoints that *something* in the chain is doing more than expected.
-    float peakIn = 0.f, peakOut = 0.f, diffSumSq = 0.f;
-    for (std::size_t i = 0; i < n; ++i) {
-        peakIn = std::max({peakIn, std::fabs(rawInL[i]), std::fabs(rawInR[i])});
-        peakOut = std::max({peakOut, std::fabs(outL[i]), std::fabs(outR[i])});
-        const float dl = outL[i] - rawInL[i];
-        const float dr = outR[i] - rawInR[i];
-        diffSumSq += dl * dl + dr * dr;
-    }
-    const float rms = std::sqrt(diffSumSq / static_cast<float>(n * 2));
-    result.peakInDb = peakIn > 0.f ? 20.f * std::log10(peakIn) : -100.f;
-    result.peakOutDb = peakOut > 0.f ? 20.f * std::log10(peakOut) : -100.f;
-    result.nullTestRmsDb = rms > 0.f ? 20.f * std::log10(rms) : -100.f;
-    return true;
 }

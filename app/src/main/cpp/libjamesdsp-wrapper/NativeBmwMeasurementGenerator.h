@@ -24,8 +24,9 @@
 // filter state/coefficients are kept in double).
 //
 // configureSweep()/configurePink()/configureTimingRef() are the control-rate calls: each runs
-// only on a dirty-flag transition (from NativeBmwDspProcessor::rebuildMeasGen(), itself only
-// called from the control thread inside configure()/rebuildAll(), never per sample) and fully
+// only on a dirty-flag transition (from configureMeasurementGenerator() in
+// NativeBmwMeasurement.cpp, itself only called from the control thread inside
+// configure()/rebuildAll(), never per sample) and fully
 // (re)starts the run -- editing a parameter while a signal is playing is expected to retrigger
 // it, same as toggling it back on. nextSweepSample()/nextPinkSample()/nextTimingRefSample() are
 // the only per-sample-frame calls.

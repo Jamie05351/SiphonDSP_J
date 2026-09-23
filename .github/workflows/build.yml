@@ -151,6 +151,19 @@ jobs:
           cmake --build build/native-tests --parallel
           ctest --test-dir build/native-tests --output-on-failure
 
+      # Renders fixed DSP scenarios with this PR's native code and with the base branch's, and
+      # fails unless the output is bit-identical. Catches an unintended behaviour change from a
+      # refactor or optimisation. A PR that changes the sound on purpose will fail this step --
+      # say so in the PR; the diff it prints shows which scenarios changed. Host (x86) build, so
+      # it exercises the scalar path; the arm64/NEON path needs a device (see the script).
+      - name: Native DSP output parity vs base branch
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          HOST=1 BASELINE_REF=FETCH_HEAD bash scripts/run-neon-parity.sh
+
       - name: Verify native libraries are packaged
         shell: bash
         run: |
