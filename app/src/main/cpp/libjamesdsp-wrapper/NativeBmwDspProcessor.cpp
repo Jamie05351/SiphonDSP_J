@@ -1495,6 +1495,16 @@ void NativeBmwDspProcessor::processBusLimiter(float& l, float& r, float threshol
     l = ftz(l * gain);
     r = ftz(r * gain);
 }
+void NativeBmwDspProcessor::resetBusLimiter(float& gain, std::atomic<float>& grMeterDb) {
+    // Called whenever a bus limiter is skipped (disabled, or its band bypassed/silenced) so
+    // it neither leaves the meter stuck on its last reading nor carries stale gain
+    // reduction into the next time it runs -- which would fade that band back in over the
+    // release time. Guarded so the steady skipped state costs no atomic store per sample.
+    if (gain != 1.f) {
+        gain = 1.f;
+        grMeterDb.store(0.f, std::memory_order_relaxed);
+    }
+}
 float NativeBmwDspProcessor::processLowCrossover(OutputRuntime& out, const OutputConfig& cfg,
                                                  float sample) {
     if (cfg.subsonicEnabled) {
@@ -1611,8 +1621,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         if (p_.busLimLowEnabled) {
             processBusLimiter(lowL, lowR, p_.busLimLowThreshDb, busLimLowGain_,
                               busLimLowReleaseMix_, busLimLowGrDb_);
+        } else {
+            resetBusLimiter(busLimLowGain_, busLimLowGrDb_);
         }
     } else {
+        resetBusLimiter(busLimLowGain_, busLimLowGrDb_);
         publishIdleMeter(dynamics(OutputId::LowLeft));
         publishIdleMeter(dynamics(OutputId::LowRight));
     }
@@ -1643,8 +1656,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         if (p_.busLimMidEnabled) {
             processBusLimiter(midL, midR, p_.busLimMidThreshDb, busLimMidGain_,
                               busLimMidReleaseMix_, busLimMidGrDb_);
+        } else {
+            resetBusLimiter(busLimMidGain_, busLimMidGrDb_);
         }
     } else {
+        resetBusLimiter(busLimMidGain_, busLimMidGrDb_);
         publishIdleMeter(dynamics(OutputId::MidLeft));
         publishIdleMeter(dynamics(OutputId::MidRight));
     }
@@ -1675,6 +1691,8 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         if (p_.busLimHighEnabled) {
             processBusLimiter(highL, highR, p_.busLimHighThreshDb, busLimHighGain_,
                               busLimHighReleaseMix_, busLimHighGrDb_);
+        } else {
+            resetBusLimiter(busLimHighGain_, busLimHighGrDb_);
         }
     } else {
         // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed
@@ -1688,6 +1706,7 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         // field -- no reliance on the caller keeping two flags in lockstep.
         highL = 0.f;
         highR = 0.f;
+        resetBusLimiter(busLimHighGain_, busLimHighGrDb_);
         publishIdleMeter(dynamics(OutputId::HighLeft));
         publishIdleMeter(dynamics(OutputId::HighRight));
     }

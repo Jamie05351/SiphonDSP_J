@@ -397,6 +397,44 @@ TEST_CASE("kBusLimHighEnabled / kBusLimHighThreshold slots") {
     CHECK(grLo > grHi + 2.f);  // lower threshold -> more reduction
 }
 
+TEST_CASE("High-bus limiter state resets while High is bypassed") {
+    // Drive the High limiter into heavy reduction, turn 3-way off (highXoPass), then back on
+    // with quiet material: the meter must not stay stuck while High is silent, and High must
+    // come back at full level rather than fading in from the stale gain.
+    NativeBmwDspProcessor proc;
+    auto on = threeWayConfig();
+    on[sch::kHeadroom] = 0.f;
+    on[sch::kTiltEnabled] = 0.f;
+    on[sch::kBusLimHighEnabled] = 1.f;
+    on[sch::kBusLimHighThreshold] = -18.f;
+    on[sch::kBusLimHighRelease] = 800.f;  // slowest release: a stale gain would linger longest
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(on.data(), on.size()));
+    auto hot = stereoSine(8000.0, 0.95, 48000);
+    proc.process(hot.data(), hot.size());
+    float m[3] = {};
+    proc.readBusLimiterMeter(m, 3);
+    INFO("High GR while driven: ", m[2], " dB");
+    REQUIRE(m[2] > 6.f);
+
+    auto off = on;
+    off[sch::kHighXoPass] = 1.f;  // what the 3-way switch writes when turned off
+    REQUIRE(proc.configure(off.data(), off.size()));
+    auto silence = stereoSine(8000.0, 0.0, 4800);
+    proc.process(silence.data(), silence.size());
+    proc.readBusLimiterMeter(m, 3);
+    CHECK(m[2] == doctest::Approx(0.0f));  // not stuck at the last reading
+
+    REQUIRE(proc.configure(on.data(), on.size()));
+    // Quiet (-40 dBFS) is far under the -18 dBFS threshold: with a clean reset there is no GR
+    // at all from the first sample, instead of a release-time fade from the stale gain.
+    auto quiet = stereoSine(8000.0, 0.01, 480);
+    proc.process(quiet.data(), quiet.size());
+    proc.readBusLimiterMeter(m, 3);
+    INFO("High GR right after 3-way back on: ", m[2], " dB");
+    CHECK(m[2] < 0.1f);
+}
+
 TEST_CASE("kMasterLimiterEnabled / kMasterLimiterThreshold slots") {
     auto run = [](float enabled, float threshold) {
         NativeBmwDspProcessor proc;

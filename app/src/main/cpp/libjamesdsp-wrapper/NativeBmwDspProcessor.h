@@ -558,6 +558,7 @@ private:
     // Brick-wall (infinite ratio, fixed-fast attack) limiter for one output bus. threshold in
     // dBFS, one stereo-linked gain follower. No lookahead -- the master limiter downstream
     // already carries that. No-op branch while the bus's enable is false.
+    void resetBusLimiter(float& gain, std::atomic<float>& grMeterDb);
     void processBusLimiter(float& left, float& right, float thresholdDb, float& gain,
                            float releaseMix, std::atomic<float>& grMeterDb);
     void publishIdleMeter(CompressorState& state);
