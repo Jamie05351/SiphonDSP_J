@@ -21,8 +21,8 @@ import app.siphondsp.view.BmwDashboardSkin
  * (-6..6 dB) and Tilt pivot (200..2000 Hz) sliders in the tilt accent colour. The section
  * toggle greys the two sliders when off.
  *
- * The other Crossovers & Tilt page ([CrossoversPageScreen]) is Compose too; a Compose
- * `HorizontalPager` (see `CrossoverTiltFragment`) hosts both.
+ * The other Crossovers & Tilt pages ([CrossoverLowMidPage], [CrossoverMidHighPage]) are Compose
+ * too; a Compose `HorizontalPager` (see `CrossoverTiltFragment`) hosts all three.
  */
 @Composable
 fun TonalityTiltScreen(modifier: Modifier = Modifier) {
