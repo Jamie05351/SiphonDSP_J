@@ -19,12 +19,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -52,8 +50,7 @@ private val TILE_GLOW_COLORS = mapOf(
 private val TileGlowStrokeWidth = 2.dp
 private val TileGlowWidth = 5.dp
 private val TileGlowHaloWidth = 10.dp
-// Head-unit art is already crisp line art, so its ring drops the bloom: the wide, faint layers
-// read as blur against it. A tight 3dp underlay at low alpha just keeps the line from looking thin.
+// Head-unit art's glow is a crisp line, no bloom -- see TileGlow.
 private val CrispRingWidth = 2.5.dp
 private val CrispRingUnderlayWidth = 3.5.dp
 private val TileGlowCornerRadius = 6.dp
@@ -208,61 +205,37 @@ private fun DspSidebarTile(
     }
 }
 
-/** Same cyan glow + stroke rounded-rect as [bmwFocusRing] (wide low-alpha stroke under a crisp
- *  one, not a real blur -- the app's established "lit tile" technique, see
- *  BmwSkinDrawables.TileFocusRingDrawable), gated on selection instead of D-pad focus. */
+/** The selected tile's glow, on its bottom edge only -- no sides or top, so it reads as the lit
+ *  base of the tile rather than a frame around it. Same layering technique as [bmwFocusRing] (wide
+ *  low-alpha strokes under a crisp one, not a real blur -- see BmwSkinDrawables.TileFocusRingDrawable),
+ *  gated on selection instead of D-pad focus. */
 @Composable
 private fun TileGlow(color: Color, crisp: Boolean, modifier: Modifier = Modifier) {
     Canvas(modifier) {
-        if (crisp) drawCrispTileRing(color, TileGlowCornerRadius) else drawBmwTileGlow(color, TileGlowCornerRadius)
+        if (crisp) {
+            // Head-unit art is already crisp line art, so no bloom: the wide, faint layers read as
+            // blur against it. A tight underlay at low alpha keeps the line from looking thin.
+            drawBottomEdge(color, CrispRingUnderlayWidth, alpha = 0.3f)
+            drawBottomEdge(color, CrispRingWidth, alpha = 1f)
+        } else {
+            drawBottomEdge(color, TileGlowHaloWidth, alpha = 0.16f)
+            drawBottomEdge(color, TileGlowWidth, alpha = 0.45f)
+            drawBottomEdge(color, TileGlowStrokeWidth, alpha = 1f)
+        }
     }
 }
 
-private fun DrawScope.drawCrispTileRing(color: Color, cornerRadius: Dp) {
-    val strokePx = CrispRingWidth.toPx()
-    val inset = strokePx / 2f
-    val corner = CornerRadius(cornerRadius.toPx())
-    val topLeft = Offset(inset, inset)
-    val ringSize = Size(size.width - strokePx, size.height - strokePx)
-    drawRoundRect(
+/** One glow layer along the tile's bottom edge, inset by the corner radius so it sits where the
+ *  old rounded ring's straight bottom run was. */
+private fun DrawScope.drawBottomEdge(color: Color, width: Dp, alpha: Float) {
+    val y = size.height - CrispRingWidth.toPx() / 2f
+    val inset = TileGlowCornerRadius.toPx()
+    drawLine(
         color = color,
-        topLeft = topLeft,
-        size = ringSize,
-        cornerRadius = corner,
-        style = Stroke(CrispRingUnderlayWidth.toPx()),
-        alpha = 0.3f,
-    )
-    drawRoundRect(color = color, topLeft = topLeft, size = ringSize, cornerRadius = corner, style = Stroke(strokePx))
-}
-
-private fun DrawScope.drawBmwTileGlow(color: Color, cornerRadius: Dp) {
-    val strokePx = TileGlowStrokeWidth.toPx()
-    val inset = strokePx / 2f
-    val corner = CornerRadius(cornerRadius.toPx())
-    val topLeft = Offset(inset, inset)
-    val ringSize = Size(size.width - strokePx, size.height - strokePx)
-    // Outermost, faintest layer: fakes a soft bloom without a real blur.
-    drawRoundRect(
-        color = color,
-        topLeft = topLeft,
-        size = ringSize,
-        cornerRadius = corner,
-        style = Stroke(TileGlowHaloWidth.toPx()),
-        alpha = 0.16f,
-    )
-    drawRoundRect(
-        color = color,
-        topLeft = topLeft,
-        size = ringSize,
-        cornerRadius = corner,
-        style = Stroke(TileGlowWidth.toPx()),
-        alpha = 0.45f,
-    )
-    drawRoundRect(
-        color = color,
-        topLeft = topLeft,
-        size = ringSize,
-        cornerRadius = corner,
-        style = Stroke(strokePx),
+        start = Offset(inset, y),
+        end = Offset(size.width - inset, y),
+        strokeWidth = width.toPx(),
+        cap = StrokeCap.Round,
+        alpha = alpha,
     )
 }
