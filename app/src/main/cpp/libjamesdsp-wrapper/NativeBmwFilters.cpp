@@ -65,55 +65,50 @@ void Biquad::loadAllPass(const NativeBmwRouting::BiquadCoefficients& c) {
     m2 = c.m2;
     clear();
 }
+void SvfPair::load(std::size_t lane, const Biquad& q) {
+    a1[lane] = q.a1;
+    a2[lane] = q.a2;
+    a3[lane] = q.a3;
+    m0[lane] = q.m0;
+    m1[lane] = q.m1;
+    m2[lane] = q.m2;
+    ic1eq[lane] = 0;
+    ic2eq[lane] = 0;
+}
+void SvfPair::clear() {
+    ic1eq[kLeftLane] = ic1eq[kRightLane] = 0;
+    ic2eq[kLeftLane] = ic2eq[kRightLane] = 0;
+}
 void PeqBank::append(std::size_t lane, const Biquad& q) {
     std::size_t& count = lane == kLeftLane ? leftCount : rightCount;
-    Section& s = sections[count++];
-    s.a1[lane] = q.a1;
-    s.a2[lane] = q.a2;
-    s.a3[lane] = q.a3;
-    s.m0[lane] = q.m0;
-    s.m1[lane] = q.m1;
-    s.m2[lane] = q.m2;
-    s.ic1eq[lane] = 0;
-    s.ic2eq[lane] = 0;
+    sections[count++].load(lane, q);
 }
 void PeqBank::process(float& left, float& right) {
     std::size_t i = 0;
 #if SIPHON_NEON
-    // NEON: the sections both channels have run as {left, right} pairs, loaded straight from the
-    // SoA arrays.
+    // NEON: the sections both channels have run as {left, right} pairs. The sample stays in one
+    // float32x2 register across the whole cascade.
     const std::size_t paired = std::min(leftCount, rightCount);
     if (paired > 0) {
         float32x2_t x = lanes(left, right);
         for (; i < paired; ++i) {
-            Section& s = sections[i];
-            float64x2_t ic1 = vld1q_f64(s.ic1eq), ic2 = vld1q_f64(s.ic2eq);
-            x = svf2StepX2(x, vld1q_f64(s.a1), vld1q_f64(s.a2), vld1q_f64(s.a3), vld1q_f64(s.m0),
-                           vld1q_f64(s.m1), vld1q_f64(s.m2), ic1, ic2);
-            vst1q_f64(s.ic1eq, ic1);
-            vst1q_f64(s.ic2eq, ic2);
+            x = sections[i].runX2(x);
         }
         left = vget_lane_f32(x, 0);
         right = vget_lane_f32(x, 1);
     }
 #endif
     // Scalar: the longer channel's remaining sections (or every section, without NEON).
-    auto runLane = [this](std::size_t lane, std::size_t from, std::size_t to, float sample) {
-        for (std::size_t j = from; j < to; ++j) {
-            Section& s = sections[j];
-            sample = static_cast<float>(svf2Step(static_cast<double>(sample), s.a1[lane],
-                                                 s.a2[lane], s.a3[lane], s.m0[lane], s.m1[lane],
-                                                 s.m2[lane], s.ic1eq[lane], s.ic2eq[lane]));
-        }
-        return sample;
-    };
-    left = runLane(kLeftLane, i, leftCount, left);
-    right = runLane(kRightLane, i, rightCount, right);
+    for (std::size_t j = i; j < leftCount; ++j) {
+        left = sections[j].runLane(kLeftLane, left);
+    }
+    for (std::size_t j = i; j < rightCount; ++j) {
+        right = sections[j].runLane(kRightLane, right);
+    }
 }
 void PeqBank::clear() {
     for (auto& s : sections) {
-        s.ic1eq[kLeftLane] = s.ic1eq[kRightLane] = 0;
-        s.ic2eq[kLeftLane] = s.ic2eq[kRightLane] = 0;
+        s.clear();
     }
 }
 

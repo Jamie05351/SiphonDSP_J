@@ -140,27 +140,43 @@ void MultibandCompressor::rebuild(const float (&splitsHz)[3], float mix, const M
     const float f0 = clampf(splitsHz[0], 20.f, f0Ceiling);
     const float f1 = clampf(splitsHz[1], std::min(f0 * 1.05f, f1Ceiling), f1Ceiling);
     const float f2 = clampf(splitsHz[2], std::min(f1 * 1.05f, ceiling), ceiling);
-    for (auto& t : tree_) {
-        t.clear();  // explicit -- makeLowPass/makeHighPass below also clear each biquad they
-                    // touch, so this is belt-and-braces, but it makes the state-reset intent
-                    // visible here rather than relying on a side effect three lines down.
-        makeLowPass(t.lp0a, f0, BW, sampleRate);
-        makeLowPass(t.lp0b, f0, BW, sampleRate);
-        makeHighPass(t.hp0a, f0, BW, sampleRate);
-        makeHighPass(t.hp0b, f0, BW, sampleRate);
-        makeLowPass(t.lp1a, f1, BW, sampleRate);
-        makeLowPass(t.lp1b, f1, BW, sampleRate);
-        makeHighPass(t.hp1a, f1, BW, sampleRate);
-        makeHighPass(t.hp1b, f1, BW, sampleRate);
-        makeLowPass(t.lp2a, f2, BW, sampleRate);
-        makeLowPass(t.lp2b, f2, BW, sampleRate);
-        makeHighPass(t.hp2a, f2, BW, sampleRate);
-        makeHighPass(t.hp2b, f2, BW, sampleRate);
-        // band 0 (below f0) picks up the phase of the f1 and f2 splits; band 1 (f0..f1) that of f2.
-        makeAllPass2(t.apB0X1, f1, sampleRate);
-        makeAllPass2(t.apB0X2, f2, sampleRate);
-        makeAllPass2(t.apB1X2, f2, sampleRate);
-    }
+    // Both channels get the same filters: build each one as a Biquad, then load it into both
+    // lanes of its SvfPair (loadBoth also clears that section's state).
+    auto lowPass = [sampleRate](SvfPair& s, float fc) {
+        Biquad q;
+        makeLowPass(q, fc, BW, sampleRate);
+        s.loadBoth(q);
+    };
+    auto highPass = [sampleRate](SvfPair& s, float fc) {
+        Biquad q;
+        makeHighPass(q, fc, BW, sampleRate);
+        s.loadBoth(q);
+    };
+    auto allPass = [sampleRate](SvfPair& s, float fc) {
+        Biquad q;
+        makeAllPass2(q, fc, sampleRate);
+        s.loadBoth(q);
+    };
+    auto& t = tree_;
+    t.clear();  // explicit -- loadBoth below also clears each section it touches, so this is
+                // belt-and-braces, but it makes the state-reset intent visible here rather than
+                // relying on a side effect three lines down.
+    lowPass(t.lp0a, f0);
+    lowPass(t.lp0b, f0);
+    highPass(t.hp0a, f0);
+    highPass(t.hp0b, f0);
+    lowPass(t.lp1a, f1);
+    lowPass(t.lp1b, f1);
+    highPass(t.hp1a, f1);
+    highPass(t.hp1b, f1);
+    lowPass(t.lp2a, f2);
+    lowPass(t.lp2b, f2);
+    highPass(t.hp2a, f2);
+    highPass(t.hp2b, f2);
+    // band 0 (below f0) picks up the phase of the f1 and f2 splits; band 1 (f0..f1) that of f2.
+    allPass(t.apB0X1, f1);
+    allPass(t.apB0X2, f2);
+    allPass(t.apB1X2, f2);
     rebuildTiming(mix, bands, sampleRate);
 }
 void MultibandCompressor::rebuildTiming(float mix, const MbcBands& bands, float sampleRate) {
@@ -175,9 +191,7 @@ void MultibandCompressor::rebuildTiming(float mix, const MbcBands& bands, float 
     }
 }
 void MultibandCompressor::resetState() {
-    for (auto& t : tree_) {
-        t.clear();
-    }
+    tree_.clear();
     for (auto& row : cell_) {
         for (auto& c : row) {
             c.rms = 0;
@@ -209,19 +223,39 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                                   const DetectorTiming& detector) {
     const float dryL = l, dryR = r;
     float band[2][4];
-    for (int ch = 0; ch < 2; ++ch) {
-        auto& t = tree_[ch];
-        const float x = ch == 0 ? l : r;
-        const float low0 = t.lp0b.run(t.lp0a.run(x));
-        const float rest0 = t.hp0b.run(t.hp0a.run(x));
-        const float low1 = t.lp1b.run(t.lp1a.run(rest0));
-        const float rest1 = t.hp1b.run(t.hp1a.run(rest0));
-        const float low2 = t.lp2b.run(t.lp2a.run(rest1));
-        const float high2 = t.hp2b.run(t.hp2a.run(rest1));
-        band[ch][0] = t.apB0X2.run(t.apB0X1.run(low0));
-        band[ch][1] = t.apB1X2.run(low1);
-        band[ch][2] = low2;
-        band[ch][3] = high2;
+    {
+        // Split tree, L and R together: each SvfPair::run is one NEON pass on arm64. Each
+        // section sees the same input sequence per channel as the old per-channel trees did.
+        auto& t = tree_;
+        float low0L = l, low0R = r;
+        t.lp0a.run(low0L, low0R);
+        t.lp0b.run(low0L, low0R);
+        float rest0L = l, rest0R = r;
+        t.hp0a.run(rest0L, rest0R);
+        t.hp0b.run(rest0L, rest0R);
+        float low1L = rest0L, low1R = rest0R;
+        t.lp1a.run(low1L, low1R);
+        t.lp1b.run(low1L, low1R);
+        float rest1L = rest0L, rest1R = rest0R;
+        t.hp1a.run(rest1L, rest1R);
+        t.hp1b.run(rest1L, rest1R);
+        float low2L = rest1L, low2R = rest1R;
+        t.lp2a.run(low2L, low2R);
+        t.lp2b.run(low2L, low2R);
+        float high2L = rest1L, high2R = rest1R;
+        t.hp2a.run(high2L, high2R);
+        t.hp2b.run(high2L, high2R);
+        t.apB0X1.run(low0L, low0R);
+        t.apB0X2.run(low0L, low0R);
+        t.apB1X2.run(low1L, low1R);
+        band[0][0] = low0L;
+        band[1][0] = low0R;
+        band[0][1] = low1L;
+        band[1][1] = low1R;
+        band[0][2] = low2L;
+        band[1][2] = low2R;
+        band[0][3] = high2L;
+        band[1][3] = high2R;
     }
     const bool publishMeter = (++meterCounter_ & 255u) == 0;
     float wetL = 0, wetR = 0;

@@ -5,7 +5,8 @@
 // hit every NEON-paired stage AND every scalar fallback next to it: uneven L/R PEQ band counts,
 // mixed crossover topologies (BW1/BW3 one-pole stages vs Svf2), subsonic on one side only,
 // all-pass sections enabled on one side / both sides / with mixed 1st/2nd order, tilt, the
-// 3-way Mid upper corner and every measurement-mute bus, plus tiny (denormal-range), silent,
+// 3-way Mid upper corner, every measurement-mute bus and the multiband compressor (linked,
+// unlinked and disabled bands), plus tiny (denormal-range), silent,
 // NaN and over-full-scale input.
 //
 // Not part of native_tests: the value is comparing two BUILDS of the same scenarios, e.g. the
@@ -145,6 +146,30 @@ void allPasses(Config& c) {
     setAllPass(c, nbschema::kHighAllPassBase, 1, 0, true, 2, 6500, 0.8f);
 }
 
+// Multiband compressor on (it ships off): stereo-linked, unlinked and disabled bands, partial mix.
+void multiband(Config& c) {
+    c[nbschema::kMbcEnabled] = 1;
+    c[nbschema::kMbcMix] = 80;
+    c[nbschema::kMbcXo0] = 120;
+    c[nbschema::kMbcXo1] = 900;
+    c[nbschema::kMbcXo2] = 5000;
+    auto bandCfg = [&c](int b, bool on, float thresh, float ratio, bool linked) {
+        const int i = nbschema::kMbcBandsBase + b * nbschema::kMbcBandWidth;
+        c[i + nbschema::kMbcBandEnabled] = on ? 1.f : 0.f;
+        c[i + nbschema::kMbcBandThreshold] = thresh;
+        c[i + nbschema::kMbcBandRatio] = ratio;
+        c[i + nbschema::kMbcBandKnee] = 6;
+        c[i + nbschema::kMbcBandAttack] = 10;
+        c[i + nbschema::kMbcBandRelease] = 150;
+        c[i + nbschema::kMbcBandMakeup] = 2;
+        c[i + nbschema::kMbcBandStereoLink] = linked ? 1.f : 0.f;
+    };
+    bandCfg(0, true, -20, 4, true);
+    bandCfg(1, true, -18, 3, false);
+    bandCfg(2, false, -24, 2, true);
+    bandCfg(3, true, -30, 6, true);
+}
+
 void tilt(Config& c) {
     c[nbschema::kTiltEnabled] = 1;
     c[nbschema::kTiltAmount] = 3;
@@ -232,6 +257,7 @@ int main(int argc, char** argv) {
         {"measmute-low", [](Config& c) { c[nbschema::kMeasurementMute] = 2; }, false},
         {"measmute-high", [](Config& c) { enableThreeWay(c); c[nbschema::kMeasurementMute] = 3; },
          false},
+        {"multiband", [](Config& c) { multiband(c); }, true},
         {"everything",
          [](Config& c) {
              mixedCrossovers(c);
