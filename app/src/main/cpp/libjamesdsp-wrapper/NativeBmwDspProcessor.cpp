@@ -208,7 +208,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.lpfPass = v[1] >= .5f;
     next.hpfPass = v[2] >= .5f;
     next.channelMute = static_cast<int>(clampf(v[3], 0, 2));
-    next.measurementMute = static_cast<int>(clampf(v[4], 0, 2));
+    // 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High -- see rebuildMeasBus().
+    next.measurementMute = static_cast<int>(clampf(v[4], 0, 3));
     next.headroom = clampf(v[5], -12, 0);
     next.lowGainL = clampf(v[6], -6, 6);
     next.lowGainR = clampf(v[7], -6, 6);
@@ -294,6 +295,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.busLimMidEnabled = v[185] >= .5f;
     next.busLimMidThreshDb = clampf(v[186], -24, 0);
     next.busLimMidReleaseMs = clampf(v[187], 20, 800);
+    // High-bus limiter (v[262..264], added in the 262 -> 266 growth); v[265] is the
+    // Kotlin-only migration marker.
+    next.busLimHighEnabled = v[262] >= .5f;
+    next.busLimHighThreshDb = clampf(v[263], -24, 0);
+    next.busLimHighReleaseMs = clampf(v[264], 20, 800);
     // v[189/190]: master limiter enable + threshold dBFS (v[191] is a Kotlin-only migration
     // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
     next.limiterEnabled = v[189] >= .5f;
@@ -492,12 +498,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             dirty |= band == NativeBmwRouting::Band::Low  ? DirtyLowXo
                     : band == NativeBmwRouting::Band::Mid ? DirtyMidXo
                                                           : DirtyHighXo;
-            // meas-bus corner tracks the *opposite* band's crossover: rebuild it only if the
-            // crossover that just moved is the one the active mute mode actually uses. High is
-            // still a "not low" band for this still-binary Low/not-Low concept -- extending
-            // measurement-mute to solo any one of three bands is its own deferred follow-up
-            // (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md).
-            if ((next.measurementMute == 1 && !low) || (next.measurementMute == 2 && low)) {
+            // The meas-bus corner tracks the isolated band's own crossover: rebuild it only
+            // if the crossover that just moved belongs to the band the active mode keeps.
+            if (measurementMuteIsolates(next.measurementMute, band)) {
                 dirty |= DirtyMeasBus;
             }
         }
@@ -508,6 +511,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             (changed(old.upperCrossoverFreq, now.upperCrossoverFreq) ||
              old.upperCrossoverEnabled != now.upperCrossoverEnabled)) {
             dirty |= DirtyMidXo;
+            // Isolate-Mid's upper bus LPF follows Mid's upper corner (and its enable).
+            if (next.measurementMute == 1) {
+                dirty |= DirtyMeasBus;
+            }
         }
         if (low && (old.subsonicEnabled != now.subsonicEnabled ||
                     changed(old.subsonicFreq, now.subsonicFreq))) {
@@ -581,8 +588,10 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // Bus limiter: threshold is read live per sample, so only enable/release need a rebuild.
     if (next.busLimLowEnabled != p_.busLimLowEnabled ||
         next.busLimMidEnabled != p_.busLimMidEnabled ||
+        next.busLimHighEnabled != p_.busLimHighEnabled ||
         changed(next.busLimLowReleaseMs, p_.busLimLowReleaseMs) ||
-        changed(next.busLimMidReleaseMs, p_.busLimMidReleaseMs)) {
+        changed(next.busLimMidReleaseMs, p_.busLimMidReleaseMs) ||
+        changed(next.busLimHighReleaseMs, p_.busLimHighReleaseMs)) {
         dirty |= DirtyBusLimiter;
     }
     // Master limiter: enable is checked live in processFrame; only the threshold -> ceiling
@@ -600,6 +609,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     mbcEnabledMeterFlag_.store(p_.mbcEnabled, std::memory_order_relaxed);
     busLimLowEnabledMeterFlag_.store(p_.busLimLowEnabled, std::memory_order_relaxed);
     busLimMidEnabledMeterFlag_.store(p_.busLimMidEnabled, std::memory_order_relaxed);
+    busLimHighEnabledMeterFlag_.store(p_.busLimHighEnabled, std::memory_order_relaxed);
     masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
     applyDirty(dirty);
     return true;
@@ -1117,10 +1127,13 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimAttackMix_ = 1 - std::exp(-1 / (.001f * sampleRate_));
     busLimLowGrDb_.store(0.f);
     busLimMidGrDb_.store(0.f);
+    busLimHighGrDb_.store(0.f);
     busLimLowReleaseMix_ =
         1 - std::exp(-1 / (std::max(20.f, p_.busLimLowReleaseMs) * .001f * sampleRate_));
     busLimMidReleaseMix_ =
         1 - std::exp(-1 / (std::max(20.f, p_.busLimMidReleaseMs) * .001f * sampleRate_));
+    busLimHighReleaseMix_ =
+        1 - std::exp(-1 / (std::max(20.f, p_.busLimHighReleaseMs) * .001f * sampleRate_));
 }
 void NativeBmwDspProcessor::rebuildTilt() {
     float g = p_.tiltAmount * .75f;
@@ -1137,9 +1150,10 @@ void NativeBmwDspProcessor::rebuildPolarityAndMute() {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
         auto& out = outputs_[i];
         const auto& cfg = outputConfigs_[i];
-        const bool isLow = NativeBmwRouting::isLowBandOutput(i);
+        // Every band except the isolated one is muted while measurement mute is on.
         const bool measurementMuted =
-            (p_.measurementMute == 1 && isLow) || (p_.measurementMute == 2 && !isLow);
+            p_.measurementMute != 0 &&
+            !measurementMuteIsolates(p_.measurementMute, NativeBmwRouting::band(i));
         out.muted = cfg.muted || measurementMuted;
         out.polarityInverted = cfg.polarityInverted;
     }
@@ -1148,47 +1162,58 @@ void NativeBmwDspProcessor::rebuildMeasBus() {
     // Option A: measurement-mute output-bus brick-wall. Only ever inserted into processFrame's
     // signal path while p_.measurementMute != 0; all coefficient work happens here, on a
     // measurementMute (or relevant crossover) transition via DirtyMeasBus -- never per sample.
-    // mute-low (==1) -> HPF the bus below the MID crossover (removes the sub-crossover skirt the
-    //                   external low/mid split would otherwise route to the woofer)
-    // mute-mid (==2) -> LPF the bus above the LOW crossover
+    // Each mode keeps one band and cuts the bus where the external split would otherwise route
+    // that band's residual skirt to a neighbouring driver:
+    // isolate Mid  (==1) -> HPF the bus below the MID lower crossover, plus (only while Mid's
+    //                       upper Mid/High corner is on, i.e. 3-way) an LPF above that corner
+    // isolate Low  (==2) -> LPF the bus above the LOW crossover
+    // isolate High (==3) -> HPF the bus below the HIGH crossover (the Mid/High corner)
     // LR8 per side: 4x cascaded Butterworth Q=1/sqrt(2), 48 dB/oct.
     //
     // The corner is not placed on the crossover itself: sitting an LR8 exactly on the opposite
     // band's crossover also chews ~12 dB out of the band that is still playing, right where its
     // own transition lives, so an isolated measurement rolls off well short of the real acoustic
     // crossover. measBusStopbandOctaves walks the corner that many octaves *into the stopband*
-    // (down for the HPF, up for the LPF) so the surviving band keeps its own transition region
+    // (down for an HPF, up for an LPF) so the surviving band keeps its own transition region
     // intact while the brick-wall still kills the deep residual skirt. 0 = original on-crossover
     // behaviour.
-    measBusActive_ = p_.measurementMute != 0;
-    measBusIsHighpass_ = p_.measurementMute == 1;
-    for (auto& b : measBusL_) {
-        b.clear();
-    }
-    for (auto& b : measBusR_) {
-        b.clear();
+    const int mode = p_.measurementMute;
+    measBusActive_ = mode != 0;
+    measBusUpperActive_ = mode == 1 && outputConfig(OutputId::MidLeft).upperCrossoverEnabled;
+    for (auto* bank : {&measBusL_, &measBusR_, &measBusUpperL_, &measBusUpperR_}) {
+        for (auto& b : *bank) {
+            b.clear();
+        }
     }
     if (!measBusActive_) {
         return;
     }
-    const float shift =
-        std::exp2(measBusIsHighpass_ ? -p_.measBusStopbandOctaves : p_.measBusStopbandOctaves);
+    const bool highpass = mode != 2;
+    const float down = std::exp2(-p_.measBusStopbandOctaves);
+    const float up = std::exp2(p_.measBusStopbandOctaves);
     const float nyquistGuard = sampleRate_ * 0.45f;
-    const float fcL = clampf((measBusIsHighpass_ ? outputConfig(OutputId::MidLeft).crossoverFreq
-                                                 : outputConfig(OutputId::LowLeft).crossoverFreq) *
-                                 shift,
-                             10.f, nyquistGuard);
-    const float fcR = clampf((measBusIsHighpass_ ? outputConfig(OutputId::MidRight).crossoverFreq
-                                                 : outputConfig(OutputId::LowRight).crossoverFreq) *
-                                 shift,
-                             10.f, nyquistGuard);
+    auto corner = [&](float crossoverHz, float shift) {
+        return clampf(crossoverHz * shift, 10.f, nyquistGuard);
+    };
+    const OutputId sourceL = mode == 1 ? OutputId::MidLeft : mode == 2 ? OutputId::LowLeft : OutputId::HighLeft;
+    const OutputId sourceR = mode == 1 ? OutputId::MidRight : mode == 2 ? OutputId::LowRight : OutputId::HighRight;
+    const float fcL = corner(outputConfig(sourceL).crossoverFreq, highpass ? down : up);
+    const float fcR = corner(outputConfig(sourceR).crossoverFreq, highpass ? down : up);
     for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-        if (measBusIsHighpass_) {
+        if (highpass) {
             makeHighPass(measBusL_[i], fcL, BW, sampleRate_);
             makeHighPass(measBusR_[i], fcR, BW, sampleRate_);
         } else {
             makeLowPass(measBusL_[i], fcL, BW, sampleRate_);
             makeLowPass(measBusR_[i], fcR, BW, sampleRate_);
+        }
+    }
+    if (measBusUpperActive_) {
+        const float fcUpL = corner(outputConfig(OutputId::MidLeft).upperCrossoverFreq, up);
+        const float fcUpR = corner(outputConfig(OutputId::MidRight).upperCrossoverFreq, up);
+        for (std::size_t i = 0; i < kMeasBusSections; ++i) {
+            makeLowPass(measBusUpperL_[i], fcUpL, BW, sampleRate_);
+            makeLowPass(measBusUpperR_[i], fcUpR, BW, sampleRate_);
         }
     }
 }
@@ -1315,9 +1340,10 @@ void NativeBmwDspProcessor::rebuildAll() {
     masterLimiterGrDb_.store(0.f);
     limiterMeterCounter_ = 0;
     resetMbcState();
-    busLimLowGain_ = busLimMidGain_ = 1.f;
+    busLimLowGain_ = busLimMidGain_ = busLimHighGain_ = 1.f;
     busLimLowGrDb_.store(0.f);
     busLimMidGrDb_.store(0.f);
+    busLimHighGrDb_.store(0.f);
     updateDelays();
     resetDynamics();
     // Locked variant: rebuildAll() runs either from the constructor (no lock needed, object not
@@ -1646,8 +1672,10 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         }
         highL *= highLeft.gain;
         highR *= highRight.gain;
-        // No High-bus limiter yet (deferred follow-up, mirrors busLimLow/busLimMid) -- see
-        // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+        if (p_.busLimHighEnabled) {
+            processBusLimiter(highL, highR, p_.busLimHighThreshDb, busLimHighGain_,
+                              busLimHighReleaseMix_, busLimHighGrDb_);
+        }
     } else {
         // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed
         // signal through unfiltered -- see processFrame()'s own comment on that, further down).
@@ -1733,6 +1761,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         for (std::size_t i = 0; i < kMeasBusSections; ++i) {
             oL = measBusL_[i].run(oL);
             oR = measBusR_[i].run(oR);
+        }
+        if (measBusUpperActive_) {
+            for (std::size_t i = 0; i < kMeasBusSections; ++i) {
+                oL = measBusUpperL_[i].run(oL);
+                oR = measBusUpperR_[i].run(oR);
+            }
         }
         oL = ftz(oL);
         oR = ftz(oR);
@@ -1856,6 +1890,10 @@ void NativeBmwDspProcessor::readBusLimiterMeter(float* v, std::size_t n) const {
                ? busLimLowGrDb_.load(std::memory_order_relaxed) : 0.f;
     v[1] = busLimMidEnabledMeterFlag_.load(std::memory_order_relaxed)
                ? busLimMidGrDb_.load(std::memory_order_relaxed) : 0.f;
+    if (n >= 3) {
+        v[2] = busLimHighEnabledMeterFlag_.load(std::memory_order_relaxed)
+                   ? busLimHighGrDb_.load(std::memory_order_relaxed) : 0.f;
+    }
 }
 void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) const {
     if (!v || n < 1) {

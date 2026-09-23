@@ -348,3 +348,8 @@
 0            # 260 highRight compressorMakeup
 
 0            # 261 highBandMigrated (0 = seed the block muted on next load)
+
+0            # 262 busLimHigh enabled
+-3           # 263 busLimHigh threshold
+120          # 264 busLimHigh release
+0            # 265 busLimHighMigrated (0 = seed the limiter disabled on next load)

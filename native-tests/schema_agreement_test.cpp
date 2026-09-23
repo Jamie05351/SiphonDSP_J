@@ -93,6 +93,53 @@ TEST_CASE("kMeasurementMute slot drops the low band") {
     CHECK(lowOff - lowOn > 20.f);
 }
 
+// 3-way on, the same two writes the UI's master switch makes: High audible, Mid bandpassed.
+static std::array<float, kConfigSize> threeWayConfig() {
+    auto c = defaultConfig();
+    c[sch::kHighXoPass] = 0.f;
+    c[sch::kHighOutputConfigBase + 0 * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    c[sch::kHighOutputConfigBase + 1 * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    c[sch::kMidUpperXo + 0 * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+    c[sch::kMidUpperXo + 1 * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+    return c;
+}
+
+TEST_CASE("kMeasurementMute 3 isolates High") {
+    auto c0 = threeWayConfig();
+    auto c3 = threeWayConfig();
+    c3[sch::kMeasurementMute] = 3.f;
+    for (double hz : {50.0, 800.0}) {  // Low and Mid territory: dropped
+        NativeBmwDspProcessor off, on;
+        const float lvlOff = outLevelDbAt(off, c0, hz);
+        const float lvlOn = outLevelDbAt(on, c3, hz);
+        INFO(hz, " Hz: measmute off ", lvlOff, " dB   isolate-High ", lvlOn, " dB");
+        CHECK(lvlOff - lvlOn > 20.f);
+    }
+    NativeBmwDspProcessor off, on;
+    const float hiOff = outLevelDbAt(off, c0, 10000.0);
+    const float hiOn = outLevelDbAt(on, c3, 10000.0);
+    INFO("10 kHz: measmute off ", hiOff, " dB   isolate-High ", hiOn, " dB");
+    CHECK(std::fabs(hiOff - hiOn) < 1.5f);  // High itself passes
+}
+
+TEST_CASE("kMeasurementMute 1 isolates Mid only, muting High too when 3-way is on") {
+    auto c0 = threeWayConfig();
+    auto c1 = threeWayConfig();
+    c1[sch::kMeasurementMute] = 1.f;
+    {
+        NativeBmwDspProcessor off, on;
+        const float hiOff = outLevelDbAt(off, c0, 10000.0);
+        const float hiOn = outLevelDbAt(on, c1, 10000.0);
+        INFO("10 kHz: measmute off ", hiOff, " dB   isolate-Mid ", hiOn, " dB");
+        CHECK(hiOff - hiOn > 20.f);
+    }
+    NativeBmwDspProcessor off, on;
+    const float midOff = outLevelDbAt(off, c0, 800.0);
+    const float midOn = outLevelDbAt(on, c1, 800.0);
+    INFO("800 Hz: measmute off ", midOff, " dB   isolate-Mid ", midOn, " dB");
+    CHECK(std::fabs(midOff - midOn) < 1.5f);  // Mid itself passes
+}
+
 TEST_CASE("kRoutingBase / kRoutingStride locate the routing matrix") {
     NativeBmwDspProcessor proc;
     auto c = defaultConfig();
@@ -308,6 +355,44 @@ TEST_CASE("kBusLimLowEnabled / kBusLimLowThreshold slots") {
     const float grHi = lowBusGr(1.f, -3.f);
     const float grLo = lowBusGr(1.f, -18.f);
     INFO("low bus GR: thr -3 -> ", grHi, "   thr -18 -> ", grLo);
+    CHECK(grHi > 1.f);
+    CHECK(grLo > grHi + 2.f);  // lower threshold -> more reduction
+}
+
+TEST_CASE("kBusLimHighEnabled / kBusLimHighThreshold slots") {
+    auto highBusGr = [](float enabled, float threshold) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[sch::kHeadroom] = 0.f;
+        c[sch::kTiltEnabled] = 0.f;
+        // High ships silent: clear highXoPass and both High mutes so the bus carries signal.
+        c[sch::kHighXoPass] = 0.f;
+        c[sch::kHighOutputConfigBase + 0 * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+        c[sch::kHighOutputConfigBase + 1 * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+        c[sch::kBusLimHighEnabled] = enabled;
+        c[sch::kBusLimHighThreshold] = threshold;
+        c[sch::kBusLimHighRelease] = 120.f;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        // 8 kHz sits well inside High's passband (default 3 kHz corner), ~ -0.4 dBFS.
+        auto warm = stereoSine(8000.0, 0.95, 48000);
+        proc.process(warm.data(), warm.size());
+        float worst = 0.f;
+        for (int i = 0; i < 16; ++i) {
+            auto b = stereoSine(8000.0, 0.95, 3000);
+            proc.process(b.data(), b.size());
+            float m[3] = {};
+            proc.readBusLimiterMeter(m, 3);
+            CHECK(m[0] == doctest::Approx(0.0f));  // Low/Mid limiters untouched: right slot
+            CHECK(m[1] == doctest::Approx(0.0f));
+            worst = std::max(worst, m[2]);
+        }
+        return worst;
+    };
+    CHECK(highBusGr(0.f, -3.f) == doctest::Approx(0.0f));  // disabled -> no GR
+    const float grHi = highBusGr(1.f, -3.f);
+    const float grLo = highBusGr(1.f, -18.f);
+    INFO("high bus GR: thr -3 -> ", grHi, "   thr -18 -> ", grLo);
     CHECK(grHi > 1.f);
     CHECK(grLo > grHi + 2.f);  // lower threshold -> more reduction
 }

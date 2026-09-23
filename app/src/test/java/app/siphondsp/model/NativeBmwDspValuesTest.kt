@@ -41,6 +41,14 @@ class NativeBmwDspValuesTest {
         seedCrossoverTypeMigrated(values)
         seedMidUpperCrossoverMigrated(values)
         seedHighBandMigrated(values)
+        seedHighBusLimiterMigrated(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateHighBusLimiterIfNeeded]: marker claimed. DEFAULTS
+     *  already ships the limiter disabled, so this only flips the marker. Must run last, matching
+     *  load()'s real call order. */
+    private fun seedHighBusLimiterMigrated(values: FloatArray) {
+        values[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateMidUpperCrossoverIfNeeded]: marker claimed. DEFAULTS
@@ -146,6 +154,7 @@ class NativeBmwDspValuesTest {
             seedCrossoverTypeMigrated(it)
             seedMidUpperCrossoverMigrated(it)
             seedHighBandMigrated(it)
+            seedHighBusLimiterMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -522,6 +531,37 @@ class NativeBmwDspValuesTest {
             0f,
         )
         assertEquals(1f, restored[NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED], 0f)
+    }
+
+    @Test
+    fun migrateRestoredValuesSeedsHighBusLimiterDisabledLikeLoadDoes() {
+        // A pre-High-bus-limiter backup-shaped array (262 values, predates the 262 -> 266 growth).
+        val legacy = FloatArray(262) { index -> NativeBmwDspValues.DEFAULTS[index] }
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(context, legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, restored.size)
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED], 0f)
+        assertEquals(-3f, restored[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD], 0f)
+        assertEquals(120f, restored[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE], 0f)
+        assertEquals(1f, restored[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadForceDisablesHighBusLimiterOnceThenRespectsALaterEnable() {
+        val unmigrated = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, unmigrated)
+
+        val first = NativeBmwDspValues.load(context)
+        assertEquals(0f, first[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED], 0f)
+        assertEquals(1f, first[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED], 0f)
+
+        NativeBmwDspValues.save(context, first.also { it[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED] = 1f })
+        val second = NativeBmwDspValues.load(context)
+        assertEquals(1f, second[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED], 0f)
     }
 
     @Test

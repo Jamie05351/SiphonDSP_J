@@ -350,9 +350,14 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val highDelayMs = if (internalLeft) values[NativeBmwDspValues.INDEX_HIGH_DELAY_L] else values[NativeBmwDspValues.INDEX_HIGH_DELAY_R]
             val postGainDb = if (internalLeft) values[NativeBmwDspValues.INDEX_POST_GAIN_L] else values[NativeBmwDspValues.INDEX_POST_GAIN_R]
 
-            val lowMuted = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || measurementMute == 1
-            val midMuted = outputValue(values, midOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || measurementMute == 2
-            val highMuted = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || highXoPass
+            // measurementMute keeps one band: 1 = Mid, 2 = Low, 3 = High (native
+            // measurementMuteIsolates()); every other band is muted.
+            val lowMuted = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f ||
+                measurementMute == 1 || measurementMute == 3
+            val midMuted = outputValue(values, midOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f ||
+                measurementMute == 2 || measurementMute == 3
+            val highMuted = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || highXoPass ||
+                measurementMute == 1 || measurementMute == 2
             val lowInvert = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
             val midInvert = outputValue(values, midOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
             val highInvert = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f

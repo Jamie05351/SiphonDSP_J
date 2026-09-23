@@ -175,11 +175,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwBusLimiterMeter(JNIEnv* e
     if (processor == nullptr) {
         return nullptr;
     }
-    float values[2];
-    processor->readBusLimiterMeter(values, 2);
-    jfloatArray result = env->NewFloatArray(2);
+    float values[3];
+    processor->readBusLimiterMeter(values, 3);
+    jfloatArray result = env->NewFloatArray(3);
     if (result != nullptr) {
-        env->SetFloatArrayRegion(result, 0, 2, values);
+        env->SetFloatArrayRegion(result, 0, 3, values);
     }
     return result;
 }

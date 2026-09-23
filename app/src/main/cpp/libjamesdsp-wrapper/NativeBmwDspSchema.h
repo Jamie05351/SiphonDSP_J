@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 262;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 266;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -170,6 +170,12 @@ inline constexpr int kHighAllPassBase = 219;
 inline constexpr int kHighOutputConfigBase = 235;
 
 inline constexpr int kHighBandMigrated = 261;  // Kotlin-only, never read natively.
+
+// --- High-bus limiter (262..265), added in the 262 -> 266 growth. Mirrors kBusLimLow*/Mid*. --
+inline constexpr int kBusLimHighEnabled = 262;
+inline constexpr int kBusLimHighThreshold = 263;
+inline constexpr int kBusLimHighRelease = 264;
+inline constexpr int kBusLimHighMigrated = 265;  // Kotlin-only, never read natively.
 
 }  // namespace nbschema
 
