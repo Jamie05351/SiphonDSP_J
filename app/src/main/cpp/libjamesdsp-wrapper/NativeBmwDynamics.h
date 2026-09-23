@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <limits>
 #include "NativeBmwDelayGain.h"
 #include "NativeBmwFilters.h"
 
@@ -68,14 +69,24 @@ private:
 struct BusLimiter {
     float gain = 1.f;
     float releaseMix = 0.f;
-    // Published gain reduction (dB, >= 0), for readBusLimiterMeter().
+    // Published gain reduction (dB, >= 0), for readBusLimiterMeter(). Written only through
+    // process()/zeroMeter()/reset(), which keep meteredGain_ in step with it.
     std::atomic<float> grDb{0.f};
     void process(float& left, float& right, float thresholdDb, float attackMix);
+    // Publishes 0 and makes the next process() republish unconditionally.
+    void zeroMeter();
     // Called whenever the limiter is skipped (disabled, or its band bypassed/silenced) so it
     // neither leaves the meter stuck on its last reading nor carries stale gain reduction into
     // the next time it runs -- which would fade that band back in over the release time.
     // Guarded so the steady skipped state costs no atomic store per sample.
     void reset();
+
+private:
+    // dbToLin(cachedThresholdDb_), so process() only pays the pow when the threshold changes.
+    float cachedThresholdDb_ = std::numeric_limits<float>::quiet_NaN();
+    float cachedCeilingLin_ = 1.f;
+    // The gain grDb was last computed from (NaN = republish on the next process()).
+    float meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 };
 // ~1 ms attack shared by all three bus limiters.
 inline float busLimiterAttackMix(float sampleRate) {

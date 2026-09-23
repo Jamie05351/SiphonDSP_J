@@ -579,9 +579,9 @@ void NativeBmwDspProcessor::rebuildCompressorTiming() {
 }
 void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimAttackMix_ = NativeBmwDsp::busLimiterAttackMix(sampleRate_);
-    busLimLow_.grDb.store(0.f);
-    busLimMid_.grDb.store(0.f);
-    busLimHigh_.grDb.store(0.f);
+    busLimLow_.zeroMeter();
+    busLimMid_.zeroMeter();
+    busLimHigh_.zeroMeter();
     busLimLow_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimLowReleaseMs, sampleRate_);
     busLimMid_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimMidReleaseMs, sampleRate_);
     busLimHigh_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimHighReleaseMs, sampleRate_);
@@ -688,7 +688,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     mbc_.resetState();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
         b->gain = 1.f;
-        b->grDb.store(0.f);
+        b->zeroMeter();
     }
     updateDelays();
     resetDynamics();

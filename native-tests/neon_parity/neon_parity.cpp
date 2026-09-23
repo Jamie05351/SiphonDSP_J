@@ -170,6 +170,38 @@ void multiband(Config& c) {
     bandCfg(3, true, -30, 6, true);
 }
 
+// Every dynamics stage working: per-output compressors on (soft knee on some, hard on others),
+// all three bus limiters with low thresholds, master limiter clamped hard.
+void dynamics(Config& c) {
+    auto comp = [&c](int base, int slot, float thresh, float ratio, float knee) {
+        const int i = base + slot * nbschema::kOutputConfigWidth + nbschema::kOutCompressor;
+        c[i] = 1;             // enabled
+        c[i + 1] = thresh;    // threshold dB
+        c[i + 2] = ratio;     // ratio
+        c[i + 3] = knee;      // knee dB
+        c[i + 4] = 5;         // attack ms
+        c[i + 5] = 120;       // release ms
+        c[i + 6] = 2;         // makeup dB
+    };
+    comp(nbschema::kOutputConfigBase, 0, -18, 4, 6);
+    comp(nbschema::kOutputConfigBase, 1, -12, 2, 0);
+    comp(nbschema::kOutputConfigBase, 2, -20, 6, 3);
+    comp(nbschema::kOutputConfigBase, 3, -15, 3, 0);
+    comp(nbschema::kHighOutputConfigBase, 0, -22, 4, 6);
+    comp(nbschema::kHighOutputConfigBase, 1, -22, 4, 6);
+    c[nbschema::kBusLimLowEnabled] = 1;
+    c[nbschema::kBusLimLowThreshold] = -9;
+    c[nbschema::kBusLimLowRelease] = 80;
+    c[nbschema::kBusLimMidEnabled] = 1;
+    c[nbschema::kBusLimMidThreshold] = -12;
+    c[nbschema::kBusLimMidRelease] = 200;
+    c[nbschema::kBusLimHighEnabled] = 1;
+    c[nbschema::kBusLimHighThreshold] = -15;
+    c[nbschema::kBusLimHighRelease] = 120;
+    c[nbschema::kMasterLimiterEnabled] = 1;
+    c[nbschema::kMasterLimiterThreshold] = -6;
+}
+
 void tilt(Config& c) {
     c[nbschema::kTiltEnabled] = 1;
     c[nbschema::kTiltAmount] = 3;
@@ -258,6 +290,7 @@ int main(int argc, char** argv) {
         {"measmute-high", [](Config& c) { enableThreeWay(c); c[nbschema::kMeasurementMute] = 3; },
          false},
         {"multiband", [](Config& c) { multiband(c); }, true},
+        {"dynamics", [](Config& c) { dynamics(c); enableThreeWay(c); }, true},
         {"everything",
          [](Config& c) {
              mixedCrossovers(c);
