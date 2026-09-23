@@ -131,6 +131,11 @@ class NativeBmwSchemaAgreementTest {
         "kHighAllPassBase" to NativeBmwDspValues.INDEX_HIGH_ALL_PASS,
         "kHighOutputConfigBase" to NativeBmwDspValues.INDEX_HIGH_OUTPUT_CONFIG,
         "kHighBandMigrated" to NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED,
+
+        "kBusLimHighEnabled" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED,
+        "kBusLimHighThreshold" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD,
+        "kBusLimHighRelease" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE,
+        "kBusLimHighMigrated" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED,
     )
 
     @Test

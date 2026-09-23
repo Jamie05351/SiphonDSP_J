@@ -85,7 +85,12 @@ public:
     //            (crossoverFreq [High's single HPF corner], crossoverType, subsonicEnabled/Freq
     //            [carried but ignored, same as Mid], mute, invert, compressor 7-tuple)
     //   261      Kotlin-only migration marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 262 };
+    //
+    // 262..265 -- the High-bus brick-wall limiter, added in the 262 -> 266 growth. Same
+    // contract as the Low/Mid bus limiters at 182..187; ships disabled:
+    //   262      enabled   263  threshold dBFS   264  release ms
+    //   265      Kotlin-only migration marker -- never read here
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 266 };
     enum : std::size_t { kMaxPeqSectionsPerChannel = 16, kPeqBandWidth = 5 };
     enum : unsigned { kDelayLineCapacity = 256 };
     // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
@@ -163,7 +168,8 @@ public:
     // while the multiband compressor is disabled. Lock-free, same discipline as
     // readCompressorMeter -- reads atomics published by processMbc().
     void readMbcMeter(float* values, std::size_t count) const;
-    // 2 floats: [lowBusGrDb, midBusGrDb] -- gain reduction of the per-bus brick-wall limiters.
+    // 3 floats: [lowBusGrDb, midBusGrDb, highBusGrDb] -- gain reduction of the per-bus
+    // brick-wall limiters.
     // 0 for a bus whose limiter is disabled. Lock-free; published by processBusLimiter().
     void readBusLimiterMeter(float* values, std::size_t count) const;
     // 1 float: gain reduction (dB, >= 0) of the master brick-wall limiter on the summed output.
@@ -237,6 +243,7 @@ private:
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyHighXo = 1u << 18,
+        DirtyHighResume = 1u << 19,  // High un-silenced (highXoPass on -> off): clear its state
         DirtyAll = 0xffffffffu,
     };
 
@@ -502,11 +509,12 @@ private:
         float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)
         float mbcXo[3] = {80.f, 500.f, 4000.f};
         MbcBandParams mbcBand[4];
-        // Per-bus output limiter (v[182..187]). Additive to -- not a replacement for -- the
-        // per-output processCompressor path. Ships disabled.
-        bool busLimLowEnabled = false, busLimMidEnabled = false;
+        // Per-bus output limiter (Low/Mid v[182..187], High v[262..264]). Additive to -- not
+        // a replacement for -- the per-output processCompressor path. Ships disabled.
+        bool busLimLowEnabled = false, busLimMidEnabled = false, busLimHighEnabled = false;
         float busLimLowThreshDb = -3.f, busLimLowReleaseMs = 120.f;
         float busLimMidThreshDb = -3.f, busLimMidReleaseMs = 120.f;
+        float busLimHighThreshDb = -3.f, busLimHighReleaseMs = 120.f;
         // Master brick-wall limiter on the summed output. enabled == false is a true bypass
         // (processLimiter is not called); the threshold defaults to -1 dBFS, the fixed ceiling
         // this stage always used before it was made adjustable.
@@ -551,6 +559,7 @@ private:
     // Brick-wall (infinite ratio, fixed-fast attack) limiter for one output bus. threshold in
     // dBFS, one stereo-linked gain follower. No lookahead -- the master limiter downstream
     // already carries that. No-op branch while the bus's enable is false.
+    void resetBusLimiter(float& gain, std::atomic<float>& grMeterDb);
     void processBusLimiter(float& left, float& right, float thresholdDb, float& gain,
                            float releaseMix, std::atomic<float>& grMeterDb);
     void publishIdleMeter(CompressorState& state);
@@ -636,8 +645,16 @@ private:
     // steeper than the LR4 crossovers; excluded-band phase is irrelevant (discarded).
     static constexpr std::size_t kMeasBusSections = 4;
     std::array<Biquad, kMeasBusSections> measBusL_{}, measBusR_{};
+    // Isolate-Mid's second (LPF) brick-wall above Mid's upper corner, only while 3-way is on.
+    std::array<Biquad, kMeasBusSections> measBusUpperL_{}, measBusUpperR_{};
     bool measBusActive_ = false;
-    bool measBusIsHighpass_ = true;
+    bool measBusUpperActive_ = false;
+    // Measurement mute values: 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High.
+    static constexpr bool measurementMuteIsolates(int mode, NativeBmwRouting::Band band) {
+        return (mode == 1 && band == NativeBmwRouting::Band::Mid) ||
+               (mode == 2 && band == NativeBmwRouting::Band::Low) ||
+               (mode == 3 && band == NativeBmwRouting::Band::High);
+    }
     // Measurement signal generator (own module, see NativeBmwMeasurementGenerator.h). Per-instance
     // state, only ever touched from applyMeasurementGenerator() (audio thread, while
     // p_.measGenType != 0) and rebuildMeasGen() (control thread, under stateMutex_ like everything
@@ -651,7 +668,7 @@ private:
     // Stored every 256 frames from processLimiter(), same discipline as the MBC meter.
     std::atomic<float> masterLimiterGrDb_{0.f};
     uint32_t limiterMeterCounter_ = 0;
-    // Mirrors of p_.mbcEnabled/busLimLowEnabled/busLimMidEnabled/limiterEnabled, published by
+    // Mirrors of p_.mbcEnabled/busLim{Low,Mid,High}Enabled/limiterEnabled, published by
     // configure() right after p_ = next (same spot the rest of this file republishes derived
     // state). The read*Meter() functions are const and take no lock, so they can't safely read
     // the plain bools inside p_ directly -- that's a data race against configure()'s whole-struct
@@ -659,6 +676,7 @@ private:
     // file already uses for the GR meters themselves (masterLimiterGrDb_ etc above).
     std::atomic<bool> mbcEnabledMeterFlag_{false};
     std::atomic<bool> busLimLowEnabledMeterFlag_{false}, busLimMidEnabledMeterFlag_{false};
+    std::atomic<bool> busLimHighEnabledMeterFlag_{false};
     std::atomic<bool> masterLimiterEnabledMeterFlag_{true};
 
     // Pre-crossover multiband compressor state. mbc_[0] = left chain, mbc_[1] = right chain.
@@ -672,12 +690,12 @@ private:
     float mbcMakeupLin_[4] = {1.f, 1.f, 1.f, 1.f};
     float mbcAttackMix_[4] = {0.f, 0.f, 0.f, 0.f};
     float mbcReleaseMix_[4] = {0.f, 0.f, 0.f, 0.f};
-    // Per-bus output limiters (Low, Mid). Fixed ~1 ms attack shared; release per bus.
+    // Per-bus output limiters (Low, Mid, High). Fixed ~1 ms attack shared; release per bus.
     float busLimAttackMix_ = 1.f;
-    float busLimLowReleaseMix_ = 0.f, busLimMidReleaseMix_ = 0.f;
-    float busLimLowGain_ = 1.f, busLimMidGain_ = 1.f;
+    float busLimLowReleaseMix_ = 0.f, busLimMidReleaseMix_ = 0.f, busLimHighReleaseMix_ = 0.f;
+    float busLimLowGain_ = 1.f, busLimMidGain_ = 1.f, busLimHighGain_ = 1.f;
     // Published gain reduction (dB, >= 0) of each per-bus limiter, for readBusLimiterMeter().
-    std::atomic<float> busLimLowGrDb_{0.f}, busLimMidGrDb_{0.f};
+    std::atomic<float> busLimLowGrDb_{0.f}, busLimMidGrDb_{0.f}, busLimHighGrDb_{0.f};
 
     // Capture state -- see startCapture()/stopCapture()/takeCaptureSnapshot(). The buffers and
     // captureEnabled_ are protected by stateMutex_ like everything else here (including from

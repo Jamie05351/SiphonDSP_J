@@ -514,6 +514,21 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun measurementMuteKeepsOnlyTheIsolatedBandWith3WayOn() {
+        val on = baseValues().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        fun sumAt(measurementMute: Float, hz: Double): Double {
+            val v = on.copyOf().also { it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE] = measurementMute }
+            return compute(v).sumDb[0][nearestIndex(hz)]
+        }
+        // 3 = isolate High: Low (50 Hz) gone, High (10 kHz) kept.
+        assertTrue(sumAt(0f, 50.0) - sumAt(3f, 50.0) > 20.0)
+        assertEquals(sumAt(0f, 10_000.0), sumAt(3f, 10_000.0), 1.0)
+        // 1 = isolate Mid and 2 = isolate Low both drop High, matching native.
+        assertTrue(sumAt(0f, 10_000.0) - sumAt(1f, 10_000.0) > 20.0)
+        assertTrue(sumAt(0f, 10_000.0) - sumAt(2f, 10_000.0) > 20.0)
+    }
+
+    @Test
     fun threeWayToggleOffIsBitIdenticalToTwoWay() {
         val defaults = baseValues()
         val on = defaults.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }

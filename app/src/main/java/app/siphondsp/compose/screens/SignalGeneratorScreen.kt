@@ -62,13 +62,11 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
     val accent = BmwTheme.colors.sliderDefault
 
     val type = dsp.get(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE).toInt().coerceIn(0, 2)
-    // INDEX_MEASUREMENT_MUTE's native values are 0=off, 1=mute-Low (i.e. isolates Mid),
-    // 2=mute-Mid (i.e. isolates Low) -- see NativeBmwDspProcessor::rebuildPolarityAndMute() and
-    // the original bmw_measurement_mute_entries ("Off"/"Mute low"/"Mute mid"). This screen's
-    // segmented control is labelled by the band the user wants to HEAR (LOW/MID), which is the
-    // opposite of "which band is muted", so 1 and 2 are swapped at this boundary in both
-    // directions via swapLowMid(), which is its own inverse.
-    val band = swapLowMid(dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 2))
+    // INDEX_MEASUREMENT_MUTE's native values are 0=off, 1=isolate Mid (historically "mute Low"),
+    // 2=isolate Low ("mute Mid"), 3=isolate High -- see NativeBmwDspProcessor::rebuildMeasBus().
+    // This screen's segmented control is ordered OFF/LOW/MID/HIGH, so 1 and 2 are swapped at
+    // this boundary in both directions via swapLowMid(), which is its own inverse.
+    val band = swapLowMid(dsp.get(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE).toInt().coerceIn(0, 3))
 
     Column(
         modifier = modifier
@@ -285,10 +283,12 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
             sliderLabels = listOf(stringResource(R.string.signal_generator_meas_mute_stopband)),
         ) {
             BmwSegmentedControl(
-                options = listOf("OFF", "LOW", "MID"),
+                // HIGH only isolates anything audible while the Crossovers page's 3-way switch is
+                // on -- otherwise High is silent and the bus carries nothing.
+                options = listOf("OFF", "LOW", "MID", "HIGH"),
                 selectedIndex = band,
                 onSelect = { dsp.commit(NativeBmwDspValues.INDEX_MEASUREMENT_MUTE, swapLowMid(it).toFloat()) },
-                optionAccents = listOf(accent, accent, accent),
+                optionAccents = listOf(accent, accent, accent, accent),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp),
@@ -378,10 +378,11 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
     }
 }
 
-/** Swaps 1<->2, leaves 0 alone. Its own inverse -- see the `band` comment above for why this
- *  boundary needs it in both directions. */
+/** Swaps 1<->2, leaves 0 (off) and 3 (High) alone. Its own inverse -- see the `band` comment
+ *  above for why this boundary needs it in both directions. */
 private fun swapLowMid(value: Int): Int = when (value) {
     1 -> 2
     2 -> 1
+    3 -> 3
     else -> 0
 }

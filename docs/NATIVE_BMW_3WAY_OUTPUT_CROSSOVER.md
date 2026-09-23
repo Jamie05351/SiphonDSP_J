@@ -76,6 +76,10 @@ through slots 3/4 only when enabled.
 | 219..234 | all-pass sub-block | 2 outputs × 2 sections × `[enabled, order, freq, q]` |
 | 235..260 | output-config sub-block | 2 outputs × 13-wide (same layout as `OUTPUT_CONFIG_WIDTH`: crossoverFreq [High's HPF corner, mirrors Mid's upper-corner value], crossoverType, subsonicEnabled/Freq [carried but ignored, same as Mid today], mute, invert, compressor 7-tuple) |
 | 261 | `INDEX_HIGH_BAND_MIGRATED` | Kotlin-only migration marker — seeds High **muted/disabled by default** (same conservative opt-in launch as the multiband compressor and per-bus limiters) |
+| 262 | `INDEX_BUS_LIMITER_HIGH_ENABLED` | Phase 6 (262 → 266 growth): High-bus brick-wall limiter, same contract as the Low/Mid bus limiters at 182..187. Ships **disabled**. |
+| 263 | `INDEX_BUS_LIMITER_HIGH_THRESHOLD` | dBFS |
+| 264 | `INDEX_BUS_LIMITER_HIGH_RELEASE` | ms |
+| 265 | `INDEX_BUS_LIMITER_HIGH_MIGRATED` | Kotlin-only migration marker — forces the limiter off once for existing saves |
 
 `highOutputIndex(output, field)` — a separate helper from `outputIndex()`, which stays
 `OUTPUT_COUNT=4` forever per the offset-freeze rule above. High Left/Right get their own `OutputId`
@@ -164,6 +168,11 @@ phase breakdown in the approved implementation plan for what each phase's tests 
 
 - All-pass and routing UI stays restrained (per-preference-screen controls, not a patch bay),
   same as the existing 4-output model.
-- High-bus brick-wall limiter, and extending measurement-mute / the measurement generator's
-  Acoustic Timing Reference split to a third band, are explicitly deferred — scoped as their own
-  follow-up, not part of this growth.
+- Phase 6 added the High-bus brick-wall limiter (262..265) and a third measurement-mute mode:
+  `INDEX_MEASUREMENT_MUTE` is now 0 off / 1 isolate Mid / 2 isolate Low / **3 isolate High** (no
+  schema growth — the existing slot's range widened). Every non-isolated band is muted, so
+  isolate-Mid now also mutes High, and while Mid's upper corner is on it adds a second bus LPF
+  above that corner. Isolate-High puts the bus HPF below the Mid/High corner.
+- The measurement generator's Acoustic Timing Reference is unchanged: its "Mid"/"Low" settings are
+  REW's sweep-segment ranges, not this app's bands, and band isolation already picks which
+  speakers play. Whether it needs any 3-way change is left to an on-device REW check.

@@ -49,7 +49,11 @@ object NativeBmwDspValues {
     // legacy per-output block, same reasoning as the offset-freeze in NativeBmwDspProcessor.h.
     // Ships muted/disabled. 261 is a one-time migration marker: migrateHighBandIfNeeded() seeds
     // the whole block muted for existing saves, same pattern as migrateMbcIfNeeded().
-    const val SIZE = 262
+    //
+    // 262..265 are the High-bus brick-wall limiter, added in the 262 -> 266 growth (Phase 6
+    // of the same work) -- the High counterpart of the Low/Mid bus limiters at 182..187.
+    // Ships disabled; 265 is a one-time migration marker, see migrateHighBusLimiterIfNeeded().
+    const val SIZE = 266
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -344,6 +348,16 @@ object NativeBmwDspValues {
     // migrateHighBandIfNeeded.
     const val INDEX_HIGH_BAND_MIGRATED = 261
 
+    // High-bus brick-wall limiter (262..264) -- same contract as INDEX_BUS_LIMITER_LOW_*/MID_*:
+    // threshold in dBFS, release in ms, fixed-fast attack, stereo-linked. Ships DISABLED.
+    const val INDEX_BUS_LIMITER_HIGH_ENABLED = 262
+    const val INDEX_BUS_LIMITER_HIGH_THRESHOLD = 263
+    const val INDEX_BUS_LIMITER_HIGH_RELEASE = 264
+    // One-time marker: 1 once an existing saved config has had the High-bus limiter seeded
+    // disabled. Kotlin-only -- native never reads this index. See
+    // migrateHighBusLimiterIfNeeded.
+    const val INDEX_BUS_LIMITER_HIGH_MIGRATED = 265
+
     fun highOutputIndex(output: Int, field: Int): Int {
         require(output == OUTPUT_HIGH_LEFT || output == OUTPUT_HIGH_RIGHT) {
             "Invalid BMW High output $output"
@@ -451,6 +465,9 @@ object NativeBmwDspValues {
         // High Right.
         DEFAULT_MID_UPPER_XO_FREQ, 2f, 0f, 32f, 1f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
         0f, // 261 migration marker (0 = seed the block muted on next load)
+        // --- High-bus limiter (262..265), ships DISABLED ---
+        0f, -3f, 120f, // 262..264 High bus: enabled, threshold dBFS, release ms
+        0f, // 265 migration marker (0 = seed the limiter disabled on next load)
     )
 
     init {
@@ -472,7 +489,24 @@ object NativeBmwDspValues {
         migrateCrossoverTypeIfNeeded(store, values)
         migrateMidUpperCrossoverIfNeeded(store, values)
         migrateHighBandIfNeeded(store, values)
+        migrateHighBusLimiterIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed the High-bus limiter disabled (indices 262..265, added in the 262 -> 266 growth) on
+     * configs saved before it existed. The index-keyed [NativeBmwDspStore] already backfills a
+     * missing index from [DEFAULTS] on load -- DEFAULTS already ships it disabled -- so this
+     * mostly just claims the marker at index 265, mirroring [migrateMbcIfNeeded]: it stays OFF
+     * for existing users even if a later build ever ships a different default. Runs once; the
+     * marker then stops it so a deliberate later enable is respected.
+     */
+    private fun migrateHighBusLimiterIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
+        if (values[INDEX_BUS_LIMITER_HIGH_MIGRATED] == 1f) return
+        values[INDEX_BUS_LIMITER_HIGH_ENABLED] = 0f
+        values[INDEX_BUS_LIMITER_HIGH_MIGRATED] = 1f
+        val saved = store?.save(values)
+        Timber.i("BMW DSP seeded High-bus limiter disabled success=$saved")
     }
 
     /**
@@ -598,6 +632,7 @@ object NativeBmwDspValues {
         migrateCrossoverTypeIfNeeded(store, padded)
         migrateMidUpperCrossoverIfNeeded(store, padded)
         migrateHighBandIfNeeded(store, padded)
+        migrateHighBusLimiterIfNeeded(store, padded)
         return padded
     }
 

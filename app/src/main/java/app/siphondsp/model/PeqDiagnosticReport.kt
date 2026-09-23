@@ -68,8 +68,9 @@ object PeqDiagnosticReport {
             appendLine("All-pass: ${flag(NativeBmwDspValues.INDEX_ALL_PASS)}")
             appendLine("MBC: ${flag(NativeBmwDspValues.INDEX_MBC_ENABLED)}")
             appendLine(
-                "Bus limiters low/mid: ${flag(NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED)} / " +
-                    "${flag(NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED)}",
+                "Bus limiters low/mid/high: ${flag(NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED)} / " +
+                    "${flag(NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED)} / " +
+                    "${flag(NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED)}",
             )
             appendLine("Master limiter: ${flag(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED)}")
             appendLine(

@@ -187,7 +187,7 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
                 leanStart = 20.dp,
                 leanEnd = 20.dp,
                 topContentGap = 2.dp,
-                sliderLabels = listOf("Threshold", "Release", "Low bus", "Mid bus"),
+                sliderLabels = listOf("Threshold", "Release", "Low bus", "Mid bus", "High bus"),
             ) {
                 BmwSectionHeader(
                     title = "Low bus",
@@ -208,6 +208,18 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
                 CompressorSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, -24f..0f, 0.5f, "dB", dsp)
                 CompressorSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE, 20f..800f, 5f, "ms", dsp)
                 BmwGrMeter(busMeter?.getOrNull(1) ?: 0f, stage = MbcBandGrMeter.Stage.LIMITER)
+
+                // Only acts while 3-way is on (High is silent otherwise), but stays editable so
+                // it can be set before the tweeters are ever switched in.
+                BmwSectionHeader(
+                    title = "High bus",
+                    accentColor = Color(BmwDashboardSkin.HIGH_BAND_PINK),
+                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED),
+                    onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED, if (it) 1f else 0f) },
+                )
+                CompressorSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD, -24f..0f, 0.5f, "dB", dsp)
+                CompressorSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE, 20f..800f, 5f, "ms", dsp)
+                BmwGrMeter(busMeter?.getOrNull(2) ?: 0f, stage = MbcBandGrMeter.Stage.LIMITER)
             }
         }
     }
