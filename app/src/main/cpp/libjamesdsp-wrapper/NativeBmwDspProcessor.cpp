@@ -534,6 +534,12 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             dirty |= DirtyGains;
         }
     }
+    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it, so they
+    // still hold whatever was playing when 3-way was switched off. Clear them on the way back
+    // on, or that stale audio replays as a burst for the first few milliseconds.
+    if (p_.highXoPass && !next.highXoPass) {
+        dirty |= DirtyHighResume;
+    }
     if (next.measurementMute != p_.measurementMute) {
         dirty |= DirtyPolarity | DirtyMeasBus;
     }
@@ -1276,6 +1282,11 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     }
     if (d & DirtyHighXo) {
         rebuildHighCrossover();
+    }
+    if (d & DirtyHighResume) {
+        output(OutputId::HighLeft).clearState();
+        output(OutputId::HighRight).clearState();
+        highPeq_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();
