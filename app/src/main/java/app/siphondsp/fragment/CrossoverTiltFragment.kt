@@ -8,19 +8,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import app.siphondsp.activity.CrossoverTiltActivity
-import app.siphondsp.compose.screens.CrossoversPageScreen
+import app.siphondsp.compose.screens.CrossoverGraphMode
+import app.siphondsp.compose.screens.CrossoverLowMidPage
+import app.siphondsp.compose.screens.CrossoverMidHighPage
 import app.siphondsp.compose.screens.TonalityTiltScreen
 
 /**
- * Crossovers & Tilt workspace -- two Compose pages:
- * - [CrossoversPageScreen] -- the read-only CrossoverHandoffSurface graph over the Lowpass /
- *   Highpass / Subsonic / Mid-align rows, plus a deep link to the full All-pass screen.
+ * Crossovers & Tilt workspace -- three Compose pages:
+ * - [CrossoverLowMidPage] -- the response graph over the Low lowpass / Mid highpass / Subsonic
+ *   rows.
+ * - [CrossoverMidHighPage] -- the same graph under the master 3-way switch, over the Mid/High
+ *   corner and Mid-align rows, plus a deep link to the full All-pass screen.
  * - [TonalityTiltScreen] -- Tilt amount / pivot.
+ * The two crossover pages share one graph-mode choice, held here.
  *
  * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same
  * way. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the View-based
@@ -44,15 +53,17 @@ class CrossoverTiltFragment : Fragment() {
     }
 
     companion object {
-        const val PAGE_COUNT = 2
+        const val PAGE_COUNT = 3
     }
 }
 
 @Composable
 private fun CrossoverTiltPager(pagerState: PagerState) {
+    var graphMode by rememberSaveable { mutableStateOf(CrossoverGraphMode.MAGNITUDE) }
     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
         when (page) {
-            0 -> CrossoversPageScreen()
+            0 -> CrossoverLowMidPage(graphMode, { graphMode = it })
+            1 -> CrossoverMidHighPage(graphMode, { graphMode = it })
             else -> TonalityTiltScreen()
         }
     }
