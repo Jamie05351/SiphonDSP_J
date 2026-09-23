@@ -288,6 +288,10 @@ private:
         // instead of silent.
         double a1 = 0, a2 = 0, a3 = 0, m0 = 1, m1 = 0, m2 = 0;
         float run(float x);
+        // Runs l on xl and r on xr -- bit-identical to xl = l.run(xl); xr = r.run(xr). On arm64,
+        // when both are Svf2, the two channels go through one NEON pass (one float64x2 lane
+        // each); any other topology mix falls back to the two scalar run() calls.
+        static void runPair(Biquad& l, Biquad& r, float& xl, float& xr);
         void clear();
         void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
     };
@@ -327,12 +331,26 @@ private:
             write = 0;
         }
     };
+    // Stereo PEQ bank in structure-of-arrays form: every coefficient/state field is a
+    // {left, right} pair, so section i of both channels loads straight into one NEON float64x2
+    // (lane 0 = left, lane 1 = right). Every PEQ section is Svf2 (makePeq only builds that
+    // topology), so no topology field is needed. Left and right can hold different band counts
+    // (a band's channel field picks L, R or both): sections [0, min(leftCount, rightCount)) run
+    // as NEON pairs, the longer channel's remainder runs scalar on its own lane. Same per-channel
+    // cascade order and the same math as the old per-channel Biquad arrays.
     struct PeqBank {
-        std::array<Biquad, kMaxPeqSectionsPerChannel> left{};
-        std::array<Biquad, kMaxPeqSectionsPerChannel> right{};
+        struct alignas(16) Section {
+            double a1[2] = {0, 0}, a2[2] = {0, 0}, a3[2] = {0, 0};
+            double m0[2] = {1, 1}, m1[2] = {0, 0}, m2[2] = {0, 0};
+            double ic1eq[2] = {0, 0}, ic2eq[2] = {0, 0};
+        };
+        enum : std::size_t { kLeftLane = 0, kRightLane = 1 };
+        std::array<Section, kMaxPeqSectionsPerChannel> sections{};
         std::size_t leftCount = 0, rightCount = 0;
-        float processLeft(float sample);
-        float processRight(float sample);
+        // Appends an Svf2 section built by makePeq() to one lane (kLeftLane/kRightLane), with
+        // cleared state.
+        void append(std::size_t lane, const Biquad& q);
+        void process(float& left, float& right);
         void clear();
     };
     struct CompressorParams {
@@ -396,13 +414,21 @@ private:
             allPass{};
         std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
 
-        float processAllPass(float sample) {
-            for (std::size_t i = 0; i < allPass.size(); ++i) {
-                if (allPass[i].enabled) {
-                    sample = allPassState[i].run(sample);
+        // Runs each output's enabled all-pass sections in order, for both channels of an output
+        // pair at once. Section i runs as a NEON pair (Biquad::runPair) when it's enabled on both
+        // sides, otherwise scalar on whichever side has it -- same result as running each side
+        // alone.
+        static void processAllPassPair(OutputRuntime& l, OutputRuntime& r, float& xl, float& xr) {
+            for (std::size_t i = 0; i < l.allPass.size(); ++i) {
+                const bool onL = l.allPass[i].enabled, onR = r.allPass[i].enabled;
+                if (onL && onR) {
+                    Biquad::runPair(l.allPassState[i], r.allPassState[i], xl, xr);
+                } else if (onL) {
+                    xl = l.allPassState[i].run(xl);
+                } else if (onR) {
+                    xr = r.allPassState[i].run(xr);
                 }
             }
-            return sample;
         }
         void clearState() {
             subsonic1.clear();
@@ -539,9 +565,14 @@ private:
     // actually does.
     static bool peqBandSkipped(int type, double gain);
     float processChannelInput(float x, float& dcX, float& dcY);
-    float processLowCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
-    float processMidCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
-    float processHighCrossover(OutputRuntime& out, const OutputConfig& config, float sample);
+    // Each runs one band's crossover chain on its left and right outputs together (NEON-paired
+    // stage by stage where both sides share a topology) -- identical to running each side's
+    // chain on its own, since the two channels share no state.
+    void processLowCrossover(OutputRuntime& left, const OutputConfig& leftConfig,
+                             OutputRuntime& right, const OutputConfig& rightConfig, float& xl,
+                             float& xr);
+    void processMidCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
+    void processHighCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
     void processFrame(float& l, float& r);
     // Substitutes the measurement generator's stimulus for l/r when p_.measGenType != 0. Called
     // from each process() overload before captureTapIn(), so a measurement run's captured "raw

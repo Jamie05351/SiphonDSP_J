@@ -8,6 +8,17 @@
 // so the actual drwav_* function bodies are resolved from there at link time.
 #include "../libjdspimptoolbox/dr_wav.h"
 
+// NEON path: arm64 only (the only ABI the app ships -- see SUPPORTED_ABIS in app/build.gradle.kts).
+// Every other target (the x86-64 host running native-tests, CI) builds the scalar path alone.
+// -DSIPHON_DISABLE_NEON forces scalar on arm64 too, for NEON-vs-scalar parity runs
+// (scripts/run-neon-parity.sh).
+#if defined(__aarch64__) && defined(__ARM_NEON) && !defined(SIPHON_DISABLE_NEON)
+#include <arm_neon.h>
+#define SIPHON_NEON 1
+#else
+#define SIPHON_NEON 0
+#endif
+
 namespace {
 constexpr float PI = 3.14159265358979323846f, BW = 0.7071067812f;
 // Q of the quadratic factor in the 3rd-order Butterworth polynomial (s^2+s+1 -> Q=1 exactly,
@@ -27,6 +38,68 @@ inline float ftz(float x) {
 inline double ftzd(double x) {
     return NativeBmwRouting::flushDenormal(x);
 }
+// a*b + c. On arm64 this is pinned to one fused multiply-add: exactly the fmadd/fnmsub clang's
+// default -ffp-contract=on already emitted for Biquad::run's Svf2 expressions before the NEON
+// path existed (checked in the arm64 disassembly). Pinning it explicitly makes the scalar and
+// NEON (vfmaq_f64) paths round identically by construction, not by compiler choice. Other
+// targets keep the plain expression, i.e. whatever they computed before.
+inline double mulAdd(double a, double b, double c) {
+#if defined(__aarch64__)
+    return __builtin_fma(a, b, c);
+#else
+    return a * b + c;
+#endif
+}
+// One step of the trapezoidal SVF (Andy Simper / Cytomic) -- Biquad::run's Svf2 case and the
+// scalar lanes of PeqBank. Same operations and fused-rounding points as svf2StepX2() below.
+inline double svf2Step(double xd, double a1, double a2, double a3, double m0, double m1,
+                       double m2, double& ic1eq, double& ic2eq) {
+    const double v3 = xd - ic2eq;
+    const double v1 = mulAdd(a1, ic1eq, a2 * v3);              // a1*ic1eq + a2*v3
+    const double v2 = mulAdd(a3, v3, mulAdd(a2, ic1eq, ic2eq));  // ic2eq + a2*ic1eq + a3*v3
+    ic1eq = ftzd(mulAdd(2.0, v1, -ic1eq));                      // 2*v1 - ic1eq
+    ic2eq = ftzd(mulAdd(2.0, v2, -ic2eq));                      // 2*v2 - ic2eq
+    return ftzd(mulAdd(m2, v2, mulAdd(m0, xd, m1 * v1)));       // m0*x + m1*v1 + m2*v2
+}
+#if SIPHON_NEON
+// ---- NEON (arm64) --------------------------------------------------------------------------
+// The filter core is double precision, so a NEON register holds 2 lanes: lane 0 = left channel,
+// lane 1 = right channel of the same frame. (IIR recursion makes each sample depend on the
+// previous one, so consecutive frames can't share a register.) Every lane op below is the same
+// IEEE double operation the scalar path does, with vfmaq_f64 exactly where svf2Step() uses
+// mulAdd(), so each lane is bit-identical to svf2Step().
+
+// ftzd() on both lanes: keeps x only when 1e-30 <= |x| < inf. NaN fails both compares, so NaN,
+// +/-inf and tiny values (including -0.0) all become +0.0, same as the scalar ftzd().
+inline float64x2_t ftzdX2(float64x2_t x) {
+    const float64x2_t ax = vabsq_f64(x);
+    const uint64x2_t keep =
+        vandq_u64(vcgeq_f64(ax, vdupq_n_f64(1e-30)),
+                  vcltq_f64(ax, vdupq_n_f64(std::numeric_limits<double>::infinity())));
+    return vreinterpretq_f64_u64(vandq_u64(vreinterpretq_u64_f64(x), keep));
+}
+// svf2Step() on both channels at once. x holds {left, right} as float, and the float<->double
+// conversions at each end match the scalar static_casts (exact widen, round-to-nearest narrow).
+inline float32x2_t svf2StepX2(float32x2_t x, float64x2_t a1, float64x2_t a2, float64x2_t a3,
+                              float64x2_t m0, float64x2_t m1, float64x2_t m2,
+                              float64x2_t& ic1eq, float64x2_t& ic2eq) {
+    const float64x2_t xd = vcvt_f64_f32(x);
+    const float64x2_t two = vdupq_n_f64(2.0);
+    const float64x2_t v3 = vsubq_f64(xd, ic2eq);
+    const float64x2_t v1 = vfmaq_f64(vmulq_f64(a2, v3), a1, ic1eq);
+    const float64x2_t v2 = vfmaq_f64(vfmaq_f64(ic2eq, a2, ic1eq), a3, v3);
+    ic1eq = ftzdX2(vfmaq_f64(vnegq_f64(ic1eq), two, v1));
+    ic2eq = ftzdX2(vfmaq_f64(vnegq_f64(ic2eq), two, v2));
+    const float64x2_t y = vfmaq_f64(vfmaq_f64(vmulq_f64(m1, v1), m0, xd), m2, v2);
+    return vcvt_f32_f64(ftzdX2(y));
+}
+inline float64x2_t lanes(double left, double right) {
+    return vcombine_f64(vdup_n_f64(left), vdup_n_f64(right));
+}
+inline float32x2_t lanes(float left, float right) {
+    return vset_lane_f32(right, vdup_n_f32(left), 1);
+}
+#endif
 template<class T>
 T clampInt(float x) {
     const double lo = static_cast<double>(std::numeric_limits<T>::min()),
@@ -79,15 +152,31 @@ float NativeBmwDspProcessor::Biquad::run(float x) {
         }
         case Topology::Svf2:
         default: {
-            // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form.
-            const double v3 = xd - ic2eq;
-            const double v1 = a1 * ic1eq + a2 * v3;
-            const double v2 = ic2eq + a2 * ic1eq + a3 * v3;
-            ic1eq = ftzd(2.0 * v1 - ic1eq);
-            ic2eq = ftzd(2.0 * v2 - ic2eq);
-            return static_cast<float>(ftzd(m0 * xd + m1 * v1 + m2 * v2));
+            // Trapezoidal-integrated SVF (Andy Simper / Cytomic), reference form -- see svf2Step().
+            return static_cast<float>(svf2Step(xd, a1, a2, a3, m0, m1, m2, ic1eq, ic2eq));
         }
     }
+}
+void NativeBmwDspProcessor::Biquad::runPair(Biquad& l, Biquad& r, float& xl, float& xr) {
+#if SIPHON_NEON
+    if (l.topology == Topology::Svf2 && r.topology == Topology::Svf2) {
+        // NEON: gather the two Biquads' coefficients/state into {l, r} lanes, run one
+        // svf2StepX2(), scatter the state back.
+        float64x2_t ic1 = lanes(l.ic1eq, r.ic1eq), ic2 = lanes(l.ic2eq, r.ic2eq);
+        const float32x2_t y =
+            svf2StepX2(lanes(xl, xr), lanes(l.a1, r.a1), lanes(l.a2, r.a2), lanes(l.a3, r.a3),
+                       lanes(l.m0, r.m0), lanes(l.m1, r.m1), lanes(l.m2, r.m2), ic1, ic2);
+        l.ic1eq = vgetq_lane_f64(ic1, 0);
+        r.ic1eq = vgetq_lane_f64(ic1, 1);
+        l.ic2eq = vgetq_lane_f64(ic2, 0);
+        r.ic2eq = vgetq_lane_f64(ic2, 1);
+        xl = vget_lane_f32(y, 0);
+        xr = vget_lane_f32(y, 1);
+        return;
+    }
+#endif
+    xl = l.run(xl);
+    xr = r.run(xr);
 }
 void NativeBmwDspProcessor::Biquad::clear() {
     op_z1 = 0;
@@ -104,24 +193,55 @@ void NativeBmwDspProcessor::Biquad::loadAllPass(const NativeBmwRouting::BiquadCo
     m2 = c.m2;
     clear();
 }
-float NativeBmwDspProcessor::PeqBank::processLeft(float sample) {
-    for (std::size_t i = 0; i < leftCount; ++i) {
-        sample = left[i].run(sample);
-    }
-    return sample;
+void NativeBmwDspProcessor::PeqBank::append(std::size_t lane, const Biquad& q) {
+    std::size_t& count = lane == kLeftLane ? leftCount : rightCount;
+    Section& s = sections[count++];
+    s.a1[lane] = q.a1;
+    s.a2[lane] = q.a2;
+    s.a3[lane] = q.a3;
+    s.m0[lane] = q.m0;
+    s.m1[lane] = q.m1;
+    s.m2[lane] = q.m2;
+    s.ic1eq[lane] = 0;
+    s.ic2eq[lane] = 0;
 }
-float NativeBmwDspProcessor::PeqBank::processRight(float sample) {
-    for (std::size_t i = 0; i < rightCount; ++i) {
-        sample = right[i].run(sample);
+void NativeBmwDspProcessor::PeqBank::process(float& left, float& right) {
+    std::size_t i = 0;
+#if SIPHON_NEON
+    // NEON: the sections both channels have run as {left, right} pairs, loaded straight from the
+    // SoA arrays.
+    const std::size_t paired = std::min(leftCount, rightCount);
+    if (paired > 0) {
+        float32x2_t x = lanes(left, right);
+        for (; i < paired; ++i) {
+            Section& s = sections[i];
+            float64x2_t ic1 = vld1q_f64(s.ic1eq), ic2 = vld1q_f64(s.ic2eq);
+            x = svf2StepX2(x, vld1q_f64(s.a1), vld1q_f64(s.a2), vld1q_f64(s.a3), vld1q_f64(s.m0),
+                           vld1q_f64(s.m1), vld1q_f64(s.m2), ic1, ic2);
+            vst1q_f64(s.ic1eq, ic1);
+            vst1q_f64(s.ic2eq, ic2);
+        }
+        left = vget_lane_f32(x, 0);
+        right = vget_lane_f32(x, 1);
     }
-    return sample;
+#endif
+    // Scalar: the longer channel's remaining sections (or every section, without NEON).
+    auto runLane = [this](std::size_t lane, std::size_t from, std::size_t to, float sample) {
+        for (std::size_t j = from; j < to; ++j) {
+            Section& s = sections[j];
+            sample = static_cast<float>(svf2Step(static_cast<double>(sample), s.a1[lane],
+                                                 s.a2[lane], s.a3[lane], s.m0[lane], s.m1[lane],
+                                                 s.m2[lane], s.ic1eq[lane], s.ic2eq[lane]));
+        }
+        return sample;
+    };
+    left = runLane(kLeftLane, i, leftCount, left);
+    right = runLane(kRightLane, i, rightCount, right);
 }
 void NativeBmwDspProcessor::PeqBank::clear() {
-    for (auto& section : left) {
-        section.clear();
-    }
-    for (auto& section : right) {
-        section.clear();
+    for (auto& s : sections) {
+        s.ic1eq[kLeftLane] = s.ic1eq[kRightLane] = 0;
+        s.ic2eq[kLeftLane] = s.ic2eq[kRightLane] = 0;
     }
 }
 float NativeBmwDspProcessor::Delay::run(float x) {
@@ -838,10 +958,10 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
                 continue;
             }
             if (ch != 2) {
-                x.left[x.leftCount++] = q;
+                x.append(PeqBank::kLeftLane, q);
             }
             if (ch != 1) {
-                x.right[x.rightCount++] = q;
+                x.append(PeqBank::kRightLane, q);
             }
         }
         b = x;
@@ -1516,34 +1636,40 @@ void NativeBmwDspProcessor::resetBusLimiter(float& gain, std::atomic<float>& grM
         grMeterDb.store(0.f, std::memory_order_relaxed);
     }
 }
-float NativeBmwDspProcessor::processLowCrossover(OutputRuntime& out, const OutputConfig& cfg,
-                                                 float sample) {
-    if (cfg.subsonicEnabled) {
-        sample = out.subsonic1.run(sample);
+// The three crossover chains below run a band's left and right outputs stage by stage through
+// Biquad::runPair() -- one NEON pass per stage when both sides are Svf2 (BW1/BW3's one-pole
+// stages fall back to scalar inside runPair). Each side still sees its own stages in its own
+// order; L and R share no state, so this is identical to running each side's chain alone.
+void NativeBmwDspProcessor::processLowCrossover(OutputRuntime& left,
+                                                const OutputConfig& leftConfig,
+                                                OutputRuntime& right,
+                                                const OutputConfig& rightConfig, float& xl,
+                                                float& xr) {
+    if (leftConfig.subsonicEnabled && rightConfig.subsonicEnabled) {
+        Biquad::runPair(left.subsonic1, right.subsonic1, xl, xr);
+    } else if (leftConfig.subsonicEnabled) {
+        xl = left.subsonic1.run(xl);
+    } else if (rightConfig.subsonicEnabled) {
+        xr = right.subsonic1.run(xr);
     }
-    sample = out.crossover1.run(sample);
-    sample = out.crossover2.run(sample);
-    return sample;
+    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
+    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
 }
-float NativeBmwDspProcessor::processMidCrossover(OutputRuntime& out,
-                                                 [[maybe_unused]] const OutputConfig& cfg,
-                                                 float sample) {
+void NativeBmwDspProcessor::processMidCrossover(OutputRuntime& left, OutputRuntime& right,
+                                                float& xl, float& xr) {
     // HPF pair (Low/Mid corner), then the optional LPF pair (Mid/High corner) -- crossover3/4
     // are forced to an identity pass-through by rebuildMidCrossover() when the upper corner is
     // disabled, so running them unconditionally here stays correct (and branch-free) either way.
-    sample = out.crossover1.run(sample);
-    sample = out.crossover2.run(sample);
-    sample = out.crossover3.run(sample);
-    sample = out.crossover4.run(sample);
-    return sample;
+    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
+    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
+    Biquad::runPair(left.crossover3, right.crossover3, xl, xr);
+    Biquad::runPair(left.crossover4, right.crossover4, xl, xr);
 }
-float NativeBmwDspProcessor::processHighCrossover(OutputRuntime& out,
-                                                  [[maybe_unused]] const OutputConfig& cfg,
-                                                  float sample) {
+void NativeBmwDspProcessor::processHighCrossover(OutputRuntime& left, OutputRuntime& right,
+                                                 float& xl, float& xr) {
     // HPF-only, mirrors processMidCrossover() before Phase 2 added its optional lowpass pair.
-    sample = out.crossover1.run(sample);
-    sample = out.crossover2.run(sample);
-    return sample;
+    Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
+    Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
 }
 
 void NativeBmwDspProcessor::applyMeasurementGenerator(float& l, float& r) {
@@ -1575,8 +1701,9 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     float sL = processChannelInput(l, leftDcX_, leftDcY_),
           sR = processChannelInput(r, rightDcX_, rightDcY_);
     if (peqEnabled_) {
-        sL = inputPeq_.processLeft(sL * peqPreamp_);
-        sR = inputPeq_.processRight(sR * peqPreamp_);
+        sL *= peqPreamp_;
+        sR *= peqPreamp_;
+        inputPeq_.process(sL, sR);
     }
     sL *= headroom_;
     sR *= headroom_;
@@ -1604,14 +1731,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     const auto& highRightCfg = outputConfig(OutputId::HighRight);
 
     if (!p_.lpfPass) {
-        lowL = processLowCrossover(lowLeft, lowLeftCfg, lowL);
-        lowR = processLowCrossover(lowRight, lowRightCfg, lowR);
+        // Filter stages run L and R together (NEON pairs on arm64); see processLowCrossover().
+        processLowCrossover(lowLeft, lowLeftCfg, lowRight, lowRightCfg, lowL, lowR);
         if (peqEnabled_) {
-            lowL = lowPeq_.processLeft(lowL);
-            lowR = lowPeq_.processRight(lowR);
+            lowPeq_.process(lowL, lowR);
         }
-        lowL = lowLeft.processAllPass(lowL);
-        lowR = lowRight.processAllPass(lowR);
+        OutputRuntime::processAllPassPair(lowLeft, lowRight, lowL, lowR);
         lowL = lowLeft.delay.run(lowL);
         lowR = lowRight.delay.run(lowR);
         if (!lowLeft.muted) {
@@ -1642,14 +1767,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
 
     if (!p_.hpfPass) {
-        midL = processMidCrossover(midLeft, midLeftCfg, midL);
-        midR = processMidCrossover(midRight, midRightCfg, midR);
+        processMidCrossover(midLeft, midRight, midL, midR);
         if (peqEnabled_) {
-            midL = midPeq_.processLeft(midL);
-            midR = midPeq_.processRight(midR);
+            midPeq_.process(midL, midR);
         }
-        midL = midLeft.processAllPass(midL);
-        midR = midRight.processAllPass(midR);
+        OutputRuntime::processAllPassPair(midLeft, midRight, midL, midR);
         midL = midLeft.delay.run(midL);
         midR = midRight.delay.run(midR);
         if (!midLeft.muted) {
@@ -1677,14 +1799,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     }
 
     if (!p_.highXoPass) {
-        highL = processHighCrossover(highLeft, highLeftCfg, highL);
-        highR = processHighCrossover(highRight, highRightCfg, highR);
+        processHighCrossover(highLeft, highRight, highL, highR);
         if (peqEnabled_) {
-            highL = highPeq_.processLeft(highL);
-            highR = highPeq_.processRight(highR);
+            highPeq_.process(highL, highR);
         }
-        highL = highLeft.processAllPass(highL);
-        highR = highRight.processAllPass(highR);
+        OutputRuntime::processAllPassPair(highLeft, highRight, highL, highR);
         highL = highLeft.delay.run(highL);
         highR = highRight.delay.run(highR);
         if (!highLeft.muted) {
@@ -1770,8 +1889,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // no effect whenever both bypass flags were on, with no error or indication why.
     float oL = stereo.left, oR = stereo.right;
     if (p_.tilt) {
-        oL = tiltHiL2_.run(tiltHiL1_.run(tiltLoL2_.run(tiltLoL1_.run(oL))));
-        oR = tiltHiR2_.run(tiltHiR1_.run(tiltLoR2_.run(tiltLoR1_.run(oR))));
+        // Same Lo1 -> Lo2 -> Hi1 -> Hi2 order per channel, L/R as NEON pairs.
+        Biquad::runPair(tiltLoL1_, tiltLoR1_, oL, oR);
+        Biquad::runPair(tiltLoL2_, tiltLoR2_, oL, oR);
+        Biquad::runPair(tiltHiL1_, tiltHiR1_, oL, oR);
+        Biquad::runPair(tiltHiL2_, tiltHiR2_, oL, oR);
     }
     oL *= postGainL_;
     oR *= postGainR_;
@@ -1789,13 +1911,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // (single branch, no state advanced) whenever measurement mute is off; see rebuildMeasBus().
     if (measBusActive_) {
         for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-            oL = measBusL_[i].run(oL);
-            oR = measBusR_[i].run(oR);
+            Biquad::runPair(measBusL_[i], measBusR_[i], oL, oR);
         }
         if (measBusUpperActive_) {
             for (std::size_t i = 0; i < kMeasBusSections; ++i) {
-                oL = measBusUpperL_[i].run(oL);
-                oR = measBusUpperR_[i].run(oR);
+                Biquad::runPair(measBusUpperL_[i], measBusUpperR_[i], oL, oR);
             }
         }
         oL = ftz(oL);
