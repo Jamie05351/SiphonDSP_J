@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include "NativeBmwDspMath.h"
 #include "NativeBmwRouting.h"
 
 namespace NativeBmwDsp {
@@ -62,20 +63,67 @@ struct Biquad {
     void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
 };
 
-// Stereo PEQ bank in structure-of-arrays form: every coefficient/state field is a
-// {left, right} pair, so section i of both channels loads straight into one NEON float64x2
-// (lane 0 = left, lane 1 = right). Every PEQ section is Svf2 (makePeq only builds that
-// topology), so no topology field is needed. Left and right can hold different band counts
-// (a band's channel field picks L, R or both): sections [0, min(leftCount, rightCount)) run
-// as NEON pairs, the longer channel's remainder runs scalar on its own lane. Same per-channel
-// cascade order and the same math as the old per-channel Biquad arrays.
-struct PeqBank {
-    struct alignas(16) Section {
-        double a1[2] = {0, 0}, a2[2] = {0, 0}, a3[2] = {0, 0};
-        double m0[2] = {1, 1}, m1[2] = {0, 0}, m2[2] = {0, 0};
-        double ic1eq[2] = {0, 0}, ic2eq[2] = {0, 0};
-    };
+// One Svf2 section for both channels, in structure-of-arrays form: every coefficient/state
+// field is a {left, right} pair, so the whole section loads straight into NEON float64x2
+// registers (lane 0 = left, lane 1 = right) with no gather. Each lane is bit-identical to a
+// Biquad running the same coefficients (both go through svf2Step's math). Svf2 only -- the
+// one-pole topologies stay on Biquad.
+struct alignas(16) SvfPair {
     enum : std::size_t { kLeftLane = 0, kRightLane = 1 };
+    double a1[2] = {0, 0}, a2[2] = {0, 0}, a3[2] = {0, 0};
+    double m0[2] = {1, 1}, m1[2] = {0, 0}, m2[2] = {0, 0};
+    double ic1eq[2] = {0, 0}, ic2eq[2] = {0, 0};
+    // Copies an Svf2 Biquad's coefficients (from a make*() builder) into one lane, state cleared.
+    void load(std::size_t lane, const Biquad& q);
+    // Both lanes from the same Biquad (same filter on L and R), state cleared.
+    void loadBoth(const Biquad& q) {
+        load(kLeftLane, q);
+        load(kRightLane, q);
+    }
+    // Clears both lanes' state; coefficients stay.
+    void clear();
+    // The run functions are defined inline here (not in the .cpp) so the per-sample hot paths
+    // in other modules -- the PEQ cascade, the MBC tree -- inline them instead of calling out.
+
+    // Runs one lane alone (scalar).
+    float runLane(std::size_t lane, float x) {
+        return static_cast<float>(svf2Step(static_cast<double>(x), a1[lane], a2[lane], a3[lane],
+                                           m0[lane], m1[lane], m2[lane], ic1eq[lane],
+                                           ic2eq[lane]));
+    }
+#if SIPHON_NEON
+    // NEON: both lanes in one svf2StepX2() pass, x = {left, right}. Coefficients and state load
+    // straight from the SoA arrays, one register per field.
+    float32x2_t runX2(float32x2_t x) {
+        float64x2_t ic1 = vld1q_f64(ic1eq), ic2 = vld1q_f64(ic2eq);
+        x = svf2StepX2(x, vld1q_f64(a1), vld1q_f64(a2), vld1q_f64(a3), vld1q_f64(m0),
+                       vld1q_f64(m1), vld1q_f64(m2), ic1, ic2);
+        vst1q_f64(ic1eq, ic1);
+        vst1q_f64(ic2eq, ic2);
+        return x;
+    }
+#endif
+    // Runs both lanes -- same result as running left/right through two Biquads.
+    void run(float& left, float& right) {
+#if SIPHON_NEON
+        const float32x2_t y = runX2(lanes(left, right));
+        left = vget_lane_f32(y, 0);
+        right = vget_lane_f32(y, 1);
+#else
+        left = runLane(kLeftLane, left);
+        right = runLane(kRightLane, right);
+#endif
+    }
+};
+
+// Stereo PEQ bank: SvfPair section i holds band i of the left chain in lane 0 and band i of the
+// right chain in lane 1. Every PEQ section is Svf2 (makePeq only builds that topology). Left and
+// right can hold different band counts (a band's channel field picks L, R or both): sections
+// [0, min(leftCount, rightCount)) run as NEON pairs, the longer channel's remainder runs scalar
+// on its own lane. Same per-channel cascade order and the same math as per-channel Biquads.
+struct PeqBank {
+    using Section = SvfPair;
+    enum : std::size_t { kLeftLane = SvfPair::kLeftLane, kRightLane = SvfPair::kRightLane };
     std::array<Section, kMaxPeqSectionsPerChannel> sections{};
     std::size_t leftCount = 0, rightCount = 0;
     // Appends an Svf2 section built by makePeq() to one lane (kLeftLane/kRightLane), with

@@ -110,14 +110,16 @@ public:
     void readMeter(float* values, bool active) const;
 
 private:
-    // One channel's 4-way Linkwitz-Riley split tree. Serial: split @ f0, then the high side
-    // @ f1, then that high side @ f2. Each LP/HP is LR4 = two cascaded Butterworth biquads.
-    // ap* are 2nd-order all-passes that put the already-separated lower bands through the same
-    // phase the later crossovers impart, so the four bands sum back to flat magnitude (an
-    // all-pass overall) -- same fix pattern as Mono Bass's Mid-side compensation.
+    // The 4-way Linkwitz-Riley split tree, both channels at once: every section is an SvfPair
+    // (lane 0 = left chain, lane 1 = right chain), so each stage runs L and R in one NEON pass.
+    // Serial: split @ f0, then the high side @ f1, then that high side @ f2. Each LP/HP is LR4 =
+    // two cascaded Butterworth sections. ap* are 2nd-order all-passes that put the
+    // already-separated lower bands through the same phase the later crossovers impart, so the
+    // four bands sum back to flat magnitude (an all-pass overall) -- same fix pattern as Mono
+    // Bass's Mid-side compensation.
     struct Tree {
-        Biquad lp0a, lp0b, hp0a, hp0b, lp1a, lp1b, hp1a, hp1b, lp2a, lp2b, hp2a, hp2b;
-        Biquad apB0X1, apB0X2, apB1X2;
+        SvfPair lp0a, lp0b, hp0a, hp0b, lp1a, lp1b, hp1a, hp1b, lp2a, lp2b, hp2a, hp2b;
+        SvfPair apB0X1, apB0X2, apB1X2;
         void clear();
     };
     struct Cell {
@@ -136,10 +138,9 @@ private:
     float bandGain(float peakAbs, const MbcBandParams& p, Cell& cell, int band,
                    const DetectorTiming& detector);
 
-    // tree_[0] = left chain, tree_[1] = right chain. cell_[ch][band]: detector + gain follower.
-    // When a band is stereo-linked only [0][band] is used (fed by max(|L|,|R|)); unlinked uses
-    // [0]=left, [1]=right.
-    std::array<Tree, 2> tree_{};
+    // cell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band] is
+    // used (fed by max(|L|,|R|)); unlinked uses [0]=left, [1]=right.
+    Tree tree_{};
     Cell cell_[2][kMbcBandCount]{};
     std::array<BandMeter, kMbcBandCount> meter_{};
     uint32_t meterCounter_ = 0;
