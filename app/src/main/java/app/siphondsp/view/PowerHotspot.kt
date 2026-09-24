@@ -2,8 +2,6 @@ package app.siphondsp.view
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.View
@@ -15,11 +13,10 @@ import app.siphondsp.R
  * toggle API the old bottom-bar power FAB had ([isToggled], [toggleOnClick], the click listener),
  * so MainActivity's power logic is unchanged.
  *
- * Head unit: the backdrop is the DSP-off art (grey button); while on, this view paints
- * `dsp_home_power_on` -- the same patch cut from the DSP-on art (purple button + glow) -- over
- * its whole bounds, which HomeArt's `power_btn` rect sets to exactly that crop. No LED dot there
- * (the view is hidden). Phone: unchanged -- paints a green power symbol over the art's white one
- * and lights [linkedLed] (the small dot under the button).
+ * The backdrop is the DSP-off art (grey button); while on, this view paints the same patch cut
+ * from the DSP-on art (purple button + glow) over its whole bounds, which HomeArt's `power_btn`
+ * rect sets to exactly that crop: `dsp_home_power_on` on the head unit, `dsp_home_power_on_phone`
+ * on a phone. No LED dot on either (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
     context: Context,
@@ -50,15 +47,11 @@ class PowerHotspot @JvmOverloads constructor(
             invalidate()
         }
 
-    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val arc = RectF()
-
-    /** Head unit only: the DSP-on patch of the artwork, drawn over the off-art while on. */
-    private val onArt: Drawable? =
-        if (context.isHeadUnitDisplay()) ContextCompat.getDrawable(context, R.drawable.dsp_home_power_on) else null
+    /** The DSP-on patch of this device's artwork, drawn over the off-art while on. */
+    private val onArt: Drawable? = ContextCompat.getDrawable(
+        context,
+        if (context.isHeadUnitDisplay()) R.drawable.dsp_home_power_on else R.drawable.dsp_home_power_on_phone,
+    )
 
     init {
         isClickable = true
@@ -74,30 +67,9 @@ class PowerHotspot @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (onArt != null) {
-            if (isToggled) {
-                onArt.setBounds(0, 0, width, height)
-                onArt.draw(canvas)
-            }
-            return
+        if (isToggled && onArt != null) {
+            onArt.setBounds(0, 0, width, height)
+            onArt.draw(canvas)
         }
-        if (!isToggled) return
-        val cx = width / 2f
-        val cy = height / 2f
-        val radius = width * 0.21f
-        arc.set(cx - radius, cy - radius, cx + radius, cy + radius)
-        // Soft halo first (wide, faint), then the crisp symbol on top -- no blur filter, which
-        // isn't reliable under the head unit's software renderer.
-        drawSymbol(canvas, cx, cy, radius, width * 0.11f, 0x2239FF14)
-        drawSymbol(canvas, cx, cy, radius, width * 0.075f, 0x5539FF14)
-        drawSymbol(canvas, cx, cy, radius, width * 0.05f, BmwDashboardSkin.TOGGLE_ON_GREEN)
-    }
-
-    private fun drawSymbol(canvas: Canvas, cx: Float, cy: Float, radius: Float, stroke: Float, color: Int) {
-        ringPaint.strokeWidth = stroke
-        ringPaint.color = color
-        // Ring open at the top, plus the vertical bar through the gap.
-        canvas.drawArc(arc, -60f, 300f, false, ringPaint)
-        canvas.drawLine(cx, cy - radius * 1.25f, cx, cy - radius * 0.1f, ringPaint)
     }
 }
