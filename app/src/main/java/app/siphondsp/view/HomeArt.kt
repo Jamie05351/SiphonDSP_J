@@ -17,9 +17,10 @@ object HomeArt {
     const val IMAGE_WIDTH = 2800f
     const val IMAGE_HEIGHT = 1050f
 
-    /** The phone art (`dsp_home_backdrop_phone.png`) is its own size, 2340x1080. */
-    const val PHONE_IMAGE_WIDTH = 2340f
-    const val PHONE_IMAGE_HEIGHT = 1080f
+    /** The phone art (`dsp_home_backdrop_phone.jpg`, the DSP-off version) is its own size,
+     *  2800x1292 (the 2340x1080 phone's aspect). */
+    const val PHONE_IMAGE_WIDTH = 2800f
+    const val PHONE_IMAGE_HEIGHT = 1292f
 
     /** Image-fraction rect: left, top, width, height. */
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
@@ -47,21 +48,28 @@ object HomeArt {
         "box_right" to Frac(0.716f, 0.053f, 0.214f, 0.314f),
     )
 
-    // Same keys for the phone artwork (`dsp_home_backdrop_phone.png`, 2340x1080). Placed in the
-    // same layout-placer page (REW/_UI/home_layout_placer_phone.html) against Main_Menu_phone.png.
+    // Same keys for the phone artwork (v4, 2800x1292), measured (Pillow edge scan) against
+    // REW/_UI/Main_Menu_phone_v4_on.png. The art's top is one wide screen (x 174..2622,
+    // y 24..549): the three live boxes sit side by side inside it with no frames of their own.
+    // Its bezel has no cog or overflow drawn, so those two live icons sit in its top corners.
+    // The knob on the right is decoration only (no key).
     private val phoneRects = mapOf(
-        "tile_peq" to Frac(0.1175f, 0.468f, 0.134f, 0.426f),
-        "tile_gains" to Frac(0.2605f, 0.468f, 0.1325f, 0.426f),
-        "tile_xovers" to Frac(0.402f, 0.468f, 0.1325f, 0.426f),
-        "tile_compressor" to Frac(0.5435f, 0.468f, 0.1325f, 0.426f),
-        "tile_allpass" to Frac(0.685f, 0.468f, 0.1335f, 0.426f),
-        "power_btn" to Frac(0.02f, 0.5385f, 0.075f, 0.185f),
-        "power_led" to Frac(0.052f, 0.777f, 0.01f, 0.022f),
-        "cog" to Frac(0.02f, 0.1f, 0.045f, 0.12f),
-        "overflow" to Frac(0.935f, 0.1f, 0.045f, 0.12f),
-        "box_left" to Frac(0.0815f, 0.0704f, 0.162f, 0.317f),
-        "box_centre" to Frac(0.2555f, 0.0704f, 0.488f, 0.317f),
-        "box_right" to Frac(0.755f, 0.0704f, 0.164f, 0.317f),
+        "tile_peq" to Frac(241f / 2800f, 661f / 1292f, 379f / 2800f, 555f / 1292f),
+        "tile_gains" to Frac(668f / 2800f, 661f / 1292f, 366f / 2800f, 555f / 1292f),
+        "tile_xovers" to Frac(1078f / 2800f, 661f / 1292f, 374f / 2800f, 555f / 1292f),
+        "tile_compressor" to Frac(1475f / 2800f, 661f / 1292f, 382f / 2800f, 555f / 1292f),
+        "tile_allpass" to Frac(1884f / 2800f, 661f / 1292f, 389f / 2800f, 555f / 1292f),
+        // Exactly the pixel crop saved as `dsp_home_power_on_phone.png` from the DSP-on art
+        // (x 2..198, y 893..1089: the disc plus a 10px margin for its glow), which PowerHotspot
+        // paints over the DSP-off backdrop while on -- same scheme as the head unit.
+        "power_btn" to Frac(2f / 2800f, 893f / 1292f, 196f / 2800f, 196f / 1292f),
+        // No LED dot in this art (the view is GONE); kept so every key resolves.
+        "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
+        "cog" to Frac(35f / 2800f, 60f / 1292f, 104f / 2800f, 104f / 1292f),
+        "overflow" to Frac(2661f / 2800f, 60f / 1292f, 104f / 2800f, 104f / 1292f),
+        "box_left" to Frac(205f / 2800f, 55f / 1292f, 475f / 2800f, 463f / 1292f),
+        "box_centre" to Frac(710f / 2800f, 55f / 1292f, 1380f / 2800f, 463f / 1292f),
+        "box_right" to Frac(2120f / 2800f, 55f / 1292f, 472f / 2800f, 463f / 1292f),
     )
 
     /** [phone] selects the phone artwork's rects; the default is the head-unit set, unchanged. */

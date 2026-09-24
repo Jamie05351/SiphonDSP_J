@@ -48,7 +48,8 @@ class HomeArtTest {
 
     @Test
     fun phoneArtMapsStraightAcrossAtItsNativeSize() {
-        // 2340x1080 is the phone art's own size: fractions map 1:1 with no crop.
+        // The 2800x1292 phone art has the 2340x1080 phone's aspect (to 0.05%), so fractions map
+        // straight across with only a sub-pixel crop.
         val px = HomeArt.map(
             HomeArt.Frac(0.5f, 0.5f, 0.1f, 0.1f), 2340, 1080,
             HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT,
@@ -75,5 +76,19 @@ class HomeArtTest {
         assertEquals(627, px.top)
         assertEquals(192, px.right)
         assertEquals(818, px.bottom)
+    }
+
+    @Test
+    fun phonePowerButtonRectIsThePowerOnCropAtArtSize() {
+        // power_btn must stay the exact pixel crop saved as dsp_home_power_on_phone.png
+        // (x 2..198, y 893..1089 of the 2800x1292 phone art), or the on-patch drifts off the button.
+        val px = HomeArt.map(
+            HomeArt.frac("power_btn", phone = true)!!, 2800, 1292,
+            HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT,
+        )
+        assertEquals(2, px.left)
+        assertEquals(893, px.top)
+        assertEquals(198, px.right)
+        assertEquals(1089, px.bottom)
     }
 }

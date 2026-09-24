@@ -167,9 +167,8 @@ class MainActivity : BaseActivity() {
 
         // Setup views
         setContentView(binding.root)
-        // The head-unit art draws its own power icon (the hotspot glows/dims it); no LED dot there.
-        if(isHeadUnitDisplay()) binding.powerLed.isVisible = false
-        else binding.powerToggle.linkedLed = binding.powerLed
+        // Both arts draw their own power button (PowerHotspot paints its lit patch); no LED dot.
+        binding.powerLed.isVisible = false
         setSupportActionBar(binding.toolbar)
 
         actionBar?.setDisplayHomeAsUpEnabled(true)
