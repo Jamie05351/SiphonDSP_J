@@ -87,8 +87,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.highDelayR = clampIn(v[214], 0, 2.8f);
 
     // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
-    // is the Kotlin-only migration marker and flagIn(v[188..192) are reserved -- none are read here.
-    next.mbcEnabled = v[144]);
+    // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
+    next.mbcEnabled = flagIn(v[144]);
     next.mbcMix = clampIn(v[145], 0, 100) * .01f;
     // Out-of-order input (e.g. v[147] < v[146]) previously reached MultibandCompressor::rebuild() as-is, where its
     // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
