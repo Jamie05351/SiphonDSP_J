@@ -85,6 +85,7 @@ import timber.log.Timber
 import java.io.File
 import java.util.Timer
 import kotlin.concurrent.schedule
+import kotlin.math.abs
 
 
 class MainActivity : BaseActivity() {
@@ -181,8 +182,13 @@ class MainActivity : BaseActivity() {
 
         // Load main fragment
         dspFragment = DspFragment.newInstance()
-        // The power / cog / overflow overlay belongs to the artwork page only.
-        dspFragment.onPageChanged = { page -> binding.homeChrome.isVisible = page == 0 }
+        // The power / cog / overflow overlay belongs to the artwork page only: it slides with that
+        // page during a swipe (the head unit's power-on patch is opaque, so a fixed overlay would
+        // paint over the incoming settings page) and is hidden once the page is fully off screen.
+        dspFragment.onHomePageOffset = { offset ->
+            binding.homeChrome.translationX = offset
+            binding.homeChrome.isVisible = abs(offset) < binding.homeChrome.width.coerceAtLeast(1)
+        }
         if(!hasLoadFailed)
             supportFragmentManager.beginTransaction()
                 .replace(R.id.dsp_fragment_container, dspFragment)
