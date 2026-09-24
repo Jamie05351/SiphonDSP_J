@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -42,7 +43,7 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
     }
 
     var stage: Stage = Stage.COMPRESSOR_BAND
-        set(value) { field = value; invalidate() }
+        set(value) { field = value; readoutTenths = -1; invalidate() }
 
     private val density = resources.displayMetrics.density
 
@@ -57,13 +58,32 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
+    // Widest readout the label column is sized for, so the track doesn't shift as the text changes.
+    private val labelWidth = labelPaint.measureText("00.0 dB · CLAMPING")
+
     private var grDb = 0f
     private var holdDb = 0f
+
+    // The `x.x dB · WORD` readout, rebuilt only when its shown tenth or zone word changes --
+    // onDraw runs every meter tick (~33 ms) and used to format a new string each time.
+    // readoutTenths = -1 forces a rebuild on next use.
+    private var readout = ""
+    private var readoutTenths = -1
+    private var readoutWord = ""
 
     fun setGainReductionDb(db: Float) {
         grDb = db.coerceIn(0f, stage.fullScaleDb)
         holdDb = if (grDb >= holdDb) grDb else holdDb * HOLD_DECAY + grDb * (1f - HOLD_DECAY)
         invalidate()
+    }
+
+    private fun updateReadout() {
+        val tenths = (grDb * 10f).roundToInt()
+        val word = zoneWord(grDb)
+        if (tenths == readoutTenths && word == readoutWord) return
+        readoutTenths = tenths
+        readoutWord = word
+        readout = "${"%.1f".format(tenths / 10f)} dB · $word"
     }
 
     /** 0..1 position along the track for [db] of reduction: sqrt-curved so small values get room. */
@@ -92,11 +112,11 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val zone = zoneColor(grDb)
-        val readout = "${"%.1f".format(grDb)} dB · ${zoneWord(grDb)}"
+        updateReadout()
 
         // readout is the headline, tinted to the current zone
         labelPaint.color = if (grDb < stage.clearMaxDb) DIM_GREEN else zone
-        val labelW = labelPaint.measureText(readout).coerceAtLeast(labelPaint.measureText("00.0 dB · CLAMPING"))
+        val labelW = labelWidth
         val midY = height / 2f
         canvas.drawText(readout, 0f, midY + 3.7f * density, labelPaint)
 
@@ -112,10 +132,10 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         fun xForDb(db: Float) = left + span * fractionForDb(db)
 
         // faint threshold ticks: past the amber tick = working, past the red tick = clamping
-        for (mark in floatArrayOf(stage.clearMaxDb, stage.workingMaxDb)) {
-            val x = xForDb(mark)
-            canvas.drawLine(x, top - 2f * density, x, bot + 2f * density, tickPaint)
-        }
+        val clearX = xForDb(stage.clearMaxDb)
+        canvas.drawLine(clearX, top - 2f * density, clearX, bot + 2f * density, tickPaint)
+        val workingX = xForDb(stage.workingMaxDb)
+        canvas.drawLine(workingX, top - 2f * density, workingX, bot + 2f * density, tickPaint)
 
         val barW = span * fractionForDb(grDb)
         if (barW > 0.5f) {
