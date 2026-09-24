@@ -52,6 +52,28 @@ TEST_CASE("configure rejects a non-finite MBC crossover before sorting") {
     CHECK_FALSE(proc.configure(c.data(), c.size()));
 }
 
+TEST_CASE("configure rejects non-finite clamped scalars instead of clamping them to max") {
+    // clampf(NaN, lo, hi) == hi, so before this check a NaN gain/delay silently became max
+    // gain/delay and configure() still returned true. One slot per section of the schema.
+    for (const std::size_t slot : {std::size_t{6},     // low gain L
+                                   std::size_t{21},    // mid delay L
+                                   std::size_t{139},   // meas-bus stopband octaves
+                                   std::size_t{150},   // MBC band 0 threshold
+                                   std::size_t{183},   // low-bus limiter threshold
+                                   std::size_t{190},   // master limiter threshold
+                                   std::size_t{213},   // high delay L
+                                   std::size_t{235}}) {  // High Left crossover freq
+        for (const float bad : {std::numeric_limits<float>::quiet_NaN(),
+                                std::numeric_limits<float>::infinity()}) {
+            NativeBmwDspProcessor proc;
+            auto c = defaultConfig();
+            c[slot] = bad;
+            INFO("slot ", slot, " = ", bad);
+            CHECK_FALSE(proc.configure(c.data(), c.size()));
+        }
+    }
+}
+
 TEST_CASE("MBC crossover splits sent out of order behave identically to the same splits sorted") {
     // configure() now sorts mbcXo ascending, so any permutation of the same 3 split frequencies
     // must produce byte-identical downstream crossover behavior. Before the fix, an out-of-order

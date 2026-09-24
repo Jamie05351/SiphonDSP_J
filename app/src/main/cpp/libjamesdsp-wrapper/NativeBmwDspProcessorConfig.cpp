@@ -18,63 +18,72 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
     Params next = p_;
+    // clampf() maps NaN to its upper bound (std::min(hi, NaN) == hi), so a non-finite scalar
+    // would silently land on max gain/delay/etc. Every clamped slot goes through clampIn(), and
+    // the whole update is rejected below (before any member state is touched) if one wasn't
+    // finite -- same policy as the routing/all-pass/MBC-crossover checks.
+    bool allFinite = true;
+    auto clampIn = [&allFinite](float x, float lo, float hi) {
+        allFinite = allFinite && std::isfinite(x);
+        return clampf(x, lo, hi);
+    };
     next.enabled = v[0] >= .5f;
     next.lpfPass = v[1] >= .5f;
     next.hpfPass = v[2] >= .5f;
-    next.channelMute = static_cast<int>(clampf(v[3], 0, 2));
+    next.channelMute = static_cast<int>(clampIn(v[3], 0, 2));
     // 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High -- see MeasurementBus::rebuild().
-    next.measurementMute = static_cast<int>(clampf(v[4], 0, 3));
-    next.headroom = clampf(v[5], -12, 0);
-    next.lowGainL = clampf(v[6], -6, 6);
-    next.lowGainR = clampf(v[7], -6, 6);
-    next.midGainL = clampf(v[8], -6, 6);
-    next.midGainR = clampf(v[9], -6, 6);
-    next.postGainL = clampf(v[10], -6, 6);
-    next.postGainR = clampf(v[11], -6, 6);
-    next.midDelayL = clampf(v[21], 0, 2.8f);
-    next.midDelayR = clampf(v[22], 0, 2.8f);
-    next.lowDelayL = clampf(v[23], 0, 2.8f);
-    next.lowDelayR = clampf(v[24], 0, 2.8f);
+    next.measurementMute = static_cast<int>(clampIn(v[4], 0, 3));
+    next.headroom = clampIn(v[5], -12, 0);
+    next.lowGainL = clampIn(v[6], -6, 6);
+    next.lowGainR = clampIn(v[7], -6, 6);
+    next.midGainL = clampIn(v[8], -6, 6);
+    next.midGainR = clampIn(v[9], -6, 6);
+    next.postGainL = clampIn(v[10], -6, 6);
+    next.postGainR = clampIn(v[11], -6, 6);
+    next.midDelayL = clampIn(v[21], 0, 2.8f);
+    next.midDelayR = clampIn(v[22], 0, 2.8f);
+    next.lowDelayL = clampIn(v[23], 0, 2.8f);
+    next.lowDelayR = clampIn(v[24], 0, 2.8f);
     // v[141] / v[142] -- reclaimed from the removed Mid-band LPF -- are the stage-centering L/R
     // alignment delay (ms). See Params::stageDelay* and processFrame's tail.
-    next.stageDelayL = clampf(v[141], 0, kStageDelayMaxMs);
-    next.stageDelayR = clampf(v[142], 0, kStageDelayMaxMs);
+    next.stageDelayL = clampIn(v[141], 0, kStageDelayMaxMs);
+    next.stageDelayR = clampIn(v[142], 0, kStageDelayMaxMs);
     next.tilt = v[25] >= .5f;
-    next.tiltAmount = clampf(v[26], -6, 6);
-    next.tiltFreq = clampf(v[27], 200, 2000);
+    next.tiltAmount = clampIn(v[26], -6, 6);
+    next.tiltFreq = clampIn(v[27], 200, 2000);
     // v[139]: measurement-mute bus brick-wall stopband offset in octaves (see MeasurementBus::rebuild()).
     // v[140] is a Kotlin-only migration marker; v[141..142] (formerly the removed Pultec bass
     // stage) now carry the Mid-band independent LPF -- read further down with the per-output
     // config. See NativeBmwDspProcessor.h's kConfigSize comment.
-    next.measBusStopbandOctaves = clampf(v[139], 0, 4);
+    next.measBusStopbandOctaves = clampIn(v[139], 0, 4);
 
     // v[192..199]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
-    next.measGenType = static_cast<int>(clampf(v[192], 0, 2));
-    next.measGenSweepStartHz = clampf(v[193], 10, 24000);
-    next.measGenSweepEndHz = clampf(v[194], 10, 24000);
-    next.measGenSweepDurationS = clampf(v[195], 0.5f, 60);
-    next.measGenSweepLevelDb = clampf(v[196], -60, 0);
-    next.measGenPinkPeriodS = clampf(v[197], 0.1f, 10);
-    next.measGenPinkLevelDb = clampf(v[198], -60, 0);
+    next.measGenType = static_cast<int>(clampIn(v[192], 0, 2));
+    next.measGenSweepStartHz = clampIn(v[193], 10, 24000);
+    next.measGenSweepEndHz = clampIn(v[194], 10, 24000);
+    next.measGenSweepDurationS = clampIn(v[195], 0.5f, 60);
+    next.measGenSweepLevelDb = clampIn(v[196], -60, 0);
+    next.measGenPinkPeriodS = clampIn(v[197], 0.1f, 10);
+    next.measGenPinkLevelDb = clampIn(v[198], -60, 0);
     next.measGenTimingRefEnabled = v[199] >= .5f;
     next.measGenTimingRefSplitChannels = v[200] >= .5f;
-    next.measGenTimingRefMidStartHz = clampf(v[201], 10, 24000);
-    next.measGenTimingRefMidEndHz = clampf(v[202], 10, 24000);
-    next.measGenTimingRefLowStartHz = clampf(v[203], 10, 24000);
-    next.measGenTimingRefLowEndHz = clampf(v[204], 10, 24000);
+    next.measGenTimingRefMidStartHz = clampIn(v[201], 10, 24000);
+    next.measGenTimingRefMidEndHz = clampIn(v[202], 10, 24000);
+    next.measGenTimingRefLowStartHz = clampIn(v[203], 10, 24000);
+    next.measGenTimingRefLowEndHz = clampIn(v[204], 10, 24000);
 
     // High band scalars (v[210..214], added in the 210 -> 262 growth). Routing/all-pass/
     // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
     next.highXoPass = v[210] >= .5f;
-    next.highGainL = clampf(v[211], -6, 6);
-    next.highGainR = clampf(v[212], -6, 6);
-    next.highDelayL = clampf(v[213], 0, 2.8f);
-    next.highDelayR = clampf(v[214], 0, 2.8f);
+    next.highGainL = clampIn(v[211], -6, 6);
+    next.highGainR = clampIn(v[212], -6, 6);
+    next.highDelayL = clampIn(v[213], 0, 2.8f);
+    next.highDelayR = clampIn(v[214], 0, 2.8f);
 
     // Pre-crossover multiband compressor (v[144..180]) + per-bus limiter (v[182..187]). v[181]
     // is the Kotlin-only migration marker and v[188..192) are reserved -- none are read here.
     next.mbcEnabled = v[144] >= .5f;
-    next.mbcMix = clampf(v[145], 0, 100) * .01f;
+    next.mbcMix = clampIn(v[145], 0, 100) * .01f;
     // Out-of-order input (e.g. v[147] < v[146]) previously reached MultibandCompressor::rebuild() as-is, where its
     // sequential spacing-clamp chain silently pushed the later value up to fit rather than the
     // update being rejected or the values being reordered predictably -- the resulting split
@@ -95,29 +104,29 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         const std::size_t base = 149 + b * 8;
         auto& mb = next.mbcBand[b];
         mb.enabled = v[base] >= .5f;
-        mb.threshold = clampf(v[base + 1], -48, 0);
-        mb.ratio = clampf(v[base + 2], 1, 20);
-        mb.knee = clampf(v[base + 3], 0, 24);
-        mb.attack = clampf(v[base + 4], 1, 200);
-        mb.release = clampf(v[base + 5], 20, 1000);
-        mb.makeup = clampf(v[base + 6], 0, 12);
+        mb.threshold = clampIn(v[base + 1], -48, 0);
+        mb.ratio = clampIn(v[base + 2], 1, 20);
+        mb.knee = clampIn(v[base + 3], 0, 24);
+        mb.attack = clampIn(v[base + 4], 1, 200);
+        mb.release = clampIn(v[base + 5], 20, 1000);
+        mb.makeup = clampIn(v[base + 6], 0, 12);
         mb.stereoLink = v[base + 7] >= .5f;
     }
     next.busLimLowEnabled = v[182] >= .5f;
-    next.busLimLowThreshDb = clampf(v[183], -24, 0);
-    next.busLimLowReleaseMs = clampf(v[184], 20, 800);
+    next.busLimLowThreshDb = clampIn(v[183], -24, 0);
+    next.busLimLowReleaseMs = clampIn(v[184], 20, 800);
     next.busLimMidEnabled = v[185] >= .5f;
-    next.busLimMidThreshDb = clampf(v[186], -24, 0);
-    next.busLimMidReleaseMs = clampf(v[187], 20, 800);
+    next.busLimMidThreshDb = clampIn(v[186], -24, 0);
+    next.busLimMidReleaseMs = clampIn(v[187], 20, 800);
     // High-bus limiter (v[262..264], added in the 262 -> 266 growth); v[265] is the
     // Kotlin-only migration marker.
     next.busLimHighEnabled = v[262] >= .5f;
-    next.busLimHighThreshDb = clampf(v[263], -24, 0);
-    next.busLimHighReleaseMs = clampf(v[264], 20, 800);
+    next.busLimHighThreshDb = clampIn(v[263], -24, 0);
+    next.busLimHighReleaseMs = clampIn(v[264], 20, 800);
     // v[189/190]: master limiter enable + threshold dBFS (v[191] is a Kotlin-only migration
     // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
     next.limiterEnabled = v[189] >= .5f;
-    next.limiterThreshDb = clampf(v[190], -12, 0);
+    next.limiterThreshDb = clampIn(v[190], -12, 0);
 
     // These four loops (routing, all-pass, output-config x2) are deliberately scoped to
     // kLegacyOutputCount (4), not the in-memory kOutputCount (6): High has no persisted schema
@@ -177,27 +186,28 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     auto nextOutputConfigs = outputConfigs_;
     auto readComp = [&](CompressorParams& c, std::size_t base) {
         c.enabled = v[base] >= .5f;
-        c.threshold = clampf(v[base + 1], -24, 0);
-        c.ratio = clampf(v[base + 2], 1, 10);
-        c.knee = clampf(v[base + 3], 0, 12);
-        c.attack = clampf(v[base + 4], 1, 100);
-        c.release = clampf(v[base + 5], 20, 800);
-        c.makeup = clampf(v[base + 6], 0, 6);
+        c.threshold = clampIn(v[base + 1], -24, 0);
+        c.ratio = clampIn(v[base + 2], 1, 10);
+        c.knee = clampIn(v[base + 3], 0, 12);
+        c.attack = clampIn(v[base + 4], 1, 100);
+        c.release = clampIn(v[base + 5], 20, 800);
+        c.makeup = clampIn(v[base + 6], 0, 6);
     };
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
-        cfg.crossoverFreq = clampf(v[base], 80, 320);
+        cfg.crossoverFreq = clampIn(v[base], 80, 320);
         // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1, 4 = BW4. Keep the old threshold
         // decoding for existing saves; only the explicit new IDs select first-order / BW4.
         const float typeVal = v[base + 1];
+        allFinite = allFinite && std::isfinite(typeVal);  // NaN would silently decode as LR4
         cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
                             : typeVal == 4.f ? OutputConfig::CrossoverType::Butterworth4
                             : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
                             : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
                                              : OutputConfig::CrossoverType::LinkwitzRiley4;
         cfg.subsonicEnabled = v[base + 2] >= .5f;
-        cfg.subsonicFreq = clampf(v[base + 3], 20, 60);
+        cfg.subsonicFreq = clampIn(v[base + 3], 20, 60);
         cfg.muted = v[base + 4] >= .5f;
         cfg.polarityInverted = v[base + 5] >= .5f;
         readComp(cfg.compressor, base + 6);
@@ -271,18 +281,23 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         auto& cfg = nextOutputConfigs[out];
         // Same 300-8000 Hz range as Mid's upper corner (v[205]/v[207]): High's single corner is
         // the same Mid/High boundary, just approached from above instead of below.
-        cfg.crossoverFreq = clampf(v[cfgBase], 300, 8000);
+        cfg.crossoverFreq = clampIn(v[cfgBase], 300, 8000);
         const float typeVal = v[cfgBase + 1];
+        allFinite = allFinite && std::isfinite(typeVal);
         cfg.crossoverType = typeVal == 3.f ? OutputConfig::CrossoverType::Butterworth1
                             : typeVal == 4.f ? OutputConfig::CrossoverType::Butterworth4
                             : typeVal < .5f ? OutputConfig::CrossoverType::Butterworth2
                             : typeVal < 1.5f ? OutputConfig::CrossoverType::Butterworth3
                                              : OutputConfig::CrossoverType::LinkwitzRiley4;
         cfg.subsonicEnabled = v[cfgBase + 2] >= .5f;  // carried but ignored, same as Mid
-        cfg.subsonicFreq = clampf(v[cfgBase + 3], 20, 60);
+        cfg.subsonicFreq = clampIn(v[cfgBase + 3], 20, 60);
         cfg.muted = v[cfgBase + 4] >= .5f;
         cfg.polarityInverted = v[cfgBase + 5] >= .5f;
         readComp(cfg.compressor, cfgBase + 6);
+    }
+
+    if (!allFinite) {
+        return false;
     }
 
     uint32_t dirty = DirtyNone;
