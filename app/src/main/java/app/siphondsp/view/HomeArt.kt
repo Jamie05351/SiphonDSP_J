@@ -5,19 +5,20 @@ import kotlin.math.roundToInt
 
 /**
  * Where every live element sits on the front page's hardware-panel artwork
- * (`dsp_home_backdrop.jpg`, 2340x878). Rects are fractions of the *image*, x/y/w/h, placed with
- * measured (Pillow edge scan) directly against the art
- * (Main_Menu_v3.jpg, saved as home_layout_v3.json).
+ * (`dsp_home_backdrop.jpg`, 2800x1050 -- the head unit's exact 1280x480 aspect). Rects are
+ * fractions of the *image*, x/y/w/h, measured (Pillow edge scan) against Main_Menu_v4 and
+ * confirmed in the layout placer (REW/_UI/home_layout_placer_v4.html).
  *
  * The art is drawn full-bleed with `centerCrop`, so [map] applies the same cover scale + offset
  * to turn an image fraction into view pixels -- the touch areas stay locked to the art on any
  * display aspect, not just the 1280x480 head unit.
  */
 object HomeArt {
-    const val IMAGE_WIDTH = 2340f
-    const val IMAGE_HEIGHT = 878f
+    const val IMAGE_WIDTH = 2800f
+    const val IMAGE_HEIGHT = 1050f
 
-    /** The phone art (`dsp_home_backdrop_phone.png`) is the same 2340 wide but 1080 tall. */
+    /** The phone art (`dsp_home_backdrop_phone.png`) is its own size, 2340x1080. */
+    const val PHONE_IMAGE_WIDTH = 2340f
     const val PHONE_IMAGE_HEIGHT = 1080f
 
     /** Image-fraction rect: left, top, width, height. */
@@ -27,20 +28,23 @@ object HomeArt {
     class Px(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
     private val rects = mapOf(
-        "tile_peq" to Frac(0.1094f, 0.4499f, 0.1389f, 0.3702f),
-        "tile_gains" to Frac(0.259f, 0.4499f, 0.1325f, 0.3702f),
-        "tile_xovers" to Frac(0.3996f, 0.4499f, 0.1355f, 0.3702f),
-        "tile_compressor" to Frac(0.5432f, 0.4499f, 0.1316f, 0.3702f),
-        "tile_allpass" to Frac(0.6846f, 0.4499f, 0.1346f, 0.3702f),
-        // The art draws its own power button (cyan icon on a dark disc); this is the disc. There is
-        // no LED dot any more, so power_led is unused on the head unit (the view is GONE there).
-        "power_btn" to Frac(0.0046f, 0.5265f, 0.0812f, 0.2164f),
-        "power_led" to Frac(0.044f, 0.746f, 0.0043f, 0.0091f),
-        "cog" to Frac(0.0105f, 0.0347f, 0.051f, 0.1194f),
-        "overflow" to Frac(0.9372f, 0.0333f, 0.0437f, 0.1181f),
-        "box_left" to Frac(0.0842f, 0.0581f, 0.1632f, 0.3007f),
-        "box_centre" to Frac(0.2611f, 0.0581f, 0.4714f, 0.3007f),
-        "box_right" to Frac(0.7474f, 0.0581f, 0.1607f, 0.3007f),
+        "tile_peq" to Frac(0.0855f, 0.482f, 0.135f, 0.43f),
+        "tile_gains" to Frac(0.2365f, 0.482f, 0.133f, 0.43f),
+        "tile_xovers" to Frac(0.385f, 0.482f, 0.128f, 0.43f),
+        "tile_compressor" to Frac(0.5275f, 0.482f, 0.132f, 0.43f),
+        "tile_allpass" to Frac(0.6745f, 0.482f, 0.136f, 0.43f),
+        // The backdrop is the DSP-off art (grey button). This rect is exactly the pixel crop
+        // saved as `dsp_home_power_on.png` from the DSP-on art (x 1..192, y 627..818 of
+        // 2800x1050: the placed button plus a 10px margin so its purple glow fits), which
+        // PowerHotspot paints over it while on. Both arts match to within 3/255 at its edge.
+        "power_btn" to Frac(1f / 2800f, 627f / 1050f, 191f / 2800f, 191f / 1050f),
+        // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
+        "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
+        "cog" to Frac(0.0109f, 0.0517f, 0.04f, 0.1373f),
+        "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
+        "box_left" to Frac(0.07f, 0.053f, 0.227f, 0.314f),
+        "box_centre" to Frac(0.299f, 0.053f, 0.406f, 0.314f),
+        "box_right" to Frac(0.716f, 0.053f, 0.214f, 0.314f),
     )
 
     // Same keys for the phone artwork (`dsp_home_backdrop_phone.png`, 2340x1080). Placed in the
@@ -63,10 +67,16 @@ object HomeArt {
     /** [phone] selects the phone artwork's rects; the default is the head-unit set, unchanged. */
     fun frac(key: String, phone: Boolean = false): Frac? = (if (phone) phoneRects else rects)[key]
 
-    /** [imageHeight] is the art's own height; the default is the head-unit art's. */
-    fun map(frac: Frac, viewWidth: Int, viewHeight: Int, imageHeight: Float = IMAGE_HEIGHT): Px {
-        val scale = max(viewWidth / IMAGE_WIDTH, viewHeight / imageHeight)
-        val shownW = IMAGE_WIDTH * scale
+    /** [imageWidth]/[imageHeight] are the art's own size; the default is the head-unit art's. */
+    fun map(
+        frac: Frac,
+        viewWidth: Int,
+        viewHeight: Int,
+        imageWidth: Float = IMAGE_WIDTH,
+        imageHeight: Float = IMAGE_HEIGHT,
+    ): Px {
+        val scale = max(viewWidth / imageWidth, viewHeight / imageHeight)
+        val shownW = imageWidth * scale
         val shownH = imageHeight * scale
         val offX = (viewWidth - shownW) / 2f
         val offY = (viewHeight - shownH) / 2f

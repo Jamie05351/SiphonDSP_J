@@ -39,8 +39,12 @@ class DspFragment : Fragment() {
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
 
-    /** Called with the pager's current page (0 = artwork front page, 1 = settings). */
-    var onPageChanged: ((Int) -> Unit)? = null
+    /**
+     * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
+     * settled on it, +-page width = fully off screen), so the activity-level overlay laid over
+     * that art can move with it instead of staying put mid-swipe.
+     */
+    var onHomePageOffset: ((Float) -> Unit)? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -67,6 +71,10 @@ class DspFragment : Fragment() {
             override fun onPageSelected(position: Int) {
                 onPageSelectedInternal(position)
             }
+
+            override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
+                reportHomePageOffset(position * binding.dspPager.width + positionOffsetPixels)
+            }
         })
 
         return binding.root
@@ -76,12 +84,20 @@ class DspFragment : Fragment() {
         super.onResume()
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
         onPageSelectedInternal(binding.dspPager.currentItem)
+        // Posted: after a restore the pager may not be laid out yet, and a 0 width would put the
+        // overlay back over the settings page.
+        binding.dspPager.post { reportHomePageOffset(binding.dspPager.currentItem * binding.dspPager.width) }
     }
 
     private fun onPageSelectedInternal(position: Int) {
         // The artwork page stays attached while off screen, so its live meters have to be told.
         shortcutsBinding.homeLevelBars.pageActive = position == 0
-        onPageChanged?.invoke(position)
+    }
+
+    /** [scrolledPx] is how far the pager has scrolled past the artwork page, in reading order. */
+    private fun reportHomePageOffset(scrolledPx: Int) {
+        val rtl = binding.dspPager.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        onHomePageOffset?.invoke(if (rtl) scrolledPx.toFloat() else -scrolledPx.toFloat())
     }
 
     private fun setUpShortcutsPage() {
