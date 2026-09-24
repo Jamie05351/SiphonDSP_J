@@ -52,10 +52,16 @@ TEST_CASE("configure rejects a non-finite MBC crossover before sorting") {
     CHECK_FALSE(proc.configure(c.data(), c.size()));
 }
 
-TEST_CASE("configure rejects non-finite clamped scalars instead of clamping them to max") {
+TEST_CASE("configure rejects non-finite control slots instead of clamping or switching them") {
     // clampf(NaN, lo, hi) == hi, so before this check a NaN gain/delay silently became max
-    // gain/delay and configure() still returned true. One slot per section of the schema.
-    for (const std::size_t slot : {std::size_t{6},     // low gain L
+    // gain/delay and configure() still returned true; likewise `NaN >= .5f` is false, so a NaN
+    // on/off slot silently switched that control off. One slot per section of the schema.
+    for (const std::size_t slot : {std::size_t{0},     // master enable
+                                   std::size_t{144},   // MBC enable
+                                   std::size_t{189},   // master limiter enable
+                                   std::size_t{210},   // highXoPass (keeps High silent)
+                                   std::size_t{239},   // High Left muted
+                                   std::size_t{6},     // low gain L
                                    std::size_t{21},    // mid delay L
                                    std::size_t{139},   // meas-bus stopband octaves
                                    std::size_t{150},   // MBC band 0 threshold
