@@ -40,11 +40,10 @@ enum class DspDestination(
     // (fragment_dsp_page_shortcuts.xml) rather than an arbitrary/functional grouping, so the
     // sidebar doesn't present a different sequence than the page the user navigated in from.
     //
-    // `backdrop` is a full-screen, per-destination piece of art (rail housing and background baked
-    // in) -- hand-authored per destination, not generated. Tile icons and the selected-tile glow
-    // are drawn live by DspCrossNavBar's Compose tiles instead (`iconOn`/`iconOff` below), not
-    // baked into this image -- except the head-unit art, which has icons, labels and the lit strip
-    // baked in and only gets a live selection ring (in that page's strip colour).
+    // `backdrop` is the full-screen head-unit art (rail housing, tiles and background baked in).
+    // Since the v4 art every destination shares one image (dsp_workspace_backdrop_v4, 2800x1050 --
+    // the head unit's exact aspect) with no selected-tile highlight, baked or live; only Gains &
+    // Delay's band pages swap in their own car art (GainsBand.backdrop).
     //
     // `backdropPhone` is a second, separately-authored set for a regular phone screen (drawable-
     // nodpi, since it's picked by name at runtime -- see DspCrossNavBar.isHeadUnitDisplay --
@@ -53,15 +52,15 @@ enum class DspDestination(
     //
     // `iconOn`/`iconOff`: the hand-authored tile glyph in its lit (selected) and dim (unselected)
     // colour variants -- native canvas sizes vary per asset, scaled to fit inside the tile box.
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.nav_peq_on, R.drawable.nav_peq_off, R.drawable.dsp_workspace_backdrop_peq, R.drawable.dsp_workspace_backdrop_peq_phone, ParametricEqualizerActivity::class),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.nav_gains_delay_on, R.drawable.nav_gains_delay_off, R.drawable.dsp_workspace_backdrop_gains, R.drawable.dsp_workspace_backdrop_gains_phone, GainLimiterActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.nav_crossover_on, R.drawable.nav_crossover_off, R.drawable.dsp_workspace_backdrop_xover, R.drawable.dsp_workspace_backdrop_xover_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.nav_compressor_on, R.drawable.nav_compressor_off, R.drawable.dsp_workspace_backdrop_compressor, R.drawable.dsp_workspace_backdrop_compressor_phone, NativeBmwCompressorActivity::class),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.nav_peq_on, R.drawable.nav_peq_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_peq_phone, ParametricEqualizerActivity::class),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.nav_gains_delay_on, R.drawable.nav_gains_delay_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_gains_phone, GainLimiterActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.nav_crossover_on, R.drawable.nav_crossover_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_xover_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.nav_compressor_on, R.drawable.nav_compressor_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_compressor_phone, NativeBmwCompressorActivity::class),
     // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
     // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
     // the native chain). The Measurements / routing rows now live in the Signal Generator screen
     // (SignalGeneratorScreen) instead of a Settings-page inline card.
-    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.nav_allpass_on, R.drawable.nav_allpass_off, R.drawable.dsp_workspace_backdrop_allpass, R.drawable.dsp_workspace_backdrop_allpass_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.nav_allpass_on, R.drawable.nav_allpass_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_allpass_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {
@@ -86,6 +85,13 @@ object DspCrossNavBar {
     // outlines at x 30-212 of the 256px rail column, measured identically on both tiers.
     private const val BAKED_ART_TILE_LEFT_INSET = 30f / 256f
     private const val BAKED_ART_TILE_RIGHT_INSET = (256f - 212f) / 256f
+
+    // Head unit, v4 art (2800x1050, 1:1 with the 1280x480 screen): the tile rows as the art's own
+    // y fractions (WorkspaceArt.sidebarTiles, placed in workspace_layout_placer_v4.html) x 10000,
+    // and the tiles' x span (0.0066..0.0981 of 1280dp) as fractions of the 140dp sidebar column.
+    private val HEAD_UNIT_ROW_WEIGHTS = intArrayOf(343, 1524, 466, 1553, 419, 1533, 419, 1467, 419, 1467, 390)
+    private const val HEAD_UNIT_TILE_LEFT_INSET = 8.45f / 140f
+    private const val HEAD_UNIT_TILE_RIGHT_INSET = (140f - 125.57f) / 140f
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
@@ -155,17 +161,20 @@ object DspCrossNavBar {
         // in). Picks the head-unit or phone art per-destination based on the live screen width --
         // see isHeadUnitDisplay().
         showBackdrop(activity, current.backdrop, current.backdropPhone)
-        if (!isHeadUnitDisplay(activity)) applyPhoneRailGeometry(activity)
+        val headUnit = isHeadUnitDisplay(activity)
+        if (!headUnit) applyPhoneRailGeometry(activity)
 
         container.setContent {
             BmwDspTheme {
                 DspSidebarNav(
                     destinations = destinations,
                     current = current,
-                    weights = ROW_WEIGHTS,
-                    leftInsetFraction = BAKED_ART_TILE_LEFT_INSET,
-                    rightInsetFraction = BAKED_ART_TILE_RIGHT_INSET,
+                    weights = if (headUnit) HEAD_UNIT_ROW_WEIGHTS else ROW_WEIGHTS,
+                    leftInsetFraction = if (headUnit) HEAD_UNIT_TILE_LEFT_INSET else BAKED_ART_TILE_LEFT_INSET,
+                    rightInsetFraction = if (headUnit) HEAD_UNIT_TILE_RIGHT_INSET else BAKED_ART_TILE_RIGHT_INSET,
                     bakedInArt = true,
+                    // The v4 head-unit art has no selected-tile mark, and none is drawn over it.
+                    showSelection = !headUnit,
                     canNavigate = canNavigate,
                     onNavigate = { destination ->
                         // Rail navigation is a clean cut, not a transition: picking another DSP

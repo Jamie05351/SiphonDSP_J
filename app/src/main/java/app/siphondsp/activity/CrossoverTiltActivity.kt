@@ -4,14 +4,17 @@ import android.os.Bundle
 import android.view.View
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.platform.ComposeView
-import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
+import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.DspPagerArrows
+import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.CrossoverTiltFragment
 import app.siphondsp.fragment.OutputAllPassFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.isHeadUnitDisplay
+import com.google.android.material.appbar.MaterialToolbar
 
 class CrossoverTiltActivity : DspWorkspaceActivity() {
     /** Shared with whichever fragment this hosts (see [pageCount]) so [DspPagerArrows] (hosted
@@ -48,7 +51,14 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         }
 
         findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
-            setContent { BmwDspTheme { DspPagerArrows(pagerState) } }
+            // All-pass keeps the generic arrows; the crossover pages get the v4 page finder.
+            val finder = !allPassMode && isHeadUnitDisplay()
+            setContent {
+                BmwDspTheme {
+                    if (finder) ArtPagerFinder(pagerState, CROSSOVER_PAGE_LABELS, WorkspaceArt.finder3)
+                    else DspPagerArrows(pagerState)
+                }
+            }
             visibility = View.VISIBLE
         }
     }
@@ -57,5 +67,8 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         const val EXTRA_WORKSPACE_MODE = "dsp_workspace_mode"
         const val MODE_CROSSOVER = "crossover"
         const val MODE_ALLPASS = "allpass"
+
+        /** One per CrossoverTiltFragment page, in pager order. */
+        private val CROSSOVER_PAGE_LABELS = listOf("LOW/MID", "MID/HIGH", "TILT")
     }
 }
