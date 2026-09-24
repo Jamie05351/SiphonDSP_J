@@ -61,31 +61,172 @@ void processCompressor(float& sample, const CompressorParams& p, CompressorState
     }
 }
 
+// ---- True-peak detector ------------------------------------------------------------------------
+namespace {
+// Modified Bessel function of the first kind, order 0 (for the Kaiser window).
+double besselI0(double x) {
+    double sum = 1, term = 1;
+    for (int k = 1; k < 32; ++k) {
+        term *= (x / (2 * k)) * (x / (2 * k));
+        sum += term;
+    }
+    return sum;
+}
+
+// sum(c[k] * x[k]) over kTaps, accumulated in four lanes (k % 4) that are combined as
+// (l0 + l1) + (l2 + l3). The NEON and scalar paths use that same order and the same fused
+// multiply-adds, so they round identically (scripts/run-neon-parity.sh needs bit-identical output).
+inline float dot(const float* c, const float* x) {
+    constexpr unsigned n = TruePeakDetector::kTaps;
+#if SIPHON_NEON
+    float32x4_t acc = vdupq_n_f32(0.f);
+    for (unsigned k = 0; k < n; k += 4) {
+        acc = vfmaq_f32(acc, vld1q_f32(c + k), vld1q_f32(x + k));
+    }
+    float32x2_t pair = vpadd_f32(vget_low_f32(acc), vget_high_f32(acc));
+    return vget_lane_f32(pair, 0) + vget_lane_f32(pair, 1);
+#else
+    float lane[4] = {0.f, 0.f, 0.f, 0.f};
+    for (unsigned k = 0; k < n; k += 4) {
+        for (unsigned j = 0; j < 4; ++j) {
+#if defined(__aarch64__)
+            lane[j] = __builtin_fmaf(c[k + j], x[k + j], lane[j]);
+#else
+            lane[j] = c[k + j] * x[k + j] + lane[j];
+#endif
+        }
+    }
+    return (lane[0] + lane[1]) + (lane[2] + lane[3]);
+#endif
+}
+}  // namespace
+
+TruePeakDetector::TruePeakDetector() {
+    // Kaiser-windowed sinc (beta 5), each phase normalised to unity DC gain. Tap k holds
+    // x[n - (kTaps-1) + k], so tap kDelay - 1 is x[n - kDelay] and the point sits frac past it.
+    constexpr double kPi = 3.14159265358979323846, kBeta = 5.0;
+    const double halfSpan = kTaps / 2.0, norm = besselI0(kBeta);
+    for (unsigned p = 1; p < kPhases; ++p) {
+        const double frac = static_cast<double>(p) / kPhases;
+        double sum = 0;
+        std::array<double, kTaps> h{};
+        for (unsigned k = 0; k < kTaps; ++k) {
+            const double d = static_cast<double>(k) - (kDelay - 1) - frac;
+            const double r = d / halfSpan;
+            const double window = besselI0(kBeta * std::sqrt(std::max(0.0, 1 - r * r))) / norm;
+            h[k] = std::sin(kPi * d) / (kPi * d) * window;
+            sum += h[k];
+        }
+        for (unsigned k = 0; k < kTaps; ++k) {
+            coeffs_[p - 1][k] = static_cast<float>(h[k] / sum);
+        }
+    }
+    marginLin_ = dbToLin(kMarginDb);
+}
+void TruePeakDetector::clear() {
+    for (auto& channel : history_) {
+        channel.fill(0.f);
+    }
+    pos_ = 0;
+}
+float TruePeakDetector::process(float left, float right) {
+    const float in[2] = {left, right};
+    float peak = 0;
+    for (unsigned c = 0; c < 2; ++c) {
+        auto& h = history_[c];
+        h[pos_] = in[c];
+        h[pos_ + kTaps] = in[c];
+        // Oldest..newest of the last kTaps samples, contiguous.
+        const float* x = h.data() + pos_ + 1;
+        peak = std::max(peak, std::fabs(x[kTaps - 1 - kDelay]));
+        for (const auto& phase : coeffs_) {
+            peak = std::max(peak, std::fabs(dot(phase.data(), x)));
+        }
+    }
+    pos_ = pos_ + 1 == kTaps ? 0 : pos_ + 1;
+    return peak * marginLin_;
+}
+
 // ---- Master brick-wall limiter -----------------------------------------------------------------
+// A true lookahead brick wall: every sample's required gain (ceiling / peak) is held for the whole
+// lookahead window, and the gain ramps down into it over that same window, so a peak of any
+// length -- a single sample included -- is already fully turned down when it leaves the delay
+// line. (The old follower only smoothed toward the current sample's target: a transient shorter
+// than the lookahead moved the gain ~1/48 per sample at 48 kHz and passed almost untouched.)
+// Peaks are true peaks (TruePeakDetector), not just sample peaks, so what reaches the amp after
+// reconstruction stays under the ceiling too.
 void MasterLimiter::rebuild(float sampleRate, float thresholdDb) {
-    float lookahead = clampf(kLookaheadMs * sampleRate * .001f, 0.f,
-                             static_cast<float>(kDelayLineCapacity - 1));
-    delayL_.delay = lookahead;
-    delayR_.delay = lookahead;
-    float attackSeconds = (kLookaheadMs * .001f) / 5.f;
-    attackMix_ = 1 - std::exp(-1 / (attackSeconds * sampleRate));
+    auto lookahead = static_cast<unsigned>(clampf(std::round(kLookaheadMs * sampleRate * .001f), 0.f,
+                                                  static_cast<float>(kMaxLookahead)));
+    // The audio also waits out the true-peak detector's latency, so each reading lines up with
+    // its own sample.
+    delayL_.delay = static_cast<float>(lookahead + TruePeakDetector::kDelay);
+    delayR_.delay = static_cast<float>(lookahead + TruePeakDetector::kDelay);
+    if (lookahead != lookahead_) {
+        lookahead_ = lookahead;
+        resetGainPath();
+    }
     float releaseSeconds = .080f;
     releaseMix_ = 1 - std::exp(-1 / (releaseSeconds * sampleRate));
     ceilingLin_ = dbToLin(clampf(thresholdDb, -12.f, 0.f));
     grDb_.store(0.f);
 }
+void MasterLimiter::resetGainPath() {
+    holdHead_ = holdCount_ = 0;
+    sampleIndex_ = 0;
+    ramp_.fill(1.f);
+    rampPos_ = 0;
+    rampSum_ = lookahead_;
+    gain_ = 1;
+}
 void MasterLimiter::clear() {
     delayL_.clear();
     delayR_.clear();
-    gain_ = 1;
+    truePeak_.clear();
+    resetGainPath();
     grDb_.store(0.f);
     meterCounter_ = 0;
 }
 void MasterLimiter::process(float& l, float& r) {
-    float pk = std::max(std::fabs(l), std::fabs(r));
-    float target = pk > ceilingLin_ ? ceilingLin_ / pk : 1.f;
-    float mix = target < gain_ ? attackMix_ : releaseMix_;
-    gain_ = std::min(1.f, ftz(gain_ + (target - gain_) * mix));
+    float pk = truePeak_.process(l, r);
+    float need = pk > ceilingLin_ ? ceilingLin_ / pk : 1.f;
+
+    // Peak hold over this reading and the lookahead_ + 1 before it -- every sample still in the
+    // delay line, plus one so an inter-sample peak's later sample is covered too. Drop queued
+    // gains that have left the window (first, so the queue never outgrows kHoldSlots), then any
+    // this one undercuts.
+    constexpr unsigned kSlots = kHoldSlots;
+    while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > lookahead_ + 1) {
+        holdHead_ = (holdHead_ + 1) % kSlots;
+        --holdCount_;
+    }
+    while (holdCount_ > 0) {
+        unsigned back = (holdHead_ + holdCount_ - 1) % kSlots;
+        if (holdGain_[back] < need) {
+            break;
+        }
+        --holdCount_;
+    }
+    unsigned tail = (holdHead_ + holdCount_) % kSlots;
+    holdGain_[tail] = need;
+    holdAt_[tail] = sampleIndex_;
+    ++holdCount_;
+    ++sampleIndex_;
+    float held = holdGain_[holdHead_];
+
+    // Attack ramp: the average of the last lookahead_ held gains. Each of those held a peak now
+    // leaving the delay line, so the average is never above what that peak needs.
+    float target = held;
+    if (lookahead_ > 0) {
+        rampSum_ += held - ramp_[rampPos_];
+        ramp_[rampPos_] = held;
+        rampPos_ = rampPos_ + 1 == lookahead_ ? 0 : rampPos_ + 1;
+        target = std::min(1.f, static_cast<float>(rampSum_ / lookahead_));
+    }
+    // Down: straight to the target (already smooth). Up: the release follower, which only ever
+    // lags below the target, so it never lets a peak through either.
+    gain_ = target < gain_ ? target : std::min(1.f, ftz(gain_ + (target - gain_) * releaseMix_));
+
     float dl = delayL_.run(l), dr = delayR_.run(r);
     l = ftz(dl * gain_);
     r = ftz(dr * gain_);

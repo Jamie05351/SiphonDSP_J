@@ -1,6 +1,8 @@
 #include "test_support.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 using namespace nbtest;
 
@@ -35,8 +37,97 @@ TEST_CASE("master brick-wall limiter keeps the output near -1 dBFS and never cli
     const float pk = peakAbs(win);
     INFO("peak out = ", pk, "  ceiling = ", kCeiling);
     CHECK(pk < 1.0f);                    // never a digital clip
-    CHECK(pk <= kCeiling * 1.07f);       // the smoothed limiter can sit ~0.5 dB over its nominal ceiling
+    CHECK(pk <= kCeiling * 1.001f);      // lookahead peak hold: no overshoot past the ceiling
     CHECK(pk > 0.6f);                    // ...but it is clearly still limiting, not gating to silence
+}
+
+// Drives a bare MasterLimiter (-1 dBFS) with the same signal on both channels, returns its output.
+static std::vector<float> runMasterLimiter(const std::vector<float>& mono) {
+    NativeBmwDsp::MasterLimiter lim;
+    lim.rebuild(kSampleRate, -1.f);
+    lim.clear();
+    std::vector<float> out(mono.size());
+    for (std::size_t i = 0; i < mono.size(); ++i) {
+        float l = mono[i], r = mono[i];
+        lim.process(l, r);
+        out[i] = std::max(std::fabs(l), std::fabs(r));
+    }
+    return out;
+}
+
+TEST_CASE("master limiter catches a single-sample spike") {
+    std::vector<float> in(4800, 0.f);
+    in[2000] = 2.f;   // +7 dB over the ceiling for one sample
+    auto out = runMasterLimiter(in);
+    const float pk = *std::max_element(out.begin(), out.end());
+    INFO("peak out = ", pk);
+    CHECK(pk <= kCeiling * 1.001f);
+    CHECK(pk > 0.5f);  // turned down, not removed
+}
+
+TEST_CASE("master limiter catches a 1 ms burst shorter than its lookahead") {
+    std::vector<float> in(9600, 0.f);
+    for (int i = 0; i < 48; ++i) {
+        in[3000 + i] = 2.f * static_cast<float>(std::sin(2 * 3.14159265358979 * 1000.0 * i / kSampleRate));
+    }
+    auto out = runMasterLimiter(in);
+    const float pk = *std::max_element(out.begin(), out.end());
+    INFO("peak out = ", pk);
+    CHECK(pk <= kCeiling * 1.001f);
+}
+
+TEST_CASE("master limiter catches inter-sample (true) peaks") {
+    // fs/4 sine at 45 degrees: every sample is at 0.707 of the waveform's real peak, so a
+    // sample-peak limiter sees 0.85 (under the 0.891 ceiling) while the DAC outputs 1.2.
+    const double amp = 1.2;
+    std::vector<float> in(9600);
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        in[i] = static_cast<float>(amp * std::sin(3.14159265358979 / 2 * i + 3.14159265358979 / 4));
+    }
+    NativeBmwDsp::MasterLimiter lim;
+    lim.rebuild(kSampleRate, -1.f);
+    lim.clear();
+    float worstTruePeak = 0.f;
+    float prev = 0.f;
+    for (std::size_t i = 0; i < in.size(); ++i) {
+        float l = in[i], r = in[i];
+        lim.process(l, r);
+        // At fs/4 consecutive samples are 90 degrees apart, so they give the sine's amplitude.
+        if (i > 2400) {
+            worstTruePeak = std::max(worstTruePeak, std::sqrt(l * l + prev * prev));
+        }
+        prev = l;
+    }
+    INFO("reconstructed peak out = ", worstTruePeak, "  ceiling = ", kCeiling);
+    CHECK(worstTruePeak <= kCeiling);  // the detector's margin covers its own interpolation error
+    CHECK(worstTruePeak > 0.8f);
+}
+
+TEST_CASE("master limiter holds the ceiling on a near-Nyquist true peak") {
+    // Review case: 19.2 kHz (0.4 fs) at phase 3pi/2. A 4-phase detector read at most 0.951 of its
+    // real peak here and let the output sit ~0.44 dB over the ceiling.
+    const double fs = kSampleRate, f = 19200.0, amp = 1.2;
+    const double kPi = 3.14159265358979;
+    NativeBmwDsp::MasterLimiter lim;
+    lim.rebuild(kSampleRate, -1.f);
+    lim.clear();
+    // The output's amplitude at f, from its projection over whole cycles (0.4 fs -> 2 cycles
+    // every 5 samples) once the limiter has settled.
+    const std::size_t total = 19200, settle = 9600;
+    double sinSum = 0, cosSum = 0;
+    for (std::size_t i = 0; i < total; ++i) {
+        float l = static_cast<float>(amp * std::sin(2 * kPi * f / fs * i + 3 * kPi / 2)), r = l;
+        lim.process(l, r);
+        if (i >= settle) {
+            sinSum += l * std::sin(2 * kPi * f / fs * i);
+            cosSum += l * std::cos(2 * kPi * f / fs * i);
+        }
+    }
+    const double n = static_cast<double>(total - settle);
+    const double outAmp = 2 * std::sqrt(sinSum * sinSum + cosSum * cosSum) / n;
+    INFO("reconstructed amplitude out = ", outAmp, "  ceiling = ", kCeiling);
+    CHECK(outAmp <= kCeiling);
+    CHECK(outAmp > 0.8);
 }
 
 TEST_CASE("master limiter does not touch a signal already under the ceiling") {
