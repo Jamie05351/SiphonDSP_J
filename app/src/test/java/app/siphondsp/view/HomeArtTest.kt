@@ -17,8 +17,8 @@ class HomeArtTest {
 
     @Test
     fun headUnitMapsImageFractionsToScreenPixels() {
-        // 1280x480 is (almost exactly) the art's own 2340:878 aspect, so fractions map straight
-        // across with only a sub-pixel crop.
+        // 1280x480 is exactly the art's own 2800:1050 aspect, so fractions map straight across
+        // with no crop.
         val px = HomeArt.map(HomeArt.Frac(0.5f, 0.5f, 0.1f, 0.1f), 1280, 480)
         assertEquals(640.0, px.left.toDouble(), 1.0)
         assertEquals(240.0, px.top.toDouble(), 1.0)
@@ -28,7 +28,7 @@ class HomeArtTest {
 
     @Test
     fun tallerDisplayCropsSidesLikeCenterCrop() {
-        // 1000x1000: scale = 1000/878, image is wider than the view, so the left/right edges are
+        // 1000x1000: scale = 1000/1050, image is wider than the view, so the left/right edges are
         // cropped equally and the vertical fractions still span the full height.
         val full = HomeArt.map(HomeArt.Frac(0f, 0f, 1f, 1f), 1000, 1000)
         assertEquals(0, full.top)
@@ -49,7 +49,10 @@ class HomeArtTest {
     @Test
     fun phoneArtMapsStraightAcrossAtItsNativeSize() {
         // 2340x1080 is the phone art's own size: fractions map 1:1 with no crop.
-        val px = HomeArt.map(HomeArt.Frac(0.5f, 0.5f, 0.1f, 0.1f), 2340, 1080, HomeArt.PHONE_IMAGE_HEIGHT)
+        val px = HomeArt.map(
+            HomeArt.Frac(0.5f, 0.5f, 0.1f, 0.1f), 2340, 1080,
+            HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT,
+        )
         assertEquals(1170.0, px.left.toDouble(), 1.0)
         assertEquals(540.0, px.top.toDouble(), 1.0)
         assertEquals(234.0, (px.right - px.left).toDouble(), 1.0)
@@ -59,7 +62,18 @@ class HomeArtTest {
     @Test
     fun headUnitDefaultsAreUnchangedByPhoneSupport() {
         val a = HomeArt.frac("tile_peq")!!
-        assertEquals(0.1094f, a.x, 0f)
-        assertEquals(0.4499f, a.y, 0f)
+        assertEquals(0.0855f, a.x, 0f)
+        assertEquals(0.482f, a.y, 0f)
+    }
+
+    @Test
+    fun powerButtonRectIsThePowerOnCropAtHeadUnitSize() {
+        // power_btn must stay the exact pixel crop saved as dsp_home_power_on.png
+        // (x 1..192, y 627..818 of the 2800x1050 art), or the on-patch drifts off the button.
+        val px = HomeArt.map(HomeArt.frac("power_btn")!!, 2800, 1050)
+        assertEquals(1, px.left)
+        assertEquals(627, px.top)
+        assertEquals(192, px.right)
+        assertEquals(818, px.bottom)
     }
 }

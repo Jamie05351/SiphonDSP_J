@@ -49,6 +49,6 @@ class HomeArtLayout @JvmOverloads constructor(
     private fun pxFor(child: View, w: Int, h: Int): HomeArt.Px {
         val frac = (child.tag as? String)?.let { HomeArt.frac(it, phone) }
         if (frac == null) return HomeArt.Px(0, 0, w, h)
-        return if (phone) HomeArt.map(frac, w, h, HomeArt.PHONE_IMAGE_HEIGHT) else HomeArt.map(frac, w, h)
+        return if (phone) HomeArt.map(frac, w, h, HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT) else HomeArt.map(frac, w, h)
     }
 }
