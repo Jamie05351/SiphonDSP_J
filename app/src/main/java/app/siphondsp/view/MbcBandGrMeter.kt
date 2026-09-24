@@ -7,7 +7,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.roundToInt
+import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
@@ -78,12 +78,12 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
     }
 
     private fun updateReadout() {
-        val tenths = (grDb * 10f).roundToInt()
+        val tenths = readoutTenths(grDb)
         val word = zoneWord(grDb)
         if (tenths == readoutTenths && word == readoutWord) return
         readoutTenths = tenths
         readoutWord = word
-        readout = "${"%.1f".format(tenths / 10f)} dB · $word"
+        readout = "${"%.1f".format(tenths / 10.0)} dB · $word"
     }
 
     /** 0..1 position along the track for [db] of reduction: sqrt-curved so small values get room. */
@@ -162,3 +162,12 @@ class MbcBandGrMeter(context: Context, attrs: AttributeSet? = null) : View(conte
         private val WORKING_AMBER = Color.rgb(0xF2, 0xB3, 0x3D)
     }
 }
+
+/**
+ * The tenth `"%.1f".format(db)` shows, as an Int: HALF_UP on the float's exact value. Multiplied
+ * in double, where `db * 10` is exact (a float's 24-bit significand times 10 fits in 53 bits) --
+ * in float it can round across the half, e.g. 1.15f (really 1.1499999...) would become 11.5 and
+ * show 1.2 where the formatter shows 1.1. Top-level (not in the companion) so JVM tests can call
+ * it without loading the View's android.graphics colour constants.
+ */
+internal fun readoutTenths(db: Float): Int = floor(db.toDouble() * 10.0 + 0.5).toInt()
