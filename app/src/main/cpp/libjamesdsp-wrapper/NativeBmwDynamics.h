@@ -37,6 +37,29 @@ void publishIdleMeter(CompressorState& state);
 void processCompressor(float& sample, const CompressorParams& params, CompressorState& state,
                        const DetectorTiming& detector);
 
+// ---- True-peak detector (4x oversampled, ITU-R BS.1770 style) ----------------------------------
+// Estimates the reconstructed waveform's peak between samples -- what a DAC will actually output
+// -- which a steep EQ boost can push well past the largest sample. Reports it kDelay samples late.
+class TruePeakDetector {
+public:
+    static constexpr unsigned kTaps = 12;      // per phase
+    static constexpr unsigned kPhases = 4;     // 4x oversampling
+    // Which past sample each result belongs to: the peak over x[n - kDelay] and the three points
+    // between it and x[n - kDelay + 1].
+    static constexpr unsigned kDelay = kTaps / 2;
+    TruePeakDetector();
+    void clear();
+    // Feeds one stereo frame and returns the true-peak estimate (max over both channels).
+    float process(float left, float right);
+
+private:
+    // coeffs_[p - 1] interpolates the point p/4 of the way from x[n - kDelay] to the next sample.
+    std::array<std::array<float, kTaps>, kPhases - 1> coeffs_{};
+    // Each channel's last kTaps samples, written twice so a window is always contiguous.
+    std::array<std::array<float, 2 * kTaps>, 2> history_{};
+    unsigned pos_ = 0;
+};
+
 // ---- Master brick-wall limiter (summed stereo output) ------------------------------------------
 class MasterLimiter {
 public:
@@ -54,9 +77,31 @@ public:
     }
 
 private:
+    // Longest lookahead the delay lines hold, in whole samples, after the true-peak detector's
+    // own latency (which the audio is delayed by as well, to stay aligned with its readings).
+    static constexpr unsigned kMaxLookahead = kDelayLineCapacity - 1 - TruePeakDetector::kDelay;
+    // Rebuilds the peak-hold window and ramp for lookahead_ (all back to unity gain).
+    void resetGainPath();
+
+    TruePeakDetector truePeak_;
     Delay delayL_, delayR_;
+    // Lookahead in whole samples: the audio delay, the peak-hold window and the attack ramp.
+    unsigned lookahead_ = 0;
+    // Peak hold: a monotonic queue whose front is the smallest gain any sample still in the
+    // delay line needs. The window is lookahead_ + 2 readings: the lookahead plus one, so both
+    // samples bounding an inter-sample peak are turned down for it.
+    static constexpr unsigned kHoldSlots = kMaxLookahead + 2;
+    std::array<float, kHoldSlots> holdGain_{};
+    std::array<uint32_t, kHoldSlots> holdAt_{};
+    unsigned holdHead_ = 0, holdCount_ = 0;
+    uint32_t sampleIndex_ = 0;
+    // Attack: a lookahead_-long moving average of the held gain, so the gain ramps down over the
+    // lookahead and has fully reached a peak's gain by the time that peak leaves the delay line.
+    std::array<float, kMaxLookahead> ramp_{};
+    unsigned rampPos_ = 0;
+    double rampSum_ = 0;
     float gain_ = 1;
-    float attackMix_ = 1, releaseMix_ = 1;
+    float releaseMix_ = 1;
     // Live ceiling = dbToLin(threshold), refreshed by rebuild().
     float ceilingLin_ = kDefaultCeilingLin;
     std::atomic<float> grDb_{0.f};
