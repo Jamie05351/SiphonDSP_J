@@ -6,6 +6,8 @@ import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspPagerArrows
+import app.siphondsp.fragment.GainLimiterPageFinder
+import app.siphondsp.view.isHeadUnitDisplay
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.GainLimiterFragment
 import app.siphondsp.view.DspCrossNavBar
@@ -34,7 +36,10 @@ class GainLimiterActivity : DspWorkspaceActivity() {
         }
 
         findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
-            setContent { BmwDspTheme { DspPagerArrows(pagerState) } }
+            val headUnit = isHeadUnitDisplay()
+            setContent {
+                BmwDspTheme { if (headUnit) GainLimiterPageFinder(pagerState) else DspPagerArrows(pagerState) }
+            }
             visibility = android.view.View.VISIBLE
         }
     }

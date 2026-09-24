@@ -111,6 +111,8 @@ fun DspSidebarNav(
     // in: a tile is then just the touch target plus a selection ring in that page's strip colour,
     // with no live icon drawn over the art's own.
     bakedInArt: Boolean = false,
+    // False draws no mark on the current destination's tile (it still isn't clickable).
+    showSelection: Boolean = true,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -139,6 +141,7 @@ fun DspSidebarNav(
                         destination = destination,
                         selected = destination == current,
                         bakedInArt = bakedInArt,
+                        showSelection = showSelection,
                         onClick = { if (canNavigate()) onNavigate(destination) },
                         modifier = Modifier.fillMaxWidth().height(heightDp),
                     )
@@ -153,6 +156,7 @@ private fun DspSidebarTile(
     destination: DspDestination,
     selected: Boolean,
     bakedInArt: Boolean,
+    showSelection: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -176,7 +180,7 @@ private fun DspSidebarTile(
         ),
         contentAlignment = Alignment.Center,
     ) {
-        if (selected) {
+        if (selected && showSelection) {
             TileGlow(
                 crisp = bakedInArt,
                 color = if (bakedInArt) TILE_GLOW_COLORS[destination] ?: TileGlowColor else TileGlowColor,

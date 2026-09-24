@@ -3,14 +3,18 @@ package app.siphondsp.activity
 import android.os.Bundle
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.platform.ComposeView
-import com.google.android.material.appbar.MaterialToolbar
 import app.siphondsp.R
+import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.DspPagerArrows
+import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.NativeBmwCompressorFragment
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.isHeadUnitDisplay
+import com.google.android.material.appbar.MaterialToolbar
 
 class NativeBmwCompressorActivity : DspWorkspaceActivity() {
     /** Shared with [NativeBmwCompressorFragment]'s `HorizontalPager` so [DspPagerArrows] (hosted
@@ -36,7 +40,13 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         }
 
         findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
-            setContent { BmwDspTheme { DspPagerArrows(pagerState) } }
+            val headUnit = isHeadUnitDisplay()
+            setContent {
+                BmwDspTheme {
+                    if (headUnit) ArtPagerFinder(pagerState, COMPRESSOR_PAGE_LABELS, WorkspaceArt.finder5)
+                    else DspPagerArrows(pagerState)
+                }
+            }
             visibility = android.view.View.VISIBLE
         }
 
@@ -47,5 +57,10 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         findViewById<android.view.View>(android.R.id.content).post {
             BmwDashboardSkin.styleTree(findViewById(android.R.id.content))
         }
+    }
+
+    private companion object {
+        /** The visualiser page, then one per MBC band (NativeBmwCompressorFragment's pager order). */
+        val COMPRESSOR_PAGE_LABELS = listOf("OVERVIEW") + List(NativeBmwDspValues.MBC_BAND_COUNT) { "B${it + 1}" }
     }
 }
