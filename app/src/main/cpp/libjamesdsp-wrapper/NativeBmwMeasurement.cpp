@@ -40,7 +40,8 @@ void MeasurementBus::rebuild(int mode, float stopbandOctaves,
         return configs[static_cast<std::size_t>(id)];
     };
     active_ = mode != 0;
-    upperActive_ = mode == 1 && config(OutputId::MidLeft).upperCrossoverEnabled;
+    upperActiveL_ = mode == 1 && config(OutputId::MidLeft).upperCrossoverEnabled;
+    upperActiveR_ = mode == 1 && config(OutputId::MidRight).upperCrossoverEnabled;
     for (auto* bank : {&busL_, &busR_, &upperL_, &upperR_}) {
         for (auto& b : *bank) {
             b.clear();
@@ -69,12 +70,16 @@ void MeasurementBus::rebuild(int mode, float stopbandOctaves,
             makeLowPass(busR_[i], fcR, BW, sampleRate);
         }
     }
-    if (upperActive_) {
+    if (upperActiveL_) {
         const float fcUpL = corner(config(OutputId::MidLeft).upperCrossoverFreq, up);
+        for (auto& b : upperL_) {
+            makeLowPass(b, fcUpL, BW, sampleRate);
+        }
+    }
+    if (upperActiveR_) {
         const float fcUpR = corner(config(OutputId::MidRight).upperCrossoverFreq, up);
-        for (std::size_t i = 0; i < kSections; ++i) {
-            makeLowPass(upperL_[i], fcUpL, BW, sampleRate);
-            makeLowPass(upperR_[i], fcUpR, BW, sampleRate);
+        for (auto& b : upperR_) {
+            makeLowPass(b, fcUpR, BW, sampleRate);
         }
     }
 }
@@ -82,9 +87,17 @@ void MeasurementBus::process(float& oL, float& oR) {
     for (std::size_t i = 0; i < kSections; ++i) {
         Biquad::runPair(busL_[i], busR_[i], oL, oR);
     }
-    if (upperActive_) {
+    if (upperActiveL_ && upperActiveR_) {
         for (std::size_t i = 0; i < kSections; ++i) {
             Biquad::runPair(upperL_[i], upperR_[i], oL, oR);
+        }
+    } else if (upperActiveL_) {
+        for (auto& b : upperL_) {
+            oL = b.run(oL);
+        }
+    } else if (upperActiveR_) {
+        for (auto& b : upperR_) {
+            oR = b.run(oR);
         }
     }
     oL = ftz(oL);

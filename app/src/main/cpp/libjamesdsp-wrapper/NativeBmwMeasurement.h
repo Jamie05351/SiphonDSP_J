@@ -45,10 +45,11 @@ public:
 
 private:
     std::array<Biquad, kSections> busL_{}, busR_{};
-    // Isolate-Mid's second (LPF) brick-wall above Mid's upper corner, only while 3-way is on.
+    // Isolate-Mid's second (LPF) brick-wall above Mid's upper corner, per side: Mid Left and
+    // Mid Right enable their upper corner independently, so each side follows its own.
     std::array<Biquad, kSections> upperL_{}, upperR_{};
     bool active_ = false;
-    bool upperActive_ = false;
+    bool upperActiveL_ = false, upperActiveR_ = false;
 };
 
 // (Re)configures the generator for params.measGenType -- restarts the run.

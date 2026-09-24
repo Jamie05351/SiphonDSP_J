@@ -140,6 +140,36 @@ TEST_CASE("kMeasurementMute 1 isolates Mid only, muting High too when 3-way is o
     CHECK(std::fabs(midOff - midOn) < 1.5f);  // Mid itself passes
 }
 
+TEST_CASE("isolate-Mid bus upper LPF follows each side's own upper-corner enable") {
+    // Mid Left/Right enable their upper corner independently (v[206] / v[208]); the bus used to
+    // read only Mid Left's, so a Right-only corner went unfiltered and a Left-only one filtered
+    // both sides. Drive MeasurementBus directly with one side on, then the other.
+    using NativeBmwRouting::OutputId;
+    for (const bool leftOn : {true, false}) {
+        std::array<NativeBmwDsp::OutputConfig, NativeBmwRouting::kOutputCount> cfgs{};
+        auto& ml = cfgs[static_cast<std::size_t>(OutputId::MidLeft)];
+        auto& mr = cfgs[static_cast<std::size_t>(OutputId::MidRight)];
+        ml.crossoverFreq = mr.crossoverFreq = 150.f;
+        ml.upperCrossoverFreq = mr.upperCrossoverFreq = 2000.f;
+        ml.upperCrossoverEnabled = leftOn;
+        mr.upperCrossoverEnabled = !leftOn;
+
+        NativeBmwDsp::MeasurementBus bus;
+        bus.rebuild(1, 0.f, cfgs, kSampleRate);
+        REQUIRE(bus.active());
+        constexpr double kAmp = 0.1;
+        auto buf = stereoSine(10000.0, kAmp, 16384);
+        for (std::size_t n = 0; n < buf.size() / 2; ++n) {
+            bus.process(buf[2 * n], buf[2 * n + 1]);
+        }
+        const double lDb = linToDb(channelMagnitudeAt(buf, 0, 10000.0) / kAmp);
+        const double rDb = linToDb(channelMagnitudeAt(buf, 1, 10000.0) / kAmp);
+        INFO("left upper on: ", leftOn, "   10 kHz L ", lDb, " dB   R ", rDb, " dB");
+        CHECK((leftOn ? lDb : rDb) < -40.0);  // the enabled side's corner cuts 10 kHz
+        CHECK((leftOn ? rDb : lDb) > -1.0);   // the other side passes it
+    }
+}
+
 TEST_CASE("kRoutingBase / kRoutingStride locate the routing matrix") {
     NativeBmwDspProcessor proc;
     auto c = defaultConfig();
