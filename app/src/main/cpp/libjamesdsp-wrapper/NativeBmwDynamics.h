@@ -37,27 +37,35 @@ void publishIdleMeter(CompressorState& state);
 void processCompressor(float& sample, const CompressorParams& params, CompressorState& state,
                        const DetectorTiming& detector);
 
-// ---- True-peak detector (4x oversampled, ITU-R BS.1770 style) ----------------------------------
+// ---- True-peak detector (8x oversampled) --------------------------------------------------------
 // Estimates the reconstructed waveform's peak between samples -- what a DAC will actually output
 // -- which a steep EQ boost can push well past the largest sample. Reports it kDelay samples late.
+//
+// Accuracy: a finite interpolator can only under-read. 32 taps x 8 phases (Kaiser beta 5) under-
+// reads a sine by at most ~0.07 dB up to 20 kHz at 48 kHz (~0.12 dB at 44.1 kHz), against >1 dB
+// for the 12 x 4 design it replaced. process() adds kMarginDb on top, so for content up to 20 kHz
+// the estimate is never below the true peak and the limiter's ceiling holds after reconstruction.
 class TruePeakDetector {
 public:
-    static constexpr unsigned kTaps = 12;      // per phase
-    static constexpr unsigned kPhases = 4;     // 4x oversampling
-    // Which past sample each result belongs to: the peak over x[n - kDelay] and the three points
+    static constexpr unsigned kTaps = 32;      // per phase (a multiple of 4: NEON lanes)
+    static constexpr unsigned kPhases = 8;     // 8x oversampling
+    static constexpr float kMarginDb = .2f;
+    // Which past sample each result belongs to: the peak over x[n - kDelay] and the seven points
     // between it and x[n - kDelay + 1].
     static constexpr unsigned kDelay = kTaps / 2;
     TruePeakDetector();
     void clear();
-    // Feeds one stereo frame and returns the true-peak estimate (max over both channels).
+    // Feeds one stereo frame and returns the true-peak estimate (max over both channels),
+    // margin included.
     float process(float left, float right);
 
 private:
-    // coeffs_[p - 1] interpolates the point p/4 of the way from x[n - kDelay] to the next sample.
-    std::array<std::array<float, kTaps>, kPhases - 1> coeffs_{};
+    // coeffs_[p - 1] interpolates the point p/8 of the way from x[n - kDelay] to the next sample.
+    alignas(16) std::array<std::array<float, kTaps>, kPhases - 1> coeffs_{};
     // Each channel's last kTaps samples, written twice so a window is always contiguous.
-    std::array<std::array<float, 2 * kTaps>, 2> history_{};
+    alignas(16) std::array<std::array<float, 2 * kTaps>, 2> history_{};
     unsigned pos_ = 0;
+    float marginLin_ = 1.f;
 };
 
 // ---- Master brick-wall limiter (summed stereo output) ------------------------------------------

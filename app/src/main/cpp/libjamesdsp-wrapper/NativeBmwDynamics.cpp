@@ -62,26 +62,66 @@ void processCompressor(float& sample, const CompressorParams& p, CompressorState
 }
 
 // ---- True-peak detector ------------------------------------------------------------------------
+namespace {
+// Modified Bessel function of the first kind, order 0 (for the Kaiser window).
+double besselI0(double x) {
+    double sum = 1, term = 1;
+    for (int k = 1; k < 32; ++k) {
+        term *= (x / (2 * k)) * (x / (2 * k));
+        sum += term;
+    }
+    return sum;
+}
+
+// sum(c[k] * x[k]) over kTaps, accumulated in four lanes (k % 4) that are combined as
+// (l0 + l1) + (l2 + l3). The NEON and scalar paths use that same order and the same fused
+// multiply-adds, so they round identically (scripts/run-neon-parity.sh needs bit-identical output).
+inline float dot(const float* c, const float* x) {
+    constexpr unsigned n = TruePeakDetector::kTaps;
+#if SIPHON_NEON
+    float32x4_t acc = vdupq_n_f32(0.f);
+    for (unsigned k = 0; k < n; k += 4) {
+        acc = vfmaq_f32(acc, vld1q_f32(c + k), vld1q_f32(x + k));
+    }
+    float32x2_t pair = vpadd_f32(vget_low_f32(acc), vget_high_f32(acc));
+    return vget_lane_f32(pair, 0) + vget_lane_f32(pair, 1);
+#else
+    float lane[4] = {0.f, 0.f, 0.f, 0.f};
+    for (unsigned k = 0; k < n; k += 4) {
+        for (unsigned j = 0; j < 4; ++j) {
+#if defined(__aarch64__)
+            lane[j] = __builtin_fmaf(c[k + j], x[k + j], lane[j]);
+#else
+            lane[j] = c[k + j] * x[k + j] + lane[j];
+#endif
+        }
+    }
+    return (lane[0] + lane[1]) + (lane[2] + lane[3]);
+#endif
+}
+}  // namespace
+
 TruePeakDetector::TruePeakDetector() {
-    // Hann-windowed sinc, each phase normalised to unity DC gain. Tap k holds x[n - (kTaps-1) + k],
-    // so tap kDelay - 1 is x[n - kDelay] and the interpolated point sits frac past it.
-    constexpr double kPi = 3.14159265358979323846;
-    const double halfSpan = kTaps / 2.0;
+    // Kaiser-windowed sinc (beta 5), each phase normalised to unity DC gain. Tap k holds
+    // x[n - (kTaps-1) + k], so tap kDelay - 1 is x[n - kDelay] and the point sits frac past it.
+    constexpr double kPi = 3.14159265358979323846, kBeta = 5.0;
+    const double halfSpan = kTaps / 2.0, norm = besselI0(kBeta);
     for (unsigned p = 1; p < kPhases; ++p) {
         const double frac = static_cast<double>(p) / kPhases;
         double sum = 0;
         std::array<double, kTaps> h{};
         for (unsigned k = 0; k < kTaps; ++k) {
             const double d = static_cast<double>(k) - (kDelay - 1) - frac;
-            const double sinc = std::sin(kPi * d) / (kPi * d);
-            const double window = .5 * (1 + std::cos(kPi * d / halfSpan));
-            h[k] = sinc * window;
+            const double r = d / halfSpan;
+            const double window = besselI0(kBeta * std::sqrt(std::max(0.0, 1 - r * r))) / norm;
+            h[k] = std::sin(kPi * d) / (kPi * d) * window;
             sum += h[k];
         }
         for (unsigned k = 0; k < kTaps; ++k) {
             coeffs_[p - 1][k] = static_cast<float>(h[k] / sum);
         }
     }
+    marginLin_ = dbToLin(kMarginDb);
 }
 void TruePeakDetector::clear() {
     for (auto& channel : history_) {
@@ -100,15 +140,11 @@ float TruePeakDetector::process(float left, float right) {
         const float* x = h.data() + pos_ + 1;
         peak = std::max(peak, std::fabs(x[kTaps - 1 - kDelay]));
         for (const auto& phase : coeffs_) {
-            float y = 0;
-            for (unsigned k = 0; k < kTaps; ++k) {
-                y += phase[k] * x[k];
-            }
-            peak = std::max(peak, std::fabs(y));
+            peak = std::max(peak, std::fabs(dot(phase.data(), x)));
         }
     }
     pos_ = pos_ + 1 == kTaps ? 0 : pos_ + 1;
-    return peak;
+    return peak * marginLin_;
 }
 
 // ---- Master brick-wall limiter -----------------------------------------------------------------

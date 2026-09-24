@@ -99,8 +99,35 @@ TEST_CASE("master limiter catches inter-sample (true) peaks") {
         prev = l;
     }
     INFO("reconstructed peak out = ", worstTruePeak, "  ceiling = ", kCeiling);
-    CHECK(worstTruePeak <= kCeiling * 1.012f);  // within 0.1 dB (the 12-tap interpolator's error)
+    CHECK(worstTruePeak <= kCeiling);  // the detector's margin covers its own interpolation error
     CHECK(worstTruePeak > 0.8f);
+}
+
+TEST_CASE("master limiter holds the ceiling on a near-Nyquist true peak") {
+    // Review case: 19.2 kHz (0.4 fs) at phase 3pi/2. A 4-phase detector read at most 0.951 of its
+    // real peak here and let the output sit ~0.44 dB over the ceiling.
+    const double fs = kSampleRate, f = 19200.0, amp = 1.2;
+    const double kPi = 3.14159265358979;
+    NativeBmwDsp::MasterLimiter lim;
+    lim.rebuild(kSampleRate, -1.f);
+    lim.clear();
+    // The output's amplitude at f, from its projection over whole cycles (0.4 fs -> 2 cycles
+    // every 5 samples) once the limiter has settled.
+    const std::size_t total = 19200, settle = 9600;
+    double sinSum = 0, cosSum = 0;
+    for (std::size_t i = 0; i < total; ++i) {
+        float l = static_cast<float>(amp * std::sin(2 * kPi * f / fs * i + 3 * kPi / 2)), r = l;
+        lim.process(l, r);
+        if (i >= settle) {
+            sinSum += l * std::sin(2 * kPi * f / fs * i);
+            cosSum += l * std::cos(2 * kPi * f / fs * i);
+        }
+    }
+    const double n = static_cast<double>(total - settle);
+    const double outAmp = 2 * std::sqrt(sinSum * sinSum + cosSum * cosSum) / n;
+    INFO("reconstructed amplitude out = ", outAmp, "  ceiling = ", kCeiling);
+    CHECK(outAmp <= kCeiling);
+    CHECK(outAmp > 0.8);
 }
 
 TEST_CASE("master limiter does not touch a signal already under the ceiling") {
