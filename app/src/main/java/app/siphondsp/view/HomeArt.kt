@@ -17,8 +17,8 @@ object HomeArt {
     const val IMAGE_WIDTH = 2800f
     const val IMAGE_HEIGHT = 1050f
 
-    /** The phone art (`dsp_home_backdrop_phone`) is its own size, 2800x1292 (the 2340x1080
-     *  phone's aspect). */
+    /** The phone art (`dsp_home_backdrop_phone.jpg`, the DSP-off version) is its own size,
+     *  2800x1292 (the 2340x1080 phone's aspect). */
     const val PHONE_IMAGE_WIDTH = 2800f
     const val PHONE_IMAGE_HEIGHT = 1292f
 
