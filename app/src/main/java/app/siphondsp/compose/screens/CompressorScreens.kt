@@ -306,12 +306,12 @@ private fun HeadUnitVisualiserPage(dsp: BmwDspState, mbcMeter: FloatArray?, modi
             onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
             labelWidth = 230.dp,
             labelColor = Color.White,
-            modifier = Modifier.artRect(artDp(190, 58, 400, 38)),
+            modifier = Modifier.artRect(artDp(190, 72, 400, 38)),
         )
         CompressorGraph(
             systemValues = dsp.values,
             mbcMeter = mbcMeter,
-            modifier = Modifier.artRect(artDp(190, 100, 1040, 270)).clip(RoundedCornerShape(20.dp)),
+            modifier = Modifier.artRect(artDp(190, 116, 1040, 256)).clip(RoundedCornerShape(20.dp)),
         )
         DspArtSlider(
             dsp, "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f..100f, 1f, "%", DefaultSliderAccent,
@@ -330,19 +330,19 @@ private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, r
             checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
             onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
             labelWidth = 100.dp,
-            modifier = Modifier.artRect(artDp(190, 58, 210, 38)),
+            modifier = Modifier.artRect(artDp(190, 72, 210, 36)),
         )
         ArtSwitchRow(
             label = "Stereo link",
             checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
             onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
             labelWidth = 120.dp,
-            modifier = Modifier.artRect(artDp(420, 58, 230, 38)),
+            modifier = Modifier.artRect(artDp(420, 72, 230, 36)),
         )
-        Box(Modifier.artRect(artDp(790, 58, 440, 38)), contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.artRect(artDp(790, 72, 440, 36)), contentAlignment = Alignment.CenterEnd) {
             ArtLabel(rangeLabel)
         }
-        ArtMeterRow(Modifier.artRect(artDp(190, 102, 1040, 26))) { BmwGrMeter(gr, it) }
+        ArtMeterRow(Modifier.artRect(artDp(190, 112, 1040, 20))) { BmwGrMeter(gr, it) }
         BandSliderSpecs.forEachIndexed { row, spec ->
             DspArtSlider(
                 dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, DefaultSliderAccent,

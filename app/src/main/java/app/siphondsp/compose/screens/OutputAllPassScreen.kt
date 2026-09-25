@@ -83,7 +83,7 @@ fun OutputAllPassScreen(
         // Head unit: placed on the workspace art (REW/_UI/submenu_layout_editor.html), no scrolling.
         BmwDspTheme {
             WorkspaceArtBox(modifier.fillMaxSize()) {
-                ArtTitle(title, Modifier.artRect(artDp(190, 62, 400, 30)), color = bandColor)
+                ArtTitle(title, Modifier.artRect(artDp(190, 72, 400, 26)), color = bandColor)
                 repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
                     val base = sectionBase(section)
                     val y = if (section == 0) 100 else 270

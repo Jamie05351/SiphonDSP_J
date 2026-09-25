@@ -46,7 +46,8 @@ import kotlin.math.roundToInt
  */
 
 /** A rect in dp on the 1280x480 head unit (the editor's units) as a fraction of the workspace art,
- *  which is the head unit's exact aspect. */
+ *  which is the head unit's exact aspect. Keep y at or below 69 (`dsp_workspace_toolbar_height`):
+ *  the pages are hosted under the toolbar, so anything higher is clipped. */
 fun artDp(x: Int, y: Int, w: Int, h: Int) = WorkspaceArt.Frac(x / 1280f, y / 480f, w / 1280f, h / 480f)
 
 val ArtLabelSize = 16.sp
