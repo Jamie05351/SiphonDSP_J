@@ -8,18 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -27,7 +22,6 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtPagerFinder
-import app.siphondsp.compose.controls.LocalArtAnchor
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsBand
@@ -80,9 +74,6 @@ class GainLimiterFragment : Fragment() {
 private fun GainLimiterPager(pagerState: PagerState) {
     val activity = LocalContext.current as FragmentActivity
     val scope = rememberCoroutineScope()
-    // Where the pager sits in the window, so each page's art-placed controls lay out as if settled
-    // and slide with their page (see LocalArtAnchor).
-    var anchor by remember { mutableStateOf<Offset?>(null) }
     // currentPage flips at the swipe's halfway point, so the art changes with the page it belongs to.
     LaunchedEffect(pagerState.currentPage) {
         val band = GainsBand.entries.getOrNull(pagerState.currentPage)
@@ -92,18 +83,13 @@ private fun GainLimiterPager(pagerState: PagerState) {
             DspCrossNavBar.showBackdrop(activity, DspDestination.GAINS_DELAY.backdrop, DspDestination.GAINS_DELAY.backdropPhone)
         }
     }
-    CompositionLocalProvider(LocalArtAnchor provides anchor) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize().onGloballyPositioned { anchor = it.positionInWindow() },
-        ) { page ->
-            val band = GainsBand.entries.getOrNull(page)
-            when {
-                // Tapping a band's label in the car art jumps straight to that band's page.
-                band != null -> GainsDelayScreen(band, onSelectBand = { scope.launch { pagerState.scrollToPage(it.ordinal) } })
-                page == GainsBand.entries.size -> HeadroomOutputScreen()
-                else -> CompressorDriverPage()
-            }
+    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+        val band = GainsBand.entries.getOrNull(page)
+        when {
+            // Tapping a band's label in the car art jumps straight to that band's page.
+            band != null -> GainsDelayScreen(band, onSelectBand = { scope.launch { pagerState.scrollToPage(it.ordinal) } })
+            page == GainsBand.entries.size -> HeadroomOutputScreen()
+            else -> CompressorDriverPage()
         }
     }
 }

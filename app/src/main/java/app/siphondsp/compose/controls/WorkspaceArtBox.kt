@@ -1,33 +1,23 @@
 package app.siphondsp.compose.controls
 
-import android.view.View
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.ParentDataModifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import app.siphondsp.R
-import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
- * The v4 head-unit workspace art (`dsp_workspace_backdrop_v4*.jpg`, 2800x1050 -- the 1280x480
- * head unit's exact aspect). Rects are fractions of the *image*, x/y/w/h, placed in the layout
- * placer (REW/_UI/workspace_layout_placer_v4.html) against that art.
+ * The v4 head-unit workspace art (`dsp_workspace_backdrop_v4*.jpg`, 2800x1050) has the same
+ * 8:3 aspect ratio as the fixed 1280x480 mdpi head unit. Rects are authored in that 1280x480 dp
+ * coordinate space by the layout tools in REW/_UI.
  */
 object WorkspaceArt {
-    const val IMAGE_WIDTH = 2800f
-    const val IMAGE_HEIGHT = 1050f
+    const val SCREEN_WIDTH_DP = 1280f
+    const val SCREEN_HEIGHT_DP = 480f
 
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
 
@@ -49,75 +39,42 @@ object WorkspaceArt {
     val finder5 = Frac(0.52f, 0.048f, 0.45f, 0.0693f)
 }
 
-/** Where a [WorkspaceArtBox] should assume it sits, in window pixels. A pager host provides its
- *  own position so every page lays out as if settled, and art-placed content slides with its page
- *  instead of being held still against the art mid-swipe. */
-val LocalArtAnchor = compositionLocalOf<Offset?> { null }
-
-interface WorkspaceArtScope {
-    /** Places this child over [frac] of the workspace art, sized to it exactly. */
-    fun Modifier.artRect(frac: WorkspaceArt.Frac): Modifier
-}
-
-private object WorkspaceArtScopeInstance : WorkspaceArtScope {
-    override fun Modifier.artRect(frac: WorkspaceArt.Frac): Modifier = this.then(ArtRectData(frac))
-}
-
-private class ArtRectData(val frac: WorkspaceArt.Frac) : ParentDataModifier {
-    override fun Density.modifyParentData(parentData: Any?): Any = this@ArtRectData
+/**
+ * Scope for controls positioned over the fixed head-unit artwork. The host supplies the full-screen
+ * origin of its own Compose surface; [artRect] converts the artwork rect into ordinary page-local
+ * `offset` and `size` modifiers. This deliberately uses normal Compose layout instead of reading
+ * window coordinates during layout or forcing child constraints from a second global frame.
+ */
+class WorkspaceArtScope internal constructor(
+    private val originX: Dp,
+    private val originY: Dp,
+) {
+    fun Modifier.artRect(frac: WorkspaceArt.Frac): Modifier =
+        absoluteOffset(
+            x = (frac.x * WorkspaceArt.SCREEN_WIDTH_DP).dp - originX,
+            y = (frac.y * WorkspaceArt.SCREEN_HEIGHT_DP).dp - originY,
+        ).size(
+            width = (frac.w * WorkspaceArt.SCREEN_WIDTH_DP).dp,
+            height = (frac.h * WorkspaceArt.SCREEN_HEIGHT_DP).dp,
+        )
 }
 
 /**
- * Lays each child over its [WorkspaceArtScope.artRect] of the workspace backdrop, using the same
- * centerCrop mapping as `R.id.dsp_workspace_backdrop`'s ImageView -- so controls line up with the
- * art wherever this box itself sits (toolbar line, pager page). Children without an art rect are
- * not placed. Fills its incoming constraints.
+ * Hosts head-unit controls using the page's own local coordinate system. Content pages begin after
+ * the fixed sidebar and toolbar; callers hosted elsewhere (the toolbar page finder) provide their
+ * own origin explicitly. Pager pages now move their content naturally, without a global-position
+ * anchor or window-coordinate feedback loop.
  */
 @Composable
-fun WorkspaceArtBox(modifier: Modifier = Modifier, content: @Composable WorkspaceArtScope.() -> Unit) {
-    val view = LocalView.current
-    val anchor = LocalArtAnchor.current
-    var ownPosition by remember { mutableStateOf<Offset?>(null) }
-
-    Layout(
-        content = { WorkspaceArtScopeInstance.content() },
-        modifier = modifier.onGloballyPositioned { ownPosition = it.positionInWindow() },
-    ) { measurables, constraints ->
-        val width = constraints.maxWidth
-        val height = constraints.maxHeight
-        val origin = anchor ?: ownPosition
-        val frame = backdropFrame(view)
-        if (origin == null || frame == null) return@Layout layout(width, height) {}
-
-        val placed = measurables.mapNotNull { measurable ->
-            val frac = (measurable.parentData as? ArtRectData)?.frac ?: return@mapNotNull null
-            val left = (frame.left + frac.x * frame.shownWidth - origin.x).roundToInt()
-            val top = (frame.top + frac.y * frame.shownHeight - origin.y).roundToInt()
-            val right = (frame.left + (frac.x + frac.w) * frame.shownWidth - origin.x).roundToInt()
-            val bottom = (frame.top + (frac.y + frac.h) * frame.shownHeight - origin.y).roundToInt()
-            Triple(measurable.measure(Constraints.fixed(right - left, bottom - top)), left, top)
-        }
-        layout(width, height) {
-            placed.forEach { (placeable, x, y) -> placeable.place(x, y) }
-        }
-    }
-}
-
-private class ArtFrame(val left: Float, val top: Float, val shownWidth: Float, val shownHeight: Float)
-
-/** The workspace backdrop's drawn art rect in window pixels (centerCrop), or null before layout. */
-private fun backdropFrame(view: View): ArtFrame? {
-    val backdrop = view.rootView.findViewById<View>(R.id.dsp_workspace_backdrop) ?: return null
-    if (backdrop.width == 0 || backdrop.height == 0) return null
-    val location = IntArray(2)
-    backdrop.getLocationInWindow(location)
-    val scale = max(backdrop.width / WorkspaceArt.IMAGE_WIDTH, backdrop.height / WorkspaceArt.IMAGE_HEIGHT)
-    val shownWidth = WorkspaceArt.IMAGE_WIDTH * scale
-    val shownHeight = WorkspaceArt.IMAGE_HEIGHT * scale
-    return ArtFrame(
-        left = location[0] + (backdrop.width - shownWidth) / 2f,
-        top = location[1] + (backdrop.height - shownHeight) / 2f,
-        shownWidth = shownWidth,
-        shownHeight = shownHeight,
+fun WorkspaceArtBox(
+    modifier: Modifier = Modifier,
+    originX: Dp? = null,
+    originY: Dp? = null,
+    content: @Composable WorkspaceArtScope.() -> Unit,
+) {
+    val scope = WorkspaceArtScope(
+        originX = originX ?: dimensionResource(R.dimen.dsp_sidebar_width),
+        originY = originY ?: dimensionResource(R.dimen.dsp_workspace_toolbar_height),
     )
+    Box(modifier) { scope.content() }
 }

@@ -23,11 +23,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.siphondsp.R
 import kotlinx.coroutines.launch
 
 // Sampled from James's page-finder mockup (Workspace_v4_low_finder.png).
@@ -104,7 +106,11 @@ fun ArtPagerFinder(
 ) {
     val scope = rememberCoroutineScope()
     val select: (Int) -> Unit = onSelect ?: { page -> scope.launch { pagerState.scrollToPage(page) } }
-    WorkspaceArtBox(Modifier.fillMaxSize()) {
+    WorkspaceArtBox(
+        modifier = Modifier.fillMaxSize(),
+        originX = dimensionResource(R.dimen.dsp_status_strip_margin_start),
+        originY = 0.dp,
+    ) {
         DspPageFinder(
             labels = labels,
             selected = selected,
