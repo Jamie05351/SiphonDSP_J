@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtSwitchRow
-import app.siphondsp.compose.controls.ArtTitle
 import app.siphondsp.compose.controls.BmwGrMeter
 import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSectionHeader
@@ -326,20 +325,19 @@ private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, r
     fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtTitle("Band ${band + 1}", Modifier.artRect(artDp(190, 58, 110, 38)))
         ArtSwitchRow(
             label = "Enabled",
             checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
             onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
             labelWidth = 100.dp,
-            modifier = Modifier.artRect(artDp(310, 58, 210, 38)),
+            modifier = Modifier.artRect(artDp(190, 58, 210, 38)),
         )
         ArtSwitchRow(
             label = "Stereo link",
             checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
             onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
             labelWidth = 120.dp,
-            modifier = Modifier.artRect(artDp(540, 58, 230, 38)),
+            modifier = Modifier.artRect(artDp(420, 58, 230, 38)),
         )
         Box(Modifier.artRect(artDp(790, 58, 440, 38)), contentAlignment = Alignment.CenterEnd) {
             ArtLabel(rangeLabel)
@@ -376,7 +374,6 @@ private val BandSliderSpecs = listOf(
 @Composable
 private fun HeadUnitDriverPage(dsp: BmwDspState, busMeter: FloatArray?, modifier: Modifier) {
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtTitle("Driver protection", Modifier.artRect(artDp(190, 62, 520, 30)))
         BusColumns.forEachIndexed { bus, col ->
             ArtSwitchRow(
                 label = col.title,

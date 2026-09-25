@@ -18,7 +18,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.R
 import app.siphondsp.compose.controls.ArtSwitchRow
-import app.siphondsp.compose.controls.ArtTitle
 import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSectionHeader
 import app.siphondsp.compose.controls.BmwSliderRow
@@ -127,7 +126,6 @@ private fun HeadUnitOutputPage(dsp: BmwDspState, headroom: String, modifier: Mod
     val blueColor = Color(BmwDashboardSkin.M_BLUE)
 
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtTitle("Output", Modifier.artRect(artDp(190, 62, 520, 30)))
         DspArtSlider(
             dsp, headroom, NativeBmwDspValues.INDEX_HEADROOM, -12f..0f, 1f, "dB", headroomColor,
             Modifier.artRect(artDp(190, 100, 1040, 50)),

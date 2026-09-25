@@ -97,16 +97,16 @@ fun CrossoverLowMidPage(
         HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, artDp(188, 392, 600, 52), modifier) {
             DspArtSlider(
                 dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
-                Modifier.artRect(artDp(832, 72, 415, 65)), labelAbove = true,
+                Modifier.artRect(artDp(835, 72, 415, 65)), labelAbove = true,
                 mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ), valueWidth = 84.dp,
             )
-            SlopeRow(lowCrossoverType, onLowType, Modifier.artRect(artDp(836, 140, 185, 40)))
+            SlopeRow(lowCrossoverType, onLowType, Modifier.artRect(artDp(835, 140, 185, 40)))
             DspArtSlider(
                 dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", midSlider,
-                Modifier.artRect(artDp(836, 188, 415, 65)), labelAbove = true,
+                Modifier.artRect(artDp(835, 188, 415, 65)), labelAbove = true,
                 mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ), valueWidth = 84.dp,
             )
-            SlopeRow(midCrossoverType, onMidType, Modifier.artRect(artDp(840, 268, 185, 40)))
+            SlopeRow(midCrossoverType, onMidType, Modifier.artRect(artDp(835, 268, 185, 40)))
             DspArtSlider(
                 dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
                 Modifier.artRect(artDp(835, 316, 415, 64)), labelAbove = true,
