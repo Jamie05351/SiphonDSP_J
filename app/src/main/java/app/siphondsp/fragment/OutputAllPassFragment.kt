@@ -8,20 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import app.siphondsp.activity.CrossoverTiltActivity
-import app.siphondsp.compose.controls.LocalArtAnchor
 import app.siphondsp.compose.screens.OutputAllPassScreen
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
@@ -60,22 +51,14 @@ class OutputAllPassFragment : Fragment() {
 
 @Composable
 private fun OutputAllPassPager(pagerState: PagerState) {
-    // Where the pager sits in the window, so each page's art-placed (head unit) controls lay out as
-    // if settled and slide with their page (see LocalArtAnchor).
-    var anchor by remember { mutableStateOf<Offset?>(null) }
-    CompositionLocalProvider(LocalArtAnchor provides anchor) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize().onGloballyPositioned { anchor = it.positionInWindow() },
-        ) { page ->
-            when (page) {
-                0 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
-                1 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
-                2 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
-                3 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
-                4 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_LEFT, "Left High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
-                else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, "Right High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
-            }
+    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+        when (page) {
+            0 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+            1 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+            2 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            3 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            4 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_LEFT, "Left High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
+            else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, "Right High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
         }
     }
 }
