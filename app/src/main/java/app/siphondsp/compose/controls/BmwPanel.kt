@@ -249,7 +249,14 @@ internal fun BoxedTitle(text: String, accentColor: Color, modifier: Modifier = M
 
 /** Boxed value readout -- centred bold number + right-pinned unit in the slider colour. */
 @Composable
-internal fun BoxedValue(text: String, unit: String, accentColor: Color, modifier: Modifier = Modifier) {
+internal fun BoxedValue(
+    text: String,
+    unit: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    textSize: TextUnit = BoxTextSize,
+    unitSize: TextUnit = 11.sp,
+) {
     Row(
         modifier = modifier.bmwGlassBox(accentColor),
         verticalAlignment = Alignment.CenterVertically,
@@ -257,7 +264,7 @@ internal fun BoxedValue(text: String, unit: String, accentColor: Color, modifier
         Text(
             text = text,
             color = Color.White,
-            fontSize = BoxTextSize,
+            fontSize = textSize,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             textAlign = TextAlign.Center,
@@ -269,7 +276,7 @@ internal fun BoxedValue(text: String, unit: String, accentColor: Color, modifier
             Text(
                 text = unit,
                 color = accentColor,
-                fontSize = 11.sp,
+                fontSize = unitSize,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 2.dp, end = 8.dp),
             )

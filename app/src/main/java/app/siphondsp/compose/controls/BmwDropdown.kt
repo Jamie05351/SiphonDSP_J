@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
@@ -48,6 +50,8 @@ fun BmwDropdown(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    textSize: TextUnit = 12.sp,
+    minHeight: Dp = 32.dp,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -55,7 +59,7 @@ fun BmwDropdown(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 32.dp)
+                .heightIn(min = minHeight)
                 .border(1.dp, DropdownStroke, DropdownShape)
                 .background(DropdownIdle, DropdownShape)
                 .clickable(interactionSource = interactionSource, indication = LocalIndication.current) { expanded = true }
@@ -66,7 +70,7 @@ fun BmwDropdown(
             Text(
                 text = options.getOrElse(selectedIndex) { "" },
                 color = DropdownText,
-                fontSize = 12.sp,
+                fontSize = textSize,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )

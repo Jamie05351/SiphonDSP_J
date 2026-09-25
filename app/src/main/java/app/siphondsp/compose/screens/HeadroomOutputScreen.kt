@@ -2,6 +2,7 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -9,21 +10,27 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.R
+import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSectionHeader
 import app.siphondsp.compose.controls.BmwSliderRow
+import app.siphondsp.compose.controls.WorkspaceArtBox
+import app.siphondsp.compose.controls.artDp
+import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.MbcBandGrMeter
+import app.siphondsp.view.isHeadUnitDisplay
 
 /**
  * Phase 5 of COMPOSE_MIGRATION_ROADMAP.md -- ports `GainLimiterFragment`'s Output page. Same
@@ -43,6 +50,11 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val blueColor = Color(BmwDashboardSkin.M_BLUE)
     val limiterOn = dsp.isOn(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED)
     val headroom = stringResource(R.string.bmw_dsp_headroom)
+
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        BmwDspTheme { HeadUnitOutputPage(dsp, headroom, modifier) }
+        return
+    }
 
     BmwDspTheme {
         BmwPanel(
@@ -102,6 +114,42 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
             )
             LimiterGrMeter(modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
         }
+    }
+}
+
+/** Head unit: the same controls placed on the workspace art (REW/_UI/submenu_layout_editor.html),
+ *  so the page fits the 480 dp screen without scrolling. */
+@Composable
+private fun HeadUnitOutputPage(dsp: BmwDspState, headroom: String, modifier: Modifier) {
+    val headroomColor = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
+    val greenColor = Color(BmwDashboardSkin.M_GREEN)
+    val blueColor = Color(BmwDashboardSkin.M_BLUE)
+
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        DspArtSlider(
+            dsp, headroom, NativeBmwDspValues.INDEX_HEADROOM, -12f..0f, 1f, "dB", headroomColor,
+            Modifier.artRect(artDp(190, 100, 1040, 50)),
+        )
+        DspArtSlider(
+            dsp, "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f..6f, 0.5f, "dB", greenColor,
+            Modifier.artRect(artDp(190, 156, 1040, 50)),
+        )
+        DspArtSlider(
+            dsp, "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f..6f, 0.5f, "dB", greenColor,
+            Modifier.artRect(artDp(190, 212, 1040, 50)),
+        )
+        ArtSwitchRow(
+            label = "Limiter",
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED),
+            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, if (on) 1f else 0f) },
+            labelColor = blueColor,
+            modifier = Modifier.artRect(artDp(190, 270, 400, 38)),
+        )
+        DspArtSlider(
+            dsp, "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f..0f, 0.5f, "dB", blueColor,
+            Modifier.artRect(artDp(190, 314, 1040, 50)),
+        )
+        ArtMeterRow(Modifier.artRect(artDp(190, 372, 1040, 36))) { LimiterGrMeter(it) }
     }
 }
 
