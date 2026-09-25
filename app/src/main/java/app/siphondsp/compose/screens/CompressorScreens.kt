@@ -2,7 +2,9 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -15,18 +17,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import app.siphondsp.compose.controls.ArtLabel
+import app.siphondsp.compose.controls.ArtSwitchRow
+import app.siphondsp.compose.controls.ArtTitle
 import app.siphondsp.compose.controls.BmwGrMeter
 import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSectionHeader
 import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.controls.BmwTitleRowWithSwitches
+import app.siphondsp.compose.controls.WorkspaceArtBox
+import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -34,6 +43,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.MbcBandGrMeter
+import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.roundToInt
 
 /**
@@ -69,6 +79,11 @@ private fun formatHz(hz: Float): String =
 fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val mbcMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwMbcMeter() }
+
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        BmwDspTheme { HeadUnitVisualiserPage(dsp, mbcMeter, modifier) }
+        return
+    }
 
     BmwDspTheme {
         Column(
@@ -135,6 +150,11 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
         "${formatHz(lo)} – ${formatHz(hi.coerceAtLeast(lo * 1.01f))}"
     }
 
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        BmwDspTheme { HeadUnitCompressorBandPage(band, dsp, gr, rangeLabel, modifier) }
+        return
+    }
+
     BmwDspTheme {
         Column(
             modifier = modifier
@@ -174,6 +194,11 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val busMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwBusLimiterMeter() }
+
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        BmwDspTheme { HeadUnitDriverPage(dsp, busMeter, modifier) }
+        return
+    }
 
     BmwDspTheme {
         Column(
@@ -269,3 +294,127 @@ private fun rememberMeterPoll(read: () -> FloatArray?): FloatArray? {
     }
     return value
 }
+
+// ---- Head unit: the same controls placed on the workspace art (REW/_UI/submenu_layout_editor.html)
+// so every page fits the 480 dp screen without scrolling.
+
+@Composable
+private fun HeadUnitVisualiserPage(dsp: BmwDspState, mbcMeter: FloatArray?, modifier: Modifier) {
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        ArtSwitchRow(
+            label = "Multiband compressor",
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
+            onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
+            labelWidth = 230.dp,
+            labelColor = Color.White,
+            modifier = Modifier.artRect(artDp(190, 58, 400, 38)),
+        )
+        CompressorGraph(
+            systemValues = dsp.values,
+            mbcMeter = mbcMeter,
+            modifier = Modifier.artRect(artDp(190, 100, 1040, 270)).clip(RoundedCornerShape(20.dp)),
+        )
+        DspArtSlider(
+            dsp, "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f..100f, 1f, "%", DefaultSliderAccent,
+            Modifier.artRect(artDp(190, 384, 1040, 54)),
+        )
+    }
+}
+
+@Composable
+private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, rangeLabel: String, modifier: Modifier) {
+    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
+
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        ArtTitle("Band ${band + 1}", Modifier.artRect(artDp(190, 58, 110, 38)))
+        ArtSwitchRow(
+            label = "Enabled",
+            checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
+            onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
+            labelWidth = 100.dp,
+            modifier = Modifier.artRect(artDp(310, 58, 210, 38)),
+        )
+        ArtSwitchRow(
+            label = "Stereo link",
+            checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
+            onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
+            labelWidth = 120.dp,
+            modifier = Modifier.artRect(artDp(540, 58, 230, 38)),
+        )
+        Box(Modifier.artRect(artDp(790, 58, 440, 38)), contentAlignment = Alignment.CenterEnd) {
+            ArtLabel(rangeLabel)
+        }
+        ArtMeterRow(Modifier.artRect(artDp(190, 102, 1040, 26))) { BmwGrMeter(gr, it) }
+        BandSliderSpecs.forEachIndexed { row, spec ->
+            DspArtSlider(
+                dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, DefaultSliderAccent,
+                Modifier.artRect(artDp(190, 134 + row * 52, 1040, 48)),
+                sliderMinTouchHeight = 40.dp,
+            )
+        }
+    }
+}
+
+private class BandSliderSpec(
+    val label: String,
+    val field: Int,
+    val range: ClosedFloatingPointRange<Float>,
+    val step: Float,
+    val unit: String,
+)
+
+private val BandSliderSpecs = listOf(
+    BandSliderSpec("Threshold", NativeBmwDspValues.MBC_FIELD_THRESHOLD, -48f..0f, 0.5f, "dB"),
+    BandSliderSpec("Ratio", NativeBmwDspValues.MBC_FIELD_RATIO, 1f..20f, 0.1f, ":1"),
+    BandSliderSpec("Soft knee", NativeBmwDspValues.MBC_FIELD_KNEE, 0f..24f, 1f, "dB"),
+    BandSliderSpec("Attack", NativeBmwDspValues.MBC_FIELD_ATTACK, 1f..200f, 1f, "ms"),
+    BandSliderSpec("Release", NativeBmwDspValues.MBC_FIELD_RELEASE, 20f..1000f, 5f, "ms"),
+    BandSliderSpec("Makeup", NativeBmwDspValues.MBC_FIELD_MAKEUP, 0f..12f, 0.1f, "dB"),
+)
+
+/** Bus limiters: one matching column per bus -- enable, Threshold, Release, GR meter. */
+@Composable
+private fun HeadUnitDriverPage(dsp: BmwDspState, busMeter: FloatArray?, modifier: Modifier) {
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        ArtTitle("Driver protection", Modifier.artRect(artDp(190, 62, 520, 30)))
+        BusColumns.forEachIndexed { bus, col ->
+            ArtSwitchRow(
+                label = col.title,
+                checked = dsp.isOn(col.enabled),
+                onCheckedChange = { dsp.commit(col.enabled, if (it) 1f else 0f) },
+                labelWidth = 120.dp,
+                labelColor = Color(col.accent),
+                modifier = Modifier.artRect(artDp(col.x, 104, 330, 40)),
+            )
+            DspArtSlider(
+                dsp, "Threshold", col.threshold, -24f..0f, 0.5f, "dB", DefaultSliderAccent,
+                Modifier.artRect(artDp(col.x, 152, 330, 86)), labelAbove = true,
+            )
+            DspArtSlider(
+                dsp, "Release", col.release, 20f..800f, 5f, "ms", DefaultSliderAccent,
+                Modifier.artRect(artDp(col.x, 246, 330, 86)), labelAbove = true,
+            )
+            ArtMeterRow(Modifier.artRect(artDp(col.x, 342, 330, 34))) {
+                BmwGrMeter(busMeter?.getOrNull(bus) ?: 0f, it, stage = MbcBandGrMeter.Stage.LIMITER)
+            }
+        }
+    }
+}
+
+private class BusColumn(val title: String, val accent: Int, val x: Int, val enabled: Int, val threshold: Int, val release: Int)
+
+private val BusColumns = listOf(
+    BusColumn(
+        "Low bus", BmwDashboardSkin.M_BLUE, 190, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,
+        NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_RELEASE,
+    ),
+    BusColumn(
+        "Mid bus", BmwDashboardSkin.MID_BAND_YELLOW, 540, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
+        NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE,
+    ),
+    // Only acts while 3-way is on, but stays editable so it can be set before the tweeters are.
+    BusColumn(
+        "High bus", BmwDashboardSkin.HIGH_BAND_PINK, 890, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED,
+        NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE,
+    ),
+)

@@ -244,7 +244,7 @@ private fun BoxedDropdownTitle(
     }
 }
 
-private fun snapToStep(raw: Float, range: ClosedFloatingPointRange<Float>, step: Float): Float {
+internal fun snapToStep(raw: Float, range: ClosedFloatingPointRange<Float>, step: Float): Float {
     if (step <= 0f) return raw.coerceIn(range.start, range.endInclusive)
     val snapped = range.start + ((raw - range.start) / step).roundToInt() * step
     return snapped.coerceIn(range.start, range.endInclusive)
