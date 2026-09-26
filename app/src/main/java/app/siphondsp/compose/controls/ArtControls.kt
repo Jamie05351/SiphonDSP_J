@@ -5,12 +5,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
@@ -217,6 +220,68 @@ fun ArtSlider(
     } else {
         ArtRow(label, modifier.then(dim), labelWidth = labelWidth) {
             sliderAndValue(Modifier.weight(1f).height(ArtValueHeight))
+        }
+    }
+}
+
+/** A labelled [BmwDspKnob] with the existing tap-to-type value box beneath it. */
+@Composable
+fun ArtKnob(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    step: Float,
+    unit: String,
+    accentColor: Color,
+    onPreview: (Float) -> Unit,
+    onCommit: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    diameter: Dp = 104.dp,
+    valueWidth: Dp = 96.dp,
+    enabled: Boolean = true,
+) {
+    val context = LocalContext.current
+    var dragValue by remember(value) { mutableFloatStateOf(value) }
+    val shown = dragValue.coerceIn(valueRange.start, valueRange.endInclusive)
+    val dim = if (enabled) Modifier else Modifier.alpha(DisabledAlpha)
+
+    Column(
+        modifier = modifier.then(dim),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        ArtLabel(
+            text = label,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        BmwDspKnob(
+            value = shown,
+            valueRange = valueRange,
+            step = step,
+            accentColor = accentColor,
+            onPreview = {
+                dragValue = it
+                onPreview(it)
+            },
+            onCommit = {
+                dragValue = it
+                onCommit(it)
+            },
+            enabled = enabled,
+            diameter = diameter,
+            modifier = Modifier.size(diameter),
+        )
+        ArtValueBox(
+            text = ArtValueFormat.format(shown),
+            unit = unit,
+            accentColor = accentColor,
+            width = valueWidth,
+        ) {
+            context.showBmwNumberInput(label, valueRange.start, valueRange.endInclusive, shown, step, unit) {
+                dragValue = it
+                onCommit(it)
+            }
         }
     }
 }

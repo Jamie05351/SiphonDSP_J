@@ -4,10 +4,13 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -113,16 +116,18 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 leanStart = 20.dp,
                 leanEnd = 20.dp,
-                sliderLabels = listOf("Mix"),
+                sliderLabels = emptyList(),
             ) {
-                BmwSliderRow(
+                DspArtKnob(
+                    dsp = dsp,
                     label = "Mix",
-                    value = dsp.get(NativeBmwDspValues.INDEX_MBC_MIX),
-                    valueRange = 0f..100f, step = 1f, unit = "%",
-                    accentColor = DefaultSliderAccent,
-                    onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MBC_MIX, it) },
-                    onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MBC_MIX, it) },
-                    onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MBC_MIX, it) },
+                    index = NativeBmwDspValues.INDEX_MBC_MIX,
+                    range = 0f..100f,
+                    step = 1f,
+                    unit = "%",
+                    accent = DefaultSliderAccent,
+                    diameter = 96.dp,
+                    modifier = Modifier.fillMaxWidth().height(156.dp),
                 )
             }
         }
@@ -178,12 +183,30 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
                     onSecondChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
                 )
                 BmwGrMeter(gr, Modifier.padding(top = 1.dp, bottom = 4.dp))
-                CompressorSliderRow("Threshold", idx(NativeBmwDspValues.MBC_FIELD_THRESHOLD), -48f..0f, 0.5f, "dB", dsp, compact = true)
-                CompressorSliderRow("Ratio", idx(NativeBmwDspValues.MBC_FIELD_RATIO), 1f..20f, 0.1f, ":1", dsp, compact = true)
-                CompressorSliderRow("Soft knee", idx(NativeBmwDspValues.MBC_FIELD_KNEE), 0f..24f, 1f, "dB", dsp, compact = true)
-                CompressorSliderRow("Attack", idx(NativeBmwDspValues.MBC_FIELD_ATTACK), 1f..200f, 1f, "ms", dsp, compact = true)
-                CompressorSliderRow("Release", idx(NativeBmwDspValues.MBC_FIELD_RELEASE), 20f..1000f, 5f, "ms", dsp, compact = true)
-                CompressorSliderRow("Makeup", idx(NativeBmwDspValues.MBC_FIELD_MAKEUP), 0f..12f, 0.1f, "dB", dsp, compact = true)
+                CompressorKnobGrid(band, dsp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompressorKnobGrid(band: Int, dsp: BmwDspState) {
+    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
+
+    BandSliderSpecs.chunked(3).forEach { rowSpecs ->
+        Row(Modifier.fillMaxWidth().height(154.dp)) {
+            rowSpecs.forEach { spec ->
+                DspArtKnob(
+                    dsp = dsp,
+                    label = spec.label,
+                    index = idx(spec.field),
+                    range = spec.range,
+                    step = spec.step,
+                    unit = spec.unit,
+                    accent = DefaultSliderAccent,
+                    diameter = 82.dp,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
             }
         }
     }
@@ -311,11 +334,19 @@ private fun HeadUnitVisualiserPage(dsp: BmwDspState, mbcMeter: FloatArray?, modi
         CompressorGraph(
             systemValues = dsp.values,
             mbcMeter = mbcMeter,
-            modifier = Modifier.artRect(artDp(190, 116, 1040, 256)).clip(RoundedCornerShape(20.dp)),
+            modifier = Modifier.artRect(artDp(190, 116, 820, 256)).clip(RoundedCornerShape(20.dp)),
         )
-        DspArtSlider(
-            dsp, "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f..100f, 1f, "%", DefaultSliderAccent,
-            Modifier.artRect(artDp(190, 384, 1040, 54)),
+        DspArtKnob(
+            dsp = dsp,
+            label = "Mix",
+            index = NativeBmwDspValues.INDEX_MBC_MIX,
+            range = 0f..100f,
+            step = 1f,
+            unit = "%",
+            accent = DefaultSliderAccent,
+            diameter = 116.dp,
+            valueWidth = 112.dp,
+            modifier = Modifier.artRect(artDp(1030, 126, 200, 240)),
         )
     }
 }
@@ -343,12 +374,21 @@ private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, r
             ArtLabel(rangeLabel)
         }
         ArtMeterRow(Modifier.artRect(artDp(190, 112, 1040, 20))) { BmwGrMeter(gr, it) }
-        BandSliderSpecs.forEachIndexed { row, spec ->
-            DspArtSlider(
-                dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, DefaultSliderAccent,
-                Modifier.artRect(artDp(190, 134 + row * 52, 1040, 48)),
-                sliderMinTouchHeight = 40.dp,
-            )
+        Row(Modifier.artRect(artDp(190, 140, 1040, 292))) {
+            BandSliderSpecs.forEach { spec ->
+                DspArtKnob(
+                    dsp = dsp,
+                    label = spec.label,
+                    index = idx(spec.field),
+                    range = spec.range,
+                    step = spec.step,
+                    unit = spec.unit,
+                    accent = DefaultSliderAccent,
+                    diameter = 108.dp,
+                    valueWidth = 108.dp,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
         }
     }
 }
