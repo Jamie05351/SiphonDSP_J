@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -139,30 +140,78 @@ fun BmwDspKnob(
         val side = size.minDimension
         val centre = center
         val knobRadius = side * 0.34f
+        val faceRadius = knobRadius * 0.91f
         val ledOrbit = side * 0.44f
         val ledRadius = side * 0.0175f
         val activeLed = ((KnobLedCount - 1) * fraction).roundToInt()
 
         drawCircle(
+            color = Color.Black.copy(alpha = 0.72f),
+            radius = knobRadius * 1.10f,
+            center = Offset(centre.x, centre.y + side * 0.025f),
+        )
+        drawCircle(
+            color = accentColor.copy(alpha = 0.09f),
+            radius = knobRadius * 1.08f,
+            center = centre,
+            style = Stroke(width = side * 0.045f),
+        )
+        drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFF4B4E58), Color(0xFF111318), Color.Black),
+                colors = listOf(Color(0xFF858994), Color(0xFF343740), Color(0xFF08090C), Color.Black),
                 center = Offset(centre.x - knobRadius * 0.30f, centre.y - knobRadius * 0.34f),
-                radius = knobRadius * 1.45f,
+                radius = knobRadius * 1.55f,
             ),
-            radius = knobRadius,
+            radius = knobRadius * 1.05f,
             center = centre,
         )
         drawCircle(
-            color = Color(0xFF363941),
-            radius = knobRadius,
+            color = Color.Black,
+            radius = knobRadius * 0.985f,
             center = centre,
-            style = Stroke(width = side * 0.024f),
+            style = Stroke(width = side * 0.018f),
         )
         drawCircle(
-            color = accentColor.copy(alpha = 0.74f),
-            radius = knobRadius * 0.91f,
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF50535D), Color(0xFF191B21), Color(0xFF050609)),
+                center = Offset(centre.x - faceRadius * 0.34f, centre.y - faceRadius * 0.40f),
+                radius = faceRadius * 1.48f,
+            ),
+            radius = faceRadius,
+            center = centre,
+        )
+        drawCircle(
+            brush = Brush.linearGradient(
+                colors = listOf(Color.White.copy(alpha = 0.20f), Color.Transparent, Color.Black.copy(alpha = 0.16f)),
+                start = Offset(centre.x - faceRadius, centre.y - faceRadius),
+                end = Offset(centre.x + faceRadius, centre.y + faceRadius),
+            ),
+            radius = faceRadius * 0.92f,
+            center = centre,
+        )
+        drawCircle(
+            color = accentColor.copy(alpha = 0.66f),
+            radius = faceRadius,
             center = centre,
             style = Stroke(width = side * 0.007f),
+        )
+        drawArc(
+            color = Color.White.copy(alpha = 0.30f),
+            startAngle = 198f,
+            sweepAngle = 95f,
+            useCenter = false,
+            topLeft = Offset(centre.x - knobRadius, centre.y - knobRadius),
+            size = Size(knobRadius * 2f, knobRadius * 2f),
+            style = Stroke(width = side * 0.009f, cap = StrokeCap.Round),
+        )
+        drawArc(
+            color = Color.Black.copy(alpha = 0.78f),
+            startAngle = 18f,
+            sweepAngle = 112f,
+            useCenter = false,
+            topLeft = Offset(centre.x - knobRadius, centre.y - knobRadius),
+            size = Size(knobRadius * 2f, knobRadius * 2f),
+            style = Stroke(width = side * 0.010f, cap = StrokeCap.Round),
         )
 
         repeat(KnobLedCount) { index ->
@@ -181,10 +230,17 @@ fun BmwDspKnob(
 
         val markerAngle = KnobStartAngle + KnobSweepAngle * fraction
         drawLine(
+            color = accentColor.copy(alpha = 0.24f),
+            start = pointOnCircle(centre, faceRadius * 0.58f, markerAngle),
+            end = pointOnCircle(centre, faceRadius * 0.93f, markerAngle),
+            strokeWidth = side * 0.050f,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
             color = Color(0xFFFFF2D0),
-            start = pointOnCircle(centre, knobRadius * 0.72f, markerAngle),
-            end = pointOnCircle(centre, knobRadius * 0.91f, markerAngle),
-            strokeWidth = side * 0.022f,
+            start = pointOnCircle(centre, faceRadius * 0.62f, markerAngle),
+            end = pointOnCircle(centre, faceRadius * 0.91f, markerAngle),
+            strokeWidth = side * 0.019f,
             cap = StrokeCap.Round,
         )
     }

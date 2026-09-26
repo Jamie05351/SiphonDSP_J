@@ -87,6 +87,19 @@ fun BmwSwitch(
         val bodyCorner = body.height / 2f
 
         drawRoundRect(
+            color = Color.Black.copy(alpha = 0.76f),
+            topLeft = Offset(outer.left, outer.top + 2.dp.toPx()),
+            size = outer.size,
+            cornerRadius = CornerRadius(outerCorner),
+        )
+        drawRoundRect(
+            color = status.copy(alpha = 0.09f),
+            topLeft = Offset(outer.left - 2.dp.toPx(), outer.top - 2.dp.toPx()),
+            size = androidx.compose.ui.geometry.Size(outer.width + 4.dp.toPx(), outer.height + 4.dp.toPx()),
+            cornerRadius = CornerRadius(outerCorner + 2.dp.toPx()),
+            style = Stroke(width = 3.dp.toPx()),
+        )
+        drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(GlassHighlight, GlassMid, Color.Black),
                 startY = outer.top,
@@ -102,6 +115,13 @@ fun BmwSwitch(
             size = outer.size,
             cornerRadius = CornerRadius(outerCorner),
             style = Stroke(width = BodyBorder.toPx()),
+        )
+        drawLine(
+            color = Color.White.copy(alpha = 0.24f),
+            start = Offset(outer.left + outerCorner * 0.75f, outer.top + 1.2.dp.toPx()),
+            end = Offset(outer.right - outerCorner * 0.75f, outer.top + 1.2.dp.toPx()),
+            strokeWidth = 0.8.dp.toPx(),
+            cap = StrokeCap.Round,
         )
 
         val selectedLeft = body.left + body.width * 0.45f * progress
@@ -134,6 +154,12 @@ fun BmwSwitch(
         )
 
         drawRoundRect(
+            color = Color.Black.copy(alpha = 0.82f),
+            topLeft = Offset(thumb.left, thumb.top + 2.dp.toPx()),
+            size = thumb.size,
+            cornerRadius = CornerRadius(thumbRadius),
+        )
+        drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(GlassHighlight, GlassMid, Color.Black),
                 startY = thumb.top,
@@ -157,6 +183,29 @@ fun BmwSwitch(
             cornerRadius = CornerRadius(thumbRadius),
             style = Stroke(width = ThumbEdge.toPx()),
         )
+        val inset = Rect(
+            thumb.left + 4.dp.toPx(),
+            thumb.top + 4.dp.toPx(),
+            thumb.right - 4.dp.toPx(),
+            thumb.bottom - 4.dp.toPx(),
+        )
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFF444750), Color(0xFF090A0D)),
+                startY = inset.top,
+                endY = inset.bottom,
+            ),
+            topLeft = inset.topLeft,
+            size = inset.size,
+            cornerRadius = CornerRadius(inset.height / 2f),
+        )
+        drawLine(
+            color = Color.White.copy(alpha = 0.34f),
+            start = Offset(inset.left + inset.height * 0.42f, inset.top + 1.dp.toPx()),
+            end = Offset(inset.right - inset.height * 0.42f, inset.top + 1.dp.toPx()),
+            strokeWidth = 0.8.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
         drawLine(
             color = androidx.compose.ui.graphics.lerp(status, Color.White, 0.82f),
             start = Offset(thumb.center.x - thumb.width * 0.20f, thumb.center.y),
@@ -177,6 +226,7 @@ fun BmwSwitch(
                 textSize = LabelTextSize.toPx()
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 textAlign = android.graphics.Paint.Align.CENTER
+                setShadowLayer(4.dp.toPx(), 0f, 0f, status.copy(alpha = 0.75f).toArgb())
             }
             drawText(label, labelCentreX, body.center.y - (paint.ascent() + paint.descent()) / 2f, paint)
         }
