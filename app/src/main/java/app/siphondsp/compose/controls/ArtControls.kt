@@ -269,6 +269,7 @@ fun ArtKnob(
                 onCommit(it)
             },
             enabled = enabled,
+            accessibilityLabel = label,
             diameter = diameter,
             modifier = Modifier.size(diameter),
         )

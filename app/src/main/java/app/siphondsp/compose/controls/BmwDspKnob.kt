@@ -14,13 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +36,7 @@ import kotlin.math.sin
 private const val KnobStartAngle = 135f
 private const val KnobSweepAngle = 270f
 private const val KnobLedCount = 25
+private const val KnobCenterDeadZoneFraction = 0.12f
 
 /**
  * Generic compressor/DSP knob in the same black-glass LED language as [BmwSlider]. It keeps the
@@ -52,6 +53,7 @@ fun BmwDspKnob(
     modifier: Modifier = Modifier,
     diameter: Dp = 104.dp,
     enabled: Boolean = true,
+    accessibilityLabel: String? = null,
 ) {
     val safeValue = value.coerceIn(valueRange.start, valueRange.endInclusive)
     val span = valueRange.endInclusive - valueRange.start
@@ -61,8 +63,13 @@ fun BmwDspKnob(
     var dragValue by remember(value) { mutableFloatStateOf(safeValue) }
     val semanticSteps = stepsFor(valueRange, step)
 
-    fun valueFor(position: Offset, width: Int, height: Int): Float {
-        val f = dspKnobFractionForPoint(position.x, position.y, width.toFloat(), height.toFloat())
+    fun valueFor(position: Offset, width: Int, height: Int): Float? {
+        val f = dspKnobFractionForInteractivePoint(
+            position.x,
+            position.y,
+            width.toFloat(),
+            height.toFloat(),
+        ) ?: return null
         val raw = valueRange.start + span * f
         return snapToStep(raw, valueRange, step)
     }
@@ -71,22 +78,32 @@ fun BmwDspKnob(
         Modifier
             .pointerInput(valueRange, step) {
                 detectTapGestures { position ->
-                    val next = valueFor(position, size.width, size.height)
-                    dragValue = next
-                    currentOnPreview(next)
-                    currentOnCommit(next)
+                    valueFor(position, size.width, size.height)?.let { next ->
+                        dragValue = next
+                        currentOnPreview(next)
+                        currentOnCommit(next)
+                    }
                 }
             }
             .pointerInput(valueRange, step) {
+                var dragHasPreview = false
                 detectDragGestures(
+                    onDragStart = { dragHasPreview = false },
                     onDrag = { change, _ ->
                         change.consume()
-                        val next = valueFor(change.position, size.width, size.height)
-                        dragValue = next
-                        currentOnPreview(next)
+                        valueFor(change.position, size.width, size.height)?.let { next ->
+                            dragValue = next
+                            dragHasPreview = true
+                            currentOnPreview(next)
+                        }
                     },
-                    onDragEnd = { currentOnCommit(dragValue) },
-                    onDragCancel = { currentOnCommit(dragValue) },
+                    onDragEnd = {
+                        if (dragHasPreview) currentOnCommit(dragValue)
+                        dragHasPreview = false
+                    },
+                    onDragCancel = {
+                        dragHasPreview = false
+                    },
                 )
             }
     } else {
@@ -98,6 +115,7 @@ fun BmwDspKnob(
             .size(diameter)
             .alpha(if (enabled) 1f else 0.4f)
             .semantics(mergeDescendants = true) {
+                accessibilityLabel?.let { contentDescription = it }
                 progressBarRangeInfo = ProgressBarRangeInfo(safeValue, valueRange, semanticSteps)
                 if (enabled) {
                     setProgress { targetValue ->
@@ -196,4 +214,18 @@ internal fun dspKnobFractionForPoint(x: Float, y: Float, width: Float, height: F
         else -> angle
     }
     return ((sweepAngle - KnobStartAngle) / KnobSweepAngle).coerceIn(0f, 1f)
+}
+
+/** Ignores the centre, where a pointer has no meaningful angle around the knob. */
+internal fun dspKnobFractionForInteractivePoint(
+    x: Float,
+    y: Float,
+    width: Float,
+    height: Float,
+): Float? {
+    val dx = x - width / 2f
+    val dy = y - height / 2f
+    val deadZoneRadius = minOf(width, height) * KnobCenterDeadZoneFraction
+    if (dx * dx + dy * dy <= deadZoneRadius * deadZoneRadius) return null
+    return dspKnobFractionForPoint(x, y, width, height)
 }

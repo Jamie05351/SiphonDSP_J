@@ -1,6 +1,7 @@
 package app.siphondsp.compose.controls
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BmwDspKnobTest {
@@ -15,6 +16,13 @@ class BmwDspKnobTest {
     fun bottomDeadZoneClampsToNearestEndpoint() {
         assertEquals(0f, dspKnobFractionForPoint(35f, 100f, 100f, 100f), 0.01f)
         assertEquals(1f, dspKnobFractionForPoint(65f, 100f, 100f, 100f), 0.01f)
+    }
+
+    @Test
+    fun interactiveMappingIgnoresPointsTooCloseToCenter() {
+        assertNull(dspKnobFractionForInteractivePoint(50f, 50f, 100f, 100f))
+        assertNull(dspKnobFractionForInteractivePoint(61f, 50f, 100f, 100f))
+        assertEquals(0.83f, dspKnobFractionForInteractivePoint(63f, 50f, 100f, 100f)!!, 0.01f)
     }
 
     @Test

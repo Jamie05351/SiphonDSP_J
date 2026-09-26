@@ -76,7 +76,6 @@ fun BmwSlider(
                         currentOnValueChange(valueAt(rawFraction))
                     },
                     onDragEnd = { currentOnFinished?.invoke() },
-                    onDragCancel = { currentOnFinished?.invoke() },
                 )
             }
     } else {
