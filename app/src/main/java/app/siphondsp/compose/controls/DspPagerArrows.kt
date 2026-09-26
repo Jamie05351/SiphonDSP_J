@@ -73,7 +73,7 @@ private val CenteredGlyphStyle = TextStyle(
 fun DspPagerArrows(pagerState: PagerState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val endInset = dimensionResource(R.dimen.dsp_pager_arrows_margin_end)
-    // Slider-palette cyan (BmwDashboardSkin.SLIDER_DEFAULT_COLOR) rather than the segmented
+    // Slider-palette neon purple (BmwDashboardSkin.SLIDER_DEFAULT_COLOR) rather than the segmented
     // control's own neutral grey rim -- these buttons sit against a dark backdrop and were hard
     // to pick out until called out in an accent color already used elsewhere in the app.
     val accent = BmwTheme.colors.sliderDefault

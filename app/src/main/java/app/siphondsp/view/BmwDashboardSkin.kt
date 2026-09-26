@@ -157,7 +157,7 @@ object BmwDashboardSkin {
     internal const val SLIDER_THUMB_TICK_STROKE_WIDTH_DP = 0.75f
 
     // Per-band slider accent -- neon variants of the J_DSP_slider_master_style_4_colour pack's
-    // hues: Low=blue, Mid=yellow, Headroom=purple, everything else=cyan (the default, when no
+    // hues: Low=blue, Mid=yellow, High=pink, and everything else=neon purple (the default, when no
     // accentColor is passed). The pack's originals (#00266D / #FEF200 / #4632A5 / #009AED) read
     // too dark on-device once the thumb gradient blends each toward black at its base, so these
     // are lifted to high-value neon tones. Distinct from LIGHT_BLUE/MID_BAND_YELLOW (used for
@@ -173,7 +173,7 @@ object BmwDashboardSkin {
     // Stage-timing L/R alignment delay: a neon magenta -- not tied to a band, and clear of the
     // blue / yellow / purple / orange / green already spoken for.
     const val SLIDER_STAGE_COLOR = 0xFFFF3D8B.toInt()
-    const val SLIDER_DEFAULT_COLOR = 0xFF12CFFF.toInt()
+    const val SLIDER_DEFAULT_COLOR = 0xFFB14DFF.toInt()
 
     // The exact neon green the ON/OFF glass switch lights up with -- reused by the page-toggle
     // strip so a selected page reads as "on" in the same language.
@@ -292,7 +292,7 @@ object BmwDashboardSkin {
         slider.setHaloTintList(ColorStateList.valueOf(SLIDER_HALO_COLOR))
         // [accent] (resolved above, never null) is passed rather than the raw nullable
         // [accentColor] -- every slider now gets a colored thumb+track+capsule, defaulting to
-        // SLIDER_DEFAULT_COLOR's cyan, matching how all 4 of the master pack's own variants are
+        // SLIDER_DEFAULT_COLOR's neon purple, matching how all 4 of the master pack's variants are
         // colored presets with no neutral-grey option among them.
         slider.setCustomThumbDrawable(sliderThumbDrawable(context, accent))
         // The capsule outline sits on the Slider's own background, not a separate wrapping view --
