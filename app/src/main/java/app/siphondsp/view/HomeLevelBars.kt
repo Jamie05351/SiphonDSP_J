@@ -9,7 +9,6 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
-import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -19,11 +18,13 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * The front page's right-hand display: live L / R output level bars (post-DSP RMS fill + peak-hold tick, from
- * [SpectrumEngine]'s analyzer, with a peak-hold tick) and the L / R post-gain readout beneath.
+ * The front page's right-hand display: live purple segmented L / R output level bars (post-DSP
+ * RMS illumination plus a peak-hold outline from [SpectrumEngine]'s analyzer) and the L / R
+ * post-gain readout beneath.
  *
  * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this view holds
  * it only while it is attached, its window and view are visible, and [pageActive] is true (the
@@ -35,6 +36,7 @@ class HomeLevelBars @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
+    private val density = resources.displayMetrics.density
     private val leftMeter = PeakHoldMeter(floorDb = FLOOR_DB)
     private val rightMeter = PeakHoldMeter(floorDb = FLOOR_DB)
     private val levels = FloatArray(4)
@@ -62,7 +64,13 @@ class HomeLevelBars @JvmOverloads constructor(
 
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(46, 255, 255, 255) }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val holdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(42, 0xB1, 0x4D, 0xFF) }
+    private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(150, 255, 255, 255) }
+    private val holdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(0xED, 0xD8, 0xFF)
+        style = Paint.Style.STROKE
+        strokeWidth = density
+    }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(184, 196, 208)
         typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -171,29 +179,49 @@ class HomeLevelBars @JvmOverloads constructor(
         val barTop = top + (rowH - barH) / 2f
         canvas.drawText(label, left, top + rowH * 0.66f, textPaint)
 
-        val radius = barH * 0.3f
-        rect.set(barLeft, barTop, barRight, barTop + barH)
-        canvas.drawRoundRect(rect, radius, radius, trackPaint)
-
-        // Bar = RMS (average loudness); the white tick = peak hold. Filling to instantaneous peak
-        // pinned the bar near full on any mastered music.
+        // Bar = RMS (average loudness); the outlined segment = peak hold. Filling to instantaneous
+        // peak pinned the bar near full on any mastered music.
         val fraction = PeakHoldMeter.fractionFor(meter.rmsDb, FLOOR_DB, CEILING_DB)
-        if (fraction > 0f) {
-            fillPaint.shader = LinearGradient(
-                barLeft, 0f, barRight, 0f,
-                intArrayOf(GREEN, GREEN, AMBER, RED),
-                floatArrayOf(0f, 0.6f, 0.85f, 1f),
-                Shader.TileMode.CLAMP,
-            )
-            rect.set(barLeft, barTop, barLeft + (barRight - barLeft) * fraction, barTop + barH)
-            canvas.drawRoundRect(rect, radius, radius, fillPaint)
+        val span = barRight - barLeft
+        val gap = barH * 0.19f
+        val segmentCount = SEGMENT_COUNT
+        val segmentW = ((span - gap * (segmentCount - 1)) / segmentCount).coerceAtLeast(1f)
+        val radius = minOf(segmentW, barH) * 0.22f
+        val active = if (fraction <= 0f) 0 else ceil(fraction * segmentCount).toInt().coerceAtMost(segmentCount)
+        fillPaint.shader = LinearGradient(
+            0f,
+            barTop,
+            0f,
+            barTop + barH,
+            intArrayOf(PURPLE_HIGHLIGHT, PURPLE, PURPLE_SHADOW),
+            floatArrayOf(0f, 0.42f, 1f),
+            android.graphics.Shader.TileMode.CLAMP,
+        )
+        repeat(segmentCount) { index ->
+            val segmentLeft = barLeft + index * (segmentW + gap)
+            rect.set(segmentLeft, barTop, segmentLeft + segmentW, barTop + barH)
+            canvas.drawRoundRect(rect, radius, radius, trackPaint)
+            if (index < active) {
+                rect.inset(-gap * 0.34f, -gap * 0.32f)
+                canvas.drawRoundRect(rect, radius + gap, radius + gap, glowPaint)
+                rect.inset(gap * 0.34f, gap * 0.32f)
+                canvas.drawRoundRect(rect, radius, radius, fillPaint)
+                canvas.drawLine(
+                    rect.left + segmentW * 0.18f,
+                    rect.top + density,
+                    rect.right - segmentW * 0.18f,
+                    rect.top + density,
+                    highlightPaint,
+                )
+            }
         }
 
         val hold = PeakHoldMeter.fractionFor(meter.holdDb, FLOOR_DB, CEILING_DB)
         if (hold > 0f) {
-            val x = barLeft + (barRight - barLeft) * hold
-            val tickW = barH * 0.16f
-            canvas.drawRect(x - tickW, barTop, x, barTop + barH, holdPaint)
+            val index = (ceil(hold * segmentCount).toInt() - 1).coerceIn(0, segmentCount - 1)
+            val segmentLeft = barLeft + index * (segmentW + gap)
+            rect.set(segmentLeft, barTop, segmentLeft + segmentW, barTop + barH)
+            canvas.drawRoundRect(rect, radius, radius, holdPaint)
         }
     }
 
@@ -206,8 +234,9 @@ class HomeLevelBars @JvmOverloads constructor(
         const val FRAME_MS = 50L
         const val FLOOR_DB = -60f
         const val CEILING_DB = 0f
-        val GREEN = Color.rgb(0x22, 0xCC, 0x66)
-        val AMBER = Color.rgb(0xDD, 0xCC, 0x22)
-        val RED = Color.rgb(0xEE, 0x44, 0x33)
+        const val SEGMENT_COUNT = 28
+        val PURPLE = BmwDashboardSkin.SLIDER_HEADROOM_COLOR
+        val PURPLE_HIGHLIGHT = Color.rgb(0xE2, 0xC2, 0xFF)
+        val PURPLE_SHADOW = Color.rgb(0x54, 0x16, 0x88)
     }
 }

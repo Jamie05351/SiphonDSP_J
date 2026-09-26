@@ -118,6 +118,19 @@ fun BmwSlider(
         val trackRect = Rect(trackLeft, trackTop, trackRight, trackTop + trackHeight)
 
         drawRoundRect(
+            color = Color.Black.copy(alpha = 0.72f),
+            topLeft = Offset(trackRect.left, trackRect.top + 2.dp.toPx()),
+            size = trackRect.size,
+            cornerRadius = CornerRadius(corner),
+        )
+        drawRoundRect(
+            color = accentColor.copy(alpha = 0.08f),
+            topLeft = Offset(trackRect.left - 2.dp.toPx(), trackRect.top - 2.dp.toPx()),
+            size = androidx.compose.ui.geometry.Size(trackRect.width + 4.dp.toPx(), trackRect.height + 4.dp.toPx()),
+            cornerRadius = CornerRadius(corner + 2.dp.toPx()),
+            style = Stroke(width = 3.dp.toPx()),
+        )
+        drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(GlassHighlight, GlassMid, Color.Black),
                 startY = trackRect.top,
@@ -133,6 +146,13 @@ fun BmwSlider(
             size = trackRect.size,
             cornerRadius = CornerRadius(corner),
             style = Stroke(width = 1.dp.toPx()),
+        )
+        drawLine(
+            color = Color.White.copy(alpha = 0.22f),
+            start = Offset(trackLeft + corner * 0.70f, trackRect.top + 1.2.dp.toPx()),
+            end = Offset(trackRight - corner * 0.70f, trackRect.top + 1.2.dp.toPx()),
+            strokeWidth = 0.8.dp.toPx(),
+            cap = StrokeCap.Round,
         )
 
         val railInset = corner * 0.58f
@@ -150,6 +170,13 @@ fun BmwSlider(
             strokeWidth = RailWidth.toPx(),
             cap = StrokeCap.Round,
         )
+        drawLine(
+            color = lerpToWhite(accentColor, 0.72f),
+            start = Offset(trackLeft + railInset, trackCentreY - 0.5.dp.toPx()),
+            end = Offset(trackRight - railInset, trackCentreY - 0.5.dp.toPx()),
+            strokeWidth = 0.7.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
 
         val activeLed = ((LedCount - 1) * fraction).roundToInt()
         val ledY = LedCentreY.toPx()
@@ -165,6 +192,7 @@ fun BmwSlider(
                 drawCircle(accentColor.copy(alpha = 0.18f), ledRadius * 2.15f, Offset(x, ledY))
                 drawCircle(accentColor, ledRadius * 1.32f, Offset(x, ledY))
                 drawCircle(lerpToWhite(accentColor, 0.88f), ledRadius * 0.60f, Offset(x, ledY))
+                drawCircle(Color.White.copy(alpha = 0.72f), ledRadius * 0.20f, Offset(x - ledRadius * 0.22f, ledY - ledRadius * 0.24f))
             } else {
                 drawCircle(SmokedEdge, ledRadius * 1.28f, Offset(x, ledY))
                 drawCircle(SmokedFill, ledRadius, Offset(x, ledY))
@@ -183,6 +211,12 @@ fun BmwSlider(
         )
         val thumbCorner = thumbHeight / 2f
 
+        drawRoundRect(
+            color = Color.Black.copy(alpha = 0.78f),
+            topLeft = Offset(thumbRect.left, thumbRect.top + 2.dp.toPx()),
+            size = thumbRect.size,
+            cornerRadius = CornerRadius(thumbCorner),
+        )
         drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(GlassHighlight, GlassMid, Color.Black),
@@ -206,6 +240,29 @@ fun BmwSlider(
             size = thumbRect.size,
             cornerRadius = CornerRadius(thumbCorner),
             style = Stroke(width = ThumbEdgeWidth.toPx()),
+        )
+        val thumbInset = Rect(
+            thumbRect.left + 4.dp.toPx(),
+            thumbRect.top + 4.dp.toPx(),
+            thumbRect.right - 4.dp.toPx(),
+            thumbRect.bottom - 4.dp.toPx(),
+        )
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFF3D4048), Color(0xFF090A0D)),
+                startY = thumbInset.top,
+                endY = thumbInset.bottom,
+            ),
+            topLeft = thumbInset.topLeft,
+            size = thumbInset.size,
+            cornerRadius = CornerRadius(thumbInset.height / 2f),
+        )
+        drawLine(
+            color = Color.White.copy(alpha = 0.34f),
+            start = Offset(thumbInset.left + thumbInset.height * 0.45f, thumbInset.top + 1.dp.toPx()),
+            end = Offset(thumbInset.right - thumbInset.height * 0.45f, thumbInset.top + 1.dp.toPx()),
+            strokeWidth = 0.8.dp.toPx(),
+            cap = StrokeCap.Round,
         )
         drawLine(
             color = lerpToWhite(accentColor, 0.86f),
