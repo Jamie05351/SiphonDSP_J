@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.progressSemantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -21,6 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -55,6 +59,7 @@ fun BmwDspKnob(
     val currentOnPreview by rememberUpdatedState(onPreview)
     val currentOnCommit by rememberUpdatedState(onCommit)
     var dragValue by remember(value) { mutableFloatStateOf(safeValue) }
+    val semanticSteps = stepsFor(valueRange, step)
 
     fun valueFor(position: Offset, width: Int, height: Int): Float {
         val f = dspKnobFractionForPoint(position.x, position.y, width.toFloat(), height.toFloat())
@@ -92,7 +97,24 @@ fun BmwDspKnob(
         modifier = modifier
             .size(diameter)
             .alpha(if (enabled) 1f else 0.4f)
-            .progressSemantics(safeValue, valueRange, stepsFor(valueRange, step))
+            .semantics(mergeDescendants = true) {
+                progressBarRangeInfo = ProgressBarRangeInfo(safeValue, valueRange, semanticSteps)
+                if (enabled) {
+                    setProgress { targetValue ->
+                        val next = snapToStep(targetValue, valueRange, step)
+                        if (next == safeValue) {
+                            false
+                        } else {
+                            dragValue = next
+                            currentOnPreview(next)
+                            currentOnCommit(next)
+                            true
+                        }
+                    }
+                } else {
+                    disabled()
+                }
+            }
             .focusProperties { canFocus = false }
             .then(inputModifier),
     ) {

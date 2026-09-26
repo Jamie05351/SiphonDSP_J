@@ -16,4 +16,11 @@ class BmwDspKnobTest {
         assertEquals(0f, dspKnobFractionForPoint(35f, 100f, 100f, 100f), 0.01f)
         assertEquals(1f, dspKnobFractionForPoint(65f, 100f, 100f, 100f), 0.01f)
     }
+
+    @Test
+    fun accessibilityProgressUsesTheSameStepSnappingAsTouch() {
+        assertEquals(2.9f, snapToStep(2.86f, 1f..4f, 0.1f), 0.001f)
+        assertEquals(1f, snapToStep(-5f, 1f..4f, 0.1f), 0.001f)
+        assertEquals(4f, snapToStep(8f, 1f..4f, 0.1f), 0.001f)
+    }
 }

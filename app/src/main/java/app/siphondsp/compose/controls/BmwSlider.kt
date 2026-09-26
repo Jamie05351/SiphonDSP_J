@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.progressSemantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -21,6 +20,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -50,14 +54,7 @@ fun BmwSlider(
 
     fun valueAt(rawFraction: Float): Float {
         val logical = if (layoutDirection == LayoutDirection.Rtl) 1f - rawFraction else rawFraction
-        val clamped = logical.coerceIn(0f, 1f)
-        val stepped = if (steps > 0) {
-            val intervals = steps + 1
-            (clamped * intervals).roundToInt() / intervals.toFloat()
-        } else {
-            clamped
-        }
-        return valueRange.start + span * stepped
+        return sliderValueForProgress(valueRange.start + span * logical, valueRange, steps)
     }
 
     val inputModifier = if (enabled) {
@@ -91,7 +88,23 @@ fun BmwSlider(
             .fillMaxWidth()
             .height(ControlHeight)
             .alpha(if (enabled) 1f else DisabledAlpha)
-            .progressSemantics(safeValue, valueRange, steps)
+            .semantics(mergeDescendants = true) {
+                progressBarRangeInfo = ProgressBarRangeInfo(safeValue, valueRange, steps)
+                if (enabled) {
+                    setProgress { targetValue ->
+                        val next = sliderValueForProgress(targetValue, valueRange, steps)
+                        if (next == safeValue) {
+                            false
+                        } else {
+                            currentOnValueChange(next)
+                            currentOnFinished?.invoke()
+                            true
+                        }
+                    }
+                } else {
+                    disabled()
+                }
+            }
             .focusProperties { canFocus = false }
             .then(inputModifier),
     ) {
@@ -207,6 +220,21 @@ fun BmwSlider(
 
 private fun lerpToWhite(color: Color, amount: Float): Color =
     androidx.compose.ui.graphics.lerp(color, Color.White, amount)
+
+internal fun sliderValueForProgress(
+    targetValue: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+): Float {
+    val clamped = targetValue.coerceIn(valueRange.start, valueRange.endInclusive)
+    if (steps <= 0) return clamped
+    val span = valueRange.endInclusive - valueRange.start
+    if (span <= 0f) return valueRange.start
+    val intervals = steps + 1
+    val fraction = (clamped - valueRange.start) / span
+    val steppedFraction = (fraction * intervals).roundToInt() / intervals.toFloat()
+    return valueRange.start + span * steppedFraction
+}
 
 private val ControlHeight = 42.dp
 private val TrackHeight = 17.dp
