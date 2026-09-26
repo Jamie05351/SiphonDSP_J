@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.view.BmwDashboardSkin
 
-private val RingColor = Color(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
+private val RingColor = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
 private val StrokeWidth = 2.dp
 private val GlowWidth = 5.dp
 

@@ -41,11 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
-import app.siphondsp.compose.controls.ArtSlider
+import app.siphondsp.compose.controls.ArtKnob
 import app.siphondsp.compose.controls.ArtStacked
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.ArtValueBox
-import app.siphondsp.compose.controls.BmwSlider
+import app.siphondsp.compose.controls.BmwDspKnob
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.WorkspaceArt
@@ -65,7 +65,7 @@ import kotlin.math.roundToInt
 /**
  * One Gains & Delay page per crossover band (Phase 5 of the 3-way crossover,
  * docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md): a full-height Left and Right [BandSidePanel] for
- * that band -- Delay, Polarity, Gain (+ slider) and the shared Stage Alignment, one per row --
+ * that band -- Delay, Polarity, Gain (+ knob) and the shared Stage Alignment, one per row --
  * with the global STEREO LINK under the car.
  *
  * The car itself isn't drawn here: each band has its own full-screen workspace backdrop
@@ -186,8 +186,8 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier, onSelectBan
 }
 
 /**
- * One side of a band page: a full-height panel with a row each for Delay, Polarity, Gain (value
- * + full-width slider) and Stage Alignment. [mirrored] (the Right side) puts labels on the outer
+ * One side of a band page: a full-height panel with a row each for Delay, Polarity, Gain (knob +
+ * value) and Stage Alignment. [mirrored] (the Right side) puts labels on the outer
  * right edge and controls toward the car, matching the Left side's reflection.
  *
  * When [inactive] it's dimmed, swallows taps (a swipe still reaches the pager, since a click
@@ -346,7 +346,7 @@ private fun HeadUnitBandPage(
                     ) { dsp.commit(stageIndex, it) }
                 }
             }
-            ArtSlider(
+            ArtKnob(
                 label = "GAIN",
                 value = dsp.get(gainIndex),
                 valueRange = GainRange,
@@ -355,9 +355,8 @@ private fun HeadUnitBandPage(
                 accentColor = sliderAccent,
                 onPreview = { dsp.preview(gainIndex, it) },
                 onCommit = { dsp.commit(gainIndex, it) },
-                labelAbove = true,
-                alignEnd = mirrored,
                 valueWidth = GainValueWidth,
+                diameter = HeadUnitGainKnobDiameter,
                 modifier = Modifier.artRect(side.gain).then(dim),
             )
             if (inactive) {
@@ -415,14 +414,14 @@ private enum class BandSide(
         delay = artDp(204, 72, 192, 70),
         polarity = artDp(208, 164, 140, 60),
         stage = artDp(204, 240, 200, 70),
-        gain = artDp(188, 324, 314, 87),
+        gain = artDp(190, 310, 210, 160),
     ),
     RIGHT(
         "Right",
         delay = artDp(1020, 72, 198, 70),
         polarity = artDp(1068, 164, 150, 60),
         stage = artDp(1024, 244, 198, 70),
-        gain = artDp(912, 328, 314, 87),
+        gain = artDp(1018, 310, 210, 160),
     ),
 }
 
@@ -431,6 +430,7 @@ private val StereoLinkRect = artDp(504, 284, 400, 36)
 private val InactiveNoteRect = artDp(504, 324, 400, 30)
 private val SideValueWidth = 120.dp
 private val GainValueWidth = 84.dp
+private val HeadUnitGainKnobDiameter = 76.dp
 private val PolarityWidth = 140.dp
 
 /** The band labels baked into each band's car art (they move between the three images). */
@@ -453,7 +453,7 @@ private val GainsBand.tapTargets: Map<GainsBand, WorkspaceArt.Frac>
         )
     }
 
-/** GAIN label + tap-to-type value on one row, then a full-width slider under it. */
+/** GAIN label with a rotary control and the existing tap-to-type value box. */
 @Composable
 private fun GainRows(
     dsp: BmwDspState,
@@ -467,8 +467,28 @@ private fun GainRows(
     var drag by remember(committed) { mutableFloatStateOf(committed) }
     val shown = drag.coerceIn(GainRange.start, GainRange.endInclusive)
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelRow("GAIN", mirrored) {
+    PanelRow("GAIN", mirrored) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            BmwDspKnob(
+                value = shown,
+                valueRange = GainRange,
+                step = GainStep,
+                accentColor = sliderAccent,
+                onPreview = {
+                    val snapped = snapGain(it)
+                    drag = snapped
+                    dsp.preview(gainIndex, snapped)
+                },
+                onCommit = {
+                    drag = it
+                    dsp.commit(gainIndex, it)
+                },
+                diameter = PanelGainKnobDiameter,
+                accessibilityLabel = "GAIN",
+            )
             TapValue(text = DelayFormat.format(shown), unit = "dB", accent = accent) {
                 context.showBmwNumberInput("GAIN", GainRange.start, GainRange.endInclusive, drag, GainStep, "dB") {
                     drag = it
@@ -476,19 +496,6 @@ private fun GainRows(
                 }
             }
         }
-        BmwSlider(
-            value = shown,
-            valueRange = GainRange,
-            steps = (((GainRange.endInclusive - GainRange.start) / GainStep).roundToInt() - 1).coerceAtLeast(0),
-            accentColor = sliderAccent,
-            onValueChange = {
-                val snapped = snapGain(it)
-                drag = snapped
-                dsp.preview(gainIndex, snapped)
-            },
-            onValueChangeFinished = { dsp.commit(gainIndex, drag) },
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -566,6 +573,7 @@ private val InactiveNoteBottom = 60.dp
 private val RowHeight = 44.dp
 private val ValueWidth = 132.dp
 private val ValueHeight = 40.dp
+private val PanelGainKnobDiameter = 82.dp
 private val DelayFormat = java.text.DecimalFormat(
     "0.##",
     java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
