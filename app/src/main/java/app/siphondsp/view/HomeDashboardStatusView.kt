@@ -22,8 +22,6 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import kotlin.math.roundToInt
 
 /**
@@ -33,9 +31,9 @@ import kotlin.math.roundToInt
 class HomeDashboardStatusView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-) : View(context, attrs), KoinComponent {
+) : View(context, attrs) {
 
-    private val appPrefs: Preferences.App by inject()
+    private val appPrefs = Preferences(context).App()
     private val handler = Handler(Looper.getMainLooper())
     private var values = NativeBmwDspValues.load(context)
     private var powered = false
