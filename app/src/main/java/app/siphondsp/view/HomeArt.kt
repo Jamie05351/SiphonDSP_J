@@ -29,11 +29,18 @@ object HomeArt {
     class Px(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
     private val rects = mapOf(
-        "tile_peq" to Frac(0.0855f, 0.482f, 0.135f, 0.43f),
-        "tile_gains" to Frac(0.2365f, 0.482f, 0.133f, 0.43f),
-        "tile_xovers" to Frac(0.385f, 0.482f, 0.128f, 0.43f),
-        "tile_compressor" to Frac(0.5275f, 0.482f, 0.132f, 0.43f),
-        "tile_allpass" to Frac(0.6745f, 0.482f, 0.136f, 0.43f),
+        // Seven square navigation tiles sit in the lower half of the recessed AMOLED display.
+        // 0.075 * 2800 == 210 px and 0.20 * 1050 == 210 px, so the authored hit targets are
+        // genuinely square on the 2800x1050 head-unit artwork.
+        "tile_peq" to Frac(0.1325f, 0.690f, 0.075f, 0.200f),
+        "tile_gains" to Frac(0.2425f, 0.690f, 0.075f, 0.200f),
+        "tile_xovers" to Frac(0.3525f, 0.690f, 0.075f, 0.200f),
+        "tile_compressor" to Frac(0.4625f, 0.690f, 0.075f, 0.200f),
+        "tile_allpass" to Frac(0.5725f, 0.690f, 0.075f, 0.200f),
+        "tile_settings" to Frac(0.6825f, 0.690f, 0.075f, 0.200f),
+        "tile_more" to Frac(0.7925f, 0.690f, 0.075f, 0.200f),
+        // Seven aligned live-status cells above the tile row.
+        "live_strip" to Frac(0.1325f, 0.430f, 0.735f, 0.205f),
         // The backdrop is the DSP-off art (grey button). This rect is exactly the pixel crop
         // saved as `dsp_home_power_on.png` from the DSP-on art (x 1..192, y 627..818 of
         // 2800x1050: the placed button plus a 10px margin so its purple glow fits), which
@@ -54,11 +61,16 @@ object HomeArt {
     // Its bezel has no cog or overflow drawn, so those two live icons sit in its top corners.
     // The knob on the right is decoration only (no key).
     private val phoneRects = mapOf(
-        "tile_peq" to Frac(241f / 2800f, 661f / 1292f, 379f / 2800f, 555f / 1292f),
-        "tile_gains" to Frac(668f / 2800f, 661f / 1292f, 366f / 2800f, 555f / 1292f),
-        "tile_xovers" to Frac(1078f / 2800f, 661f / 1292f, 374f / 2800f, 555f / 1292f),
-        "tile_compressor" to Frac(1475f / 2800f, 661f / 1292f, 382f / 2800f, 555f / 1292f),
-        "tile_allpass" to Frac(1884f / 2800f, 661f / 1292f, 389f / 2800f, 555f / 1292f),
+        // Same seven-column system on the taller phone artwork. Width remains 210 px; height is
+        // 210/1292 so the touch targets stay square in the source art.
+        "tile_peq" to Frac(0.1325f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_gains" to Frac(0.2425f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_xovers" to Frac(0.3525f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_compressor" to Frac(0.4625f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_allpass" to Frac(0.5725f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_settings" to Frac(0.6825f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_more" to Frac(0.7925f, 0.710f, 0.075f, 210f / 1292f),
+        "live_strip" to Frac(0.1325f, 0.480f, 0.735f, 0.170f),
         // Exactly the pixel crop saved as `dsp_home_power_on_phone.png` from the DSP-on art
         // (x 2..198, y 893..1089: the disc plus a 10px margin for its glow), which PowerHotspot
         // paints over the DSP-off backdrop while on -- same scheme as the head unit.
