@@ -45,7 +45,7 @@ object HomeArt {
         "tile_settings" to Frac(0.6825f, 0.690f, 0.075f, 0.200f),
         "tile_more" to Frac(0.7925f, 0.690f, 0.075f, 0.200f),
         // Seven aligned live-status cells above the tile row.
-        "live_strip" to Frac(0.1325f, 0.430f, 0.735f, 0.205f),
+        "live_strip" to Frac(0.1175f, 0.430f, 0.765f, 0.205f),
         // The backdrop is the DSP-off art (grey button). This rect is exactly the pixel crop
         // saved as `dsp_home_power_on.png` from the DSP-on art (x 1..192, y 627..818 of
         // 2800x1050: the placed button plus a 10px margin so its purple glow fits), which
@@ -78,7 +78,7 @@ object HomeArt {
         "tile_allpass" to Frac(0.5725f, 0.710f, 0.075f, 210f / 1292f),
         "tile_settings" to Frac(0.6825f, 0.710f, 0.075f, 210f / 1292f),
         "tile_more" to Frac(0.7925f, 0.710f, 0.075f, 210f / 1292f),
-        "live_strip" to Frac(0.1325f, 0.480f, 0.735f, 0.170f),
+        "live_strip" to Frac(0.1175f, 0.480f, 0.765f, 0.170f),
         // Exactly the pixel crop saved as `dsp_home_power_on_phone.png` from the DSP-on art
         // (x 2..198, y 893..1089: the disc plus a 10px margin for its glow), which PowerHotspot
         // paints over the DSP-off backdrop while on -- same scheme as the head unit.
