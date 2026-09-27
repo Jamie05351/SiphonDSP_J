@@ -37,27 +37,27 @@ object HomeArt {
         // Seven square navigation tiles sit in the lower half of the recessed AMOLED display.
         // 0.075 * 2800 == 210 px and 0.20 * 1050 == 210 px, so the authored hit targets are
         // genuinely square on the 2800x1050 head-unit artwork.
-        "tile_peq" to Frac(0.1325f, 0.690f, 0.075f, 0.200f),
-        "tile_gains" to Frac(0.2425f, 0.690f, 0.075f, 0.200f),
-        "tile_xovers" to Frac(0.3525f, 0.690f, 0.075f, 0.200f),
-        "tile_compressor" to Frac(0.4625f, 0.690f, 0.075f, 0.200f),
-        "tile_allpass" to Frac(0.5725f, 0.690f, 0.075f, 0.200f),
-        "tile_settings" to Frac(0.6825f, 0.690f, 0.075f, 0.200f),
-        "tile_more" to Frac(0.7925f, 0.690f, 0.075f, 0.200f),
+        "tile_peq" to Frac(0.150000f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_gains" to Frac(0.246875f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_xovers" to Frac(0.343750f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_compressor" to Frac(0.443750f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_allpass" to Frac(0.540625f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_settings" to Frac(0.637500f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_more" to Frac(0.731250f, 0.666667f, 0.075000f, 0.200000f),
         // Seven aligned live-status cells above the tile row.
-        "live_strip" to Frac(0.1175f, 0.430f, 0.765f, 0.205f),
+        "live_strip" to Frac(0.125000f, 0.500000f, 0.706250f, 0.125000f),
         // The backdrop is the DSP-off art (grey button). This rect is exactly the pixel crop
         // saved as `dsp_home_power_on.png` from the DSP-on art (x 1..192, y 627..818 of
         // 2800x1050: the placed button plus a 10px margin so its purple glow fits), which
         // PowerHotspot paints over it while on. Both arts match to within 3/255 at its edge.
-        "power_btn" to Frac(1f / 2800f, 627f / 1050f, 191f / 2800f, 191f / 1050f),
+        "power_btn" to Frac(0.021875f, 0.633333f, 0.068750f, 0.183333f),
         // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
         "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
         "cog" to Frac(0.0109f, 0.0517f, 0.04f, 0.1373f),
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
-        "box_left" to Frac(0.07f, 0.053f, 0.227f, 0.314f),
-        "box_centre" to Frac(0.299f, 0.053f, 0.406f, 0.314f),
-        "box_right" to Frac(0.716f, 0.053f, 0.214f, 0.314f),
+        "box_left" to Frac(0.125000f, 0.116667f, 0.203125f, 0.250000f),
+        "box_centre" to Frac(0.362500f, 0.116667f, 0.273438f, 0.250000f),
+        "box_right" to Frac(0.668750f, 0.116667f, 0.203125f, 0.250000f),
     )
 
     // Same keys for the phone artwork (v4, 2800x1292), measured (Pillow edge scan) against
