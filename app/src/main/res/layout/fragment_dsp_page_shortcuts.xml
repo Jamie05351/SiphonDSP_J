@@ -8,11 +8,11 @@
     tools:context=".fragment.DspFragment"
     tools:ignore="SpeakableTextPresentCheck">
 
-    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.jpg, 2800x1050, drawn
+    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.jpg, 2340x878, drawn
          for the 1280x480 head unit) with no margins, padding, header or bottom bar around it.
          Everything live is laid over the artwork's own regions by HomeArtLayout, which places each
          child by its tag (see HomeArt.kt) using the same centerCrop mapping as this ImageView:
-         the 7 menu tiles (touch only), the seven-cell live status strip above them, and the
+         the 7 menu tiles (each its own image and touch area), the live status strip above them, and the
          three top displays - left crossover response, centre PEQ curve (both read-only) and
          right L/R level bars. The power button remains in the activity overlay. Must never scroll. -->
     <ImageView
@@ -28,23 +28,11 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Opaque live AMOLED layer masks the legacy baked lower-screen graphics. -->
-        <app.siphondsp.view.HomeAmoledSurfaceView
-            android:tag="lower_screen"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no" />
-
-        <!-- Vector-drawn visual tile family; transparent Views below remain the click targets. -->
-        <app.siphondsp.view.HomeDashboardTilesView
-            android:tag="tile_strip"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no" />
-
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_peq"
             android:tag="tile_peq"
+            android:src="@drawable/home_tile_peq"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -52,9 +40,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_parametric_eq" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_gains_delay"
             android:tag="tile_gains"
+            android:src="@drawable/home_tile_gains"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -62,9 +52,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_gain_limiter" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_crossovers"
             android:tag="tile_xovers"
+            android:src="@drawable/home_tile_xovers"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -72,9 +64,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_crossover_tilt" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_compressor"
             android:tag="tile_compressor"
+            android:src="@drawable/home_tile_compressor"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -82,9 +76,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_compressor" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_allpass"
             android:tag="tile_allpass"
+            android:src="@drawable/home_tile_allpass"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -92,9 +88,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_allpass" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_settings"
             android:tag="tile_settings"
+            android:src="@drawable/home_tile_settings"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -102,9 +100,11 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/title_activity_settings" />
 
-        <View
+        <ImageView
             android:id="@+id/card_shortcut_more"
             android:tag="tile_more"
+            android:src="@drawable/home_tile_more"
+            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"

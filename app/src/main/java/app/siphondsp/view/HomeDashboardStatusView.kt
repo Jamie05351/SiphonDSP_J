@@ -37,6 +37,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     private var powered = false
     private var healthLabel = "OFF"
     private var runtime: RootlessPipelineRuntimeSnapshot? = null
+    private val columnCenters = HomeArt.liveColumnCenters(phone = !context.isHeadUnitDisplay())
     private var active = true
 
     var powerOn: Boolean
@@ -123,9 +124,12 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (width <= 0 || height <= 0) return
 
-        val cellW = width / 7f
+        // Each cell is centred over its own tile (the tiles aren't evenly spaced); cellW is the
+        // average tile pitch, which sizes each cell's contents.
+        val centers = columnCenters
+        val cellW = (centers.last() - centers.first()) * width / (centers.size - 1)
         for (i in 1 until 6) {
-            val x = cellW * i
+            val x = (centers[i - 1] + centers[i]) / 2f * width
             canvas.drawLine(x, height * .12f, x, height * .88f, dividerPaint)
         }
 
@@ -137,7 +141,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         drawSettings(canvas, cellW, 5)
     }
 
-    private fun center(cellW: Float, index: Int): Float = cellW * (index + .5f)
+    private fun center(index: Int): Float = columnCenters[index] * width
 
     private fun title(canvas: Canvas, cx: Float, value: String) {
         labelPaint.textSize = height * .15f
@@ -155,7 +159,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     }
 
     private fun drawDspState(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "DSP")
         val paint = when (healthLabel) {
             "ON" -> onPaint
@@ -168,7 +172,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     }
 
     private fun drawGains(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "HEADROOM / GAIN")
         val hr = values[NativeBmwDspValues.INDEX_HEADROOM]
         val low = average(values[NativeBmwDspValues.INDEX_LOW_GAIN_L], values[NativeBmwDspValues.INDEX_LOW_GAIN_R])
@@ -180,7 +184,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
 
     /** One line per setting on the Crossovers pages: Low/Mid, Mid/High and Tilt. */
     private fun drawXovers(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "XOVERS")
         val midHigh = if (ThreeWayCrossover.isEnabled(values)) {
             hz(values[ThreeWayCrossover.cornerIndex])
@@ -199,7 +203,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     }
 
     private fun drawCompressor(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "COMPRESSOR")
         val master = values[NativeBmwDspValues.INDEX_MBC_ENABLED] >= .5f
         val box = minOf(cellW * .18f, height * .23f)
@@ -225,7 +229,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     }
 
     private fun drawAllpass(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "ALLPASS")
         val outputs = intArrayOf(
             NativeBmwDspValues.OUTPUT_LOW_LEFT,
@@ -259,7 +263,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
 
     /** What the running pipeline really uses, not the requested setting; dashes while it's stopped. */
     private fun drawSettings(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
+        val cx = center(index)
         title(canvas, cx, "AUDIO")
         val snapshot = runtime
         val format = when (snapshot?.pcmFloat) {
