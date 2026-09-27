@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -13,31 +12,31 @@ import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.View
-import app.siphondsp.R
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.model.preference.AudioEncoding
+import app.siphondsp.model.ThreeWayCrossover
+import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
 import app.siphondsp.service.DspHealthBadge
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
-import app.siphondsp.utils.preferences.Preferences
 import kotlin.math.roundToInt
 
 /**
  * Seven-column at-a-glance status strip above the home navigation tiles.
- * Order matches the row below: PEQ, Gains/Delay, Xovers, Compressor, Allpass, Settings, More.
+ * Order matches the row below: PEQ, Gains/Delay, Xovers, Compressor, Allpass, Settings. The
+ * column above More is left empty.
  */
 class HomeDashboardStatusView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    private val appPrefs = Preferences(context).App()
     private val handler = Handler(Looper.getMainLooper())
     private var values = NativeBmwDspValues.load(context)
     private var powered = false
     private var healthLabel = "OFF"
+    private var runtime: RootlessPipelineRuntimeSnapshot? = null
     private var active = true
 
     var powerOn: Boolean
@@ -89,14 +88,6 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         }
     }
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == context.getString(R.string.key_audioformat_encoding) ||
-            key == context.getString(R.string.key_audioformat_buffersize)
-        ) {
-            invalidate()
-        }
-    }
-
     private val healthPoll = object : Runnable {
         override fun run() {
             refreshHealth()
@@ -108,7 +99,6 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        appPrefs.registerOnSharedPreferenceChangeListener(prefListener)
         values = NativeBmwDspValues.load(context)
         refreshHealth()
         if (active) handler.post(healthPoll)
@@ -117,7 +107,6 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         handler.removeCallbacks(healthPoll)
         context.unregisterLocalReceiver(receiver)
-        appPrefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         super.onDetachedFromWindow()
     }
 
@@ -135,7 +124,7 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         if (width <= 0 || height <= 0) return
 
         val cellW = width / 7f
-        for (i in 1 until 7) {
+        for (i in 1 until 6) {
             val x = cellW * i
             canvas.drawLine(x, height * .12f, x, height * .88f, dividerPaint)
         }
@@ -146,7 +135,6 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         drawCompressor(canvas, cellW, 3)
         drawAllpass(canvas, cellW, 4)
         drawSettings(canvas, cellW, 5)
-        drawMute(canvas, cellW, 6)
     }
 
     private fun center(cellW: Float, index: Int): Float = cellW * (index + .5f)
@@ -158,6 +146,11 @@ class HomeDashboardStatusView @JvmOverloads constructor(
 
     private fun line(canvas: Canvas, cx: Float, y: Float, value: String) {
         textPaint.textSize = height * .16f
+        canvas.drawText(value, cx, y, textPaint)
+    }
+
+    private fun smallLine(canvas: Canvas, cx: Float, y: Float, value: String) {
+        textPaint.textSize = height * .13f
         canvas.drawText(value, cx, y, textPaint)
     }
 
@@ -185,11 +178,24 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         line(canvas, cx, height * .76f, "L " + db(low) + "  M " + db(mid) + "  H " + db(high))
     }
 
+    /** One line per setting on the Crossovers pages: Low/Mid, Mid/High and Tilt. */
     private fun drawXovers(canvas: Canvas, cellW: Float, index: Int) {
         val cx = center(cellW, index)
         title(canvas, cx, "XOVERS")
-        line(canvas, cx, height * .52f, "LOW " + xoText(NativeBmwDspValues.OUTPUT_LOW_LEFT))
-        line(canvas, cx, height * .76f, "MID " + xoText(NativeBmwDspValues.OUTPUT_MID_LEFT))
+        val midHigh = if (ThreeWayCrossover.isEnabled(values)) {
+            hz(values[ThreeWayCrossover.cornerIndex])
+        } else {
+            "OFF"
+        }
+        val tilt = if (values[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
+            db(values[NativeBmwDspValues.INDEX_TILT_AMOUNT]) + " dB"
+        } else {
+            "OFF"
+        }
+        smallLine(canvas, cx, height * .44f, "LOW " + xoText(NativeBmwDspValues.OUTPUT_LOW_LEFT))
+        smallLine(canvas, cx, height * .60f, "MID " + xoText(NativeBmwDspValues.OUTPUT_MID_LEFT))
+        smallLine(canvas, cx, height * .76f, "M/H " + midHigh)
+        smallLine(canvas, cx, height * .92f, "TILT " + tilt)
     }
 
     private fun drawCompressor(canvas: Canvas, cellW: Float, index: Int) {
@@ -251,34 +257,27 @@ class HomeDashboardStatusView @JvmOverloads constructor(
         }
     }
 
+    /** What the running pipeline really uses, not the requested setting; dashes while it's stopped. */
     private fun drawSettings(canvas: Canvas, cellW: Float, index: Int) {
         val cx = center(cellW, index)
         title(canvas, cx, "AUDIO")
-        val encoding = appPrefs.get<String>(R.string.key_audioformat_encoding).toIntOrNull() ?: 1
-        val floatOn = AudioEncoding.fromInt(encoding) == AudioEncoding.PcmFloat
-        val buffer = appPrefs.get<Float>(R.string.key_audioformat_buffersize).roundToInt()
-        line(canvas, cx, height * .52f, if (floatOn) "FLOAT 32" else "PCM 16")
+        val snapshot = runtime
+        val format = when (snapshot?.pcmFloat) {
+            true -> "FLOAT 32"
+            false -> "PCM 16"
+            null -> "FORMAT --"
+        }
+        val buffer = snapshot?.bufferSamples?.takeIf { it > 0 }?.toString() ?: "--"
+        line(canvas, cx, height * .52f, format)
         line(canvas, cx, height * .76f, "BUFFER " + buffer)
     }
 
-    private fun drawMute(canvas: Canvas, cellW: Float, index: Int) {
-        val cx = center(cellW, index)
-        title(canvas, cx, "MUTE")
-        val channelMuted = values[NativeBmwDspValues.INDEX_CHANNEL_MUTE] >= .5f
-        val lowMuted = pairMuted(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_LOW_RIGHT)
-        val midMuted = pairMuted(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT)
-        val highMuted = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f ||
-            pairMuted(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.OUTPUT_HIGH_RIGHT)
-        val mutedBands = listOf(lowMuted, midMuted, highMuted).count { it }
-        line(canvas, cx, height * .52f, if (channelMuted) "CH MUTED" else "CH OPEN")
-        line(canvas, cx, height * .76f, "BANDS " + mutedBands + "/3")
-    }
-
     private fun refreshHealth() {
+        runtime = RootlessAudioProcessorService.pipelineRuntimeSnapshot()
         healthLabel = if (!powered) {
             "OFF"
         } else {
-            when (DspHealthBadge.evaluate(RootlessAudioProcessorService.pipelineRuntimeSnapshot()).level) {
+            when (DspHealthBadge.evaluate(runtime).level) {
                 DspHealthBadge.Level.IDLE -> "IDLE"
                 else -> "ON"
             }
@@ -310,15 +309,6 @@ class HomeDashboardStatusView @JvmOverloads constructor(
     }
 
     private fun average(a: Float, b: Float): Float = (a + b) * .5f
-
-    private fun pairMuted(left: Int, right: Int): Boolean = outputMuted(left) && outputMuted(right)
-
-    private fun outputMuted(output: Int): Boolean =
-        if (output <= NativeBmwDspValues.OUTPUT_MID_RIGHT) {
-            values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_MUTE)] >= .5f
-        } else {
-            values[NativeBmwDspValues.highOutputIndex(output, NativeBmwDspValues.FIELD_MUTE)] >= .5f
-        }
 
     private fun anyAllPassEnabled(output: Int): Boolean {
         repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { section ->
