@@ -29,6 +29,11 @@ object HomeArt {
     class Px(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
     private val rects = mapOf(
+        // Flat AMOLED lower display and its live-drawn tile strip. The surface view masks the
+        // legacy baked-in tile art so the dashboard can be rendered entirely from live UI.
+        "lower_screen" to Frac(0.108f, 0.398f, 0.784f, 0.535f),
+        "tile_strip" to Frac(0.1175f, 0.665f, 0.765f, 0.235f),
+
         // Seven square navigation tiles sit in the lower half of the recessed AMOLED display.
         // 0.075 * 2800 == 210 px and 0.20 * 1050 == 210 px, so the authored hit targets are
         // genuinely square on the 2800x1050 head-unit artwork.
@@ -61,6 +66,9 @@ object HomeArt {
     // Its bezel has no cog or overflow drawn, so those two live icons sit in its top corners.
     // The knob on the right is decoration only (no key).
     private val phoneRects = mapOf(
+        "lower_screen" to Frac(0.098f, 0.438f, 0.804f, 0.485f),
+        "tile_strip" to Frac(0.1175f, 0.685f, 0.765f, 0.205f),
+
         // Same seven-column system on the taller phone artwork. Width remains 210 px; height is
         // 210/1292 so the touch targets stay square in the source art.
         "tile_peq" to Frac(0.1325f, 0.710f, 0.075f, 210f / 1292f),
