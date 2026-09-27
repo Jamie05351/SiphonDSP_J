@@ -1,7 +1,6 @@
 package app.siphondsp.view
 
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -29,48 +28,22 @@ object HomeArt {
     /** Rect in view pixels. */
     class Px(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-    /** The seven navigation tiles, left to right, as drawn by HomeDashboardTilesView. */
-    val TILE_KEYS = listOf(
-        "tile_peq", "tile_gains", "tile_xovers", "tile_compressor",
-        "tile_allpass", "tile_settings", "tile_more",
-    )
-
-    /**
-     * Tile [index]'s square inside a [stripW] x [stripH] tile strip, in the strip's own units:
-     * seven equal columns, each tile 0.76 of its column (capped at 0.92 of the strip height),
-     * centred. HomeDashboardTilesView draws with this and the touch rects are built from it,
-     * so what is tapped is always exactly what is drawn.
-     */
-    fun stripTile(index: Int, stripW: Float, stripH: Float): Frac {
-        val cellW = stripW / TILE_KEYS.size
-        val side = min(cellW * .76f, stripH * .92f)
-        return Frac(cellW * index + (cellW - side) / 2f, (stripH - side) / 2f, side, side)
-    }
-
-    /** Touch rects for the seven tiles, derived from [strip] on an [imageW] x [imageH] art. */
-    private fun tileRects(strip: Frac, imageW: Float, imageH: Float): List<Pair<String, Frac>> {
-        val stripW = strip.w * imageW
-        val stripH = strip.h * imageH
-        return TILE_KEYS.mapIndexed { i, key ->
-            val t = stripTile(i, stripW, stripH)
-            key to Frac(
-                strip.x + t.x / imageW,
-                strip.y + t.y / imageH,
-                t.w / imageW,
-                t.h / imageH,
-            )
-        }
-    }
-
-    private val tileStrip = Frac(0.1175f, 0.665f, 0.765f, 0.235f)
-    private val phoneTileStrip = Frac(0.1175f, 0.685f, 0.765f, 0.205f)
-
     private val rects = mapOf(
         // Flat AMOLED lower display and its live-drawn tile strip. The surface view masks the
         // legacy baked-in tile art so the dashboard can be rendered entirely from live UI.
         "lower_screen" to Frac(0.108f, 0.398f, 0.784f, 0.535f),
-        "tile_strip" to tileStrip,
-        *tileRects(tileStrip, IMAGE_WIDTH, IMAGE_HEIGHT).toTypedArray(),
+        "tile_strip" to Frac(0.1175f, 0.665f, 0.765f, 0.235f),
+
+        // Seven square navigation tiles sit in the lower half of the recessed AMOLED display.
+        // 0.075 * 2800 == 210 px and 0.20 * 1050 == 210 px, so the authored hit targets are
+        // genuinely square on the 2800x1050 head-unit artwork.
+        "tile_peq" to Frac(0.150000f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_gains" to Frac(0.246875f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_xovers" to Frac(0.343750f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_compressor" to Frac(0.443750f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_allpass" to Frac(0.540625f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_settings" to Frac(0.637500f, 0.666667f, 0.075000f, 0.200000f),
+        "tile_more" to Frac(0.731250f, 0.666667f, 0.075000f, 0.200000f),
         // Seven aligned live-status cells above the tile row.
         "live_strip" to Frac(0.125000f, 0.500000f, 0.706250f, 0.125000f),
         // The backdrop is the DSP-off art (grey button). This rect is exactly the pixel crop
@@ -94,8 +67,17 @@ object HomeArt {
     // The knob on the right is decoration only (no key).
     private val phoneRects = mapOf(
         "lower_screen" to Frac(0.098f, 0.438f, 0.804f, 0.485f),
-        "tile_strip" to phoneTileStrip,
-        *tileRects(phoneTileStrip, PHONE_IMAGE_WIDTH, PHONE_IMAGE_HEIGHT).toTypedArray(),
+        "tile_strip" to Frac(0.1175f, 0.685f, 0.765f, 0.205f),
+
+        // Same seven-column system on the taller phone artwork. Width remains 210 px; height is
+        // 210/1292 so the touch targets stay square in the source art.
+        "tile_peq" to Frac(0.1325f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_gains" to Frac(0.2425f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_xovers" to Frac(0.3525f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_compressor" to Frac(0.4625f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_allpass" to Frac(0.5725f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_settings" to Frac(0.6825f, 0.710f, 0.075f, 210f / 1292f),
+        "tile_more" to Frac(0.7925f, 0.710f, 0.075f, 210f / 1292f),
         "live_strip" to Frac(0.1175f, 0.480f, 0.765f, 0.170f),
         // Exactly the pixel crop saved as `dsp_home_power_on_phone.png` from the DSP-on art
         // (x 2..198, y 893..1089: the disc plus a 10px margin for its glow), which PowerHotspot

@@ -87,12 +87,14 @@ class HomeDashboardTilesView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (width <= 0 || height <= 0) return
 
-        repeat(HomeArt.TILE_KEYS.size) { i ->
-            // Same square the tile's touch rect is built from (HomeArt.stripTile).
-            val t = HomeArt.stripTile(i, width.toFloat(), height.toFloat())
-            val tile = t.w
-            val radius = tile * .105f
-            val rect = RectF(t.x, t.y, t.x + tile, t.y + tile)
+        val cellW = width / 7f
+        val tile = min(cellW * .76f, height * .92f)
+        val top = (height - tile) / 2f
+        val radius = tile * .105f
+
+        repeat(7) { i ->
+            val left = cellW * i + (cellW - tile) / 2f
+            val rect = RectF(left, top, left + tile, top + tile)
             canvas.drawRoundRect(rect, radius, radius, tileFill)
             canvas.drawRoundRect(rect, radius, radius, rim)
 
