@@ -39,6 +39,7 @@ class DspFragment : Fragment() {
     private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
+    private var powerState: Boolean = false
 
     /**
      * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
@@ -137,6 +138,7 @@ class DspFragment : Fragment() {
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
         )
         shortcutsBinding.homePeqGraph.setContent { HomePeqGraph() }
+        shortcutsBinding.homeDashboardStatus.powerOn = powerState
 
         // Seven primary home actions. The first five open DSP workspaces; Settings and More
         // delegate to MainActivity so its existing settings/overflow behaviour remains the single
@@ -202,6 +204,7 @@ class DspFragment : Fragment() {
 
     /** Keeps the live DSP-status cell in lockstep with MainActivity's real power state. */
     fun setPowerState(on: Boolean) {
+        powerState = on
         if (::shortcutsBinding.isInitialized) {
             shortcutsBinding.homeDashboardStatus.powerOn = on
         }
