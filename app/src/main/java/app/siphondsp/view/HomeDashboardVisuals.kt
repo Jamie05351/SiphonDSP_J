@@ -203,7 +203,7 @@ class HomeDashboardTilesView @JvmOverloads constructor(
             val x = r.left + r.width() * t
             val envelope = if (t < .48f) (1f - t * .6f) else .35f
             val amp = r.height() * .42f * envelope
-            val y = center - sin(t * PI.toFloat() * 10f) * amp
+            val y = center - sin((t * PI.toFloat() * 10f).toDouble()).toFloat() * amp
             if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
         }
         canvas.drawPath(p, neutral)
@@ -213,7 +213,7 @@ class HomeDashboardTilesView @JvmOverloads constructor(
             val t = i / points.toFloat()
             val x = r.left + r.width() * t
             val amp = r.height() * .18f
-            val y = center - sin(t * PI.toFloat() * 10f) * amp
+            val y = center - sin((t * PI.toFloat() * 10f).toDouble()).toFloat() * amp
             if (i == 26) p2.moveTo(x, y) else p2.lineTo(x, y)
         }
         canvas.drawPath(p2, red)
@@ -229,7 +229,7 @@ class HomeDashboardTilesView @JvmOverloads constructor(
         for (i in 0..48) {
             val t = i / 48f
             val x = r.left + r.width() * t
-            val y = r.centerY() - sin(t * PI.toFloat() * 2f + phase) * r.height() * .32f
+            val y = r.centerY() - sin((t * PI.toFloat() * 2f + phase).toDouble()).toFloat() * r.height() * .32f
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         canvas.drawPath(path, Paint(accent).apply { this.color = color })
@@ -245,10 +245,12 @@ class HomeDashboardTilesView @JvmOverloads constructor(
         canvas.drawCircle(cx, cy, inner, neutral)
         repeat(8) { i ->
             val angle = i * PI.toFloat() / 4f
-            val x0 = cx + kotlin.math.cos(angle) * outer
-            val y0 = cy + kotlin.math.sin(angle) * outer
-            val x1 = cx + kotlin.math.cos(angle) * outer * 1.34f
-            val y1 = cy + kotlin.math.sin(angle) * outer * 1.34f
+            val cosA = kotlin.math.cos(angle.toDouble()).toFloat()
+            val sinA = kotlin.math.sin(angle.toDouble()).toFloat()
+            val x0 = cx + cosA * outer
+            val y0 = cy + sinA * outer
+            val x1 = cx + cosA * outer * 1.34f
+            val y1 = cy + sinA * outer * 1.34f
             canvas.drawLine(x0, y0, x1, y1, neutral)
         }
     }
