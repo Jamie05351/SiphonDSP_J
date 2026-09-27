@@ -115,7 +115,7 @@ class MainActivity : BaseActivity() {
                 processorServiceBound = true
 
                 if (isRootless())
-                    binding.powerToggle.isToggled = true
+                    setPowerUi(true)
             }
 
             override fun onServiceDisconnected(arg0: ComponentName) {
@@ -132,11 +132,11 @@ class MainActivity : BaseActivity() {
             when (intent.action) {
                 Constants.ACTION_SERVICE_STOPPED -> {
                     if(isRootless())
-                        binding.powerToggle.isToggled = false
+                        setPowerUi(false)
                 }
                 Constants.ACTION_SERVICE_STARTED -> {
                     if(isRootless())
-                        binding.powerToggle.isToggled = true
+                        setPowerUi(true)
                 }
             }
         }
@@ -188,6 +188,12 @@ class MainActivity : BaseActivity() {
             binding.homeChrome.translationX = offset
             binding.homeChrome.isVisible = abs(offset) < binding.homeChrome.width.coerceAtLeast(1)
         }
+        dspFragment.onSettingsClick = {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        dspFragment.onMoreClick = { anchor ->
+            showOverflowMenu(anchor)
+        }
         if(!hasLoadFailed)
             supportFragmentManager.beginTransaction()
                 .replace(R.id.dsp_fragment_container, dspFragment)
@@ -211,10 +217,10 @@ class MainActivity : BaseActivity() {
         // cog and the "more" overflow (revert / blocklist / measurement / signal generator /
         // native truth) are transparent-backed icons in the overlay, and the power button is a
         // hotspot over the artwork's own button.
-        binding.actionSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        binding.actionOverflow.setOnClickListener { showOverflowMenu(it) }
+        // Settings and More are now proper seventh-row home tiles. Keep the legacy overlay
+        // views in the XML for binding/source compatibility, but make them non-visual/non-clickable.
+        binding.actionSettings.isVisible = false
+        binding.actionOverflow.isVisible = false
 
         IntentFilter(Constants.ACTION_SERVICE_STOPPED).apply {
             addAction(Constants.ACTION_SERVICE_STARTED)
@@ -240,7 +246,7 @@ class MainActivity : BaseActivity() {
                     if (binding.powerToggle.isToggled) {
                         // Currently on, let's turn it off
                         RootlessAudioProcessorService.stop(this@MainActivity)
-                        binding.powerToggle.isToggled = false
+                        setPowerUi(false)
                     } else {
                         // Currently off, let's turn it on
                         requestCapturePermission()
@@ -249,8 +255,9 @@ class MainActivity : BaseActivity() {
                 else if (isRoot()) {
                     when(JamesDspRemoteEngine.isPluginInstalled()) {
                         JamesDspRemoteEngine.PluginState.Available -> {
-                            binding.powerToggle.isToggled = !binding.powerToggle.isToggled
-                            prefsApp.set(R.string.key_powered_on, binding.powerToggle.isToggled)
+                            val next = !binding.powerToggle.isToggled
+                            setPowerUi(next)
+                            prefsApp.set(R.string.key_powered_on, next)
                         }
                         JamesDspRemoteEngine.PluginState.Unsupported -> {
                             toast(getString(R.string.version_mismatch_root_toast))
@@ -261,8 +268,9 @@ class MainActivity : BaseActivity() {
                     }
                 }
                 else if(isPlugin()) {
-                    binding.powerToggle.isToggled = !binding.powerToggle.isToggled
-                    prefsApp.set(R.string.key_powered_on, binding.powerToggle.isToggled)
+                    val next = !binding.powerToggle.isToggled
+                    setPowerUi(next)
+                    prefsApp.set(R.string.key_powered_on, next)
                 }
             }
         })
@@ -273,10 +281,10 @@ class MainActivity : BaseActivity() {
             ) { result ->
                 if (result.resultCode == RESULT_OK && isRootless()) {
                     app.mediaProjectionStartIntent = result.data
-                    binding.powerToggle.isToggled = true
+                    setPowerUi(true)
                     RootlessAudioProcessorService.start(this, result.data)
                 } else {
-                    binding.powerToggle.isToggled = false
+                    setPowerUi(false)
                 }
             }
         }
@@ -357,7 +365,7 @@ class MainActivity : BaseActivity() {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
-            binding.powerToggle.isToggled = prefsApp.get(R.string.key_powered_on)
+            setPowerUi(prefsApp.get(R.string.key_powered_on))
         }
 
         super.onSharedPreferenceChanged(sharedPreferences, key)
@@ -455,7 +463,15 @@ class MainActivity : BaseActivity() {
         prefsVar.set(R.string.key_is_activity_active, true)
 
         if(isRootless())
-            binding.powerToggle.isToggled = processorService != null
+            setPowerUi(processorService != null)
+    }
+
+    /** Updates both the physical-looking power control and the home status cell. */
+    private fun setPowerUi(on: Boolean) {
+        binding.powerToggle.isToggled = on
+        if (::dspFragment.isInitialized) {
+            dspFragment.setPowerState(on)
+        }
     }
 
     private fun showAndroid15Alert() {
@@ -588,7 +604,7 @@ class MainActivity : BaseActivity() {
             .replace(R.id.dsp_fragment_container, LibraryLoadErrorFragment.newInstance())
             .commit()
 
-        binding.powerToggle.isToggled = false
+        setPowerUi(false)
         binding.toolbar.isVisible = false
         // No artwork page behind the overlay in the load-error state.
         binding.homeChrome.isVisible = false
@@ -625,7 +641,7 @@ class MainActivity : BaseActivity() {
     @RequiresApi(Build.VERSION_CODES.Q)
     fun requestCapturePermission() {
         if(app.mediaProjectionStartIntent != null && isRootless() && !SdkCheck.isVanillaIceCream) {
-            binding.powerToggle.isToggled = true
+            setPowerUi(true)
             RootlessAudioProcessorService.start(this, app.mediaProjectionStartIntent)
             return
         }
