@@ -28,6 +28,20 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <!-- Opaque live AMOLED layer masks the legacy baked lower-screen graphics. -->
+        <app.siphondsp.view.HomeAmoledSurfaceView
+            android:tag="lower_screen"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
+
+        <!-- Vector-drawn visual tile family; transparent Views below remain the click targets. -->
+        <app.siphondsp.view.HomeDashboardTilesView
+            android:tag="tile_strip"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
+
         <View
             android:id="@+id/card_shortcut_peq"
             android:tag="tile_peq"
@@ -108,7 +122,8 @@
         <app.siphondsp.view.NoTouchFrameLayout
             android:tag="box_left"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:background="#000000">
 
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/home_crossover_graph"
@@ -119,7 +134,8 @@
         <app.siphondsp.view.NoTouchFrameLayout
             android:tag="box_centre"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:background="#000000">
 
             <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/home_peq_graph"
@@ -132,6 +148,7 @@
             android:tag="box_right"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:background="#000000"
             android:importantForAccessibility="no" />
     </app.siphondsp.view.HomeArtLayout>
 
