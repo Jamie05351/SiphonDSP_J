@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.launch
 import app.siphondsp.R
+import app.siphondsp.compose.screens.HomeCrossoverGraph
 import app.siphondsp.compose.screens.HomePeqGraph
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
@@ -45,6 +46,8 @@ class DspFragment : Fragment() {
      * that art can move with it instead of staying put mid-swipe.
      */
     var onHomePageOffset: ((Float) -> Unit)? = null
+    var onSettingsClick: (() -> Unit)? = null
+    var onMoreClick: ((View) -> Unit)? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -90,8 +93,11 @@ class DspFragment : Fragment() {
     }
 
     private fun onPageSelectedInternal(position: Int) {
-        // The artwork page stays attached while off screen, so its live meters have to be told.
-        shortcutsBinding.homeLevelBars.pageActive = position == 0
+        // The artwork page stays attached while off screen, so live/polled home widgets need to
+        // stop work when the settings page is selected.
+        val active = position == 0
+        shortcutsBinding.homeLevelBars.pageActive = active
+        shortcutsBinding.homeDashboardStatus.pageActive = active
     }
 
     /** [scrolledPx] is how far the pager has scrolled past the artwork page, in reading order. */
@@ -119,17 +125,22 @@ class DspFragment : Fragment() {
             updateNoticeOnClick?.invoke()
         }
 
-        // Centre display: read-only PEQ curve. Disposed with the fragment's view, not the
-        // window, since ViewPager2 keeps the page attached while it's off screen.
+        // Top-left display: read-only crossover response. Top-centre: read-only PEQ response.
+        // Both are static snapshots of current settings (no analyser/spectrum animation) and are
+        // disposed with the fragment view rather than the window.
+        shortcutsBinding.homeCrossoverGraph.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
+        shortcutsBinding.homeCrossoverGraph.setContent { HomeCrossoverGraph() }
+
         shortcutsBinding.homePeqGraph.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
         )
         shortcutsBinding.homePeqGraph.setContent { HomePeqGraph() }
 
-        // Primary BMW DSP shortcuts: transparent touch areas over the 5 tiles drawn in the
-        // front-page artwork -- only the click targets are wired here. The settings cog, overflow
-        // menu and power button are in the activity's overlay. The 5th tile opens the all-pass
-        // screen directly -- see DspDestination.ALLPASS.
+        // Seven primary home actions. The first five open DSP workspaces; Settings and More
+        // delegate to MainActivity so its existing settings/overflow behaviour remains the single
+        // source of truth. The power button remains activity-owned because it controls the engine.
         shortcutsBinding.cardShortcutPeq.setOnClickListener {
             startActivity(Intent(requireContext(), ParametricEqualizerActivity::class.java))
         }
@@ -147,6 +158,12 @@ class DspFragment : Fragment() {
                 Intent(requireContext(), CrossoverTiltActivity::class.java)
                     .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS),
             )
+        }
+        shortcutsBinding.cardShortcutSettings.setOnClickListener {
+            onSettingsClick?.invoke()
+        }
+        shortcutsBinding.cardShortcutMore.setOnClickListener { anchor ->
+            onMoreClick?.invoke(anchor)
         }
         // Should show notice?
         Timber.e(Locale.getDefault().language.toString())
@@ -181,6 +198,13 @@ class DspFragment : Fragment() {
         shortcutsBinding.translationNotice.isVisible = false
         // Set timer +1y
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
+    }
+
+    /** Keeps the live DSP-status cell in lockstep with MainActivity's real power state. */
+    fun setPowerState(on: Boolean) {
+        if (::shortcutsBinding.isInitialized) {
+            shortcutsBinding.homeDashboardStatus.powerOn = on
+        }
     }
 
     fun setUpdateCardVisible(visible: Boolean) {
