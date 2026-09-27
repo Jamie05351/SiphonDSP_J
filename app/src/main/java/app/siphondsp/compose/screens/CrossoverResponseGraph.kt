@@ -107,6 +107,7 @@ fun CrossoverResponseGraph(
     systemValues: FloatArray,
     peqState: BmwPeqState,
     modifier: Modifier = Modifier,
+    showSpectrum: Boolean = true,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
@@ -263,7 +264,7 @@ fun CrossoverResponseGraph(
 
     // Live spectrum poll, scoped to composition and to the modes that draw it. Acquire/release
     // bracket SpectrumEngine; the tick is read only in the draw phase so it never recomposes.
-    val spectrumActive = mode.showsSpectrum()
+    val spectrumActive = showSpectrum && mode.showsSpectrum()
     val spectrumTick = remember { mutableIntStateOf(0) }
     LaunchedEffect(spectrumActive) {
         if (!spectrumActive) return@LaunchedEffect
@@ -304,7 +305,7 @@ fun CrossoverResponseGraph(
                 gridPaint, gridOctavePaint, gridZeroPaint, labelPaint, toY,
             )
             drawCrossoverMarkers(nc, systemValues, left, right, top, bottom, density, markerPaint, markerLabelPaint)
-            if (mode.showsSpectrum()) {
+            if (showSpectrum && mode.showsSpectrum()) {
                 drawSpectrum(nc, left, right, top, bottom, frame, spectrumFillPaint, spectrumPaint)
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {

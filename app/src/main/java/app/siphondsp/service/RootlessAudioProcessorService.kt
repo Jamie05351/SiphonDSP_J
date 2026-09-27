@@ -124,6 +124,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile private var recorderSuspended = false
     @Volatile private var startupDiagnostics: StartupAudioDiagnostics? = null
     @Volatile private var totalRecoveries = 0
+    // What the current pipeline really runs at, for the home screen's Settings cell.
+    @Volatile private var activePcmFloat: Boolean? = null
+    @Volatile private var activeBufferSamples = 0
 
     private val startupDiagnosticsFinisher = Runnable {
         startupDiagnostics?.finishIfDue()
@@ -744,6 +747,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 .takeIf { it > 0 } ?: requestedBytes
             val bufferSizeBytes = alignUp(maxOf(requestedBytes, minRecordBytes, minTrackBytes), frameSizeBytes)
             val bufferSamples = bufferSizeBytes / bytesPerSample
+            activePcmFloat = encoding == AudioEncoding.PcmFloat
+            activeBufferSamples = bufferSamples
 
             Timber.i(
                 "Sample rate: $sampleRate; Encoding: ${encoding.name}; " +
@@ -1389,6 +1394,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     lastFlowAgeMs = service.lastSuccessfulWrite.let {
                         if (it < 0) -1L else SystemClock.elapsedRealtime() - it
                     },
+                    pcmFloat = service.activePcmFloat,
+                    bufferSamples = service.activeBufferSamples,
                 )
             }
         }

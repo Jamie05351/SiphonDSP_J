@@ -170,6 +170,10 @@ data class RootlessPipelineRuntimeSnapshot(
     val recoveriesThisSession: Int = 0,
     /** Milliseconds since audio was last written out; -1 if none yet. */
     val lastFlowAgeMs: Long = -1,
+    /** Whether the running pipeline uses 32-bit float samples (false = 16-bit PCM); null before it starts. */
+    val pcmFloat: Boolean? = null,
+    /** Buffer the running pipeline actually uses, in samples (the setting raised to Android's minimum); 0 before it starts. */
+    val bufferSamples: Int = 0,
 )
 
 private const val HEADER_WIDTH = 3
