@@ -8,6 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
@@ -41,26 +42,25 @@ enum class DspDestination(
     // sidebar doesn't present a different sequence than the page the user navigated in from.
     //
     // `backdrop` is the full-screen head-unit art (rail housing, tiles and background baked in).
-    // Since the v4 art every destination shares one image (dsp_workspace_backdrop_v4, 2800x1050 --
-    // the head unit's exact aspect) with no selected-tile highlight, baked or live; only Gains &
+    // Since the v5 art every destination shares one image (dsp_workspace_backdrop_v5, 2048x768 --
+    // the head unit's aspect) with no selected-tile highlight, baked or live; only Gains &
     // Delay's band pages swap in their own car art (GainsBand.backdrop).
     //
-    // `backdropPhone` is a second, separately-authored set for a regular phone screen (drawable-
-    // nodpi, since it's picked by name at runtime -- see DspCrossNavBar.isHeadUnitDisplay --
-    // rather than by density/config qualifiers). The head-unit set stays exactly as authored;
-    // this is purely additive.
+    // `backdropPhone` is the matching phone art (dsp_workspace_backdrop_v5_phone, 1846x852 -- the
+    // phone's aspect), picked by name at runtime (see DspCrossNavBar.isHeadUnitDisplay) rather
+    // than by density/config qualifiers.
     //
     // `iconOn`/`iconOff`: the hand-authored tile glyph in its lit (selected) and dim (unselected)
     // colour variants -- native canvas sizes vary per asset, scaled to fit inside the tile box.
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.nav_peq_on, R.drawable.nav_peq_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_peq_phone, ParametricEqualizerActivity::class),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.nav_gains_delay_on, R.drawable.nav_gains_delay_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_gains_phone, GainLimiterActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.nav_crossover_on, R.drawable.nav_crossover_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_xover_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.nav_compressor_on, R.drawable.nav_compressor_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_compressor_phone, NativeBmwCompressorActivity::class),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, R.drawable.nav_peq_on, R.drawable.nav_peq_off, R.drawable.dsp_workspace_backdrop_v5, R.drawable.dsp_workspace_backdrop_v5_phone, ParametricEqualizerActivity::class),
+    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, R.drawable.nav_gains_delay_on, R.drawable.nav_gains_delay_off, R.drawable.dsp_workspace_backdrop_v5, R.drawable.dsp_workspace_backdrop_v5_phone, GainLimiterActivity::class),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, R.drawable.nav_crossover_on, R.drawable.nav_crossover_off, R.drawable.dsp_workspace_backdrop_v5, R.drawable.dsp_workspace_backdrop_v5_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
+    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, R.drawable.nav_compressor_on, R.drawable.nav_compressor_off, R.drawable.dsp_workspace_backdrop_v5, R.drawable.dsp_workspace_backdrop_v5_phone, NativeBmwCompressorActivity::class),
     // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
     // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
     // the native chain). The Measurements / routing rows now live in the Signal Generator screen
     // (SignalGeneratorScreen) instead of a Settings-page inline card.
-    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.nav_allpass_on, R.drawable.nav_allpass_off, R.drawable.dsp_workspace_backdrop_v4, R.drawable.dsp_workspace_backdrop_allpass_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, R.drawable.nav_allpass_on, R.drawable.nav_allpass_off, R.drawable.dsp_workspace_backdrop_v5, R.drawable.dsp_workspace_backdrop_v5_phone, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
 }
 
 object DspCrossNavBar {
@@ -71,27 +71,67 @@ object DspCrossNavBar {
     // column (see that column's own comment in activity_parametric_eq.xml) -- populate() just
     // sets the backdrop image and pushes this destination's state into that ComposeView.
 
-    // Dialed in against the real empty-tile-slot backdrop PNGs with an HTML/JS calibrator (sliders
-    // over the actual art, live-updating this array) rather than eyeballed -- see DspSidebarNav's
-    // TILE_LEFT_INSET_FRACTION/TILE_RIGHT_INSET_FRACTION for the matching horizontal inset, which
-    // came from the same tool. These are weights (a ratio), not absolute pixels, so the source
-    // images' native resolution doesn't need to match the on-device render size -- only the
-    // proportions matter.
-    private val ROW_WEIGHTS = intArrayOf(56, 135, 21, 140, 18, 130, 18, 140, 21, 135, 62)
+    /**
+     * Where one backdrop's baked-in rail tiles sit. [rowWeights] alternate gap / tile / gap ...
+     * top to bottom as the art's own y fractions x 10000 (a ratio, so the art's native size
+     * doesn't matter); [leftInset]/[rightInset] are the tiles' x span as fractions of the sidebar
+     * column. On a phone the column itself follows the art ([railWidth] px of [width] x [height]).
+     */
+    private class RailArt(
+        val rowWeights: IntArray,
+        val leftInset: Float,
+        val rightInset: Float,
+        val width: Float = 0f,
+        val height: Float = 0f,
+        val railWidth: Float = 0f,
+    )
 
-    // Both art tiers -- head unit (2340x878) and phone (2340x1080) -- have tiles/labels/strips
-    // baked in: same tile rows as ROW_WEIGHTS (outlines measured within ~1px of it), but the tiles
-    // sit 4px further left than the old empty-slot art, so they need their own horizontal insets:
-    // outlines at x 30-212 of the 256px rail column, measured identically on both tiers.
-    private const val BAKED_ART_TILE_LEFT_INSET = 30f / 256f
-    private const val BAKED_ART_TILE_RIGHT_INSET = (256f - 212f) / 256f
+    // Head unit, v5 plain art (2048x768): tile outlines at y 43-159, 179-296, 315-432, 452-568,
+    // 588-704 and x 34-159, i.e. 21.25..100 dp of the fixed 140 dp column.
+    private val HEAD_UNIT_V5 = RailArt(
+        intArrayOf(560, 1523, 247, 1536, 234, 1536, 247, 1523, 247, 1523, 824),
+        leftInset = 21.25f / 140f,
+        rightInset = (140f - 100f) / 140f,
+    )
 
-    // Head unit, v4 art (2800x1050, 1:1 with the 1280x480 screen): the tile rows as the art's own
-    // y fractions (WorkspaceArt.sidebarTiles, placed in workspace_layout_placer_v4.html) x 10000,
-    // and the tiles' x span (0.0066..0.0981 of 1280dp) as fractions of the 140dp sidebar column.
-    private val HEAD_UNIT_ROW_WEIGHTS = intArrayOf(343, 1524, 466, 1553, 419, 1533, 419, 1467, 419, 1467, 390)
-    private const val HEAD_UNIT_TILE_LEFT_INSET = 8.45f / 140f
-    private const val HEAD_UNIT_TILE_RIGHT_INSET = (140f - 125.57f) / 140f
+    // Head unit, v5 Gains band car art (2340x878, all three share it): tiles at y 61-194,
+    // 219-352, 375-508, 532-665, 690-823 and x 34-168, i.e. 18.6..92.4 dp of the 140 dp column.
+    private val HEAD_UNIT_V5_CAR = RailArt(
+        intArrayOf(695, 1526, 273, 1526, 251, 1526, 262, 1526, 273, 1526, 616),
+        leftInset = 18.6f / 140f,
+        rightInset = (140f - 92.4f) / 140f,
+    )
+
+    // Phone, v5 art (1846x852): rail column 0..245 px, tiles at x 49-212 and y 45-180, 199-333,
+    // 352-485, 504-638, 657-795.
+    private val PHONE_V5 = RailArt(
+        intArrayOf(528, 1596, 211, 1585, 211, 1573, 211, 1585, 211, 1631, 658),
+        leftInset = 49f / 245f,
+        rightInset = (245f - 213f) / 245f,
+        width = 1846f,
+        height = 852f,
+        railWidth = 245f,
+    )
+
+    private val HEAD_UNIT_CAR_ART = setOf(
+        R.drawable.dsp_workspace_backdrop_v5_high,
+        R.drawable.dsp_workspace_backdrop_v5_mid,
+        R.drawable.dsp_workspace_backdrop_v5_low,
+    )
+
+    // Phones keep the plain art's rail on every page, including Gains' band pages (still the
+    // older phone car art): re-sizing the sidebar column while the pager swipes would relayout
+    // the page mid-gesture.
+    private fun railArtFor(backdrop: Int, headUnit: Boolean): RailArt = when {
+        !headUnit -> PHONE_V5
+        backdrop in HEAD_UNIT_CAR_ART -> HEAD_UNIT_V5_CAR
+        else -> HEAD_UNIT_V5
+    }
+
+    // The head unit's rail rows follow whichever backdrop is showing: Gains & Delay swaps in car
+    // art per pager page (showBackdrop), and its tiles sit a few px lower than the plain art's.
+    // Only the Compose tile rows change; the sidebar column's size never does.
+    private val currentRail = mutableStateOf(HEAD_UNIT_V5)
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
     // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
@@ -105,16 +145,10 @@ object DspCrossNavBar {
 
     // Phone only (populate() never calls this on the head unit, whose fixed dp dimens --
     // dsp_sidebar_width, dsp_toolbar_nav_inset, dsp_status_strip_margin_start -- stay exactly as
-    // authored). Both backdrop arts are 2340px wide with the rail's tile column 256px wide (the
-    // head unit's 140dp column at its 2340/1280 art scale), and the phone art's tile rows are the
-    // head-unit rows scaled by 1080/878, so ROW_WEIGHTS and the tile insets in DspSidebarNav
-    // already fit it. Only the column width and the toolbar insets built on it need to follow the
-    // art's own centerCrop scale, since a fixed 140dp is ~50% too wide on a ~832dp phone. The dp
-    // buffers past the rail (43dp to the back arrow, +72dp to the status strip) are touch-target
-    // spacing, so they're kept as-is.
-    private const val PHONE_ART_WIDTH = 2340f
-    private const val PHONE_ART_HEIGHT = 1080f
-    private const val RAIL_ART_WIDTH = 256f
+    // authored). The sidebar column and the toolbar insets built on it follow the rail's width in
+    // the art at its centerCrop scale, since a fixed 140dp is ~50% too wide on a ~832dp phone.
+    // The dp buffers past the rail (43dp to the back arrow, +72dp to the status strip) are
+    // touch-target spacing, so they're kept as-is.
     private const val NAV_INSET_BUFFER_DP = 43
     private const val STATUS_STRIP_GAP_DP = 72
 
@@ -123,12 +157,12 @@ object DspCrossNavBar {
         // doOnLayout fires while the parent ConstraintLayout is still mid-layout, and layoutParams
         // changes made there were sometimes swallowed (sidebar stayed 140dp while the toolbar
         // margin took effect). Posting runs the update after that pass, so it always lands.
-        backdrop.doOnLayout { view -> view.post { applyRailGeometry(activity, view.width, view.height) } }
+        backdrop.doOnLayout { view -> view.post { applyRailGeometry(activity, view.width, view.height, currentRail.value) } }
     }
 
-    private fun applyRailGeometry(activity: FragmentActivity, viewWidth: Int, viewHeight: Int) {
-        val scale = max(viewWidth / PHONE_ART_WIDTH, viewHeight / PHONE_ART_HEIGHT)
-        val railPx = (RAIL_ART_WIDTH * scale).roundToInt()
+    private fun applyRailGeometry(activity: FragmentActivity, viewWidth: Int, viewHeight: Int, art: RailArt) {
+        val scale = max(viewWidth / art.width, viewHeight / art.height)
+        val railPx = (art.railWidth * scale).roundToInt()
         val density = activity.resources.displayMetrics.density
         val stripStart = railPx + ((NAV_INSET_BUFFER_DP + STATUS_STRIP_GAP_DP) * density).roundToInt()
 
@@ -145,8 +179,10 @@ object DspCrossNavBar {
      *  per-band car art); every variant must share its tier's exact pixel size, or centerCrop
      *  drifts the baked-in rail away from the live sidebar tiles. */
     fun showBackdrop(activity: FragmentActivity, headUnit: Int, phone: Int) {
-        val backdrop = if (isHeadUnitDisplay(activity)) headUnit else phone
+        val isHeadUnit = isHeadUnitDisplay(activity)
+        val backdrop = if (isHeadUnit) headUnit else phone
         activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
+        if (isHeadUnit) currentRail.value = railArtFor(backdrop, headUnit = true)
     }
 
     fun populate(
@@ -160,8 +196,9 @@ object DspCrossNavBar {
         // The rail visual: swap in this destination's own backdrop (housing + background baked
         // in). Picks the head-unit or phone art per-destination based on the live screen width --
         // see isHeadUnitDisplay().
-        showBackdrop(activity, current.backdrop, current.backdropPhone)
         val headUnit = isHeadUnitDisplay(activity)
+        currentRail.value = railArtFor(if (headUnit) current.backdrop else current.backdropPhone, headUnit)
+        showBackdrop(activity, current.backdrop, current.backdropPhone)
         if (!headUnit) applyPhoneRailGeometry(activity)
 
         container.setContent {
@@ -169,11 +206,11 @@ object DspCrossNavBar {
                 DspSidebarNav(
                     destinations = destinations,
                     current = current,
-                    weights = if (headUnit) HEAD_UNIT_ROW_WEIGHTS else ROW_WEIGHTS,
-                    leftInsetFraction = if (headUnit) HEAD_UNIT_TILE_LEFT_INSET else BAKED_ART_TILE_LEFT_INSET,
-                    rightInsetFraction = if (headUnit) HEAD_UNIT_TILE_RIGHT_INSET else BAKED_ART_TILE_RIGHT_INSET,
+                    weights = currentRail.value.rowWeights,
+                    leftInsetFraction = currentRail.value.leftInset,
+                    rightInsetFraction = currentRail.value.rightInset,
                     bakedInArt = true,
-                    // The v4 head-unit art has no selected-tile mark, and none is drawn over it.
+                    // The v5 head-unit art has no selected-tile mark, and none is drawn over it.
                     showSelection = !headUnit,
                     canNavigate = canNavigate,
                     onNavigate = { destination ->
