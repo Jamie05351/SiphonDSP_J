@@ -434,10 +434,11 @@ private val HeadUnitGainKnobDiameter = 76.dp
 private val PolarityWidth = 140.dp
 
 // The HIGH / MID / LOW labels baked into the v5 car art (2340x878) sit in the same place on all
-// three band images: x 1176-1373, y 233-317 / 449-531 / 661-741.
+// three band images: x 1176-1373, y 233-317 / 449-531 / 661-741. MID's label runs into the STEREO
+// LINK row, so its target stops where that row starts and the switch keeps its whole touch area.
 private val BandLabelTargets = mapOf(
     GainsBand.HIGH to WorkspaceArt.Frac(1176f / 2340f, 233f / 878f, 198f / 2340f, 85f / 878f),
-    GainsBand.MID to WorkspaceArt.Frac(1176f / 2340f, 449f / 878f, 198f / 2340f, 83f / 878f),
+    GainsBand.MID to WorkspaceArt.Frac(1176f / 2340f, 449f / 878f, 198f / 2340f, StereoLinkRect.y - 449f / 878f),
     GainsBand.LOW to WorkspaceArt.Frac(1176f / 2340f, 661f / 878f, 198f / 2340f, 81f / 878f),
 )
 
