@@ -17,8 +17,8 @@
         android:layout_height="match_parent"
         android:scaleType="centerCrop"
         android:importantForAccessibility="no"
-        android:src="@drawable/dsp_workspace_backdrop_v4"
-        tools:src="@drawable/dsp_workspace_backdrop_v4" />
+        android:src="@drawable/dsp_workspace_backdrop_v5"
+        tools:src="@drawable/dsp_workspace_backdrop_v5" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/dsp_workspace_content"

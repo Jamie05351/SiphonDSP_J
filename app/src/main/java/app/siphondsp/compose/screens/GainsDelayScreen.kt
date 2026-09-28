@@ -97,21 +97,21 @@ enum class GainsBand(
         NativeBmwDspValues.INDEX_HIGH_GAIN_L, NativeBmwDspValues.INDEX_HIGH_GAIN_R,
         NativeBmwDspValues.INDEX_HIGH_DELAY_L, NativeBmwDspValues.INDEX_HIGH_DELAY_R,
         BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v4_high, R.drawable.dsp_workspace_backdrop_gains_tweeter_phone,
+        R.drawable.dsp_workspace_backdrop_v5_high, R.drawable.dsp_workspace_backdrop_gains_tweeter_phone,
     ),
     MID(
         "Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT,
         NativeBmwDspValues.INDEX_MID_GAIN_L, NativeBmwDspValues.INDEX_MID_GAIN_R,
         NativeBmwDspValues.INDEX_MID_DELAY_L, NativeBmwDspValues.INDEX_MID_DELAY_R,
         BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v4_mid, R.drawable.dsp_workspace_backdrop_gains_mid_phone,
+        R.drawable.dsp_workspace_backdrop_v5_mid, R.drawable.dsp_workspace_backdrop_gains_mid_phone,
     ),
     LOW(
         "Low", NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_LOW_RIGHT,
         NativeBmwDspValues.INDEX_LOW_GAIN_L, NativeBmwDspValues.INDEX_LOW_GAIN_R,
         NativeBmwDspValues.INDEX_LOW_DELAY_L, NativeBmwDspValues.INDEX_LOW_DELAY_R,
         BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.M_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v4_low, R.drawable.dsp_workspace_backdrop_gains_woofer_phone,
+        R.drawable.dsp_workspace_backdrop_v5_low, R.drawable.dsp_workspace_backdrop_gains_woofer_phone,
     );
 
     /** High's per-output config lives in the schema tail, not the legacy 4-output block. */
@@ -390,7 +390,7 @@ private fun HeadUnitBandPage(
         }
         for (target in GainsBand.entries) {
             Box(
-                Modifier.artRect(band.tapTargets.getValue(target)).clickable(
+                Modifier.artRect(BandLabelTargets.getValue(target)).clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     role = Role.Tab,
@@ -433,25 +433,14 @@ private val GainValueWidth = 84.dp
 private val HeadUnitGainKnobDiameter = 76.dp
 private val PolarityWidth = 140.dp
 
-/** The band labels baked into each band's car art (they move between the three images). */
-private val GainsBand.tapTargets: Map<GainsBand, WorkspaceArt.Frac>
-    get() = when (this) {
-        GainsBand.HIGH -> mapOf(
-            GainsBand.HIGH to WorkspaceArt.Frac(0.3905f, 0.1493f, 0.3185f, 0.1227f),
-            GainsBand.MID to WorkspaceArt.Frac(0.4855f, 0.44f, 0.1215f, 0.0853f),
-            GainsBand.LOW to WorkspaceArt.Frac(0.484f, 0.776f, 0.121f, 0.0853f),
-        )
-        GainsBand.MID -> mapOf(
-            GainsBand.HIGH to WorkspaceArt.Frac(0.49f, 0.2107f, 0.1135f, 0.0853f),
-            GainsBand.MID to WorkspaceArt.Frac(0.38f, 0.4027f, 0.336f, 0.16f),
-            GainsBand.LOW to WorkspaceArt.Frac(0.484f, 0.7773f, 0.121f, 0.0867f),
-        )
-        GainsBand.LOW -> mapOf(
-            GainsBand.HIGH to WorkspaceArt.Frac(0.491f, 0.208f, 0.1115f, 0.0853f),
-            GainsBand.MID to WorkspaceArt.Frac(0.488f, 0.444f, 0.1155f, 0.0813f),
-            GainsBand.LOW to WorkspaceArt.Frac(0.3975f, 0.716f, 0.2925f, 0.1613f),
-        )
-    }
+// The HIGH / MID / LOW labels baked into the v5 car art (2340x878) sit in the same place on all
+// three band images: x 1176-1373, y 233-317 / 449-531 / 661-741. MID's label runs into the STEREO
+// LINK row, so its target stops where that row starts and the switch keeps its whole touch area.
+private val BandLabelTargets = mapOf(
+    GainsBand.HIGH to WorkspaceArt.Frac(1176f / 2340f, 233f / 878f, 198f / 2340f, 85f / 878f),
+    GainsBand.MID to WorkspaceArt.Frac(1176f / 2340f, 449f / 878f, 198f / 2340f, StereoLinkRect.y - 449f / 878f),
+    GainsBand.LOW to WorkspaceArt.Frac(1176f / 2340f, 661f / 878f, 198f / 2340f, 81f / 878f),
+)
 
 /** GAIN label with a rotary control and the existing tap-to-type value box. */
 @Composable
