@@ -389,6 +389,9 @@ private fun DriverCard(
     val delayMirror = if (linked) intArrayOf(siblingIndex) else IntArray(0)
     val cm = geometry.distanceCm(id)
     val labelSize = if (headUnit) 16.sp else 14.sp
+    // Names the side and band in each −/+ button's spoken label ("Increase Left Mid delay"): the
+    // card heading isn't merged into the buttons, so without it both cards would sound identical.
+    val cardName = "${if (left) "Left" else "Right"} ${band.title}"
 
     Box(modifier) {
         Column(
@@ -403,7 +406,7 @@ private fun DriverCard(
             verticalArrangement = if (headUnit) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "${if (left) "Left" else "Right"} ${band.title}",
+                text = cardName,
                 color = accent,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -414,7 +417,7 @@ private fun DriverCard(
                         geometry.setDistanceCm(id, it)
                     }
                 }
-                Stepper("Path", headUnit) { dir ->
+                Stepper("$cardName path", headUnit) { dir ->
                     geometry.setDistanceCm(id, stepped(cm, dir * PathStepCm, PathRangeCm))
                 }
             }
@@ -434,7 +437,7 @@ private fun DriverCard(
                         "DELAY", DelayRange.start, DelayRange.endInclusive, dsp.get(delayIndex), 0f, "ms",
                     ) { dsp.commit(delayIndex, it, delayMirror) }
                 }
-                Stepper("Delay", headUnit) { dir ->
+                Stepper("$cardName delay", headUnit) { dir ->
                     dsp.commit(delayIndex, stepped(dsp.get(delayIndex), dir * DelayStepMs, DelayRange), delayMirror)
                 }
             }
@@ -444,7 +447,7 @@ private fun DriverCard(
                         "GAIN", GainRange.start, GainRange.endInclusive, dsp.get(gainIndex), GainStep, "dB",
                     ) { dsp.commit(gainIndex, snapGain(it)) }
                 }
-                Stepper("Gain", headUnit) { dir -> dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep)) }
+                Stepper("$cardName gain", headUnit) { dir -> dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep)) }
             }
             CardRow("POLARITY", labelSize) {
                 BmwSwitch(
@@ -466,7 +469,7 @@ private fun DriverCard(
                         "STAGE ALIGNMENT", 0f, NativeBmwDspValues.STAGE_DELAY_MAX_MS, dsp.get(stageIndex), StageStepMs, "ms",
                     ) { dsp.commit(stageIndex, it) }
                 }
-                Stepper("Stage alignment", headUnit) { dir ->
+                Stepper("$cardName stage alignment", headUnit) { dir ->
                     dsp.commit(stageIndex, stepped(dsp.get(stageIndex), dir * StageStepMs, 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS))
                 }
             }

@@ -31,7 +31,8 @@ private val MinusPlusFill = Color(0xFF23272F)
 /**
  * The PEQ filter list's −/+ stepper: one pill split by a thin divider, rather than two separate
  * buttons, so it stays compact next to the value box it steps. Shared by the PEQ list and the
- * Delay page cards; [label] names the value for accessibility ("Delay" -> "Decrease Delay").
+ * Delay page cards; [label] names the value for accessibility ("Left Mid delay" -> "Decrease Left Mid delay"); include
+ * enough to tell repeated steppers apart, e.g. the channel and band.
  */
 @Composable
 internal fun MinusPlusPill(
