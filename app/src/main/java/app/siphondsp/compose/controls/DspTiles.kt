@@ -41,6 +41,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -92,6 +95,9 @@ fun DspTile(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    // What accessibility services announce in place of the short visible [label] (e.g. the rail's
+    // "PEQ" tile reads as the full screen name). Null announces the label itself.
+    a11yLabel: String? = null,
     glyph: @Composable () -> Unit
 ) {
     val interaction = interactionSource
@@ -112,7 +118,7 @@ fun DspTile(
                         interactionSource = interaction,
                         indication = null,
                         enabled = enabled,
-                        onClickLabel = label,
+                        onClickLabel = a11yLabel ?: label,
                         role = Role.Button,
                         onClick = onClick,
                     )
@@ -120,6 +126,7 @@ fun DspTile(
                     Modifier
                 },
             )
+            .then(if (a11yLabel != null) Modifier.semantics { contentDescription = a11yLabel } else Modifier)
     ) {
         val w = maxWidth
         // 10 % of the tile, at least 12sp, then shrunk (not below LabelMinSp) if the label would be
@@ -151,6 +158,8 @@ fun DspTile(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = w * 0.09f)
+                // With an a11yLabel the tile announces that instead, not both.
+                .then(if (a11yLabel != null) Modifier.clearAndSetSemantics { } else Modifier)
         )
     }
 }

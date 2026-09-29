@@ -87,6 +87,8 @@ fun DspSidebarRail(
                 val source = remember { MutableInteractionSource() }
                 DspTile(
                     label = stringResource(dest.tileLabelRes()),
+                    // The caption is short ("PEQ", "Xovers"); announce the full screen name.
+                    a11yLabel = stringResource(dest.labelRes),
                     accent = dest.accent(),
                     selected = selected,
                     enabled = !selected,
