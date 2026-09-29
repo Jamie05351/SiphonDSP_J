@@ -48,10 +48,16 @@ fun OutputAllPassScreen(
     val bandColor = Color(bandColorArgb)
     val sliderColor = Color(sliderColorArgb)
     val isHigh = output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT
-    // High only plays above the Mid/High corner (1 kHz+), so the Low/Mid 20..1000 Hz range would
-    // leave its all-pass unable to reach the band it acts on. UI-only: native accepts any
-    // frequency below Nyquist.
-    val freqRange = if (isHigh) 1000f..16000f else 20f..1000f
+    val isMid = output == NativeBmwDspValues.OUTPUT_MID_LEFT || output == NativeBmwDspValues.OUTPUT_MID_RIGHT
+    // Per-section slider range. UI-only: native accepts any frequency below Nyquist.
+    // - High only plays above the Mid/High corner (1 kHz+), so 20..1000 Hz couldn't reach its band.
+    // - Mid section 2 reaches the Mid/High corner (up to 8 kHz, as on the Crossovers page) for
+    //   phase work at the mid/tweeter crossover; section 1 keeps the finer 20..1000 Hz slider.
+    fun freqRange(section: Int) = when {
+        isHigh -> 1000f..16000f
+        isMid && section == 1 -> 20f..8000f
+        else -> 20f..1000f
+    }
     val freqStep = if (isHigh) 10f else 1f
 
     // High's all-pass block lives in the schema tail, not the legacy 4-output block.
@@ -66,7 +72,7 @@ fun OutputAllPassScreen(
         val order = dsp.get(base + 1)
         return OrderOptions.indices.minByOrNull { abs(OrderOptions[it].second - order) } ?: 0
     }
-    fun setEnabled(base: Int, on: Boolean) {
+    fun setEnabled(base: Int, freqRange: ClosedFloatingPointRange<Float>, on: Boolean) {
         // High's sections are stored at the shared 150 Hz default, below its range, so the slider
         // shows a coerced value native isn't using. Commit that shown value with the enable so
         // what plays matches what's shown.
@@ -90,7 +96,7 @@ fun OutputAllPassScreen(
                     ArtSwitchRow(
                         label = "Section ${section + 1}",
                         checked = dsp.isOn(base),
-                        onCheckedChange = { setEnabled(base, it) },
+                        onCheckedChange = { setEnabled(base, freqRange(section), it) },
                         labelWidth = 110.dp,
                         modifier = Modifier.artRect(artDp(190, y, 230, 36)),
                     )
@@ -103,7 +109,7 @@ fun OutputAllPassScreen(
                         modifier = Modifier.artRect(artDp(440, y, 260, 36)),
                     )
                     DspArtSlider(
-                        dsp, "Frequency", base + 2, freqRange, freqStep, "Hz", sliderColor,
+                        dsp, "Frequency", base + 2, freqRange(section), freqStep, "Hz", sliderColor,
                         Modifier.artRect(artDp(190, y + 44, 1040, 50)), valueWidth = 110.dp,
                     )
                     DspArtSlider(
@@ -132,7 +138,7 @@ fun OutputAllPassScreen(
                 val base = sectionBase(section)
                 BmwDropdownRow(
                     toggleChecked = dsp.isOn(base),
-                    onToggleChange = { setEnabled(base, it) },
+                    onToggleChange = { setEnabled(base, freqRange(section), it) },
                     options = OrderOptions.map { it.first },
                     selectedIndex = selectedOrder(base),
                     onSelect = { dsp.commit(base + 1, OrderOptions[it].second) },
@@ -140,7 +146,7 @@ fun OutputAllPassScreen(
                 BmwSliderRow(
                     label = "Frequency",
                     value = dsp.get(base + 2),
-                    valueRange = freqRange,
+                    valueRange = freqRange(section),
                     step = freqStep,
                     unit = "Hz",
                     accentColor = sliderColor,
