@@ -4,6 +4,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.CarSpeakerDiagram
 import app.siphondsp.compose.controls.DriverId
 import app.siphondsp.compose.controls.AlignTarget
+import app.siphondsp.compose.controls.SpeakerGeometryMath
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.compose.controls.SpeakerKind
 import app.siphondsp.compose.controls.WorkspaceArtBox
@@ -332,13 +335,22 @@ private fun ApplyButton(accent: Color, headUnit: Boolean, modifier: Modifier, on
 @Composable
 private fun ApplyDialog(geometry: SpeakerGeometryState, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val seatName = if (geometry.target == AlignTarget.DRIVER) "the driver seat" else "both front seats"
+    val needed = SpeakerGeometryMath.allDrivers.map { geometry.alignDelayMs(it) }
+    val cappedCount = needed.count { it > DelayRange.endInclusive }
+    val cappedNote = if (cappedCount == 0) {
+        ""
+    } else {
+        "\n\n$cappedCount driver${if (cappedCount == 1) " needs" else "s need"} up to " +
+            "${AlignFormat.format(needed.max())} ms, more than the ${AlignFormat.format(DelayRange.endInclusive)} ms " +
+            "maximum. They will be set to the maximum and won't be fully aligned; check the PATH values."
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Apply alignment to delays?") },
         text = {
             Text(
                 "Sets the delay of all six drivers to the geometric alignment for $seatName " +
-                    "(farthest driver 0 ms) and turns stereo link off. Your current delays are replaced.",
+                    "(farthest driver 0 ms) and turns stereo link off. Your current delays are replaced." + cappedNote,
             )
         },
         confirmButton = { TextButton(onClick = { onDismiss(); onConfirm() }) { Text("Apply") } },
@@ -381,6 +393,9 @@ private fun DriverCard(
                 .background(PanelBackground, PanelShape)
                 .border(1.dp, Color(band.stroke), PanelShape)
                 .then(if (inactive) Modifier.alpha(InactiveAlpha) else Modifier)
+                // D-pad / rotary can't enter a dimmed card either; the overlay below only stops taps.
+                .focusProperties { onEnter = { if (inactive) cancelFocusChange() } }
+                .focusGroup()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = if (headUnit) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
         ) {
@@ -398,7 +413,12 @@ private fun DriverCard(
                 }
             }
             CardRow("ALIGN", labelSize) {
-                ValueBox(AlignFormat.format(geometry.alignDelayMs(id)), "ms", accent.copy(alpha = 0.75f), headUnit, null)
+                // Shows what Apply will write; tinted when the path needs more delay than the DSP allows.
+                val capped = geometry.alignDelayMs(id) > DelayRange.endInclusive
+                ValueBox(
+                    AlignFormat.format(alignmentFor(geometry, id)), "ms",
+                    if (capped) CappedColor else accent.copy(alpha = 0.75f), headUnit, null,
+                )
             }
             CardRow("DELAY", labelSize) {
                 ValueBox(DelayFormat.format(dsp.get(delayIndex)), "ms", accent, headUnit) {
@@ -542,6 +562,8 @@ private val CmFormat = java.text.DecimalFormat(
     java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
 )
 private val DelayRange = 0f..2.8f
+// ALIGN needs more than DelayRange allows, so Apply will cap it.
+private val CappedColor = Color(0xFFFF6B5A)
 private val GainRange = -6f..6f
 private const val GainStep = 0.5f
 private val PathRangeCm = 20f..400f
