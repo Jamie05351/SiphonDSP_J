@@ -134,6 +134,19 @@ class BackupManager(private val context: Context): KoinComponent {
                 throw UnsupportedOperationException(context.getString(R.string.backup_restore_error_version_too_new))
             }
 
+            // Read the speaker geometry before anything is deleted: a malformed file is skipped (the
+            // current geometry is kept) instead of failing the restore halfway through.
+            val geometryFile = File(targetFolder, "shared_prefs/$GEOMETRY_PREFS_FILE")
+            val geometry = geometryFile.takeIf { it.isFile }?.let {
+                try {
+                    SpeakerGeometryState.readBackup(it)
+                } catch (e: Exception) {
+                    Timber.w(e, "Skipping unreadable speaker geometry in backup")
+                    null
+                }
+            }
+            geometryFile.delete()
+
             // Clean restore
             if(!dirty) {
                 // Remove profiles
@@ -158,15 +171,8 @@ class BackupManager(private val context: Context): KoinComponent {
 
             var enableDeviceProfiles = false
             targetFolder.listFiles()?.forEach { file ->
-                if(file.isDirectory && file.name == "shared_prefs") {
-                    // Written through SharedPreferences so an open Delay page and the in-memory prefs
-                    // cache see it; a plain file copy would be ignored and later overwritten.
-                    File(file, GEOMETRY_PREFS_FILE).takeIf { it.isFile }?.let {
-                        SpeakerGeometryState.restoreFrom(context, it, replace = !dirty)
-                        it.delete()
-                    }
+                if(file.isDirectory && file.name == "shared_prefs")
                     file.copyRecursively(File(context.applicationInfo.dataDir + "/shared_prefs"), true)
-                }
                 else if(file.isDirectory && file.name == "no_backup")
                     file.copyRecursively(context.noBackupFilesDir, true)
                 else if(file.isDirectory && file.name == "profiles") {
@@ -182,6 +188,11 @@ class BackupManager(private val context: Context): KoinComponent {
             }
 
             targetFolder.deleteRecursively()
+
+            // Last, once everything else is in place. Written through SharedPreferences so an open
+            // Delay page and the in-memory prefs cache see it; throws (restore reports an error) if
+            // it can't be saved.
+            geometry?.apply(context, replace = !dirty)
 
             context.broadcastPresetLoadEvent()
             context.sendLocalBroadcast(Intent(Constants.ACTION_BACKUP_RESTORED))

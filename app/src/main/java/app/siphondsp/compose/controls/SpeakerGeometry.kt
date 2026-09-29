@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
+import java.io.IOException
 
 /** A seat the distances are measured from; the path lines start at its head position. */
 enum class ListeningSeat { DRIVER, PASSENGER }
@@ -140,14 +141,33 @@ class SpeakerGeometryState internal constructor(context: Context) {
         const val PREFS = "speaker_geometry"
         private const val KEY_TARGET = "target"
 
+        /** Values read from a backed-up `speaker_geometry.xml`, ready to [apply]. */
+        class Backup internal constructor(
+            private val distances: Map<String, Float>,
+            private val target: String?,
+        ) {
+            /**
+             * Writes the values through the SharedPreferences API rather than copying the file
+             * over, because the process caches each prefs file in memory: a copied file would be
+             * ignored and overwritten by the next edit. [replace] clears the current values first
+             * (a clean restore); otherwise it merges. Throws if the write can't be saved.
+             */
+            fun apply(context: Context, replace: Boolean) {
+                val saved = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+                    if (replace) clear()
+                    for ((key, value) in distances) putFloat(key, value)
+                    target?.let { putString(KEY_TARGET, it) }
+                }.commit()
+                if (!saved) throw IOException("Couldn't save the restored speaker geometry")
+            }
+        }
+
         /**
-         * Restores the geometry from a backed-up `speaker_geometry.xml`. It goes through the
-         * SharedPreferences API rather than copying the file over, because the process caches each
-         * prefs file in memory: a copied file would be ignored and overwritten by the next edit.
-         * [replace] clears the current values first (a clean restore); otherwise it merges.
+         * Parses a backed-up `speaker_geometry.xml`. Call it before changing anything, so a bad
+         * file can't leave a restore half done; it throws on malformed XML.
          */
-        fun restoreFrom(context: Context, backedUp: File, replace: Boolean) {
-            val floats = HashMap<String, Float>()
+        fun readBackup(backedUp: File): Backup {
+            val distances = HashMap<String, Float>()
             var target: String? = null
             backedUp.inputStream().use { input ->
                 val parser = Xml.newPullParser().apply { setInput(input, null) }
@@ -156,16 +176,12 @@ class SpeakerGeometryState internal constructor(context: Context) {
                     val name = parser.getAttributeValue(null, "name") ?: continue
                     when (parser.name) {
                         "float" -> parser.getAttributeValue(null, "value")?.toFloatOrNull()
-                            ?.takeIf { name.startsWith("cm_") }?.let { floats[name] = it }
+                            ?.takeIf { name.startsWith("cm_") }?.let { distances[name] = it }
                         "string" -> if (name == KEY_TARGET) target = parser.nextText()
                     }
                 }
             }
-            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
-                if (replace) clear()
-                for ((key, value) in floats) putFloat(key, value)
-                target?.let { putString(KEY_TARGET, it) }
-            }.commit()
+            return Backup(distances, target)
         }
     }
 }

@@ -36,11 +36,9 @@ class SpeakerGeometryRestoreTest {
         state.setDistanceCm(tweeterL, 111f)
         state.setDistanceCm(midR, 222f)
 
-        SpeakerGeometryState.restoreFrom(
-            context,
+        SpeakerGeometryState.readBackup(
             backup("""<float name="cm_DRIVER_TWEETER_L" value="140.5" />""", """<string name="target">MULTI</string>"""),
-            replace = true,
-        )
+        ).apply(context, replace = true)
         shadowOf(Looper.getMainLooper()).idle()
 
         assertEquals(140.5f, state.distanceCm(tweeterL), 0f)
@@ -54,13 +52,17 @@ class SpeakerGeometryRestoreTest {
     fun dirtyRestoreMergesIntoCurrentValues() {
         SpeakerGeometryState(context).setDistanceCm(midR, 222f)
 
-        SpeakerGeometryState.restoreFrom(
-            context, backup("""<float name="cm_DRIVER_TWEETER_L" value="99.0" />"""), replace = false,
-        )
+        SpeakerGeometryState.readBackup(backup("""<float name="cm_DRIVER_TWEETER_L" value="99.0" />"""))
+            .apply(context, replace = false)
 
         val fresh = SpeakerGeometryState(context)
         assertEquals(99f, fresh.distanceCm(tweeterL), 0f)
         assertEquals(222f, fresh.distanceCm(midR), 0f)
         assertEquals(AlignTarget.DRIVER, fresh.target)
+    }
+
+    @Test(expected = Exception::class)
+    fun malformedBackupThrowsBeforeAnythingIsWritten() {
+        SpeakerGeometryState.readBackup(backup("""<float name="cm_DRIVER_TWEETER_L" value="1" """))
     }
 }
