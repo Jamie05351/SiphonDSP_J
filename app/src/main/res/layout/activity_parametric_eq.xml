@@ -42,13 +42,16 @@
 
         <!-- The fragment content sits to the right of the rail and starts below the floating
              transparent toolbar line (dsp_workspace_toolbar_height); the faceplate still shows
-             through the top strip behind that toolbar. -->
+             through the top strip behind that toolbar. It stops short of the faceplate's bezel on
+             the right and bottom (dsp_workspace_bezel_inset). -->
         <FrameLayout
             android:id="@+id/params"
             android:name="androidx.navigation.fragment.NavHostFragment"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_marginTop="@dimen/dsp_workspace_toolbar_height"
+            android:layout_marginEnd="@dimen/dsp_workspace_bezel_inset"
+            android:layout_marginBottom="@dimen/dsp_workspace_bezel_inset"
             app:layout_constraintStart_toEndOf="@id/dsp_sidebar"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"

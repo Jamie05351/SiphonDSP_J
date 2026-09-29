@@ -63,12 +63,13 @@ object HomeArt {
         "power_btn" to hu(40, 595, 178, 186),
         // Faceplate chrome, measured from the old baked art: the three top screens (outer edge of
         // the black glass), the bottom screen, and the decorative volume knob (a circle; the
-        // volume itself is the car's).
+        // volume itself is the car's). The knob is shrunk about its old centre so it clears the
+        // screen bezel (~7dp in from the right edge) instead of running off the art.
         "screen_left" to Frac(0.1120f, 0.0194f, 0.2303f, 0.4442f),
         "screen_centre" to Frac(0.3496f, 0.0194f, 0.3021f, 0.4442f),
         "screen_right" to Frac(0.6600f, 0.0194f, 0.2290f, 0.4442f),
         "screen_bottom" to Frac(0.1141f, 0.5376f, 0.7321f, 0.4578f),
-        "knob" to Frac(0.8529f, 0.5658f, 0.1494f, 0.3982f),
+        "knob" to Frac(0.8520f, 0.5770f, 0.1410f, 0.3758f),
         // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
         "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
         // Legacy icons, hidden now that Settings and More are tiles; kept so every key resolves.
@@ -97,7 +98,7 @@ object HomeArt {
         "screen_centre" to Frac(0.3491f, 0.0278f, 0.3039f, 0.4537f),
         "screen_right" to Frac(0.6600f, 0.0241f, 0.2290f, 0.4537f),
         "screen_bottom" to Frac(0.1128f, 0.5361f, 0.7342f, 0.3806f),
-        "knob" to Frac(0.8535f, 0.5683f, 0.1497f, 0.3241f),
+        "knob" to Frac(0.8520f, 0.5798f, 0.1390f, 0.3012f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),

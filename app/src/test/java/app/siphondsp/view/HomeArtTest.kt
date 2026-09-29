@@ -141,4 +141,16 @@ class HomeArtTest {
         val phone = HomeArt.frac("knob", phone = true)!!
         assertEquals(phone.w * HomeArt.PHONE_IMAGE_WIDTH, phone.h * HomeArt.PHONE_IMAGE_HEIGHT, 2f)
     }
+
+    @Test
+    fun theKnobClearsTheBezelAndTheBottomScreen() {
+        // The screen bezel reaches ~7dp in: 0.0055 of the 1280dp head unit, 0.0084 of an ~832dp phone.
+        for ((phone, bezel) in listOf(false to 0.0055f, true to 0.0084f)) {
+            val knob = HomeArt.frac("knob", phone)!!
+            val bottom = HomeArt.frac("screen_bottom", phone)!!
+            assertTrue("knob runs under the bezel (phone=$phone)", knob.x + knob.w <= 1f - bezel)
+            assertTrue("knob overlaps the bottom screen (phone=$phone)", knob.x > bottom.x + bottom.w)
+            assertTrue("knob runs off the bottom (phone=$phone)", knob.y + knob.h <= 1f)
+        }
+    }
 }
