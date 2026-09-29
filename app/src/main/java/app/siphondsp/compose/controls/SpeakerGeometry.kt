@@ -1,13 +1,18 @@
 package app.siphondsp.compose.controls
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Xml
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import org.xmlpull.v1.XmlPullParser
+import java.io.File
 
 /** A seat the distances are measured from; the path lines start at its head position. */
 enum class ListeningSeat { DRIVER, PASSENGER }
@@ -75,12 +80,29 @@ object SpeakerGeometryMath {
  */
 class SpeakerGeometryState internal constructor(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val overrides = mutableStateMapOf<String, Float>().apply {
-        for ((key, value) in prefs.all) if (key.startsWith("cm_") && value is Float) put(key, value)
-    }
+    private val overrides = mutableStateMapOf<String, Float>()
 
     var target by mutableStateOf(readTarget())
         private set
+
+    // Picks up writes made elsewhere (a backup restore) while the page is open. Held here because
+    // SharedPreferences only keeps a weak reference to its listeners.
+    private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> reload() }
+
+    init {
+        reload()
+    }
+
+    internal fun startListening() = prefs.registerOnSharedPreferenceChangeListener(listener)
+
+    internal fun stopListening() = prefs.unregisterOnSharedPreferenceChangeListener(listener)
+
+    private fun reload() {
+        val stored = prefs.all.filter { (key, value) -> key.startsWith("cm_") && value is Float }
+        overrides.keys.retainAll(stored.keys)
+        for ((key, value) in stored) overrides[key] = value as Float
+        target = readTarget()
+    }
 
     fun selectTarget(next: AlignTarget) {
         target = next
@@ -113,14 +135,48 @@ class SpeakerGeometryState internal constructor(context: Context) {
     private fun key(id: DriverId) =
         "cm_${ListeningSeat.DRIVER.name}_${id.kind.name}_${if (id.left) "L" else "R"}"
 
-    private companion object {
+    companion object {
+        /** SharedPreferences name; the backup carries it as `shared_prefs/speaker_geometry.xml`. */
         const val PREFS = "speaker_geometry"
-        const val KEY_TARGET = "target"
+        private const val KEY_TARGET = "target"
+
+        /**
+         * Restores the geometry from a backed-up `speaker_geometry.xml`. It goes through the
+         * SharedPreferences API rather than copying the file over, because the process caches each
+         * prefs file in memory: a copied file would be ignored and overwritten by the next edit.
+         * [replace] clears the current values first (a clean restore); otherwise it merges.
+         */
+        fun restoreFrom(context: Context, backedUp: File, replace: Boolean) {
+            val floats = HashMap<String, Float>()
+            var target: String? = null
+            backedUp.inputStream().use { input ->
+                val parser = Xml.newPullParser().apply { setInput(input, null) }
+                while (parser.next() != XmlPullParser.END_DOCUMENT) {
+                    if (parser.eventType != XmlPullParser.START_TAG) continue
+                    val name = parser.getAttributeValue(null, "name") ?: continue
+                    when (parser.name) {
+                        "float" -> parser.getAttributeValue(null, "value")?.toFloatOrNull()
+                            ?.takeIf { name.startsWith("cm_") }?.let { floats[name] = it }
+                        "string" -> if (name == KEY_TARGET) target = parser.nextText()
+                    }
+                }
+            }
+            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+                if (replace) clear()
+                for ((key, value) in floats) putFloat(key, value)
+                target?.let { putString(KEY_TARGET, it) }
+            }.commit()
+        }
     }
 }
 
 @Composable
 fun rememberSpeakerGeometry(): SpeakerGeometryState {
     val context = LocalContext.current
-    return remember { SpeakerGeometryState(context) }
+    val state = remember { SpeakerGeometryState(context) }
+    DisposableEffect(state) {
+        state.startListening()
+        onDispose { state.stopListening() }
+    }
+    return state
 }
