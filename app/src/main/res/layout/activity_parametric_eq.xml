@@ -6,7 +6,7 @@
     tools:context=".activity.ParametricEqualizerActivity">
 
     <!-- Full-screen workspace faceplate (textured background + slim metal screen bezel), drawn live by
-         DspWorkspaceBackdrop (Compose) -- DspCrossNavBar.populate() sets its content. The rail housing
+         DspWorkspaceBackdrop (Compose): DspCrossNavBar.populate() sets its content. The rail housing
          and tiles are drawn by dsp_cross_nav below, not by this view. Authored for 1280x480 mdpi, edge
          to edge (the head unit runs with no system bars), so it fills the whole activity behind every
          other layer. -->
