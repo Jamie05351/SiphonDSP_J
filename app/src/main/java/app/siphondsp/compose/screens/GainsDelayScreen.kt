@@ -45,7 +45,7 @@ import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.CarSpeakerDiagram
 import app.siphondsp.compose.controls.DriverId
-import app.siphondsp.compose.controls.ListeningSeat
+import app.siphondsp.compose.controls.AlignTarget
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.compose.controls.SpeakerKind
 import app.siphondsp.compose.controls.WorkspaceArtBox
@@ -122,10 +122,12 @@ enum class GainsBand(
  *
  * - **Band**: tap a driver on the map, or a High / Mid / Low tab; the lit drivers, the colours and
  *   the two cards follow.
- * - **Seat**: Driver / Passenger switches where the path lines start and which set of measured
- *   distances is used (both sets are editable and remembered; the passenger set starts mirrored).
- * - **Cards** (Left and Right for the chosen band): PATH is the measured seat-to-driver distance,
- *   ALIGN the geometric time alignment that distance implies (relative to the farthest of all six
+ * - **Target**: Driver aligns to the driver seat. Multi aligns to both front seats using, per
+ *   driver, the average of its driver-seat and passenger-seat paths (the passenger seat is the
+ *   driver seat mirrored, so nothing extra is measured). Band timing is right for both seats; each
+ *   seat is left half its left/right path gap off centre, which delay alone can't fix.
+ * - **Cards** (Left and Right for the chosen band): PATH is the measured driver-seat distance,
+ *   ALIGN the geometric time alignment for the target (relative to the farthest of all six
  *   drivers, at 343 m/s), and DELAY / GAIN / POLARITY / STAGE ALIGN are the real DSP controls.
  * - **Apply to delays** writes the six alignment values into the driver delays in one step.
  * - **Stereo link** stays global.
@@ -239,16 +241,19 @@ private fun BandTabs(band: GainsBand, onSelect: (GainsBand) -> Unit, modifier: M
 @Composable
 private fun SeatToggle(geometry: SpeakerGeometryState, modifier: Modifier) {
     BmwSegmentedControl(
-        options = listOf("Driver seat", "Passenger seat"),
-        selectedIndex = geometry.seat.ordinal,
-        onSelect = { geometry.selectSeat(ListeningSeat.entries[it]) },
+        options = listOf("Driver", "Multi"),
+        selectedIndex = geometry.target.ordinal,
+        onSelect = { geometry.selectTarget(AlignTarget.entries[it]) },
         modifier = modifier,
         segmentHeight = 40.dp,
         segmentGap = 6.dp,
     )
 }
 
-/** The live map. The lit drivers show their seat-to-driver distance, as on the pills under the car. */
+/**
+ * The live map. The lit drivers show the distance the alignment uses: the driver-seat path, or in
+ * Multi the average of the driver- and passenger-seat paths.
+ */
 @Composable
 private fun BandMap(
     geometry: SpeakerGeometryState,
@@ -261,9 +266,14 @@ private fun BandMap(
         accent = Color(band.accent),
         onSelect = { setBand(GainsBand.forSpeaker(it)) },
         modifier = modifier,
-        seat = geometry.seat,
+        seats = geometry.target.seats,
         label = { kind, left ->
-            if (kind == band.speaker) "${geometry.distanceCm(DriverId(kind, left)).roundToInt()} cm" else null
+            if (kind != band.speaker) {
+                null
+            } else {
+                val cm = geometry.targetDistanceCm(DriverId(kind, left)).roundToInt()
+                if (geometry.target == AlignTarget.MULTI) "avg $cm cm" else "$cm cm"
+            }
         },
     )
 }
@@ -321,13 +331,13 @@ private fun ApplyButton(accent: Color, headUnit: Boolean, modifier: Modifier, on
 
 @Composable
 private fun ApplyDialog(geometry: SpeakerGeometryState, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val seatName = if (geometry.seat == ListeningSeat.DRIVER) "driver seat" else "passenger seat"
+    val seatName = if (geometry.target == AlignTarget.DRIVER) "the driver seat" else "both front seats"
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Apply alignment to delays?") },
         text = {
             Text(
-                "Sets the delay of all six drivers to the geometric alignment for the $seatName " +
+                "Sets the delay of all six drivers to the geometric alignment for $seatName " +
                     "(farthest driver 0 ms) and turns stereo link off. Your current delays are replaced.",
             )
         },

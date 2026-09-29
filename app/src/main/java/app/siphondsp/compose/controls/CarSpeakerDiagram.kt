@@ -80,7 +80,7 @@ const val CarDiagramAspect = 701f / 373f
  * objects: the [selected] band's two drivers are lit in [accent] with a path line from the driver's
  * seat, and the rest are dimmed. Tapping a driver calls [onSelect] with its band's kind.
  *
- * [seat] moves the listening position the path lines start from (driver or passenger), captioned on
+ * [seats] are the listening positions the path lines start from (driver, or both front seats), captioned on
  * the map. [title], if given, is shown as a badge in the corner in [accent].
  *
  * This composable is stateless: it only *reports* a tap through [onSelect]. Whoever owns the band
@@ -101,7 +101,7 @@ fun CarSpeakerDiagram(
     accent: Color,
     onSelect: (SpeakerKind) -> Unit,
     modifier: Modifier = Modifier,
-    seat: ListeningSeat = ListeningSeat.DRIVER,
+    seats: List<ListeningSeat> = listOf(ListeningSeat.DRIVER),
     title: String? = null,
     label: (SpeakerKind, Boolean) -> String? = { _, _ -> null },
     level: ((SpeakerKind, Boolean) -> Float)? = null,
@@ -157,28 +157,36 @@ fun CarSpeakerDiagram(
             val t = if (level != null) frame / 1_000_000f else 0f // ms; only ticks when animated
             val w = size.width
             val h = size.height
-            val head = (if (seat == ListeningSeat.DRIVER) DriverHead else PassengerHead)
-                .let { Offset(it.x * w, it.y * h) }
+            val heads = seats.map { seat ->
+                (if (seat == ListeningSeat.DRIVER) DriverHead else PassengerHead).let { Offset(it.x * w, it.y * h) }
+            }
+
+            // Distance pills sit halfway along the path; with two seats, halfway to the point between them.
+            val labelAnchor = heads.reduce { acc, o -> acc + o } / heads.size.toFloat()
 
             // Path lines first, so the drivers sit on top of them.
-            SpeakerKind.entries.forEach { kind ->
-                listOf(true, false).forEach { left ->
-                    val c = (if (left) LeftPos else RightPos).getValue(kind).let { Offset(it.x * w, it.y * h) }
-                    if (kind == selected) {
-                        drawLine(accent.copy(alpha = 0.16f), head, c, strokeWidth = w * 0.012f, cap = StrokeCap.Round)
-                        drawLine(accent, head, c, strokeWidth = w * 0.004f, cap = StrokeCap.Round)
-                    } else {
-                        drawLine(Color.White.copy(alpha = 0.10f), head, c, strokeWidth = 1.5f)
+            heads.forEach { head ->
+                SpeakerKind.entries.forEach { kind ->
+                    listOf(true, false).forEach { left ->
+                        val c = (if (left) LeftPos else RightPos).getValue(kind).let { Offset(it.x * w, it.y * h) }
+                        if (kind == selected) {
+                            drawLine(accent.copy(alpha = 0.16f), head, c, strokeWidth = w * 0.012f, cap = StrokeCap.Round)
+                            drawLine(accent, head, c, strokeWidth = w * 0.004f, cap = StrokeCap.Round)
+                        } else {
+                            drawLine(Color.White.copy(alpha = 0.10f), head, c, strokeWidth = 1.5f)
+                        }
                     }
                 }
             }
-            drawCircle(Color.White.copy(alpha = 0.9f), w * 0.011f, head)
-            drawCircle(Color.White.copy(alpha = 0.35f), w * 0.024f, head, style = Stroke(1.5f))
-            measurer.measure(
-                if (seat == ListeningSeat.DRIVER) "DRIVER" else "PASSENGER",
-                TextStyle(fontSize = CarUi.MinDenseText, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.55f)),
-            ).let { caption ->
-                drawText(caption, topLeft = Offset(head.x - caption.size.width / 2f, head.y + w * 0.034f))
+            seats.zip(heads).forEach { (seat, head) ->
+                drawCircle(Color.White.copy(alpha = 0.9f), w * 0.011f, head)
+                drawCircle(Color.White.copy(alpha = 0.35f), w * 0.024f, head, style = Stroke(1.5f))
+                measurer.measure(
+                    if (seat == ListeningSeat.DRIVER) "DRIVER" else "PASSENGER",
+                    TextStyle(fontSize = CarUi.MinDenseText, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.55f)),
+                ).let { caption ->
+                    drawText(caption, topLeft = Offset(head.x - caption.size.width / 2f, head.y + w * 0.034f))
+                }
             }
 
             SpeakerKind.entries.forEach { kind ->
@@ -212,7 +220,7 @@ fun CarSpeakerDiagram(
                                 text,
                                 TextStyle(fontSize = CarUi.MinDenseText, fontWeight = FontWeight.Medium, color = Color.White),
                             )
-                            val m = (c + head) / 2f
+                            val m = (c + labelAnchor) / 2f
                             val pw = layout.size.width + layout.size.height * 0.8f
                             val ph = layout.size.height * 1.15f
                             drawRoundRect(Color(0xE0060708), Offset(m.x - pw / 2, m.y - ph / 2), Size(pw, ph), CornerRadius(ph / 2))

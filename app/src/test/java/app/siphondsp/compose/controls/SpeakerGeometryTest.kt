@@ -49,6 +49,43 @@ class SpeakerGeometryTest {
     }
 
     @Test
+    fun driverTargetUsesTheDriverSeatPath() {
+        all.forEach { id ->
+            val cm = defaultDriverCm(id)
+            assertEquals(cm, SpeakerGeometryMath.targetDistanceCm(AlignTarget.DRIVER, id, ::defaultDriverCm), 0f)
+        }
+    }
+
+    @Test
+    fun multiAveragesTheDriverPathWithItsMirror() {
+        // Left tweeter: 130 cm from the driver seat, and the passenger seat mirrors the 78 cm right one.
+        val leftTweeter = DriverId(SpeakerKind.TWEETER, left = true)
+        assertEquals(104f, SpeakerGeometryMath.targetDistanceCm(AlignTarget.MULTI, leftTweeter, ::defaultDriverCm), 1e-4f)
+    }
+
+    @Test
+    fun multiGivesLeftAndRightOfABandTheSameAlignment() {
+        val distances = all.map { SpeakerGeometryMath.targetDistanceCm(AlignTarget.MULTI, it, ::defaultDriverCm) }
+        SpeakerKind.entries.forEach { kind ->
+            val l = SpeakerGeometryMath.targetDistanceCm(AlignTarget.MULTI, DriverId(kind, true), ::defaultDriverCm)
+            val r = SpeakerGeometryMath.targetDistanceCm(AlignTarget.MULTI, DriverId(kind, false), ::defaultDriverCm)
+            assertEquals(
+                SpeakerGeometryMath.alignDelayMs(l, distances),
+                SpeakerGeometryMath.alignDelayMs(r, distances),
+                1e-4f,
+            )
+        }
+    }
+
+    @Test
+    fun multiAlignmentsFitTheDelayRange() {
+        val distances = all.map { SpeakerGeometryMath.targetDistanceCm(AlignTarget.MULTI, it, ::defaultDriverCm) }
+        distances.forEach { cm -> assertTrue(SpeakerGeometryMath.alignDelayMs(cm, distances) in 0f..2.8f) }
+    }
+
+    private fun defaultDriverCm(id: DriverId) = SpeakerGeometryMath.defaultDistanceCm(ListeningSeat.DRIVER, id)
+
+    @Test
     fun emptyInputIsSafe() {
         assertEquals(0f, SpeakerGeometryMath.alignDelayMs(100f, emptyList()), 0f)
     }
