@@ -153,7 +153,7 @@ fun BmwDspKnob(
 }
 
 /** Size-dependent brushes, built once per layout size by [drawWithCache]. */
-private class KnobBrushes(val radius: Float, val centre: Offset) {
+internal class KnobBrushes(val radius: Float, val centre: Offset) {
     val shadow = Brush.radialGradient(
         colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
         center = Offset(centre.x, centre.y + radius * 0.04f),
@@ -184,7 +184,7 @@ private class KnobBrushes(val radius: Float, val centre: Offset) {
     )
 }
 
-private fun DrawScope.drawKnob(b: KnobBrushes, fraction: Float, accent: Color) {
+internal fun DrawScope.drawKnob(b: KnobBrushes, fraction: Float, accent: Color) {
     val c = b.centre
     val r = b.radius
 

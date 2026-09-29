@@ -39,7 +39,7 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         // Full-screen workspace: no toolbar title (the manifest android:label would otherwise
-        // show); the backdrop's lit rail tile identifies the screen.
+        // show); the rail's lit tile identifies the screen.
         supportActionBar?.title = null
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         DspCrossNavBar.populate(this, binding.dspCrossNav, DspDestination.PARAMETRIC_EQ) {
@@ -59,7 +59,7 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
         // Skin once after fragment restoration/inflation. This is deliberately UI-only and
         // is not attached to onStart/onResume or any DSP/service lifecycle callback. styleTree
         // only (not styleWorkspace): the background half is now painted by DspCrossNavBar's
-        // per-destination full-screen workspace backdrop above (R.id.dsp_workspace_backdrop).
+        // full-screen workspace faceplate above (R.id.dsp_workspace_backdrop).
         binding.root.post { BmwDashboardSkin.styleTree(binding.root) }
     }
 }

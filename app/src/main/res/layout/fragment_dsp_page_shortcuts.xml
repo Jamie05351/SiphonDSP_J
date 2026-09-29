@@ -8,19 +8,18 @@
     tools:context=".fragment.DspFragment"
     tools:ignore="SpeakableTextPresentCheck">
 
-    <!-- Front page: one full-bleed hardware-panel image (dsp_home_backdrop.jpg, 2340x878, drawn
-         for the 1280x480 head unit) with no margins, padding, header or bottom bar around it.
-         Everything live is laid over the artwork's own regions by HomeArtLayout, which places each
-         child by its tag (see HomeArt.kt) using the same centerCrop mapping as this ImageView:
-         the 7 menu tiles (each its own image and touch area), the live status strip above them, and the
-         three top displays - left crossover response, centre PEQ curve (both read-only) and
-         right L/R level bars. The power button remains in the activity overlay. Must never scroll. -->
-    <ImageView
+    <!-- Front page: one full-bleed hardware faceplate, drawn live by HomeFaceplate (Compose) with no
+         margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
+         own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
+         same cover mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
+         ComposeView, so a tile's picture and its touch area are the same box), the live status strip
+         above them, and the three top displays - left crossover response, centre PEQ curve (both
+         read-only) and right L/R level bars. The power button remains in the activity overlay
+         (PowerHotspot draws it). Must never scroll. -->
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/home_backdrop"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:src="@drawable/dsp_home_backdrop"
         android:importantForAccessibility="no" />
 
     <app.siphondsp.view.HomeArtLayout
@@ -28,11 +27,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_peq"
             android:tag="tile_peq"
-            android:src="@drawable/home_tile_peq"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -40,11 +37,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_parametric_eq" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_gains_delay"
             android:tag="tile_gains"
-            android:src="@drawable/home_tile_gains"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -52,11 +47,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_gain_limiter" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_crossovers"
             android:tag="tile_xovers"
-            android:src="@drawable/home_tile_xovers"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -64,11 +57,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_crossover_tilt" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_compressor"
             android:tag="tile_compressor"
-            android:src="@drawable/home_tile_compressor"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -76,11 +67,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_compressor" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_allpass"
             android:tag="tile_allpass"
-            android:src="@drawable/home_tile_allpass"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -88,11 +77,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/action_allpass" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_settings"
             android:tag="tile_settings"
-            android:src="@drawable/home_tile_settings"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"
@@ -100,11 +87,9 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/title_activity_settings" />
 
-        <ImageView
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/card_shortcut_more"
             android:tag="tile_more"
-            android:src="@drawable/home_tile_more"
-            android:scaleType="fitXY"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clickable="true"

@@ -7,20 +7,22 @@ import kotlin.math.roundToInt
  * Where every live element sits on the front page's hardware-panel artwork. Rects are fractions
  * of the *image*, x/y/w/h.
  *
- * Head unit: `dsp_home_backdrop.jpg`, 2340x878 (the 1280x480 screen's aspect), placed in
- * REW/_UI/home_layout_placer_v5.html (home_layout_v5.json). The backdrop has no tiles of its own:
- * each tile is its own image (`home_tile_*`) drawn by the view at its rect, so a tile's picture
- * and its touch area are always the same box.
+ * Head unit: a 2340x878 art space (the 1280x480 screen's aspect), placed in
+ * REW/_UI/home_layout_placer_v5.html (home_layout_v5.json). The faceplate itself is no longer an
+ * image: [app.siphondsp.compose.controls.HomeFaceplate] draws the plates, screens, bezel and knob
+ * live, at the `screen_*` / `knob` rects below (measured from the old baked art so every live view
+ * still lands inside its screen). Each tile is drawn by a Compose tile at its rect, so a tile's
+ * picture and its touch area are always the same box.
  *
- * The art is drawn full-bleed with `centerCrop`, so [map] applies the same cover scale + offset
- * to turn an image fraction into view pixels -- the touch areas stay locked to the art on any
- * display aspect, not just the 1280x480 head unit.
+ * The art space is laid out full-bleed with cover scaling, so [map] turns an art fraction into view
+ * pixels -- the touch areas and the chrome stay locked together on any display aspect, not just the
+ * 1280x480 head unit.
  */
 object HomeArt {
     const val IMAGE_WIDTH = 2340f
     const val IMAGE_HEIGHT = 878f
 
-    /** The phone art (`dsp_home_backdrop_phone.jpg`) is its own size, 2340x1080 (the phone's aspect). */
+    /** The phone's art space is its own size, 2340x1080 (the phone's aspect). */
     const val PHONE_IMAGE_WIDTH = 2340f
     const val PHONE_IMAGE_HEIGHT = 1080f
 
@@ -56,10 +58,17 @@ object HomeArt {
         "tile_allpass" to Frac(0.5671f, 0.7588f, 0.0824f, 0.2197f),
         "tile_settings" to Frac(0.6809f, 0.775f, 0.0787f, 0.2008f),
         "tile_more" to Frac(0.7631f, 0.778f, 0.0691f, 0.1879f),
-        // The backdrop is the DSP-off art (greyed button). This rect is exactly the pixel crop
-        // saved as `dsp_home_power_on.png` from the lit art (x 40..218, y 595..781: the button
-        // and its whole glow), which PowerHotspot paints over it while on.
+        // The power button and its whole glow (x 40..218, y 595..781): PowerHotspot draws the
+        // button, off and on, within this rect.
         "power_btn" to hu(40, 595, 178, 186),
+        // Faceplate chrome, measured from the old baked art: the three top screens (outer edge of
+        // the black glass), the bottom screen, and the decorative volume knob (a circle; the
+        // volume itself is the car's).
+        "screen_left" to Frac(0.1120f, 0.0194f, 0.2303f, 0.4442f),
+        "screen_centre" to Frac(0.3496f, 0.0194f, 0.3021f, 0.4442f),
+        "screen_right" to Frac(0.6600f, 0.0194f, 0.2290f, 0.4442f),
+        "screen_bottom" to Frac(0.1141f, 0.5376f, 0.7321f, 0.4578f),
+        "knob" to Frac(0.8529f, 0.5658f, 0.1494f, 0.3982f),
         // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
         "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
         // Legacy icons, hidden now that Settings and More are tiles; kept so every key resolves.
@@ -82,9 +91,13 @@ object HomeArt {
         "tile_allpass" to ph(1327, 785, 193, 193),
         "tile_settings" to ph(1593, 800, 184, 176),
         "tile_more" to ph(1786, 803, 162, 165),
-        // Exactly the pixel crop saved as `dsp_home_power_on_phone.png` from the lit art
-        // (x 37..215, y 702..888), same scheme as the head unit.
+        // The power button and its glow (x 37..215, y 702..888), same scheme as the head unit.
         "power_btn" to ph(37, 702, 178, 186),
+        "screen_left" to Frac(0.1115f, 0.0241f, 0.2317f, 0.4537f),
+        "screen_centre" to Frac(0.3491f, 0.0278f, 0.3039f, 0.4537f),
+        "screen_right" to Frac(0.6600f, 0.0241f, 0.2290f, 0.4537f),
+        "screen_bottom" to Frac(0.1128f, 0.5361f, 0.7342f, 0.3806f),
+        "knob" to Frac(0.8535f, 0.5683f, 0.1497f, 0.3241f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),

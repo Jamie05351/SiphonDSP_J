@@ -5,31 +5,25 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
 
-    <!-- Full-screen workspace backdrop: per-destination art (rail housing, background field and
-         the ///M carbon logo baked in) &#8212; see DspDestination.backdrop. Tile icons and the
-         selected-tile glow are drawn live by dsp_cross_nav's Compose content below, not baked in
-         here. DspCrossNavBar.populate() swaps this image per destination.
-         Authored at 1280x480 mdpi, edge to edge (the head unit runs with no system bars), so it
-         fills the whole activity behind every other layer. -->
-    <ImageView
+    <!-- Full-screen workspace faceplate (textured background + slim metal screen bezel), drawn live by
+         DspWorkspaceBackdrop (Compose): DspCrossNavBar.populate() sets its content. The rail housing
+         and tiles are drawn by dsp_cross_nav below, not by this view. Authored for 1280x480 mdpi, edge
+         to edge (the head unit runs with no system bars), so it fills the whole activity behind every
+         other layer. -->
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/dsp_workspace_backdrop"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:importantForAccessibility="no"
-        android:src="@drawable/dsp_workspace_backdrop_v5"
-        tools:src="@drawable/dsp_workspace_backdrop_v5" />
+        android:importantForAccessibility="no" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/dsp_workspace_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Full-height column for the rail: the panel/background is baked into the per-destination
-             backdrop image (R.id.dsp_workspace_backdrop) behind this column; dsp_cross_nav draws
-             the 5 tile icons and the current destination's glow live (DspSidebarNav, Compose) and
-             hosts their real touch targets, positioned via DspCrossNavBar.populate()'s measured
-             row-weight table. Fixed width, since the rail is a fixed pixel fixture; see
+        <!-- Full-height column for the rail: dsp_cross_nav draws the rail housing and the 5 tiles live
+             (DspSidebarRail, Compose) and hosts their touch targets; the current destination's tile
+             is lit and inert. Fixed width, since the rail is a fixed fixture; see
              @dimen/dsp_sidebar_width. -->
         <FrameLayout
             android:id="@+id/dsp_sidebar"
@@ -47,7 +41,7 @@
         </FrameLayout>
 
         <!-- The fragment content sits to the right of the rail and starts below the floating
-             transparent toolbar line (dsp_workspace_toolbar_height); the backdrop still shows
+             transparent toolbar line (dsp_workspace_toolbar_height); the faceplate still shows
              through the top strip behind that toolbar. -->
         <FrameLayout
             android:id="@+id/params"
@@ -63,8 +57,7 @@
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Declared last so the toolbar chrome renders above the content. Transparent, no elevation,
-         no ///M stripe (removed &#8212; the carbon ///M logo is baked into the backdrop's bottom-right
-         instead). The back arrow and bypass-state strip are indented past the rail so they never
+         no ///M stripe. The back arrow and bypass-state strip are indented past the rail so they never
          sit over it. -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"

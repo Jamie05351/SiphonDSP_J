@@ -258,6 +258,13 @@
 
     <!-- Settings -->
     <string name="title_activity_settings">Settings</string>
+    <!-- Labels on the front-page tiles and the workspace rail tiles (they used to be baked into art). -->
+    <string name="home_tile_peq">PEQ</string>
+    <string name="home_tile_gains">Delay/Gains</string>
+    <string name="home_tile_xovers">Xovers</string>
+    <string name="home_tile_compressor">Compressor</string>
+    <string name="home_tile_allpass">Allpass</string>
+    <string name="home_tile_more">More</string>
     <string name="session_exclude_restricted">Exclude unsupported apps</string>
     <string name="session_exclude_restricted_off">Apps blocking audio capture stay muted (default Android behavior)</string>
     <string name="session_exclude_restricted_on">Apps blocking audio capture are excluded and remain unprocessed (recommended)</string>
