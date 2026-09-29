@@ -1,5 +1,6 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -62,7 +63,7 @@ fun BmwPanel(
         if (sliderLabels.isEmpty()) {
             FallbackTitleColumnWidth
         } else {
-            val style = TextStyle(fontSize = BoxTextSize, fontWeight = FontWeight.Bold)
+            val style = TextStyle(fontSize = BoxTextSize, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
             val widest = sliderLabels.maxOf { textMeasurer.measure(it, style).size.width }
             // +12dp slack so a label as wide as the measured text doesn't hit the maxLines=1
             // ellipsis -- TextMeasurer with a bare TextStyle underestimates the rendered width
@@ -108,7 +109,7 @@ fun BmwPanel(
                 Text(
                     text = subtitle,
                     color = SubtitleColor,
-                    fontSize = 11.5.sp,
+                    fontSize = CarUi.MinDenseText,
                     modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
                 )
             } else {
@@ -156,7 +157,7 @@ fun BmwTitleRowWithSwitches(
                 Text(
                     text = secondLabel,
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = CarUi.MinDenseText,
                     maxLines = 1,
                     modifier = Modifier.padding(end = 10.dp),
                 )
@@ -169,7 +170,7 @@ fun BmwTitleRowWithSwitches(
             Text(
                 text = subheading,
                 color = SubtitleColor,
-                fontSize = 11.5.sp,
+                fontSize = CarUi.MinDenseText,
                 modifier = Modifier.padding(top = 1.dp),
             )
         }
@@ -186,7 +187,7 @@ fun BmwSectionHeader(
     title: String,
     accentColor: Color,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = 12.5.sp,
+    fontSize: TextUnit = CarUi.MinDenseText,
     toggleChecked: Boolean? = null,
     onToggleChange: ((Boolean) -> Unit)? = null,
 ) {
@@ -221,6 +222,8 @@ internal val RowValueGap = BmwDashboardSkin.SLIDER_VALUE_GAP_DP.dp
 internal val RowBoxHeight = BmwDashboardSkin.SLIDER_TITLE_HEIGHT_DP.dp // == SLIDER_VALUE_HEIGHT_DP (30)
 internal val RowMinHeight = BmwDashboardSkin.SLIDER_ROW_MIN_HEIGHT_DP.dp
 private val BoxTextSize = 14.sp
+private const val TitleBorderAlpha = 0.6f
+private val TitleTextColor = Color(0xFFE8ECF0)
 internal val SubtitleColor = Color(0xFFB2BBC6) // rgb(178, 187, 198)
 private val BoxTitleHorizontalPadding = 18.dp // createBoxedTitleText's setPadding(dp(18), .., dp(18), ..)
 
@@ -228,18 +231,19 @@ private val BoxTitleHorizontalPadding = 18.dp // createBoxedTitleText's setPaddi
  *  [FallbackTitleColumnWidth] outside a panel or when labels aren't supplied. */
 internal val LocalRowTitleColumnWidth = compositionLocalOf { FallbackTitleColumnWidth }
 
-/** Boxed slider-row title -- bold white text, glass box tinted to the row's slider colour. */
+/** Boxed slider-row title -- medium-weight text on the recessed display, ring dimmed so the value pops. */
 @Composable
 internal fun BoxedTitle(text: String, accentColor: Color, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.bmwGlassBox(accentColor),
+        modifier = modifier.bmwGlassBox(accentColor, borderAlpha = TitleBorderAlpha),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = text,
-            color = Color.White,
+            color = TitleTextColor,
             fontSize = BoxTextSize,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.2.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = BoxTitleHorizontalPadding),
@@ -247,7 +251,10 @@ internal fun BoxedTitle(text: String, accentColor: Color, modifier: Modifier = M
     }
 }
 
-/** Boxed value readout -- centred bold number + right-pinned unit in the slider colour. */
+/**
+ * Boxed value readout -- tabular numerals (so the number doesn't jitter while dragging) packed to
+ * the right against a muted unit, on the same recessed display as the title.
+ */
 @Composable
 internal fun BoxedValue(
     text: String,
@@ -255,30 +262,29 @@ internal fun BoxedValue(
     accentColor: Color,
     modifier: Modifier = Modifier,
     textSize: TextUnit = BoxTextSize,
-    unitSize: TextUnit = 11.sp,
+    unitSize: TextUnit = CarUi.MinDenseText,
 ) {
     Row(
-        modifier = modifier.bmwGlassBox(accentColor),
+        modifier = modifier.bmwGlassBox(accentColor).padding(end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
     ) {
         Text(
             text = text,
             color = Color.White,
             fontSize = textSize,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
+            style = TextStyle(fontFeatureSettings = "tnum"),
             maxLines = 1,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 6.dp),
+            textAlign = TextAlign.End,
         )
         if (unit.isNotEmpty()) {
             Text(
                 text = unit,
-                color = accentColor,
+                color = accentColor.copy(alpha = 0.85f),
                 fontSize = unitSize,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 2.dp, end = 8.dp),
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(start = 5.dp),
             )
         }
     }

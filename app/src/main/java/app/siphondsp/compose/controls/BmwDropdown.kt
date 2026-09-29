@@ -50,8 +50,8 @@ fun BmwDropdown(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    textSize: TextUnit = 12.sp,
-    minHeight: Dp = 32.dp,
+    textSize: TextUnit = CarUi.MinText,
+    minHeight: Dp = CarUi.MinTouch,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -64,7 +64,7 @@ fun BmwDropdown(
                 .background(DropdownIdle, DropdownShape)
                 .clickable(interactionSource = interactionSource, indication = LocalIndication.current) { expanded = true }
                 .bmwFocusRing(interactionSource)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -78,7 +78,7 @@ fun BmwDropdown(
                 painter = painterResource(R.drawable.ic_baseline_keyboard_arrow_down_24dp),
                 contentDescription = null,
                 tint = DropdownText,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(24.dp),
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

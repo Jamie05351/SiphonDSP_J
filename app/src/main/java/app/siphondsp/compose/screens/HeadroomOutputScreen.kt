@@ -97,7 +97,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
             BmwSectionHeader(
                 title = "Limiter",
                 accentColor = blueColor,
-                fontSize = 13.sp,
+                fontSize = 16.sp,
                 toggleChecked = limiterOn,
                 onToggleChange = { on ->
                     dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, if (on) 1f else 0f)

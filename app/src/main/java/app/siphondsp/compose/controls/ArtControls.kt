@@ -56,7 +56,7 @@ fun artDp(x: Int, y: Int, w: Int, h: Int) = WorkspaceArt.Frac(x / 1280f, y / 480
 val ArtLabelSize = 16.sp
 val ArtValueSize = 20.sp
 val ArtValueHeight = 48.dp
-private val ArtUnitSize = 14.sp
+private val ArtUnitSize = CarUi.MinText
 private val ArtLabelColor = Color(0xFF969EA8)
 private const val DisabledAlpha = 0.4f
 private val ArtValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
@@ -199,6 +199,7 @@ fun ArtSlider(
                     steps = steps,
                     accentColor = accentColor,
                     enabled = enabled,
+                    valueText = { ArtValueFormat.format(it) + if (unit.isNotEmpty()) " $unit" else "" },
                     modifier = Modifier.weight(1f),
                 )
             }
