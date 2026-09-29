@@ -231,12 +231,18 @@ private fun drawGrid(
         nc.drawLine(left, y, right, y, if (db == 0.0) zeroPaint else gridPaint)
         nc.drawText("${db.toInt()}", 3f * density, y + 5f * density, labelPaint)
     }
-    for (hz in FreqScale) {
-        val x = xForFrequency(hz, left, right)
-        nc.drawLine(x, top, x, bottom, gridPaint)
-        val label = hz.prettyNumberFormat()
-        nc.drawText(label, x - labelPaint.measureText(label) / 2f, bottom + 19f * density, labelPaint)
+    // Shrink the frequency labels to fit a narrow plot instead of letting them collide.
+    val baseTextSize = labelPaint.textSize
+    val xs = FloatArray(FreqScale.size) { xForFrequency(FreqScale[it], left, right) }
+    val labels = Array(FreqScale.size) { FreqScale[it].prettyNumberFormat() }
+    labelPaint.textSize = baseTextSize * graphLabelFitScale(
+        minNeighbourSpacing(xs), labels.maxOf { labelPaint.measureText(it) }, gapPx = 3f * density,
+    )
+    for (i in FreqScale.indices) {
+        nc.drawLine(xs[i], top, xs[i], bottom, gridPaint)
+        nc.drawText(labels[i], xs[i] - labelPaint.measureText(labels[i]) / 2f, bottom + 19f * density, labelPaint)
     }
+    labelPaint.textSize = baseTextSize
 }
 
 /** = `CompressorSurface.drawSpectrum` + `drawSpectrumDelta` + `fillDelta`. `tick` only forces the snapshot read to count. */

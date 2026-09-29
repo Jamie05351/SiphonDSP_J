@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.Job
+import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.preference.FileLibraryPreference
@@ -133,14 +134,29 @@ class BackupManager(private val context: Context): KoinComponent {
                 throw UnsupportedOperationException(context.getString(R.string.backup_restore_error_version_too_new))
             }
 
+            // Read the speaker geometry before anything is deleted: a malformed file is skipped (the
+            // current geometry is kept) instead of failing the restore halfway through.
+            val geometryFile = File(targetFolder, "shared_prefs/$GEOMETRY_PREFS_FILE")
+            val geometry = geometryFile.takeIf { it.isFile }?.let {
+                try {
+                    SpeakerGeometryState.readBackup(it)
+                } catch (e: Exception) {
+                    Timber.w(e, "Skipping unreadable speaker geometry in backup")
+                    null
+                }
+            }
+            geometryFile.delete()
+
             // Clean restore
             if(!dirty) {
                 // Remove profiles
                 File(context.applicationInfo.dataDir + "/files/profiles").deleteRecursively()
 
-                // Remove shared dsp prefs
+                // Remove shared dsp prefs. Speaker geometry is left alone here: it is replaced below
+                // only if this backup has it, so restoring an older backup doesn't erase it.
                 File(context.applicationInfo.dataDir + "/shared_prefs").listFiles { file: File ->
-                    (file.name.startsWith("dsp_") || file.name in BMW_SHARED_PREFS_FILES) && file.extension == "xml"
+                    (file.name.startsWith("dsp_") || file.name in BMW_SHARED_PREFS_FILES) &&
+                        file.extension == "xml" && file.name != GEOMETRY_PREFS_FILE
                 }?.forEach { it.delete() }
                 // Remove BMW PEQ / DSP config no-backup state
                 context.noBackupFilesDir.listFiles { file: File ->
@@ -173,6 +189,11 @@ class BackupManager(private val context: Context): KoinComponent {
 
             targetFolder.deleteRecursively()
 
+            // Last, once everything else is in place. Written through SharedPreferences so an open
+            // Delay page and the in-memory prefs cache see it; throws (restore reports an error) if
+            // it can't be saved.
+            geometry?.apply(context, replace = !dirty)
+
             context.broadcastPresetLoadEvent()
             context.sendLocalBroadcast(Intent(Constants.ACTION_BACKUP_RESTORED))
 
@@ -187,9 +208,10 @@ class BackupManager(private val context: Context): KoinComponent {
         private const val META_HAS_DEVICE_PROFILES = "has_device_profiles"
         const val META_IS_BACKUP = "is_backup"
 
-        // Kept in sync with Preset.kt's constants of the same purpose -- both features back up
-        // the same BMW-specific state that lives outside the generic dsp_* convention.
-        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml")
+        // BMW-specific state that lives outside the generic dsp_* convention. speaker_geometry.xml
+        // holds the Delay page's alignment target and measured seat-to-driver paths.
+        private const val GEOMETRY_PREFS_FILE = SpeakerGeometryState.PREFS + ".xml"
+        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml", GEOMETRY_PREFS_FILE)
         private val BMW_NO_BACKUP_STATE_FILES = setOf(
             "native_bmw_peq_state.txt", "native_bmw_peq_state.recovery",
             "native_bmw_dsp_state.txt", "native_bmw_dsp_state.recovery",

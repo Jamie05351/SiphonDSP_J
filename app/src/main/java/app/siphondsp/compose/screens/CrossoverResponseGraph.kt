@@ -337,12 +337,22 @@ private fun drawGrid(
         nc.drawLine(left, y, right, y, if (value == 0f) zeroPaint else gridPaint)
         nc.drawText(value.toInt().toString(), 5f * density, y + 4f * density, labelPaint)
     }
-    FreqGridLines.forEach { frequency ->
-        val x = frequencyToX(frequency, left, right)
-        nc.drawLine(x, top, x, bottom, if (frequency in OctaveFreqs) octavePaint else gridPaint)
-        val label = if (frequency >= 1000f) "${(frequency / 1000f).toInt()}k" else frequency.toInt().toString()
-        nc.drawText(label, x - labelPaint.measureText(label) / 2f, bottom + 18f * density, labelPaint)
+    // Shrink the frequency labels to fit a narrow plot instead of letting them collide.
+    val baseTextSize = labelPaint.textSize
+    val freqs = FreqGridLines.toList()
+    val xs = FloatArray(freqs.size) { frequencyToX(freqs[it], left, right) }
+    val labels = Array(freqs.size) {
+        val f = freqs[it]
+        if (f >= 1000f) "${(f / 1000f).toInt()}k" else f.toInt().toString()
     }
+    labelPaint.textSize = baseTextSize * graphLabelFitScale(
+        minNeighbourSpacing(xs), labels.maxOf { labelPaint.measureText(it) }, gapPx = 3f * density,
+    )
+    freqs.forEachIndexed { i, frequency ->
+        nc.drawLine(xs[i], top, xs[i], bottom, if (frequency in OctaveFreqs) octavePaint else gridPaint)
+        nc.drawText(labels[i], xs[i] - labelPaint.measureText(labels[i]) / 2f, bottom + 18f * density, labelPaint)
+    }
+    labelPaint.textSize = baseTextSize
 }
 
 /**
