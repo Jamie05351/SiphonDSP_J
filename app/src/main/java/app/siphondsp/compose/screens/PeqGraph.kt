@@ -147,10 +147,10 @@ private const val NODE_IDLE_FADE_DELAY_MS = 6_000L
 private const val NODE_FADE_DURATION_MS = 400
 
 // Plot insets — 1:1 with ParametricEqSurface.padLeft/padTop/padRight/padBottom.
-private val PlotPadLeft = 34.dp
-private val PlotPadTop = 16.dp
-private val PlotPadRight = 44.dp
-private val PlotPadBottom = 22.dp
+private val PlotPadLeft = 44.dp
+private val PlotPadTop = 24.dp
+private val PlotPadRight = 52.dp
+private val PlotPadBottom = 30.dp
 
 // Horizontal gridline values per mode — 1:1 with drawUnifiedGrid / drawPhaseGrid.
 private val MagnitudeGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
@@ -561,14 +561,22 @@ private fun drawGrid(
     lines.forEach { value ->
         val y = toY(value.toDouble())
         nc.drawLine(g.left, y, g.right, y, if (value == 0f) p.unifiedZeroPaint else p.unifiedGridPaint)
-        nc.drawText(value.toInt().toString(), 4f * density, y + 3f * density, p.unifiedLabelPaint)
+        nc.drawText(value.toInt().toString(), 5f * density, y + 5f * density, p.unifiedLabelPaint)
     }
+    // Larger labels can collide on a narrow plot (the home-screen graphs), so a label is only
+    // drawn if it clears the previous one by a small gap; the grid line is always drawn.
+    var lastLabelEnd = Float.NEGATIVE_INFINITY
     FreqScale.forEach { frequency ->
         val x = g.xForFrequency(frequency)
         val linePaint = if (octavePaint != null && frequency in OctaveFreqs) octavePaint else p.unifiedGridPaint
         nc.drawLine(x, g.top, x, g.bottom, linePaint)
         val label = frequency.prettyNumberFormat()
-        nc.drawText(label, x - p.unifiedLabelPaint.measureText(label) / 2f, g.bottom + 15f * density, p.unifiedLabelPaint)
+        val labelWidth = p.unifiedLabelPaint.measureText(label)
+        val labelStart = x - labelWidth / 2f
+        if (labelStart >= lastLabelEnd + 6f * density) {
+            nc.drawText(label, labelStart, g.bottom + 21f * density, p.unifiedLabelPaint)
+            lastLabelEnd = labelStart + labelWidth
+        }
     }
 }
 
@@ -605,26 +613,26 @@ private fun drawLegend(
     density: Float,
     mode: PeqGraphMode,
 ) {
-    val baseline = g.top - 6f * density
+    val baseline = g.top - 8f * density
     fun tinted(color: Int) = Paint(p.unifiedLegendPaint).apply { this.color = color }
     when (mode) {
         PeqGraphMode.PHASE -> {
             nc.drawText("LOW", g.left, baseline, tinted(p.bankColorLow))
-            nc.drawText("MID", g.left + 38f * density, baseline, tinted(p.bankColorMid))
-            nc.drawText("HIGH", g.left + 76f * density, baseline, tinted(p.bankColorHigh))
+            nc.drawText("MID", g.left + 48f * density, baseline, tinted(p.bankColorMid))
+            nc.drawText("HIGH", g.left + 92f * density, baseline, tinted(p.bankColorHigh))
             nc.drawText(
                 "FINAL SUM PHASE (L solid / R dashed) · compressor not shown (nonlinear)",
-                g.left + 114f * density, baseline, p.unifiedLegendPaint,
+                g.left + 146f * density, baseline, p.unifiedLegendPaint,
             )
         }
         PeqGraphMode.MAGNITUDE -> {
             nc.drawText("FULL", g.left, baseline, tinted(p.bankColorFull))
-            nc.drawText("LOW", g.left + 38f * density, baseline, tinted(p.bankColorLow))
-            nc.drawText("MID", g.left + 74f * density, baseline, tinted(p.bankColorMid))
-            nc.drawText("HIGH", g.left + 112f * density, baseline, tinted(p.bankColorHigh))
+            nc.drawText("LOW", g.left + 48f * density, baseline, tinted(p.bankColorLow))
+            nc.drawText("MID", g.left + 92f * density, baseline, tinted(p.bankColorMid))
+            nc.drawText("HIGH", g.left + 136f * density, baseline, tinted(p.bankColorHigh))
             nc.drawText(
                 "FINAL SUM (L solid / R dashed) · compressor not shown (nonlinear)",
-                g.left + 152f * density, baseline, p.unifiedLegendPaint,
+                g.left + 190f * density, baseline, p.unifiedLegendPaint,
             )
         }
     }
@@ -1241,8 +1249,8 @@ private fun drawGainMeters(nc: Canvas, ctx: PeqDrawContext) {
     val rightBarX = leftBarX + barWidth + gap
     drawMeterBar(nc, p, d, leftBarX, g.top, g.bottom, barWidth, left)
     drawMeterBar(nc, p, d, rightBarX, g.top, g.bottom, barWidth, right)
-    nc.drawText("L", leftBarX + barWidth / 2f, g.bottom + 15f * d, p.meterLabelPaint)
-    nc.drawText("R", rightBarX + barWidth / 2f, g.bottom + 15f * d, p.meterLabelPaint)
+    nc.drawText("L", leftBarX + barWidth / 2f, g.bottom + 21f * d, p.meterLabelPaint)
+    nc.drawText("R", rightBarX + barWidth / 2f, g.bottom + 21f * d, p.meterLabelPaint)
 }
 
 private fun drawMeterBar(
@@ -1338,14 +1346,14 @@ private fun PeqNodeCallout(hit: NodeHit, accent: Color, modifier: Modifier = Mod
             "#${hit.number} · ${band.filterType.displayLabel} · ${band.channel.displayLabel}",
             color = accent,
             fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
+            fontSize = 14.sp,
         )
         Text(
             "${band.frequency.roundToInt()} Hz · ${"%+.1f".format(band.gain)} dB · Q ${"%.2f".format(band.q)}",
             color = Color(0xFFE8EAF0),
-            fontSize = 11.sp,
+            fontSize = 14.sp,
         )
-        Text("${bankLabel(hit.bank)} band", color = Color(0xFF9AA0AA), fontSize = 11.sp)
+        Text("${bankLabel(hit.bank)} band", color = Color(0xFF9AA0AA), fontSize = 14.sp)
     }
 }
 
@@ -1397,7 +1405,7 @@ private fun MenuSectionLabel(text: String) {
     Text(
         text,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        fontSize = 11.sp,
+        fontSize = 14.sp,
         fontFamily = FontFamily.SansSerif,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

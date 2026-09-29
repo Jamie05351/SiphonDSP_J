@@ -248,7 +248,7 @@ fun CrossoverMidHighPage(
         Text(
             text = "Open full All-pass \u203a",
             color = Color(BmwDashboardSkin.LIGHT_BLUE),
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             textDecoration = TextDecoration.Underline,
             modifier = Modifier

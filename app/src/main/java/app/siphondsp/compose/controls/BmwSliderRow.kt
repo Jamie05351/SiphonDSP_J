@@ -150,6 +150,7 @@ fun BmwSliderRow(
                 steps = steps,
                 accentColor = accentColor,
                 enabled = enabled,
+                valueText = { ValueFormat.format(it) + if (unit.isNotEmpty()) " $unit" else "" },
                 modifier = Modifier.weight(1f),
             )
         }

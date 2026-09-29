@@ -199,7 +199,7 @@ private fun PeqListHeader() {
 
 // Matches TapCell/StepperCell's own 13sp -- big enough to read at a glance (vs. the original
 // 11sp) while still reliably fitting "FILTER", the longest header label, in its column.
-private val HeaderFontSize = 13.sp
+private val HeaderFontSize = 16.sp
 
 @Composable
 private fun RowScope.HeaderCell(text: String, weight: Float) {
@@ -240,7 +240,7 @@ private fun PeqBandRow(
         Text(
             text = "$number",
             color = if (selected) accent else IndexColor,
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier
@@ -270,7 +270,7 @@ private fun RowScope.TapCell(text: String, accent: Color, weight: Float, onClick
     Text(
         text = text,
         color = accent,
-        fontSize = 13.sp,
+        fontSize = 16.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         modifier = Modifier
@@ -305,7 +305,7 @@ private fun RowScope.StepperCell(
         Text(
             text = value,
             color = accent,
-            fontSize = 13.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier
@@ -390,7 +390,7 @@ private fun PeqAddRow(accent: Color, onClick: () -> Unit) {
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("+  Add filter", color = accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("+  Add filter", color = accent, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     }
 }
 

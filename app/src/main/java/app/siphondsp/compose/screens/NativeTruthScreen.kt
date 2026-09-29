@@ -90,7 +90,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             Text(
                 "Last refreshed ${if (lastRefreshedAtMs == 0L) "never" else "${(nowMs - lastRefreshedAtMs).coerceAtLeast(0)} ms ago"}",
                 color = Color.Gray,
-                fontSize = 11.sp,
+                fontSize = 14.sp,
             )
         }
         item { EngineSection(handleReady, engineSampleRate, truth) }
@@ -126,7 +126,7 @@ private fun SectionHeader(title: String) {
         title,
         color = MaterialTheme.colorScheme.secondary,
         fontWeight = FontWeight.Bold,
-        fontSize = 13.sp,
+        fontSize = 16.sp,
         modifier = Modifier.padding(top = 6.dp),
     )
 }
@@ -145,8 +145,8 @@ private fun DebugCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun KeyValueRow(label: String, value: String, valueColor: Color = Color.White) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
-        Text(value, color = valueColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        Text(label, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+        Text(value, color = valueColor, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -305,7 +305,7 @@ private fun CrossoverCard(output: NativeDspOutput, snapshot: NativeCrossoverSnap
             output.name.replace('_', ' '),
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
+            fontSize = 16.sp,
         )
         KeyValueRow(
             "Type",
@@ -336,7 +336,7 @@ private fun CrossoverCard(output: NativeDspOutput, snapshot: NativeCrossoverSnap
 @Composable
 private fun PeqBankCard(label: String, bank: NativePeqBank) {
     DebugCard {
-        Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         KeyValueRow("Raw band count", bank.rawBandCount.toString())
         KeyValueRow("Active left / right", "${bank.leftActiveCount} / ${bank.rightActiveCount}")
         if (bank.bands.isEmpty()) {

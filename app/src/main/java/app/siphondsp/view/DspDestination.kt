@@ -43,8 +43,8 @@ enum class DspDestination(
     //
     // `backdrop` is the full-screen head-unit art (rail housing, tiles and background baked in).
     // Since the v5 art every destination shares one image (dsp_workspace_backdrop_v5, 2048x768 --
-    // the head unit's aspect) with no selected-tile highlight, baked or live; only Gains &
-    // Delay's band pages swap in their own car art (GainsBand.backdrop).
+    // the head unit's aspect) with no selected-tile highlight, baked or live. Gains & Delay draws
+    // its car live (CarSpeakerDiagram) rather than swapping in per-band art.
     //
     // `backdropPhone` is the matching phone art (dsp_workspace_backdrop_v5_phone, 1846x852 -- the
     // phone's aspect), picked by name at runtime (see DspCrossNavBar.isHeadUnitDisplay) rather
@@ -94,14 +94,6 @@ object DspCrossNavBar {
         rightInset = (140f - 100f) / 140f,
     )
 
-    // Head unit, v5 Gains band car art (2340x878, all three share it): tiles at y 61-194,
-    // 219-352, 375-508, 532-665, 690-823 and x 34-168, i.e. 18.6..92.4 dp of the 140 dp column.
-    private val HEAD_UNIT_V5_CAR = RailArt(
-        intArrayOf(695, 1526, 273, 1526, 251, 1526, 262, 1526, 273, 1526, 616),
-        leftInset = 18.6f / 140f,
-        rightInset = (140f - 92.4f) / 140f,
-    )
-
     // Phone, v5 art (1846x852): rail column 0..245 px, tiles at x 49-212 and y 45-180, 199-333,
     // 352-485, 504-638, 657-795.
     private val PHONE_V5 = RailArt(
@@ -113,24 +105,13 @@ object DspCrossNavBar {
         railWidth = 245f,
     )
 
-    private val HEAD_UNIT_CAR_ART = setOf(
-        R.drawable.dsp_workspace_backdrop_v5_high,
-        R.drawable.dsp_workspace_backdrop_v5_mid,
-        R.drawable.dsp_workspace_backdrop_v5_low,
-    )
+    // Phones keep the plain art's rail on every page: re-sizing the sidebar column while the pager
+    // swipes would relayout the page mid-gesture. The head unit's Gains & Delay pages no longer
+    // swap in car art (the car is drawn live), so every head-unit page uses the plain art's rail.
+    private fun railArtFor(headUnit: Boolean): RailArt = if (headUnit) HEAD_UNIT_V5 else PHONE_V5
 
-    // Phones keep the plain art's rail on every page, including Gains' band pages (still the
-    // older phone car art): re-sizing the sidebar column while the pager swipes would relayout
-    // the page mid-gesture.
-    private fun railArtFor(backdrop: Int, headUnit: Boolean): RailArt = when {
-        !headUnit -> PHONE_V5
-        backdrop in HEAD_UNIT_CAR_ART -> HEAD_UNIT_V5_CAR
-        else -> HEAD_UNIT_V5
-    }
-
-    // The head unit's rail rows follow whichever backdrop is showing: Gains & Delay swaps in car
-    // art per pager page (showBackdrop), and its tiles sit a few px lower than the plain art's.
-    // Only the Compose tile rows change; the sidebar column's size never does.
+    // The rail rows in use for the current display. Only the Compose tile rows change with it;
+    // the sidebar column's size never does.
     private val currentRail = mutableStateOf(HEAD_UNIT_V5)
 
     // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
@@ -174,15 +155,14 @@ object DspCrossNavBar {
         }
     }
 
-    /** Swaps the workspace backdrop for the head-unit or phone art, per [isHeadUnitDisplay]. Also
-     *  used after [populate] by workspaces whose art changes per pager page (Gains & Delay's
-     *  per-band car art); every variant must share its tier's exact pixel size, or centerCrop
-     *  drifts the baked-in rail away from the live sidebar tiles. */
+    /** Swaps the workspace backdrop for the head-unit or phone art, per [isHeadUnitDisplay]. Any
+     *  variant must share its tier's exact pixel size, or centerCrop drifts the baked-in rail away
+     *  from the live sidebar tiles. */
     fun showBackdrop(activity: FragmentActivity, headUnit: Int, phone: Int) {
         val isHeadUnit = isHeadUnitDisplay(activity)
         val backdrop = if (isHeadUnit) headUnit else phone
         activity.findViewById<ImageView>(R.id.dsp_workspace_backdrop)?.setImageResource(backdrop)
-        if (isHeadUnit) currentRail.value = railArtFor(backdrop, headUnit = true)
+        if (isHeadUnit) currentRail.value = railArtFor(headUnit = true)
     }
 
     fun populate(
@@ -197,7 +177,7 @@ object DspCrossNavBar {
         // in). Picks the head-unit or phone art per-destination based on the live screen width --
         // see isHeadUnitDisplay().
         val headUnit = isHeadUnitDisplay(activity)
-        currentRail.value = railArtFor(if (headUnit) current.backdrop else current.backdropPhone, headUnit)
+        currentRail.value = railArtFor(headUnit)
         showBackdrop(activity, current.backdrop, current.backdropPhone)
         if (!headUnit) applyPhoneRailGeometry(activity)
 

@@ -34,7 +34,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,8 +45,11 @@ import app.siphondsp.compose.controls.ArtStacked
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.ArtValueBox
 import app.siphondsp.compose.controls.BmwDspKnob
+import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
+import app.siphondsp.compose.controls.CarSpeakerDiagram
+import app.siphondsp.compose.controls.SpeakerKind
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
@@ -68,11 +70,11 @@ import kotlin.math.roundToInt
  * that band -- Delay, Polarity, Gain (+ knob) and the shared Stage Alignment, one per row --
  * with the global STEREO LINK under the car.
  *
- * The car itself isn't drawn here: each band has its own full-screen workspace backdrop
- * ([GainsBand.backdrop], swapped in by `GainLimiterFragment` as the pager moves) with the car and
- * that band's speakers + leader lines baked in. The car fills the middle of the art, so the
- * panels are width-limited but get the whole height; on a screen too short for every row (a
- * landscape phone) each panel scrolls rather than clipping.
+ * The car is drawn live between the panels by [CarSpeakerDiagram] (the workspace backdrop no
+ * longer changes per band): the band's two drivers light up in its colour with their live delay,
+ * and tapping a driver -- or the HIGH / MID / LOW selector under it -- switches band. The panels are
+ * width-limited but get the whole height; on a screen too short for every row (a landscape phone)
+ * each panel scrolls rather than clipping.
  *
  * High only makes sound with the Crossovers page's 3-way switch on; with it off the High page
  * stays in the pager (so the page count never changes) but greyed out and inert, with a pointer
@@ -89,35 +91,39 @@ enum class GainsBand(
     val accent: Int,
     val stroke: Int,
     val slider: Int,
-    val backdrop: Int,
-    val backdropPhone: Int,
+    val speaker: SpeakerKind,
 ) {
     HIGH(
         "High", NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.OUTPUT_HIGH_RIGHT,
         NativeBmwDspValues.INDEX_HIGH_GAIN_L, NativeBmwDspValues.INDEX_HIGH_GAIN_R,
         NativeBmwDspValues.INDEX_HIGH_DELAY_L, NativeBmwDspValues.INDEX_HIGH_DELAY_R,
         BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v5_high, R.drawable.dsp_workspace_backdrop_gains_tweeter_phone,
+        SpeakerKind.TWEETER,
     ),
     MID(
         "Mid", NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT,
         NativeBmwDspValues.INDEX_MID_GAIN_L, NativeBmwDspValues.INDEX_MID_GAIN_R,
         NativeBmwDspValues.INDEX_MID_DELAY_L, NativeBmwDspValues.INDEX_MID_DELAY_R,
         BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v5_mid, R.drawable.dsp_workspace_backdrop_gains_mid_phone,
+        SpeakerKind.MID,
     ),
     LOW(
         "Low", NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_LOW_RIGHT,
         NativeBmwDspValues.INDEX_LOW_GAIN_L, NativeBmwDspValues.INDEX_LOW_GAIN_R,
         NativeBmwDspValues.INDEX_LOW_DELAY_L, NativeBmwDspValues.INDEX_LOW_DELAY_R,
         BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.M_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR,
-        R.drawable.dsp_workspace_backdrop_v5_low, R.drawable.dsp_workspace_backdrop_gains_woofer_phone,
+        SpeakerKind.WOOFER,
     );
 
     /** High's per-output config lives in the schema tail, not the legacy 4-output block. */
     fun polarityIndex(output: Int): Int =
         if (this == HIGH) NativeBmwDspValues.highOutputIndex(output, NativeBmwDspValues.FIELD_INVERT)
         else NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_INVERT)
+
+    companion object {
+        /** The band whose drivers are of this kind (tweeters = High, mids = Mid, woofers = Low). */
+        fun forSpeaker(kind: SpeakerKind): GainsBand = entries.first { it.speaker == kind }
+    }
 }
 
 /**
@@ -136,7 +142,19 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier, onSelectBan
     }
 
     BmwDspTheme {
-        Box(modifier = modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+            // Width left between the two panels; the diagram is skipped on a screen too narrow for it.
+            val centreWidth = maxWidth - StartInset - PanelWidth - EndInset - PanelWidth - 24.dp
+            if (centreWidth >= 180.dp) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).width(centreWidth).padding(bottom = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BandCarDiagram(dsp, band, onSelectBand, Modifier.fillMaxWidth())
+                    BandSelector(band, onSelectBand, Modifier.fillMaxWidth())
+                }
+            }
             BandSidePanel(
                 dsp, linked, band, inactive,
                 title = "Left ${band.title}", output = band.leftOutput,
@@ -160,7 +178,7 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier, onSelectBan
                 Text(
                     text = "STEREO LINK",
                     color = Color.White,
-                    fontSize = 13.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(end = 10.dp),
                 )
@@ -176,7 +194,7 @@ fun GainsDelayScreen(band: GainsBand, modifier: Modifier = Modifier, onSelectBan
                 Text(
                     text = "3-way is off: turn it on in Crossovers",
                     color = Color(band.accent),
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = InactiveNoteBottom),
                 )
@@ -285,10 +303,10 @@ private fun BandSidePanel(
 }
 
 /**
- * Head unit, v4 art: no panels of its own -- the art's colour-coded band frame is the box. Every
- * control sits over its own [artDp] rect (laid out in REW/_UI/submenu_layout_editor.html; one
- * layout for all three bands, only the car art and colours change). The band labels baked into the
- * car art are tap targets.
+ * Head unit: no panels of its own -- the art's colour-coded band frame is the box. Every control
+ * sits over its own [artDp] rect (laid out in REW/_UI/submenu_layout_editor.html; one layout for
+ * all three bands, only the colours change). The live car and the HIGH / MID / LOW selector fill
+ * the centre column between the two side panels.
  */
 @Composable
 private fun HeadUnitBandPage(
@@ -382,23 +400,55 @@ private fun HeadUnitBandPage(
             Text(
                 text = "3-way is off: turn it on in Crossovers",
                 color = accent,
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.artRect(InactiveNoteRect),
             )
         }
-        for (target in GainsBand.entries) {
-            Box(
-                Modifier.artRect(BandLabelTargets.getValue(target)).clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Tab,
-                    onClickLabel = "${target.title} band",
-                ) { if (target != band) onSelectBand(target) },
-            )
-        }
+        // The car is drawn live now (no per-band backdrop), so band picking is the diagram itself
+        // plus a labelled selector that also gives D-pad / rotary focus a way to switch bands.
+        BandCarDiagram(dsp, band, onSelectBand, Modifier.artRect(DiagramRect))
+        BandSelector(band, onSelectBand, Modifier.artRect(BandSelectRect))
     }
+}
+
+/** The live car for [band]: its drivers lit with their current delay; tapping a driver picks its band. */
+@Composable
+private fun BandCarDiagram(
+    dsp: BmwDspState,
+    band: GainsBand,
+    onSelectBand: (GainsBand) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CarSpeakerDiagram(
+        selected = band.speaker,
+        accent = Color(band.accent),
+        onSelect = { kind ->
+            val target = GainsBand.forSpeaker(kind)
+            if (target != band) onSelectBand(target)
+        },
+        modifier = modifier,
+        label = { kind, left ->
+            if (kind != band.speaker) {
+                null
+            } else {
+                DelayFormat.format(dsp.get(if (left) band.delayL else band.delayR)) + " ms"
+            }
+        },
+    )
+}
+
+/** HIGH / MID / LOW selector, each segment in its band's colour. */
+@Composable
+private fun BandSelector(band: GainsBand, onSelectBand: (GainsBand) -> Unit, modifier: Modifier = Modifier) {
+    BmwSegmentedControl(
+        options = GainsBand.entries.map { it.title },
+        selectedIndex = band.ordinal,
+        onSelect = { onSelectBand(GainsBand.entries[it]) },
+        optionAccents = GainsBand.entries.map { Color(it.accent) },
+        modifier = modifier,
+    )
 }
 
 /** Where one side's controls sit (dp on the 1280x480 head unit, from the layout editor). */
@@ -412,35 +462,29 @@ private enum class BandSide(
     LEFT(
         "Left",
         delay = artDp(204, 72, 192, 70),
-        polarity = artDp(208, 164, 140, 60),
+        polarity = artDp(208, 156, 140, 72),
         stage = artDp(204, 240, 200, 70),
         gain = artDp(190, 310, 210, 160),
     ),
     RIGHT(
         "Right",
         delay = artDp(1020, 72, 198, 70),
-        polarity = artDp(1068, 164, 150, 60),
+        polarity = artDp(1068, 156, 150, 72),
         stage = artDp(1024, 244, 198, 70),
         gain = artDp(1018, 310, 210, 160),
     ),
 }
 
-private val StereoLinkRect = artDp(504, 284, 400, 36)
-// High only: under STEREO LINK, clear of the car's Mid and Low labels.
-private val InactiveNoteRect = artDp(504, 324, 400, 30)
+// The centre column between the two side panels (x 414..1018): live car, band selector, link row.
+private val DiagramRect = artDp(463, 72, 506, 270)
+private val BandSelectRect = artDp(526, 348, 380, 48)
+private val StereoLinkRect = artDp(516, 402, 400, 48)
+// High only: laid over the top of the car's roof, clear of the drivers.
+private val InactiveNoteRect = artDp(463, 74, 506, 30)
 private val SideValueWidth = 120.dp
 private val GainValueWidth = 84.dp
 private val HeadUnitGainKnobDiameter = 76.dp
 private val PolarityWidth = 140.dp
-
-// The HIGH / MID / LOW labels baked into the v5 car art (2340x878) sit in the same place on all
-// three band images: x 1176-1373, y 233-317 / 449-531 / 661-741. MID's label runs into the STEREO
-// LINK row, so its target stops where that row starts and the switch keeps its whole touch area.
-private val BandLabelTargets = mapOf(
-    GainsBand.HIGH to WorkspaceArt.Frac(1176f / 2340f, 233f / 878f, 198f / 2340f, 85f / 878f),
-    GainsBand.MID to WorkspaceArt.Frac(1176f / 2340f, 449f / 878f, 198f / 2340f, StereoLinkRect.y - 449f / 878f),
-    GainsBand.LOW to WorkspaceArt.Frac(1176f / 2340f, 661f / 878f, 198f / 2340f, 81f / 878f),
-)
 
 /** GAIN label with a rotary control and the existing tap-to-type value box. */
 @Composable
@@ -499,7 +543,7 @@ private fun PanelRow(label: String, mirrored: Boolean, control: @Composable () -
             Text(
                 text = label,
                 color = LabelColor,
-                fontSize = 13.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.03.em,
             )

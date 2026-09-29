@@ -78,7 +78,7 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
         Text(
             text = stringResource(R.string.signal_generator_explainer),
             color = BmwTheme.colors.sliderDefault,
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 84.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
@@ -207,7 +207,7 @@ fun SignalGeneratorScreen(modifier: Modifier = Modifier) {
             Text(
                 text = stringResource(R.string.signal_generator_timing_ref_explainer),
                 color = BmwTheme.colors.sliderDefault,
-                fontSize = 11.sp,
+                fontSize = 14.sp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 10.dp),

@@ -16,10 +16,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.WorkspaceArt
@@ -27,20 +25,18 @@ import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsBand
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
-import app.siphondsp.view.DspCrossNavBar
-import app.siphondsp.view.DspDestination
 import kotlinx.coroutines.launch
 
 /**
  * Dedicated Gains & Delay workspace. Swipes between five pages, all Compose:
  * - [GainsDelayScreen] x3 -- one per crossover band, High / Mid / Low (top of the speaker stack
  *   first): that band's Left/Right Delay, Polarity and Gain cards, the stage alignment and the
- *   global stereo link. Each band page swaps in its own car backdrop ([GainsBand.backdrop]).
+ *   global stereo link. The car is drawn live on each page, so every page shares the destination's
+ *   plain backdrop.
  * - [HeadroomOutputScreen] -- Headroom, the post-gain L/R sliders and the master limiter
  *   (enable + threshold + a live GR meter).
  * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus), moved here
  *   from the compressor pager so every limiter stage lives on one screen.
- * The last two show the destination's plain backdrop.
  *
  * All pages read/write the same `NativeBmwDspValues` indices and broadcast the same way via
  * `BmwDspState`. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the
@@ -72,21 +68,11 @@ class GainLimiterFragment : Fragment() {
 
 @Composable
 private fun GainLimiterPager(pagerState: PagerState) {
-    val activity = LocalContext.current as FragmentActivity
     val scope = rememberCoroutineScope()
-    // currentPage flips at the swipe's halfway point, so the art changes with the page it belongs to.
-    LaunchedEffect(pagerState.currentPage) {
-        val band = GainsBand.entries.getOrNull(pagerState.currentPage)
-        if (band != null) {
-            DspCrossNavBar.showBackdrop(activity, band.backdrop, band.backdropPhone)
-        } else {
-            DspCrossNavBar.showBackdrop(activity, DspDestination.GAINS_DELAY.backdrop, DspDestination.GAINS_DELAY.backdropPhone)
-        }
-    }
     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
         val band = GainsBand.entries.getOrNull(page)
         when {
-            // Tapping a band's label in the car art jumps straight to that band's page.
+            // Tapping a driver in the live car (or the band selector) jumps straight to that band's page.
             band != null -> GainsDelayScreen(band, onSelectBand = { scope.launch { pagerState.scrollToPage(it.ordinal) } })
             page == GainsBand.entries.size -> HeadroomOutputScreen()
             else -> CompressorDriverPage()

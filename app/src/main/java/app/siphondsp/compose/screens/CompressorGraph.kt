@@ -82,7 +82,7 @@ fun CompressorGraph(
     }
     val labelPaint = remember(density) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(176, 178, 186); textSize = 9.5f * density
+            color = Color.rgb(176, 178, 186); textSize = 14f * density
         }
     }
     val splitLinePaint = remember(density) {
@@ -130,7 +130,7 @@ fun CompressorGraph(
     }
     val readoutPaint = remember(density) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(200, 202, 210); textSize = 10f * density; textAlign = Paint.Align.CENTER
+            color = Color.rgb(200, 202, 210); textSize = 14f * density; textAlign = Paint.Align.CENTER
         }
     }
 
@@ -229,13 +229,13 @@ private fun drawGrid(
     for (db in CompressorSurfaceMath.GRID_DB) {
         val y = yForDb(db, top, bottom)
         nc.drawLine(left, y, right, y, if (db == 0.0) zeroPaint else gridPaint)
-        nc.drawText("${db.toInt()}", 3f * density, y + 3.2f * density, labelPaint)
+        nc.drawText("${db.toInt()}", 3f * density, y + 5f * density, labelPaint)
     }
     for (hz in FreqScale) {
         val x = xForFrequency(hz, left, right)
         nc.drawLine(x, top, x, bottom, gridPaint)
         val label = hz.prettyNumberFormat()
-        nc.drawText(label, x - labelPaint.measureText(label) / 2f, bottom + 14f * density, labelPaint)
+        nc.drawText(label, x - labelPaint.measureText(label) / 2f, bottom + 19f * density, labelPaint)
     }
 }
 
@@ -395,7 +395,7 @@ private fun drawBandReadouts(
             values[NativeBmwDspValues.mbcBandIndex(band, NativeBmwDspValues.MBC_FIELD_ENABLED)] >= .5f
         val gr = mbcMeter?.getOrNull(band * 3 + 2) ?: 0f
         val text = if (enabled) "GR ${"%.1f".format(gr)} dB" else "—"
-        nc.drawText(text, cx, top + 12f * density, readoutPaint)
+        nc.drawText(text, cx, top + 17f * density, readoutPaint)
     }
 }
 

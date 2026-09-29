@@ -82,11 +82,11 @@ class PeqSurfacePaints(
     val unifiedZeroPaint = Paint(unifiedGridPaint).apply { strokeWidth = 1.6f * density; alpha = 200 }
     val unifiedLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = unifiedTextColor
-        textSize = 9.5f * density
+        textSize = 14f * density
     }
     val unifiedLegendPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = unifiedTextColor
-        textSize = 10.5f * density
+        textSize = 14f * density
     }
     val crossoverShadePaint = Paint().apply {
         style = Paint.Style.FILL
@@ -182,7 +182,7 @@ class PeqSurfacePaints(
     val nodeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
         textAlign = Paint.Align.CENTER
-        textSize = 9.5f * density
+        textSize = 14f * density
     }
     // Tapped-node info card (see drawInfoCard): a dark rounded panel, edged in that band's own
     // palette colour, holding its type / freq / gain / Q / channel / bank for a few seconds.
@@ -196,7 +196,7 @@ class PeqSurfacePaints(
     }
     val infoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(232, 234, 240)
-        textSize = 10f * density
+        textSize = 14f * density
     }
     val tiltHandlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -206,7 +206,7 @@ class PeqSurfacePaints(
     val tiltLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = unifiedTextColor
         textAlign = Paint.Align.LEFT
-        textSize = 9.5f * density
+        textSize = 14f * density
     }
     val meterTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -228,6 +228,6 @@ class PeqSurfacePaints(
     val meterLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = unifiedTextColor
         textAlign = Paint.Align.CENTER
-        textSize = 8.5f * density
+        textSize = 13f * density
     }
 }

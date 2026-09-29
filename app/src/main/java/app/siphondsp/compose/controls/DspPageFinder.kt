@@ -80,7 +80,7 @@ fun DspPageFinder(
                 Text(
                     text = label,
                     color = if (isSelected) Color.White else FinderText,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     letterSpacing = 0.16.em,
                     textAlign = TextAlign.Center,
