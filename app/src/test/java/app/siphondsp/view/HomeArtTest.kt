@@ -2,6 +2,7 @@ package app.siphondsp.view
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeArtTest {
@@ -81,9 +82,9 @@ class HomeArtTest {
     }
 
     @Test
-    fun powerButtonRectIsThePowerOnCropAtHeadUnitSize() {
-        // power_btn must stay the exact pixel crop saved as dsp_home_power_on.png
-        // (x 40..218, y 595..781 of the 2340x878 art), or the on-patch drifts off the button.
+    fun powerButtonRectIsTheButtonAndItsGlowAtHeadUnitSize() {
+        // power_btn is the button plus its whole glow (x 40..218, y 595..781 of the 2340x878 art
+        // space); PowerHotspot draws the button within it.
         val px = HomeArt.map(HomeArt.frac("power_btn")!!, 2340, 878)
         assertEquals(40, px.left)
         assertEquals(595, px.top)
@@ -92,9 +93,9 @@ class HomeArtTest {
     }
 
     @Test
-    fun phonePowerButtonRectIsThePowerOnCropAtArtSize() {
-        // power_btn must stay the exact pixel crop saved as dsp_home_power_on_phone.png
-        // (x 37..215, y 702..888 of the 2340x1080 phone art), or the on-patch drifts off the button.
+    fun phonePowerButtonRectIsTheButtonAndItsGlowAtArtSize() {
+        // power_btn is the button plus its whole glow (x 37..215, y 702..888 of the 2340x1080 phone
+        // art space); PowerHotspot draws the button within it.
         val px = HomeArt.map(
             HomeArt.frac("power_btn", phone = true)!!, 2340, 1080,
             HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT,
@@ -103,5 +104,41 @@ class HomeArtTest {
         assertEquals(702, px.top)
         assertEquals(215, px.right)
         assertEquals(888, px.bottom)
+    }
+
+    private val chromeKeys = listOf("screen_left", "screen_centre", "screen_right", "screen_bottom", "knob")
+
+    @Test
+    fun everyChromeRectResolvesForBothArts() {
+        chromeKeys.forEach {
+            assertNotNull("missing head unit rect for $it", HomeArt.frac(it))
+            assertNotNull("missing phone rect for $it", HomeArt.frac(it, phone = true))
+        }
+    }
+
+    @Test
+    fun eachLiveBoxSitsInsideItsScreen() {
+        for (phone in listOf(false, true)) {
+            for ((box, screen) in listOf("box_left" to "screen_left", "box_centre" to "screen_centre", "box_right" to "screen_right")) {
+                val b = HomeArt.frac(box, phone)!!
+                val sc = HomeArt.frac(screen, phone)!!
+                assertTrue("$box escapes $screen (phone=$phone)", b.x >= sc.x && b.y >= sc.y && b.x + b.w <= sc.x + sc.w && b.y + b.h <= sc.y + sc.h)
+            }
+            val strip = HomeArt.frac("live_strip", phone)!!
+            val bottom = HomeArt.frac("screen_bottom", phone)!!
+            assertTrue("live strip escapes the bottom screen (phone=$phone)", strip.x >= bottom.x && strip.x + strip.w <= bottom.x + bottom.w && strip.y >= bottom.y && strip.y + strip.h <= bottom.y + bottom.h)
+            HomeArt.TILE_KEYS.forEach { key ->
+                val t = HomeArt.frac(key, phone)!!
+                assertTrue("$key escapes the bottom screen (phone=$phone)", t.x >= bottom.x && t.x + t.w <= bottom.x + bottom.w && t.y >= bottom.y && t.y + t.h <= bottom.y + bottom.h)
+            }
+        }
+    }
+
+    @Test
+    fun theKnobIsACircleInPixels() {
+        val head = HomeArt.frac("knob")!!
+        assertEquals(head.w * HomeArt.IMAGE_WIDTH, head.h * HomeArt.IMAGE_HEIGHT, 2f)
+        val phone = HomeArt.frac("knob", phone = true)!!
+        assertEquals(phone.w * HomeArt.PHONE_IMAGE_WIDTH, phone.h * HomeArt.PHONE_IMAGE_HEIGHT, 2f)
     }
 }

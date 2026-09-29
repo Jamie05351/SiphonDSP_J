@@ -7,10 +7,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Shared chrome for the dedicated BMW DSP workspaces. These screens run **full-screen**: the
- * per-destination backdrop art (drawable-nodpi/dsp_workspace_backdrop_v5*.jpg, set by
- * DspCrossNavBar.populate() on R.id.dsp_workspace_backdrop) is authored at the head unit's full
- * 1280x480 with no system bars, and the toolbar floats over it transparently. So this base hides
- * the system bars and lets content draw edge to edge.
+ * faceplate (DspWorkspaceBackdrop, set by DspCrossNavBar.populate() on R.id.dsp_workspace_backdrop)
+ * is laid out for the head unit's full 1280x480 with no system bars, and the toolbar floats over it
+ * transparently. So this base hides the system bars and lets content draw edge to edge.
  *
  * There is no power control here -- DSP power lives solely on MainActivity's bottom bar. Settings,
  * Presets, Revert and Blocklist are likewise reachable only from that bottom bar.

@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
@@ -14,8 +16,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.launch
 import app.siphondsp.R
+import app.siphondsp.compose.controls.HomeFaceplate
+import app.siphondsp.compose.controls.HomeTile
+import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.screens.HomeCrossoverGraph
 import app.siphondsp.compose.screens.HomePeqGraph
+import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
@@ -26,7 +32,6 @@ import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.view.StaticPagerAdapter
-import app.siphondsp.view.isHeadUnitDisplay
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
@@ -108,11 +113,16 @@ class DspFragment : Fragment() {
     }
 
     private fun setUpShortcutsPage() {
-        // The layout's own src is the head-unit art (left untouched); a phone swaps in the
-        // taller phone art, which HomeArtLayout maps its own rect set onto.
-        if (!requireContext().isHeadUnitDisplay()) {
-            shortcutsBinding.homeBackdrop.setImageResource(R.drawable.dsp_home_backdrop_phone)
-        }
+        // The faceplate and the seven tiles are Compose. HomeFaceplate and HomeArtLayout both pick
+        // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
+        shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
+        shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ) }
+        shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS) }
+        shortcutsBinding.cardShortcutCrossovers.setHomeContent { HomeTile(HomeTileKind.XOVERS) }
+        shortcutsBinding.cardShortcutCompressor.setHomeContent { HomeTile(HomeTileKind.COMPRESSOR) }
+        shortcutsBinding.cardShortcutAllpass.setHomeContent { HomeTile(HomeTileKind.ALLPASS) }
+        shortcutsBinding.cardShortcutSettings.setHomeContent { HomeTile(HomeTileKind.SETTINGS) }
+        shortcutsBinding.cardShortcutMore.setHomeContent { HomeTile(HomeTileKind.MORE) }
         shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
         shortcutsBinding.translationNotice.setOnRootClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/project/siphondsp".toUri()))
@@ -177,6 +187,12 @@ class DspFragment : Fragment() {
         val transition = LayoutTransition()
         transition.enableTransitionType(LayoutTransition.CHANGING)
         shortcutsBinding.pageShortcutsRoot.layoutTransition = transition
+    }
+
+    /** Fragment-hosted ComposeViews are disposed with the fragment view, not the window. */
+    private fun ComposeView.setHomeContent(content: @Composable () -> Unit) {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        setContent { BmwDspTheme { content() } }
     }
 
     private fun setUpSettingsPage() {

@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 
 /**
- * The v5 head-unit workspace art (`dsp_workspace_backdrop_v5*.jpg`) has the same 8:3 aspect
+ * The head-unit workspace faceplate (DspWorkspaceBackdrop) has the same 8:3 aspect
  * ratio as the fixed 1280x480 mdpi head unit. Rects are authored in that 1280x480 dp
  * coordinate space by the layout tools in REW/_UI.
  */
