@@ -187,9 +187,9 @@ class BackupManager(private val context: Context): KoinComponent {
         private const val META_HAS_DEVICE_PROFILES = "has_device_profiles"
         const val META_IS_BACKUP = "is_backup"
 
-        // Kept in sync with Preset.kt's constants of the same purpose -- both features back up
-        // the same BMW-specific state that lives outside the generic dsp_* convention.
-        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml")
+        // BMW-specific state that lives outside the generic dsp_* convention. speaker_geometry.xml
+        // holds the Delay page's alignment target and measured seat-to-driver paths.
+        private val BMW_SHARED_PREFS_FILES = setOf("native_bmw_dsp.xml", "native_bmw_peq.xml", "speaker_geometry.xml")
         private val BMW_NO_BACKUP_STATE_FILES = setOf(
             "native_bmw_peq_state.txt", "native_bmw_peq_state.recovery",
             "native_bmw_dsp_state.txt", "native_bmw_dsp_state.recovery",
