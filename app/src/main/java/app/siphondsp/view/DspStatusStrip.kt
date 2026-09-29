@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
+import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
@@ -133,6 +134,27 @@ class DspStatusStrip @JvmOverloads constructor(
         if (!stacked) addView(separator())
         cells += healthView
         addView(healthView)
+        if (!stacked) {
+            val sp = fitTextSp()
+            for (i in 0 until childCount) (getChildAt(i) as TextView).textSize = sp
+        }
+    }
+
+    /**
+     * Toolbar mode: the largest text size, up to [MAX_TEXT_SP], at which the longest readout the
+     * strip can show still fits R.dimen.dsp_status_strip_max_width (short of the page tabs). Worked
+     * out once from the worst case rather than the live text, so the size never jumps as the
+     * health cell's label changes.
+     */
+    private fun fitTextSp(): Float {
+        val paint = TextPaint(cells.first().paint)
+        paint.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, MAX_TEXT_SP, resources.displayMetrics)
+        val separators = cells.size - 1
+        val textPx = WORST_CASE_CELLS.sumOf { paint.measureText(it).toDouble() }.toFloat() +
+            separators * paint.measureText("·")
+        val paddingPx = (cells.size * dp(12) + separators * dp(4)).toFloat()
+        val roomPx = resources.getDimension(R.dimen.dsp_status_strip_max_width) - paddingPx
+        return (MAX_TEXT_SP * (roomPx / textPx).coerceAtMost(1f)).coerceAtLeast(MIN_TEXT_SP)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -267,5 +289,11 @@ class DspStatusStrip @JvmOverloads constructor(
         const val HEALTH_POLL_MS = 1_000L
         const val LOG_LINES_SHOWN = 12
         val WARN_COLOR = Color.rgb(0xF2, 0xB3, 0x3D)
+        /** Toolbar-mode text: as large as fits, never above MAX (the page tabs' height) or below MIN. */
+        const val MAX_TEXT_SP = 18f
+        const val MIN_TEXT_SP = 14f
+        /** The widest each toolbar cell gets: stages off, a two-digit limiter threshold, and the
+         *  longest DspHealthBadge label. */
+        val WORST_CASE_CELLS = listOf("Tilt off", "MBC off", "Limiter -12.5 dB", "● DSP recovering")
     }
 }

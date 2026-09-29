@@ -68,6 +68,8 @@ object DspColors {
     val Comp = Color(0xFFEA1A26)
     val Allpass = Color(0xFFAE4AF6)
     val Neutral = Color(0xFF9A9CA0)
+    /** An unselected rail tile's ring: grey, so only the current screen's tile carries colour. */
+    val RingOff = Color(0xFF55585C)
 
     val TileTop = Color(0xFF1E2327)
     val TileBottom = Color(0xFF060809)
