@@ -31,9 +31,9 @@ import java.util.UUID
 private const val MIN_ASSUMED_SAMPLE_RATE = 44_100f
 
 /**
- * Compose state layer for the three-bank Parametric EQ (roadmap Phase 10a). Ports
+ * Compose state layer for the three-bank Parametric EQ. Ports
  * `ParametricEqualizerFragment`'s state + the `applyCandidate` mutation funnel, minus the undo
- * history (the Compose PEQ screen drops Undo/Redo -- see `docs/PEQ_COMPOSE_PLAN.md`). The visible
+ * history (the Compose PEQ screen drops Undo/Redo). The visible
  * band list is derived from `peqState` + `selectedScope`, not explicitly rebound.
  */
 class PeqStateHolder internal constructor(private val appContext: Context) {

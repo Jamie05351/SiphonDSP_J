@@ -56,7 +56,7 @@ import kotlin.math.pow
  * the theme-attr lookup only for the grid/label/spectrum/marker greys (`textColorSecondary`) and
  * the legend text (`textColorPrimary`).
  *
- * `docs/ANALYZER_VISUAL_SPEC.md` polish applied on top of the 1:1 port:
+ * Visual polish applied on top of the 1:1 port:
  *  - §1 real blur glow under the summed curve only (BlurMaskFilter, the same mechanism the PEQ
  *    port uses -- no RenderEffect layer juggling; the low/mid branch curves stay plain);
  *  - §2 gradient area fill under the summed magnitude curve, fading to nothing at the 0 dB line
@@ -89,7 +89,7 @@ private val GroupDelayGridLines = floatArrayOf(10f, 6f, 2f, 0f, -2f)
 private val FreqGridLines =
     floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f)
 
-// ANALYZER_VISUAL_SPEC.md polish
+// Visual polish
 private const val SUM_GLOW_BLUR_DP = 7f
 private const val SUM_GLOW_ALPHA = 90
 private const val AREA_FILL_ALPHA = 82   // §2: curve colour at the curve edges, -> 0 at 0 dB
@@ -397,7 +397,7 @@ private fun drawSpectrum(
 /**
  * = `NativeBmwDspResponseView.drawResponse` (Low / Mid / Sum, per display mode, plus the 3-way
  * High branch whenever it's audible), plus
- * ANALYZER_VISUAL_SPEC §1: the summed curve is stroked twice -- a blurred [sumGlowPaint] pass
+ * the summed curve is stroked twice -- a blurred [sumGlowPaint] pass
  * then the crisp [sumPaint] -- while the low/mid branch curves stay plain.
  */
 private fun drawResponse(
@@ -463,7 +463,7 @@ private fun drawResponse(
 }
 
 /**
- * ANALYZER_VISUAL_SPEC §2: gradient area fill under the summed magnitude curve. The summed
+ * Gradient area fill under the summed magnitude curve. The summed
  * magnitude sits between the curve and the 0 dB reference; the fill is the curve colour (white)
  * at its edges fading to nothing at 0 dB, so a boost pool sits above the line and the crossover
  * notch pools below it. Drawn behind the curve stroke + glow. Magnitude modes only.

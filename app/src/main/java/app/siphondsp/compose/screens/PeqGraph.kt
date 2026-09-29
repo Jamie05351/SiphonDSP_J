@@ -421,7 +421,7 @@ private fun rememberPeqSurfacePaints(): PeqSurfacePaints {
             themeTextColor = themeColor(context, android.R.attr.textColorPrimary),
             themeAccentColor = themeColor(context, android.R.attr.colorAccent),
         ).apply {
-            // ANALYZER_VISUAL_SPEC §4 grid hierarchy: recede the regular mesh so the brightened
+            // Grid hierarchy: recede the regular mesh so the brightened
             // 0 dB / octave lines actually read as emphasised rather than one-more-line.
             unifiedGridPaint.alpha = 90
             unifiedZeroPaint.color = AndroidColor.rgb(132, 136, 146)
@@ -546,7 +546,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
 
 // --- frame helpers (raw Canvas, shared by PeqGraphFrame and renderPeqGraph) --------------------
 
-// ANALYZER_VISUAL_SPEC §4: octave-boundary verticals get their own weight.
+// Octave-boundary verticals get their own weight.
 private val OctaveFreqs = setOf(100.0, 1_000.0, 10_000.0)
 
 private fun drawGrid(
@@ -657,7 +657,7 @@ private fun strokeNeon(nc: Canvas, path: Path, paint: Paint, glow: Paint) {
 }
 
 /**
- * ANALYZER_VISUAL_SPEC §1: real Gaussian blur glow beneath a crisp core stroke — replaces
+ * Real Gaussian blur glow beneath a crisp core stroke — replaces
  * [strokeNeon]'s fake wide-stroke approximation for the primary (summed) curve only.
  */
 private fun drawGlowStroke(nc: Canvas, glass: PeqGlassPaints, path: Path, paint: Paint) {
@@ -772,7 +772,7 @@ private fun drawSumChannel(nc: Canvas, ctx: PeqDrawContext, self: DoubleArray, p
 }
 
 /**
- * ANALYZER_VISUAL_SPEC §2: gradient area fill under the primary summed curve, fading toward the
+ * Gradient area fill under the primary summed curve, fading toward the
  * 0 dB reference (PEQ's gain axis is symmetric around it). Drawn behind the stroke + glow.
  */
 private fun drawSumAreaFill(nc: Canvas, ctx: PeqDrawContext) {
@@ -830,7 +830,7 @@ private fun drawSumAreaFill(nc: Canvas, ctx: PeqDrawContext) {
     nc.drawPath(path, glass.areaFillPaint)
 }
 
-/** ANALYZER_VISUAL_SPEC §5: a subtle corner vignette so the plot ground doesn't read as flat. */
+/** A subtle corner vignette so the plot ground doesn't read as flat. */
 private fun drawVignette(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
     val glass = ctx.glass
@@ -1527,7 +1527,7 @@ private class PeqResponseModel {
 }
 
 /**
- * Extra paints for the 10c-ii visual pass (`ANALYZER_VISUAL_SPEC.md` §1–5, §7) — constructed
+ * Extra paints for the graph's visual polish (glow, area fill, grid, vignette) — constructed
  * once per composition, reused every frame. Real Gaussian blur comes from [BlurMaskFilter] (the
  * same mechanism `GlassSwitchThumbDrawable` / `BmwSwitch` use); no `RenderEffect` layer juggling.
  */

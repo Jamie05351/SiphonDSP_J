@@ -85,8 +85,7 @@ private val StepperGlyphColor = IndexColor
  * room. Channel / Type open [PeqDialogs] choice pickers (interop); Hz / dB / Q each open the
  * numeric dialog and carry inline -/+ steppers; every edit funnels through [PeqStateHolder].
  *
- * No drag-to-reorder (filter tools' Move up/down is the reorder path -- see
- * docs/PEQ_COMPOSE_PLAN.md). Not wired into the fragment here -- that's 10d.
+ * No drag-to-reorder (filter tools' Move up/down is the reorder path). Not wired into the fragment here -- that's 10d.
  */
 @Composable
 fun PeqBandList(
