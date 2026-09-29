@@ -4,6 +4,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -48,6 +50,7 @@ import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.CarSpeakerDiagram
 import app.siphondsp.compose.controls.DriverId
 import app.siphondsp.compose.controls.AlignTarget
+import app.siphondsp.compose.controls.MinusPlusPill
 import app.siphondsp.compose.controls.SpeakerGeometryMath
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.compose.controls.SpeakerKind
@@ -386,6 +389,9 @@ private fun DriverCard(
     val delayMirror = if (linked) intArrayOf(siblingIndex) else IntArray(0)
     val cm = geometry.distanceCm(id)
     val labelSize = if (headUnit) 16.sp else 14.sp
+    // Names the side and band in each −/+ button's spoken label ("Increase Left Mid delay"): the
+    // card heading isn't merged into the buttons, so without it both cards would sound identical.
+    val cardName = "${if (left) "Left" else "Right"} ${band.title}"
 
     Box(modifier) {
         Column(
@@ -396,11 +402,11 @@ private fun DriverCard(
                 // D-pad / rotary can't enter a dimmed card either; the overlay below only stops taps.
                 .focusProperties { onEnter = { if (inactive) cancelFocusChange() } }
                 .focusGroup()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 6.dp, vertical = 8.dp),
             verticalArrangement = if (headUnit) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "${if (left) "Left" else "Right"} ${band.title}",
+                text = cardName,
                 color = accent,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -411,6 +417,9 @@ private fun DriverCard(
                         geometry.setDistanceCm(id, it)
                     }
                 }
+                Stepper("$cardName path", headUnit) { dir ->
+                    geometry.setDistanceCm(id, stepped(cm, dir * PathStepCm, PathRangeCm))
+                }
             }
             CardRow("ALIGN", labelSize) {
                 // Shows what Apply will write; tinted when the path needs more delay than the DSP allows.
@@ -419,12 +428,17 @@ private fun DriverCard(
                     AlignFormat.format(alignmentFor(geometry, id)), "ms",
                     if (capped) CappedColor else accent.copy(alpha = 0.75f), headUnit, null,
                 )
+                // Read-only: an empty slot where the −/+ would be keeps the boxes in one column.
+                Spacer(Modifier.width(StepperGap + StepperWidth))
             }
             CardRow("DELAY", labelSize) {
                 ValueBox(DelayFormat.format(dsp.get(delayIndex)), "ms", accent, headUnit) {
                     context.showBmwNumberInput(
                         "DELAY", DelayRange.start, DelayRange.endInclusive, dsp.get(delayIndex), 0f, "ms",
                     ) { dsp.commit(delayIndex, it, delayMirror) }
+                }
+                Stepper("$cardName delay", headUnit) { dir ->
+                    dsp.commit(delayIndex, stepped(dsp.get(delayIndex), dir * DelayStepMs, DelayRange), delayMirror)
                 }
             }
             CardRow("GAIN", labelSize) {
@@ -433,6 +447,7 @@ private fun DriverCard(
                         "GAIN", GainRange.start, GainRange.endInclusive, dsp.get(gainIndex), GainStep, "dB",
                     ) { dsp.commit(gainIndex, snapGain(it)) }
                 }
+                Stepper("$cardName gain", headUnit) { dir -> dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep)) }
             }
             CardRow("POLARITY", labelSize) {
                 BmwSwitch(
@@ -448,11 +463,14 @@ private fun DriverCard(
                     width = 132.dp,
                 )
             }
-            CardRow("STAGE ALIGN", labelSize) {
+            CardRow("STAGE", labelSize) {
                 ValueBox(DelayFormat.format(dsp.get(stageIndex)), "ms", stageAccent, headUnit) {
                     context.showBmwNumberInput(
-                        "STAGE ALIGNMENT", 0f, NativeBmwDspValues.STAGE_DELAY_MAX_MS, dsp.get(stageIndex), 0.05f, "ms",
+                        "STAGE ALIGNMENT", 0f, NativeBmwDspValues.STAGE_DELAY_MAX_MS, dsp.get(stageIndex), StageStepMs, "ms",
                     ) { dsp.commit(stageIndex, it) }
+                }
+                Stepper("$cardName stage alignment", headUnit) { dir ->
+                    dsp.commit(stageIndex, stepped(dsp.get(stageIndex), dir * StageStepMs, 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS))
                 }
             }
         }
@@ -468,8 +486,9 @@ private fun DriverCard(
     }
 }
 
+/** Label on the left, then the row's controls (value box, and −/+ where the value is editable). */
 @Composable
-private fun CardRow(label: String, size: TextUnit, control: @Composable () -> Unit) {
+private fun CardRow(label: String, size: TextUnit, controls: @Composable RowScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -480,9 +499,26 @@ private fun CardRow(label: String, size: TextUnit, control: @Composable () -> Un
             maxLines = 1,
             modifier = Modifier.weight(1f),
         )
-        control()
+        controls()
     }
 }
+
+/** The PEQ list's −/+ pill beside a value box; [onStep] gets -1 or +1. */
+@Composable
+private fun Stepper(label: String, headUnit: Boolean, onStep: (Int) -> Unit) {
+    Spacer(Modifier.width(StepperGap))
+    MinusPlusPill(
+        onMinus = { onStep(-1) },
+        onPlus = { onStep(1) },
+        height = if (headUnit) 44.dp else 38.dp,
+        halfWidth = StepperHalfWidth,
+        label = label,
+    )
+}
+
+/** [value] moved by [delta], kept in [range] and rounded to 0.01 so repeated taps don't drift. */
+private fun stepped(value: Float, delta: Float, range: ClosedFloatingPointRange<Float>): Float =
+    ((value + delta) * 100f).roundToInt().div(100f).coerceIn(range.start, range.endInclusive)
 
 /** A recessed value readout; tappable (numeric entry) when [onTap] is given, else read-only. */
 @Composable
@@ -493,7 +529,7 @@ private fun ValueBox(text: String, unit: String, accent: Color, headUnit: Boolea
         unit = unit,
         accentColor = accent,
         modifier = Modifier
-            .width(if (headUnit) 108.dp else 120.dp)
+            .width(if (headUnit) 84.dp else 120.dp)
             .height(if (headUnit) 44.dp else 38.dp)
             .then(
                 if (onTap != null) {
@@ -567,3 +603,11 @@ private val CappedColor = Color(0xFFFF6B5A)
 private val GainRange = -6f..6f
 private const val GainStep = 0.5f
 private val PathRangeCm = 20f..400f
+
+// −/+ steps: the same resolution the tap-to-type boxes use.
+private const val PathStepCm = 1f
+private const val DelayStepMs = 0.01f
+private const val StageStepMs = 0.05f
+private val StepperHalfWidth = 40.dp
+private val StepperWidth = StepperHalfWidth * 2 + 1.dp
+private val StepperGap = 6.dp
