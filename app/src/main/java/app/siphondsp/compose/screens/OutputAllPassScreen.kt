@@ -27,9 +27,9 @@ import kotlin.math.abs
 private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
 
 /**
- * Phase 9 of COMPOSE_MIGRATION_ROADMAP.md -- one Output all-pass page (per physical output).
- * The `repeat(ALL_PASS_SECTIONS_PER_OUTPUT)` loop over generated `INDEX_ALL_PASS` blocks is the
- * roadmap's "generated/repeated Compose rows" test: each section reads/writes its own
+ * One Output all-pass page (per physical output).
+ * The `repeat(ALL_PASS_SECTIONS_PER_OUTPUT)` loop over generated `INDEX_ALL_PASS` blocks builds
+ * repeated Compose rows: each section reads/writes its own
  * `base..base+3` slots (enabled / order / freq / Q) with per-`base` `onCommit` closures, and the
  * shared [rememberBmwDspState] snapshot means recomposition stays scoped per section.
  *

@@ -18,8 +18,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 
 /** Output all-pass workspace: the two cascaded all-pass filter sections per physical output.
- *  Each output is a swipe page ([OutputAllPassScreen], Compose -- see
- *  COMPOSE_MIGRATION_ROADMAP.md Phase 9), colour-coded Low=blue / Mid=yellow / High=pink the same way Gains
+ *  Each output is a swipe page ([OutputAllPassScreen], Compose), colour-coded Low=blue / Mid=yellow / High=pink the same way Gains
  *  & Delay and Crossovers & Tilt are, so which output you're on reads at a glance.
  *
  *  Phase 11.1: hosted directly by Compose's own `HorizontalPager` (see `ParametricEqScreen` for

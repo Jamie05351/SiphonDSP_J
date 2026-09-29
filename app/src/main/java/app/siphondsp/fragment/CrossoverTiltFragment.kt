@@ -34,7 +34,7 @@ import app.siphondsp.compose.screens.TonalityTiltScreen
  * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same
  * way. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the View-based
  * `DspPager` -- each page already self-refreshes via `rememberBmwDspState`, so the old per-resume
- * rebuild was redundant (COMPOSE_MIGRATION_ROADMAP.md Phase 4 + Phase 11).
+ * rebuild was redundant.
  *
  * The `PagerState` is owned by [CrossoverTiltActivity] (shared with [OutputAllPassFragment], its
  * other possible content), not `remember`ed here, so `DspPagerArrows` on the toolbar line can

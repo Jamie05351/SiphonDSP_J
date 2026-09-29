@@ -25,8 +25,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
  * system's `Fragment.rebuild()` pattern of loading the array into a local, mutating it in place,
  * and calling `save` + `broadcast` on every change.
  *
- * Deliberately NOT an app-wide repository or a ViewModel yet -- see COMPOSE_MIGRATION_ROADMAP.md
- * section 3a / section 13. This establishes the read / preview / commit / observe shape so the
+ * Deliberately NOT an app-wide repository or a ViewModel yet. This establishes the read / preview / commit / observe shape so the
  * next few leaf-screen ports reuse it verbatim; once 2-3 screens are on it, promote to a shared
  * `BmwDspRepository` with a single receiver + writer.
  *

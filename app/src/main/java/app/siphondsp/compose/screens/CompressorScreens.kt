@@ -48,7 +48,7 @@ import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.roundToInt
 
 /**
- * Phase 7 of COMPOSE_MIGRATION_ROADMAP.md -- the pre-crossover multiband compressor. Five pages
+ * The pre-crossover multiband compressor. Five pages
  * on a Compose `HorizontalPager` (see `NativeBmwCompressorFragment`):
  * - [CompressorVisualiserPage] -- the `CompressorGraph` (Compose port of `CompressorSurface`) +
  *   MBC enable / dry-wet Mix master strip.

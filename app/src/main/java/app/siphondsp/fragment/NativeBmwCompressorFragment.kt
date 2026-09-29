@@ -23,8 +23,7 @@ import app.siphondsp.model.NativeBmwDspValues
  * [CompressorVisualiserPage] (the `CompressorSurface` visualiser + the MBC enable / dry-wet Mix
  * master strip) and one [CompressorBandPage] per MBC band (enable, stereo link, a live GR meter,
  * and the threshold / ratio / knee / attack / release / makeup sliders). The per-bus brick-wall
- * limiters (`CompressorDriverPage`) now live on the Gains & Delay pager. See
- * COMPOSE_MIGRATION_ROADMAP.md Phase 7.
+ * limiters (`CompressorDriverPage`) now live on the Gains & Delay pager.
  *
  * Every control writes into the shared `NativeBmwDspValues` array via `BmwDspState` and
  * broadcasts the same way; the legacy per-output compressor this screen used to edit is retired

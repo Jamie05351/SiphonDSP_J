@@ -35,8 +35,8 @@ import kotlin.math.abs
  * stream to build fling velocity, which a fast flick never has.
  *
  * Built by `DspFragment`'s `ViewPager2` (the Settings/Shortcuts landing pager) -- the DSP
- * workspace pagers it used to also serve are Compose `HorizontalPager`s now (see
- * COMPOSE_MIGRATION_ROADMAP.md Phase 11.1), which arbitrate this natively.
+ * workspace pagers it used to also serve are Compose `HorizontalPager`s now, which arbitrate
+ * this natively.
  */
 class PagerChildSwipeGate(context: Context) : FrameLayout(context) {
 

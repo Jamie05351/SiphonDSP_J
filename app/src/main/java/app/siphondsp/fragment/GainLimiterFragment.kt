@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
  * All pages read/write the same `NativeBmwDspValues` indices and broadcast the same way via
  * `BmwDspState`. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the
  * View-based `DspPager` -- each page already self-refreshes via `rememberBmwDspState`, so the old
- * per-resume rebuild was redundant (see COMPOSE_MIGRATION_ROADMAP.md Phases 5-6, 11).
+ * per-resume rebuild was redundant.
  *
  * The `PagerState` is owned by [GainLimiterActivity], not `remember`ed here, so
  * `DspPagerArrows` (hosted on the toolbar line) can drive the same pager -- swiping (off a slider)

@@ -33,7 +33,7 @@ import app.siphondsp.view.MbcBandGrMeter
 import app.siphondsp.view.isHeadUnitDisplay
 
 /**
- * Phase 5 of COMPOSE_MIGRATION_ROADMAP.md -- ports `GainLimiterFragment`'s Output page. Same
+ * Ports `GainLimiterFragment`'s Output page. Same
  * shape as [TonalityTiltScreen] (a lean [BmwPanel] of [BmwSliderRow]s) plus two firsts:
  * [BmwSectionHeader] (the "Limiter" sub-header + enable toggle) and an `AndroidView`-hosted
  * live meter ([LimiterGrMeter], the master-limiter gain-reduction bar).

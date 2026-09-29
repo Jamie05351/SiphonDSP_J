@@ -22,7 +22,7 @@ import app.siphondsp.view.isHeadUnitDisplay
 
 /**
  * First real (non-demo) leaf-screen port -- replaces `CrossoverTiltFragment`'s `tiltPage`
- * content (Phase 4 of COMPOSE_MIGRATION_ROADMAP.md). Parity target: a lean glass panel titled
+ * content. Parity target: a lean glass panel titled
  * "Tonality Tilt" with a section-enable toggle on `INDEX_TILT_ENABLED`, then Tilt amount
  * (-6..6 dB) and Tilt pivot (200..2000 Hz) sliders in the tilt accent colour. The section
  * toggle greys the two sliders when off.
