@@ -68,7 +68,7 @@ object DspCrossNavBar {
     // Phone only (populate() never calls this on the head unit, whose fixed dp dimens --
     // dsp_sidebar_width, dsp_toolbar_nav_inset, dsp_status_strip_margin_start -- stay exactly as
     // authored). The sidebar column and the toolbar insets built on it use a phone-sized rail:
-    // the head unit's fixed 140dp is ~50% too wide on a ~832dp phone. The dp buffers past the rail
+    // the head unit's fixed 124dp is too wide on a ~832dp phone. The dp buffers past the rail
     // (43dp to the back arrow, +72dp to the status strip) are touch-target spacing, so they're
     // kept as-is.
     private const val PHONE_RAIL_WIDTH_DP = 118
@@ -117,7 +117,7 @@ object DspCrossNavBar {
                     destinations = destinations,
                     current = current,
                     // The head unit's rail housing sits 9dp in from the screen edge and is 106dp wide,
-                    // inside the fixed 140dp column; a phone's column is the rail's width already.
+                    // inside the fixed 124dp column; a phone's column is the rail's width already.
                     modifier = if (headUnit) {
                         Modifier.padding(start = 9.dp, top = 9.dp, bottom = 9.dp).width(106.dp)
                     } else {

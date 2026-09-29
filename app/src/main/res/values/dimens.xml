@@ -30,25 +30,27 @@
     <dimen name="dsp_workspace_bezel_inset">7dp</dimen>
     <!-- BMW ///M stripe divider under the top banner; see view_m_stripe_divider.xml. -->
     <dimen name="m_stripe_height">3dp</dimen>
-    <!-- Width of the rail baked into the full-screen DSP workspace backdrop
-         (dsp_workspace_backdrop_*.png). dsp_sidebar reserves exactly this so DspCrossNavBar's
-         invisible click-targets land on the baked tiles. Measured off the current 1280x480 art.
-         Kept separate from dsp_toolbar_nav_inset below: this one must stay exactly the rail's
-         own width, or the backdrop art and the click-target overlay drift apart. -->
-    <dimen name="dsp_sidebar_width">140dp</dimen>
+    <!-- Head-unit sidebar column: DspSidebarRail's housing (9dp in from the screen edge, 106dp
+         wide) plus a 9dp gap before the content, mirroring the edge inset. Was 140dp; the extra
+         16dp now belongs to the screen, and WorkspaceArtBox stretches the head-unit screens' art
+         rects (authored against the old 140dp edge) to fill it. -->
+    <dimen name="dsp_sidebar_width">124dp</dimen>
     <!-- Gap between the rail's right edge and the toolbar's back arrow: the toolbar itself now
          starts at the rail's edge (dsp_sidebar_width, see activity_parametric_eq.xml), so this is
          just the buffer past the rail, not an offset from the screen edge. A Toolbar's navigation
          icon touch target is a Material minimum (48dp) centred on the drawn 24dp glyph, not just
          the glyph's own bounds, so flush against the rail put that touch target right up against
-         the rail's own click-targets; 43dp gives it real breathing room. The arrow's x is
-         unchanged from before (140dp rail + 43dp = the old 183dp). -->
+         the rail's own click-targets; 43dp gives it real breathing room. -->
     <dimen name="dsp_toolbar_nav_inset">43dp</dimen>
     <!-- Bypass-state strip / dsp_toolbar_actions start here: past the back arrow's touch target
          (dsp_toolbar_nav_inset + its ~48dp target), with its own buffer for the same reason.
          Shifted the same +35dp as dsp_toolbar_nav_inset above, so the gap after the arrow's
          touch target stays the same width it was before this widening. -->
     <dimen name="dsp_status_strip_margin_start">255dp</dimen>
+    <!-- The widest the status strip may draw: from dsp_status_strip_margin_start to just short of
+         the widest page tabs (Compressor's five, WorkspaceArt.finder5, from ~666dp). DspStatusStrip
+         sizes its text to fit its longest possible readout in this. -->
+    <dimen name="dsp_status_strip_max_width">400dp</dimen>
     <!-- DspPagerArrows sit on the toolbar's right side but inset this far from the true screen
          edge, not flush against it: the head unit's screen is sunk into the dash and boxed in by
          trim, so the extreme edge is physically hard to reach while driving. 50dp is a real

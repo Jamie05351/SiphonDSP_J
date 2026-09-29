@@ -26,6 +26,10 @@ object WorkspaceArt {
 
     /** The 5-segment page finder (Compressor). */
     val finder5 = Frac(0.52f, 0.048f, 0.45f, 0.0693f)
+
+    /** Where the content column started when the screens' rects were authored (the old 140dp
+     *  sidebar). Content pages stretch x from here to the current column; see [WorkspaceArtScope]. */
+    const val AUTHORED_CONTENT_LEFT_DP = 140f
 }
 
 /**
@@ -37,15 +41,28 @@ object WorkspaceArt {
 class WorkspaceArtScope internal constructor(
     private val originX: Dp,
     private val originY: Dp,
+    /** Content pages only: the column's right edge. Rects are then stretched horizontally from the
+     *  authored span (AUTHORED_CONTENT_LEFT_DP..right) to the current one (originX..right), so the
+     *  width the narrower sidebar gave back goes to the screen. Null places rects 1:1. */
+    private val contentRight: Dp? = null,
 ) {
-    fun Modifier.artRect(frac: WorkspaceArt.Frac): Modifier =
-        absoluteOffset(
-            x = (frac.x * WorkspaceArt.SCREEN_WIDTH_DP).dp - originX,
+    fun Modifier.artRect(frac: WorkspaceArt.Frac): Modifier {
+        var x = frac.x * WorkspaceArt.SCREEN_WIDTH_DP
+        var w = frac.w * WorkspaceArt.SCREEN_WIDTH_DP
+        if (contentRight != null) {
+            val authoredLeft = WorkspaceArt.AUTHORED_CONTENT_LEFT_DP
+            val scale = (contentRight.value - originX.value) / (contentRight.value - authoredLeft)
+            x = originX.value + (x - authoredLeft) * scale
+            w *= scale
+        }
+        return absoluteOffset(
+            x = x.dp - originX,
             y = (frac.y * WorkspaceArt.SCREEN_HEIGHT_DP).dp - originY,
         ).size(
-            width = (frac.w * WorkspaceArt.SCREEN_WIDTH_DP).dp,
+            width = w.dp,
             height = (frac.h * WorkspaceArt.SCREEN_HEIGHT_DP).dp,
         )
+    }
 }
 
 /**
@@ -64,6 +81,12 @@ fun WorkspaceArtBox(
     val scope = WorkspaceArtScope(
         originX = originX ?: dimensionResource(R.dimen.dsp_sidebar_width),
         originY = originY ?: dimensionResource(R.dimen.dsp_workspace_toolbar_height),
+        // A content page (default origin) gets the stretch; an explicitly placed host doesn't.
+        contentRight = if (originX == null) {
+            WorkspaceArt.SCREEN_WIDTH_DP.dp - dimensionResource(R.dimen.dsp_workspace_bezel_inset)
+        } else {
+            null
+        },
     )
     Box(modifier) { scope.content() }
 }

@@ -57,7 +57,7 @@ private val RailBezel = 3.dp
  * ([DspTile] + live glyphs). It sits on top of [DspWorkspaceBackdrop].
  *
  * Size it from the caller: the calibrated head unit rail is about 106dp wide inset 9dp from the
- * screen edge (`Modifier.padding(9.dp).width(106.dp)`), which gives ~78dp tiles at 480dp height.
+ * screen edge (`Modifier.padding(9.dp).width(106.dp)`, inside the 124dp column), which gives ~78dp tiles at 480dp height.
  * The current destination is lit and not clickable; hardware D-pad focus keeps [bmwFocusRing].
  */
 @Composable
@@ -87,9 +87,9 @@ fun DspSidebarRail(
                 val source = remember { MutableInteractionSource() }
                 DspTile(
                     label = stringResource(dest.tileLabelRes()),
-                    // The caption is short ("PEQ", "Xovers"); announce the full screen name.
+                    // The caption is short ("PEQ", "Xover"); announce the full screen name.
                     a11yLabel = stringResource(dest.labelRes),
-                    accent = dest.accent(),
+                    accent = if (selected) dest.accent() else DspColors.RingOff,
                     selected = selected,
                     enabled = !selected,
                     onClick = { if (canNavigate()) onNavigate(dest) },

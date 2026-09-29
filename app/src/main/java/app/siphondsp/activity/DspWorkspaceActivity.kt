@@ -1,9 +1,11 @@
 package app.siphondsp.activity
 
 import android.os.Bundle
+import androidx.appcompat.widget.Toolbar
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.siphondsp.R
 
 /**
  * Shared chrome for the dedicated BMW DSP workspaces. These screens run **full-screen**: the
@@ -24,6 +26,12 @@ abstract class DspWorkspaceActivity : BaseActivity() {
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+    }
+
+    /** Every workspace installs its toolbar here, so this is where its back arrow gets enlarged. */
+    override fun setSupportActionBar(toolbar: Toolbar?) {
+        super.setSupportActionBar(toolbar)
+        supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_workspace_back_32dp)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
