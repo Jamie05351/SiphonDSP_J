@@ -43,6 +43,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
+import app.siphondsp.compose.controls.MinusPlusPill
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
@@ -317,47 +318,13 @@ private fun RowScope.StepperCell(
                 .border(1.dp, accent, RoundedCornerShape(6.dp))
                 .padding(vertical = 12.dp),
         )
-        MinusPlusGroup(StepperGlyphColor, onMinus, onPlus)
+        MinusPlusPill(onMinus, onPlus, height = RowControlHeight, glyphColor = StepperGlyphColor)
     }
 }
 
 // Reclaims the width the old separate −/+ buttons (2x48dp + a gap between them) spent, so the
-// value box -- the thing actually being read -- gets more of it: one pill-shaped control, split
-// by a thin divider in the same gray as the glyphs, rather than two independent buttons.
-private val StepperHalfWidth = 40.dp
-
-@Composable
-private fun MinusPlusGroup(glyphColor: Color, onMinus: () -> Unit, onPlus: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .height(RowControlHeight)
-            .clip(RoundedCornerShape(8.dp))
-            .background(GlyphButtonFill),
-    ) {
-        GlyphHalf("−", glyphColor, Modifier.width(StepperHalfWidth).fillMaxHeight(), onMinus)
-        Box(
-            Modifier
-                .width(1.dp)
-                .fillMaxHeight(0.6f)
-                .align(Alignment.CenterVertically)
-                .background(glyphColor),
-        )
-        GlyphHalf("+", glyphColor, Modifier.width(StepperHalfWidth).fillMaxHeight(), onPlus)
-    }
-}
-
-@Composable
-private fun GlyphHalf(text: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier
-            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
-            .bmwFocusRing(interactionSource),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = text, color = tint, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    }
-}
+// value box -- the thing actually being read -- gets more of it: the shared MinusPlusPill, one
+// pill-shaped control split by a thin divider in the same gray as the glyphs.
 
 /** A stepper / delete button: a filled rounded hit target with a large glyph so it's not an
  *  accidental touch next to the value box. */
