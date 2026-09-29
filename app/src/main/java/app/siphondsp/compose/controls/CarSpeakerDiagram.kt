@@ -2,6 +2,7 @@ package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -11,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -24,6 +26,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
@@ -56,6 +63,7 @@ private val RightPos = mapOf(
     SpeakerKind.WOOFER to Offset(0.630f, 0.72f),
 )
 private val DriverHead = Offset(0.645f, 0.60f)
+private val PassengerHead = Offset(0.385f, 0.60f)
 
 // Diameter as a fraction of the diagram width.
 private fun SpeakerKind.sizeFraction() = when (this) {
@@ -72,6 +80,13 @@ const val CarDiagramAspect = 701f / 373f
  * objects: the [selected] band's two drivers are lit in [accent] with a path line from the driver's
  * seat, and the rest are dimmed. Tapping a driver calls [onSelect] with its band's kind.
  *
+ * [seat] moves the listening position the path lines start from (driver or passenger), captioned on
+ * the map. [title], if given, is shown as a badge in the corner in [accent].
+ *
+ * This composable is stateless: it only *reports* a tap through [onSelect]. Whoever owns the band
+ * (the pager on Gains & Delay) must change it, and the new [selected] / [accent] / [title] then flow
+ * back in. If tapping a driver does nothing, check that [onSelect] reaches that owner.
+ *
  * [label] returns the text to pin beside a driver (`isLeft` = the screen-left channel), or null for
  * none; it is read while drawing, so a changing value only redraws the canvas. [level] (0..1) makes
  * the selected drivers' cones pulse; leave it null (the default) for a static diagram, which also
@@ -86,12 +101,16 @@ fun CarSpeakerDiagram(
     accent: Color,
     onSelect: (SpeakerKind) -> Unit,
     modifier: Modifier = Modifier,
+    seat: ListeningSeat = ListeningSeat.DRIVER,
+    title: String? = null,
     label: (SpeakerKind, Boolean) -> String? = { _, _ -> null },
     level: ((SpeakerKind, Boolean) -> Float)? = null,
 ) {
     val mid = ImageBitmap.imageResource(R.drawable.spk_mid)
     val woofer = ImageBitmap.imageResource(R.drawable.spk_woofer)
     val measurer = rememberTextMeasurer()
+    // Always call the latest callback, even if the pointer-input block outlives a recomposition.
+    val currentOnSelect by rememberUpdatedState(onSelect)
     var frame by remember { mutableLongStateOf(0L) }
     if (level != null) {
         LaunchedEffect(Unit) { while (true) withFrameNanos { frame = it } }
@@ -101,7 +120,21 @@ fun CarSpeakerDiagram(
         modifier
             .aspectRatio(CarDiagramAspect)
             .semantics { contentDescription = "Speaker map. Tap a driver to choose its band." }
-            .pointerInput(selected) {
+            // D-pad / rotary: focus the map, then left/up = previous band, right/down = next band.
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val all = SpeakerKind.entries
+                val here = all.indexOf(selected)
+                val next = when (event.key) {
+                    Key.DirectionLeft, Key.DirectionUp -> all.getOrNull(here - 1)
+                    Key.DirectionRight, Key.DirectionDown -> all.getOrNull(here + 1)
+                    else -> return@onKeyEvent false
+                }
+                next?.let(currentOnSelect)
+                next != null
+            }
+            .focusable()
+            .pointerInput(Unit) {
                 detectTapGestures { p ->
                     val w = size.width.toFloat()
                     val h = size.height.toFloat()
@@ -115,7 +148,7 @@ fun CarSpeakerDiagram(
                             if (d < reach && d < bestDistance) { best = kind; bestDistance = d }
                         }
                     }
-                    best?.let(onSelect)
+                    best?.let(currentOnSelect)
                 }
             },
     ) {
@@ -124,7 +157,8 @@ fun CarSpeakerDiagram(
             val t = if (level != null) frame / 1_000_000f else 0f // ms; only ticks when animated
             val w = size.width
             val h = size.height
-            val head = Offset(DriverHead.x * w, DriverHead.y * h)
+            val head = (if (seat == ListeningSeat.DRIVER) DriverHead else PassengerHead)
+                .let { Offset(it.x * w, it.y * h) }
 
             // Path lines first, so the drivers sit on top of them.
             SpeakerKind.entries.forEach { kind ->
@@ -140,6 +174,12 @@ fun CarSpeakerDiagram(
             }
             drawCircle(Color.White.copy(alpha = 0.9f), w * 0.011f, head)
             drawCircle(Color.White.copy(alpha = 0.35f), w * 0.024f, head, style = Stroke(1.5f))
+            measurer.measure(
+                if (seat == ListeningSeat.DRIVER) "DRIVER" else "PASSENGER",
+                TextStyle(fontSize = CarUi.MinDenseText, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.55f)),
+            ).let { caption ->
+                drawText(caption, topLeft = Offset(head.x - caption.size.width / 2f, head.y + w * 0.034f))
+            }
 
             SpeakerKind.entries.forEach { kind ->
                 listOf(true, false).forEachIndexed { i, left ->
@@ -181,6 +221,23 @@ fun CarSpeakerDiagram(
                         }
                     }
                 }
+            }
+
+            title?.let { text ->
+                val layout = measurer.measure(
+                    text,
+                    TextStyle(fontSize = CarUi.MinText, fontWeight = FontWeight.Bold, color = accent),
+                )
+                val padX = layout.size.height * 0.7f
+                val padY = layout.size.height * 0.28f
+                val bw = layout.size.width + padX * 2f
+                val bh = layout.size.height + padY * 2f
+                val bx = w * 0.02f
+                val by = h * 0.03f
+                drawRoundRect(accent.copy(alpha = 0.16f), Offset(bx - 3f, by - 3f), Size(bw + 6f, bh + 6f), CornerRadius(bh / 2f + 3f), style = Stroke(6f))
+                drawRoundRect(Color(0xF0060708), Offset(bx, by), Size(bw, bh), CornerRadius(bh / 2f))
+                drawRoundRect(accent, Offset(bx, by), Size(bw, bh), CornerRadius(bh / 2f), style = Stroke(1.5f))
+                drawText(layout, topLeft = Offset(bx + padX, by + padY))
             }
         }
     }

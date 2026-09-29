@@ -55,7 +55,7 @@ fun BmwSegmentedControl(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     optionAccents: List<Color>? = null,
-    segmentHeight: Dp = 44.dp, // + the 2dp track padding = 48dp
+    segmentHeight: Dp = 32.dp, // + the 2dp track padding each side = 36dp: fits the 44dp toolbar band
     // A gap between adjacent segments so a near-the-boundary tap doesn't land on the wrong one.
     // Default 0 keeps compact inline uses (Polarity NORMAL/INVERT) unchanged.
     segmentGap: Dp = 0.dp,
@@ -103,10 +103,10 @@ private fun RowScope.Segment(
         Text(
             text = label.uppercase(),
             color = if (selected) Color.White else SegmentIdleText,
-            fontSize = CarUi.MinText,
+            fontSize = CarUi.MinDenseText,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 10.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
         )
     }
 }

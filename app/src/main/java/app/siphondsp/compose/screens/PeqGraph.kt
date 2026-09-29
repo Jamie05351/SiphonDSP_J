@@ -563,21 +563,28 @@ private fun drawGrid(
         nc.drawLine(g.left, y, g.right, y, if (value == 0f) p.unifiedZeroPaint else p.unifiedGridPaint)
         nc.drawText(value.toInt().toString(), 5f * density, y + 5f * density, p.unifiedLabelPaint)
     }
-    // Larger labels can collide on a narrow plot (the home-screen graphs), so a label is only
-    // drawn if it clears the previous one by a small gap; the grid line is always drawn.
+    // Narrow plots (a phone, the home-screen graphs) shrink the frequency labels to fit rather than
+    // dropping any; only if they still overlap at the smallest size is a label skipped.
+    val labelPaint = p.unifiedLabelPaint
+    val baseTextSize = labelPaint.textSize
+    val xs = FloatArray(FreqScale.size) { g.xForFrequency(FreqScale[it]) }
+    val labels = Array(FreqScale.size) { FreqScale[it].prettyNumberFormat() }
+    val widest = labels.maxOf { labelPaint.measureText(it) }
+    labelPaint.textSize = baseTextSize *
+        graphLabelFitScale(minNeighbourSpacing(xs), widest, gapPx = 3f * density)
     var lastLabelEnd = Float.NEGATIVE_INFINITY
-    FreqScale.forEach { frequency ->
-        val x = g.xForFrequency(frequency)
+    FreqScale.forEachIndexed { i, frequency ->
+        val x = xs[i]
         val linePaint = if (octavePaint != null && frequency in OctaveFreqs) octavePaint else p.unifiedGridPaint
         nc.drawLine(x, g.top, x, g.bottom, linePaint)
-        val label = frequency.prettyNumberFormat()
-        val labelWidth = p.unifiedLabelPaint.measureText(label)
+        val labelWidth = labelPaint.measureText(labels[i])
         val labelStart = x - labelWidth / 2f
-        if (labelStart >= lastLabelEnd + 6f * density) {
-            nc.drawText(label, labelStart, g.bottom + 21f * density, p.unifiedLabelPaint)
+        if (labelStart >= lastLabelEnd + 2f * density) {
+            nc.drawText(labels[i], labelStart, g.bottom + 21f * density, labelPaint)
             lastLabelEnd = labelStart + labelWidth
         }
     }
+    labelPaint.textSize = baseTextSize
 }
 
 private fun drawCrossoverShading(

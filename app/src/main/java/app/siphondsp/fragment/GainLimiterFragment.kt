@@ -8,12 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -22,17 +17,17 @@ import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.screens.CompressorDriverPage
-import app.siphondsp.compose.screens.GainsBand
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
 import kotlinx.coroutines.launch
 
 /**
- * Dedicated Gains & Delay workspace. Swipes between five pages, all Compose:
- * - [GainsDelayScreen] x3 -- one per crossover band, High / Mid / Low (top of the speaker stack
- *   first): that band's Left/Right Delay, Polarity and Gain cards, the stage alignment and the
- *   global stereo link. The car is drawn live on each page, so every page shares the destination's
- *   plain backdrop.
+ * Dedicated Gains & Delay workspace. Swipes between three pages, all Compose:
+ * - [GainsDelayScreen] -- one interactive speaker map for all three crossover bands (High / Mid /
+ *   Low tabs, or tap a driver): seat position, measured path distances and the geometric
+ *   alignment they imply, plus that band's Left/Right Delay, Polarity, Gain and Stage Alignment
+ *   and the global stereo link. The car is drawn live, so the page uses the destination's plain
+ *   backdrop.
  * - [HeadroomOutputScreen] -- Headroom, the post-gain L/R sliders and the master limiter
  *   (enable + threshold + a live GR meter).
  * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus), moved here
@@ -61,46 +56,34 @@ class GainLimiterFragment : Fragment() {
     }
 
     companion object {
-        /** One page per [GainsBand], then Output and Bus limiters. */
-        val PAGE_COUNT = GainsBand.entries.size + 2
+        /** Delay (all three bands), Output, then Bus limiters; the finder's three segments map 1:1. */
+        const val PAGE_COUNT = 3
     }
 }
 
 @Composable
 private fun GainLimiterPager(pagerState: PagerState) {
-    val scope = rememberCoroutineScope()
     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-        val band = GainsBand.entries.getOrNull(page)
-        when {
-            // Tapping a driver in the live car (or the band selector) jumps straight to that band's page.
-            band != null -> GainsDelayScreen(band, onSelectBand = { scope.launch { pagerState.scrollToPage(it.ordinal) } })
-            page == GainsBand.entries.size -> HeadroomOutputScreen()
+        when (page) {
+            0 -> GainsDelayScreen()
+            1 -> HeadroomOutputScreen()
             else -> CompressorDriverPage()
         }
     }
 }
 
 /**
- * Head unit's DELAY | GAINS | LIMITERS finder for this pager. DELAY covers all three band pages
- * (the car art's band labels pick between them) and returns to whichever band was last shown;
- * GAINS is the Output page and LIMITERS the bus limiters.
+ * Head unit's DELAY | GAINS | LIMITERS finder for this pager: DELAY is the interactive speaker map,
+ * GAINS the Output page and LIMITERS the bus limiters.
  */
 @Composable
 fun GainLimiterPageFinder(pagerState: PagerState) {
     val scope = rememberCoroutineScope()
-    val bandCount = GainsBand.entries.size
-    var lastBandPage by remember { mutableIntStateOf(0) }
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage < bandCount) lastBandPage = pagerState.currentPage
-    }
     ArtPagerFinder(
         pagerState = pagerState,
         labels = listOf("DELAY", "GAINS", "LIMITERS"),
         frac = WorkspaceArt.finder3,
-        selected = (pagerState.currentPage - bandCount + 1).coerceAtLeast(0),
-        onSelect = { segment ->
-            val page = if (segment == 0) lastBandPage else bandCount + segment - 1
-            scope.launch { pagerState.scrollToPage(page) }
-        },
+        selected = pagerState.currentPage,
+        onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
     )
 }

@@ -31,8 +31,8 @@ import app.siphondsp.compose.theme.BmwTheme
 import kotlinx.coroutines.launch
 
 private val DisabledColor = Color(0xFF4A4C54)
-private val ArrowBoxHeight = CarUi.MinTouch
-private val ArrowBoxWidth = 72.dp
+private val ArrowBoxHeight = 30.dp
+private val ArrowBoxWidth = 60.dp
 private const val FillAlpha = 0.7f
 // Android reserves extra space below a glyph's baseline for descenders ("font padding"), which
 // otherwise reads as the arrow sitting low in its box even though Alignment.Center is centering
