@@ -24,9 +24,12 @@ import app.siphondsp.R
 import app.siphondsp.view.DspDestination
 
 /**
- * Live values for the rail's glyphs. Every field is a lambda so it is read in the draw phase:
- * wire them to the same sources as the home tiles and the rail animates without recomposing.
- * The defaults are static sample values so the rail renders before anything is wired.
+ * Values for the rail's glyphs. Every field is a lambda so it is read in the draw phase, so they
+ * can later be wired to live DSP state without recomposing.
+ *
+ * Nothing supplies these yet: like the front-page tiles, the rail glyphs are ICONS drawn from
+ * these fixed sample values (4 ms, -6 dB, 3-way ...), not a readout of the current settings.
+ * Don't read settings off them; the workspace controls are the truth.
  */
 class SidebarLive(
     val peqBands: () -> List<PeqBand> = { SampleBands },

@@ -41,7 +41,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -120,6 +122,18 @@ fun DspTile(
             )
     ) {
         val w = maxWidth
+        // 10 % of the tile, at least 12sp, then shrunk (not below LabelMinSp) if the label would be
+        // wider than the tile's inner 90 %: a short landscape phone makes rail tiles small.
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val labelSize = remember(label, w, density) {
+            with(density) {
+                val base = maxOf((w * 0.10f).toSp().value, 12f)
+                val width = measurer.measure(label, TextStyle(fontSize = base.sp, fontWeight = FontWeight.Normal)).size.width
+                val room = (w * 0.90f).toPx()
+                (if (width > room) maxOf(base * room / width, LabelMinSp) else base).sp
+            }
+        }
         // glyph area: x 10–90 %, y 11–67 %
         Box(
             Modifier
@@ -130,7 +144,7 @@ fun DspTile(
         Text(
             text = label,
             color = lerp(DspColors.Label, Color.White, glow),
-            fontSize = with(LocalDensity.current) { maxOf((w * 0.10f).toSp().value, 12f).sp },
+            fontSize = labelSize,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
             softWrap = false,
@@ -140,6 +154,8 @@ fun DspTile(
         )
     }
 }
+
+private const val LabelMinSp = 9f
 
 private fun DrawScope.drawShell(accent: Color, glow: Float) {
     val w = size.width
