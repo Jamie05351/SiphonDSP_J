@@ -23,30 +23,33 @@ private val SampleBands = listOf(
  * owns the click, the ripple and the accessibility label (see fragment_dsp_page_shortcuts.xml), so
  * the tile and its touch area are always the same box. The glyphs are illustrative, not live.
  * Settings and More have slightly smaller rects than the other five, which they keep.
+ *
+ * [selected] lights the tile's glow; the front page sets it for a moment when a tile is tapped, just
+ * before its screen zooms open.
  */
 @Composable
-fun HomeTile(kind: HomeTileKind, modifier: Modifier = Modifier) {
+fun HomeTile(kind: HomeTileKind, modifier: Modifier = Modifier, selected: Boolean = false) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (kind) {
-            HomeTileKind.PEQ -> DspTile(stringResource(R.string.home_tile_peq), DspColors.Peq, false, null) {
+            HomeTileKind.PEQ -> DspTile(stringResource(R.string.home_tile_peq), DspColors.Peq, selected, null) {
                 PeqGlyph({ SampleBands })
             }
-            HomeTileKind.GAINS -> DspTile(stringResource(R.string.home_tile_gains), DspColors.Delay, false, null) {
+            HomeTileKind.GAINS -> DspTile(stringResource(R.string.home_tile_gains), DspColors.Delay, selected, null) {
                 DelayGainGlyph(delayMs = { 8f }, gainDb = { -6f })
             }
-            HomeTileKind.XOVERS -> DspTile(stringResource(R.string.home_tile_xovers), DspColors.Xover, false, null) {
+            HomeTileKind.XOVERS -> DspTile(stringResource(R.string.home_tile_xovers), DspColors.Xover, selected, null) {
                 XoverGlyph({ 3 })
             }
-            HomeTileKind.COMPRESSOR -> DspTile(stringResource(R.string.home_tile_compressor), DspColors.Comp, false, null) {
+            HomeTileKind.COMPRESSOR -> DspTile(stringResource(R.string.home_tile_compressor), DspColors.Comp, selected, null) {
                 CompressorGlyph(thresholdNorm = { 0.55f }, grDb = { 7f })
             }
-            HomeTileKind.ALLPASS -> DspTile(stringResource(R.string.home_tile_allpass), DspColors.Allpass, false, null) {
+            HomeTileKind.ALLPASS -> DspTile(stringResource(R.string.home_tile_allpass), DspColors.Allpass, selected, null) {
                 AllpassGlyph({ 90f })
             }
-            HomeTileKind.SETTINGS -> DspTile(stringResource(R.string.title_activity_settings), DspColors.Neutral, false, null) {
+            HomeTileKind.SETTINGS -> DspTile(stringResource(R.string.title_activity_settings), DspColors.Neutral, selected, null) {
                 GearGlyph()
             }
-            HomeTileKind.MORE -> DspTile(stringResource(R.string.home_tile_more), DspColors.Neutral, false, null) {
+            HomeTileKind.MORE -> DspTile(stringResource(R.string.home_tile_more), DspColors.Neutral, selected, null) {
                 MoreGlyph()
             }
         }
