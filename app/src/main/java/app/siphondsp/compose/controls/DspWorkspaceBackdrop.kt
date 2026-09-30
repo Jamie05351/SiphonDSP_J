@@ -31,8 +31,10 @@ import kotlin.math.roundToInt
  * texture filling the whole screen, and a slim metal bezel running around the entire screen edge
  * (same metal as the tile and rail bezels).
  *
- * Needs `res/drawable-nodpi/dsp_workspace_bg.png` (the 1080x404 texture, which is the head unit's
- * own aspect, so it fills 1280x480 without cropping; other aspects are cover-cropped).
+ * Needs `res/drawable-nodpi/dsp_workspace_bg.webp` (the 2340x878 texture, which is the head unit's
+ * own aspect, so it fills 1280x480 without cropping; other aspects are cover-cropped). It is
+ * James's texture levels-lifted from 10-26 to 16-44 so it reads on the head unit's panel, and
+ * saved lossless: a lossy re-encode flattened the original to 10-17, near solid black.
  *
  * The sidebar is a separate layer on top ([DspSidebarRail]); the content sits to its right.
  * The bezel and its inner lip take about [bezel] * 1.75 of the screen edge, so give the content
