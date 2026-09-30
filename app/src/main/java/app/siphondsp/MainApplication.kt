@@ -47,9 +47,6 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import timber.log.Timber
 import timber.log.Timber.DebugTree
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 
 open class MainApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {

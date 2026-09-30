@@ -43,7 +43,6 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
-import app.siphondsp.view.Card
 import org.koin.android.ext.android.inject
 import rikka.shizuku.Shizuku
 import timber.log.Timber
