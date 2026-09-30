@@ -8,7 +8,6 @@ import androidx.preference.Preference
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.activity.OnboardingActivity
-import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.preference.IconPreference
 import app.siphondsp.preference.MaterialSwitchPreference
 import app.siphondsp.utils.Constants
@@ -25,7 +24,6 @@ class SettingsMiscFragment : SettingsBaseFragment() {
 
     private val autoStartNotify by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_autostart_prompt_at_boot)) }
     private val repairAssets by lazy { findPreference<Preference>(getString(R.string.key_troubleshooting_repair_assets)) }
-    private val crashReports by lazy { findPreference<Preference>(getString(R.string.key_share_crash_reports)) }
     private val debugDatabase by lazy { findPreference<Preference>(getString(R.string.key_debug_database)) }
     private val permSkipPrompt by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_skip_prompt)) }
     private val permAutoStart by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_auto_start)) }
@@ -36,11 +34,6 @@ class SettingsMiscFragment : SettingsBaseFragment() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = Constants.PREF_APP
         setPreferencesFromResource(R.xml.app_misc_preferences, rootKey)
-
-        crashReports?.setOnPreferenceChangeListener { _, newValue ->
-            CrashlyticsImpl.setCollectionEnabled(newValue as Boolean)
-            true
-        }
 
         repairAssets?.setOnPreferenceClickListener {
             requireContext().assets.installPrivateAssets(requireContext(), force = true)
@@ -58,7 +51,6 @@ class SettingsMiscFragment : SettingsBaseFragment() {
 
         updatePermissionStates()
 
-        crashReports?.parent?.isVisible = !BuildConfig.FOSS_ONLY
         debugDatabase?.parent?.isVisible = BuildConfig.DEBUG
         autoStartNotify?.isVisible = isRootless()
         permRestartSetup?.parent?.isVisible = isRootless()

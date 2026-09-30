@@ -43,7 +43,6 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
-import app.siphondsp.view.Card
 import org.koin.android.ext.android.inject
 import rikka.shizuku.Shizuku
 import timber.log.Timber
@@ -382,14 +381,6 @@ class OnboardingFragment : Fragment() {
             val pageBinding = binding.onboardingPage5
             if(!SdkCheck.isTiramisu) {
                 pageBinding.findViewById<View>(R.id.onboarding_notification_permission).visibility = View.GONE
-            }
-            pageBinding.findViewById<Card>(R.id.privacy_card).apply {
-                isVisible = !BuildConfig.FOSS_ONLY
-                checkboxIsChecked = prefsApp.get(R.string.key_share_crash_reports)
-                setOnCheckChangedListener {
-                    Timber.d("Should share crash reports? $it")
-                    prefsApp.set(R.string.key_share_crash_reports, it)
-                }
             }
         }
 

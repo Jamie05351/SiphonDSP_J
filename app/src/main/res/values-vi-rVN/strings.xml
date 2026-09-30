@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Bạn cần cấp quyền rõ ràng cho ứng dụng này để ghi lại nội dung âm thanh mỗi khi ứng dụng khởi chạy.</string>
     <string name="onboarding_perm_missing_title">Quyền thời gian chạy không được cấp</string>
     <string name="onboarding_perm_missing">Hãy cấp tất cả các quyền trong thời gian chạy được yêu cầu để tiếp tục.\nNếu bạn liên tục từ chối các quyền, bạn cần cấp chúng theo cách thủ công trong cài đặt hệ thống.</string>
-    <string name="onboarding_perm_diag">Cho phép gửi báo cáo chẩn đoán</string>
-    <string name="onboarding_perm_diag_caption">Ứng dụng này sẽ gửi báo cáo sự cố và dữ liệu chẩn đoán khác, bao gồm thông tin về các ứng dụng đang hoạt động khác, để cho phép mình phát hiện và giải quyết các vấn đề và lỗi tương thích dễ dàng hơn.</string>
     <string name="onboarding_finish_header">SiphonDSP đã được thiết lập!</string>
     <string name="onboarding_finish_caption">Nếu bạn gặp bất kỳ vấn đề nào, vui lòng truy cập các tùy chọn khắc phục sự cố.</string>
     <string name="limit_session_control_conflict_title">Tắt các ứng dụng hiệu ứng âm thanh khác</string>
@@ -228,10 +226,6 @@
     <string name="assets">Tài sản</string>
     <string name="about_settings">Thông tin</string>
     <string name="about_settings_summary">Tín dụng, hỗ trợ, các cập nhật</string>
-    <string name="privacy">Quyền riêng tư</string>
-    <string name="privacy_share_crash_reports">Chia sẻ báo cáo sự cố ứng dụng</string>
-    <string name="privacy_share_crash_reports_on">Gửi báo cáo sự cố cho nhà phát triển</string>
-    <string name="privacy_share_crash_reports_off">Không gửi báo cáo sự cố cho nhà phát triển</string>
     <string name="credits">Tín dụng</string>
     <string name="translators">Dịch thuật</string>
     <string name="credits_app">Ứng dụng &amp; triển khai không cần root được phát triển bởi</string>

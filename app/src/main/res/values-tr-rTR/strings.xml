@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Bu uygulama, her başlatıldığında ses içeriğini kaydetme izni vermeniz gerekir.</string>
     <string name="onboarding_perm_missing_title">Çalışma zamanı için izinleri verilmedi</string>
     <string name="onboarding_perm_missing">Lütfen devam etmek için istenen tüm çalışma zamanı izinlerini verin.\nİzinleri tekrar tekrar reddettiyseniz, bunları sistem ayarlarından manuel olarak vermeniz gerekir.</string>
-    <string name="onboarding_perm_diag">Teşhis raporlarının gönderilmesine izin ver</string>
-    <string name="onboarding_perm_diag_caption">Bu uygulama, uyumluluk sorunlarını ve hataları daha kolay tespit edip çözmeme olanak sağlamak için, diğer etkin uygulamalar hakkındaki bilgiler de dahil olmak üzere çökme raporları ve diğer teşhis verilerini göndermektedir.</string>
     <string name="onboarding_finish_header">SiphonDSP kuruldu!</string>
     <string name="onboarding_finish_caption">Eğer bir hatayla karşılaşırsanız, lütfen sorun giderme ayarlarını kullanınız.</string>
     <string name="limit_session_control_conflict_title">Diğer ses efekti uygulamalarını devre dışı bırakın</string>
@@ -222,10 +220,6 @@
     <string name="assets">Parçalar</string>
     <string name="about_settings">Hakkında</string>
     <string name="about_settings_summary">Emektarlar, destek, güncellemeler</string>
-    <string name="privacy">Gizlilik</string>
-    <string name="privacy_share_crash_reports">Uygulama çökme raporlarını paylaşın</string>
-    <string name="privacy_share_crash_reports_on">Çökme raporlarını geliştiriciye gönderin</string>
-    <string name="privacy_share_crash_reports_off">Geliştiriciye çökme raporları göndermeyin</string>
     <string name="credits">Emektarlar</string>
     <string name="translators">Çevirmenler</string>
     <string name="credits_app">Uygulama &amp; tarafından geliştirilen köksüz program</string>

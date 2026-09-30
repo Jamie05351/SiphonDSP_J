@@ -122,8 +122,6 @@
     <string name="onboarding_perm_cast_caption">Kifejezetten engedélyt kell adnia ennek az alkalmazásnak a hangtartalom rögzítésére minden indításkor.</string>
     <string name="onboarding_perm_missing_title">A futásidejű engedélyek nincsenek megadva</string>
     <string name="onboarding_perm_missing">A folytatáshoz adja meg az összes kért futásidejű engedélyt.\n Ha többször is megtagadta az engedélyeket, manuálisan kell megadnia azokat a rendszerbeállításokban.</string>
-    <string name="onboarding_perm_diag">Diagnosztikai jelentések küldésének engedélyezése</string>
-    <string name="onboarding_perm_diag_caption">Ez az alkalmazás összeomlási jelentéseket és egyéb diagnosztikai adatokat küld el, beleértve az egyéb aktív alkalmazásokra vonatkozó információkat is, hogy könnyebben észleljem és megoldjam a kompatibilitási problémákat és a hibákat.</string>
     <string name="onboarding_finish_header">A SiphonDSP be van állítva!</string>
     <string name="onboarding_finish_caption">Ha bármilyen problémába ütközik, kérjük, keresse fel a hibaelhárítási lehetőségeket.</string>
     <string name="limit_session_control_conflict_title">Más hangeffektus-alkalmazások letiltása</string>

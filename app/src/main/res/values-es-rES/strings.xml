@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Debes otorgar explícitamente permiso a esta aplicación para grabar contenido de audio cada vez que se inicie.</string>
     <string name="onboarding_perm_missing_title">Permisos de ejecución no concedido</string>
     <string name="onboarding_perm_missing">Por favor otorgue todos los permisos solicitados de ejecución para continuar.\nSi ha denegado repetidamente los permisos, debe otorgarlos manualmente en la configuración del sistema.</string>
-    <string name="onboarding_perm_diag">Permitir el envío de informes de diagnóstico</string>
-    <string name="onboarding_perm_diag_caption">Esta aplicación envía informes de fallos y otros datos de diagnóstico, incluyendo información sobre otras aplicaciones activas, para permitirme detectar y resolver problemas de compatibilidad y errores más fácilmente.</string>
     <string name="onboarding_finish_header">SiphonDSP está configurado!</string>
     <string name="onboarding_finish_caption">Si encuentras algún problema, por favor visita las opciones de solución de problemas.</string>
     <string name="limit_session_control_conflict_title">Desactive otras aplicaciones de efectos de audio</string>
@@ -228,10 +226,6 @@
     <string name="assets">Activos</string>
     <string name="about_settings">Acerca de</string>
     <string name="about_settings_summary">Créditos, soporte, actualizaciones</string>
-    <string name="privacy">Privacidad</string>
-    <string name="privacy_share_crash_reports">Compartir reportes de errores de aplicación</string>
-    <string name="privacy_share_crash_reports_on">Enviar reportes de errores al desarrollador</string>
-    <string name="privacy_share_crash_reports_off">No enviar reportes de errores al desarrollador</string>
     <string name="credits">Créditos</string>
     <string name="translators">Traductores</string>
     <string name="credits_app">Implementación de aplicación &amp; rootless desarrollada por</string>

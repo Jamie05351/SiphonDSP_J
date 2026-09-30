@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Devi concedere esplicitamente a questa applicazione l\'autorizzazione per registrare contenuti audio ogni volta che viene avviata.</string>
     <string name="onboarding_perm_missing_title">Autorizzazioni di esecuzione non concesse</string>
     <string name="onboarding_perm_missing">Concedi tutte le autorizzazioni di esecuzione richieste per continuare.\nSe hai ripetutamente negato le autorizzazioni, devi concederle manualmente nelle impostazioni di sistema.</string>
-    <string name="onboarding_perm_diag">Consenti l\'invio di rapporti diagnostici</string>
-    <string name="onboarding_perm_diag_caption">Questa applicazione invia rapporti sugli arresti anomali e altri dati diagnostici, incluse informazioni su altre applicazioni attive, per consentirmi di rilevare e risolvere più facilmente problemi di compatibilità e bug.</string>
     <string name="onboarding_finish_header">SiphonDSP è pronto!</string>
     <string name="onboarding_finish_caption">In caso di problemi, visita le opzioni di risoluzione dei problemi.</string>
     <string name="limit_session_control_conflict_title">Disabilita altre applicazioni di effetti audio</string>
@@ -228,10 +226,6 @@
     <string name="assets">Impostazioni</string>
     <string name="about_settings">Informazioni</string>
     <string name="about_settings_summary">Ringraziamenti, supporto, aggiornamenti</string>
-    <string name="privacy">Riservatezza</string>
-    <string name="privacy_share_crash_reports">Condividi arresti anomali</string>
-    <string name="privacy_share_crash_reports_on">Invia i rapporti di arresto anomalo agli sviluppatori</string>
-    <string name="privacy_share_crash_reports_off">Non inviare rapporti di arresto anomalo allo sviluppatore</string>
     <string name="credits">Ringraziamenti</string>
     <string name="translators">Traduttori</string>
     <string name="credits_app">Applicazione e implementazione senza root sviluppata da</string>

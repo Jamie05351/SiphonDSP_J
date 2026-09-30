@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Você precisa conceder permissão explícita a este aplicativo para gravar conteúdo de áudio sempre que for iniciado.</string>
     <string name="onboarding_perm_missing_title">Permissões de tempo de execução não concedidas</string>
     <string name="onboarding_perm_missing">Conceda todas as permissões de tempo de execução solicitadas para continuar.\nSe você negou repetidamente as permissões, precisará concedê-las manualmente nas configurações do sistema.</string>
-    <string name="onboarding_perm_diag">Permitir o envio de relatórios de diagnóstico</string>
-    <string name="onboarding_perm_diag_caption">Este aplicativo envia relatórios de falhas e outros dados de diagnóstico, incluindo informações sobre outros aplicativos ativos, para permitir que eu detecte e resolva problemas de compatibilidade e erros com mais facilidade.</string>
     <string name="onboarding_finish_header">SiphonDSP está configurado!</string>
     <string name="onboarding_finish_caption">Se você encontrar algum problema, visite as opções de solução de problemas.</string>
     <string name="limit_session_control_conflict_title">Desative outros aplicativos de efeitos de áudio</string>
@@ -222,10 +220,6 @@
     <string name="assets">Itens</string>
     <string name="about_settings">Sobre</string>
     <string name="about_settings_summary">Créditos, suporte, atualizações</string>
-    <string name="privacy">Privacidade</string>
-    <string name="privacy_share_crash_reports">Compartilhar relatórios de erros do aplicativo</string>
-    <string name="privacy_share_crash_reports_on">Enviar relatório de erros para o desenvolvedor</string>
-    <string name="privacy_share_crash_reports_off">Não envie relatórios de falha para o desenvolvedor</string>
     <string name="credits">Créditos</string>
     <string name="translators">Tradutores</string>
     <string name="credits_app">Aplicativo &amp; implementação rootless desenvolvida por</string>

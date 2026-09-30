@@ -49,10 +49,6 @@
 
         <profileable android:shell="true"/>
 
-        <meta-data
-            android:name="firebase_crashlytics_collection_enabled"
-            android:value="${crashlyticsCollectionEnabled}" />
-
         <!-- Activities -->
         <activity
             android:name=".activity.MainActivity"
