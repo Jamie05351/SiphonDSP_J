@@ -19,8 +19,6 @@ import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
-import app.siphondsp.compose.screens.HomeCrossoverGraph
-import app.siphondsp.compose.screens.HomePeqGraph
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
@@ -103,7 +101,7 @@ class DspFragment : Fragment() {
         // stop work when the settings page is selected.
         val active = position == 0
         shortcutsBinding.homeLevelBars.pageActive = active
-        shortcutsBinding.homeDashboardStatus.pageActive = active
+        shortcutsBinding.homeEngineStatus.pageActive = active
     }
 
     /** [scrolledPx] is how far the pager has scrolled past the artwork page, in reading order. */
@@ -136,19 +134,7 @@ class DspFragment : Fragment() {
             updateNoticeOnClick?.invoke()
         }
 
-        // Top-left display: read-only crossover response. Top-centre: read-only PEQ response.
-        // Both are static snapshots of current settings (no analyser/spectrum animation) and are
-        // disposed with the fragment view rather than the window.
-        shortcutsBinding.homeCrossoverGraph.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
-        )
-        shortcutsBinding.homeCrossoverGraph.setContent { HomeCrossoverGraph() }
-
-        shortcutsBinding.homePeqGraph.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
-        )
-        shortcutsBinding.homePeqGraph.setContent { HomePeqGraph() }
-        shortcutsBinding.homeDashboardStatus.powerOn = powerState
+        shortcutsBinding.homeEngineStatus.powerOn = powerState
 
         // Seven primary home actions. The first five open DSP workspaces; Settings and More
         // delegate to MainActivity so its existing settings/overflow behaviour remains the single
@@ -218,11 +204,11 @@ class DspFragment : Fragment() {
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
 
-    /** Keeps the live DSP-status cell in lockstep with MainActivity's real power state. */
+    /** Keeps the live panel's audio-engine block in lockstep with MainActivity's real power state. */
     fun setPowerState(on: Boolean) {
         powerState = on
         if (::shortcutsBinding.isInitialized) {
-            shortcutsBinding.homeDashboardStatus.powerOn = on
+            shortcutsBinding.homeEngineStatus.powerOn = on
         }
     }
 

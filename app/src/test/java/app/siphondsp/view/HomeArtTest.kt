@@ -7,14 +7,29 @@ import org.junit.Test
 
 class HomeArtTest {
 
+    private val keys = HomeArt.TILE_KEYS + HomeArt.LIVE_KEYS +
+        listOf("screen", "power_btn", "power_led", "cog", "overflow")
+
+    private val dspTiles = HomeArt.TILE_KEYS.take(5)
+
+    private fun artSize(phone: Boolean) =
+        if (phone) HomeArt.PHONE_IMAGE_WIDTH to HomeArt.PHONE_IMAGE_HEIGHT else HomeArt.IMAGE_WIDTH to HomeArt.IMAGE_HEIGHT
+
+    private fun inside(inner: HomeArt.Frac, outer: HomeArt.Frac) =
+        inner.x >= outer.x && inner.y >= outer.y &&
+            inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h
+
+    private fun overlaps(a: HomeArt.Frac, b: HomeArt.Frac) =
+        a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
     @Test
     fun everyLiveElementHasARect() {
-        val keys = listOf(
-            "tile_peq", "tile_gains", "tile_xovers", "tile_compressor", "tile_allpass",
-            "tile_settings", "tile_more", "live_strip",
-            "power_btn", "power_led", "cog", "overflow", "box_left", "box_centre", "box_right",
-        )
         keys.forEach { assertNotNull("missing rect for $it", HomeArt.frac(it)) }
+    }
+
+    @Test
+    fun everyLiveElementHasAPhoneRect() {
+        keys.forEach { assertNotNull("missing phone rect for $it", HomeArt.frac(it, phone = true)) }
     }
 
     @Test
@@ -40,16 +55,6 @@ class HomeArtTest {
     }
 
     @Test
-    fun everyLiveElementHasAPhoneRect() {
-        val keys = listOf(
-            "tile_peq", "tile_gains", "tile_xovers", "tile_compressor", "tile_allpass",
-            "tile_settings", "tile_more", "live_strip",
-            "power_btn", "power_led", "cog", "overflow", "box_left", "box_centre", "box_right",
-        )
-        keys.forEach { assertNotNull("missing phone rect for $it", HomeArt.frac(it, phone = true)) }
-    }
-
-    @Test
     fun phoneArtMapsStraightAcrossAtItsNativeSize() {
         // The 2340x1080 phone art is the phone's own size, so fractions map straight across.
         val px = HomeArt.map(
@@ -63,94 +68,58 @@ class HomeArtTest {
     }
 
     @Test
-    fun headUnitTilesAreThePlacerLayout() {
-        // home_layout_v5.json from REW/_UI/home_layout_placer_v5.html.
-        val a = HomeArt.frac("tile_peq")!!
-        assertEquals(0.147f, a.x, 0f)
-        assertEquals(0.7579f, a.y, 0f)
-    }
-
-    @Test
-    fun liveStripColumnsSitOverTheirTiles() {
-        val centers = HomeArt.liveColumnCenters()
-        assertEquals(HomeArt.TILE_KEYS.size, centers.size)
-        val strip = HomeArt.frac("live_strip")!!
-        HomeArt.TILE_KEYS.forEachIndexed { i, key ->
-            val t = HomeArt.frac(key)!!
-            assertEquals(t.x + t.w / 2f, strip.x + centers[i] * strip.w, 1e-5f)
-        }
-    }
-
-    @Test
-    fun powerButtonRectIsTheButtonAndItsGlowAtHeadUnitSize() {
-        // power_btn is the button plus its whole glow (x 40..218, y 595..781 of the 2340x878 art
-        // space); PowerHotspot draws the button within it.
-        val px = HomeArt.map(HomeArt.frac("power_btn")!!, 2340, 878)
-        assertEquals(40, px.left)
-        assertEquals(595, px.top)
-        assertEquals(218, px.right)
-        assertEquals(781, px.bottom)
-    }
-
-    @Test
-    fun phonePowerButtonRectIsTheButtonAndItsGlowAtArtSize() {
-        // power_btn is the button plus its whole glow (x 37..215, y 702..888 of the 2340x1080 phone
-        // art space); PowerHotspot draws the button within it.
-        val px = HomeArt.map(
-            HomeArt.frac("power_btn", phone = true)!!, 2340, 1080,
-            HomeArt.PHONE_IMAGE_WIDTH, HomeArt.PHONE_IMAGE_HEIGHT,
-        )
-        assertEquals(37, px.left)
-        assertEquals(702, px.top)
-        assertEquals(215, px.right)
-        assertEquals(888, px.bottom)
-    }
-
-    private val chromeKeys = listOf("screen_left", "screen_centre", "screen_right", "screen_bottom", "knob")
-
-    @Test
-    fun everyChromeRectResolvesForBothArts() {
-        chromeKeys.forEach {
-            assertNotNull("missing head unit rect for $it", HomeArt.frac(it))
-            assertNotNull("missing phone rect for $it", HomeArt.frac(it, phone = true))
-        }
-    }
-
-    @Test
-    fun eachLiveBoxSitsInsideItsScreen() {
+    fun tilesAndLivePanelSitInsideTheScreen() {
         for (phone in listOf(false, true)) {
-            for ((box, screen) in listOf("box_left" to "screen_left", "box_centre" to "screen_centre", "box_right" to "screen_right")) {
-                val b = HomeArt.frac(box, phone)!!
-                val sc = HomeArt.frac(screen, phone)!!
-                assertTrue("$box escapes $screen (phone=$phone)", b.x >= sc.x && b.y >= sc.y && b.x + b.w <= sc.x + sc.w && b.y + b.h <= sc.y + sc.h)
-            }
-            val strip = HomeArt.frac("live_strip", phone)!!
-            val bottom = HomeArt.frac("screen_bottom", phone)!!
-            assertTrue("live strip escapes the bottom screen (phone=$phone)", strip.x >= bottom.x && strip.x + strip.w <= bottom.x + bottom.w && strip.y >= bottom.y && strip.y + strip.h <= bottom.y + bottom.h)
-            HomeArt.TILE_KEYS.forEach { key ->
-                val t = HomeArt.frac(key, phone)!!
-                assertTrue("$key escapes the bottom screen (phone=$phone)", t.x >= bottom.x && t.x + t.w <= bottom.x + bottom.w && t.y >= bottom.y && t.y + t.h <= bottom.y + bottom.h)
+            val screen = HomeArt.frac("screen", phone)!!
+            (HomeArt.TILE_KEYS + HomeArt.LIVE_KEYS).forEach { key ->
+                assertTrue("$key escapes the screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, screen))
             }
         }
     }
 
     @Test
-    fun theKnobIsACircleInPixels() {
-        val head = HomeArt.frac("knob")!!
-        assertEquals(head.w * HomeArt.IMAGE_WIDTH, head.h * HomeArt.IMAGE_HEIGHT, 2f)
-        val phone = HomeArt.frac("knob", phone = true)!!
-        assertEquals(phone.w * HomeArt.PHONE_IMAGE_WIDTH, phone.h * HomeArt.PHONE_IMAGE_HEIGHT, 2f)
+    fun nothingOnTheScreenOverlaps() {
+        for (phone in listOf(false, true)) {
+            val all = HomeArt.TILE_KEYS + HomeArt.LIVE_KEYS
+            for (i in all.indices) for (j in i + 1 until all.size) {
+                assertTrue(
+                    "${all[i]} overlaps ${all[j]} (phone=$phone)",
+                    !overlaps(HomeArt.frac(all[i], phone)!!, HomeArt.frac(all[j], phone)!!),
+                )
+            }
+        }
     }
 
     @Test
-    fun theKnobClearsTheBezelAndTheBottomScreen() {
-        // The screen bezel reaches ~7dp in: 0.0055 of the 1280dp head unit, 0.0084 of an ~832dp phone.
-        for ((phone, bezel) in listOf(false to 0.0055f, true to 0.0084f)) {
-            val knob = HomeArt.frac("knob", phone)!!
-            val bottom = HomeArt.frac("screen_bottom", phone)!!
-            assertTrue("knob runs under the bezel (phone=$phone)", knob.x + knob.w <= 1f - bezel)
-            assertTrue("knob overlaps the bottom screen (phone=$phone)", knob.x > bottom.x + bottom.w)
-            assertTrue("knob runs off the bottom (phone=$phone)", knob.y + knob.h <= 1f)
+    fun dspTilesAreSquareAndEvenlyPitched() {
+        for (phone in listOf(false, true)) {
+            val (w, h) = artSize(phone)
+            val tiles = dspTiles.map { HomeArt.frac(it, phone)!! }
+            tiles.forEach { assertEquals("tile not square (phone=$phone)", it.w * w, it.h * h, 1f) }
+            val pitches = tiles.zipWithNext { a, b -> b.x - a.x }
+            pitches.forEach { assertEquals(pitches.first(), it, 1e-4f) }
+            assertTrue(tiles.all { it.y == tiles.first().y })
+        }
+    }
+
+    @Test
+    fun settingsAndMoreEndFlushWithTheLastTile() {
+        for (phone in listOf(false, true)) {
+            val last = HomeArt.frac("tile_allpass", phone)!!
+            val more = HomeArt.frac("tile_more", phone)!!
+            assertEquals(last.x + last.w, more.x + more.w, 1e-3f)
+        }
+    }
+
+    @Test
+    fun powerButtonIsACircleLeftOfTheScreen() {
+        for (phone in listOf(false, true)) {
+            val (w, h) = artSize(phone)
+            val power = HomeArt.frac("power_btn", phone)!!
+            val screen = HomeArt.frac("screen", phone)!!
+            assertEquals("power button not round (phone=$phone)", power.w * w, power.h * h, 1f)
+            assertTrue("power button overlaps the screen (phone=$phone)", power.x + power.w <= screen.x)
+            assertTrue(power.x >= 0f && power.y >= 0f && power.y + power.h <= 1f)
         }
     }
 }

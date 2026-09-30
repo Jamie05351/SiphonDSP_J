@@ -27,16 +27,13 @@ import kotlin.math.max
 import kotlin.random.Random
 
 /**
- * The front page's hardware faceplate, drawn live instead of baked into an image: brushed dark
- * plates, a seam between the two bands, three recessed top screens and one bottom screen, the
- * decorative volume knob, and a slim metal bezel around the whole screen.
+ * The front page's hardware faceplate, drawn live: a brushed dark plate, one recessed black glass
+ * screen, faint dividers between the live panel's blocks, and a slim metal bezel around the whole
+ * display.
  *
  * Everything is placed in the same art space as [HomeArt] (cover-scaled, so it lines up with the
- * live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect), using the
- * `screen_*` and `knob` rects. The live views (graphs, level bars, status strip) sit on the black
- * screens; the seven tiles and the power button are drawn by their own views on top.
- *
- * The volume knob is decoration only: volume is the car's, not the app's.
+ * live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect). The tiles, the
+ * live panel and the power button are drawn by their own views on top.
  */
 @Composable
 fun HomeFaceplate(modifier: Modifier = Modifier) {
@@ -69,7 +66,7 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     val imageH = if (phone) HomeArt.PHONE_IMAGE_HEIGHT else HomeArt.IMAGE_HEIGHT
     val w = size.width
     val h = size.height
-    val scale = max(w / imageW, h / imageH) // art px -> view px (cover)
+    val unit = max(w / imageW, h / imageH) // one art pixel in view pixels (cover)
     fun rect(key: String): Pair<Offset, Size> {
         val px = HomeArt.map(HomeArt.frac(key, phone)!!, w.toInt(), h.toInt(), imageW, imageH)
         return Offset(px.left.toFloat(), px.top.toFloat()) to Size((px.right - px.left).toFloat(), (px.bottom - px.top).toFloat())
@@ -77,38 +74,35 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
 
     val corner = 12.dp.toPx()
     val bezel = 4.dp.toPx()
-    val unit = scale // one art pixel in view pixels
 
     // The real screen corners are square, so anything outside the rounded bezel stays black.
     drawRect(Color.Black)
 
-    // Plates.
+    // Plate.
     drawRoundRect(
         brush = Brush.verticalGradient(listOf(Color(0xFF2A2A2C), Color(0xFF0E0E0F))),
         cornerRadius = CornerRadius(corner),
     )
     drawRoundRect(brush = streaks, alpha = 0.55f, cornerRadius = CornerRadius(corner))
 
-    // Seam between the top band and the bottom band.
-    val top = rect("screen_left")
-    val bottom = rect("screen_bottom")
-    val seamY = ((top.first.y + top.second.height) + bottom.first.y) / 2f
-    drawLine(Color.Black.copy(alpha = 0.85f), Offset(0f, seamY), Offset(w, seamY), strokeWidth = 3f * unit)
-    drawLine(Color.White.copy(alpha = 0.14f), Offset(0f, seamY + 3f * unit), Offset(w, seamY + 3f * unit), strokeWidth = 1.5f * unit)
+    // The one screen.
+    val (screenAt, screenSize) = rect("screen")
+    drawScreen(screenAt, screenSize, unit)
 
-    // Screens.
-    for (key in listOf("screen_left", "screen_centre", "screen_right", "screen_bottom")) {
-        val (at, extent) = rect(key)
-        drawScreen(at, extent, unit)
+    // Faint dividers between the live panel's blocks, inset from their top and bottom.
+    val blocks = HomeArt.LIVE_KEYS.map { rect(it) }
+    blocks.zipWithNext { (leftAt, leftSize), (rightAt, _) ->
+        val x = (leftAt.x + leftSize.width + rightAt.x) / 2f
+        val inset = leftSize.height * 0.1f
+        drawLine(
+            Color.White.copy(alpha = 0.12f),
+            Offset(x, leftAt.y + inset),
+            Offset(x, leftAt.y + leftSize.height - inset),
+            strokeWidth = 2f * unit,
+        )
     }
 
-    // Decorative volume knob (the car controls volume).
-    val (knobAt, knobSize) = rect("knob")
-    val radius = knobSize.width / 2f
-    val centre = Offset(knobAt.x + radius, knobAt.y + knobSize.height / 2f)
-    drawKnob(KnobBrushes(radius, centre), fraction = 0.55f, accent = Color(0xFF2110F7))
-
-    // Slim metal bezel around the whole screen.
+    // Slim metal bezel around the whole display.
     drawBezelRing(0f, 0f, w, h, corner, bezel)
 }
 
