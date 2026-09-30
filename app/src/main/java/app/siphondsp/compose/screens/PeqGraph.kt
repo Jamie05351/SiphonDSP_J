@@ -800,6 +800,18 @@ private fun drawPhaseCurves(nc: Canvas, ctx: PeqDrawContext) {
 private fun primaryChannel(ctx: PeqDrawContext): Int =
     if (ctx.channelDisplay == PeqChannelDisplay.RIGHT) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal
 
+/**
+ * Which channel's curve [band] sits on: its own for an L-only or R-only filter, the primary one for
+ * L+R. Null when the display hides the only channel it applies to (an L-only filter while showing
+ * R only, or the reverse), so it isn't drawn on a curve it doesn't touch.
+ */
+private fun channelFor(band: ParametricEqBand, display: PeqChannelDisplay): Int? = when (band.channel) {
+    ParametricEqChannel.LEFT -> if (display == PeqChannelDisplay.RIGHT) null else BmwOutputChannel.LEFT.ordinal
+    ParametricEqChannel.RIGHT -> if (display == PeqChannelDisplay.LEFT) null else BmwOutputChannel.RIGHT.ordinal
+    ParametricEqChannel.LEFT_RIGHT ->
+        if (display == PeqChannelDisplay.RIGHT) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal
+}
+
 /** [values] (evenly spaced across the plot's log-frequency axis) as a path across the plot. */
 private fun curvePath(g: PeqPlotGeometry, values: DoubleArray, into: Path = Path()): Path {
     into.rewind()
@@ -967,14 +979,16 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     if (bands.isEmpty()) return
     val g = ctx.geometry
     val m = ctx.model
-    val reference = bankCurves(ctx.curves, ctx.activeBank)[primaryChannel(ctx)]
-    if (reference.size != SYSTEM_POINT_COUNT) return
+    val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val fill = ctx.glass.filterShapePaint
     val edge = ctx.glass.filterEdgePaint
     val shape = Path()
     val without = Path()
     val offset = ctx.bankNumberOffset(ctx.activeBank)
     bands.forEachIndexed { index, band ->
+        val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
+        val reference = perChannel[channel]
+        if (reference.size != SYSTEM_POINT_COUNT) return@forEachIndexed
         m.bandCascade.clear()
         m.bandCascade.addPeqBand(band, ctx.sampleRate)
         for (i in 0 until SYSTEM_POINT_COUNT) {
@@ -1142,7 +1156,7 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
     val p = ctx.paints
     val gl = ctx.glass
     val d = ctx.density
-    val reference = bankCurves(ctx.curves, ctx.activeBank)[primaryChannel(ctx)]
+    val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val numberOffset = ctx.bankNumberOffset(ctx.activeBank)
     val dotAlpha = ctx.focus.coerceIn(0f, 1f)
     fun withAlpha(a: Int) = scaleAlpha(a, dotAlpha)
@@ -1150,9 +1164,10 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
         // §3 glass treatment: radial "lit from above" fill, real blurred glow when highlighted,
         // crisp ring + border, a top-left highlight arc, the R-channel dark ring and a
         // luminance-contrasted number.
+        val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
         val color = filterColor(numberOffset + index)
         val x = g.xForFrequency(band.frequency)
-        val y = g.yForGain(curveDbAt(reference, band.frequency, ctx.maxFrequency))
+        val y = g.yForGain(curveDbAt(perChannel[channel], band.frequency, ctx.maxFrequency))
         val highlighted = band.uuid == ctx.selectedId ||
             band.uuid == ctx.calloutBandId ||
             band.uuid == ctx.highlightId
@@ -1313,14 +1328,16 @@ private fun hitTestFocusedBank(
         BmwPeqBank.MID -> mid to full.size + low.size
         BmwPeqBank.HIGH -> high to full.size + low.size + mid.size
     }
-    val channel = if (channelDisplay == PeqChannelDisplay.RIGHT) BmwOutputChannel.RIGHT.ordinal else BmwOutputChannel.LEFT.ordinal
-    val reference = bankCurves(curves, bank)[channel]
+    // Mirrors drawFocusedNodes: a silent High band (3-way off) draws no nodes, so none can be hit.
+    if (bank == BmwPeqBank.HIGH && !curves.highBranchActive) return null
+    val perChannel = bankCurves(curves, bank)
     val radius = NODE_TOUCH_RADIUS_DP * density
     var best: NodeHit? = null
     var bestDistance = Float.MAX_VALUE
     bands.forEachIndexed { index, band ->
+        val channel = channelFor(band, channelDisplay) ?: return@forEachIndexed
         val x = geometry.xForFrequency(band.frequency)
-        val y = geometry.yForGain(curveDbAt(reference, band.frequency, maxFrequency))
+        val y = geometry.yForGain(curveDbAt(perChannel[channel], band.frequency, maxFrequency))
         val distance = hypot(tap.x - x, tap.y - y)
         if (distance <= radius && distance < bestDistance) {
             bestDistance = distance
@@ -1540,7 +1557,8 @@ private class PeqResponseModel {
     /**
      * Fits the gain window to what's drawn, so the curves use the plot's height instead of sitting
      * in the bottom of a fixed -24..+12: the top is the first 6 dB line at least 3 dB above the
-     * highest point of the full curve or any bank's curve; the window is 24 dB tall, or 36 dB when
+     * highest point of the full curve or any bank's curve (uncapped, so a big stacked boost still
+     * shows its real height); the window is 24 dB tall, or 36 dB when
      * the full curve dips further than that (ignoring the rolled-off ends below 40 Hz / above
      * 16 kHz).
      */
@@ -1559,7 +1577,7 @@ private class PeqResponseModel {
             }
         }
         if (!high.isFinite() || !low.isFinite()) return
-        val top = (ceil((high + 3.0) / 6.0) * 6.0).coerceIn(-12.0, 24.0)
+        val top = ceil((high + 3.0) / 6.0) * 6.0
         val span = if (top - low <= 22.0) 24.0 else 36.0
         axisTop = top
         axisBottom = top - span
