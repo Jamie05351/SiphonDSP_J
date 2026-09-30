@@ -19,15 +19,16 @@ import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
+import app.siphondsp.compose.screens.SpeakerAlignScreen
 import kotlinx.coroutines.launch
 
 /**
- * Dedicated Gains & Delay workspace. Swipes between three pages, all Compose:
- * - [GainsDelayScreen] -- one interactive speaker map for all three crossover bands (High / Mid /
- *   Low tabs, or tap a driver): seat position, measured path distances and the geometric
- *   alignment they imply, plus that band's Left/Right Delay, Polarity, Gain and Stage Alignment
- *   and the global stereo link. The car is drawn live, so the page uses the destination's plain
- *   backdrop.
+ * Dedicated Gains & Delay workspace. Swipes between four pages, all Compose:
+ * - [GainsDelayScreen] -- the tuning controls for one crossover band at a time (High / Mid / Low
+ *   tabs): Left/Right Delay, Gain, Polarity and Stage Alignment, and the global stereo link.
+ * - [SpeakerAlignScreen] -- time-alignment setup: the live car map, the seat target, all six
+ *   drivers' measured path distances and the alignment they imply, and "Apply to delays". Split
+ *   off the Delay page, which was too cramped with both on it.
  * - [HeadroomOutputScreen] -- Headroom, the post-gain L/R sliders and the master limiter
  *   (enable + threshold + a live GR meter).
  * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus), moved here
@@ -56,8 +57,8 @@ class GainLimiterFragment : Fragment() {
     }
 
     companion object {
-        /** Delay (all three bands), Output, then Bus limiters; the finder's three segments map 1:1. */
-        const val PAGE_COUNT = 3
+        /** Delay, Align, Output, then Bus limiters; the finder's four segments map 1:1. */
+        const val PAGE_COUNT = 4
     }
 }
 
@@ -66,23 +67,24 @@ private fun GainLimiterPager(pagerState: PagerState) {
     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
         when (page) {
             0 -> GainsDelayScreen()
-            1 -> HeadroomOutputScreen()
+            1 -> SpeakerAlignScreen()
+            2 -> HeadroomOutputScreen()
             else -> CompressorDriverPage()
         }
     }
 }
 
 /**
- * Head unit's DELAY | GAINS | LIMITERS finder for this pager: DELAY is the interactive speaker map,
- * GAINS the Output page and LIMITERS the bus limiters.
+ * Head unit's DELAY | ALIGN | GAINS | LIMITERS finder for this pager: DELAY the band controls,
+ * ALIGN the speaker map and time alignment, GAINS the Output page and LIMITERS the bus limiters.
  */
 @Composable
 fun GainLimiterPageFinder(pagerState: PagerState) {
     val scope = rememberCoroutineScope()
     ArtPagerFinder(
         pagerState = pagerState,
-        labels = listOf("DELAY", "GAINS", "LIMITERS"),
-        frac = WorkspaceArt.finder3,
+        labels = listOf("DELAY", "ALIGN", "GAINS", "LIMITERS"),
+        frac = WorkspaceArt.finder4,
         selected = pagerState.currentPage,
         onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
     )
