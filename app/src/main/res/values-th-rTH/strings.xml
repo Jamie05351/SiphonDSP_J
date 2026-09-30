@@ -130,8 +130,6 @@
     <string name="onboarding_perm_cast_caption">คุณต้องให้สิทธิ์แอปนี้อย่างชัดแจ้งในการบันทึกเนื้อหาเสียงทุกครั้งที่เปิดตัว</string>
     <string name="onboarding_perm_missing_title">ไม่ได้รับสิทธิ์รันไทม์ </string>
     <string name="onboarding_perm_missing">โปรดให้สิทธิ์รันไทม์ที่ร้องขอทั้งหมดเพื่อดำเนินการต่อ\nหากคุณปฏิเสธสิทธิ์ซ้ำๆ คุณจะต้องให้สิทธิ์ด้วยตนเองในการตั้งค่าระบบ</string>
-    <string name="onboarding_perm_diag">อนุญาตให้ส่งรายงานการวินิจฉัย</string>
-    <string name="onboarding_perm_diag_caption">แอปนี้ส่งรายงานข้อขัดข้องและข้อมูลการวินิจฉัยอื่นๆ รวมถึงข้อมูลเกี่ยวกับแอปพลิเคชันอื่นๆ ที่ใช้งานอยู่ เพื่อให้ฉันตรวจหาและแก้ไขปัญหาความเข้ากันได้และจุดบกพร่องได้ง่ายขึ้น</string>
     <string name="onboarding_finish_header">SiphonDSP ตั้งค่าแล้ว!</string>
     <string name="onboarding_finish_caption">หากคุณพบปัญหาใด ๆ โปรดไปที่ตัวเลือกการแก้ไขปัญหา</string>
     <string name="limit_session_control_conflict_title">ปิดใช้งานแอปเอฟเฟ็กต์เสียงอื่นๆ</string>
@@ -229,10 +227,6 @@
     <string name="assets">สินทรัพย์</string>
     <string name="about_settings">เกี่ยวกับเรา</string>
     <string name="about_settings_summary">เครดิต การสนับสนุน การอัปเดต</string>
-    <string name="privacy">ความเป็นส่วนตัว</string>
-    <string name="privacy_share_crash_reports">แบ่งปันรายงานข้อขัดข้องของแอปพลิเคชัน</string>
-    <string name="privacy_share_crash_reports_on">ส่งรายงานข้อขัดข้องไปยังผู้พัฒนา</string>
-    <string name="privacy_share_crash_reports_off">อย่าส่งรายงานข้อขัดข้องไปยังผู้พัฒนา</string>
     <string name="credits">เครดิต</string>
     <string name="translators">ผู้แปลภาษา</string>
     <string name="credits_app">แอพ &amp;  การใช้งานแบบไม่มี Root พัฒนาโดย</string>

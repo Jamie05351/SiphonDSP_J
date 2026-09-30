@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">U moet deze app expliciet machtiging verlenen om audio inhoud op te nemen elke keer wanneer deze wordt gestart.</string>
     <string name="onboarding_perm_missing_title">Runtime machtigingen niet verleend</string>
     <string name="onboarding_perm_missing">Gelieve alle gevraagde runtime machtigingen te verlenen om door te gaan.\nAls u herhaaldelijk de machtigingen heeft geweigerd, moet u ze handmatig verlenen in de systeem-instellingen.</string>
-    <string name="onboarding_perm_diag">Versturen van diagnostische rapporten toestaan</string>
-    <string name="onboarding_perm_diag_caption">Deze app verstuurt crashrapporten en andere diagnostische gegevens, waaronder informatie over andere actieve toepassingen, om compatibiliteitsproblemen en bugs makkelijker op te sporen en op te lossen.</string>
     <string name="onboarding_finish_header">SiphonDSP is ingesteld!</string>
     <string name="onboarding_finish_caption">Als u tegen problemen aanloopt, kijk dan alstublieft bij de opties voor probleemoplossing.</string>
     <string name="limit_session_control_conflict_title">Andere audio-effect apps uitschakelen</string>
@@ -228,10 +226,6 @@
     <string name="assets">Assets</string>
     <string name="about_settings">Over</string>
     <string name="about_settings_summary">Credit, ondersteuning, updates</string>
-    <string name="privacy">Privacy</string>
-    <string name="privacy_share_crash_reports">Deel crash rapporten van applicatie</string>
-    <string name="privacy_share_crash_reports_on">Verstuur crash rapporten naar de ontwikkelaar</string>
-    <string name="privacy_share_crash_reports_off">Verstuur crash rapporten niet naar de ontwikkelaar</string>
     <string name="credits">Credits</string>
     <string name="translators">Vertalers</string>
     <string name="credits_app">App &amp; rootless implementatie ontwikkeld door</string>

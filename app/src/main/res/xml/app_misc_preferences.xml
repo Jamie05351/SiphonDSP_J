@@ -51,15 +51,4 @@
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
-    <PreferenceCategory
-        app:title="@string/privacy"
-        app:iconSpaceReserved="false">
-        <app.siphondsp.preference.MaterialSwitchPreference
-            android:key="@string/key_share_crash_reports"
-            android:defaultValue="@bool/default_share_crash_reports"
-            android:title="@string/privacy_share_crash_reports"
-            android:summaryOn="@string/privacy_share_crash_reports_on"
-            android:summaryOff="@string/privacy_share_crash_reports_off"
-            app:iconSpaceReserved="false" />
-    </PreferenceCategory>
 </PreferenceScreen>

@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">이 앱이 실행될 때마다 오디오 콘텐츠를 녹음할 권한을 명시적으로 부여해야 합니다.</string>
     <string name="onboarding_perm_missing_title">런타임 권한이 부여되지 않았습니다</string>
     <string name="onboarding_perm_missing">계속하려면 요청된 모든 런타임 권한을 부여해 주세요.\n권한을 반복적으로 거부한 경우 시스템 설정에서 수동으로 권한을 부여해야 합니다.</string>
-    <string name="onboarding_perm_diag">진단 보고서 전송 허용</string>
-    <string name="onboarding_perm_diag_caption">이 앱은 충돌 보고서와 기타 진단 데이터를 제출하며, 다른 활성화된 애플리케이션에 대한 정보도 포함되어 있어 호환성 문제와 버그를 더 쉽게 감지하고 해결할 수 있도록 돕습니다.</string>
     <string name="onboarding_finish_header">SiphonDSP 설정이 완료되었습니다!</string>
     <string name="onboarding_finish_caption">문제가 발생한 경우, 문제 해결을 참조해 주세요.</string>
     <string name="limit_session_control_conflict_title">다른 오디오 효과 앱 비활성화</string>
@@ -228,10 +226,6 @@
     <string name="assets">에셋</string>
     <string name="about_settings">정보</string>
     <string name="about_settings_summary">크레딧, 지원, 업데이트</string>
-    <string name="privacy">개인 정보 보호</string>
-    <string name="privacy_share_crash_reports">어플리케이션 충돌 보고서 공유</string>
-    <string name="privacy_share_crash_reports_on">개발자에게 충돌 보고서 전송</string>
-    <string name="privacy_share_crash_reports_off">개발자에게 충돌 보고서 전송 안 함</string>
     <string name="credits">크레딧</string>
     <string name="translators">번역가</string>
     <string name="credits_app">앱 &amp; 루트리스 구현 개발</string>

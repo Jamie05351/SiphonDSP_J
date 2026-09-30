@@ -3,7 +3,6 @@ package app.siphondsp.interop
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.StringRes
-import app.siphondsp.flavor.CrashlyticsImpl
 import kotlin.reflect.KClass
 
 class PreferenceCache(val context: Context) {
@@ -36,7 +35,6 @@ class PreferenceCache(val context: Context) {
             }
         }
 
-        CrashlyticsImpl.setCustomKey("dsp_$name", current.toString())
         cache[name] = current as Any
         return current
     }

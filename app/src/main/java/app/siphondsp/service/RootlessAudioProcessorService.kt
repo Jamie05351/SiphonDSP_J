@@ -30,7 +30,6 @@ import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
-import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.interop.JamesDspLocalEngine
 import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.interop.ProcessorMessageHandler
@@ -1422,7 +1421,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 context.startForegroundService(ServiceNotificationHelper.createStartIntent(context, data))
             }
             catch(ex: Exception) {
-                CrashlyticsImpl.recordException(ex)
+                Timber.e(ex, "Failed to start the audio processor service")
             }
         }
 
@@ -1431,7 +1430,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 context.startForegroundService(ServiceNotificationHelper.createStopIntent(context))
             }
             catch(ex: Exception) {
-                CrashlyticsImpl.recordException(ex)
+                Timber.e(ex, "Failed to stop the audio processor service")
             }
         }
     }

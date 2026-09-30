@@ -22,7 +22,6 @@ import com.pluto.plugins.rooms.db.PlutoRoomsDatabasePlugin
 import fr.bipi.treessence.file.FileLoggerTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.flavor.UpdateManager
 import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
@@ -109,8 +108,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             Timber.plant(PlutoTimberTree())
             enableDebugTools()
         }
-        if(!BuildConfig.FOSS_ONLY)
-            Timber.plant(CrashReportingTree())
 
         // Clean up
         Cache.cleanup(this)
@@ -153,31 +150,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             androidLogger()
             androidContext(this@MainApplication)
             modules(appModule)
-        }
-
-        if(!BuildConfig.FOSS_ONLY) {
-            // Soft-disable crashlytics in debug mode by default on each launch
-            if (BuildConfig.DEBUG) {
-                prefs.set(R.string.key_share_crash_reports, false)
-            }
-
-            val crashlytics = prefs.get<Boolean>(R.string.key_share_crash_reports)
-            Timber.d("Crashlytics enabled? $crashlytics")
-            CrashlyticsImpl.setCollectionEnabled(crashlytics)
-
-            CrashlyticsImpl.setCustomKey("buildType", BuildConfig.BUILD_TYPE)
-            CrashlyticsImpl.setCustomKey("buildCommit", BuildConfig.COMMIT_SHA)
-            CrashlyticsImpl.setCustomKey("flavor", "rootlessFull")
-            try {
-                CrashlyticsImpl.setCustomKey(
-                    "language",
-                    resources.configuration.locales.get(0).language
-                )
-            }
-            catch (ex: Exception) {
-                // Just in case the locale array is empty
-                Timber.e(ex)
-            }
         }
 
         /**
@@ -225,7 +197,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
     override fun onLowMemory() {
         Timber.w("onLowMemory: Running low on memory")
-        CrashlyticsImpl.setCustomKey("last_low_memory_event", SimpleDateFormat("yyyyMMdd HHmmss z", Locale.US).format(Date()))
         super.onLowMemory()
     }
 
@@ -285,27 +256,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
         PlutoRoomsDBWatcher.watch("blocked_apps.db", AppBlocklistDatabase::class.java)
     }
-
-    /** A tree which logs important information for crash reporting.  */
-    private class CrashReportingTree : DebugTree() {
-        private fun priorityAsString(priority: Int): String {
-            return when(priority){
-                Log.VERBOSE -> "V"
-                Log.DEBUG -> "D"
-                Log.INFO -> "I"
-                Log.WARN -> "W"
-                Log.ERROR -> "E"
-                Log.ASSERT -> "A"
-                else -> "?"
-            }
-        }
-
-        override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-            CrashlyticsImpl.log("[${priorityAsString(priority)}] ${tag ?: "???"}: $message")
-            t?.takeIf { priority >= Log.WARN }?.let(CrashlyticsImpl::recordException)
-        }
-    }
-
 
     companion object {
         lateinit var instance: MainApplication

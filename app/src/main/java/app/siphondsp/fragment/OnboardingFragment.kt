@@ -383,14 +383,6 @@ class OnboardingFragment : Fragment() {
             if(!SdkCheck.isTiramisu) {
                 pageBinding.findViewById<View>(R.id.onboarding_notification_permission).visibility = View.GONE
             }
-            pageBinding.findViewById<Card>(R.id.privacy_card).apply {
-                isVisible = !BuildConfig.FOSS_ONLY
-                checkboxIsChecked = prefsApp.get(R.string.key_share_crash_reports)
-                setOnCheckChangedListener {
-                    Timber.d("Should share crash reports? $it")
-                    prefsApp.set(R.string.key_share_crash_reports, it)
-                }
-            }
         }
 
         // Hide next button because user should continue by choosing a setup method

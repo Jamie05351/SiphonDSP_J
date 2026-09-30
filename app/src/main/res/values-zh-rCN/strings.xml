@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">您需要明确授予此应用程序每次启动时录制音频内容的权限。</string>
     <string name="onboarding_perm_missing_title">未授予运行时权限</string>
     <string name="onboarding_perm_missing">请授予所有请求的运行时权限以继续。\n如果您一再拒绝权限，您需要在系统设置中手动授予这些权限。</string>
-    <string name="onboarding_perm_diag">允许发送诊断报告</string>
-    <string name="onboarding_perm_diag_caption">提交此应用程序崩溃报告和其他诊断数据，包括有关其他活动应用程序的信息，使我能够更轻松地检测和解决兼容性问题和错误。</string>
     <string name="onboarding_finish_header">SiphonDSP 已设置完毕！</string>
     <string name="onboarding_finish_caption">如果您遇到任何问题，请访问故障排查选项。</string>
     <string name="limit_session_control_conflict_title">禁用其它音频效果应用</string>
@@ -228,10 +226,6 @@
     <string name="assets">资源</string>
     <string name="about_settings">关于</string>
     <string name="about_settings_summary">鸣谢、支持与更新</string>
-    <string name="privacy">隐私</string>
-    <string name="privacy_share_crash_reports">分享应用崩溃报告</string>
-    <string name="privacy_share_crash_reports_on">将崩溃报告发送给开发者</string>
-    <string name="privacy_share_crash_reports_off">不要向开发人员发送崩溃报告</string>
     <string name="credits">鸣谢</string>
     <string name="translators">翻译人员</string>
     <string name="credits_app">应用程序和免 root 执行开发</string>

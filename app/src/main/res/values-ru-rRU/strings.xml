@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Вы должны предоставить данному приложению разрешение на запись аудиоконтента при каждом запуске.</string>
     <string name="onboarding_perm_missing_title">Разрешения на выполнение не предоставлены</string>
     <string name="onboarding_perm_missing">Пожалуйста, предоставьте все запрошенные разрешения на выполнение, чтобы продолжить.\nЕсли вы несколько раз отказали в предоставлении разрешений, вам нужно предоставить их вручную в настройках системы.</string>
-    <string name="onboarding_perm_diag">Разрешить отправку диагностических отчетов</string>
-    <string name="onboarding_perm_diag_caption">Данное приложение отправляет отчеты о сбоях и другие диагностические данные, в том числе информацию о других активных приложениях, чтобы мне было легче обнаруживать и решать проблемы совместимости и ошибки.</string>
     <string name="onboarding_finish_header">SiphonDSP настроен!</string>
     <string name="onboarding_finish_caption">Если у вас возникли какие-либо проблемы, пожалуйста, посетите раздел настроек «Устранение неисправностей».</string>
     <string name="limit_session_control_conflict_title">Отключение других приложений для обработки аудиоэффектов</string>
@@ -228,10 +226,6 @@
     <string name="assets">Ресурсы</string>
     <string name="about_settings">О приложении</string>
     <string name="about_settings_summary">Авторы, поддержка, обновления</string>
-    <string name="privacy">Конфиденциальность</string>
-    <string name="privacy_share_crash_reports">Поделиться информацией о сбоях приложения</string>
-    <string name="privacy_share_crash_reports_on">Отправлять отчеты о сбоях разработчику</string>
-    <string name="privacy_share_crash_reports_off">Не отправлять отчеты о сбоях разработчику</string>
     <string name="credits">Благодарности</string>
     <string name="translators">Авторы переводов</string>
     <string name="credits_app">Приложение и rootless версия</string>

@@ -46,19 +46,6 @@
             android:orientation="vertical">
 
             <app.siphondsp.view.Card
-                android:id="@+id/privacy_card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:titleText="@string/onboarding_perm_diag"
-                app:bodyText="@string/onboarding_perm_diag_caption"
-                app:iconCentered="true"
-                app:iconSrc="@drawable/ic_twotone_privacy_tip_24dp"
-                app:iconTint="?attr/colorOnSurface"
-                app:checkboxVisible="true"
-                app:cardMargin="8dp" />
-
-
-            <app.siphondsp.view.Card
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:titleText="@string/onboarding_perm_microphone_title"

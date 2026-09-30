@@ -28,6 +28,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(SIPHON_NATIVE_FLAGS "${SIPHON_NATIVE_FLAGS} -DDEBUG")
 endif()
 
+# Firebase Crashlytics is gone from the app, so compile its native connector as the stub: LOGx
+# then only writes logcat, instead of formatting every line for a libcrashlytics.so that isn't
+# there.
+set(SIPHON_NATIVE_FLAGS "${SIPHON_NATIVE_FLAGS} -DNO_CRASHLYTICS")
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SIPHON_NATIVE_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SIPHON_NATIVE_FLAGS}")
 

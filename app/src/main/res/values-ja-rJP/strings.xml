@@ -131,8 +131,6 @@
     <string name="onboarding_perm_cast_caption">このアプリが起動するたびに、音声コンテンツを録音する権限を明示的に与える必要があります。</string>
     <string name="onboarding_perm_missing_title">動作に必要な権限が付与されていません</string>
     <string name="onboarding_perm_missing">続行するには、要求されたすべての実行権限を付与してください。\n権限を繰り返し拒否した場合は、システム設定で手動で許可する必要があります。</string>
-    <string name="onboarding_perm_diag">診断レポートの送信を許可</string>
-    <string name="onboarding_perm_diag_caption">このアプリは、他のアクティブなアプリケーションに関する情報を含むクラッシュレポートやその他の診断データを送信します。互換性の問題やバグを簡単に検出して解決できるようにするためです。</string>
     <string name="onboarding_finish_header">SiphonDSPのセットアップが完了しました!</string>
     <string name="onboarding_finish_caption">問題が発生した場合は、トラブルシューティングを参照してください。</string>
     <string name="limit_session_control_conflict_title">他のオーディオエフェクトアプリの無効化</string>
@@ -230,10 +228,6 @@
     <string name="assets">アセット</string>
     <string name="about_settings">このアプリについて</string>
     <string name="about_settings_summary">クレジット、サポート、更新情報</string>
-    <string name="privacy">プライバシー</string>
-    <string name="privacy_share_crash_reports">クラッシュレポートを共有</string>
-    <string name="privacy_share_crash_reports_on">開発者にクラッシュレポートを送信する</string>
-    <string name="privacy_share_crash_reports_off">開発者にクラッシュレポートを送信しない</string>
     <string name="credits">クレジット</string>
     <string name="translators">翻訳者</string>
     <string name="credits_app">App &amp; rootless implementation developed by</string>

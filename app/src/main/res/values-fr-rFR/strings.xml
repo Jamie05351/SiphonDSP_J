@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">Vous devez accorder l\'autorisation à cette application pour enregistrer du contenu audio chaque fois qu\'elle est lancée.</string>
     <string name="onboarding_perm_missing_title">Autorisations d\'exécution non accordées</string>
     <string name="onboarding_perm_missing">Veuillez accorder toutes les autorisations d\'exécution demandées pour continuer.\nSi vous avez refusé à plusieurs reprises les autorisations, vous devez les accorder manuellement dans les paramètres du système.</string>
-    <string name="onboarding_perm_diag">Autoriser l\'envoi de rapports de diagnostic</string>
-    <string name="onboarding_perm_diag_caption">Cette application soumet des rapports de plantage et d\'autres données de diagnostic, y compris des informations sur d\'autres applications actives, pour me permettre de détecter et de résoudre plus facilement les problèmes de compatibilité et les bugs.</string>
     <string name="onboarding_finish_header">SiphonDSP est configuré!</string>
     <string name="onboarding_finish_caption">Si vous rencontrez des problèmes, veuillez consulter les options de dépannage.</string>
     <string name="limit_session_control_conflict_title">Désactiver les autres applications d\'effet audio</string>
@@ -228,10 +226,6 @@
     <string name="assets">Assets</string>
     <string name="about_settings">À propos</string>
     <string name="about_settings_summary">Crédits, support et mises à jour</string>
-    <string name="privacy">Confidentialité</string>
-    <string name="privacy_share_crash_reports">Partager les rapports de plantage de l\'application</string>
-    <string name="privacy_share_crash_reports_on">Envoyer les rapports de plantage au développeur</string>
-    <string name="privacy_share_crash_reports_off">Ne pas envoyer de rapports de plantage au développeur</string>
     <string name="credits">Crédits</string>
     <string name="translators">Traducteurs</string>
     <string name="credits_app">Implémentation de l\'application &amp; sans root développée par</string>

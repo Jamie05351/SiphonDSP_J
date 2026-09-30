@@ -129,8 +129,6 @@
     <string name="onboarding_perm_cast_caption">每次啟動時，您都會需要的授予此應用程式錄製或投放的權限。</string>
     <string name="onboarding_perm_missing_title">未授予所需權限</string>
     <string name="onboarding_perm_missing">授予全部所需的權限以繼續。\n若您不斷拒絕權存取，將需要手動在設定頁面中啟用。</string>
-    <string name="onboarding_perm_diag">允許傳送統計資料</string>
-    <string name="onboarding_perm_diag_caption">此應用程式會提交崩潰報告和其他診斷資料，包含活躍中的應用程式，以便能檢查錯誤，解決相容性問題。</string>
     <string name="onboarding_finish_header">SiphonDSP 設定完成！</string>
     <string name="onboarding_finish_caption">若遇到任何問題，請見疑難排解選項。</string>
     <string name="limit_session_control_conflict_title">停用其他音效軟體</string>

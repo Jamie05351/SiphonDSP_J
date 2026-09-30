@@ -41,7 +41,6 @@ import app.siphondsp.MainApplication
 import app.siphondsp.R
 import app.siphondsp.databinding.ActivityDspMainBinding
 import app.siphondsp.databinding.ContentMainBinding
-import app.siphondsp.flavor.CrashlyticsImpl
 import app.siphondsp.flavor.UpdateManager
 import app.siphondsp.fragment.DspFragment
 import app.siphondsp.fragment.FileLibraryDialogFragment
@@ -759,7 +758,6 @@ class MainActivity : BaseActivity() {
     }
 
     private fun quitGracefully() {
-        CrashlyticsImpl.sendUnsentReports()
         Timer().schedule(2000){
             this@MainActivity.finishAndRemoveTask()
         }

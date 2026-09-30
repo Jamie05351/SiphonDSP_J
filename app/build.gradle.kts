@@ -1,4 +1,3 @@
-import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import org.gradle.api.plugins.BasePluginExtension
 import java.util.Properties
 
@@ -11,8 +10,6 @@ val keystoreProperties = Properties().apply {
 
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
     id("com.google.devtools.ksp") version AndroidConfig.kspVersion
     id("dev.rikka.tools.refine") version AndroidConfig.rikkaRefineVersion
     id("org.jetbrains.kotlin.plugin.serialization") version AndroidConfig.kotlinVersion
@@ -71,15 +68,8 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-${getCommitCount()}"
-            manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
         }
         getByName("release") {
-            manifestPlaceholders += mapOf("crashlyticsCollectionEnabled" to "true")
-            configure<CrashlyticsExtension> {
-                nativeSymbolUploadEnabled = true
-                mappingFileUploadEnabled = false
-            }
-
             //proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
             isMinifyEnabled = false
             isShrinkResources = false
@@ -97,8 +87,9 @@ android {
 
     // Product flavors removed: only the rootless x full combination ever shipped. The other
     // `version` modes (root, plugin) and the FOSS `fdroid` build are gone; their flavor source
-    // sets folded into src/main (RootShellImpl/UpdateManager from rootless, CrashlyticsImpl from
-    // full). See buildConfigField ROOTLESS/FOSS_ONLY/PLUGIN in defaultConfig above.
+    // sets folded into src/main (RootShellImpl/UpdateManager from rootless). Firebase
+    // (Crashlytics/Analytics) is removed too: this is a private build nobody collected reports
+    // for. See buildConfigField ROOTLESS/FOSS_ONLY/PLUGIN in defaultConfig above.
 
     sourceSets {
         // Use different app icon for non-release builds
@@ -155,15 +146,6 @@ composeCompiler {
     // or stability issues on the head-unit target (Snapdragon 662).
 }
 
-// Hooks to upload native symbols to crashlytics automatically
-afterEvaluate {
-    val uploadRelease = "uploadCrashlyticsSymbolFileRelease"
-    getTasksByName("bundleRelease", false).firstOrNull()?.finalizedBy(uploadRelease)
-    getTasksByName("assembleRelease", false).firstOrNull()?.finalizedBy(uploadRelease)
-    // preview initWith(release) but keeps the release build type name for the symbol upload task.
-    getTasksByName("assemblePreview", false).firstOrNull()?.finalizedBy(uploadRelease)
-}
-
 dependencies {
     // Kotlin extensions
     implementation("org.jetbrains.kotlin:kotlin-reflect:${AndroidConfig.kotlinVersion}")
@@ -205,10 +187,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
 
     // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-crashlytics")
-    implementation("com.google.firebase:firebase-crashlytics-ndk")
 
     // Web API client
     implementation("com.google.code.gson:gson:2.14.0")

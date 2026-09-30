@@ -57,7 +57,6 @@
     <string name="troubleshooting_view_limitations">Tekniset rajoitukset</string>
     <string name="misc_settings">Sekalaista</string>
     <string name="about_settings">Tietoja</string>
-    <string name="privacy">Yksityisyys</string>
     <string name="translators">Kääntäjät</string>
     <string name="credits_project_check_update">Tarkista uudet päivitykset…</string>
     <string name="credits_project_check_update_summary">Lataa ja asenna päivitykset, jos saatavilla</string>
