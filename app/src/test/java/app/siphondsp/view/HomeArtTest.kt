@@ -143,6 +143,19 @@ class HomeArtTest {
     }
 
     @Test
+    fun settingsAndMoreAreAtLeastTheMinimumTouchSize() {
+        // Head unit: 1280x480dp. Phone: a 16:9 1920x1080 phone at 3x is 640x360dp, where fitting
+        // the 2340x1080 art leaves it only 640dp wide -- the smallest common case.
+        for ((phone, size) in listOf(false to (1280 to 480), true to (640 to 360))) {
+            val (aw, ah) = artSize(phone)
+            listOf("tile_settings", "tile_more").forEach { key ->
+                val px = HomeArt.map(HomeArt.frac(key, phone)!!, size.first, size.second, aw, ah)
+                assertTrue("$key under 48dp (phone=$phone)", px.right - px.left >= 48 && px.bottom - px.top >= 48)
+            }
+        }
+    }
+
+    @Test
     fun powerButtonIsACircleLeftOfTheScreen() {
         for (phone in listOf(false, true)) {
             val (w, h) = artSize(phone)

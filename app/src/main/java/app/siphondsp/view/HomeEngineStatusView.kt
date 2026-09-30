@@ -110,16 +110,20 @@ class HomeEngineStatusView @JvmOverloads constructor(
         if (width <= 0 || height <= 0) return
         val pad = 4f * density
         val maxW = width - pad * 2f
-        var y = pad + titlePaint.textSize
-        canvas.drawText("AUDIO ENGINE", pad, y, titlePaint)
+        // 18sp title, 20sp status, 18sp detail. A box too short for that (a small phone) scales
+        // all three down to fit; each line also shrinks on its own if it is too wide.
+        val natural = pad + sp(18f) + 10f * density + sp(20f) + 10f * density + sp(18f) * 1.25f
+        val k = (height / natural).coerceAtMost(1f)
+        var y = pad + sp(18f) * k
+        drawFitted(canvas, "AUDIO ENGINE", pad, y, maxW, titlePaint, sp(18f) * k)
 
-        y += 10f * density + statusPaint.textSize
+        y += 10f * density * k + sp(20f) * k
         statusPaint.color = statusColor
         val statusText = "● $status"
-        drawFitted(canvas, statusText, pad, y, maxW, statusPaint, sp(20f))
+        drawFitted(canvas, statusText, pad, y, maxW, statusPaint, sp(20f) * k)
 
-        y += 10f * density + detailPaint.textSize
-        drawFitted(canvas, detail, pad, y, maxW, detailPaint, sp(18f))
+        y += 10f * density * k + sp(18f) * k
+        drawFitted(canvas, detail, pad, y, maxW, detailPaint, sp(18f) * k)
     }
 
     /** Draws [text] at [fullPx], shrinking it only if it would overrun [maxW]. */
@@ -137,7 +141,8 @@ class HomeEngineStatusView @JvmOverloads constructor(
         const val POLL_MS = 1_000L
         val TITLE_COLOR = Color.WHITE
         val VALUE_COLOR = Color.rgb(230, 231, 232)
-        val IDLE_COLOR = Color.rgb(132, 140, 150)
+        // White, not grey: the front page's top screen has no grey text. Running is green, off red.
+        val IDLE_COLOR = Color.WHITE
         val WARN_COLOR = Color.rgb(0xF2, 0xB3, 0x3D)
         val OFF_COLOR = BmwDashboardSkin.M_RED
     }

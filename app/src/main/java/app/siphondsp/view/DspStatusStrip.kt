@@ -51,8 +51,9 @@ class DspStatusStrip @JvmOverloads constructor(
 
     /**
      * Front-page mode (`app:stacked="true"`): the live panel's GLOBAL STAGES block. A title, then
-     * the three stage cells stacked at 16sp, with no separators and no health cell (the panel's
-     * audio-engine block shows that).
+     * the three stage cells stacked at 18sp, one line each, with no separators and no health cell
+     * (the panel's audio-engine block shows that). A block too small for 18sp shrinks to fit (see
+     * [fitStacked]).
      */
     private val stacked: Boolean = context.obtainStyledAttributes(attrs, R.styleable.DspStatusStrip).let {
         try {
@@ -125,6 +126,7 @@ class DspStatusStrip @JvmOverloads constructor(
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 includeFontPadding = false
                 setTextColor(Color.WHITE)
+                isSingleLine = true
                 setPadding(dp(4), dp(4), dp(4), dp(6))
             })
         }
@@ -136,6 +138,7 @@ class DspStatusStrip @JvmOverloads constructor(
                 includeFontPadding = false
                 // Stacked: 2dp above/below keeps title + three 18sp rows inside ~110dp.
                 if (stacked) setPadding(dp(4), dp(2), dp(6), dp(2)) else setPadding(dp(6), dp(4), dp(6), dp(4))
+                if (stacked) isSingleLine = true
                 setOnClickListener { open(segment) }
             }
             segment.view = cell
@@ -275,6 +278,34 @@ class DspStatusStrip @JvmOverloads constructor(
         )
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // Posted: resizing the text requests a layout, which must not happen inside this one.
+        if (stacked && w > 0 && h > 0) post { fitStacked(w, h) }
+    }
+
+    /**
+     * Front-page mode: the title and rows at 18sp, unless the block is too small for that (a small
+     * phone). Then all four shrink together until the title and the widest possible row each fit
+     * on one line and all four fit the height, so nothing wraps or is cut off.
+     */
+    private fun fitStacked(w: Int, h: Int) {
+        val title = getChildAt(0) as TextView
+        val full = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, STACKED_TEXT_SP, resources.displayMetrics)
+        val titlePaint = TextPaint(title.paint).apply { textSize = full }
+        val cellPaint = TextPaint(cells.first().paint).apply { textSize = full }
+        // Horizontal padding: the title's 4 + 4dp, a cell's 4 + 6dp. Vertical: 4 + 6dp, 2 + 2dp.
+        val widest = maxOf(
+            titlePaint.measureText(title.text.toString()) + dp(8),
+            WORST_CASE_CELLS.take(3).maxOf { cellPaint.measureText(it) } + dp(10),
+        )
+        val line = cellPaint.fontMetrics.let { it.descent - it.ascent }
+        val natural = line + dp(10) + cells.size * (line + dp(4))
+        val px = full * minOf(1f, w / widest, h / natural)
+        title.setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
+        cells.forEach { it.setTextSize(TypedValue.COMPLEX_UNIT_PX, px) }
+    }
+
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
     private companion object {
@@ -284,6 +315,7 @@ class DspStatusStrip @JvmOverloads constructor(
         /** Toolbar-mode text: as large as fits, never above MAX (the page tabs' height) or below MIN. */
         const val MAX_TEXT_SP = 18f
         const val MIN_TEXT_SP = 14f
+        const val STACKED_TEXT_SP = 18f
         /** The widest each toolbar cell gets: stages off, a two-digit limiter threshold, and the
          *  longest DspHealthBadge label. */
         val WORST_CASE_CELLS = listOf("Tilt off", "MBC off", "Limiter -12.5 dB", "● DSP recovering")

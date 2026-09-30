@@ -147,15 +147,17 @@ class HomeLevelBars @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // Title, L bar, R bar, gain readout, top-aligned at fixed sizes so the text meets the
-        // 18sp throughout, white, whatever the box height (the split faceplate's top screen: nothing
-        // under 18, no grey text). Needs ~110dp of height, which live_output has on both rect sets.
+        // Title, L bar, R bar, gain readout, top-aligned: 18sp, white (the split faceplate's top
+        // screen: nothing under 18, no grey text). That needs ~110dp of height; a shorter box (a
+        // small phone) scales the whole block down to fit rather than clipping the gain line.
         val pad = 4f * density
-        val titlePx = sp(18f)
-        val valuePx = sp(18f)
-        val rowH = 26f * density
-        val barH = 14f * density
-        val labelW = 22f * density
+        val natural = pad + sp(18f) + 8f * density + 52f * density + 6f * density + sp(18f) * 1.25f
+        val k = (h / natural).coerceAtMost(1f)
+        val titlePx = sp(18f) * k
+        val valuePx = sp(18f) * k
+        val rowH = 26f * density * k
+        val barH = 14f * density * k
+        val labelW = 22f * density * k
         val barLeft = pad + labelW
         val barRight = w - pad
 
@@ -163,13 +165,13 @@ class HomeLevelBars @JvmOverloads constructor(
         textPaint.color = TITLE_COLOR
         var y = pad + titlePx
         canvas.drawText("OUTPUT", pad, y, textPaint)
-        y += 8f * density
+        y += 8f * density * k
 
         textPaint.textSize = valuePx
         textPaint.color = LABEL_COLOR
         drawBar(canvas, "L", leftMeter, pad, y, barLeft, barRight, barH, rowH)
         drawBar(canvas, "R", rightMeter, pad, y + rowH, barLeft, barRight, barH, rowH)
-        y += rowH * 2f + 6f * density + valuePx
+        y += rowH * 2f + 6f * density * k + valuePx
 
         val gainText = "Post gain  L ${formatDb(gainL)}   R ${formatDb(gainR)} dB"
         // Shrink to fit if the gain values are long (e.g. "-12.5"), never clip.

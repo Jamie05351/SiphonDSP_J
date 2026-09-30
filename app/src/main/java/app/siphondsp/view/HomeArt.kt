@@ -71,9 +71,10 @@ object HomeArt {
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
     )
 
-    // Phone (2340x1080): the same columns and element sizes in art pixels. The taller art gives the
-    // top screen a bigger share (40 % of the screen height, not a third): a phone's art space is
-    // only ~390dp tall, and the live panel's 18sp text needs ~110dp.
+    // Phone (2340x1080): the same DSP tile columns. The taller art gives the top screen a bigger
+    // share (40 % of the screen height, not a third) for the live panel, whose text shrinks to fit
+    // if the box is still too short. Settings and More are bigger than the head unit's, so they stay
+    // at least 48dp even when a 16:9 phone fits the art to only ~640dp wide.
     private val phoneRects = mapOf(
         "screen_top" to Frac(0.1141f, 0.0602f, 0.8484f, 0.3435f),
         "screen_bottom" to Frac(0.1141f, 0.4241f, 0.8484f, 0.5157f),
@@ -82,11 +83,11 @@ object HomeArt {
         "tile_xovers" to Frac(0.4622f, 0.5173f, 0.1520f, 0.3293f),
         "tile_compressor" to Frac(0.6288f, 0.5173f, 0.1520f, 0.3293f),
         "tile_allpass" to Frac(0.7954f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_settings" to Frac(0.1290f, 0.1739f, 0.0536f, 0.1161f),
-        "tile_more" to Frac(0.8938f, 0.1739f, 0.0536f, 0.1161f),
-        "live_output" to Frac(0.2013f, 0.0819f, 0.2813f, 0.3000f),
-        "live_engine" to Frac(0.5266f, 0.0819f, 0.1484f, 0.3000f),
-        "live_stages" to Frac(0.7191f, 0.0819f, 0.1563f, 0.3000f),
+        "tile_settings" to Frac(0.1290f, 0.1496f, 0.0760f, 0.1647f),
+        "tile_more" to Frac(0.8714f, 0.1496f, 0.0760f, 0.1647f),
+        "live_output" to Frac(0.2180f, 0.0819f, 0.2700f, 0.3000f),
+        "live_engine" to Frac(0.5060f, 0.0819f, 0.1600f, 0.3000f),
+        "live_stages" to Frac(0.6840f, 0.0819f, 0.1744f, 0.3000f),
         "power_btn" to Frac(0.0096f, 0.3942f, 0.0977f, 0.2117f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
