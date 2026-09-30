@@ -1,8 +1,5 @@
 package app.siphondsp.compose.controls
 
-import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
-import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -13,18 +10,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import app.siphondsp.view.HomeArt
 import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.min
-import kotlin.random.Random
 
 /**
  * The front page's hardware faceplate, drawn live: a brushed dark plate with two black glass screens
@@ -43,25 +35,6 @@ fun HomeFaceplate(modifier: Modifier = Modifier) {
     Canvas(modifier.fillMaxSize()) { drawFaceplate(phone, streaks) }
 }
 
-/** Horizontal machining streaks, generated once from a fixed seed so it never shimmers or changes. */
-private fun brushedMetalBrush(): ShaderBrush {
-    val bitmap = Bitmap.createBitmap(256, 128, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-    val paint = Paint()
-    val random = Random(20260929)
-    repeat(140) {
-        val light = random.nextBoolean()
-        paint.color = android.graphics.Color.argb(
-            (10 + random.nextInt(40)),
-            if (light) 255 else 0, if (light) 255 else 0, if (light) 255 else 0,
-        )
-        val y = random.nextInt(128).toFloat()
-        val x = random.nextInt(256).toFloat()
-        canvas.drawRect(x, y, x + 40f + random.nextInt(216), y + 1f, paint)
-    }
-    return ShaderBrush(ImageShader(bitmap.asImageBitmap(), TileMode.Repeated, TileMode.Repeated))
-}
-
 private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     val imageW = if (phone) HomeArt.PHONE_IMAGE_WIDTH else HomeArt.IMAGE_WIDTH
     val imageH = if (phone) HomeArt.PHONE_IMAGE_HEIGHT else HomeArt.IMAGE_HEIGHT
@@ -73,18 +46,13 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
         return Offset(px.left.toFloat(), px.top.toFloat()) to Size((px.right - px.left).toFloat(), (px.bottom - px.top).toFloat())
     }
 
-    val corner = 12.dp.toPx()
-    val bezel = 4.dp.toPx()
+    val corner = FaceplateCorner.toPx()
+    val bezel = FaceplateBezel.toPx()
 
     // The real screen corners are square, so anything outside the rounded bezel stays black.
     drawRect(Color.Black)
 
-    // Plate.
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(Color(0xFF2A2A2C), Color(0xFF0E0E0F))),
-        cornerRadius = CornerRadius(corner),
-    )
-    drawRoundRect(brush = streaks, alpha = 0.55f, cornerRadius = CornerRadius(corner))
+    drawPlate(streaks, corner)
 
     // The two screens, each sunk into the plate.
     for (key in HomeArt.SCREEN_KEYS) {
