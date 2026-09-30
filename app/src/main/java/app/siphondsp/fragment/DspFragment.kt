@@ -193,6 +193,7 @@ class DspFragment : Fragment() {
         shortcutsBinding.cardShortcutSettings.setOnClickListener {
             if (openingTile == null) onSettingsClick?.invoke()
         }
+        shortcutsBinding.homeStages.canOpen = { openingTile == null }
         shortcutsBinding.cardShortcutMore.setOnClickListener { anchor ->
             if (openingTile == null) onMoreClick?.invoke(anchor)
         }
@@ -214,9 +215,9 @@ class DspFragment : Fragment() {
      * animations turned off in system settings there is no flash wait, and the platform skips the
      * zoom.
      *
-     * Other tile, Settings and More taps are ignored from the tap until this page stops (see
-     * [openingTile]), not just during the flash, so a quick second tap can't open a second screen
-     * underneath. Leaving the page during the flash (swiping to the settings page, or anything
+     * Other tile, Settings, More and GLOBAL STAGES taps are ignored from the tap until this page
+     * stops (see [openingTile]), not just during the flash, so a quick second tap can't open a
+     * second screen underneath. Leaving the page during the flash (swiping to the settings page, or anything
      * pausing it) cancels the launch, so the DSP screen never opens over where the user went.
      */
     private fun openFromTile(kind: HomeTileKind, tile: View, intent: Intent) {
