@@ -12,11 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -48,13 +44,11 @@ private val SampleBands = listOf(
     PeqBand(6000f, 5f, 1.5f, DspColors.BandGreen),
 )
 
-private val RailCorner = 14.dp
-private val RailBezel = 3.dp
 
 /**
- * The submenu sidebar drawn entirely in Compose: a raised glass housing with its own slim bezel
- * (same metal as the screen and tile bezels) and the five nav tiles from the home screen
- * ([DspTile] + live glyphs). It sits on top of [DspWorkspaceBackdrop].
+ * The submenu sidebar drawn entirely in Compose: a housing made of the front page's faceplate (the
+ * same brushed plate and metal bezel, see FaceplatePlate.kt) holding the five nav tiles from the
+ * home screen ([DspTile] + live glyphs). It sits on top of [DspWorkspaceBackdrop].
  *
  * Size it from the caller: the calibrated head unit rail is about 106dp wide inset 9dp from the
  * screen edge (`Modifier.padding(9.dp).width(106.dp)`, inside the 124dp column), which gives ~78dp tiles at 480dp height.
@@ -69,8 +63,13 @@ fun DspSidebarRail(
     modifier: Modifier = Modifier,
     live: SidebarLive = SidebarLive(),
 ) {
+    val streaks = remember { brushedMetalBrush() }
     BoxWithConstraints(
-        modifier.fillMaxSize().drawBehind { drawRailHousing(RailCorner.toPx(), RailBezel.toPx()) },
+        modifier.fillMaxSize().drawBehind {
+            val corner = FaceplateCorner.toPx()
+            drawPlate(streaks, corner)
+            drawBezelRing(0f, 0f, size.width, size.height, corner, FaceplateBezel.toPx())
+        },
     ) {
         val n = destinations.size.coerceAtLeast(1)
         // Layout ratios from the rail art: tile 1.0, gap 0.12, end padding 0.20 (of tile size).
@@ -123,23 +122,4 @@ private fun DspDestination.accent(): Color = when (this) {
     DspDestination.CROSSOVER_TILT -> DspColors.Xover
     DspDestination.COMPRESSOR -> DspColors.Comp
     DspDestination.ALLPASS -> DspColors.Allpass
-}
-
-/** Raised glass panel: dark gradient body, soft sheen, then the shared slim metal bezel. */
-private fun DrawScope.drawRailHousing(corner: Float, bezel: Float) {
-    val w = size.width
-    val h = size.height
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(Color(0xFF232527), Color(0xFF0B0C0D))),
-        cornerRadius = CornerRadius(corner),
-    )
-    drawRoundRect(
-        brush = Brush.linearGradient(
-            0f to Color.White.copy(alpha = 0.08f), 0.35f to Color.Transparent,
-            start = Offset.Zero, end = Offset(w * 1.2f, h * 0.45f),
-        ),
-        cornerRadius = CornerRadius(corner),
-    )
-    drawInsetShadow(corner, depth = bezel * 2.5f)
-    drawBezelRing(0f, 0f, w, h, corner, bezel)
 }
