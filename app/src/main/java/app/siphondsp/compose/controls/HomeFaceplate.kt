@@ -19,7 +19,7 @@ import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.min
 
 /**
- * The front page's hardware faceplate, drawn live: a brushed dark plate with two black glass screens
+ * The front page's hardware faceplate, drawn live: a grained dark plate with two black glass screens
  * recessed into it (a third of the height on top, two thirds below, a strip of plate between them),
  * faint dividers between the live panel's blocks, and a slim metal bezel around the whole display.
  *
@@ -31,11 +31,11 @@ import kotlin.math.min
 @Composable
 fun HomeFaceplate(modifier: Modifier = Modifier) {
     val phone = !LocalContext.current.isHeadUnitDisplay()
-    val streaks = remember { brushedMetalBrush() }
-    Canvas(modifier.fillMaxSize()) { drawFaceplate(phone, streaks) }
+    val grain = remember { plateGrainBrush() }
+    Canvas(modifier.fillMaxSize()) { drawFaceplate(phone, grain) }
 }
 
-private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
+private fun DrawScope.drawFaceplate(phone: Boolean, grain: ShaderBrush) {
     val imageW = if (phone) HomeArt.PHONE_IMAGE_WIDTH else HomeArt.IMAGE_WIDTH
     val imageH = if (phone) HomeArt.PHONE_IMAGE_HEIGHT else HomeArt.IMAGE_HEIGHT
     val w = size.width
@@ -52,13 +52,26 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     // The real screen corners are square, so anything outside the rounded bezel stays black.
     drawRect(Color.Black)
 
-    drawPlate(streaks, corner)
+    drawPlate(grain, corner)
 
     // The two screens, each sunk into the plate.
     for (key in HomeArt.SCREEN_KEYS) {
         val (at, extent) = rect(key)
         drawRecessedScreen(at, extent, unit)
     }
+
+    // The engraved seam across the strip of plate between the two screens: a dark groove with a
+    // thin highlight under it, so they read as two separate pieces of glass, not one split screen.
+    val (topAt, topSize) = rect("screen_top")
+    val (bottomAt, _) = rect("screen_bottom")
+    val seamY = (topAt.y + topSize.height + bottomAt.y) / 2f
+    drawLine(Color.Black.copy(alpha = 0.85f), Offset(0f, seamY), Offset(w, seamY), strokeWidth = 3f * unit)
+    drawLine(
+        Color.White.copy(alpha = 0.12f),
+        Offset(0f, seamY + 2.5f * unit),
+        Offset(w, seamY + 2.5f * unit),
+        strokeWidth = 1.5f * unit,
+    )
 
     // Faint dividers between the live panel's blocks, inset from their top and bottom.
     val blocks = HomeArt.LIVE_KEYS.map { rect(it) }

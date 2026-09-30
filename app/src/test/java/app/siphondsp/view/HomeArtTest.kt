@@ -99,6 +99,9 @@ class HomeArtTest {
             val top = HomeArt.frac("screen_top", phone)!!
             val bottom = HomeArt.frac("screen_bottom", phone)!!
             assertTrue("screens touch (phone=$phone)", top.y + top.h < bottom.y)
+            // A real strip of plate between them, not a hairline: at least ~4.5 % of the height
+            // (28 px of 480 on the head unit), wider than the two recess wells around it.
+            assertTrue("screens too close (phone=$phone)", bottom.y - (top.y + top.h) >= 0.045f)
             assertTrue("top screen not the smaller (phone=$phone)", top.h < bottom.h)
         }
     }

@@ -47,7 +47,7 @@ private val SampleBands = listOf(
 
 /**
  * The submenu sidebar drawn entirely in Compose: a housing made of the front page's faceplate (the
- * same brushed plate and metal bezel, see FaceplatePlate.kt) holding the five nav tiles from the
+ * same grained plate and metal bezel, see FaceplatePlate.kt) holding the five nav tiles from the
  * home screen ([DspTile] + live glyphs). It sits on top of [DspWorkspaceBackdrop].
  *
  * Size it from the caller: the calibrated head unit rail is about 106dp wide inset 9dp from the
@@ -63,11 +63,11 @@ fun DspSidebarRail(
     modifier: Modifier = Modifier,
     live: SidebarLive = SidebarLive(),
 ) {
-    val streaks = remember { brushedMetalBrush() }
+    val grain = remember { plateGrainBrush() }
     BoxWithConstraints(
         modifier.fillMaxSize().drawBehind {
             val corner = FaceplateCorner.toPx()
-            drawPlate(streaks, corner)
+            drawPlate(grain, corner)
             drawBezelRing(0f, 0f, size.width, size.height, corner, FaceplateBezel.toPx())
         },
     ) {

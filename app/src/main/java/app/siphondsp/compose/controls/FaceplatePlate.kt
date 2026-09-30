@@ -1,8 +1,6 @@
 package app.siphondsp.compose.controls
 
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
-import android.graphics.Paint
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -22,30 +20,44 @@ import kotlin.random.Random
 internal val FaceplateCorner = 12.dp
 internal val FaceplateBezel = 4.dp
 
-/** Horizontal machining streaks, generated once from a fixed seed so it never shimmers or changes. */
-internal fun brushedMetalBrush(): ShaderBrush {
-    val bitmap = Bitmap.createBitmap(256, 128, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-    val paint = Paint()
-    val random = Random(20260929)
-    repeat(140) {
-        val light = random.nextBoolean()
-        paint.color = android.graphics.Color.argb(
-            (10 + random.nextInt(40)),
-            if (light) 255 else 0, if (light) 255 else 0, if (light) 255 else 0,
-        )
-        val y = random.nextInt(128).toFloat()
-        val x = random.nextInt(256).toFloat()
-        canvas.drawRect(x, y, x + 40f + random.nextInt(216), y + 1f, paint)
+/**
+ * The plate's fine grain: a 512x512 tile of per-pixel speckle, generated once from a fixed seed so it
+ * never shimmers or changes. Each pixel is a faint white or black fleck (or nothing), so the grain
+ * adds texture without lightening or darkening the plate. Unlike the old brushed-metal streaks,
+ * random speckle has no shapes for the eye to catch repeating when the tile is laid across a wide
+ * plate, at any screen density.
+ */
+internal fun plateGrainBrush(): ShaderBrush {
+    val size = GrainTileSize
+    val pixels = IntArray(size * size)
+    val random = Random(20261001)
+    for (i in pixels.indices) {
+        val alpha = random.nextInt(GrainMaxAlpha + 1)
+        pixels[i] = if (random.nextBoolean()) {
+            android.graphics.Color.argb(alpha, 255, 255, 255)
+        } else {
+            android.graphics.Color.argb(alpha, 0, 0, 0)
+        }
     }
+    val bitmap = Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
     return ShaderBrush(ImageShader(bitmap.asImageBitmap(), TileMode.Repeated, TileMode.Repeated))
 }
 
-/** The plate over the whole draw area: dark brushed metal, lighter at the top, rounded to [corner]. */
-internal fun DrawScope.drawPlate(streaks: ShaderBrush, corner: Float) {
+/**
+ * The plate over the whole draw area: a smooth dark gradient, lighter at the top, with the fine
+ * [grain] over it, rounded to [corner]. (It was brushed-metal streaks from a small repeated tile,
+ * which showed as a busy repeating pattern, worst on high-density phones.)
+ */
+internal fun DrawScope.drawPlate(grain: ShaderBrush, corner: Float) {
     drawRoundRect(
-        brush = Brush.verticalGradient(listOf(Color(0xFF2A2A2C), Color(0xFF0E0E0F))),
+        brush = Brush.verticalGradient(listOf(PlateTop, PlateBottom)),
         cornerRadius = CornerRadius(corner),
     )
-    drawRoundRect(brush = streaks, alpha = 0.55f, cornerRadius = CornerRadius(corner))
+    drawRoundRect(brush = grain, cornerRadius = CornerRadius(corner))
 }
+
+private const val GrainTileSize = 512
+// Fleck strength: up to ~5% white or black per pixel. Enough to read as a surface, not as noise.
+private const val GrainMaxAlpha = 14
+private val PlateTop = Color(0xFF252527)
+private val PlateBottom = Color(0xFF121213)

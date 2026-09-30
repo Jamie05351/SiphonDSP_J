@@ -44,23 +44,26 @@ object HomeArt {
 
     private fun ph(x: Int, y: Int, w: Int, h: Int) = px(x, y, w, h, PHONE_IMAGE_WIDTH, PHONE_IMAGE_HEIGHT)
 
-    // Head unit, measured off the approved Figma frame (1280x480 px / 1280, / 480). The DSP tiles
+    // Head unit, measured off the approved Figma frame (1280x480 px / 1280, / 480), then the gap
+    // between the screens widened from 12 to 28 px so a real strip of plate (with the faceplate's
+    // engraved seam) separates them, each screen keeping its share and its contents centred. The
+    // DSP tiles
     // are square and evenly pitched; More ends flush with the last DSP tile, Settings starts flush
     // with the first. Settings and More are a third smaller than before so the live panel fits
     // between them.
     private val rects = mapOf(
-        "screen_top" to Frac(0.1141f, 0.0750f, 0.8484f, 0.2604f),
-        "screen_bottom" to Frac(0.1141f, 0.3604f, 0.8484f, 0.5188f),
-        "tile_peq" to Frac(0.1290f, 0.4173f, 0.1520f, 0.4050f),
-        "tile_gains" to Frac(0.2956f, 0.4173f, 0.1520f, 0.4050f),
-        "tile_xovers" to Frac(0.4622f, 0.4173f, 0.1520f, 0.4050f),
-        "tile_compressor" to Frac(0.6288f, 0.4173f, 0.1520f, 0.4050f),
-        "tile_allpass" to Frac(0.7954f, 0.4173f, 0.1520f, 0.4050f),
-        "tile_settings" to Frac(0.1290f, 0.1338f, 0.0536f, 0.1429f),
-        "tile_more" to Frac(0.8938f, 0.1338f, 0.0536f, 0.1429f),
-        "live_output" to Frac(0.2013f, 0.0865f, 0.2813f, 0.2375f),
-        "live_engine" to Frac(0.5266f, 0.0865f, 0.1484f, 0.2375f),
-        "live_stages" to Frac(0.7191f, 0.0865f, 0.1563f, 0.2375f),
+        "screen_top" to Frac(0.1141f, 0.0750f, 0.8484f, 0.2479f),
+        "screen_bottom" to Frac(0.1141f, 0.3813f, 0.8484f, 0.4979f),
+        "tile_peq" to Frac(0.1290f, 0.4277f, 0.1520f, 0.4050f),
+        "tile_gains" to Frac(0.2956f, 0.4277f, 0.1520f, 0.4050f),
+        "tile_xovers" to Frac(0.4622f, 0.4277f, 0.1520f, 0.4050f),
+        "tile_compressor" to Frac(0.6288f, 0.4277f, 0.1520f, 0.4050f),
+        "tile_allpass" to Frac(0.7954f, 0.4277f, 0.1520f, 0.4050f),
+        "tile_settings" to Frac(0.1290f, 0.1275f, 0.0536f, 0.1429f),
+        "tile_more" to Frac(0.8938f, 0.1275f, 0.0536f, 0.1429f),
+        "live_output" to Frac(0.2013f, 0.0802f, 0.2813f, 0.2375f),
+        "live_engine" to Frac(0.5266f, 0.0802f, 0.1484f, 0.2375f),
+        "live_stages" to Frac(0.7191f, 0.0802f, 0.1563f, 0.2375f),
         // The power button and its glow, a circle centred on the left panel. PowerHotspot draws the
         // button, off and on, within this rect.
         "power_btn" to Frac(0.0096f, 0.3871f, 0.0977f, 0.2606f),
@@ -76,18 +79,18 @@ object HomeArt {
     // if the box is still too short. Settings and More are bigger than the head unit's, so they stay
     // at least 48dp even when a 16:9 phone fits the art to only ~640dp wide.
     private val phoneRects = mapOf(
-        "screen_top" to Frac(0.1141f, 0.0602f, 0.8484f, 0.3435f),
-        "screen_bottom" to Frac(0.1141f, 0.4241f, 0.8484f, 0.5157f),
-        "tile_peq" to Frac(0.1290f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_gains" to Frac(0.2956f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_xovers" to Frac(0.4622f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_compressor" to Frac(0.6288f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_allpass" to Frac(0.7954f, 0.5173f, 0.1520f, 0.3293f),
-        "tile_settings" to Frac(0.1290f, 0.1496f, 0.0760f, 0.1647f),
-        "tile_more" to Frac(0.8714f, 0.1496f, 0.0760f, 0.1647f),
-        "live_output" to Frac(0.2180f, 0.0819f, 0.2700f, 0.3000f),
-        "live_engine" to Frac(0.5060f, 0.0819f, 0.1600f, 0.3000f),
-        "live_stages" to Frac(0.6840f, 0.0819f, 0.1744f, 0.3000f),
+        "screen_top" to Frac(0.1141f, 0.0602f, 0.8484f, 0.3318f),
+        "screen_bottom" to Frac(0.1141f, 0.4420f, 0.8484f, 0.4978f),
+        "tile_peq" to Frac(0.1290f, 0.5263f, 0.1520f, 0.3293f),
+        "tile_gains" to Frac(0.2956f, 0.5263f, 0.1520f, 0.3293f),
+        "tile_xovers" to Frac(0.4622f, 0.5263f, 0.1520f, 0.3293f),
+        "tile_compressor" to Frac(0.6288f, 0.5263f, 0.1520f, 0.3293f),
+        "tile_allpass" to Frac(0.7954f, 0.5263f, 0.1520f, 0.3293f),
+        "tile_settings" to Frac(0.1290f, 0.1438f, 0.0760f, 0.1647f),
+        "tile_more" to Frac(0.8714f, 0.1438f, 0.0760f, 0.1647f),
+        "live_output" to Frac(0.2180f, 0.0761f, 0.2700f, 0.3000f),
+        "live_engine" to Frac(0.5060f, 0.0761f, 0.1600f, 0.3000f),
+        "live_stages" to Frac(0.6840f, 0.0761f, 0.1744f, 0.3000f),
         "power_btn" to Frac(0.0096f, 0.3942f, 0.0977f, 0.2117f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
