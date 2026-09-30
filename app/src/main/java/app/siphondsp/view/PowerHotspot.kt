@@ -18,8 +18,9 @@ import kotlin.math.min
  * power logic is unchanged.
  *
  * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the glow):
- * a metal collar around a dark well with a power symbol, grey while off, and with a violet neon ring
- * and halo while on. No baked art is involved. No LED dot (the view is hidden).
+ * a metal collar around a dark well with a power symbol, always lit: a green neon ring and halo
+ * while on, red while off, so the engine state reads at a glance. No baked art is involved. No LED
+ * dot (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
     context: Context,
@@ -73,50 +74,47 @@ class PowerHotspot @JvmOverloads constructor(
         if (r <= 0f) return
         val on = isToggled
 
-        // Halo, only while on.
-        if (on) {
-            paint.reset(); paint.isAntiAlias = true
-            paint.shader = RadialGradient(cx, cy, r, Ring.withAlpha(0.55f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            canvas.drawCircle(cx, cy, r, paint)
-        }
+        val ring = if (on) RingOn else RingOff
+        val symbol = if (on) SymbolOn else SymbolOff
+
+        // Halo.
+        paint.reset(); paint.isAntiAlias = true
+        paint.shader = RadialGradient(cx, cy, r, ring.withAlpha(0.55f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, r, paint)
         // Metal collar (light top-left, dark bottom-right, like the tile bezels).
         paint.reset(); paint.isAntiAlias = true
         paint.shader = SweepGradient(cx, cy, CollarColors, CollarStops)
         canvas.drawCircle(cx, cy, r * 0.78f, paint)
-        // Dark well, with a faint glow while on.
+        // Dark well, with a faint glow of the ring colour.
         paint.reset(); paint.isAntiAlias = true
         paint.color = 0xFF050508.toInt()
         canvas.drawCircle(cx, cy, r * 0.68f, paint)
-        if (on) {
-            paint.shader = RadialGradient(cx, cy, r * 0.68f, Ring.withAlpha(0.30f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            canvas.drawCircle(cx, cy, r * 0.68f, paint)
-        }
+        paint.shader = RadialGradient(cx, cy, r * 0.68f, ring.withAlpha(0.30f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, r * 0.68f, paint)
         // Neon ring.
-        val ring = if (on) Ring else 0xFF2A2A3A.toInt()
         paint.reset(); paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        if (on) {
-            paint.color = Ring.withAlpha(0.25f); paint.strokeWidth = r * 0.14f
-            canvas.drawCircle(cx, cy, r * 0.6f, paint)
-        }
+        paint.color = ring.withAlpha(0.25f); paint.strokeWidth = r * 0.14f
+        canvas.drawCircle(cx, cy, r * 0.6f, paint)
         paint.color = ring; paint.strokeWidth = r * 0.035f
         canvas.drawCircle(cx, cy, r * 0.6f, paint)
         // Power symbol: an arc open at the top, and a stem.
         val symbolRadius = r * 0.3f
-        val symbol = if (on) 0xFFB8AEFF.toInt() else 0xFF3A3A4A.toInt()
         arcBounds.set(cx - symbolRadius, cy - symbolRadius, cx + symbolRadius, cy + symbolRadius)
         paint.strokeCap = Paint.Cap.ROUND
-        if (on) {
-            paint.color = Ring.withAlpha(0.30f); paint.strokeWidth = r * 0.165f
-            canvas.drawArc(arcBounds, -55f, 290f, false, paint)
-        }
+        paint.color = ring.withAlpha(0.30f); paint.strokeWidth = r * 0.165f
+        canvas.drawArc(arcBounds, -55f, 290f, false, paint)
         paint.color = symbol; paint.strokeWidth = r * 0.055f
         canvas.drawArc(arcBounds, -55f, 290f, false, paint)
         canvas.drawLine(cx, cy - symbolRadius * 1.15f, cx, cy - symbolRadius * 0.10f, paint)
     }
 
     private companion object {
-        const val Ring = 0xFF3A22FF.toInt()
+        // Same green as the app's on toggles, and BmwDashboardSkin.M_RED.
+        const val RingOn = 0xFF39FF14.toInt()
+        const val RingOff = 0xFFE32B3B.toInt()
+        const val SymbolOn = 0xFFC8FFB8.toInt()
+        const val SymbolOff = 0xFFFFB8BE.toInt()
         val CollarColors = intArrayOf(
             0xFF2A282A.toInt(), 0xFFC8C6C8.toInt(), 0xFF383638.toInt(), 0xFF9A9799.toInt(),
             0xFF232123.toInt(), 0xFFD0CED0.toInt(), 0xFF2A282A.toInt(),

@@ -7,7 +7,7 @@ import android.view.ViewGroup
 
 /**
  * Lays each child over the region of the front-page artwork named by its `android:tag` (a key of
- * [HomeArt]), using the same cover mapping the Compose faceplate uses. A child with no
+ * [HomeArt]), using the same fit (contain) mapping the Compose faceplate uses. A child with no
  * known tag simply fills the layout. Non-clickable areas stay transparent to touch, so the
  * pager underneath still swipes.
  */

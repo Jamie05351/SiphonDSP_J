@@ -1,21 +1,23 @@
 package app.siphondsp.view
 
-import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
  * Where every live element sits on the front page. Rects are fractions of the art space, x/y/w/h.
  *
- * Head unit: a 2340x878 art space (the 1280x480 screen's aspect). The layout follows James's
- * front-page mock-up: the power button alone on the left panel, one big screen holding the five
- * DSP tiles across the top, Settings and More bottom-right, and a live panel (output, audio engine,
- * global stages) in the space bottom-left. [app.siphondsp.compose.controls.HomeFaceplate] draws the
- * plate, the `screen` and the bezel; each tile is a Compose tile at its rect, so a tile's picture
- * and its touch area are always the same box.
+ * Head unit: a 2340x878 art space (the 1280x480 screen's aspect). The layout is the approved
+ * split faceplate (Figma "SiphonDSP Faceplate", frame "APPROVED -- split 1/3 + 2/3"): the power
+ * button alone on the left panel, then two screens recessed into the plate with a strip of plate
+ * between them. The top screen (a third of the height) holds Settings on the left, the live panel
+ * (output, audio engine, global stages) in the middle and More on the right; the bottom screen (two
+ * thirds) holds the five DSP tiles. [app.siphondsp.compose.controls.HomeFaceplate] draws the plate,
+ * the `screen_top` / `screen_bottom` and the bezel; each tile is a Compose tile at its rect, so a
+ * tile's picture and its touch area are always the same box.
  *
- * The art space is laid out full-bleed with cover scaling, so [map] turns an art fraction into view
- * pixels -- the touch areas and the chrome stay locked together on any display aspect, not just the
- * 1280x480 head unit.
+ * [map] fits the whole art space inside the view (contain, not cover), so nothing is ever cropped
+ * on a display of another aspect: the plate fills whatever margin is left over. The touch areas and
+ * the chrome stay locked together on any display.
  */
 object HomeArt {
     const val IMAGE_WIDTH = 2340f
@@ -42,24 +44,26 @@ object HomeArt {
 
     private fun ph(x: Int, y: Int, w: Int, h: Int) = px(x, y, w, h, PHONE_IMAGE_WIDTH, PHONE_IMAGE_HEIGHT)
 
-    // Head unit. The screen leaves 19dp margins inside it (0.015 of the width, 0.044 of the
-    // height); the five DSP tiles are square, evenly pitched, and Settings/More end flush with the
-    // last one. The live panel's three blocks fill the space left of Settings.
+    // Head unit, measured off the approved Figma frame (1280x480 px / 1280, / 480). The DSP tiles
+    // are square and evenly pitched; More ends flush with the last DSP tile, Settings starts flush
+    // with the first. Settings and More are a third smaller than before so the live panel fits
+    // between them.
     private val rects = mapOf(
-        "screen" to Frac(0.1140f, 0.0760f, 0.8485f, 0.8040f),
-        "tile_peq" to Frac(0.1290f, 0.1200f, 0.1520f, 0.4050f),
-        "tile_gains" to Frac(0.2956f, 0.1200f, 0.1520f, 0.4050f),
-        "tile_xovers" to Frac(0.4622f, 0.1200f, 0.1520f, 0.4050f),
-        "tile_compressor" to Frac(0.6288f, 0.1200f, 0.1520f, 0.4050f),
-        "tile_allpass" to Frac(0.7954f, 0.1200f, 0.1520f, 0.4050f),
-        "tile_settings" to Frac(0.7560f, 0.6227f, 0.0800f, 0.2133f),
-        "tile_more" to Frac(0.8674f, 0.6227f, 0.0800f, 0.2133f),
-        "live_output" to Frac(0.1290f, 0.5690f, 0.2580f, 0.2670f),
-        "live_engine" to Frac(0.3970f, 0.5690f, 0.1500f, 0.2670f),
-        "live_stages" to Frac(0.5570f, 0.5690f, 0.1690f, 0.2670f),
+        "screen_top" to Frac(0.1141f, 0.0750f, 0.8484f, 0.2604f),
+        "screen_bottom" to Frac(0.1141f, 0.3604f, 0.8484f, 0.5188f),
+        "tile_peq" to Frac(0.1290f, 0.4173f, 0.1520f, 0.4050f),
+        "tile_gains" to Frac(0.2956f, 0.4173f, 0.1520f, 0.4050f),
+        "tile_xovers" to Frac(0.4622f, 0.4173f, 0.1520f, 0.4050f),
+        "tile_compressor" to Frac(0.6288f, 0.4173f, 0.1520f, 0.4050f),
+        "tile_allpass" to Frac(0.7954f, 0.4173f, 0.1520f, 0.4050f),
+        "tile_settings" to Frac(0.1290f, 0.1338f, 0.0536f, 0.1429f),
+        "tile_more" to Frac(0.8938f, 0.1338f, 0.0536f, 0.1429f),
+        "live_output" to Frac(0.2013f, 0.0865f, 0.2813f, 0.2375f),
+        "live_engine" to Frac(0.5266f, 0.0865f, 0.1484f, 0.2375f),
+        "live_stages" to Frac(0.7191f, 0.0865f, 0.1563f, 0.2375f),
         // The power button and its glow, a circle centred on the left panel. PowerHotspot draws the
         // button, off and on, within this rect.
-        "power_btn" to Frac(0.0160f, 0.4040f, 0.0850f, 0.2267f),
+        "power_btn" to Frac(0.0096f, 0.3871f, 0.0977f, 0.2606f),
         // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
         "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
         // Legacy icons, hidden now that Settings and More are tiles; kept so every key resolves.
@@ -67,25 +71,31 @@ object HomeArt {
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
     )
 
-    // Phone (2340x1080): the same columns; the taller art gives the live panel more height.
-    // Heights are rescaled so tiles and the power button stay square/round in pixels.
+    // Phone (2340x1080): the same DSP tile columns. The taller art gives the top screen a bigger
+    // share (40 % of the screen height, not a third) for the live panel, whose text shrinks to fit
+    // if the box is still too short. Settings and More are bigger than the head unit's, so they stay
+    // at least 48dp even when a 16:9 phone fits the art to only ~640dp wide.
     private val phoneRects = mapOf(
-        "screen" to Frac(0.1140f, 0.0600f, 0.8485f, 0.8800f),
-        "tile_peq" to Frac(0.1290f, 0.1000f, 0.1520f, 0.3293f),
-        "tile_gains" to Frac(0.2956f, 0.1000f, 0.1520f, 0.3293f),
-        "tile_xovers" to Frac(0.4622f, 0.1000f, 0.1520f, 0.3293f),
-        "tile_compressor" to Frac(0.6288f, 0.1000f, 0.1520f, 0.3293f),
-        "tile_allpass" to Frac(0.7954f, 0.1000f, 0.1520f, 0.3293f),
-        "tile_settings" to Frac(0.7560f, 0.7267f, 0.0800f, 0.1733f),
-        "tile_more" to Frac(0.8674f, 0.7267f, 0.0800f, 0.1733f),
-        "live_output" to Frac(0.1290f, 0.4693f, 0.2580f, 0.4307f),
-        "live_engine" to Frac(0.3970f, 0.4693f, 0.1500f, 0.4307f),
-        "live_stages" to Frac(0.5570f, 0.4693f, 0.1690f, 0.4307f),
-        "power_btn" to Frac(0.0160f, 0.4079f, 0.0850f, 0.1842f),
+        "screen_top" to Frac(0.1141f, 0.0602f, 0.8484f, 0.3435f),
+        "screen_bottom" to Frac(0.1141f, 0.4241f, 0.8484f, 0.5157f),
+        "tile_peq" to Frac(0.1290f, 0.5173f, 0.1520f, 0.3293f),
+        "tile_gains" to Frac(0.2956f, 0.5173f, 0.1520f, 0.3293f),
+        "tile_xovers" to Frac(0.4622f, 0.5173f, 0.1520f, 0.3293f),
+        "tile_compressor" to Frac(0.6288f, 0.5173f, 0.1520f, 0.3293f),
+        "tile_allpass" to Frac(0.7954f, 0.5173f, 0.1520f, 0.3293f),
+        "tile_settings" to Frac(0.1290f, 0.1496f, 0.0760f, 0.1647f),
+        "tile_more" to Frac(0.8714f, 0.1496f, 0.0760f, 0.1647f),
+        "live_output" to Frac(0.2180f, 0.0819f, 0.2700f, 0.3000f),
+        "live_engine" to Frac(0.5060f, 0.0819f, 0.1600f, 0.3000f),
+        "live_stages" to Frac(0.6840f, 0.0819f, 0.1744f, 0.3000f),
+        "power_btn" to Frac(0.0096f, 0.3942f, 0.0977f, 0.2117f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),
     )
+
+    /** The two screens, top then bottom; the faceplate recesses each into the plate. */
+    val SCREEN_KEYS = listOf("screen_top", "screen_bottom")
 
     /** The live panel's blocks, left to right; the faceplate draws a divider between each pair. */
     val LIVE_KEYS = listOf("live_output", "live_engine", "live_stages")
@@ -101,7 +111,8 @@ object HomeArt {
         imageWidth: Float = IMAGE_WIDTH,
         imageHeight: Float = IMAGE_HEIGHT,
     ): Px {
-        val scale = max(viewWidth / imageWidth, viewHeight / imageHeight)
+        // Contain: the whole art space always fits, centred; the plate fills any margin.
+        val scale = min(viewWidth / imageWidth, viewHeight / imageHeight)
         val shownW = imageWidth * scale
         val shownH = imageHeight * scale
         val offX = (viewWidth - shownW) / 2f

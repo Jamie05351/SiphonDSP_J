@@ -11,7 +11,7 @@
     <!-- Front page: one full-bleed hardware faceplate, drawn live by HomeFaceplate (Compose) with no
          margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
          own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
-         same cover mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
+         same fit mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
          ComposeView, so a tile's picture and its touch area are the same box) and the live panel's
          three blocks (output levels, audio engine, global stages). The power button remains in the
          activity overlay (PowerHotspot draws it). Must never scroll. -->
