@@ -61,4 +61,21 @@ class PeqPlotGeometryTest {
         assertEquals(16f, geo.yForGroupDelayMs(10.0), 1e-3f)
         assertEquals(278f, geo.yForGroupDelayMs(-2.0), 1e-3f)
     }
+
+    @Test
+    fun aCustomGainWindowMapsItsOwnRailsAndClampsOutsideThem() {
+        // The redesigned PEQ graph fits a 24 dB window to the curves, e.g. 0..-24.
+        val fitted = PeqPlotGeometry(34f, 356f, 16f, 278f, PeqGraphMath.MAX_FREQUENCY, minGain = -24.0, maxGain = 0.0)
+        assertEquals(16f, fitted.yForGain(0.0), 1e-3f)
+        assertEquals(278f, fitted.yForGain(-24.0), 1e-3f)
+        assertEquals((16f + 278f) / 2f, fitted.yForGain(-12.0), 1e-3f)
+        assertEquals(16f, fitted.yForGain(6.0), 1e-3f)
+        assertEquals(278f, fitted.yForGain(-40.0), 1e-3f)
+    }
+
+    @Test
+    fun theDefaultGainWindowIsUnchanged() {
+        assertEquals(PeqGraphMath.MIN_GAIN, geo.minGain, 0.0)
+        assertEquals(PeqGraphMath.MAX_GAIN, geo.maxGain, 0.0)
+    }
 }
