@@ -148,10 +148,11 @@ class HomeLevelBars @JvmOverloads constructor(
         if (w <= 0f || h <= 0f) return
 
         // Title, L bar, R bar, gain readout, top-aligned at fixed sizes so the text meets the
-        // CarUi floors (14sp title, 16sp values) whatever the box height.
+        // 18sp throughout, white, whatever the box height (the split faceplate's top screen: nothing
+        // under 18, no grey text). Needs ~110dp of height, which live_output has on both rect sets.
         val pad = 4f * density
-        val titlePx = sp(14f)
-        val valuePx = sp(16f)
+        val titlePx = sp(18f)
+        val valuePx = sp(18f)
         val rowH = 26f * density
         val barH = 14f * density
         val labelW = 22f * density
@@ -248,8 +249,8 @@ class HomeLevelBars @JvmOverloads constructor(
         val PURPLE = BmwDashboardSkin.SLIDER_HEADROOM_COLOR
         val PURPLE_HIGHLIGHT = Color.rgb(0xE2, 0xC2, 0xFF)
         val PURPLE_SHADOW = Color.rgb(0x54, 0x16, 0x88)
-        val TITLE_COLOR = Color.rgb(139, 143, 148)
-        val LABEL_COLOR = Color.rgb(184, 196, 208)
+        val TITLE_COLOR = Color.WHITE
+        val LABEL_COLOR = Color.WHITE
         val VALUE_COLOR = Color.rgb(230, 231, 232)
     }
 }

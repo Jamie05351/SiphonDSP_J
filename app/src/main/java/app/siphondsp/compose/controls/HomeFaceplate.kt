@@ -23,17 +23,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.siphondsp.view.HomeArt
 import app.siphondsp.view.isHeadUnitDisplay
-import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * The front page's hardware faceplate, drawn live: a brushed dark plate, one recessed black glass
- * screen, faint dividers between the live panel's blocks, and a slim metal bezel around the whole
- * display.
+ * The front page's hardware faceplate, drawn live: a brushed dark plate with two black glass screens
+ * recessed into it (a third of the height on top, two thirds below, a strip of plate between them),
+ * faint dividers between the live panel's blocks, and a slim metal bezel around the whole display.
  *
- * Everything is placed in the same art space as [HomeArt] (cover-scaled, so it lines up with the
- * live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect). The tiles, the
- * live panel and the power button are drawn by their own views on top.
+ * Everything is placed in the same art space as [HomeArt] (fit-scaled and centred, so it lines up
+ * with the live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect; the
+ * plate fills the whole view, margins included). The tiles, the live panel and the power button are
+ * drawn by their own views on top.
  */
 @Composable
 fun HomeFaceplate(modifier: Modifier = Modifier) {
@@ -66,7 +67,7 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     val imageH = if (phone) HomeArt.PHONE_IMAGE_HEIGHT else HomeArt.IMAGE_HEIGHT
     val w = size.width
     val h = size.height
-    val unit = max(w / imageW, h / imageH) // one art pixel in view pixels (cover)
+    val unit = min(w / imageW, h / imageH) // one art pixel in view pixels (fit)
     fun rect(key: String): Pair<Offset, Size> {
         val px = HomeArt.map(HomeArt.frac(key, phone)!!, w.toInt(), h.toInt(), imageW, imageH)
         return Offset(px.left.toFloat(), px.top.toFloat()) to Size((px.right - px.left).toFloat(), (px.bottom - px.top).toFloat())
@@ -85,9 +86,11 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     )
     drawRoundRect(brush = streaks, alpha = 0.55f, cornerRadius = CornerRadius(corner))
 
-    // The one screen.
-    val (screenAt, screenSize) = rect("screen")
-    drawScreen(screenAt, screenSize, unit)
+    // The two screens, each sunk into the plate.
+    for (key in HomeArt.SCREEN_KEYS) {
+        val (at, extent) = rect(key)
+        drawRecessedScreen(at, extent, unit)
+    }
 
     // Faint dividers between the live panel's blocks, inset from their top and bottom.
     val blocks = HomeArt.LIVE_KEYS.map { rect(it) }
@@ -106,15 +109,34 @@ private fun DrawScope.drawFaceplate(phone: Boolean, streaks: ShaderBrush) {
     drawBezelRing(0f, 0f, w, h, corner, bezel)
 }
 
-/** One recessed black glass screen: a dark rim, the glass, then a metal hairline lit from top-left. */
-private fun DrawScope.drawScreen(at: Offset, extent: Size, unit: Float) {
+/**
+ * One black glass screen sunk into the plate: a well cut around it (dark at the top where the plate
+ * overhangs, catching light on its bottom lip), then the glass, then a metal hairline lit from the
+ * top-left.
+ */
+private fun DrawScope.drawRecessedScreen(at: Offset, extent: Size, unit: Float) {
     val r = 8f * unit
+    val d = 9f * unit
+    val wellAt = Offset(at.x - d, at.y - d)
+    val wellSize = Size(extent.width + 2f * d, extent.height + 2f * d)
     drawRoundRect(
-        color = Color.Black.copy(alpha = 0.9f),
-        topLeft = Offset(at.x - 3f * unit, at.y - 3f * unit),
-        size = Size(extent.width + 6f * unit, extent.height + 6f * unit),
-        cornerRadius = CornerRadius(r + 3f * unit),
-        style = Stroke(6f * unit),
+        brush = Brush.verticalGradient(
+            0f to Color.Black.copy(alpha = 0.95f),
+            0.5f to Color(0xFF0D0D0F).copy(alpha = 0.9f),
+            1f to Color(0xFF4A4B4E).copy(alpha = 0.9f),
+            startY = wellAt.y,
+            endY = wellAt.y + wellSize.height,
+        ),
+        topLeft = wellAt,
+        size = wellSize,
+        cornerRadius = CornerRadius(r + d),
+    )
+    // Light catching the lip below the well.
+    drawLine(
+        Color.White.copy(alpha = 0.10f),
+        Offset(wellAt.x + r + d, wellAt.y + wellSize.height + unit),
+        Offset(wellAt.x + wellSize.width - r - d, wellAt.y + wellSize.height + unit),
+        strokeWidth = 2f * unit,
     )
     drawRoundRect(Color.Black, at, extent, CornerRadius(r))
     drawRoundRect(

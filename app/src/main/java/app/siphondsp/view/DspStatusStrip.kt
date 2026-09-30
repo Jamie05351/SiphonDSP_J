@@ -75,9 +75,9 @@ class DspStatusStrip @JvmOverloads constructor(
 
     private val density = resources.displayMetrics.density
     // Active stages read in the app's "lit" green (same neon as the ON/OFF switch); inactive
-    // stay a dim grey.
+    // stay a dim grey on the toolbar, and white on the front page (no grey text on its top screen).
     private val onColor = BmwDashboardSkin.TOGGLE_ON_GREEN
-    private val offColor = Color.rgb(120, 128, 138)
+    private val offColor get() = if (stacked) Color.WHITE else Color.rgb(120, 128, 138)
 
     private val segments = listOf(
         Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
@@ -121,10 +121,10 @@ class DspStatusStrip @JvmOverloads constructor(
         if (stacked) {
             addView(TextView(context).apply {
                 text = "GLOBAL STAGES"
-                textSize = 14f
+                textSize = 18f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 includeFontPadding = false
-                setTextColor(Color.rgb(139, 143, 148))
+                setTextColor(Color.WHITE)
                 setPadding(dp(4), dp(4), dp(4), dp(6))
             })
         }
@@ -132,9 +132,10 @@ class DspStatusStrip @JvmOverloads constructor(
         segments.forEachIndexed { index, segment ->
             if (index > 0 && !stacked) addView(separator())
             val cell = TextView(context).apply {
-                textSize = if (stacked) 16f else 11f
+                textSize = if (stacked) 18f else 11f
                 includeFontPadding = false
-                setPadding(if (stacked) dp(4) else dp(6), dp(4), dp(6), dp(4))
+                // Stacked: 2dp above/below keeps title + three 18sp rows inside ~110dp.
+                if (stacked) setPadding(dp(4), dp(2), dp(6), dp(2)) else setPadding(dp(6), dp(4), dp(6), dp(4))
                 setOnClickListener { open(segment) }
             }
             segment.view = cell

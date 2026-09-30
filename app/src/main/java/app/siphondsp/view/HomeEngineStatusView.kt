@@ -55,7 +55,7 @@ class HomeEngineStatusView @JvmOverloads constructor(
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = TITLE_COLOR
         typeface = android.graphics.Typeface.DEFAULT_BOLD
-        textSize = sp(14f)
+        textSize = sp(18f)
     }
     private val statusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -64,7 +64,7 @@ class HomeEngineStatusView @JvmOverloads constructor(
     private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = VALUE_COLOR
         typeface = android.graphics.Typeface.DEFAULT_BOLD
-        textSize = sp(16f)
+        textSize = sp(18f)
     }
 
     override fun onAttachedToWindow() {
@@ -119,7 +119,7 @@ class HomeEngineStatusView @JvmOverloads constructor(
         drawFitted(canvas, statusText, pad, y, maxW, statusPaint, sp(20f))
 
         y += 10f * density + detailPaint.textSize
-        drawFitted(canvas, detail, pad, y, maxW, detailPaint, sp(16f))
+        drawFitted(canvas, detail, pad, y, maxW, detailPaint, sp(18f))
     }
 
     /** Draws [text] at [fullPx], shrinking it only if it would overrun [maxW]. */
@@ -135,7 +135,7 @@ class HomeEngineStatusView @JvmOverloads constructor(
 
     private companion object {
         const val POLL_MS = 1_000L
-        val TITLE_COLOR = Color.rgb(139, 143, 148)
+        val TITLE_COLOR = Color.WHITE
         val VALUE_COLOR = Color.rgb(230, 231, 232)
         val IDLE_COLOR = Color.rgb(132, 140, 150)
         val WARN_COLOR = Color.rgb(0xF2, 0xB3, 0x3D)
