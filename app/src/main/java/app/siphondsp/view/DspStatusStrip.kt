@@ -266,7 +266,14 @@ class DspStatusStrip @JvmOverloads constructor(
         setPadding(dp(2), 0, dp(2), 0)
     }
 
+    /**
+     * Asked before a cell opens its screen; false ignores the tap. The front page uses it to hold
+     * the cells back while a DSP tile's screen is opening, so they can't open a second screen.
+     */
+    var canOpen: () -> Boolean = { true }
+
     private fun open(segment: Segment) {
+        if (!canOpen()) return
         context.startActivity(
             Intent(context, segment.target).apply {
                 segment.workspaceMode?.let { putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
