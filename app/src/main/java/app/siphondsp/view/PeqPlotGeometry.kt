@@ -15,6 +15,9 @@ class PeqPlotGeometry(
     val top: Float,
     val bottom: Float,
     private val maximumFrequency: Double,
+    /** The gain window down y; defaults to [PeqGraphMath]'s fixed -24..+12 dB. */
+    val minGain: Double = PeqGraphMath.MIN_GAIN,
+    val maxGain: Double = PeqGraphMath.MAX_GAIN,
 ) {
     fun xForFrequency(frequency: Double): Float {
         val fraction = PeqGraphMath.frequencyToFraction(frequency, PeqGraphMath.MIN_FREQUENCY, maximumFrequency)
@@ -22,7 +25,7 @@ class PeqPlotGeometry(
     }
 
     fun yForGain(gain: Double): Float {
-        val fraction = PeqGraphMath.gainToFraction(gain)
+        val fraction = PeqGraphMath.gainToFraction(gain, minGain, maxGain)
         return top + fraction * (bottom - top)
     }
 
