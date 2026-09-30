@@ -217,8 +217,9 @@ class DspFragment : Fragment() {
      *
      * Other tile, Settings, More and GLOBAL STAGES taps are ignored from the tap until this page
      * stops (see [openingTile]), not just during the flash, so a quick second tap can't open a
-     * second screen underneath. Leaving the page during the flash (swiping to the settings page, or anything
-     * pausing it) cancels the launch, so the DSP screen never opens over where the user went.
+     * second screen underneath. Leaving the page during the flash (swiping to the settings page,
+     * or anything pausing it) cancels the launch, so the DSP screen never opens over where the
+     * user went.
      */
     private fun openFromTile(kind: HomeTileKind, tile: View, intent: Intent) {
         if (openingTile != null) return
