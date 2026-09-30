@@ -365,7 +365,10 @@ fun PeqGraph(
         ) {
             // Read the tick + focus here (draw phase), not in composition.
             val spectrumFrame = spectrumTick.intValue
-            val bandFocus = focus.value
+            // A silent selected bank (High with 3-way off) has no curve, filters or nodes to focus,
+            // so the full curve keeps focus instead of dimming to a near-blank graph.
+            val selectedSilent = activeBank == BmwPeqBank.HIGH && !model.curves.highBranchActive
+            val bandFocus = if (selectedSilent) 0f else focus.value
             val left = PlotPadLeft.toPx()
             val top = PlotPadTop.toPx()
             val right = size.width - PlotPadRight.toPx()
