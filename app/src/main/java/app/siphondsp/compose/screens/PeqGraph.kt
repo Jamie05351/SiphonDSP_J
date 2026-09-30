@@ -973,8 +973,9 @@ private fun drawVignette(nc: Canvas, ctx: PeqDrawContext) {
 /**
  * Each of the focused bank's filters as its own shape in its own colour: the region between the
  * bank's curve and "the bank's curve without this filter" (exact for an LTI cascade: subtract the
- * filter's own dB response). Translucent, so where two filters overlap their colours mix; a dashed
- * edge marks the "without" side. Fades with focus, so idle shows no stacked shapes at all.
+ * filter's own dB response). Translucent, so where two filters overlap their colours mix. No
+ * outline: dashed "without" edges crowded the curve wherever filters sat side by side. Fades with
+ * focus, so idle shows no stacked shapes at all.
  */
 private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     if (ctx.focus <= 0f || !bankAudible(ctx, ctx.activeBank)) return
@@ -984,9 +985,7 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     val m = ctx.model
     val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val fill = ctx.glass.filterShapePaint
-    val edge = ctx.glass.filterEdgePaint
     val shape = Path()
-    val without = Path()
     val offset = ctx.bankNumberOffset(ctx.activeBank)
     bands.forEachIndexed { index, band ->
         val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
@@ -1008,22 +1007,15 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
             m.fillBottomY[i] = g.yForGain(reference[i] - m.bandAcc.magnitudeDb())
         }
         shape.rewind()
-        without.rewind()
         for (i in 0 until SYSTEM_POINT_COUNT) {
             if (i == 0) shape.moveTo(m.fillX[i], m.fillTopY[i]) else shape.lineTo(m.fillX[i], m.fillTopY[i])
         }
         for (i in SYSTEM_POINT_COUNT - 1 downTo 0) shape.lineTo(m.fillX[i], m.fillBottomY[i])
         shape.close()
-        for (i in 0 until SYSTEM_POINT_COUNT) {
-            if (i == 0) without.moveTo(m.fillX[i], m.fillBottomY[i]) else without.lineTo(m.fillX[i], m.fillBottomY[i])
-        }
         val color = filterColor(offset + index)
         fill.color = color
         fill.alpha = scaleAlpha(97, ctx.focus)
         nc.drawPath(shape, fill)
-        edge.color = color
-        edge.alpha = scaleAlpha(230, ctx.focus)
-        nc.drawPath(without, edge)
     }
 }
 
@@ -1625,13 +1617,8 @@ private class PeqGlassPaints(density: Float) {
         strokeWidth = 1.5f * density
     }
 
-    // A focused bank's filters: one translucent shape each, with a dashed "without" edge.
+    // A focused bank's filters: one translucent shape each.
     val filterShapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    val filterEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-        pathEffect = DashPathEffect(floatArrayOf(4f * density, 3f * density), 0f)
-    }
 
     // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.
     val octaveGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
