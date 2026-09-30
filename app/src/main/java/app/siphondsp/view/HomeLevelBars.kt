@@ -22,9 +22,9 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * The front page's right-hand display: live purple segmented L / R output level bars (post-DSP
+ * The front page live panel's OUTPUT block: live purple segmented L / R output level bars (post-DSP
  * RMS illumination plus a peak-hold outline from [SpectrumEngine]'s analyzer) and the L / R
- * post-gain readout beneath.
+ * post-gain readout beneath. Text is at fixed sp sizes (CarUi floors), not scaled to the box.
  *
  * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this view holds
  * it only while it is attached, its window and view are visible, and [pageActive] is true (the
@@ -147,37 +147,47 @@ class HomeLevelBars @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // Three rows: L bar, R bar, gain readout. Sizes follow the box height, not dp, so the
-        // layout holds on any display density. Kept deliberately small so the whole readout sits
-        // comfortably inside the art's display with margin, and the gain line always fits.
-        val pad = h * 0.16f
-        val rowH = (h - pad * 2f) / 3f
-        val labelW = rowH * 0.7f
-        val barH = rowH * 0.38f
+        // Title, L bar, R bar, gain readout, top-aligned at fixed sizes so the text meets the
+        // CarUi floors (14sp title, 16sp values) whatever the box height.
+        val pad = 4f * density
+        val titlePx = sp(14f)
+        val valuePx = sp(16f)
+        val rowH = 26f * density
+        val barH = 14f * density
+        val labelW = 22f * density
         val barLeft = pad + labelW
         val barRight = w - pad
-        textPaint.textSize = rowH * 0.46f
 
-        drawBar(canvas, "L", leftMeter, pad, pad, barLeft, barRight, barH, rowH)
-        drawBar(canvas, "R", rightMeter, pad, pad + rowH, barLeft, barRight, barH, rowH)
+        textPaint.textSize = titlePx
+        textPaint.color = TITLE_COLOR
+        var y = pad + titlePx
+        canvas.drawText("OUTPUT", pad, y, textPaint)
+        y += 8f * density
 
-        val gainText = "POST GAIN  L ${formatDb(gainL)}   R ${formatDb(gainR)} dB"
-        textPaint.textSize = rowH * 0.36f
+        textPaint.textSize = valuePx
+        textPaint.color = LABEL_COLOR
+        drawBar(canvas, "L", leftMeter, pad, y, barLeft, barRight, barH, rowH)
+        drawBar(canvas, "R", rightMeter, pad, y + rowH, barLeft, barRight, barH, rowH)
+        y += rowH * 2f + 6f * density + valuePx
+
+        val gainText = "Post gain  L ${formatDb(gainL)}   R ${formatDb(gainR)} dB"
         // Shrink to fit if the gain values are long (e.g. "-12.5"), never clip.
         val maxW = w - pad * 2f
         val textW = textPaint.measureText(gainText)
         if (textW > maxW) textPaint.textSize *= maxW / textW
-        textPaint.color = Color.rgb(140, 150, 162)
-        canvas.drawText(gainText, pad, pad + rowH * 2f + rowH * 0.66f, textPaint)
-        textPaint.color = Color.rgb(184, 196, 208)
+        textPaint.color = VALUE_COLOR
+        canvas.drawText(gainText, pad, y, textPaint)
     }
+
+    private fun sp(value: Float): Float =
+        android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics)
 
     private fun drawBar(
         canvas: Canvas, label: String, meter: PeakHoldMeter,
         left: Float, top: Float, barLeft: Float, barRight: Float, barH: Float, rowH: Float,
     ) {
         val barTop = top + (rowH - barH) / 2f
-        canvas.drawText(label, left, top + rowH * 0.66f, textPaint)
+        canvas.drawText(label, left, top + (rowH + textPaint.textSize * 0.7f) / 2f, textPaint)
 
         // Bar = RMS (average loudness); the outlined segment = peak hold. Filling to instantaneous
         // peak pinned the bar near full on any mastered music.
@@ -238,5 +248,8 @@ class HomeLevelBars @JvmOverloads constructor(
         val PURPLE = BmwDashboardSkin.SLIDER_HEADROOM_COLOR
         val PURPLE_HIGHLIGHT = Color.rgb(0xE2, 0xC2, 0xFF)
         val PURPLE_SHADOW = Color.rgb(0x54, 0x16, 0x88)
+        val TITLE_COLOR = Color.rgb(139, 143, 148)
+        val LABEL_COLOR = Color.rgb(184, 196, 208)
+        val VALUE_COLOR = Color.rgb(230, 231, 232)
     }
 }

@@ -12,10 +12,9 @@
          margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
          own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
          same cover mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
-         ComposeView, so a tile's picture and its touch area are the same box), the live status strip
-         above them, and the three top displays - left crossover response, centre PEQ curve (both
-         read-only) and right L/R level bars. The power button remains in the activity overlay
-         (PowerHotspot draws it). Must never scroll. -->
+         ComposeView, so a tile's picture and its touch area are the same box) and the live panel's
+         three blocks (output levels, audio engine, global stages). The power button remains in the
+         activity overlay (PowerHotspot draws it). Must never scroll. -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/home_backdrop"
         android:layout_width="match_parent"
@@ -97,44 +96,27 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/abc_action_menu_overflow_description" />
 
-        <app.siphondsp.view.HomeDashboardStatusView
-            android:id="@+id/home_dashboard_status"
-            android:tag="live_strip"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no" />
-
-        <app.siphondsp.view.NoTouchFrameLayout
-            android:tag="box_left"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#000000">
-
-            <androidx.compose.ui.platform.ComposeView
-                android:id="@+id/home_crossover_graph"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </app.siphondsp.view.NoTouchFrameLayout>
-
-        <app.siphondsp.view.NoTouchFrameLayout
-            android:tag="box_centre"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#000000">
-
-            <androidx.compose.ui.platform.ComposeView
-                android:id="@+id/home_peq_graph"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </app.siphondsp.view.NoTouchFrameLayout>
-
         <app.siphondsp.view.HomeLevelBars
             android:id="@+id/home_level_bars"
-            android:tag="box_right"
+            android:tag="live_output"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#000000"
             android:importantForAccessibility="no" />
+
+        <app.siphondsp.view.HomeEngineStatusView
+            android:id="@+id/home_engine_status"
+            android:tag="live_engine"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no" />
+
+        <!-- Each stage cell opens the screen that owns it, as on the workspace toolbar. -->
+        <app.siphondsp.view.DspStatusStrip
+            android:id="@+id/home_stages"
+            android:tag="live_stages"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:stacked="true" />
     </app.siphondsp.view.HomeArtLayout>
 
     <!-- Notices float over the top of the artwork instead of pushing it down. -->

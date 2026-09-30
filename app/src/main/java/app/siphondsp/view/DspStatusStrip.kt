@@ -50,9 +50,9 @@ class DspStatusStrip @JvmOverloads constructor(
 ) : LinearLayout(context, attrs) {
 
     /**
-     * Front-page mode (`app:stacked="true"`): the same cells stacked vertically inside the
-     * artwork's left display, with no separators and text sized from the box height instead of
-     * fixed sp.
+     * Front-page mode (`app:stacked="true"`): the live panel's GLOBAL STAGES block. A title, then
+     * the three stage cells stacked at 16sp, with no separators and no health cell (the panel's
+     * audio-engine block shows that).
      */
     private val stacked: Boolean = context.obtainStyledAttributes(attrs, R.styleable.DspStatusStrip).let {
         try {
@@ -116,25 +116,35 @@ class DspStatusStrip @JvmOverloads constructor(
         // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
         // the toolbar's own (see activity_parametric_eq.xml / dsp_workspace_toolbar_height) so this
         // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
-        gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        gravity = Gravity.START or if (stacked) Gravity.TOP else Gravity.CENTER_VERTICAL
         if (!stacked) setPadding(0, dp(25), 0, 0)
+        if (stacked) {
+            addView(TextView(context).apply {
+                text = "GLOBAL STAGES"
+                textSize = 14f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+                setTextColor(Color.rgb(139, 143, 148))
+                setPadding(dp(4), dp(4), dp(4), dp(6))
+            })
+        }
 
         segments.forEachIndexed { index, segment ->
             if (index > 0 && !stacked) addView(separator())
             val cell = TextView(context).apply {
-                textSize = 11f
+                textSize = if (stacked) 16f else 11f
                 includeFontPadding = false
-                setPadding(dp(6), dp(4), dp(6), dp(4))
+                setPadding(if (stacked) dp(4) else dp(6), dp(4), dp(6), dp(4))
                 setOnClickListener { open(segment) }
             }
             segment.view = cell
             cells += cell
             addView(cell)
         }
-        if (!stacked) addView(separator())
-        cells += healthView
-        addView(healthView)
         if (!stacked) {
+            addView(separator())
+            cells += healthView
+            addView(healthView)
             val sp = fitTextSp()
             for (i in 0 until childCount) (getChildAt(i) as TextView).textSize = sp
         }
@@ -157,30 +167,11 @@ class DspStatusStrip @JvmOverloads constructor(
         return (MAX_TEXT_SP * (roomPx / textPx).coerceAtMost(1f)).coerceAtLeast(MIN_TEXT_SP)
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (!stacked || h <= 0) return
-        // Four rows share the display's height: text takes ~62% of a row, the rest is padding.
-        // Posted, not applied here: a requestLayout() raised from inside the layout pass doesn't
-        // reliably re-measure the wrap_content cells, which left the three bypass rows at their
-        // old height with the enlarged text clipped (only the health row, which re-lays itself
-        // out every second, came out right).
-        val rowPx = h / cells.size.toFloat()
-        val padX = (rowPx * 0.25f).roundToInt()
-        val padY = (rowPx * 0.08f).roundToInt()
-        post {
-            cells.forEach {
-                it.setTextSize(TypedValue.COMPLEX_UNIT_PX, rowPx * 0.62f)
-                it.setPadding(padX, padY, padX, padY)
-            }
-        }
-    }
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
         refresh(null)
-        handler.post(healthPoll)
+        if (!stacked) handler.post(healthPoll)
     }
 
     override fun onDetachedFromWindow() {
