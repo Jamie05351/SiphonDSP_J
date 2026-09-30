@@ -21,8 +21,11 @@ object WorkspaceArt {
 
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
 
-    /** The 3-segment page finder (Gains, Xovers). */
+    /** The 3-segment page finder (Xovers). */
     val finder3 = Frac(0.629f, 0.048f, 0.341f, 0.0693f)
+
+    /** The 4-segment page finder (Gains & Delay). Ends where the 3- and 5-segment ones do. */
+    val finder4 = Frac(0.57f, 0.048f, 0.40f, 0.0693f)
 
     /** The 5-segment page finder (Compressor). */
     val finder5 = Frac(0.52f, 0.048f, 0.45f, 0.0693f)

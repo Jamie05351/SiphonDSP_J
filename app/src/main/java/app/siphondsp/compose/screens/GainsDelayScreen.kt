@@ -19,20 +19,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -47,18 +44,11 @@ import androidx.compose.ui.unit.sp
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
-import app.siphondsp.compose.controls.CarSpeakerDiagram
-import app.siphondsp.compose.controls.DriverId
-import app.siphondsp.compose.controls.AlignTarget
 import app.siphondsp.compose.controls.MinusPlusPill
-import app.siphondsp.compose.controls.SpeakerGeometryMath
-import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.compose.controls.SpeakerKind
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.controls.bmwFocusRing
-import app.siphondsp.compose.controls.bmwGlassBox
-import app.siphondsp.compose.controls.rememberSpeakerGeometry
 import app.siphondsp.compose.controls.showBmwNumberInput
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
@@ -124,24 +114,18 @@ enum class GainsBand(
 }
 
 /**
- * The Gains & Delay "Delay" page: one interactive speaker map for all three bands.
+ * The Gains & Delay "Delay" page: the per-driver controls you adjust while tuning, one band at a
+ * time. The time-alignment setup (the speaker map, PATH distances, ALIGN and "Apply to delays") has
+ * its own page, [SpeakerAlignScreen], so this one has room for large controls.
  *
- * - **Band**: tap a driver on the map, or a High / Mid / Low tab; the lit drivers, the colours and
- *   the two cards follow.
- * - **Target**: Driver aligns to the driver seat. Multi aligns to both front seats using, per
- *   driver, the average of its driver-seat and passenger-seat paths (the passenger seat is the
- *   driver seat mirrored, so nothing extra is measured). Band timing is right for both seats; each
- *   seat is left half its left/right path gap off centre, which delay alone can't fix.
- * - **Cards** (Left and Right for the chosen band): PATH is the measured driver-seat distance,
- *   ALIGN the geometric time alignment for the target (relative to the farthest of all six
- *   drivers, at 343 m/s), and DELAY / GAIN / POLARITY / STAGE ALIGN are the real DSP controls.
- * - **Apply to delays** writes the six alignment values into the driver delays in one step.
+ * - **Band**: the High / Mid / Low tabs; the colours and the two cards follow.
+ * - **Cards** (Left and Right for the chosen band): DELAY, GAIN, POLARITY and STAGE ALIGN, the
+ *   real DSP controls.
  * - **Stereo link** stays global.
  */
 @Composable
 fun GainsDelayScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val geometry = rememberSpeakerGeometry()
     var bandIndex by rememberSaveable { mutableIntStateOf(GainsBand.MID.ordinal) }
     val band = GainsBand.entries[bandIndex.coerceIn(0, GainsBand.entries.size - 1)]
     val linked = dsp.isOn(NativeBmwDspValues.INDEX_DELAY_LINKED)
@@ -151,9 +135,9 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
 
     BmwDspTheme {
         if (headUnit) {
-            HeadUnitDelayPage(dsp, geometry, band, setBand, linked, inactive, modifier)
+            HeadUnitDelayPage(dsp, band, setBand, linked, inactive, modifier)
         } else {
-            PhoneDelayPage(dsp, geometry, band, setBand, linked, inactive, modifier)
+            PhoneDelayPage(dsp, band, setBand, linked, inactive, modifier)
         }
     }
 }
@@ -163,27 +147,19 @@ fun GainsDelayScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun HeadUnitDelayPage(
     dsp: BmwDspState,
-    geometry: SpeakerGeometryState,
     band: GainsBand,
     setBand: (GainsBand) -> Unit,
     linked: Boolean,
     inactive: Boolean,
     modifier: Modifier,
 ) {
-    var confirming by remember { mutableStateOf(false) }
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        DriverCard(dsp, geometry, band, left = true, linked, inactive, headUnit = true, Modifier.artRect(LeftCardRect))
-        DriverCard(dsp, geometry, band, left = false, linked, inactive, headUnit = true, Modifier.artRect(RightCardRect))
         BandTabs(band, setBand, Modifier.artRect(TabsRect))
-        BandMap(geometry, band, setBand, Modifier.artRect(MapRect))
         if (inactive) ThreeWayOffNote(band, Modifier.artRect(NoteRect))
-        Row(Modifier.artRect(SeatRect), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SeatToggle(geometry, Modifier.weight(1f))
-            ApplyButton(Color(band.accent), true, Modifier.width(190.dp).height(44.dp)) { confirming = true }
-        }
+        DriverCard(dsp, band, left = true, linked, inactive, LargeSizing, fill = true, Modifier.artRect(LeftCardRect))
+        DriverCard(dsp, band, left = false, linked, inactive, LargeSizing, fill = true, Modifier.artRect(RightCardRect))
         StereoLinkRow(dsp, linked, true, Modifier.artRect(LinkRect))
     }
-    if (confirming) ApplyDialog(geometry, onDismiss = { confirming = false }) { applyAlignment(dsp, geometry) }
 }
 
 // ---------------------------------------------------------------- phone (scrolling column)
@@ -191,14 +167,12 @@ private fun HeadUnitDelayPage(
 @Composable
 private fun PhoneDelayPage(
     dsp: BmwDspState,
-    geometry: SpeakerGeometryState,
     band: GainsBand,
     setBand: (GainsBand) -> Unit,
     linked: Boolean,
     inactive: Boolean,
     modifier: Modifier,
 ) {
-    var confirming by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val sideBySide = maxWidth >= 560.dp
         Column(
@@ -206,30 +180,22 @@ private fun PhoneDelayPage(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             BandTabs(band, setBand, Modifier.fillMaxWidth().height(44.dp))
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                BandMap(geometry, band, setBand, Modifier.widthIn(max = 460.dp).fillMaxWidth())
-            }
             if (inactive) ThreeWayOffNote(band, Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SeatToggle(geometry, Modifier.weight(1f))
-                ApplyButton(Color(band.accent), false, Modifier.width(150.dp).height(44.dp)) { confirming = true }
-            }
             if (sideBySide) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DriverCard(dsp, geometry, band, true, linked, inactive, false, Modifier.weight(1f))
-                    DriverCard(dsp, geometry, band, false, linked, inactive, false, Modifier.weight(1f))
+                    DriverCard(dsp, band, true, linked, inactive, PhoneSizing, fill = false, Modifier.weight(1f))
+                    DriverCard(dsp, band, false, linked, inactive, PhoneSizing, fill = false, Modifier.weight(1f))
                 }
             } else {
-                DriverCard(dsp, geometry, band, true, linked, inactive, false, Modifier.fillMaxWidth())
-                DriverCard(dsp, geometry, band, false, linked, inactive, false, Modifier.fillMaxWidth())
+                DriverCard(dsp, band, true, linked, inactive, PhoneSizing, fill = false, Modifier.fillMaxWidth())
+                DriverCard(dsp, band, false, linked, inactive, PhoneSizing, fill = false, Modifier.fillMaxWidth())
             }
             StereoLinkRow(dsp, linked, false, Modifier.fillMaxWidth())
         }
     }
-    if (confirming) ApplyDialog(geometry, onDismiss = { confirming = false }) { applyAlignment(dsp, geometry) }
 }
 
-// ---------------------------------------------------------------- shared pieces
+// ---------------------------------------------------------------- pieces
 
 @Composable
 private fun BandTabs(band: GainsBand, onSelect: (GainsBand) -> Unit, modifier: Modifier) {
@@ -241,46 +207,6 @@ private fun BandTabs(band: GainsBand, onSelect: (GainsBand) -> Unit, modifier: M
         modifier = modifier,
         segmentHeight = 40.dp,
         segmentGap = 6.dp,
-    )
-}
-
-@Composable
-private fun SeatToggle(geometry: SpeakerGeometryState, modifier: Modifier) {
-    BmwSegmentedControl(
-        options = listOf("Driver", "Multi"),
-        selectedIndex = geometry.target.ordinal,
-        onSelect = { geometry.selectTarget(AlignTarget.entries[it]) },
-        modifier = modifier,
-        segmentHeight = 40.dp,
-        segmentGap = 6.dp,
-    )
-}
-
-/**
- * The live map. The lit drivers show the distance the alignment uses: the driver-seat path, or in
- * Multi the average of the driver- and passenger-seat paths.
- */
-@Composable
-private fun BandMap(
-    geometry: SpeakerGeometryState,
-    band: GainsBand,
-    setBand: (GainsBand) -> Unit,
-    modifier: Modifier,
-) {
-    CarSpeakerDiagram(
-        selected = band.speaker,
-        accent = Color(band.accent),
-        onSelect = { setBand(GainsBand.forSpeaker(it)) },
-        modifier = modifier,
-        seats = geometry.target.seats,
-        label = { kind, left ->
-            if (kind != band.speaker) {
-                null
-            } else {
-                val cm = geometry.targetDistanceCm(DriverId(kind, left)).roundToInt()
-                if (geometry.target == AlignTarget.MULTI) "avg $cm cm" else "$cm cm"
-            }
-        },
     )
 }
 
@@ -302,7 +228,7 @@ private fun StereoLinkRow(dsp: BmwDspState, linked: Boolean, headUnit: Boolean, 
         Text(
             text = "STEREO LINK",
             color = LabelColor,
-            fontSize = if (headUnit) 16.sp else 14.sp,
+            fontSize = if (headUnit) 18.sp else 14.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.03.em,
             modifier = Modifier.padding(end = 12.dp),
@@ -315,71 +241,24 @@ private fun StereoLinkRow(dsp: BmwDspState, linked: Boolean, headUnit: Boolean, 
     }
 }
 
-@Composable
-private fun ApplyButton(accent: Color, headUnit: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    Box(
-        modifier = modifier
-            .bmwGlassBox(accent)
-            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
-            .bmwFocusRing(interaction),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Apply to delays",
-            color = Color.White,
-            fontSize = if (headUnit) 16.sp else 14.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun ApplyDialog(geometry: SpeakerGeometryState, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val seatName = if (geometry.target == AlignTarget.DRIVER) "the driver seat" else "both front seats"
-    val needed = SpeakerGeometryMath.allDrivers.map { geometry.alignDelayMs(it) }
-    val cappedCount = needed.count { it > DelayRange.endInclusive }
-    val cappedNote = if (cappedCount == 0) {
-        ""
-    } else {
-        "\n\n$cappedCount driver${if (cappedCount == 1) " needs" else "s need"} up to " +
-            "${AlignFormat.format(needed.max())} ms, more than the ${AlignFormat.format(DelayRange.endInclusive)} ms " +
-            "maximum. They will be set to the maximum and won't be fully aligned; check the PATH values."
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Apply alignment to delays?") },
-        text = {
-            Text(
-                "Sets the delay of all six drivers to the geometric alignment for $seatName " +
-                    "(farthest driver 0 ms) and turns stereo link off. Your current delays are replaced." + cappedNote,
-            )
-        },
-        confirmButton = { TextButton(onClick = { onDismiss(); onConfirm() }) { Text("Apply") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
 /**
- * Left or Right card for [band]: PATH (measured, editable), ALIGN (derived), then the real DSP
- * controls. On a head unit it fills its art rect and spreads the rows; on a phone it wraps.
+ * Left or Right card for [band]: DELAY, GAIN, POLARITY and STAGE. With [fill] (head unit) it fills
+ * its art rect and spreads the rows; otherwise (phone) it wraps.
  */
 @Composable
 private fun DriverCard(
     dsp: BmwDspState,
-    geometry: SpeakerGeometryState,
     band: GainsBand,
     left: Boolean,
     linked: Boolean,
     inactive: Boolean,
-    headUnit: Boolean,
+    sizing: DelaySizing,
+    fill: Boolean,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
     val accent = Color(band.accent)
     val stageAccent = Color(BmwDashboardSkin.SLIDER_STAGE_COLOR)
-    val id = DriverId(band.speaker, left)
     val output = if (left) band.leftOutput else band.rightOutput
     val delayIndex = if (left) band.delayL else band.delayR
     val siblingIndex = if (left) band.delayR else band.delayL
@@ -387,69 +266,47 @@ private fun DriverCard(
     val stageIndex = if (left) NativeBmwDspValues.INDEX_STAGE_DELAY_L else NativeBmwDspValues.INDEX_STAGE_DELAY_R
     val polarityIndex = band.polarityIndex(output)
     val delayMirror = if (linked) intArrayOf(siblingIndex) else IntArray(0)
-    val cm = geometry.distanceCm(id)
-    val labelSize = if (headUnit) 16.sp else 14.sp
     // Names the side and band in each −/+ button's spoken label ("Increase Left Mid delay"): the
     // card heading isn't merged into the buttons, so without it both cards would sound identical.
     val cardName = "${if (left) "Left" else "Right"} ${band.title}"
 
     Box(modifier) {
         Column(
-            modifier = (if (headUnit) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+            modifier = (if (fill) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
                 .background(PanelBackground, PanelShape)
                 .border(1.dp, Color(band.stroke), PanelShape)
                 .then(if (inactive) Modifier.alpha(InactiveAlpha) else Modifier)
                 // D-pad / rotary can't enter a dimmed card either; the overlay below only stops taps.
                 .focusProperties { onEnter = { if (inactive) cancelFocusChange() } }
                 .focusGroup()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalArrangement = if (headUnit) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = if (fill) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = cardName,
                 color = accent,
-                fontSize = 18.sp,
+                fontSize = sizing.title,
                 fontWeight = FontWeight.Bold,
             )
-            CardRow("PATH", labelSize) {
-                ValueBox(CmFormat.format(cm), "cm", accent, headUnit) {
-                    context.showBmwNumberInput("PATH", PathRangeCm.start, PathRangeCm.endInclusive, cm, 1f, "cm") {
-                        geometry.setDistanceCm(id, it)
-                    }
-                }
-                Stepper("$cardName path", headUnit) { dir ->
-                    geometry.setDistanceCm(id, stepped(cm, dir * PathStepCm, PathRangeCm))
-                }
-            }
-            CardRow("ALIGN", labelSize) {
-                // Shows what Apply will write; tinted when the path needs more delay than the DSP allows.
-                val capped = geometry.alignDelayMs(id) > DelayRange.endInclusive
-                ValueBox(
-                    AlignFormat.format(alignmentFor(geometry, id)), "ms",
-                    if (capped) CappedColor else accent.copy(alpha = 0.75f), headUnit, null,
-                )
-                // Read-only: an empty slot where the −/+ would be keeps the boxes in one column.
-                Spacer(Modifier.width(StepperGap + StepperWidth))
-            }
-            CardRow("DELAY", labelSize) {
-                ValueBox(DelayFormat.format(dsp.get(delayIndex)), "ms", accent, headUnit) {
+            CardRow("DELAY", sizing) {
+                ValueBox(DelayFormat.format(dsp.get(delayIndex)), "ms", accent, sizing) {
                     context.showBmwNumberInput(
                         "DELAY", DelayRange.start, DelayRange.endInclusive, dsp.get(delayIndex), 0f, "ms",
                     ) { dsp.commit(delayIndex, it, delayMirror) }
                 }
-                Stepper("$cardName delay", headUnit) { dir ->
+                Stepper("$cardName delay", sizing) { dir ->
                     dsp.commit(delayIndex, stepped(dsp.get(delayIndex), dir * DelayStepMs, DelayRange), delayMirror)
                 }
             }
-            CardRow("GAIN", labelSize) {
-                ValueBox(DelayFormat.format(dsp.get(gainIndex)), "dB", accent, headUnit) {
+            CardRow("GAIN", sizing) {
+                ValueBox(DelayFormat.format(dsp.get(gainIndex)), "dB", accent, sizing) {
                     context.showBmwNumberInput(
                         "GAIN", GainRange.start, GainRange.endInclusive, dsp.get(gainIndex), GainStep, "dB",
                     ) { dsp.commit(gainIndex, snapGain(it)) }
                 }
-                Stepper("$cardName gain", headUnit) { dir -> dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep)) }
+                Stepper("$cardName gain", sizing) { dir -> dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep)) }
             }
-            CardRow("POLARITY", labelSize) {
+            CardRow("POLARITY", sizing) {
                 BmwSwitch(
                     checked = dsp.isOn(polarityIndex),
                     onCheckedChange = { dsp.commit(polarityIndex, if (it) 1f else 0f) },
@@ -458,18 +315,17 @@ private fun DriverCard(
                     offColor = PolNormalGreen,
                     onLabel = "INVERT",
                     offLabel = "NORMAL",
-                    // Wider than the value boxes so INVERT / NORMAL clears the thumb; the POLARITY
-                    // label is short enough to give the width up.
+                    // Wider than a value box so INVERT / NORMAL clears the thumb.
                     width = 132.dp,
                 )
             }
-            CardRow("STAGE", labelSize) {
-                ValueBox(DelayFormat.format(dsp.get(stageIndex)), "ms", stageAccent, headUnit) {
+            CardRow("STAGE", sizing) {
+                ValueBox(DelayFormat.format(dsp.get(stageIndex)), "ms", stageAccent, sizing) {
                     context.showBmwNumberInput(
                         "STAGE ALIGNMENT", 0f, NativeBmwDspValues.STAGE_DELAY_MAX_MS, dsp.get(stageIndex), StageStepMs, "ms",
                     ) { dsp.commit(stageIndex, it) }
                 }
-                Stepper("$cardName stage alignment", headUnit) { dir ->
+                Stepper("$cardName stage alignment", sizing) { dir ->
                     dsp.commit(stageIndex, stepped(dsp.get(stageIndex), dir * StageStepMs, 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS))
                 }
             }
@@ -486,14 +342,34 @@ private fun DriverCard(
     }
 }
 
+/**
+ * Control sizes for the Delay and Align pages: the phone's, the head unit's (the Align table), and
+ * the head unit's large set for the Delay cards, which have the whole page width to themselves.
+ */
+internal class DelaySizing(
+    val boxWidth: Dp,
+    val controlHeight: Dp,
+    val valueText: TextUnit,
+    val unitText: TextUnit,
+    val stepperHalfWidth: Dp,
+    val label: TextUnit,
+    val title: TextUnit,
+) {
+    val stepperWidth: Dp get() = stepperHalfWidth * 2 + 1.dp
+}
+
+internal val PhoneSizing = DelaySizing(120.dp, 38.dp, 16.sp, 14.sp, 40.dp, 14.sp, 18.sp)
+internal val HeadUnitSizing = DelaySizing(84.dp, 44.dp, 20.sp, 16.sp, 40.dp, 16.sp, 18.sp)
+internal val LargeSizing = DelaySizing(120.dp, 48.dp, 24.sp, 18.sp, 50.dp, 20.sp, 22.sp)
+
 /** Label on the left, then the row's controls (value box, and −/+ where the value is editable). */
 @Composable
-private fun CardRow(label: String, size: TextUnit, controls: @Composable RowScope.() -> Unit) {
+internal fun CardRow(label: String, sizing: DelaySizing, controls: @Composable RowScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
             color = LabelColor,
-            fontSize = size,
+            fontSize = sizing.label,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.03.em,
             maxLines = 1,
@@ -505,32 +381,32 @@ private fun CardRow(label: String, size: TextUnit, controls: @Composable RowScop
 
 /** The PEQ list's −/+ pill beside a value box; [onStep] gets -1 or +1. */
 @Composable
-private fun Stepper(label: String, headUnit: Boolean, onStep: (Int) -> Unit) {
+internal fun Stepper(label: String, sizing: DelaySizing, onStep: (Int) -> Unit) {
     Spacer(Modifier.width(StepperGap))
     MinusPlusPill(
         onMinus = { onStep(-1) },
         onPlus = { onStep(1) },
-        height = if (headUnit) 44.dp else 38.dp,
-        halfWidth = StepperHalfWidth,
+        height = sizing.controlHeight,
+        halfWidth = sizing.stepperHalfWidth,
         label = label,
     )
 }
 
 /** [value] moved by [delta], kept in [range] and rounded to 0.01 so repeated taps don't drift. */
-private fun stepped(value: Float, delta: Float, range: ClosedFloatingPointRange<Float>): Float =
+internal fun stepped(value: Float, delta: Float, range: ClosedFloatingPointRange<Float>): Float =
     ((value + delta) * 100f).roundToInt().div(100f).coerceIn(range.start, range.endInclusive)
 
 /** A recessed value readout; tappable (numeric entry) when [onTap] is given, else read-only. */
 @Composable
-private fun ValueBox(text: String, unit: String, accent: Color, headUnit: Boolean, onTap: (() -> Unit)?) {
+internal fun ValueBox(text: String, unit: String, accent: Color, sizing: DelaySizing, onTap: (() -> Unit)?) {
     val interaction = remember { MutableInteractionSource() }
     BoxedValue(
         text = text,
         unit = unit,
         accentColor = accent,
         modifier = Modifier
-            .width(if (headUnit) 84.dp else 120.dp)
-            .height(if (headUnit) 44.dp else 38.dp)
+            .width(sizing.boxWidth)
+            .height(sizing.controlHeight)
             .then(
                 if (onTap != null) {
                     Modifier
@@ -540,26 +416,9 @@ private fun ValueBox(text: String, unit: String, accent: Color, headUnit: Boolea
                     Modifier
                 },
             ),
-        textSize = if (headUnit) 20.sp else 16.sp,
-        unitSize = if (headUnit) 16.sp else 14.sp,
+        textSize = sizing.valueText,
+        unitSize = sizing.unitText,
     )
-}
-
-/** Writes the six geometric alignment delays in one atomic save, and unlinks the sides. */
-private fun applyAlignment(dsp: BmwDspState, geometry: SpeakerGeometryState) {
-    val updates = HashMap<Int, Float>()
-    for (band in GainsBand.entries) {
-        updates[band.delayL] = alignmentFor(geometry, DriverId(band.speaker, true))
-        updates[band.delayR] = alignmentFor(geometry, DriverId(band.speaker, false))
-    }
-    // Left and right now differ, so a linked pair would fight this on the next edit.
-    updates[NativeBmwDspValues.INDEX_DELAY_LINKED] = 0f
-    dsp.commitAll(updates)
-}
-
-private fun alignmentFor(geometry: SpeakerGeometryState, id: DriverId): Float {
-    val ms = geometry.alignDelayMs(id).coerceIn(DelayRange.start, DelayRange.endInclusive)
-    return (ms * 100f).roundToInt() / 100f
 }
 
 private fun snapGain(raw: Float): Float {
@@ -567,47 +426,32 @@ private fun snapGain(raw: Float): Float {
     return snapped.coerceIn(GainRange.start, GainRange.endInclusive)
 }
 
-// Head unit art rects (dp on the 1280x480 art). Cards sit in the old side-panel columns; the
-// centre column is band tabs, the map, seat + apply, then the stereo link.
-private val LeftCardRect = artDp(190, 72, 244, 396)
-private val RightCardRect = artDp(984, 72, 244, 396)
-private val TabsRect = artDp(462, 72, 506, 44)
-private val MapRect = artDp(482, 122, 466, 248)
-private val NoteRect = artDp(462, 126, 506, 28)
-private val SeatRect = artDp(462, 376, 506, 44)
-private val LinkRect = artDp(540, 424, 350, 44)
+// Head unit art rects (dp on the 1280x480 art; content authored from x = 140). Band tabs across the
+// top, the 3-way note under them while High is off, the Left and Right cards side by side, then the
+// stereo link.
+private val TabsRect = artDp(390, 76, 650, 48)
+private val NoteRect = artDp(390, 128, 650, 24)
+private val LeftCardRect = artDp(160, 158, 520, 252)
+private val RightCardRect = artDp(733, 158, 520, 252)
+private val LinkRect = artDp(540, 420, 350, 48)
 
 private const val InactiveAlpha = 0.35f
-private val PanelShape = RoundedCornerShape(10.dp)
-private val PanelBackground = Color(0x99100818)
-private val LabelColor = Color(0xFF969EA8)
+internal val PanelShape = RoundedCornerShape(10.dp)
+internal val PanelBackground = Color(0x99100818)
+internal val LabelColor = Color(0xFF969EA8)
 private val PolNormalGreen = Color(BmwDashboardSkin.M_GREEN)
 // Pink for inverted, shared with the stage-alignment accent so "offset from normal" reads the same.
 private val PolInvertPink = Color(BmwDashboardSkin.SLIDER_STAGE_COLOR)
 
-private val DelayFormat = java.text.DecimalFormat(
+internal val DelayFormat = java.text.DecimalFormat(
     "0.##",
     java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
 )
-private val AlignFormat = java.text.DecimalFormat(
-    "0.00",
-    java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
-)
-private val CmFormat = java.text.DecimalFormat(
-    "0.#",
-    java.text.DecimalFormatSymbols.getInstance(java.util.Locale.ENGLISH),
-)
-private val DelayRange = 0f..2.8f
-// ALIGN needs more than DelayRange allows, so Apply will cap it.
-private val CappedColor = Color(0xFFFF6B5A)
+internal val DelayRange = 0f..2.8f
 private val GainRange = -6f..6f
 private const val GainStep = 0.5f
-private val PathRangeCm = 20f..400f
 
 // −/+ steps: the same resolution the tap-to-type boxes use.
-private const val PathStepCm = 1f
 private const val DelayStepMs = 0.01f
 private const val StageStepMs = 0.05f
-private val StepperHalfWidth = 40.dp
-private val StepperWidth = StepperHalfWidth * 2 + 1.dp
 private val StepperGap = 6.dp
