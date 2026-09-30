@@ -33,8 +33,9 @@ import kotlin.math.roundToInt
  *
  * Needs `res/drawable-nodpi/dsp_workspace_bg.webp` (the 2340x878 texture, which is the head unit's
  * own aspect, so it fills 1280x480 without cropping; other aspects are cover-cropped). It is
- * James's texture levels-lifted from 10-26 to 16-44 so it reads on the head unit's panel, and
- * saved lossless: a lossy re-encode flattened the original to 10-17, near solid black.
+ * James's dark navy texture (average about 20/255, a blue cast; the lifted grey before it read
+ * too bright on the head unit), saved lossless: a lossy re-encode once flattened an earlier
+ * texture to near solid black.
  *
  * The sidebar is a separate layer on top ([DspSidebarRail]); the content sits to its right.
  * The bezel and its inner lip take about [bezel] * 1.75 of the screen edge, so give the content
