@@ -154,11 +154,8 @@ private fun filterColor(globalIndex: Int): Int = FilterPalette[globalIndex.mod(F
 // Pre EQ's pure white and every band. (The bright full curve itself uses the channel colours.)
 private val SumCurveColor = AndroidColor.rgb(0xEA, 0xF2, 0xFF)
 
-// Channel colours for every response curve (the full curve and the focused bank's): left neon
-// purple (the app's meter purple), right solid neon green (the lit-switch green) -- solid lines, so
-// L and R stay tellable apart without dashes. The focused bank shows in its tab, area and label.
-private val LeftChannelColor = AndroidColor.rgb(0xB1, 0x4D, 0xFF)
-private val RightChannelColor = AndroidColor.rgb(0x39, 0xFF, 0x14)
+// Every response curve (the full curve and the focused bank's) uses the shared LeftChannelColor /
+// RightChannelColor (GraphPanel.kt). The focused bank shows in its tab, area and label.
 
 private const val ACTIVE_NODE_RADIUS_DP = 8f
 private const val NODE_TOUCH_RADIUS_DP = 22f
@@ -204,7 +201,7 @@ fun PeqGraphFrame(
     val maxFrequency = remember(sampleRate) {
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
     }
-    ComposeCanvas(modifier) {
+    ComposeCanvas(modifier.graphPanel()) {
         val left = PlotPadLeft.toPx()
         val top = PlotPadTop.toPx()
         val right = size.width - PlotPadRight.toPx()
@@ -334,7 +331,7 @@ fun PeqGraph(
     // which auto-hides). Cleared when peqState / bank changes so a stale uuid never lingers.
     var tappedNodeId by remember(peqState, activeBank) { mutableStateOf<UUID?>(null) }
 
-    Box(modifier) {
+    Box(modifier.graphPanel()) {
         ComposeCanvas(
             Modifier
                 .fillMaxSize()

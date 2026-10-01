@@ -8,6 +8,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
+import androidx.core.graphics.ColorUtils
 import android.util.TypedValue
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.runtime.Composable
@@ -67,6 +68,12 @@ import kotlin.math.pow
  * §7 (spectrum EMA / peak-hold) is deliberately skipped -- this graph's spectrum is already a
  * subtle 28/105-alpha wash, drawn behind the curves in only two of the four modes, so it never
  * reads as a competing element the way PEQ's foreground spectrum did.
+ *
+ * 2026-10-01 restyle to match the redesigned PEQ graph: the whole graph sits on [graphPanel]; in
+ * the magnitude modes the Low / Mid / High branches are soft washes under their curves instead of
+ * plain lines, and the sum is drawn per channel -- L neon purple, R neon green, solid, with a glow
+ * -- instead of one white L/R average with a white area fill. The crossover markers are faint solid
+ * lines (no dashes). Phase and group delay keep their curves.
  */
 enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
 
@@ -92,7 +99,8 @@ private val FreqGridLines =
 // ANALYZER_VISUAL_SPEC.md polish
 private const val SUM_GLOW_BLUR_DP = 7f
 private const val SUM_GLOW_ALPHA = 90
-private const val AREA_FILL_ALPHA = 82   // §2: curve colour at the curve edges, -> 0 at 0 dB
+private const val BAND_WASH_ALPHA = 41   // band area wash at the top of the plot, -> 0 at the bottom
+private const val BAND_EDGE_ALPHA = 90   // the band's own curve, as the wash's outline
 private const val GRID_BASE_ALPHA = 42   // §4: everything that isn't a reference line recedes
 private const val GRID_OCTAVE_ALPHA = 78 // §4: 100 Hz / 1 k / 10 k slightly brighter
 private const val GRID_ZERO_ALPHA = 122  // §4: the 0 line is the brightest
@@ -205,9 +213,19 @@ fun CrossoverResponseGraph(
             alpha = SUM_GLOW_ALPHA
         }
     }
-    // §2: gradient area fill under the summed magnitude curve; shader rebuilt per draw (only the
-    // two magnitude modes reach it).
-    val areaFillPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL } }
+    // The sum per channel (magnitude modes): L neon purple, R neon green, each over a blurred glow.
+    val leftPaint = remember(density) { channelCurvePaint(density, LeftChannelColor) }
+    val rightPaint = remember(density) { channelCurvePaint(density, RightChannelColor) }
+    val leftGlowPaint = remember(density) { channelGlowPaint(density, LeftChannelColor) }
+    val rightGlowPaint = remember(density) { channelGlowPaint(density, RightChannelColor) }
+    // Band areas: a wash under each branch curve (shader set per band) and its outline.
+    val bandWashPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL } }
+    val bandEdgePaint = remember(density) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f * density
+        }
+    }
     val phasePaint = remember(density, sumArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -235,9 +253,8 @@ fun CrossoverResponseGraph(
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = density
-            pathEffect = DashPathEffect(floatArrayOf(4f * density, 4f * density), 0f)
-            alpha = 120
             color = gridArgb
+            alpha = 70 // after color: a faint solid line, not a dashed one
         }
     }
     val markerLabelPaint = remember(density, gridArgb) {
@@ -279,7 +296,7 @@ fun CrossoverResponseGraph(
         }
     }
 
-    ComposeCanvas(modifier) {
+    ComposeCanvas(modifier.graphPanel()) {
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
         val top = PAD_TOP_DP * density
@@ -309,9 +326,12 @@ fun CrossoverResponseGraph(
                 drawSpectrum(nc, left, right, top, bottom, frame, spectrumFillPaint, spectrumPaint)
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
-                drawSumAreaFill(nc, curves, left, right, top, bottom, areaFillPaint)
+                drawBandAreas(nc, curves, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint)
             }
-            drawResponse(nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint)
+            drawResponse(
+                nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
+                ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+            )
         }
     }
 }
@@ -414,6 +434,7 @@ private fun drawResponse(
     sumPaint: Paint,
     sumGlowPaint: Paint,
     phasePaint: Paint,
+    channels: ChannelPaints,
 ) {
     val lastIndex = POINT_COUNT - 1
     fun pathFor(sample: (Int) -> Float): Path = Path().apply {
@@ -427,18 +448,23 @@ private fun drawResponse(
         nc.drawPath(path, sumGlowPaint)
         nc.drawPath(path, sumPaint)
     }
+    // Magnitude modes: the sum per channel, L purple / R green, each over its glow. The branches
+    // are drawn by drawBandAreas, so no branch lines here.
+    fun strokeChannelSums() {
+        val leftPath = pathFor { i -> dbToY(curves.sumDbFor(BmwOutputChannel.LEFT)[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
+        val rightPath = pathFor { i -> dbToY(curves.sumDbFor(BmwOutputChannel.RIGHT)[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
+        nc.drawPath(rightPath, channels.rightGlow)
+        nc.drawPath(rightPath, channels.right)
+        nc.drawPath(leftPath, channels.leftGlow)
+        nc.drawPath(leftPath, channels.left)
+    }
     val l = BmwOutputChannel.LEFT
     val r = BmwOutputChannel.RIGHT
     // High is silent (highXoPass / muted) unless 3-way is on; a silent branch would otherwise
     // draw as a flat line pinned to the -24 dB floor.
     val drawHigh = curves.highBranchActive
     when (mode) {
-        CrossoverGraphMode.MAGNITUDE -> {
-            nc.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(l)[i], curves.lowBranchDbFor(r)[i]), top, bottom) }, lowPaint)
-            nc.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(l)[i], curves.midBranchDbFor(r)[i]), top, bottom) }, midPaint)
-            if (drawHigh) nc.drawPath(pathFor { i -> dbToY(averageDb(curves.highBranchDbFor(l)[i], curves.highBranchDbFor(r)[i]), top, bottom) }, highPaint)
-            strokeSum(pathFor { i -> dbToY(averageDb(curves.sumDbFor(l)[i], curves.sumDbFor(r)[i]), top, bottom) })
-        }
+        CrossoverGraphMode.MAGNITUDE -> strokeChannelSums()
         CrossoverGraphMode.PHASE -> {
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.lowBranchPhaseFor(l)[i], curves.lowBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, lowPaint)
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.midBranchPhaseFor(l)[i], curves.midBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, midPaint)
@@ -446,10 +472,7 @@ private fun drawResponse(
             strokeSum(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) })
         }
         CrossoverGraphMode.MAGNITUDE_PHASE -> {
-            nc.drawPath(pathFor { i -> dbToY(averageDb(curves.lowBranchDbFor(l)[i], curves.lowBranchDbFor(r)[i]), top, bottom) }, lowPaint)
-            nc.drawPath(pathFor { i -> dbToY(averageDb(curves.midBranchDbFor(l)[i], curves.midBranchDbFor(r)[i]), top, bottom) }, midPaint)
-            if (drawHigh) nc.drawPath(pathFor { i -> dbToY(averageDb(curves.highBranchDbFor(l)[i], curves.highBranchDbFor(r)[i]), top, bottom) }, highPaint)
-            strokeSum(pathFor { i -> dbToY(averageDb(curves.sumDbFor(l)[i], curves.sumDbFor(r)[i]), top, bottom) })
+            strokeChannelSums()
             nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) }, phasePaint)
         }
         CrossoverGraphMode.GROUP_DELAY -> {
@@ -462,51 +485,76 @@ private fun drawResponse(
     }
 }
 
+/** The magnitude modes' L / R sum paints, bundled for [drawResponse]. */
+private class ChannelPaints(val left: Paint, val right: Paint, val leftGlow: Paint, val rightGlow: Paint)
+
+private fun channelCurvePaint(density: Float, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeWidth = 2.4f * density
+    strokeJoin = Paint.Join.ROUND
+    this.color = color
+}
+
+private fun channelGlowPaint(density: Float, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeWidth = 2.4f * density * 2.2f
+    maskFilter = BlurMaskFilter(SUM_GLOW_BLUR_DP * density, BlurMaskFilter.Blur.NORMAL)
+    this.color = color
+    alpha = SUM_GLOW_ALPHA
+}
+
 /**
- * ANALYZER_VISUAL_SPEC §2: gradient area fill under the summed magnitude curve. The summed
- * magnitude sits between the curve and the 0 dB reference; the fill is the curve colour (white)
- * at its edges fading to nothing at 0 dB, so a boost pool sits above the line and the crossover
- * notch pools below it. Drawn behind the curve stroke + glow. Magnitude modes only.
+ * The crossover branches as soft washes under their own (L/R-averaged) curves -- Low, Mid, and
+ * High while 3-way is on -- each outlined by its curve: the same band areas as the PEQ graph, so
+ * the per-channel sum reads on top of them. Magnitude modes only.
  */
-private fun drawSumAreaFill(
+private fun drawBandAreas(
     nc: Canvas,
     curves: BmwResponseCurves,
     left: Float,
     right: Float,
     top: Float,
     bottom: Float,
-    fillPaint: Paint,
+    colors: IntArray,
+    washPaint: Paint,
+    edgePaint: Paint,
 ) {
     val lastIndex = POINT_COUNT - 1
-    val zeroY = dbToY(0f, top, bottom)
-    val path = Path()
-    for (i in 0 until POINT_COUNT) {
-        val x = left + (i.toFloat() / lastIndex) * (right - left)
-        val y = dbToY(
-            averageDb(curves.sumDbFor(BmwOutputChannel.LEFT)[i], curves.sumDbFor(BmwOutputChannel.RIGHT)[i]),
-            top, bottom,
-        )
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    val l = BmwOutputChannel.LEFT
+    val r = BmwOutputChannel.RIGHT
+    val branches = buildList {
+        add(curves.lowBranchDbFor(l) to curves.lowBranchDbFor(r))
+        add(curves.midBranchDbFor(l) to curves.midBranchDbFor(r))
+        if (curves.highBranchActive) add(curves.highBranchDbFor(l) to curves.highBranchDbFor(r))
     }
-    path.lineTo(right, zeroY)
-    path.lineTo(left, zeroY)
-    path.close()
-    val zeroFraction = ((12f - 0f) / (12f - (-24f))).coerceIn(0.02f, 0.98f)
-    fillPaint.shader = LinearGradient(
-        0f, top, 0f, bottom,
-        intArrayOf(
-            android.graphics.Color.argb(AREA_FILL_ALPHA, 255, 255, 255),
-            android.graphics.Color.argb(0, 255, 255, 255),
-            android.graphics.Color.argb(AREA_FILL_ALPHA, 255, 255, 255),
-        ),
-        floatArrayOf(0f, zeroFraction, 1f),
-        Shader.TileMode.CLAMP,
-    )
-    nc.drawPath(path, fillPaint)
+    branches.forEachIndexed { band, (leftDb, rightDb) ->
+        val color = colors[band]
+        val edge = Path()
+        for (i in 0 until POINT_COUNT) {
+            val x = left + (i.toFloat() / lastIndex) * (right - left)
+            val y = dbToY(averageDb(leftDb[i], rightDb[i]), top, bottom)
+            if (i == 0) edge.moveTo(x, y) else edge.lineTo(x, y)
+        }
+        val area = Path(edge).apply {
+            lineTo(right, bottom)
+            lineTo(left, bottom)
+            close()
+        }
+        washPaint.shader = LinearGradient(
+            0f, top, 0f, bottom,
+            ColorUtils.setAlphaComponent(color, BAND_WASH_ALPHA),
+            ColorUtils.setAlphaComponent(color, 0),
+            Shader.TileMode.CLAMP,
+        )
+        nc.drawPath(area, washPaint)
+        edgePaint.color = color
+        edgePaint.alpha = BAND_EDGE_ALPHA
+        nc.drawPath(edge, edgePaint)
+    }
 }
 
 /**
- * Dashed vertical marker + Hz label at the Lowpass / Highpass corner frequencies (and the 3-way
+ * Faint vertical marker + Hz label at the Lowpass / Highpass corner frequencies (and the 3-way
  * Mid/High corner while 3-way is on). Not in
  * `NativeBmwDspResponseView`; matches what `CrossoverHandoffSurface.drawCornerMarker` showed on
  * this page.

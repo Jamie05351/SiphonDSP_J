@@ -1,10 +1,13 @@
 package app.siphondsp.compose.screens
 
 import android.content.Context
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Shader
 import android.util.TypedValue
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.runtime.Composable
@@ -40,6 +43,11 @@ import kotlinx.coroutines.delay
  * object -- splits, band ranges, the freq/dB fraction mapping and the GR->dB conversion are
  * shared verbatim with the View. The page's existing `rememberMeterPoll { nativeBmwMbcMeter() }`
  * feeds [mbcMeter]; the spectrum runs its own poll while this composable is on screen.
+ *
+ * 2026-10-01 restyle to match the redesigned PEQ graph: the whole graph sits on [graphPanel]; the
+ * four band regions are soft washes fading down the plot instead of flat blocks, the split lines
+ * and the dry/wet difference fills are quieter, and the gain-reduction curve is a neon red over a
+ * glow.
  */
 
 // --- geometry / constants, 1:1 with CompressorSurface ----------------------------------------
@@ -47,7 +55,10 @@ private const val PAD_LEFT_DP = 28f
 private const val PAD_RIGHT_DP = 10f
 private const val PAD_TOP_DP = 12f
 private const val PAD_BOTTOM_DP = 20f
-private const val BAND_FILL_ALPHA = 34
+private const val BAND_WASH_TOP_ALPHA = 46    // band region wash at the top of the plot
+private const val BAND_WASH_BOTTOM_ALPHA = 8   // ... fading toward the bottom
+private const val DELTA_FILL_ALPHA = 48        // dry/wet difference fills (were 90)
+private const val GAIN_CURVE_COLOR = 0xFFFF3B4E.toInt() // neon red
 private const val SPECTRUM_STEPS = 200
 private const val SPECTRUM_TICK_MS = 33L
 
@@ -87,15 +98,12 @@ fun CompressorGraph(
     }
     val splitLinePaint = remember(density) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(150, 152, 160); style = Paint.Style.STROKE; strokeWidth = 1.2f * density
+            color = Color.rgb(150, 152, 160); style = Paint.Style.STROKE; strokeWidth = density; alpha = 90
         }
     }
+    // One wash paint per band; the vertical-fade shader is set per draw (it depends on the plot).
     val bandFillPaints = remember {
-        BandTints.map { tint ->
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = ColorUtils.setAlphaComponent(tint, BAND_FILL_ALPHA); style = Paint.Style.FILL
-            }
-        }
+        BandTints.map { Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL } }
     }
     val thresholdPaint = remember(density, textPrimaryArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -105,7 +113,7 @@ fun CompressorGraph(
     val dryStrokePaint = remember(density, textPrimaryArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textPrimaryArgb; style = Paint.Style.STROKE
-            strokeWidth = 1.5f * density; alpha = 150
+            strokeWidth = 1.5f * density; alpha = 110
         }
     }
     val wetStrokePaint = remember(density) {
@@ -115,17 +123,24 @@ fun CompressorGraph(
     }
     val boostFillPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = BmwDashboardSkin.M_GREEN; style = Paint.Style.FILL; alpha = 90
+            color = BmwDashboardSkin.M_GREEN; style = Paint.Style.FILL; alpha = DELTA_FILL_ALPHA
         }
     }
     val cutFillPaint = remember {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = BmwDashboardSkin.M_RED; style = Paint.Style.FILL; alpha = 90
+            color = BmwDashboardSkin.M_RED; style = Paint.Style.FILL; alpha = DELTA_FILL_ALPHA
         }
     }
     val gainCurvePaint = remember(density) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = BmwDashboardSkin.M_RED; style = Paint.Style.STROKE; strokeWidth = 2f * density
+            color = GAIN_CURVE_COLOR; style = Paint.Style.STROKE; strokeWidth = 2.4f * density
+            strokeJoin = Paint.Join.ROUND
+        }
+    }
+    val gainGlowPaint = remember(density) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = GAIN_CURVE_COLOR; style = Paint.Style.STROKE; strokeWidth = 5f * density
+            maskFilter = BlurMaskFilter(6f * density, BlurMaskFilter.Blur.NORMAL); alpha = 110
         }
     }
     val readoutPaint = remember(density) {
@@ -151,7 +166,7 @@ fun CompressorGraph(
         }
     }
 
-    ComposeCanvas(modifier) {
+    ComposeCanvas(modifier.graphPanel()) {
         if (systemValues.size < NativeBmwDspValues.SIZE) return@ComposeCanvas
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
@@ -173,7 +188,7 @@ fun CompressorGraph(
             drawSpectrum(nc, left, right, top, bottom, frame, scratch, dryStrokePaint, wetStrokePaint, boostFillPaint, cutFillPaint)
             drawThresholdLines(nc, systemValues, left, right, top, bottom, splits, thresholdPaint)
             if (mbcOn) {
-                drawGainCurve(nc, mbcMeter, left, right, top, bottom, splits, scratch, gridPaint, gainCurvePaint)
+                drawGainCurve(nc, mbcMeter, left, right, top, bottom, splits, scratch, gridPaint, gainCurvePaint, gainGlowPaint)
             }
             drawBandReadouts(nc, systemValues, mbcMeter, left, right, top, density, splits, readoutPaint)
         }
@@ -207,6 +222,13 @@ private fun drawBandRegions(
         val (lowHz, highHz) = CompressorSurfaceMath.bandRange(band, splits)
         val x0 = xForFrequency(lowHz, left, right)
         val x1 = xForFrequency(highHz, left, right)
+        val tint = BandTints[band]
+        bandFillPaints[band].shader = LinearGradient(
+            0f, top, 0f, bottom,
+            ColorUtils.setAlphaComponent(tint, BAND_WASH_TOP_ALPHA),
+            ColorUtils.setAlphaComponent(tint, BAND_WASH_BOTTOM_ALPHA),
+            Shader.TileMode.CLAMP,
+        )
         nc.drawRect(x0, top, x1, bottom, bandFillPaints[band])
     }
     for (hz in splits) {
@@ -359,6 +381,7 @@ private fun drawGainCurve(
     scratch: CompressorGraphScratch,
     gridPaint: Paint,
     gainCurvePaint: Paint,
+    gainGlowPaint: Paint,
 ) {
     scratch.gainPath.rewind()
     var started = false
@@ -379,6 +402,7 @@ private fun drawGainCurve(
     }
     val zeroY = yForDb(0.0, top, bottom)
     nc.drawLine(left, zeroY, right, zeroY, gridPaint)
+    nc.drawPath(scratch.gainPath, gainGlowPaint)
     nc.drawPath(scratch.gainPath, gainCurvePaint)
 }
 
