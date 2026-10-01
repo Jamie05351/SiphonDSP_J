@@ -40,3 +40,27 @@
 -keepclasseswithmembernames class * {
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
+
+# Native code calls back into these by name (JamesDspWrapper.cpp, EelVmVariable.cpp). Covered by
+# the interop keep above; repeated here so the dependency is explicit.
+-keep class app.siphondsp.interop.structure.EelVmVariable { *; }
+
+# Gson fills these by field name.
+-keep class app.siphondsp.model.api.** { *; }
+-keepattributes Signature, *Annotation*
+
+# Passed through Bundles/Intents as java.io.Serializable.
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+# Reflects on its own helper classes to lift hidden-API restrictions (MainApplication).
+-keep class org.lsposed.hiddenapibypass.** { *; }
+
+# Keep line numbers so crash stack traces still point at real lines.
+-keepattributes SourceFile,LineNumberTable

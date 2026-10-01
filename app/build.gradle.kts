@@ -70,9 +70,12 @@ android {
             versionNameSuffix = "-${getCommitCount()}"
         }
         getByName("release") {
-            //proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 + resource shrinking: drops unused code and any res/ file nothing references.
+            // Keep rules for JNI, name-based lookups and Gson models live in proguard-rules.pro
+            // and res/raw/keep.xml.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         create("preview") {
