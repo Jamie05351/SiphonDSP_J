@@ -50,30 +50,31 @@ import kotlin.math.sin
 /** The three driver types in the car, one per crossover band. */
 enum class SpeakerKind { TWEETER, MID, WOOFER }
 
-// Positions as fractions of car_top (701x373). Right-hand-drive car, front at the top, so the
-// screen-left driver of each pair is the Left channel.
+// Positions as fractions of car_top (1400x703). Right-hand-drive car, front at the top, so the
+// screen-left driver of each pair is the Left channel. Tweeters sit in the mirror triangles, mids low on
+// the door cards (spread apart for tapping), woofers under the front seat cushions; heads at the headrests.
 private val LeftPos = mapOf(
-    SpeakerKind.TWEETER to Offset(0.300f, 0.30f),
-    SpeakerKind.MID to Offset(0.135f, 0.47f),
-    SpeakerKind.WOOFER to Offset(0.385f, 0.72f),
+    SpeakerKind.TWEETER to Offset(0.245f, 0.233f),
+    SpeakerKind.MID to Offset(0.126f, 0.445f),
+    SpeakerKind.WOOFER to Offset(0.380f, 0.682f),
 )
 private val RightPos = mapOf(
-    SpeakerKind.TWEETER to Offset(0.735f, 0.30f),
-    SpeakerKind.MID to Offset(0.885f, 0.47f),
-    SpeakerKind.WOOFER to Offset(0.630f, 0.72f),
+    SpeakerKind.TWEETER to Offset(0.761f, 0.245f),
+    SpeakerKind.MID to Offset(0.880f, 0.449f),
+    SpeakerKind.WOOFER to Offset(0.621f, 0.682f),
 )
-private val DriverHead = Offset(0.645f, 0.60f)
-private val PassengerHead = Offset(0.385f, 0.60f)
+private val DriverHead = Offset(0.619f, 0.810f)
+private val PassengerHead = Offset(0.379f, 0.810f)
 
 // Diameter as a fraction of the diagram width.
 private fun SpeakerKind.sizeFraction() = when (this) {
-    SpeakerKind.TWEETER -> 0.050f
-    SpeakerKind.MID -> 0.115f
-    SpeakerKind.WOOFER -> 0.150f
+    SpeakerKind.TWEETER -> 0.030f
+    SpeakerKind.MID -> 0.075f
+    SpeakerKind.WOOFER -> 0.110f
 }
 
-/** Aspect ratio of the car cut-out (701 x 373). */
-const val CarDiagramAspect = 701f / 373f
+/** Aspect ratio of the car cut-out (1400 x 703). */
+const val CarDiagramAspect = 1400f / 703f
 
 /**
  * Live car diagram for the Gains & Delay pages. The car cut-out with the six drivers as real
