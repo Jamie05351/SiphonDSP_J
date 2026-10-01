@@ -62,5 +62,12 @@
 # Reflects on its own helper classes to lift hidden-API restrictions (MainApplication).
 -keep class org.lsposed.hiddenapibypass.** { *; }
 
+# Hidden system interfaces from :hidden-api-stubs (compileOnly), used by hidden-api-impl through
+# Shizuku. They exist on the device but not on R8's classpath, so R8 must not treat them as missing.
+-dontwarn android.permission.IPermissionManager
+-dontwarn android.permission.IPermissionManager$**
+-dontwarn com.android.internal.app.IAppOpsService
+-dontwarn com.android.internal.app.IAppOpsService$**
+
 # Keep line numbers so crash stack traces still point at real lines.
 -keepattributes SourceFile,LineNumberTable
