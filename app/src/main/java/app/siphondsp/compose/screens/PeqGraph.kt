@@ -3,7 +3,6 @@ package app.siphondsp.compose.screens
 import android.content.Context
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
-import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -133,15 +132,16 @@ private const val FOCUS_IDLE_MS = 10_000L
 private const val FOCUS_FADE_MS = 400
 
 // Per-filter colours (node, shape and callout), by global filter number. Chosen to stay clear of
-// the bank colours (Pre EQ white, Low cyan, Mid yellow, High pink) so a filter never reads as a
-// band, and different enough from each other that overlapping shapes stay tellable apart.
+// the bank colours (Pre EQ white, Low cyan, Mid yellow, High pink) and the L purple / R green
+// curves, so a filter never reads as a band or a channel, and different enough from each other
+// that overlapping shapes stay tellable apart.
 private val FilterPalette = intArrayOf(
     AndroidColor.rgb(0x2D, 0xE1, 0xC2), // teal
-    AndroidColor.rgb(0xA0, 0x6B, 0xFF), // violet
+    AndroidColor.rgb(0xE0, 0xE0, 0xE0), // silver
     AndroidColor.rgb(0xFF, 0x7A, 0x59), // coral
     AndroidColor.rgb(0xB5, 0xE6, 0x55), // lime
     AndroidColor.rgb(0xFF, 0xA2, 0x4C), // orange
-    AndroidColor.rgb(0xD9, 0x8C, 0xFF), // orchid
+    AndroidColor.rgb(0xC8, 0xA1, 0x65), // bronze
     AndroidColor.rgb(0x7D, 0xFF, 0xB2), // mint
     AndroidColor.rgb(0xFF, 0x4D, 0x4D), // red
     AndroidColor.rgb(0x7B, 0x8C, 0xFF), // periwinkle
@@ -150,8 +150,15 @@ private val FilterPalette = intArrayOf(
 
 private fun filterColor(globalIndex: Int): Int = FilterPalette[globalIndex.mod(FilterPalette.size)]
 
-// The full EQ'd (summed) curve: a cool white, distinct from Pre EQ's pure white and every band.
+// The "SUM" label and the faint full curve behind a focused bank: a cool white, distinct from
+// Pre EQ's pure white and every band. (The bright full curve itself uses the channel colours.)
 private val SumCurveColor = AndroidColor.rgb(0xEA, 0xF2, 0xFF)
+
+// Channel colours for every response curve (the full curve and the focused bank's): left neon
+// purple (the app's meter purple), right solid neon green (the lit-switch green) -- solid lines, so
+// L and R stay tellable apart without dashes. The focused bank shows in its tab, area and label.
+private val LeftChannelColor = AndroidColor.rgb(0xB1, 0x4D, 0xFF)
+private val RightChannelColor = AndroidColor.rgb(0x39, 0xFF, 0x14)
 
 private const val ACTIVE_NODE_RADIUS_DP = 8f
 private const val NODE_TOUCH_RADIUS_DP = 22f
@@ -457,10 +464,11 @@ private fun rememberPeqSurfacePaints(): PeqSurfacePaints {
             // The summed-response curve: a cool white (the old warm yellow read as the Mid band),
             // a little heavier so the bloom underneath reads. Compose-only override —
             // PeqSurfacePaints.sumColor stays white for the legacy view and the gain meters.
-            sumPaintSolid.color = SumCurveColor
+            sumPaintSolid.color = LeftChannelColor
             sumPaintSolid.strokeWidth = 2.2f * density
-            sumPaintDashed.color = SumCurveColor
+            sumPaintDashed.color = RightChannelColor
             sumPaintDashed.strokeWidth = 2.2f * density
+            sumPaintDashed.pathEffect = null // R: solid neon green, not dashed (name kept from the View)
         }
     }
 }
@@ -664,12 +672,12 @@ private fun drawLegend(
             nc.drawText("MID", g.left + 48f * density, baseline, tinted(p.bankColorMid))
             nc.drawText("HIGH", g.left + 92f * density, baseline, tinted(p.bankColorHigh))
             nc.drawText(
-                "FINAL SUM PHASE (L solid / R dashed) · compressor not shown (nonlinear)",
+                "FINAL SUM PHASE (L purple / R green) · compressor not shown (nonlinear)",
                 g.left + 146f * density, baseline, p.unifiedLegendPaint,
             )
         }
         PeqGraphMode.MAGNITUDE -> {
-            // Left: the bank colour key. Right: what has focus, and its L solid / R dashed key.
+            // Left: the bank colour key. Right: what has focus, and its L purple / R green key.
             var x = g.left
             for ((label, color) in listOf(
                 "PRE EQ" to p.bankColorFull, "LOW" to p.bankColorLow,
@@ -694,11 +702,11 @@ private fun drawLegend(
             var right = g.right
             right -= keyPaint.measureText("R"); nc.drawText("R", right, baseline, keyPaint)
             right -= gap + sample
-            line.pathEffect = DashPathEffect(floatArrayOf(5f * density, 3f * density), 0f)
+            line.color = RightChannelColor
             nc.drawLine(right, midY, right + sample, midY, line)
             right -= 14f * density + keyPaint.measureText("L"); nc.drawText("L", right, baseline, keyPaint)
             right -= gap + sample
-            line.pathEffect = null
+            line.color = LeftChannelColor
             nc.drawLine(right, midY, right + sample, midY, line)
             right -= 12f * density + labelPaint.measureText(focusLabel)
             nc.drawText(focusLabel, right, baseline, labelPaint)
@@ -828,7 +836,7 @@ private fun curvePath(g: PeqPlotGeometry, values: DoubleArray, into: Path = Path
 
 /**
  * The full EQ'd (summed) curve. With the full curve in focus (focus 0) it's bright with a glow, L
- * solid and R dashed; as a bank takes focus it drops back to one faint thin line behind it.
+ * neon purple and R neon green; as a bank takes focus it drops back to one faint thin line behind it.
  */
 private fun drawSumCurve(nc: Canvas, ctx: PeqDrawContext) {
     val g = ctx.geometry
@@ -845,7 +853,7 @@ private fun drawSumCurve(nc: Canvas, ctx: PeqDrawContext) {
         if (ctx.channelDisplay != PeqChannelDisplay.LEFT) {
             val values = ctx.curves.sumDb[BmwOutputChannel.RIGHT.ordinal]
             if (values.isNotEmpty()) {
-                p.sumPaintDashed.alpha = scaleAlpha(180, bright)
+                p.sumPaintDashed.alpha = scaleAlpha(230, bright)
                 nc.drawPath(curvePath(g, values), p.sumPaintDashed)
             }
         }
@@ -883,18 +891,17 @@ private fun curveDbAt(values: DoubleArray, frequency: Double, maxFrequency: Doub
 private fun bankAudible(ctx: PeqDrawContext, bank: BmwPeqBank): Boolean =
     bank != BmwPeqBank.HIGH || ctx.curves.highBranchActive
 
-/** The focused bank's own curve, bright in its bank colour (L solid, R dashed), faded by focus. */
+/** The focused bank's own curve, bright (L neon purple, R neon green), faded by focus. */
 private fun drawFocusedBankCurve(nc: Canvas, ctx: PeqDrawContext) {
     if (ctx.focus <= 0f || !bankAudible(ctx, ctx.activeBank)) return
     val g = ctx.geometry
     val perChannel = bankCurves(ctx.curves, ctx.activeBank)
-    val color = bankColor(ctx.paints, ctx.activeBank)
     val solid = ctx.glass.bankCurvePaint
-    val dashed = ctx.glass.bankCurveDashedPaint
+    val rightPaint = ctx.glass.bankCurveRightPaint
     if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) {
         val values = perChannel[BmwOutputChannel.LEFT.ordinal]
         if (values.isNotEmpty()) {
-            solid.color = color
+            solid.color = LeftChannelColor
             solid.alpha = scaleAlpha(255, ctx.focus)
             drawGlowStroke(nc, ctx.glass, curvePath(g, values), solid, scaleAlpha(130, ctx.focus))
         }
@@ -902,9 +909,9 @@ private fun drawFocusedBankCurve(nc: Canvas, ctx: PeqDrawContext) {
     if (ctx.channelDisplay != PeqChannelDisplay.LEFT) {
         val values = perChannel[BmwOutputChannel.RIGHT.ordinal]
         if (values.isNotEmpty()) {
-            dashed.color = color
-            dashed.alpha = scaleAlpha(190, ctx.focus)
-            nc.drawPath(curvePath(g, values), dashed)
+            rightPaint.color = RightChannelColor
+            rightPaint.alpha = scaleAlpha(230, ctx.focus)
+            nc.drawPath(curvePath(g, values), rightPaint)
         }
     }
 }
@@ -973,8 +980,9 @@ private fun drawVignette(nc: Canvas, ctx: PeqDrawContext) {
 /**
  * Each of the focused bank's filters as its own shape in its own colour: the region between the
  * bank's curve and "the bank's curve without this filter" (exact for an LTI cascade: subtract the
- * filter's own dB response). Translucent, so where two filters overlap their colours mix; a dashed
- * edge marks the "without" side. Fades with focus, so idle shows no stacked shapes at all.
+ * filter's own dB response). Translucent, so where two filters overlap their colours mix. No
+ * outline: dashed "without" edges crowded the curve wherever filters sat side by side. Fades with
+ * focus, so idle shows no stacked shapes at all.
  */
 private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     if (ctx.focus <= 0f || !bankAudible(ctx, ctx.activeBank)) return
@@ -984,9 +992,7 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     val m = ctx.model
     val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val fill = ctx.glass.filterShapePaint
-    val edge = ctx.glass.filterEdgePaint
     val shape = Path()
-    val without = Path()
     val offset = ctx.bankNumberOffset(ctx.activeBank)
     bands.forEachIndexed { index, band ->
         val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
@@ -1008,22 +1014,15 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
             m.fillBottomY[i] = g.yForGain(reference[i] - m.bandAcc.magnitudeDb())
         }
         shape.rewind()
-        without.rewind()
         for (i in 0 until SYSTEM_POINT_COUNT) {
             if (i == 0) shape.moveTo(m.fillX[i], m.fillTopY[i]) else shape.lineTo(m.fillX[i], m.fillTopY[i])
         }
         for (i in SYSTEM_POINT_COUNT - 1 downTo 0) shape.lineTo(m.fillX[i], m.fillBottomY[i])
         shape.close()
-        for (i in 0 until SYSTEM_POINT_COUNT) {
-            if (i == 0) without.moveTo(m.fillX[i], m.fillBottomY[i]) else without.lineTo(m.fillX[i], m.fillBottomY[i])
-        }
         val color = filterColor(offset + index)
         fill.color = color
         fill.alpha = scaleAlpha(97, ctx.focus)
         nc.drawPath(shape, fill)
-        edge.color = color
-        edge.alpha = scaleAlpha(230, ctx.focus)
-        nc.drawPath(without, edge)
     }
 }
 
@@ -1605,17 +1604,16 @@ private class PeqGlassPaints(density: Float) {
         strokeJoin = Paint.Join.ROUND
     }
 
-    // The focused bank's own curve (L solid, R dashed).
+    // The focused bank's own curve: L neon purple, R neon green.
     val bankCurvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2.4f * density
         strokeJoin = Paint.Join.ROUND
     }
-    val bankCurveDashedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val bankCurveRightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2f * density
         strokeJoin = Paint.Join.ROUND
-        pathEffect = DashPathEffect(floatArrayOf(7f * density, 5f * density), 0f)
     }
 
     // Band areas: a wash under each band's curve (shader set per band) and its thin outline.
@@ -1625,13 +1623,8 @@ private class PeqGlassPaints(density: Float) {
         strokeWidth = 1.5f * density
     }
 
-    // A focused bank's filters: one translucent shape each, with a dashed "without" edge.
+    // A focused bank's filters: one translucent shape each.
     val filterShapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    val filterEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-        pathEffect = DashPathEffect(floatArrayOf(4f * density, 3f * density), 0f)
-    }
 
     // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.
     val octaveGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
