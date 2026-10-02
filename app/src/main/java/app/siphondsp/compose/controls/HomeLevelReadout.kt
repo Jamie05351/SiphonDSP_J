@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,8 +24,9 @@ import java.util.Locale
 /**
  * The front page's top-screen level readout: big L and R RMS numbers with each channel's held peak
  * under it, and the headroom left before the limiter (or before clipping while the limiter is off).
- * Text is 18sp / 44sp at the head unit's size and scales down together only when the box is
- * smaller than that (a small phone), so nothing wraps or clips.
+ * The block is centred vertically in its box. Text is 18sp / 44sp at the head unit's size and
+ * scales down together only when the box is smaller than that (a small phone), so nothing wraps or
+ * clips.
  *
  * [limiterDb] is the limiter threshold while the limiter is on, null while it is off.
  */
@@ -35,7 +37,11 @@ fun HomeLevelReadout(readout: LevelReadout, limiterDb: Float?, modifier: Modifie
         val small = (SmallSp * k).sp
         val big = (BigSp * k).sp
         val headroom = readout.headroomDb(limiterDb ?: 0f)
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy((12 * k).dp)) {
+        // Centred vertically, so the block sits on the top screen's centre line.
+        Row(
+            Modifier.fillMaxWidth().align(Alignment.CenterStart),
+            horizontalArrangement = Arrangement.spacedBy((12 * k).dp),
+        ) {
             Column(Modifier.weight(2f)) {
                 Heading("LEVELS", small)
                 Row {
