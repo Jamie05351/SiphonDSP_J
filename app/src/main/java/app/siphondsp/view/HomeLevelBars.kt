@@ -18,9 +18,6 @@ import kotlin.math.ceil
  * the bottom (post-DSP RMS illumination plus a peak-hold outline from [SpectrumEngine]'s analyzer).
  * Unlit segments stay as dim purple glass so the meter reads as hardware even in silence.
  *
- * It also feeds the top screen's big level readout through [onReadout], a few times a second, so
- * both share one analyzer subscription.
- *
  * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this view holds
  * it only while it is attached, its window and view are visible, and [pageActive] is true (the
  * pager is on the artwork page), so nothing extra runs once the user has moved on to a DSP
@@ -36,13 +33,6 @@ class HomeLevelBars @JvmOverloads constructor(
     private val rightMeter = PeakHoldMeter(floorDb = FLOOR_DB)
     private val levels = FloatArray(4)
     private var acquired = false
-    private var ticksSinceReadout = 0
-
-    /**
-     * Receives the current levels every [READOUT_EVERY] frames (about 5 per second, slow enough for
-     * numbers to be read), and [LevelReadout.SILENT] when the meter stops.
-     */
-    var onReadout: ((LevelReadout) -> Unit)? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -51,12 +41,6 @@ class HomeLevelBars @JvmOverloads constructor(
             val now = System.currentTimeMillis()
             leftMeter.update(levels[0], levels[1], now)
             rightMeter.update(levels[2], levels[3], now)
-            if (++ticksSinceReadout >= READOUT_EVERY) {
-                ticksSinceReadout = 0
-                onReadout?.invoke(
-                    LevelReadout(leftMeter.rmsDb, leftMeter.holdDb, rightMeter.rmsDb, rightMeter.holdDb),
-                )
-            }
             invalidate()
             handler.postDelayed(this, FRAME_MS)
         }
@@ -124,7 +108,6 @@ class HomeLevelBars @JvmOverloads constructor(
         SpectrumEngine.release()
         leftMeter.reset()
         rightMeter.reset()
-        onReadout?.invoke(LevelReadout.SILENT)
         invalidate()
     }
 
@@ -190,8 +173,7 @@ class HomeLevelBars @JvmOverloads constructor(
 
     private companion object {
         const val FRAME_MS = 50L
-        const val FLOOR_DB = LevelReadout.FLOOR_DB
-        const val READOUT_EVERY = 4
+        const val FLOOR_DB = -60f
         const val CEILING_DB = 0f
         const val SEGMENT_COUNT = 28
         val PURPLE = BmwDashboardSkin.SLIDER_HEADROOM_COLOR

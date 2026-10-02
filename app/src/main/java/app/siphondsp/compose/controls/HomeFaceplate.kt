@@ -21,13 +21,12 @@ import kotlin.math.min
 /**
  * The front page's hardware faceplate, drawn live: a grained dark plate with two black glass screens
  * recessed into it right of the meter and power panel (the smaller on top, a strip of plate between
- * them), a faint divider between the top screen's live blocks, and a slim metal bezel around the
- * whole display.
+ * them), and a slim metal bezel around the whole display.
  *
  * Everything is placed in the same art space as [HomeArt] (fit-scaled and centred, so it lines up
  * with the live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect; the
- * plate fills the whole view, margins included). The tiles, the meter, the stages and the power
- * button are drawn by their own views on top.
+ * plate fills the whole view, margins included). The tiles, the meter and the power button are
+ * drawn by their own views on top.
  */
 @Composable
 fun HomeFaceplate(modifier: Modifier = Modifier) {
@@ -76,19 +75,6 @@ private fun DrawScope.drawFaceplate(phone: Boolean, grain: ShaderBrush) {
         Offset(seamRight, seamY + 2.5f * unit),
         strokeWidth = 1.5f * unit,
     )
-
-    // Faint dividers between the top screen's live blocks, inset from their top and bottom.
-    val blocks = HomeArt.LIVE_KEYS.map { rect(it) }
-    blocks.zipWithNext { (leftAt, leftSize), (rightAt, _) ->
-        val x = (leftAt.x + leftSize.width + rightAt.x) / 2f
-        val inset = leftSize.height * 0.1f
-        drawLine(
-            Color.White.copy(alpha = 0.12f),
-            Offset(x, leftAt.y + inset),
-            Offset(x, leftAt.y + leftSize.height - inset),
-            strokeWidth = 2f * unit,
-        )
-    }
 
     // Slim metal bezel around the whole display.
     drawBezelRing(0f, 0f, w, h, corner, bezel)
