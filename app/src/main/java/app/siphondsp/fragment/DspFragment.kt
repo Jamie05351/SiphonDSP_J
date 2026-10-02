@@ -49,7 +49,6 @@ class DspFragment : Fragment() {
     private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
-    private var powerState: Boolean = false
 
     /**
      * The DSP tile being opened: its glow is lit, and every other front-page tap is ignored, from the
@@ -131,7 +130,6 @@ class DspFragment : Fragment() {
         // stop work when the settings page is selected.
         val active = position == 0
         shortcutsBinding.homeLevelBars.pageActive = active
-        shortcutsBinding.homeEngineStatus.pageActive = active
         if (!active) cancelPendingOpen()
     }
 
@@ -164,8 +162,6 @@ class DspFragment : Fragment() {
         shortcutsBinding.updateNotice.setOnRootClickListener {
             updateNoticeOnClick?.invoke()
         }
-
-        shortcutsBinding.homeEngineStatus.powerOn = powerState
 
         // Seven primary home actions. The first five open DSP workspaces; Settings and More
         // delegate to MainActivity so its existing settings/overflow behaviour remains the single
@@ -267,14 +263,6 @@ class DspFragment : Fragment() {
         shortcutsBinding.translationNotice.isVisible = false
         // Set timer +1y
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
-    }
-
-    /** Keeps the live panel's audio-engine block in lockstep with MainActivity's real power state. */
-    fun setPowerState(on: Boolean) {
-        powerState = on
-        if (::shortcutsBinding.isInitialized) {
-            shortcutsBinding.homeEngineStatus.powerOn = on
-        }
     }
 
     fun setUpdateCardVisible(visible: Boolean) {

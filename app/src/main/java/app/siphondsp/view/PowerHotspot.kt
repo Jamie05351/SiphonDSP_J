@@ -18,8 +18,8 @@ import kotlin.math.min
  * power logic is unchanged.
  *
  * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the glow):
- * a metal collar around a dark well with a power symbol, always lit: a green neon ring and halo
- * while on, red while off, so the engine state reads at a glance. No baked art is involved. No LED
+ * a metal collar around a dark well with a power symbol, always lit: a purple neon ring and halo
+ * while on (the output meter's purple), red while off, so the engine state reads at a glance. No baked art is involved. No LED
  * dot (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
@@ -110,10 +110,10 @@ class PowerHotspot @JvmOverloads constructor(
     }
 
     private companion object {
-        // Same green as the app's on toggles, and BmwDashboardSkin.M_RED.
-        const val RingOn = 0xFF39FF14.toInt()
+        // The output meter's purple (HomeLevelBars' glow), and BmwDashboardSkin.M_RED.
+        const val RingOn = 0xFFB14DFF.toInt()
         const val RingOff = 0xFFE32B3B.toInt()
-        const val SymbolOn = 0xFFC8FFB8.toInt()
+        const val SymbolOn = 0xFFEDD8FF.toInt()
         const val SymbolOff = 0xFFFFB8BE.toInt()
         val CollarColors = intArrayOf(
             0xFF2A282A.toInt(), 0xFFC8C6C8.toInt(), 0xFF383638.toInt(), 0xFF9A9799.toInt(),

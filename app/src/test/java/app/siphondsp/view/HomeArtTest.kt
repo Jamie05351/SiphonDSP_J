@@ -7,7 +7,9 @@ import org.junit.Test
 
 class HomeArtTest {
 
-    private val keys = HomeArt.TILE_KEYS + HomeArt.LIVE_KEYS +
+    private val liveKeys = listOf("live_output", "live_stages")
+
+    private val keys = HomeArt.TILE_KEYS + liveKeys +
         HomeArt.SCREEN_KEYS + listOf("power_btn", "power_led", "cog", "overflow")
 
     private val dspTiles = HomeArt.TILE_KEYS.take(5)
@@ -87,7 +89,7 @@ class HomeArtTest {
             dspTiles.forEach { key ->
                 assertTrue("$key escapes the bottom screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, bottom))
             }
-            (listOf("tile_settings", "tile_more") + HomeArt.LIVE_KEYS).forEach { key ->
+            listOf("tile_settings", "tile_more", "live_stages").forEach { key ->
                 assertTrue("$key escapes the top screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, top))
             }
         }
@@ -109,7 +111,7 @@ class HomeArtTest {
     @Test
     fun nothingOnTheScreenOverlaps() {
         for (phone in listOf(false, true)) {
-            val all = HomeArt.TILE_KEYS + HomeArt.LIVE_KEYS
+            val all = HomeArt.TILE_KEYS + liveKeys + "power_btn"
             for (i in all.indices) for (j in i + 1 until all.size) {
                 assertTrue(
                     "${all[i]} overlaps ${all[j]} (phone=$phone)",
@@ -132,16 +134,26 @@ class HomeArtTest {
     }
 
     @Test
-    fun settingsAndMoreLineUpWithTheOuterDspTiles() {
+    fun settingsEndsFlushWithTheLastDspTileAndMoreSitsLeftOfIt() {
         for (phone in listOf(false, true)) {
-            val (w, h) = artSize(phone)
-            val first = HomeArt.frac("tile_peq", phone)!!
             val last = HomeArt.frac("tile_allpass", phone)!!
             val settings = HomeArt.frac("tile_settings", phone)!!
             val more = HomeArt.frac("tile_more", phone)!!
-            assertEquals(last.x + last.w, more.x + more.w, 1e-3f)
-            assertEquals(first.x, settings.x, 1e-3f)
-            listOf(settings, more).forEach { assertEquals("small tile not square (phone=$phone)", it.w * w, it.h * h, 1f) }
+            assertEquals(last.x + last.w, settings.x + settings.w, 1e-3f)
+            assertTrue("More not left of Settings (phone=$phone)", more.x + more.w <= settings.x)
+            assertEquals(more.y, settings.y, 1e-4f)
+        }
+    }
+
+    @Test
+    fun meterAndPowerButtonShareTheLeftPanel() {
+        for (phone in listOf(false, true)) {
+            val screen = HomeArt.frac("screen_top", phone)!!
+            val meter = HomeArt.frac("live_output", phone)!!
+            val power = HomeArt.frac("power_btn", phone)!!
+            assertTrue("meter overlaps the screens (phone=$phone)", meter.x + meter.w <= screen.x)
+            assertTrue("meter not left of the power button (phone=$phone)", meter.x + meter.w <= power.x)
+            assertTrue("meter taller than the art (phone=$phone)", meter.y >= 0f && meter.y + meter.h <= 1f)
         }
     }
 

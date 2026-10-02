@@ -50,9 +50,9 @@ class DspStatusStrip @JvmOverloads constructor(
 ) : LinearLayout(context, attrs) {
 
     /**
-     * Front-page mode (`app:stacked="true"`): the live panel's GLOBAL STAGES block. A title, then
+     * Front-page mode (`app:stacked="true"`): the top screen's GLOBAL STAGES block. A title, then
      * the three stage cells stacked at 18sp, one line each, with no separators and no health cell
-     * (the panel's audio-engine block shows that). A block too small for 18sp shrinks to fit (see
+     * (the power button shows whether the engine runs). A block too small for 18sp shrinks to fit (see
      * [fitStacked]).
      */
     private val stacked: Boolean = context.obtainStyledAttributes(attrs, R.styleable.DspStatusStrip).let {

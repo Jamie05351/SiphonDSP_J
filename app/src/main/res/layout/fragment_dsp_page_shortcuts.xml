@@ -12,8 +12,8 @@
          margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
          own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
          same fit mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
-         ComposeView, so a tile's picture and its touch area are the same box) and the live panel's
-         three blocks (output levels, audio engine, global stages). The power button remains in the
+         ComposeView, so a tile's picture and its touch area are the same box), the left panel's
+         output meter and the top screen's global stages. The power button remains in the
          activity overlay (PowerHotspot draws it). Must never scroll. -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/home_backdrop"
@@ -99,13 +99,6 @@
         <app.siphondsp.view.HomeLevelBars
             android:id="@+id/home_level_bars"
             android:tag="live_output"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no" />
-
-        <app.siphondsp.view.HomeEngineStatusView
-            android:id="@+id/home_engine_status"
-            android:tag="live_engine"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="no" />
