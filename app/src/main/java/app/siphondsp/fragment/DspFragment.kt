@@ -329,8 +329,8 @@ class DspFragment : Fragment() {
 
     /**
      * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
-     * five DSP tiles, the LED meter, GLOBAL STAGES and the level readout fade to grey, so it is
-     * obvious at a glance. They stay tappable. Settings and More keep their colour.
+     * live data (the LED meter, GLOBAL STAGES and the level readout) fades to grey, so it is obvious
+     * at a glance. The stage cells stay tappable. The tiles, Settings and More keep their colour.
      */
     fun setPowerState(on: Boolean) {
         if (on == powerOn) return
@@ -355,12 +355,7 @@ class DspFragment : Fragment() {
      */
     private fun setPowerLook(look: Float) {
         powerLook = look
-        val views = with(shortcutsBinding) {
-            listOf(
-                cardShortcutPeq, cardShortcutGainsDelay, cardShortcutCrossovers, cardShortcutCompressor,
-                cardShortcutAllpass, homeLevelBars, homeStages, homeLevelReadout,
-            )
-        }
+        val views = with(shortcutsBinding) { listOf(homeLevelBars, homeStages, homeLevelReadout) }
         if (look >= 1f) {
             views.forEach {
                 it.setLayerType(View.LAYER_TYPE_NONE, null)
@@ -414,7 +409,7 @@ class DspFragment : Fragment() {
     companion object {
         private const val TILE_FLASH_MS = 150L
         private const val POWER_FADE_MS = 250L
-        /** How visible the powered views stay while the DSP is off: dimmed, but still readable. */
+        /** How visible the live data stays while the DSP is off: dimmed, but still readable. */
         private const val OFF_ALPHA = 0.45f
 
         fun newInstance(): DspFragment {

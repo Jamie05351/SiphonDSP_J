@@ -44,7 +44,7 @@ internal fun plateGrainBrush(): ShaderBrush {
 }
 
 /**
- * The plate over the whole draw area: a smooth dark gradient, lighter at the top, with the fine
+ * The plate over the whole draw area: a smooth near-black gradient, a touch lighter at the top, with the fine
  * [grain] over it, rounded to [corner]. (It was brushed-metal streaks from a small repeated tile,
  * which showed as a busy repeating pattern, worst on high-density phones.)
  */
@@ -59,5 +59,5 @@ internal fun DrawScope.drawPlate(grain: ShaderBrush, corner: Float) {
 private const val GrainTileSize = 512
 // Fleck strength: up to ~5% white or black per pixel. Enough to read as a surface, not as noise.
 private const val GrainMaxAlpha = 14
-private val PlateTop = Color(0xFF252527)
-private val PlateBottom = Color(0xFF121213)
+private val PlateTop = Color(0xFF151517)
+private val PlateBottom = Color(0xFF09090A)
