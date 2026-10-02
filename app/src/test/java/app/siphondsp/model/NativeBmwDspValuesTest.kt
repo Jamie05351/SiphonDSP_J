@@ -42,6 +42,14 @@ class NativeBmwDspValuesTest {
         seedMidUpperCrossoverMigrated(values)
         seedHighBandMigrated(values)
         seedHighBusLimiterMigrated(values)
+        seedVirtualMigrated(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateVirtualIfNeeded]: marker claimed. DEFAULTS already
+     *  ships the virtual stage disabled, so this only flips the marker. Runs last, matching
+     *  load()'s real call order. */
+    private fun seedVirtualMigrated(values: FloatArray) {
+        values[NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateHighBusLimiterIfNeeded]: marker claimed. DEFAULTS
@@ -562,6 +570,49 @@ class NativeBmwDspValuesTest {
         NativeBmwDspValues.save(context, first.also { it[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED] = 1f })
         val second = NativeBmwDspValues.load(context)
         assertEquals(1f, second[NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED], 0f)
+    }
+
+    @Test
+    fun migrateRestoredValuesSeedsVirtualStageOffLikeLoadDoes() {
+        // A pre-virtual-stage backup-shaped array (266 values, predates the 266 -> 288 growth).
+        val legacy = FloatArray(266) { index -> NativeBmwDspValues.DEFAULTS[index] }
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(context, legacy)
+
+        assertEquals(NativeBmwDspValues.SIZE, restored.size)
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED], 0f)
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL], 0f)
+        assertEquals(
+            0f,
+            restored[NativeBmwDspValues.virtualFeedIndex(NativeBmwDspValues.VIRTUAL_SIDE_RIGHT, NativeBmwDspValues.VIRTUAL_FEED_DELAY)],
+            0f,
+        )
+        assertEquals(1f, restored[NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED], 0f)
+    }
+
+    @Test
+    fun loadForceDisablesVirtualStageOnceThenRespectsALaterEnable() {
+        val unmigrated = migratedDefaults().also {
+            it[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, unmigrated)
+
+        val first = NativeBmwDspValues.load(context)
+        assertEquals(0f, first[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED], 0f)
+        assertEquals(1f, first[NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED], 0f)
+
+        NativeBmwDspValues.save(context, first.also { it[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED] = 1f })
+        val second = NativeBmwDspValues.load(context)
+        assertEquals(1f, second[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED], 0f)
+    }
+
+    @Test
+    fun virtualFeedIndexLaysOutLeftThenRight() {
+        assertEquals(273, NativeBmwDspValues.virtualFeedIndex(NativeBmwDspValues.VIRTUAL_SIDE_LEFT, NativeBmwDspValues.VIRTUAL_FEED_GAIN))
+        assertEquals(279, NativeBmwDspValues.virtualFeedIndex(NativeBmwDspValues.VIRTUAL_SIDE_LEFT, NativeBmwDspValues.VIRTUAL_FEED_AP_ORDER))
+        assertEquals(280, NativeBmwDspValues.virtualFeedIndex(NativeBmwDspValues.VIRTUAL_SIDE_RIGHT, NativeBmwDspValues.VIRTUAL_FEED_GAIN))
+        assertEquals(286, NativeBmwDspValues.virtualFeedIndex(NativeBmwDspValues.VIRTUAL_SIDE_RIGHT, NativeBmwDspValues.VIRTUAL_FEED_AP_ORDER))
     }
 
     @Test

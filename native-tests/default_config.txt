@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (210 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (288 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -353,3 +353,26 @@
 -3           # 263 busLimHigh threshold
 120          # 264 busLimHigh release
 0            # 265 busLimHighMigrated (0 = seed the limiter disabled on next load)
+
+0            # 266 virtual stage enabled (ships off)
+150          # 267 virtual detector HPF Hz
+8000         # 268 virtual detector LPF Hz
+10           # 269 virtual weight attack ms
+200          # 270 virtual weight release ms
+0            # 271 virtual centre level dB
+0            # 272 virtual side (residual) level dB
+0            # 273 centre feed Left gain dB
+0            # 274 centre feed Left delay ms
+0            # 275 centre feed Left polarity
+0            # 276 centre feed Left all-pass enabled
+1000         # 277 centre feed Left all-pass freq Hz
+0.70710677   # 278 centre feed Left all-pass Q
+2            # 279 centre feed Left all-pass order (2 = 2nd)
+0            # 280 centre feed Right gain dB
+0            # 281 centre feed Right delay ms
+0            # 282 centre feed Right polarity
+0            # 283 centre feed Right all-pass enabled
+1000         # 284 centre feed Right all-pass freq Hz
+0.70710677   # 285 centre feed Right all-pass Q
+2            # 286 centre feed Right all-pass order (2 = 2nd)
+0            # 287 virtualMigrated (0 = seed the stage off on next load)

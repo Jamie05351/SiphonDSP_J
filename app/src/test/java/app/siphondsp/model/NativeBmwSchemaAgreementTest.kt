@@ -136,6 +136,24 @@ class NativeBmwSchemaAgreementTest {
         "kBusLimHighThreshold" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD,
         "kBusLimHighRelease" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE,
         "kBusLimHighMigrated" to NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_MIGRATED,
+
+        "kVirtualEnabled" to NativeBmwDspValues.INDEX_VIRTUAL_ENABLED,
+        "kVirtualDetectHpf" to NativeBmwDspValues.INDEX_VIRTUAL_DETECT_HPF,
+        "kVirtualDetectLpf" to NativeBmwDspValues.INDEX_VIRTUAL_DETECT_LPF,
+        "kVirtualAttack" to NativeBmwDspValues.INDEX_VIRTUAL_ATTACK,
+        "kVirtualRelease" to NativeBmwDspValues.INDEX_VIRTUAL_RELEASE,
+        "kVirtualCentreLevel" to NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL,
+        "kVirtualSideLevel" to NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL,
+        "kVirtualFeedBase" to NativeBmwDspValues.INDEX_VIRTUAL_FEED,
+        "kVirtualFeedWidth" to NativeBmwDspValues.VIRTUAL_FEED_WIDTH,
+        "kVirtualFeedGain" to NativeBmwDspValues.VIRTUAL_FEED_GAIN,
+        "kVirtualFeedDelay" to NativeBmwDspValues.VIRTUAL_FEED_DELAY,
+        "kVirtualFeedPolarity" to NativeBmwDspValues.VIRTUAL_FEED_POLARITY,
+        "kVirtualFeedApEnabled" to NativeBmwDspValues.VIRTUAL_FEED_AP_ENABLED,
+        "kVirtualFeedApFreq" to NativeBmwDspValues.VIRTUAL_FEED_AP_FREQ,
+        "kVirtualFeedApQ" to NativeBmwDspValues.VIRTUAL_FEED_AP_Q,
+        "kVirtualFeedApOrder" to NativeBmwDspValues.VIRTUAL_FEED_AP_ORDER,
+        "kVirtualMigrated" to NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED,
     )
 
     @Test

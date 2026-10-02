@@ -490,6 +490,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 
+    fun nativeBmwVirtualMeter(): FloatArray? =
+        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwVirtualMeter(it) }
+
     fun startNativeBmwCapture() {
         freePendingCaptureSnapshot()
         withHandle { JamesDspWrapper.startNativeBmwCapture(it) }

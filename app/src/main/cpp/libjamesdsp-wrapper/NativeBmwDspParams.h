@@ -4,6 +4,7 @@
 // The processor's parsed scalar config (everything configure() reads that isn't per-output).
 
 #include "NativeBmwDynamics.h"
+#include "NativeBmwVirtual.h"
 
 namespace NativeBmwDsp {
 
@@ -62,6 +63,9 @@ struct Params {
     // ceiling this stage always used before it was made adjustable.
     bool limiterEnabled = true;
     float limiterThreshDb = -1.f;
+    // Virtual-source stage (v[266..286]): the virtual centre and its per-side feeds, run between
+    // the MBC and routing. Ships disabled; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
+    VirtualConfig virtualStage;
 };
 
 }  // namespace NativeBmwDsp

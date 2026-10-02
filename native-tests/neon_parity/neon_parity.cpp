@@ -50,12 +50,17 @@ bool loadDefaultConfig(const char* path, Config& cfg) {
         if (first == std::string::npos) {
             continue;
         }
-        if (count >= cfg.size()) {
-            return false;
+        // A file longer than this build's schema is a newer tree's config: the schema only ever
+        // grows at the tail (see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md and earlier growth docs),
+        // so the slots this build knows are the file's first cfg.size() values and the rest are
+        // newer features it doesn't have. That's how a BASELINE_REF build (older schema) reads
+        // the working tree's default_config.txt. A file that's too short is still an error.
+        if (count < cfg.size()) {
+            cfg[count] = std::stof(line.substr(first));
         }
-        cfg[count++] = std::stof(line.substr(first));
+        ++count;
     }
-    return count == cfg.size();
+    return count >= cfg.size();
 }
 
 // Deterministic stereo test signal: noise + two sines, with stretches of silence, denormal-range

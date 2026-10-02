@@ -44,6 +44,9 @@ object JamesDspWrapper {
     external fun getNativeBmwBusLimiterMeter(self: JamesDspHandle): FloatArray?
     // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
     external fun getNativeBmwMasterLimiterMeter(self: JamesDspHandle): FloatArray?
+    // 2 floats: [centreWeight 0..1, centreRmsDb] of the virtual centre; [0, -60] while the
+    // virtual stage is disabled.
+    external fun getNativeBmwVirtualMeter(self: JamesDspHandle): FloatArray?
     // Whole-state read-only snapshot for the native-truth debug screen. Null when the native
     // handle is gone. See NativeBmwDspProcessor::captureTruthSnapshot()'s comment for the exact
     // array layout (sample rate + PEQ enable/preamp, 4 fixed-width per-output crossover blocks,

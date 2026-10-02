@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include "NativeBmwDspMath.h"
+#include "NativeBmwDspSchema.h"
 
 namespace {
 using NativeBmwDsp::clampf;
@@ -133,6 +134,37 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // marker). Slots reclaimed from the 188..191 "reserved" run -- SIZE stays 192.
     next.limiterEnabled = flagIn(v[189]);
     next.limiterThreshDb = clampIn(v[190], -12, 0);
+
+    // Virtual-source stage (v[266..286], added in the 266 -> 288 growth); v[287] is the
+    // Kotlin-only migration marker. See docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
+    {
+        namespace sch = nbschema;
+        auto& vs = next.virtualStage;
+        vs.enabled = flagIn(v[sch::kVirtualEnabled]);
+        vs.detectHpfHz = clampIn(v[sch::kVirtualDetectHpf], 20, 1000);
+        vs.detectLpfHz = clampIn(v[sch::kVirtualDetectLpf], 1000, 20000);
+        vs.attackMs = clampIn(v[sch::kVirtualAttack], 1, 500);
+        vs.releaseMs = clampIn(v[sch::kVirtualRelease], 10, 2000);
+        vs.centreLevelDb = clampIn(v[sch::kVirtualCentreLevel], -24, 6);
+        vs.sideLevelDb = clampIn(v[sch::kVirtualSideLevel], -24, 6);
+        for (std::size_t side = 0; side < vs.centreFeed.size(); ++side) {
+            const std::size_t base = sch::kVirtualFeedBase + side * sch::kVirtualFeedWidth;
+            auto& feed = vs.centreFeed[side];
+            feed.gainDb = clampIn(v[base + sch::kVirtualFeedGain], -24, 6);
+            feed.delayMs = clampIn(v[base + sch::kVirtualFeedDelay], 0, kStageDelayMaxMs);
+            feed.polarityInverted = flagIn(v[base + sch::kVirtualFeedPolarity]);
+            feed.allPass.enabled = flagIn(v[base + sch::kVirtualFeedApEnabled]);
+            feed.allPass.frequencyHz = clampIn(v[base + sch::kVirtualFeedApFreq], 20, 20000);
+            feed.allPass.q = clampIn(v[base + sch::kVirtualFeedApQ], 0.1f, 30);
+            // Same encoding as the per-output all-pass order slot: 1 = 1st order, 2 = 2nd.
+            feed.allPass.secondOrder = clampIn(v[base + sch::kVirtualFeedApOrder], 1, 2) >= 1.5f;
+        }
+        // The detector band must be a real band; an inverted pair is a caller bug, not
+        // something to silently reorder. Rejected in full like any other invalid update.
+        if (vs.detectHpfHz >= vs.detectLpfHz) {
+            return false;
+        }
+    }
 
     // These four loops (routing, all-pass, output-config x2) are deliberately scoped to
     // kLegacyOutputCount (4), not the in-memory kOutputCount (6): High has no persisted schema
@@ -435,6 +467,34 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         changed(next.busLimHighReleaseMs, p_.busLimHighReleaseMs)) {
         dirty |= DirtyBusLimiter;
     }
+    // Virtual stage: any parameter change rebuilds its coefficients (state kept, so a slider
+    // drag doesn't click); switching it on or off also clears its state, so stale detector
+    // and delay-line contents can't replay when it comes back on.
+    {
+        const auto& cur = p_.virtualStage;
+        const auto& nxt = next.virtualStage;
+        bool feedChanged = false;
+        for (std::size_t side = 0; side < cur.centreFeed.size(); ++side) {
+            const auto& a = cur.centreFeed[side];
+            const auto& b = nxt.centreFeed[side];
+            feedChanged = feedChanged || changed(a.gainDb, b.gainDb) ||
+                          changed(a.delayMs, b.delayMs) ||
+                          a.polarityInverted != b.polarityInverted ||
+                          a.allPass.enabled != b.allPass.enabled ||
+                          a.allPass.secondOrder != b.allPass.secondOrder ||
+                          changed(a.allPass.frequencyHz, b.allPass.frequencyHz) ||
+                          changed(a.allPass.q, b.allPass.q);
+        }
+        if (feedChanged || changed(cur.detectHpfHz, nxt.detectHpfHz) ||
+            changed(cur.detectLpfHz, nxt.detectLpfHz) || changed(cur.attackMs, nxt.attackMs) ||
+            changed(cur.releaseMs, nxt.releaseMs) || changed(cur.centreLevelDb, nxt.centreLevelDb) ||
+            changed(cur.sideLevelDb, nxt.sideLevelDb)) {
+            dirty |= DirtyVirtual;
+        }
+        if (cur.enabled != nxt.enabled) {
+            dirty |= DirtyVirtual | DirtyVirtualState;
+        }
+    }
     // Master limiter: enable is checked live in processFrame; only the threshold -> ceiling
     // scalar needs a (cheap, state-free) recompute.
     if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
@@ -452,6 +512,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     busLimMidEnabledMeterFlag_.store(p_.busLimMidEnabled, std::memory_order_relaxed);
     busLimHighEnabledMeterFlag_.store(p_.busLimHighEnabled, std::memory_order_relaxed);
     masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
+    virtualEnabledMeterFlag_.store(p_.virtualStage.enabled, std::memory_order_relaxed);
     applyDirty(dirty);
     return true;
 }
@@ -681,6 +742,12 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLimiter) {
         limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     }
+    if (d & DirtyVirtual) {
+        virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
+    }
+    if ((d & DirtyVirtualState) && !p_.virtualStage.enabled) {
+        virtual_.zeroMeter();
+    }
 }
 void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = NativeBmwDsp::DcBlocker::coefficient(sampleRate_);
@@ -698,6 +765,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     measBus_.rebuild(p_.measurementMute, p_.measBusStopbandOctaves, outputConfigs_, sampleRate_);
     NativeBmwDsp::configureMeasurementGenerator(measGen_, p_, sampleRate_);
     rebuildAllPass();
+    virtual_.rebuild(p_.virtualStage, sampleRate_, true);
     inputDcL_.clear();
     inputDcR_.clear();
     for (auto& out : outputs_) {
