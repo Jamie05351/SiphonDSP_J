@@ -20,13 +20,14 @@ import kotlin.math.min
 
 /**
  * The front page's hardware faceplate, drawn live: a grained dark plate with two black glass screens
- * recessed into it (a third of the height on top, two thirds below, a strip of plate between them),
- * faint dividers between the live panel's blocks, and a slim metal bezel around the whole display.
+ * recessed into it right of the meter and power panel (the smaller on top, a strip of plate between
+ * them), a faint divider between the top screen's live blocks, and a slim metal bezel around the
+ * whole display.
  *
  * Everything is placed in the same art space as [HomeArt] (fit-scaled and centred, so it lines up
  * with the live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect; the
- * plate fills the whole view, margins included). The tiles, the live panel and the power button are
- * drawn by their own views on top.
+ * plate fills the whole view, margins included). The tiles, the meter, the stages and the power
+ * button are drawn by their own views on top.
  */
 @Composable
 fun HomeFaceplate(modifier: Modifier = Modifier) {
@@ -62,18 +63,21 @@ private fun DrawScope.drawFaceplate(phone: Boolean, grain: ShaderBrush) {
 
     // The engraved seam across the strip of plate between the two screens: a dark groove with a
     // thin highlight under it, so they read as two separate pieces of glass, not one split screen.
+    // It spans the screens' width only, so it never cuts across the meter on the left panel.
     val (topAt, topSize) = rect("screen_top")
     val (bottomAt, _) = rect("screen_bottom")
     val seamY = (topAt.y + topSize.height + bottomAt.y) / 2f
-    drawLine(Color.Black.copy(alpha = 0.85f), Offset(0f, seamY), Offset(w, seamY), strokeWidth = 3f * unit)
+    val seamLeft = topAt.x
+    val seamRight = topAt.x + topSize.width
+    drawLine(Color.Black.copy(alpha = 0.85f), Offset(seamLeft, seamY), Offset(seamRight, seamY), strokeWidth = 3f * unit)
     drawLine(
         Color.White.copy(alpha = 0.12f),
-        Offset(0f, seamY + 2.5f * unit),
-        Offset(w, seamY + 2.5f * unit),
+        Offset(seamLeft, seamY + 2.5f * unit),
+        Offset(seamRight, seamY + 2.5f * unit),
         strokeWidth = 1.5f * unit,
     )
 
-    // Faint dividers between the live panel's blocks, inset from their top and bottom.
+    // Faint dividers between the top screen's live blocks, inset from their top and bottom.
     val blocks = HomeArt.LIVE_KEYS.map { rect(it) }
     blocks.zipWithNext { (leftAt, leftSize), (rightAt, _) ->
         val x = (leftAt.x + leftSize.width + rightAt.x) / 2f

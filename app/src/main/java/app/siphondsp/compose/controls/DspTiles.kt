@@ -488,10 +488,11 @@ fun GearGlyph(modifier: Modifier = Modifier.fillMaxSize()) {
     }
 }
 
+/** [dotRadius] is each dot's radius as a fraction of the glyph's width. */
 @Composable
-fun MoreGlyph(modifier: Modifier = Modifier.fillMaxSize()) {
+fun MoreGlyph(modifier: Modifier = Modifier.fillMaxSize(), dotRadius: Float = 0.06f) {
     Canvas(modifier) {
-        val r = size.width * 0.06f
+        val r = size.width * dotRadius
         for (fx in listOf(0.3f, 0.5f, 0.7f)) drawCircle(Color(0xFFEDEDED), r, Offset(size.width * fx, size.height * 0.55f))
     }
 }

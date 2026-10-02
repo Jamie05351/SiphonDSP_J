@@ -3,7 +3,13 @@ package app.siphondsp.fragment
 import android.animation.LayoutTransition
 import android.animation.ValueAnimator
 import android.app.ActivityOptions
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -24,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
+import app.siphondsp.compose.controls.HomeLevelReadout
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -34,8 +41,12 @@ import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -49,7 +60,6 @@ class DspFragment : Fragment() {
     private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
-    private var powerState: Boolean = false
 
     /**
      * The DSP tile being opened: its glow is lit, and every other front-page tap is ignored, from the
@@ -59,6 +69,29 @@ class DspFragment : Fragment() {
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
+
+    /** The top screen's level readout, fed by the LED meter while the front page is live. */
+    private var levelReadout by mutableStateOf(LevelReadout.SILENT)
+
+    /** The limiter threshold while the limiter is on, else null; see [refreshLimiter]. */
+    private var limiterDb by mutableStateOf<Float?>(null)
+
+    /**
+     * Re-reads the limiter whenever settings change underneath the front page while it stays
+     * resumed: a preset or backup loaded, a Revert from the overflow menu, or any DSP edit.
+     */
+    private val settingsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refreshLimiter(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
+        }
+    }
+
+    /** MainActivity's real power state. Off until the processor service reports it running. */
+    private var powerOn = false
+
+    /** How "on" the front page looks: 1 in full colour, 0 greyed out (see [setPowerLook]). */
+    private var powerLook = 1f
+    private var powerAnimator: ValueAnimator? = null
 
     /**
      * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
@@ -105,6 +138,8 @@ class DspFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Coming back from the limiter's screen; in-place changes arrive via settingsReceiver.
+        refreshLimiter(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
         onPageSelectedInternal(binding.dspPager.currentItem)
         // Posted: after a restore the pager may not be laid out yet, and a 0 width would put the
@@ -119,6 +154,13 @@ class DspFragment : Fragment() {
         cancelPendingOpen()
     }
 
+    override fun onDestroyView() {
+        requireContext().unregisterLocalReceiver(settingsReceiver)
+        powerAnimator?.cancel()
+        powerAnimator = null
+        super.onDestroyView()
+    }
+
     override fun onStop() {
         super.onStop()
         // The DSP screen (or whatever else) now covers this page, so taps can't reach it: release
@@ -131,7 +173,6 @@ class DspFragment : Fragment() {
         // stop work when the settings page is selected.
         val active = position == 0
         shortcutsBinding.homeLevelBars.pageActive = active
-        shortcutsBinding.homeEngineStatus.pageActive = active
         if (!active) cancelPendingOpen()
     }
 
@@ -145,6 +186,17 @@ class DspFragment : Fragment() {
         // The faceplate and the seven tiles are Compose. HomeFaceplate and HomeArtLayout both pick
         // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
+        shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
+        shortcutsBinding.homeLevelBars.onReadout = { levelReadout = it }
+        requireContext().registerLocalReceiver(
+            settingsReceiver,
+            IntentFilter().apply {
+                addAction(Constants.ACTION_PRESET_LOADED)
+                addAction(Constants.ACTION_BACKUP_RESTORED)
+                addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
+            },
+        )
+        setPowerLook(if (powerOn) 1f else 0f)
         shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ, selected = openingTile == HomeTileKind.PEQ) }
         shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS, selected = openingTile == HomeTileKind.GAINS) }
         shortcutsBinding.cardShortcutCrossovers.setHomeContent { HomeTile(HomeTileKind.XOVERS, selected = openingTile == HomeTileKind.XOVERS) }
@@ -164,8 +216,6 @@ class DspFragment : Fragment() {
         shortcutsBinding.updateNotice.setOnRootClickListener {
             updateNoticeOnClick?.invoke()
         }
-
-        shortcutsBinding.homeEngineStatus.powerOn = powerState
 
         // Seven primary home actions. The first five open DSP workspaces; Settings and More
         // delegate to MainActivity so its existing settings/overflow behaviour remains the single
@@ -269,11 +319,65 @@ class DspFragment : Fragment() {
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
 
-    /** Keeps the live panel's audio-engine block in lockstep with MainActivity's real power state. */
+    /** The limiter threshold while it is on, else null, from [fromBroadcast] or the saved values. */
+    private fun refreshLimiter(fromBroadcast: FloatArray?) {
+        val values = fromBroadcast?.takeIf { it.size == NativeBmwDspValues.SIZE }
+            ?: NativeBmwDspValues.load(requireContext())
+        limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
+            .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
+    }
+
+    /**
+     * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
+     * five DSP tiles, the LED meter, GLOBAL STAGES and the level readout fade to grey, so it is
+     * obvious at a glance. They stay tappable. Settings and More keep their colour.
+     */
     fun setPowerState(on: Boolean) {
-        powerState = on
-        if (::shortcutsBinding.isInitialized) {
-            shortcutsBinding.homeEngineStatus.powerOn = on
+        if (on == powerOn) return
+        powerOn = on
+        if (!::shortcutsBinding.isInitialized || view == null) return
+        val target = if (on) 1f else 0f
+        powerAnimator?.cancel()
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            setPowerLook(target)
+            return
+        }
+        powerAnimator = ValueAnimator.ofFloat(powerLook, target).apply {
+            duration = POWER_FADE_MS
+            addUpdateListener { setPowerLook(it.animatedValue as Float) }
+            start()
+        }
+    }
+
+    /**
+     * [look] 1 draws the powered views normally; below that each is drawn through a hardware layer
+     * whose paint drains its colour (saturation [look]) and fades it towards [OFF_ALPHA].
+     */
+    private fun setPowerLook(look: Float) {
+        powerLook = look
+        val views = with(shortcutsBinding) {
+            listOf(
+                cardShortcutPeq, cardShortcutGainsDelay, cardShortcutCrossovers, cardShortcutCompressor,
+                cardShortcutAllpass, homeLevelBars, homeStages, homeLevelReadout,
+            )
+        }
+        if (look >= 1f) {
+            views.forEach {
+                it.setLayerType(View.LAYER_TYPE_NONE, null)
+                it.alpha = 1f
+            }
+            return
+        }
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(look) })
+        }
+        views.forEach {
+            if (it.layerType == View.LAYER_TYPE_HARDWARE) {
+                it.setLayerPaint(paint)
+            } else {
+                it.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+            }
+            it.alpha = OFF_ALPHA + (1f - OFF_ALPHA) * look
         }
     }
 
@@ -309,6 +413,9 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 150L
+        private const val POWER_FADE_MS = 250L
+        /** How visible the powered views stay while the DSP is off: dimmed, but still readable. */
+        private const val OFF_ALPHA = 0.45f
 
         fun newInstance(): DspFragment {
             return DspFragment()

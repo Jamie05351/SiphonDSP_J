@@ -6,14 +6,15 @@ import kotlin.math.roundToInt
 /**
  * Where every live element sits on the front page. Rects are fractions of the art space, x/y/w/h.
  *
- * Head unit: a 2340x878 art space (the 1280x480 screen's aspect). The layout is the approved
- * split faceplate (Figma "SiphonDSP Faceplate", frame "APPROVED -- split 1/3 + 2/3"): the power
- * button alone on the left panel, then two screens recessed into the plate with a strip of plate
- * between them. The top screen (a third of the height) holds Settings on the left, the live panel
- * (output, audio engine, global stages) in the middle and More on the right; the bottom screen (two
- * thirds) holds the five DSP tiles. [app.siphondsp.compose.controls.HomeFaceplate] draws the plate,
- * the `screen_top` / `screen_bottom` and the bezel; each tile is a Compose tile at its rect, so a
- * tile's picture and its touch area are always the same box.
+ * Head unit: a 2340x878 art space (the 1280x480 screen's aspect). The layout is the rack-panel
+ * faceplate (Figma "SiphonDSP Front Face v2", from the owner's mockup, top screen option D): the
+ * left panel holds a tall stereo LED output meter and the power button; then two screens recessed
+ * into the plate with a strip of plate between them. The top screen (about 30 % of the height)
+ * holds GLOBAL STAGES on the left, the big L / R level and headroom readout beside it, and More
+ * and Settings, bare icons with labels, on the right; the bottom screen holds the five DSP tiles.
+ * [app.siphondsp.compose.controls.HomeFaceplate] draws the plate, the `screen_top` /
+ * `screen_bottom`, the divider between the top screen's live blocks and the bezel; each tile is a
+ * Compose tile at its rect, so a tile's picture and its touch area are always the same box.
  *
  * [map] fits the whole art space inside the view (contain, not cover), so nothing is ever cropped
  * on a display of another aspect: the plate fills whatever margin is left over. The touch areas and
@@ -44,29 +45,30 @@ object HomeArt {
 
     private fun ph(x: Int, y: Int, w: Int, h: Int) = px(x, y, w, h, PHONE_IMAGE_WIDTH, PHONE_IMAGE_HEIGHT)
 
-    // Head unit, measured off the approved Figma frame (1280x480 px / 1280, / 480), then the gap
-    // between the screens widened from 12 to 28 px so a real strip of plate (with the faceplate's
-    // engraved seam) separates them, each screen keeping its share and its contents centred. The
-    // DSP tiles
-    // are square and evenly pitched; More ends flush with the last DSP tile, Settings starts flush
-    // with the first. Settings and More are a third smaller than before so the live panel fits
-    // between them.
+    // Head unit, measured off the owner's 2000x750 mockup (same aspect as the art space). The DSP
+    // tiles are square and evenly pitched with the same gap (0.9 % of the width) between each other
+    // and the screen's edges, and centred vertically in the bottom screen. Settings ends flush with
+    // the last DSP tile, More just left of it. The meter's two columns run nearly the plate's full
+    // height; the power button sits level with the tiles' centres.
     private val rects = mapOf(
-        "screen_top" to Frac(0.1141f, 0.0750f, 0.8484f, 0.2479f),
-        "screen_bottom" to Frac(0.1141f, 0.3813f, 0.8484f, 0.4979f),
-        "tile_peq" to Frac(0.1290f, 0.4277f, 0.1520f, 0.4050f),
-        "tile_gains" to Frac(0.2956f, 0.4277f, 0.1520f, 0.4050f),
-        "tile_xovers" to Frac(0.4622f, 0.4277f, 0.1520f, 0.4050f),
-        "tile_compressor" to Frac(0.6288f, 0.4277f, 0.1520f, 0.4050f),
-        "tile_allpass" to Frac(0.7954f, 0.4277f, 0.1520f, 0.4050f),
-        "tile_settings" to Frac(0.1290f, 0.1275f, 0.0536f, 0.1429f),
-        "tile_more" to Frac(0.8938f, 0.1275f, 0.0536f, 0.1429f),
-        "live_output" to Frac(0.2013f, 0.0802f, 0.2813f, 0.2375f),
-        "live_engine" to Frac(0.5266f, 0.0802f, 0.1484f, 0.2375f),
-        "live_stages" to Frac(0.7191f, 0.0802f, 0.1563f, 0.2375f),
-        // The power button and its glow, a circle centred on the left panel. PowerHotspot draws the
-        // button, off and on, within this rect.
-        "power_btn" to Frac(0.0096f, 0.3871f, 0.0977f, 0.2606f),
+        "screen_top" to Frac(0.2310f, 0.0667f, 0.7465f, 0.3027f),
+        "screen_bottom" to Frac(0.2310f, 0.4840f, 0.7465f, 0.4067f),
+        "tile_peq" to Frac(0.2400f, 0.5028f, 0.1385f, 0.3691f),
+        "tile_gains" to Frac(0.3875f, 0.5028f, 0.1385f, 0.3691f),
+        "tile_xovers" to Frac(0.5350f, 0.5028f, 0.1385f, 0.3691f),
+        "tile_compressor" to Frac(0.6825f, 0.5028f, 0.1385f, 0.3691f),
+        "tile_allpass" to Frac(0.8300f, 0.5028f, 0.1385f, 0.3691f),
+        "tile_more" to Frac(0.8180f, 0.1050f, 0.0650f, 0.2267f),
+        "tile_settings" to Frac(0.9035f, 0.1050f, 0.0650f, 0.2267f),
+        "live_output" to Frac(0.0275f, 0.0667f, 0.0325f, 0.7800f),
+        // GLOBAL STAGES and the level readout share one top edge and both top-align their text, so
+        // the three headings sit on one line. The boxes are ~110dp tall, just over the taller
+        // block's 18sp content (stages: title + 3 rows), and centred on the top screen.
+        "live_stages" to Frac(0.2450f, 0.1034f, 0.1350f, 0.2292f),
+        "live_levels" to Frac(0.3900f, 0.1034f, 0.4150f, 0.2292f),
+        // The power button and its glow, a circle level with the tiles' centres. PowerHotspot draws
+        // the button, off and on, within this rect.
+        "power_btn" to Frac(0.0987f, 0.5584f, 0.0977f, 0.2606f),
         // No LED dot on the head unit (the view is GONE there); kept so every key resolves.
         "power_led" to Frac(0.034f, 0.78f, 0.004f, 0.01f),
         // Legacy icons, hidden now that Settings and More are tiles; kept so every key resolves.
@@ -74,24 +76,24 @@ object HomeArt {
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
     )
 
-    // Phone (2340x1080): the same DSP tile columns. The taller art gives the top screen a bigger
-    // share (40 % of the screen height, not a third) for the live panel, whose text shrinks to fit
-    // if the box is still too short. Settings and More are bigger than the head unit's, so they stay
-    // at least 48dp even when a 16:9 phone fits the art to only ~640dp wide.
+    // Phone (2340x1080): the same columns. The taller art gives both screens more height; the top
+    // screen's GLOBAL STAGES text shrinks to fit if its box is still too short. More and Settings are
+    // wider and taller than the head unit's so they stay at least 48dp when a 16:9 phone fits the art
+    // to only ~640dp wide.
     private val phoneRects = mapOf(
-        "screen_top" to Frac(0.1141f, 0.0602f, 0.8484f, 0.3318f),
-        "screen_bottom" to Frac(0.1141f, 0.4420f, 0.8484f, 0.4978f),
-        "tile_peq" to Frac(0.1290f, 0.5263f, 0.1520f, 0.3293f),
-        "tile_gains" to Frac(0.2956f, 0.5263f, 0.1520f, 0.3293f),
-        "tile_xovers" to Frac(0.4622f, 0.5263f, 0.1520f, 0.3293f),
-        "tile_compressor" to Frac(0.6288f, 0.5263f, 0.1520f, 0.3293f),
-        "tile_allpass" to Frac(0.7954f, 0.5263f, 0.1520f, 0.3293f),
-        "tile_settings" to Frac(0.1290f, 0.1438f, 0.0760f, 0.1647f),
-        "tile_more" to Frac(0.8714f, 0.1438f, 0.0760f, 0.1647f),
-        "live_output" to Frac(0.2180f, 0.0761f, 0.2700f, 0.3000f),
-        "live_engine" to Frac(0.5060f, 0.0761f, 0.1600f, 0.3000f),
-        "live_stages" to Frac(0.6840f, 0.0761f, 0.1744f, 0.3000f),
-        "power_btn" to Frac(0.0096f, 0.3942f, 0.0977f, 0.2117f),
+        "screen_top" to Frac(0.2310f, 0.0550f, 0.7465f, 0.3350f),
+        "screen_bottom" to Frac(0.2310f, 0.4400f, 0.7465f, 0.5000f),
+        "tile_peq" to Frac(0.2400f, 0.5400f, 0.1385f, 0.3000f),
+        "tile_gains" to Frac(0.3875f, 0.5400f, 0.1385f, 0.3000f),
+        "tile_xovers" to Frac(0.5350f, 0.5400f, 0.1385f, 0.3000f),
+        "tile_compressor" to Frac(0.6825f, 0.5400f, 0.1385f, 0.3000f),
+        "tile_allpass" to Frac(0.8300f, 0.5400f, 0.1385f, 0.3000f),
+        "tile_more" to Frac(0.8065f, 0.0850f, 0.0770f, 0.2750f),
+        "tile_settings" to Frac(0.8915f, 0.0850f, 0.0770f, 0.2750f),
+        "live_output" to Frac(0.0275f, 0.0550f, 0.0325f, 0.8850f),
+        "live_stages" to Frac(0.2450f, 0.0725f, 0.1500f, 0.3000f),
+        "live_levels" to Frac(0.4100f, 0.0725f, 0.3850f, 0.3000f),
+        "power_btn" to Frac(0.0987f, 0.5844f, 0.0977f, 0.2117f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),
@@ -100,8 +102,8 @@ object HomeArt {
     /** The two screens, top then bottom; the faceplate recesses each into the plate. */
     val SCREEN_KEYS = listOf("screen_top", "screen_bottom")
 
-    /** The live panel's blocks, left to right; the faceplate draws a divider between each pair. */
-    val LIVE_KEYS = listOf("live_output", "live_engine", "live_stages")
+    /** The top screen's live blocks, left to right; the faceplate draws a divider between each pair. */
+    val LIVE_KEYS = listOf("live_stages", "live_levels")
 
     /** [phone] selects the phone artwork's rects; the default is the head-unit set, unchanged. */
     fun frac(key: String, phone: Boolean = false): Frac? = (if (phone) phoneRects else rects)[key]

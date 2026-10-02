@@ -465,7 +465,7 @@ class MainActivity : BaseActivity() {
             setPowerUi(processorService != null)
     }
 
-    /** Updates both the physical-looking power control and the home status cell. */
+    /** Updates the physical-looking power control, and greys the front page out while off. */
     private fun setPowerUi(on: Boolean) {
         binding.powerToggle.isToggled = on
         if (::dspFragment.isInitialized) {

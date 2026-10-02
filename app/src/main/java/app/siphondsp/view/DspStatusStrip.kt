@@ -50,9 +50,9 @@ class DspStatusStrip @JvmOverloads constructor(
 ) : LinearLayout(context, attrs) {
 
     /**
-     * Front-page mode (`app:stacked="true"`): the live panel's GLOBAL STAGES block. A title, then
+     * Front-page mode (`app:stacked="true"`): the top screen's GLOBAL STAGES block. A title, then
      * the three stage cells stacked at 18sp, one line each, with no separators and no health cell
-     * (the panel's audio-engine block shows that). A block too small for 18sp shrinks to fit (see
+     * (the power button shows whether the engine runs). A block too small for 18sp shrinks to fit (see
      * [fitStacked]).
      */
     private val stacked: Boolean = context.obtainStyledAttributes(attrs, R.styleable.DspStatusStrip).let {
@@ -117,6 +117,8 @@ class DspStatusStrip @JvmOverloads constructor(
         // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
         // the toolbar's own (see activity_parametric_eq.xml / dsp_workspace_toolbar_height) so this
         // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
+        // Front page: top-aligned, so the title shares a line with the level readout's headings
+        // (HomeArt gives both blocks the same top edge, centred on the top screen).
         gravity = Gravity.START or if (stacked) Gravity.TOP else Gravity.CENTER_VERTICAL
         if (!stacked) setPadding(0, dp(25), 0, 0)
         if (stacked) {
