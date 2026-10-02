@@ -16,32 +16,51 @@ constexpr double kMeterWindowMs = 300.0;
 constexpr unsigned kMeterInterval = 64;
 constexpr double kButterworthQ = 0.70710678118654752;
 
+// The coefficient builders (makeLowPass/makeHighPass/loadAllPass) all clear the filter's state.
+// When a parameter merely changes on a running filter, carry the integrator state over instead,
+// so moving a slider doesn't reset live audio (the SVF form tolerates coefficient changes). Not
+// possible across a topology change (1st <-> 2nd order), which keeps the cleared state.
+template <typename Build>
+void rebuildKeepingState(Biquad& b, bool keepState, Build build) {
+    const auto topology = b.topology;
+    const double ic1 = b.ic1eq, ic2 = b.ic2eq, z1 = b.op_z1;
+    build();
+    if (keepState && b.topology == topology) {
+        b.ic1eq = ic1;
+        b.ic2eq = ic2;
+        b.op_z1 = z1;
+    }
+}
+
 double onePoleCoef(double ms, float sampleRate) {
     const double samples = ms * 0.001 * static_cast<double>(sampleRate);
     return samples > 0 ? std::exp(-1.0 / samples) : 0.0;
 }
 }  // namespace
 
-void VirtualFeed::rebuild(VirtualFeedConfig& cfg, float sampleRate) {
+void VirtualFeed::rebuild(VirtualFeedConfig& cfg, float sampleRate, bool keepState) {
     gain = dbToLin(cfg.gainDb);
     inverted = cfg.polarityInverted;
     delay.delay = delaySamples(cfg.delayMs, sampleRate, kStageDelayCapacity);
     // An all-pass that can't be built at this sample rate degrades to identity (rebuild() leaves
     // identity coefficients), the same policy as the per-output all-pass sections.
     (void)cfg.allPass.rebuild(sampleRate);
+    // Only a section that was already running has live history worth keeping; one being
+    // switched on starts clean rather than replaying whatever it held when it was last off.
+    const bool keepAllPass = keepState && allPassOn && cfg.allPass.enabled;
     allPassOn = cfg.allPass.enabled;
-    allPass.loadAllPass(cfg.allPass.coefficients);
+    rebuildKeepingState(allPass, keepAllPass, [&] { allPass.loadAllPass(cfg.allPass.coefficients); });
 }
 
-void CentreExtractor::rebuild(const VirtualConfig& cfg, float sampleRate) {
+void CentreExtractor::rebuild(const VirtualConfig& cfg, float sampleRate, bool keepState) {
     // Keep the detector corners strictly inside (0, Nyquist) at any sample rate.
     const float nyquistSafe = sampleRate * 0.45f;
     const float hpf = std::min(cfg.detectHpfHz, nyquistSafe * 0.5f);
     const float lpf = std::min(cfg.detectLpfHz, nyquistSafe);
-    makeHighPass(hpL, hpf, kButterworthQ, sampleRate);
-    makeHighPass(hpR, hpf, kButterworthQ, sampleRate);
-    makeLowPass(lpL, lpf, kButterworthQ, sampleRate);
-    makeLowPass(lpR, lpf, kButterworthQ, sampleRate);
+    rebuildKeepingState(hpL, keepState, [&] { makeHighPass(hpL, hpf, kButterworthQ, sampleRate); });
+    rebuildKeepingState(hpR, keepState, [&] { makeHighPass(hpR, hpf, kButterworthQ, sampleRate); });
+    rebuildKeepingState(lpL, keepState, [&] { makeLowPass(lpL, lpf, kButterworthQ, sampleRate); });
+    rebuildKeepingState(lpR, keepState, [&] { makeLowPass(lpR, lpf, kButterworthQ, sampleRate); });
     powerCoef = onePoleCoef(kPowerWindowMs, sampleRate);
     attackCoef = onePoleCoef(cfg.attackMs, sampleRate);
     releaseCoef = onePoleCoef(cfg.releaseMs, sampleRate);
@@ -72,9 +91,9 @@ void CentreExtractor::clear() {
 }
 
 void VirtualSourceStage::rebuild(VirtualConfig& cfg, float sampleRate, bool clearState) {
-    centre_.rebuild(cfg, sampleRate);
+    centre_.rebuild(cfg, sampleRate, !clearState);
     for (std::size_t side = 0; side < centreFeed_.size(); ++side) {
-        centreFeed_[side].rebuild(cfg.centreFeed[side], sampleRate);
+        centreFeed_[side].rebuild(cfg.centreFeed[side], sampleRate, !clearState);
     }
     centreGain_ = dbToLin(cfg.centreLevelDb);
     sideGain_ = dbToLin(cfg.sideLevelDb);

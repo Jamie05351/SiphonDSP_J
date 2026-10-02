@@ -49,7 +49,8 @@ struct VirtualFeed {
     StageDelay delay;
     Biquad allPass;
 
-    void rebuild(VirtualFeedConfig& cfg, float sampleRate);
+    /** [keepState]: carry the all-pass history over (see rebuildKeepingState). */
+    void rebuild(VirtualFeedConfig& cfg, float sampleRate, bool keepState);
     float run(float x) {
         x *= inverted ? -gain : gain;
         x = delay.run(x);
@@ -73,7 +74,7 @@ struct CentreExtractor {
     double weight = 0;
     double powerCoef = 0, attackCoef = 0, releaseCoef = 0;
 
-    void rebuild(const VirtualConfig& cfg, float sampleRate);
+    void rebuild(const VirtualConfig& cfg, float sampleRate, bool keepState);
     /** Returns the centre sample for (l, r); both must be finite. */
     float run(float l, float r);
     void clear();

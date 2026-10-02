@@ -232,3 +232,28 @@ TEST_CASE("virtual meter: idle while disabled, live while enabled") {
     CHECK(m[0] > 0.9f);
     CHECK(m[1] > -60.f);
 }
+
+TEST_CASE("virtual stage: a parameter rebuild keeps the running filter state") {
+    // Rebuilding with unchanged settings (what configure() does for any virtual slider move)
+    // must not reset the detector or the all-pass history: the output stays bit-identical to a
+    // stage that was never rebuilt.
+    auto cfg = neutralConfig();
+    cfg.centreFeed[0].allPass.enabled = true;
+    cfg.centreFeed[0].allPass.frequencyHz = 700.f;
+    cfg.centreFeed[1].allPass.enabled = true;
+    cfg.centreFeed[1].allPass.frequencyHz = 2500.f;
+    NativeBmwDsp::VirtualSourceStage steady, rebuilt;
+    auto cfgA = cfg, cfgB = cfg;
+    steady.rebuild(cfgA, static_cast<float>(kSampleRate), true);
+    rebuilt.rebuild(cfgB, static_cast<float>(kSampleRate), true);
+    auto a = mixedSignal(9600, 0.1f, 0.05f), b = a;
+    for (std::size_t i = 0; i + 1 < a.size(); i += 2) {
+        if (i == a.size() / 2) {
+            auto again = cfg;
+            rebuilt.rebuild(again, static_cast<float>(kSampleRate), false);
+        }
+        steady.process(a[i], a[i + 1]);
+        rebuilt.process(b[i], b[i + 1]);
+    }
+    CHECK(a == b);
+}
