@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
+import app.siphondsp.compose.controls.HomeLevelReadout
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -34,8 +35,10 @@ import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
+import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -58,6 +61,12 @@ class DspFragment : Fragment() {
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
+
+    /** The top screen's level readout, fed by the LED meter while the front page is live. */
+    private var levelReadout by mutableStateOf(LevelReadout.SILENT)
+
+    /** The limiter threshold while the limiter is on, else null; re-read whenever the page resumes. */
+    private var limiterDb by mutableStateOf<Float?>(null)
 
     /**
      * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
@@ -104,6 +113,10 @@ class DspFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Coming back from the limiter's screen is the only way its settings change under us.
+        val values = NativeBmwDspValues.load(requireContext())
+        limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
+            .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
         onPageSelectedInternal(binding.dspPager.currentItem)
         // Posted: after a restore the pager may not be laid out yet, and a 0 width would put the
@@ -143,6 +156,8 @@ class DspFragment : Fragment() {
         // The faceplate and the seven tiles are Compose. HomeFaceplate and HomeArtLayout both pick
         // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
+        shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
+        shortcutsBinding.homeLevelBars.onReadout = { levelReadout = it }
         shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ, selected = openingTile == HomeTileKind.PEQ) }
         shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS, selected = openingTile == HomeTileKind.GAINS) }
         shortcutsBinding.cardShortcutCrossovers.setHomeContent { HomeTile(HomeTileKind.XOVERS, selected = openingTile == HomeTileKind.XOVERS) }

@@ -7,7 +7,7 @@ import org.junit.Test
 
 class HomeArtTest {
 
-    private val liveKeys = listOf("live_output", "live_stages")
+    private val liveKeys = listOf("live_output") + HomeArt.LIVE_KEYS
 
     private val keys = HomeArt.TILE_KEYS + liveKeys +
         HomeArt.SCREEN_KEYS + listOf("power_btn", "power_led", "cog", "overflow")
@@ -89,7 +89,7 @@ class HomeArtTest {
             dspTiles.forEach { key ->
                 assertTrue("$key escapes the bottom screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, bottom))
             }
-            listOf("tile_settings", "tile_more", "live_stages").forEach { key ->
+            (listOf("tile_settings", "tile_more") + HomeArt.LIVE_KEYS).forEach { key ->
                 assertTrue("$key escapes the top screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, top))
             }
         }

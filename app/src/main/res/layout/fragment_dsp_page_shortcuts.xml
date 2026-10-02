@@ -13,8 +13,8 @@
          own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
          same fit mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
          ComposeView, so a tile's picture and its touch area are the same box), the left panel's
-         output meter and the top screen's global stages. The power button remains in the
-         activity overlay (PowerHotspot draws it). Must never scroll. -->
+         output meter, and the top screen's global stages and level readout. The power button remains
+         in the activity overlay (PowerHotspot draws it). Must never scroll. -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/home_backdrop"
         android:layout_width="match_parent"
@@ -102,6 +102,14 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="no" />
+
+        <!-- Big L / R levels and headroom; numbers change several times a second, so not announced. -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/home_level_readout"
+            android:tag="live_levels"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="noHideDescendants" />
 
         <!-- Each stage cell opens the screen that owns it, as on the workspace toolbar. -->
         <app.siphondsp.view.DspStatusStrip

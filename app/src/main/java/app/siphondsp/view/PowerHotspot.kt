@@ -3,11 +3,11 @@ package app.siphondsp.view
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
-import android.graphics.SweepGradient
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.min
@@ -17,10 +17,10 @@ import kotlin.math.min
  * old bottom-bar power FAB had ([isToggled], [toggleOnClick], the click listener), so MainActivity's
  * power logic is unchanged.
  *
- * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the glow):
- * a metal collar around a dark well with a power symbol, always lit: a purple neon ring and halo
- * while on (the output meter's purple), red while off, so the engine state reads at a glance. No baked art is involved. No LED
- * dot (the view is hidden).
+ * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the
+ * shadow and glow): a matte charcoal dome in a matte grey bezel, with a glowing power symbol that
+ * is always lit: purple while on (the output meter's purple), red while off, so the engine state
+ * reads at a glance. No baked art is involved. No LED dot (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
     context: Context,
@@ -74,52 +74,67 @@ class PowerHotspot @JvmOverloads constructor(
         if (r <= 0f) return
         val on = isToggled
 
-        val ring = if (on) RingOn else RingOff
+        val glow = if (on) GlowOn else GlowOff
         val symbol = if (on) SymbolOn else SymbolOff
+        // The button itself; the rest of the rect is room for its shadow and the symbol's glow.
+        val b = r * 0.72f
 
-        // Halo.
+        // Soft shadow the button casts on the plate, a little below it.
         paint.reset(); paint.isAntiAlias = true
-        paint.shader = RadialGradient(cx, cy, r, ring.withAlpha(0.55f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        canvas.drawCircle(cx, cy, r, paint)
-        // Metal collar (light top-left, dark bottom-right, like the tile bezels).
+        paint.shader = RadialGradient(
+            cx, cy + b * 0.06f, b * 1.12f,
+            intArrayOf(ShadowColor, ShadowColor, Color.TRANSPARENT), floatArrayOf(0f, 0.86f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx, cy + b * 0.06f, b * 1.12f, paint)
+        // Matte grey bezel, lit from the top-left.
         paint.reset(); paint.isAntiAlias = true
-        paint.shader = SweepGradient(cx, cy, CollarColors, CollarStops)
-        canvas.drawCircle(cx, cy, r * 0.78f, paint)
-        // Dark well, with a faint glow of the ring colour.
+        paint.shader = LinearGradient(cx - b, cy - b, cx + b, cy + b, BezelColors, BezelStops, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, b, paint)
+        // The dark gap between bezel and face, with a faint hairline of the glow colour in it.
         paint.reset(); paint.isAntiAlias = true
-        paint.color = 0xFF050508.toInt()
-        canvas.drawCircle(cx, cy, r * 0.68f, paint)
-        paint.shader = RadialGradient(cx, cy, r * 0.68f, ring.withAlpha(0.30f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        canvas.drawCircle(cx, cy, r * 0.68f, paint)
-        // Neon ring.
+        paint.color = 0xFF141418.toInt()
+        canvas.drawCircle(cx, cy, b * 0.86f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = glow.withAlpha(0.45f); paint.strokeWidth = b * 0.02f
+        canvas.drawCircle(cx, cy, b * 0.845f, paint)
+        // Matte grey dome face: lighter towards the top-left, darker at the bottom-right.
+        paint.reset(); paint.isAntiAlias = true
+        paint.shader = RadialGradient(cx - b * 0.3f, cy - b * 0.35f, b * 1.3f, FaceColors, null, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, b * 0.81f, paint)
+
+        // Power symbol: an arc open at the top, and a stem, glowing.
+        val symbolRadius = b * 0.42f
+        arcBounds.set(cx - symbolRadius, cy - symbolRadius, cx + symbolRadius, cy + symbolRadius)
         paint.reset(); paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.color = ring.withAlpha(0.25f); paint.strokeWidth = r * 0.14f
-        canvas.drawCircle(cx, cy, r * 0.6f, paint)
-        paint.color = ring; paint.strokeWidth = r * 0.035f
-        canvas.drawCircle(cx, cy, r * 0.6f, paint)
-        // Power symbol: an arc open at the top, and a stem.
-        val symbolRadius = r * 0.3f
-        arcBounds.set(cx - symbolRadius, cy - symbolRadius, cx + symbolRadius, cy + symbolRadius)
         paint.strokeCap = Paint.Cap.ROUND
-        paint.color = ring.withAlpha(0.30f); paint.strokeWidth = r * 0.165f
-        canvas.drawArc(arcBounds, -55f, 290f, false, paint)
-        paint.color = symbol; paint.strokeWidth = r * 0.055f
-        canvas.drawArc(arcBounds, -55f, 290f, false, paint)
-        canvas.drawLine(cx, cy - symbolRadius * 1.15f, cx, cy - symbolRadius * 0.10f, paint)
+        for ((alpha, stroke) in SymbolGlow) {
+            paint.color = glow.withAlpha(alpha); paint.strokeWidth = b * stroke
+            drawSymbol(canvas, cx, cy, symbolRadius)
+        }
+        paint.color = symbol; paint.strokeWidth = b * 0.085f
+        drawSymbol(canvas, cx, cy, symbolRadius)
+    }
+
+    private fun drawSymbol(canvas: Canvas, cx: Float, cy: Float, symbolRadius: Float) {
+        canvas.drawArc(arcBounds, -50f, 280f, false, paint)
+        canvas.drawLine(cx, cy - symbolRadius * 1.2f, cx, cy - symbolRadius * 0.15f, paint)
     }
 
     private companion object {
-        // The output meter's purple (HomeLevelBars' glow), and BmwDashboardSkin.M_RED.
-        const val RingOn = 0xFFB14DFF.toInt()
-        const val RingOff = 0xFFE32B3B.toInt()
-        const val SymbolOn = 0xFFEDD8FF.toInt()
+        // On: the output meter's purple. Off: BmwDashboardSkin.M_RED.
+        const val GlowOn = 0xFFB14DFF.toInt()
+        const val GlowOff = 0xFFE32B3B.toInt()
+        const val SymbolOn = 0xFFECA3FC.toInt()
         const val SymbolOff = 0xFFFFB8BE.toInt()
-        val CollarColors = intArrayOf(
-            0xFF2A282A.toInt(), 0xFFC8C6C8.toInt(), 0xFF383638.toInt(), 0xFF9A9799.toInt(),
-            0xFF232123.toInt(), 0xFFD0CED0.toInt(), 0xFF2A282A.toInt(),
-        )
-        val CollarStops = floatArrayOf(0f, 0.15f, 0.30f, 0.50f, 0.70f, 0.85f, 1f)
+        val BezelColors = intArrayOf(0xFF74747A.toInt(), 0xFF4A4A50.toInt(), 0xFF2E2E33.toInt(), 0xFF222226.toInt())
+        val BezelStops = floatArrayOf(0f, 0.35f, 0.7f, 1f)
+        val FaceColors = intArrayOf(0xFF5C5C63.toInt(), 0xFF3A3A40.toInt(), 0xFF26252A.toInt())
+        const val ShadowColor = 0x99000000.toInt()
+        // Glow passes under the symbol's core stroke: (alpha, stroke width as a fraction of the
+        // button radius).
+        val SymbolGlow = listOf(0.12f to 0.30f, 0.30f to 0.17f)
         fun Int.withAlpha(a: Float): Int = Color.argb((a * 255f).toInt(), Color.red(this), Color.green(this), Color.blue(this))
     }
 }
