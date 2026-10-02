@@ -61,8 +61,11 @@ object HomeArt {
         "tile_more" to Frac(0.8180f, 0.1050f, 0.0650f, 0.2267f),
         "tile_settings" to Frac(0.9035f, 0.1050f, 0.0650f, 0.2267f),
         "live_output" to Frac(0.0275f, 0.0667f, 0.0325f, 0.7800f),
-        "live_stages" to Frac(0.2450f, 0.0850f, 0.1350f, 0.2660f),
-        "live_levels" to Frac(0.3900f, 0.0833f, 0.4150f, 0.2700f),
+        // GLOBAL STAGES and the level readout share one top edge and both top-align their text, so
+        // the three headings sit on one line. The boxes are ~110dp tall, just over the taller
+        // block's 18sp content (stages: title + 3 rows), and centred on the top screen.
+        "live_stages" to Frac(0.2450f, 0.1034f, 0.1350f, 0.2292f),
+        "live_levels" to Frac(0.3900f, 0.1034f, 0.4150f, 0.2292f),
         // The power button and its glow, a circle level with the tiles' centres. PowerHotspot draws
         // the button, off and on, within this rect.
         "power_btn" to Frac(0.0987f, 0.5584f, 0.0977f, 0.2606f),
@@ -88,8 +91,8 @@ object HomeArt {
         "tile_more" to Frac(0.8065f, 0.0850f, 0.0770f, 0.2750f),
         "tile_settings" to Frac(0.8915f, 0.0850f, 0.0770f, 0.2750f),
         "live_output" to Frac(0.0275f, 0.0550f, 0.0325f, 0.8850f),
-        "live_stages" to Frac(0.2450f, 0.0700f, 0.1500f, 0.3050f),
-        "live_levels" to Frac(0.4100f, 0.0700f, 0.3850f, 0.3050f),
+        "live_stages" to Frac(0.2450f, 0.0725f, 0.1500f, 0.3000f),
+        "live_levels" to Frac(0.4100f, 0.0725f, 0.3850f, 0.3000f),
         "power_btn" to Frac(0.0987f, 0.5844f, 0.0977f, 0.2117f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),

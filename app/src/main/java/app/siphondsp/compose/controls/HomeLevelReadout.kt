@@ -24,9 +24,9 @@ import java.util.Locale
 /**
  * The front page's top-screen level readout: big L and R RMS numbers with each channel's held peak
  * under it, and the headroom left before the limiter (or before clipping while the limiter is off).
- * The block is centred vertically in its box. Text is 18sp / 44sp at the head unit's size and
- * scales down together only when the box is smaller than that (a small phone), so nothing wraps or
- * clips.
+ * The block is top-aligned in its box, so its headings line up with GLOBAL STAGES' title beside
+ * it. Text is 18sp / 44sp at the head unit's size and scales down together only when the box is
+ * smaller than that (a small phone), so nothing wraps or clips.
  *
  * [limiterDb] is the limiter threshold while the limiter is on, null while it is off.
  */
@@ -37,9 +37,8 @@ fun HomeLevelReadout(readout: LevelReadout, limiterDb: Float?, modifier: Modifie
         val small = (SmallSp * k).sp
         val big = (BigSp * k).sp
         val headroom = readout.headroomDb(limiterDb ?: 0f)
-        // Centred vertically, so the block sits on the top screen's centre line.
         Row(
-            Modifier.fillMaxWidth().align(Alignment.CenterStart),
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy((12 * k).dp),
         ) {
             Column(Modifier.weight(2f)) {
@@ -84,7 +83,8 @@ private fun Channel(
 
 @Composable
 private fun Heading(text: String, size: TextUnit) =
-    OneLine(text, size, Color.White, FontWeight.Bold, Modifier.padding(bottom = 4.dp))
+    // 4dp above, as GLOBAL STAGES' title has, so the headings share a line.
+    OneLine(text, size, Color.White, FontWeight.Bold, Modifier.padding(top = 4.dp, bottom = 4.dp))
 
 @Composable
 private fun OneLine(
@@ -119,7 +119,8 @@ private fun headroomColor(db: Float?): Color = when {
 }
 
 private val DesignWidth = 531.dp
-private val DesignHeight = 130.dp
+// The block's natural height at 18sp / 44sp, with a little slack.
+private val DesignHeight = 104.dp
 private const val SmallSp = 18f
 private const val BigSp = 44f
 private val Purple = Color(0xFFB14DFF)
