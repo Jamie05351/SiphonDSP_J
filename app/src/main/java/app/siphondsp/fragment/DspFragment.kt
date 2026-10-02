@@ -4,6 +4,9 @@ import android.animation.LayoutTransition
 import android.animation.ValueAnimator
 import android.app.ActivityOptions
 import android.content.Intent
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -68,6 +71,13 @@ class DspFragment : Fragment() {
     /** The limiter threshold while the limiter is on, else null; re-read whenever the page resumes. */
     private var limiterDb by mutableStateOf<Float?>(null)
 
+    /** MainActivity's real power state. Off until the processor service reports it running. */
+    private var powerOn = false
+
+    /** How "on" the front page looks: 1 in full colour, 0 greyed out (see [setPowerLook]). */
+    private var powerLook = 1f
+    private var powerAnimator: ValueAnimator? = null
+
     /**
      * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
      * settled on it, +-page width = fully off screen), so the activity-level overlay laid over
@@ -131,6 +141,12 @@ class DspFragment : Fragment() {
         cancelPendingOpen()
     }
 
+    override fun onDestroyView() {
+        powerAnimator?.cancel()
+        powerAnimator = null
+        super.onDestroyView()
+    }
+
     override fun onStop() {
         super.onStop()
         // The DSP screen (or whatever else) now covers this page, so taps can't reach it: release
@@ -158,6 +174,7 @@ class DspFragment : Fragment() {
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
         shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
         shortcutsBinding.homeLevelBars.onReadout = { levelReadout = it }
+        setPowerLook(if (powerOn) 1f else 0f)
         shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ, selected = openingTile == HomeTileKind.PEQ) }
         shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS, selected = openingTile == HomeTileKind.GAINS) }
         shortcutsBinding.cardShortcutCrossovers.setHomeContent { HomeTile(HomeTileKind.XOVERS, selected = openingTile == HomeTileKind.XOVERS) }
@@ -280,6 +297,60 @@ class DspFragment : Fragment() {
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
 
+    /**
+     * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
+     * five DSP tiles, the LED meter, GLOBAL STAGES and the level readout fade to grey, so it is
+     * obvious at a glance. They stay tappable. Settings and More keep their colour.
+     */
+    fun setPowerState(on: Boolean) {
+        if (on == powerOn) return
+        powerOn = on
+        if (!::shortcutsBinding.isInitialized || view == null) return
+        val target = if (on) 1f else 0f
+        powerAnimator?.cancel()
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            setPowerLook(target)
+            return
+        }
+        powerAnimator = ValueAnimator.ofFloat(powerLook, target).apply {
+            duration = POWER_FADE_MS
+            addUpdateListener { setPowerLook(it.animatedValue as Float) }
+            start()
+        }
+    }
+
+    /**
+     * [look] 1 draws the powered views normally; below that each is drawn through a hardware layer
+     * whose paint drains its colour (saturation [look]) and fades it towards [OFF_ALPHA].
+     */
+    private fun setPowerLook(look: Float) {
+        powerLook = look
+        val views = with(shortcutsBinding) {
+            listOf(
+                cardShortcutPeq, cardShortcutGainsDelay, cardShortcutCrossovers, cardShortcutCompressor,
+                cardShortcutAllpass, homeLevelBars, homeStages, homeLevelReadout,
+            )
+        }
+        if (look >= 1f) {
+            views.forEach {
+                it.setLayerType(View.LAYER_TYPE_NONE, null)
+                it.alpha = 1f
+            }
+            return
+        }
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(look) })
+        }
+        views.forEach {
+            if (it.layerType == View.LAYER_TYPE_HARDWARE) {
+                it.setLayerPaint(paint)
+            } else {
+                it.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+            }
+            it.alpha = OFF_ALPHA + (1f - OFF_ALPHA) * look
+        }
+    }
+
     fun setUpdateCardVisible(visible: Boolean) {
         shortcutsBinding.updateNotice.isVisible = visible
     }
@@ -312,6 +383,9 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 150L
+        private const val POWER_FADE_MS = 250L
+        /** How visible the powered views stay while the DSP is off: dimmed, but still readable. */
+        private const val OFF_ALPHA = 0.45f
 
         fun newInstance(): DspFragment {
             return DspFragment()
