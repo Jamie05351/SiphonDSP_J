@@ -3,7 +3,10 @@ package app.siphondsp.fragment
 import android.animation.LayoutTransition
 import android.animation.ValueAnimator
 import android.app.ActivityOptions
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
@@ -40,6 +43,8 @@ import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
+import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
@@ -68,8 +73,18 @@ class DspFragment : Fragment() {
     /** The top screen's level readout, fed by the LED meter while the front page is live. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
 
-    /** The limiter threshold while the limiter is on, else null; re-read whenever the page resumes. */
+    /** The limiter threshold while the limiter is on, else null; see [refreshLimiter]. */
     private var limiterDb by mutableStateOf<Float?>(null)
+
+    /**
+     * Re-reads the limiter whenever settings change underneath the front page while it stays
+     * resumed: a preset or backup loaded, a Revert from the overflow menu, or any DSP edit.
+     */
+    private val settingsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refreshLimiter(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
+        }
+    }
 
     /** MainActivity's real power state. Off until the processor service reports it running. */
     private var powerOn = false
@@ -123,10 +138,8 @@ class DspFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Coming back from the limiter's screen is the only way its settings change under us.
-        val values = NativeBmwDspValues.load(requireContext())
-        limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
-            .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
+        // Coming back from the limiter's screen; in-place changes arrive via settingsReceiver.
+        refreshLimiter(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
         onPageSelectedInternal(binding.dspPager.currentItem)
         // Posted: after a restore the pager may not be laid out yet, and a 0 width would put the
@@ -142,6 +155,7 @@ class DspFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        requireContext().unregisterLocalReceiver(settingsReceiver)
         powerAnimator?.cancel()
         powerAnimator = null
         super.onDestroyView()
@@ -174,6 +188,14 @@ class DspFragment : Fragment() {
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
         shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
         shortcutsBinding.homeLevelBars.onReadout = { levelReadout = it }
+        requireContext().registerLocalReceiver(
+            settingsReceiver,
+            IntentFilter().apply {
+                addAction(Constants.ACTION_PRESET_LOADED)
+                addAction(Constants.ACTION_BACKUP_RESTORED)
+                addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
+            },
+        )
         setPowerLook(if (powerOn) 1f else 0f)
         shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ, selected = openingTile == HomeTileKind.PEQ) }
         shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS, selected = openingTile == HomeTileKind.GAINS) }
@@ -295,6 +317,14 @@ class DspFragment : Fragment() {
         shortcutsBinding.translationNotice.isVisible = false
         // Set timer +1y
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
+    }
+
+    /** The limiter threshold while it is on, else null, from [fromBroadcast] or the saved values. */
+    private fun refreshLimiter(fromBroadcast: FloatArray?) {
+        val values = fromBroadcast?.takeIf { it.size == NativeBmwDspValues.SIZE }
+            ?: NativeBmwDspValues.load(requireContext())
+        limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
+            .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
     }
 
     /**
