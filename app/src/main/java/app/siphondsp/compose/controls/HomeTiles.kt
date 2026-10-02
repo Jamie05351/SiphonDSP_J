@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -80,9 +81,15 @@ private fun HomeIconButton(label: String, glyph: @Composable () -> Unit) {
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
         val boxWidth = maxWidth
-        val labelSize = remember(label, boxWidth, density) {
-            val width = measurer.measure(label, TextStyle(fontSize = IconLabelSp.sp)).size.width
-            val room = with(density) { boxWidth.toPx() }
+        // Measured in the exact style the Text draws with (the theme's font, weight and letter
+        // spacing), or the measurement comes up short and the label clips at the box's edge.
+        val baseStyle = LocalTextStyle.current.merge(
+            TextStyle(fontSize = IconLabelSp.sp, fontWeight = FontWeight.Normal),
+        )
+        val labelSize = remember(label, boxWidth, density, baseStyle) {
+            val width = measurer.measure(label, baseStyle).size.width
+            // A little short of the box: letter spacing doesn't shrink exactly with the size.
+            val room = with(density) { boxWidth.toPx() } * 0.94f
             (if (width > room) maxOf(IconLabelSp * room / width, IconLabelMinSp) else IconLabelSp).sp
         }
         Column(
@@ -94,8 +101,7 @@ private fun HomeIconButton(label: String, glyph: @Composable () -> Unit) {
             Text(
                 text = label,
                 color = Color.White,
-                fontSize = labelSize,
-                fontWeight = FontWeight.Normal,
+                style = baseStyle.copy(fontSize = labelSize),
                 maxLines = 1,
                 softWrap = false,
                 modifier = Modifier.padding(top = 4.dp),

@@ -70,22 +70,24 @@ object HomeArt {
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
     )
 
-    // Phone (2340x1080): the same columns. The taller art gives both screens more height; the top
-    // screen's GLOBAL STAGES text shrinks to fit if its box is still too short. More and Settings are
-    // wider and taller than the head unit's so they stay at least 48dp when a 16:9 phone fits the art
-    // to only ~640dp wide.
+    // Phone (2340x1080): the head unit's layout, scaled and centred vertically, so the screens keep
+    // the head unit's proportions and the tiles fill the bottom screen instead of floating in a
+    // stretched one; the taller art just leaves more plate above and below. Each head-unit y maps
+    // to (y * 878 + 101) / 1080 and each height to h * 878 / 1080. More and Settings are wider
+    // than the head unit's so they stay at least 48dp when a 16:9 phone fits the art to only
+    // ~640dp wide; Settings still ends flush with the last DSP tile.
     private val phoneRects = mapOf(
-        "screen_top" to Frac(0.2310f, 0.0550f, 0.7465f, 0.3350f),
-        "screen_bottom" to Frac(0.2310f, 0.4400f, 0.7465f, 0.5000f),
-        "tile_peq" to Frac(0.2400f, 0.5400f, 0.1385f, 0.3000f),
-        "tile_gains" to Frac(0.3875f, 0.5400f, 0.1385f, 0.3000f),
-        "tile_xovers" to Frac(0.5350f, 0.5400f, 0.1385f, 0.3000f),
-        "tile_compressor" to Frac(0.6825f, 0.5400f, 0.1385f, 0.3000f),
-        "tile_allpass" to Frac(0.8300f, 0.5400f, 0.1385f, 0.3000f),
-        "tile_more" to Frac(0.8065f, 0.0850f, 0.0770f, 0.2750f),
-        "tile_settings" to Frac(0.8915f, 0.0850f, 0.0770f, 0.2750f),
-        "live_output" to Frac(0.0275f, 0.0550f, 0.0325f, 0.8850f),
-        "power_btn" to Frac(0.0987f, 0.5844f, 0.0977f, 0.2117f),
+        "screen_top" to Frac(0.2310f, 0.1477f, 0.7465f, 0.2461f),
+        "screen_bottom" to Frac(0.2310f, 0.4870f, 0.7465f, 0.3306f),
+        "tile_peq" to Frac(0.2400f, 0.5023f, 0.1385f, 0.3001f),
+        "tile_gains" to Frac(0.3875f, 0.5023f, 0.1385f, 0.3001f),
+        "tile_xovers" to Frac(0.5350f, 0.5023f, 0.1385f, 0.3001f),
+        "tile_compressor" to Frac(0.6825f, 0.5023f, 0.1385f, 0.3001f),
+        "tile_allpass" to Frac(0.8300f, 0.5023f, 0.1385f, 0.3001f),
+        "tile_more" to Frac(0.8065f, 0.1789f, 0.0770f, 0.1843f),
+        "tile_settings" to Frac(0.8915f, 0.1789f, 0.0770f, 0.1843f),
+        "live_output" to Frac(0.0275f, 0.1477f, 0.0325f, 0.6341f),
+        "power_btn" to Frac(0.0987f, 0.5475f, 0.0977f, 0.2119f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),
