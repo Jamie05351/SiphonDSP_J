@@ -38,30 +38,36 @@ private val SampleBands = listOf(
  * One front-page tile, drawn to fit its host view's rect. It is purely visual: the host ComposeView
  * owns the click, the ripple and the accessibility label (see fragment_dsp_page_shortcuts.xml), so
  * the tile and its touch area are always the same box. The glyphs are illustrative, not live.
- * Settings and More sit in the top screen as bare icons with a label under them, no tile shell.
+ * The five DSP modules are signal-chain cards ([HomeChainCard]) in the bottom screen; Settings and
+ * More sit in the top screen as bare icons with a label under them, no tile shell.
  *
- * [selected] lights the tile's glow; the front page sets it for a moment when a tile is tapped, just
- * before its screen zooms open.
+ * [selected] lights the card's glow; the front page sets it for a moment when a card is tapped,
+ * just before its screen zooms open.
  */
 @Composable
 fun HomeTile(kind: HomeTileKind, modifier: Modifier = Modifier, selected: Boolean = false) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (kind) {
-            HomeTileKind.PEQ -> DspTile(stringResource(R.string.home_tile_peq), DspColors.Peq, selected, null) {
-                PeqGlyph({ SampleBands })
-            }
-            HomeTileKind.GAINS -> DspTile(stringResource(R.string.home_tile_gains), DspColors.Delay, selected, null) {
-                DelayGainGlyph(delayMs = { 8f }, gainDb = { -6f })
-            }
-            HomeTileKind.XOVERS -> DspTile(stringResource(R.string.home_tile_xovers), DspColors.Xover, selected, null) {
-                XoverGlyph({ 3 })
-            }
-            HomeTileKind.COMPRESSOR -> DspTile(stringResource(R.string.home_tile_compressor), DspColors.Comp, selected, null) {
-                CompressorGlyph(thresholdNorm = { 0.55f }, grDb = { 7f })
-            }
-            HomeTileKind.ALLPASS -> DspTile(stringResource(R.string.home_tile_allpass), DspColors.Allpass, selected, null) {
-                AllpassGlyph({ 90f })
-            }
+            HomeTileKind.PEQ -> HomeChainCard(
+                stringResource(R.string.home_card_peq), stringResource(R.string.home_card_peq_sub),
+                DspColors.Peq, DspColors.BandMagenta, selected,
+            ) { PeqGlyph({ SampleBands }) }
+            HomeTileKind.GAINS -> HomeChainCard(
+                stringResource(R.string.home_card_gains), stringResource(R.string.home_card_gains_sub),
+                DspColors.Delay, ChainTeal, selected,
+            ) { DelayGainGlyph(delayMs = { 8f }, gainDb = { -6f }) }
+            HomeTileKind.XOVERS -> HomeChainCard(
+                stringResource(R.string.home_card_xovers), stringResource(R.string.home_card_xovers_sub),
+                DspColors.Xover, DspColors.XoverLow, selected,
+            ) { XoverGlyph({ 3 }) }
+            HomeTileKind.COMPRESSOR -> HomeChainCard(
+                stringResource(R.string.home_card_compressor), stringResource(R.string.home_card_compressor_sub),
+                DspColors.Comp, ChainRose, selected,
+            ) { CompressorGlyph(thresholdNorm = { 0.55f }, grDb = { 7f }) }
+            HomeTileKind.ALLPASS -> HomeChainCard(
+                stringResource(R.string.home_card_allpass), stringResource(R.string.home_card_allpass_sub),
+                DspColors.Allpass, ChainIndigo, selected,
+            ) { AllpassGlyph({ 90f }) }
             HomeTileKind.SETTINGS -> HomeIconButton(stringResource(R.string.title_activity_settings)) { GearGlyph() }
             HomeTileKind.MORE -> HomeIconButton(stringResource(R.string.home_tile_more)) { MoreGlyph(dotRadius = 0.10f) }
         }
@@ -109,6 +115,11 @@ private fun HomeIconButton(label: String, glyph: @Composable () -> Unit) {
         }
     }
 }
+
+// Each card's second border colour, from the Figma cards (the others reuse DspColors).
+private val ChainTeal = Color(0xFF14B8A6)
+private val ChainRose = Color(0xFFFF4D8D)
+private val ChainIndigo = Color(0xFF5B5BFF)
 
 private const val IconLabelSp = 18f
 private const val IconLabelMinSp = 11f

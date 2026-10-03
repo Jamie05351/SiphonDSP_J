@@ -7,7 +7,7 @@ import org.junit.Test
 
 class HomeArtTest {
 
-    private val liveKeys = listOf("live_output") + HomeArt.LIVE_KEYS
+    private val liveKeys = listOf(HomeArt.SCOPE_KEY) + HomeArt.LIVE_KEYS
 
     private val keys = HomeArt.TILE_KEYS + liveKeys +
         HomeArt.SCREEN_KEYS + listOf("power_btn", "power_led", "cog", "overflow")
@@ -82,11 +82,11 @@ class HomeArtTest {
     }
 
     @Test
-    fun dspTilesSitInTheBottomScreenAndTheRestInTheTop() {
+    fun dspCardsAndTheScopeSitInTheBottomScreenAndTheRestInTheTop() {
         for (phone in listOf(false, true)) {
             val top = HomeArt.frac("screen_top", phone)!!
             val bottom = HomeArt.frac("screen_bottom", phone)!!
-            dspTiles.forEach { key ->
+            (dspTiles + HomeArt.SCOPE_KEY).forEach { key ->
                 assertTrue("$key escapes the bottom screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, bottom))
             }
             (listOf("tile_settings", "tile_more") + HomeArt.LIVE_KEYS).forEach { key ->
@@ -122,11 +122,14 @@ class HomeArtTest {
     }
 
     @Test
-    fun dspTilesAreSquareAndEvenlyPitched() {
+    fun dspCardsShareOneSizeAndAreEvenlyPitched() {
         for (phone in listOf(false, true)) {
-            val (w, h) = artSize(phone)
             val tiles = dspTiles.map { HomeArt.frac(it, phone)!! }
-            tiles.forEach { assertEquals("tile not square (phone=$phone)", it.w * w, it.h * h, 1f) }
+            tiles.forEach {
+                assertEquals("card width differs (phone=$phone)", tiles.first().w, it.w, 1e-5f)
+                assertEquals("card height differs (phone=$phone)", tiles.first().h, it.h, 1e-5f)
+                assertTrue("card wider than tall (phone=$phone)", it.w * artSize(phone).first < it.h * artSize(phone).second)
+            }
             val pitches = tiles.zipWithNext { a, b -> b.x - a.x }
             pitches.forEach { assertEquals(pitches.first(), it, 1e-4f) }
             assertTrue(tiles.all { it.y == tiles.first().y })
@@ -134,9 +137,9 @@ class HomeArtTest {
     }
 
     @Test
-    fun settingsEndsFlushWithTheLastDspTileAndMoreSitsLeftOfIt() {
+    fun settingsEndsFlushWithTheOutputScopeAndMoreSitsLeftOfIt() {
         for (phone in listOf(false, true)) {
-            val last = HomeArt.frac("tile_allpass", phone)!!
+            val last = HomeArt.frac(HomeArt.SCOPE_KEY, phone)!!
             val settings = HomeArt.frac("tile_settings", phone)!!
             val more = HomeArt.frac("tile_more", phone)!!
             assertEquals(last.x + last.w, settings.x + settings.w, 1e-3f)
@@ -146,14 +149,22 @@ class HomeArtTest {
     }
 
     @Test
-    fun meterAndPowerButtonShareTheLeftPanel() {
+    fun outputScopeEndsTheChainLevelWithTheCards() {
         for (phone in listOf(false, true)) {
-            val screen = HomeArt.frac("screen_top", phone)!!
-            val meter = HomeArt.frac("live_output", phone)!!
+            val last = HomeArt.frac("tile_allpass", phone)!!
+            val scope = HomeArt.frac(HomeArt.SCOPE_KEY, phone)!!
+            assertTrue("scope not right of the cards (phone=$phone)", last.x + last.w < scope.x)
+            // The chain's line enters the scope level with the cards' centres, where its rails split.
+            assertEquals(last.y + last.h / 2f, scope.y + scope.h / 2f, 2e-3f)
+        }
+    }
+
+    @Test
+    fun powerButtonIsCentredInTheLeftPanel() {
+        for (phone in listOf(false, true)) {
             val power = HomeArt.frac("power_btn", phone)!!
-            assertTrue("meter overlaps the screens (phone=$phone)", meter.x + meter.w <= screen.x)
-            assertTrue("meter not left of the power button (phone=$phone)", meter.x + meter.w <= power.x)
-            assertTrue("meter taller than the art (phone=$phone)", meter.y >= 0f && meter.y + meter.h <= 1f)
+            val screen = HomeArt.frac("screen_top", phone)!!
+            assertEquals(screen.x / 2f, power.x + power.w / 2f, 2e-3f)
         }
     }
 

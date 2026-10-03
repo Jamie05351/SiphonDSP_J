@@ -263,6 +263,17 @@
     <string name="home_tile_compressor">Comp</string>
     <string name="home_tile_allpass">Allpass</string>
     <string name="home_tile_more">More</string>
+    <!-- Front-page signal-chain cards: title, then a short line on what the module does. -->
+    <string name="home_card_peq">PEQ</string>
+    <string name="home_card_peq_sub">Parametric EQ</string>
+    <string name="home_card_gains">Gains / Delay</string>
+    <string name="home_card_gains_sub">Time alignment</string>
+    <string name="home_card_xovers">Xovers</string>
+    <string name="home_card_xovers_sub">Crossover</string>
+    <string name="home_card_compressor">Compressor</string>
+    <string name="home_card_compressor_sub">Dynamics</string>
+    <string name="home_card_allpass">Allpass</string>
+    <string name="home_card_allpass_sub">Phase alignment</string>
     <string name="session_exclude_restricted">Exclude unsupported apps</string>
     <string name="session_exclude_restricted_off">Apps blocking audio capture stay muted (default Android behavior)</string>
     <string name="session_exclude_restricted_on">Apps blocking audio capture are excluded and remain unprocessed (recommended)</string>

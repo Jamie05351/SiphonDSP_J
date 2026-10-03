@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
 import app.siphondsp.compose.controls.HomeLevelReadout
+import app.siphondsp.compose.controls.HomeOutputScope
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -46,6 +48,8 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.HomeLevelFeed
+import app.siphondsp.view.LevelHistory
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
@@ -70,8 +74,17 @@ class DspFragment : Fragment() {
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
 
-    /** The top screen's level readout, fed by the LED meter while the front page is live. */
+    /** The held output levels, for the top screen's readout and the output scope's numbers. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
+
+    /** The output scope's last few seconds of levels; [scopeTick] moves on each new frame. */
+    private val levelHistory = LevelHistory()
+    private var scopeTick by mutableIntStateOf(0)
+
+    /** Feeds [levelHistory] and [levelReadout] while the front page is live; see [updateLevelFeed]. */
+    private var levelFeed: HomeLevelFeed? = null
+    private var resumed = false
+    private var homePageActive = true
 
     /** The limiter threshold while the limiter is on, else null; see [refreshLimiter]. */
     private var limiterDb by mutableStateOf<Float?>(null)
@@ -138,6 +151,7 @@ class DspFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         // Coming back from the limiter's screen; in-place changes arrive via settingsReceiver.
         refreshLimiter(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
@@ -152,9 +166,13 @@ class DspFragment : Fragment() {
         // Something else is coming to the front (a GLOBAL STAGES cell, Settings, another app): a
         // tile launch still waiting out its flash must not open over it.
         cancelPendingOpen()
+        resumed = false
+        updateLevelFeed()
     }
 
     override fun onDestroyView() {
+        levelFeed?.running = false
+        levelFeed = null
         requireContext().unregisterLocalReceiver(settingsReceiver)
         powerAnimator?.cancel()
         powerAnimator = null
@@ -172,8 +190,17 @@ class DspFragment : Fragment() {
         // The artwork page stays attached while off screen, so live/polled home widgets need to
         // stop work when the settings page is selected.
         val active = position == 0
-        shortcutsBinding.homeLevelBars.pageActive = active
+        homePageActive = active
+        updateLevelFeed()
         if (!active) cancelPendingOpen()
+    }
+
+    /**
+     * Runs the level feed (and so the analyzer) only while the front page is resumed and the pager
+     * is on the artwork page: it stays attached and "visible" when swiped away or covered.
+     */
+    private fun updateLevelFeed() {
+        levelFeed?.running = resumed && homePageActive
     }
 
     /** [scrolledPx] is how far the pager has scrolled past the artwork page, in reading order. */
@@ -187,7 +214,8 @@ class DspFragment : Fragment() {
         // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
         shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
-        shortcutsBinding.homeLevelBars.onReadout = { levelReadout = it }
+        shortcutsBinding.homeOutputScope.setHomeContent { HomeOutputScope(levelHistory, { scopeTick }, levelReadout) }
+        levelFeed = HomeLevelFeed(levelHistory, onFrame = { scopeTick++ }, onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
             IntentFilter().apply {
@@ -329,7 +357,7 @@ class DspFragment : Fragment() {
 
     /**
      * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
-     * live data (the LED meter, GLOBAL STAGES and the level readout) fades to grey, so it is obvious
+     * live data (the output scope, GLOBAL STAGES and the level readout) fades to grey, so it is obvious
      * at a glance. The stage cells stay tappable. The tiles, Settings and More keep their colour.
      */
     fun setPowerState(on: Boolean) {
@@ -355,7 +383,7 @@ class DspFragment : Fragment() {
      */
     private fun setPowerLook(look: Float) {
         powerLook = look
-        val views = with(shortcutsBinding) { listOf(homeLevelBars, homeStages, homeLevelReadout) }
+        val views = with(shortcutsBinding) { listOf(homeOutputScope, homeStages, homeLevelReadout) }
         if (look >= 1f) {
             views.forEach {
                 it.setLayerType(View.LAYER_TYPE_NONE, null)
