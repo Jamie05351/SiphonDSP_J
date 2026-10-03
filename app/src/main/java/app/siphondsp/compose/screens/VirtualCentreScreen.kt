@@ -66,7 +66,7 @@ fun VirtualCentreScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, weight: Float, modifier: Modifier) {
+private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, centreFound: Float, modifier: Modifier) {
     WorkspaceArtBox(modifier.fillMaxSize()) {
         ArtSwitchRow(
             label = "Virtual centre",
@@ -78,15 +78,15 @@ private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState,
         )
         PresetControl(dsp, geometry, Modifier.artRect(artDp(640, 92, 590, 44)))
         ArtRow("Centre found", Modifier.artRect(artDp(190, 150, 1040, 30)), labelWidth = 200.dp) {
-            CentreMeter(weight, Modifier.weight(1f))
+            CentreMeter(centreFound, Modifier.weight(1f))
         }
-        DspArtSlider(dsp, "Centre level", NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, LevelRange, 0.5f, "dB",
+        DspArtSlider(dsp, "Centre level", NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB",
             CentreAccent, Modifier.artRect(artDp(190, 196, 505, 50)))
-        DspArtSlider(dsp, "Side level", NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, LevelRange, 0.5f, "dB",
+        DspArtSlider(dsp, "Side level", NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB",
             SideAccent, Modifier.artRect(artDp(725, 196, 505, 50)))
-        DspArtSlider(dsp, "Delay L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), DelayRange, 0.01f, "ms",
+        DspArtSlider(dsp, "Delay L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms",
             DelayAccent, Modifier.artRect(artDp(190, 254, 505, 50)))
-        DspArtSlider(dsp, "Delay R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), DelayRange, 0.01f, "ms",
+        DspArtSlider(dsp, "Delay R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms",
             DelayAccent, Modifier.artRect(artDp(725, 254, 505, 50)))
         ArtSwitchRow(
             label = "Spread",
@@ -96,15 +96,15 @@ private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState,
             labelWidth = 200.dp,
             modifier = Modifier.artRect(artDp(190, 312, 420, 44)),
         )
-        DspArtSlider(dsp, "Spread L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), SpreadRange, 50f, "Hz",
+        DspArtSlider(dsp, "Spread L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz",
             SpreadAccent, Modifier.artRect(artDp(190, 366, 505, 50)))
-        DspArtSlider(dsp, "Spread R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), SpreadRange, 50f, "Hz",
+        DspArtSlider(dsp, "Spread R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz",
             SpreadAccent, Modifier.artRect(artDp(725, 366, 505, 50)))
     }
 }
 
 @Composable
-private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, weight: Float, modifier: Modifier) {
+private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, centreFound: Float, modifier: Modifier) {
     val labels = listOf("Centre level", "Side level", "Delay L", "Delay R", "Spread L", "Spread R")
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         BmwPanel(
@@ -119,11 +119,11 @@ private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, we
             sliderLabels = labels,
         ) {
             PresetControl(dsp, geometry, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-            CentreMeter(weight, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-            PhoneSlider(dsp, labels[0], NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, LevelRange, 0.5f, "dB", CentreAccent)
-            PhoneSlider(dsp, labels[1], NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, LevelRange, 0.5f, "dB", SideAccent)
-            PhoneSlider(dsp, labels[2], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), DelayRange, 0.01f, "ms", DelayAccent)
-            PhoneSlider(dsp, labels[3], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), DelayRange, 0.01f, "ms", DelayAccent)
+            CentreMeter(centreFound, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+            PhoneSlider(dsp, labels[0], NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB", CentreAccent)
+            PhoneSlider(dsp, labels[1], NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB", SideAccent)
+            PhoneSlider(dsp, labels[2], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent)
+            PhoneSlider(dsp, labels[3], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent)
             BmwSectionHeader(
                 title = "Spread",
                 accentColor = SpreadAccent,
@@ -131,8 +131,8 @@ private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, we
                 toggleChecked = spreadOn(dsp),
                 onToggleChange = { on -> setSpread(dsp, on) },
             )
-            PhoneSlider(dsp, labels[4], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), SpreadRange, 50f, "Hz", SpreadAccent)
-            PhoneSlider(dsp, labels[5], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), SpreadRange, 50f, "Hz", SpreadAccent)
+            PhoneSlider(dsp, labels[4], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent)
+            PhoneSlider(dsp, labels[5], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent)
         }
     }
 }
@@ -220,9 +220,9 @@ private fun setSpread(dsp: BmwDspState, on: Boolean) {
     )
 }
 
-private val LevelRange = -24f..6f
-private val DelayRange = 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS
-private val SpreadRange = 100f..10000f
+private val CentreLevelRange = -24f..6f
+private val CentreDelayRange = 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS
+private val CentreSpreadRange = 100f..10000f
 private val CentreAccent = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
 private val SideAccent = Color(BmwDashboardSkin.M_GREEN)
 private val DelayAccent = Color(BmwDashboardSkin.M_BLUE)
