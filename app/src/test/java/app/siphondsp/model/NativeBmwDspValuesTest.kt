@@ -163,6 +163,7 @@ class NativeBmwDspValuesTest {
             seedMidUpperCrossoverMigrated(it)
             seedHighBandMigrated(it)
             seedHighBusLimiterMigrated(it)
+            seedVirtualMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
