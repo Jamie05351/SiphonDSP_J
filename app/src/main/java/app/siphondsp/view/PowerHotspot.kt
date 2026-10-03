@@ -18,7 +18,7 @@ import kotlin.math.min
  *
  * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the
  * glow): a matte grey face in a matte grey bezel, with a glowing power symbol that is always lit:
- * purple while on (the output meter's purple), red while off, so the engine state reads at a glance;
+ * purple while on (the signal chain's purple), red while off, so the engine state reads at a glance;
  * the front page's tiles and live data also grey out while off. No baked art is involved. No LED dot (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
@@ -105,7 +105,7 @@ class PowerHotspot @JvmOverloads constructor(
     }
 
     private companion object {
-        // On: the output meter's purple. Off: BmwDashboardSkin.M_RED.
+        // On: the signal chain's purple. Off: BmwDashboardSkin.M_RED.
         const val GlowOn = 0xFFB14DFF.toInt()
         const val GlowOff = 0xFFE32B3B.toInt()
         const val SymbolOn = 0xFFECA3FC.toInt()

@@ -11,9 +11,10 @@
     <!-- Front page: one full-bleed hardware faceplate, drawn live by HomeFaceplate (Compose) with no
          margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
          own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
-         same fit mapping as the faceplate: the 7 menu tiles (each a Compose tile in a clickable
-         ComposeView, so a tile's picture and its touch area are the same box), the left panel's
-         output meter, and the top screen's global stages and level readout. The power button remains
+         same fit mapping as the faceplate: the 7 menu tiles (the five DSP signal-chain cards, then
+         Settings and More, each Compose in a clickable ComposeView, so its picture and its touch
+         area are the same box), the bottom screen's live output scope, and the top screens' global
+         stages, level readout and MBC / all-pass boxes. The power button remains
          in the activity overlay (PowerHotspot draws it). Must never scroll. -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/home_backdrop"
@@ -96,17 +97,26 @@
             android:foreground="?attr/selectableItemBackground"
             android:contentDescription="@string/abc_action_menu_overflow_description" />
 
-        <app.siphondsp.view.HomeLevelBars
-            android:id="@+id/home_level_bars"
-            android:tag="live_output"
+        <!-- Live output at the end of the signal chain; redraws 20 times a second, so not announced. -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/home_output_scope"
+            android:tag="live_scope"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:importantForAccessibility="no" />
+            android:importantForAccessibility="noHideDescendants" />
 
         <!-- Big L / R levels and headroom; numbers change several times a second, so not announced. -->
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/home_level_readout"
             android:tag="live_levels"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="noHideDescendants" />
+
+        <!-- MBC band squares and all-pass boxes, under the level readout; changes with settings. -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/home_stage_boxes"
+            android:tag="live_bands"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="noHideDescendants" />
