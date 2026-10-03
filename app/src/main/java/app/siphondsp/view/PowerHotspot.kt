@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
@@ -17,9 +18,10 @@ import kotlin.math.min
  * power logic is unchanged.
  *
  * It draws the whole button within its bounds (HomeArt's `power_btn` rect, which includes the
- * glow): a matte grey face in a matte grey bezel, with a glowing power symbol that is always lit:
- * purple while on (the signal chain's purple), red while off, so the engine state reads at a glance;
- * the front page's tiles and live data also grey out while off. No baked art is involved. No LED dot (the view is hidden).
+ * halo): a matte grey face in a matte grey bezel, ringed by a lit ring, with a glowing power symbol,
+ * all in the state's colour: purple while on (the signal chain's purple), red while off, so the
+ * engine state reads at a glance; the front page's live-data screens also go black while off. No
+ * baked art is involved. No LED dot (the view is hidden).
  */
 class PowerHotspot @JvmOverloads constructor(
     context: Context,
@@ -74,9 +76,21 @@ class PowerHotspot @JvmOverloads constructor(
         val on = isToggled
 
         val glow = if (on) GlowOn else GlowOff
+        val ring = if (on) RingOn else RingOff
         val symbol = if (on) SymbolOn else SymbolOff
-        // The button itself; the rest of the rect is room for the symbol's glow.
+        // The button itself; the rest of the rect is room for its halo.
         val b = r * 0.72f
+        val face = b * 0.82f
+
+        // Halo: the state's colour, strongest at the button and fading out to the rect's edge.
+        paint.reset(); paint.isAntiAlias = true
+        paint.shader = RadialGradient(
+            cx, cy, r,
+            intArrayOf(glow.withAlpha(0.9f), glow.withAlpha(0.55f), glow.withAlpha(0.18f), glow.withAlpha(0f)),
+            floatArrayOf(0f, 0.45f, 0.75f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx, cy, r, paint)
 
         // Matte grey bezel, a little lighter at the top.
         paint.reset(); paint.isAntiAlias = true
@@ -85,15 +99,27 @@ class PowerHotspot @JvmOverloads constructor(
         // Matte grey face, set just inside the bezel.
         paint.reset(); paint.isAntiAlias = true
         paint.shader = LinearGradient(cx, cy - b, cx, cy + b, FaceTop, FaceBottom, Shader.TileMode.CLAMP)
-        canvas.drawCircle(cx, cy, b * 0.82f, paint)
+        canvas.drawCircle(cx, cy, face, paint)
 
-        // Power symbol: an arc open at the top and a stem, over one soft glow of its colour.
-        val symbolRadius = b * 0.42f
-        arcBounds.set(cx - symbolRadius, cy - symbolRadius, cx + symbolRadius, cy + symbolRadius)
+        // The lit ring round the face: a soft glow either side of it, then the ring itself.
         paint.reset(); paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
+        val ringWidth = face * 0.075f
+        for (i in 4 downTo 1) {
+            paint.color = ring.withAlpha(0.14f)
+            paint.strokeWidth = ringWidth + face * 0.09f * i
+            canvas.drawCircle(cx, cy, face, paint)
+        }
+        paint.color = ring; paint.strokeWidth = ringWidth
+        canvas.drawCircle(cx, cy, face, paint)
+
+        // Power symbol: an arc open at the top and a stem, glowing in the state's colour.
+        val symbolRadius = b * 0.42f
+        arcBounds.set(cx - symbolRadius, cy - symbolRadius, cx + symbolRadius, cy + symbolRadius)
         paint.strokeCap = Paint.Cap.ROUND
-        paint.color = glow.withAlpha(0.25f); paint.strokeWidth = b * 0.2f
+        paint.color = glow.withAlpha(0.2f); paint.strokeWidth = b * 0.3f
+        drawSymbol(canvas, cx, cy, symbolRadius)
+        paint.color = glow.withAlpha(0.45f); paint.strokeWidth = b * 0.17f
         drawSymbol(canvas, cx, cy, symbolRadius)
         paint.color = symbol; paint.strokeWidth = b * 0.085f
         drawSymbol(canvas, cx, cy, symbolRadius)
@@ -105,11 +131,14 @@ class PowerHotspot @JvmOverloads constructor(
     }
 
     private companion object {
-        // On: the signal chain's purple. Off: BmwDashboardSkin.M_RED.
-        const val GlowOn = 0xFFB14DFF.toInt()
-        const val GlowOff = 0xFFE32B3B.toInt()
-        const val SymbolOn = 0xFFECA3FC.toInt()
-        const val SymbolOff = 0xFFFFB8BE.toInt()
+        // On: the signal chain's purple. Off: a bright red. Each has its halo/glow colour, the lit
+        // ring's colour and the symbol's, all fully saturated so the state reads at a glance.
+        const val GlowOn = 0xFFB44DFF.toInt()
+        const val GlowOff = 0xFFFF1F33.toInt()
+        const val RingOn = 0xFFC266FF.toInt()
+        const val RingOff = 0xFFFF3344.toInt()
+        const val SymbolOn = 0xFFD88CFF.toInt()
+        const val SymbolOff = 0xFFFF5A66.toInt()
         const val BezelTop = 0xFF6A6A70.toInt()
         const val BezelBottom = 0xFF2C2C31.toInt()
         const val FaceTop = 0xFF4E4E55.toInt()

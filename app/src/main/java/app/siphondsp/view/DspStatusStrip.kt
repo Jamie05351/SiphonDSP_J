@@ -117,9 +117,8 @@ class DspStatusStrip @JvmOverloads constructor(
         // its own -- the toolbar it rides paints the header colour behind it. Top padding matches
         // the toolbar's own (see activity_parametric_eq.xml / dsp_workspace_toolbar_height) so this
         // strip's text lines up with the toolbar's (bezel-clearance-padded) content band.
-        // Front page: top-aligned, so the title shares a line with the level readout's headings
-        // (HomeArt gives both blocks the same top edge, centred on the top screen).
-        gravity = Gravity.START or if (stacked) Gravity.TOP else Gravity.CENTER_VERTICAL
+        // Front page: the title and rows are one block, centred vertically in the left screen.
+        gravity = Gravity.START or Gravity.CENTER_VERTICAL
         if (!stacked) setPadding(0, dp(25), 0, 0)
         if (stacked) {
             addView(TextView(context).apply {

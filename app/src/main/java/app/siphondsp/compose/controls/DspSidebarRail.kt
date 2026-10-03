@@ -13,42 +13,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import app.siphondsp.R
+import app.siphondsp.compose.assets.AllpassGraphic
+import app.siphondsp.compose.assets.CompressorGraphic
+import app.siphondsp.compose.assets.GainsDelayGraphic
+import app.siphondsp.compose.assets.PeqGraphic
+import app.siphondsp.compose.assets.XoversGraphic
 import app.siphondsp.view.DspDestination
-
-/**
- * Values for the rail's glyphs. Every field is a lambda so it is read in the draw phase, so they
- * can later be wired to live DSP state without recomposing.
- *
- * Nothing supplies these yet: like the front-page tiles, the rail glyphs are ICONS drawn from
- * these fixed sample values (4 ms, -6 dB, 3-way ...), not a readout of the current settings.
- * Don't read settings off them; the workspace controls are the truth.
- */
-class SidebarLive(
-    val peqBands: () -> List<PeqBand> = { SampleBands },
-    val delayMs: () -> Float = { 4f },
-    val gainDb: () -> Float = { -6f },
-    val xoverWays: () -> Int = { 3 },
-    val compThreshold: () -> Float = { 0.55f },
-    val compGrDb: () -> Float = { 6f },
-    val allpassPhaseDeg: () -> Float = { 90f },
-)
-
-private val SampleBands = listOf(
-    PeqBand(60f, 5f, 1.2f, DspColors.BandMagenta),
-    PeqBand(250f, 9f, 1.4f, DspColors.BandBlue),
-    PeqBand(1000f, -9f, 1.6f, DspColors.BandAmber),
-    PeqBand(6000f, 5f, 1.5f, DspColors.BandGreen),
-)
-
 
 /**
  * The submenu sidebar drawn entirely in Compose: a housing made of the front page's faceplate (the
  * same grained plate and metal bezel, see FaceplatePlate.kt) holding the five nav tiles from the
- * home screen ([DspTile] + live glyphs). It sits on top of [DspWorkspaceBackdrop].
+ * front page's signal chain as small square cards ([RailChainCard], with the same artwork and
+ * colours as the front page's [HomeChainCard]s). It sits on top of [DspWorkspaceBackdrop].
  *
  * Size it from the caller: the calibrated head unit rail is about 106dp wide inset 9dp from the
  * screen edge (`Modifier.padding(9.dp).width(106.dp)`, inside the 124dp column), which gives ~78dp tiles at 480dp height.
@@ -61,7 +42,6 @@ fun DspSidebarRail(
     canNavigate: () -> Boolean,
     onNavigate: (DspDestination) -> Unit,
     modifier: Modifier = Modifier,
-    live: SidebarLive = SidebarLive(),
 ) {
     val grain = remember { plateGrainBrush() }
     BoxWithConstraints(
@@ -84,25 +64,20 @@ fun DspSidebarRail(
             destinations.forEach { dest ->
                 val selected = dest == current
                 val source = remember { MutableInteractionSource() }
-                DspTile(
+                val (accent, accent2, graphic) = dest.cardStyle()
+                RailChainCard(
                     label = stringResource(dest.tileLabelRes()),
+                    graphic = graphic,
+                    accent = accent,
+                    accent2 = accent2,
                     // The caption is short ("PEQ", "Xover"); announce the full screen name.
                     a11yLabel = stringResource(dest.labelRes),
-                    accent = if (selected) dest.accent() else DspColors.RingOff,
                     selected = selected,
                     enabled = !selected,
                     onClick = { if (canNavigate()) onNavigate(dest) },
                     interactionSource = source,
-                    modifier = Modifier.size(tile).bmwFocusRing(source, cornerRadius = tile * 0.15f),
-                ) {
-                    when (dest) {
-                        DspDestination.PARAMETRIC_EQ -> PeqGlyph(live.peqBands)
-                        DspDestination.GAINS_DELAY -> DelayGainGlyph(live.delayMs, live.gainDb)
-                        DspDestination.CROSSOVER_TILT -> XoverGlyph(live.xoverWays)
-                        DspDestination.COMPRESSOR -> CompressorGlyph(live.compThreshold, live.compGrDb)
-                        DspDestination.ALLPASS -> AllpassGlyph(live.allpassPhaseDeg)
-                    }
-                }
+                    modifier = Modifier.size(tile).bmwFocusRing(source, cornerRadius = tile * 0.12f),
+                )
             }
         }
     }
@@ -116,10 +91,11 @@ private fun DspDestination.tileLabelRes(): Int = when (this) {
     DspDestination.ALLPASS -> R.string.home_tile_allpass
 }
 
-private fun DspDestination.accent(): Color = when (this) {
-    DspDestination.PARAMETRIC_EQ -> DspColors.Peq
-    DspDestination.GAINS_DELAY -> DspColors.Delay
-    DspDestination.CROSSOVER_TILT -> DspColors.Xover
-    DspDestination.COMPRESSOR -> DspColors.Comp
-    DspDestination.ALLPASS -> DspColors.Allpass
+/** Each page's card colours and artwork: the same as its card on the front page. */
+private fun DspDestination.cardStyle(): Triple<Color, Color, ImageVector> = when (this) {
+    DspDestination.PARAMETRIC_EQ -> Triple(DspColors.Peq, DspColors.BandMagenta, PeqGraphic)
+    DspDestination.GAINS_DELAY -> Triple(DspColors.Delay, ChainTeal, GainsDelayGraphic)
+    DspDestination.CROSSOVER_TILT -> Triple(DspColors.Xover, DspColors.XoverLow, XoversGraphic)
+    DspDestination.COMPRESSOR -> Triple(DspColors.Comp, ChainRose, CompressorGraphic)
+    DspDestination.ALLPASS -> Triple(DspColors.Allpass, ChainIndigo, AllpassGraphic)
 }

@@ -1,5 +1,6 @@
 package app.siphondsp.compose.controls
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -23,21 +25,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
+import app.siphondsp.compose.assets.AllpassGraphic
+import app.siphondsp.compose.assets.CogsGraphic
+import app.siphondsp.compose.assets.CompressorGraphic
+import app.siphondsp.compose.assets.GainsDelayGraphic
+import app.siphondsp.compose.assets.PeqGraphic
+import app.siphondsp.compose.assets.XoversGraphic
 
 /** The seven front-page tiles, in the order of [app.siphondsp.view.HomeArt.TILE_KEYS]. */
 enum class HomeTileKind { PEQ, GAINS, XOVERS, COMPRESSOR, ALLPASS, SETTINGS, MORE }
 
-private val SampleBands = listOf(
-    PeqBand(60f, 5f, 1.2f, DspColors.BandMagenta),
-    PeqBand(250f, 9f, 1.4f, DspColors.BandBlue),
-    PeqBand(1000f, -9f, 1.6f, DspColors.BandAmber),
-    PeqBand(6000f, 5f, 1.5f, DspColors.BandGreen),
-)
-
 /**
  * One front-page tile, drawn to fit its host view's rect. It is purely visual: the host ComposeView
  * owns the click, the ripple and the accessibility label (see fragment_dsp_page_shortcuts.xml), so
- * the tile and its touch area are always the same box. The glyphs are illustrative, not live.
+ * the tile and its touch area are always the same box. The card graphics are static artwork, not live.
  * The five DSP modules are signal-chain cards ([HomeChainCard]) in the bottom screen; Settings and
  * More sit in the top screen as bare icons with a label under them, no tile shell.
  *
@@ -51,28 +52,33 @@ fun HomeTile(kind: HomeTileKind, modifier: Modifier = Modifier, selected: Boolea
             HomeTileKind.PEQ -> HomeChainCard(
                 stringResource(R.string.home_card_peq), stringResource(R.string.home_card_peq_sub),
                 DspColors.Peq, DspColors.BandMagenta, selected,
-            ) { PeqGlyph({ SampleBands }) }
+            ) { CardGraphic(PeqGraphic) }
             HomeTileKind.GAINS -> HomeChainCard(
                 stringResource(R.string.home_card_gains), stringResource(R.string.home_card_gains_sub),
                 DspColors.Delay, ChainTeal, selected,
-            ) { DelayGainGlyph(delayMs = { 8f }, gainDb = { -6f }) }
+            ) { CardGraphic(GainsDelayGraphic) }
             HomeTileKind.XOVERS -> HomeChainCard(
                 stringResource(R.string.home_card_xovers), stringResource(R.string.home_card_xovers_sub),
                 DspColors.Xover, DspColors.XoverLow, selected,
-            ) { XoverGlyph({ 3 }) }
+            ) { CardGraphic(XoversGraphic) }
             HomeTileKind.COMPRESSOR -> HomeChainCard(
                 stringResource(R.string.home_card_compressor), stringResource(R.string.home_card_compressor_sub),
                 DspColors.Comp, ChainRose, selected,
-            ) { CompressorGlyph(thresholdNorm = { 0.55f }, grDb = { 7f }) }
+            ) { CardGraphic(CompressorGraphic) }
             HomeTileKind.ALLPASS -> HomeChainCard(
                 stringResource(R.string.home_card_allpass), stringResource(R.string.home_card_allpass_sub),
                 DspColors.Allpass, ChainIndigo, selected,
-            ) { AllpassGlyph({ 90f }) }
-            HomeTileKind.SETTINGS -> HomeIconButton(stringResource(R.string.title_activity_settings)) { GearGlyph() }
+            ) { CardGraphic(AllpassGraphic) }
+            HomeTileKind.SETTINGS -> HomeIconButton(stringResource(R.string.title_activity_settings)) { CogsGraphic(Modifier.fillMaxSize()) }
             HomeTileKind.MORE -> HomeIconButton(stringResource(R.string.home_tile_more)) { MoreGlyph(dotRadius = 0.10f) }
         }
     }
 }
+
+/** A chain card's static artwork, fitted into the card's graphic area. */
+@Composable
+private fun CardGraphic(graphic: ImageVector) =
+    Image(imageVector = graphic, contentDescription = null, modifier = Modifier.fillMaxSize())
 
 /**
  * A top-screen icon (Settings, More): the glyph over its label, with no tile shell. Like [HomeTile]
@@ -116,10 +122,11 @@ private fun HomeIconButton(label: String, glyph: @Composable () -> Unit) {
     }
 }
 
-// Each card's second border colour, from the Figma cards (the others reuse DspColors).
-private val ChainTeal = Color(0xFF14B8A6)
-private val ChainRose = Color(0xFFFF4D8D)
-private val ChainIndigo = Color(0xFF5B5BFF)
+// Each card's second border colour, from the Figma cards (the others reuse DspColors); the
+// workspace sidebar's cards (DspSidebarRail) use the same pairs.
+internal val ChainTeal = Color(0xFF14B8A6)
+internal val ChainRose = Color(0xFFFF4D8D)
+internal val ChainIndigo = Color(0xFF5B5BFF)
 
 private const val IconLabelSp = 18f
 private const val IconLabelMinSp = 11f
