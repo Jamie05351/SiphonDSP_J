@@ -304,13 +304,18 @@ class DspStatusStrip @JvmOverloads constructor(
         val titlePaint = TextPaint(title.paint).apply { textSize = full }
         val cellPaint = TextPaint(cells.first().paint).apply { textSize = full }
         // Horizontal padding: the title's 4 + 4dp, a cell's 4 + 6dp. Vertical: 4 + 6dp, 2 + 2dp.
-        val widest = maxOf(
-            titlePaint.measureText(title.text.toString()) + dp(8),
-            WORST_CASE_CELLS.take(3).maxOf { cellPaint.measureText(it) } + dp(10),
-        )
+        // Only the text shrinks -- the padding stays its fixed dp -- so each scale is the room
+        // left after the padding over the text's own size at full size. Scaling the padded total
+        // instead (as before) under-shrank the text whenever the box was too small, and on a
+        // 640dp phone cut off the bottom row.
+        val titleText = titlePaint.measureText(title.text.toString())
+        val cellText = WORST_CASE_CELLS.take(3).maxOf { cellPaint.measureText(it) }
         val line = cellPaint.fontMetrics.let { it.descent - it.ascent }
-        val natural = line + dp(10) + cells.size * (line + dp(4))
-        val px = full * minOf(1f, w / widest, h / natural)
+        val scaleW = minOf((w - dp(8)) / titleText, (w - dp(10)) / cellText)
+        val fixedH = dp(10) + cells.size * dp(4)
+        val scaleH = (h - fixedH) / (line * (1 + cells.size))
+        // Never 0 or negative (a box smaller than its own padding): keep a sliver of text.
+        val px = full * minOf(1f, scaleW, scaleH).coerceAtLeast(MIN_STACKED_SCALE)
         title.setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
         cells.forEach { it.setTextSize(TypedValue.COMPLEX_UNIT_PX, px) }
     }
@@ -318,6 +323,8 @@ class DspStatusStrip @JvmOverloads constructor(
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
     private companion object {
+        /** The smallest the front-page text may shrink to, as a fraction of STACKED_TEXT_SP. */
+        const val MIN_STACKED_SCALE = 0.3f
         const val HEALTH_POLL_MS = 1_000L
         const val LOG_LINES_SHOWN = 12
         val WARN_COLOR = Color.rgb(0xF2, 0xB3, 0x3D)
