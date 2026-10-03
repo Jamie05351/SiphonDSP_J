@@ -20,6 +20,7 @@ import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.compose.screens.SpeakerAlignScreen
+import app.siphondsp.compose.screens.VirtualCentreScreen
 import kotlinx.coroutines.launch
 
 /**
@@ -57,8 +58,8 @@ class GainLimiterFragment : Fragment() {
     }
 
     companion object {
-        /** Delay, Align, Output, then Bus limiters; the finder's four segments map 1:1. */
-        const val PAGE_COUNT = 4
+        /** Delay, Align, Centre, Output, then Bus limiters; the finder's five segments map 1:1. */
+        const val PAGE_COUNT = 5
     }
 }
 
@@ -68,23 +69,25 @@ private fun GainLimiterPager(pagerState: PagerState) {
         when (page) {
             0 -> GainsDelayScreen()
             1 -> SpeakerAlignScreen()
-            2 -> HeadroomOutputScreen()
+            2 -> VirtualCentreScreen()
+            3 -> HeadroomOutputScreen()
             else -> CompressorDriverPage()
         }
     }
 }
 
 /**
- * Head unit's DELAY | ALIGN | GAINS | LIMITERS finder for this pager: DELAY the band controls,
- * ALIGN the speaker map and time alignment, GAINS the Output page and LIMITERS the bus limiters.
+ * Head unit's DELAY | ALIGN | CENTRE | GAINS | LIMITERS finder for this pager: DELAY the band
+ * controls, ALIGN the speaker map and time alignment, CENTRE the virtual centre (two-seat
+ * imaging), GAINS the Output page and LIMITERS the bus limiters.
  */
 @Composable
 fun GainLimiterPageFinder(pagerState: PagerState) {
     val scope = rememberCoroutineScope()
     ArtPagerFinder(
         pagerState = pagerState,
-        labels = listOf("DELAY", "ALIGN", "GAINS", "LIMITERS"),
-        frac = WorkspaceArt.finder4,
+        labels = listOf("DELAY", "ALIGN", "CENTRE", "GAINS", "LIMITERS"),
+        frac = WorkspaceArt.finder5,
         selected = pagerState.currentPage,
         onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
     )

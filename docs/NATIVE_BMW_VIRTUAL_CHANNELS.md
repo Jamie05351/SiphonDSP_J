@@ -124,6 +124,9 @@ mono-bass blend it has no fixed transfer function and `BmwResponseCalculator` do
 1. Native `NativeBmwVirtual.h/.cpp`, schema constants, `configure()` read/validate, the
    `processFrame()` hook, the meter, native tests. No UI.
 2. Kotlin schema, migration, store, JNI meter, JVM tests.
-3. CENTRE page (Gains/Delay pager, next to ALIGN) with Both seats / Driver / Custom presets.
+3. CENTRE page (Gains/Delay pager, next to ALIGN; `VirtualCentreScreen`) with Both seats /
+   Driver / Custom presets (`VirtualCentrePreset`), centre/side level, per-side delay, the
+   spread all-pass pair and a live "centre found" meter. Detector band and attack/release keep
+   their defaults and aren't on the page.
 4. On-device tuning on the head unit to settle the spread defaults. As with every
    `processFrame()` change, physical head-unit sign-off before release.
