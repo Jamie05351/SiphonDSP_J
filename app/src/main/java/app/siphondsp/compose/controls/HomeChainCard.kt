@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -23,9 +25,11 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.cos
@@ -60,27 +64,48 @@ fun HomeChainCard(
                 .offset(w * (GlyphX / CardW), h * (GlyphY / CardH))
                 .size(w * (GlyphW / CardW), h * (GlyphH / CardH)),
         ) { glyph() }
-        CardText(title, scaledSp(h, TitleSize, TitleMinSp), Color.White, FontWeight.Medium, w, h * (TitleY / CardH))
-        CardText(subtitle, scaledSp(h, SubtitleSize, SubtitleMinSp), SubtitleColour, FontWeight.Normal, w, h * (SubtitleY / CardH))
+        CardText(title, TitleSize, TitleMinSp, Color.White, FontWeight.Medium, w, h, TitleY)
+        CardText(subtitle, SubtitleSize, SubtitleMinSp, SubtitleColour, FontWeight.Normal, w, h, SubtitleY)
     }
 }
 
+/**
+ * One line of card text at its Figma size ([designSize] in the 330-tall card, at [designY]),
+ * shrunk to fit between the card's text margins if it would be wider (a long translation, a small
+ * phone), never below [minSp]; past that it ends in an ellipsis rather than being cut off.
+ */
 @Composable
-private fun CardText(text: String, size: TextUnit, colour: Color, weight: FontWeight, w: Dp, y: Dp) = Text(
-    text = text,
-    color = colour,
-    fontSize = size,
-    fontWeight = weight,
-    maxLines = 1,
-    softWrap = false,
-    modifier = Modifier.offset(y = y).padding(start = w * (TextX / CardW), end = w * (TextX / CardW)),
-)
-
-/** A Figma size (in the 330-tall card) at this card's height, never below [minSp]. */
-@Composable
-private fun scaledSp(h: Dp, designSize: Float, minSp: Float): TextUnit {
-    val sp = with(LocalDensity.current) { (h * (designSize / CardH)).toSp().value }
-    return maxOf(sp, minSp).sp
+private fun CardText(
+    text: String,
+    designSize: Float,
+    minSp: Float,
+    colour: Color,
+    weight: FontWeight,
+    w: Dp,
+    h: Dp,
+    designY: Float,
+) {
+    val margin = w * (TextX / CardW)
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    // Measured in the exact style the Text draws with, or the measurement comes up short.
+    val baseStyle = LocalTextStyle.current.merge(TextStyle(fontWeight = weight))
+    val size = remember(text, w, h, density, baseStyle) {
+        val designSp = with(density) { (h * (designSize / CardH)).toSp().value }
+        val room = with(density) { (w - margin * 2).toPx() } * 0.97f
+        val width = measurer.measure(text, baseStyle.copy(fontSize = designSp.sp)).size.width
+        val fitted = if (width > room) designSp * room / width else designSp
+        maxOf(fitted, minSp).sp
+    }
+    Text(
+        text = text,
+        color = colour,
+        style = baseStyle.copy(fontSize = size),
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.offset(y = h * (designY / CardH)).padding(start = margin, end = margin),
+    )
 }
 
 private fun DrawScope.drawCard(accent: Color, accent2: Color, glow: Float) {

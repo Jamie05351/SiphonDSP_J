@@ -105,18 +105,11 @@
             android:layout_height="match_parent"
             android:importantForAccessibility="noHideDescendants" />
 
-        <!-- Big L / R levels and headroom; numbers change several times a second, so not announced. -->
+        <!-- Centre screen: headroom over the MBC band squares and all-pass boxes. The headroom
+             changes several times a second, so it is not announced. -->
         <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/home_level_readout"
-            android:tag="live_levels"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="noHideDescendants" />
-
-        <!-- MBC band squares and all-pass boxes, under the level readout; changes with settings. -->
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/home_stage_boxes"
-            android:tag="live_bands"
+            android:id="@+id/home_centre_screen"
+            android:tag="live_centre"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:importantForAccessibility="noHideDescendants" />

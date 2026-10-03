@@ -7,9 +7,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -31,9 +28,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
-import app.siphondsp.compose.controls.HomeLevelReadout
 import app.siphondsp.compose.controls.HomeOutputScope
-import app.siphondsp.compose.controls.HomeStageBoxes
+import app.siphondsp.compose.controls.HomeCentreScreen
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -219,9 +215,8 @@ class DspFragment : Fragment() {
         // The faceplate and the seven tiles are Compose. HomeFaceplate and HomeArtLayout both pick
         // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
-        shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
+        shortcutsBinding.homeCentreScreen.setHomeContent { HomeCentreScreen(levelReadout, limiterDb, stageStatus) }
         shortcutsBinding.homeOutputScope.setHomeContent { HomeOutputScope(levelHistory, { scopeTick }, levelReadout) }
-        shortcutsBinding.homeStageBoxes.setHomeContent { HomeStageBoxes(stageStatus) }
         levelFeed = HomeLevelFeed(levelHistory, onFrame = { scopeTick++ }, onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
@@ -367,9 +362,11 @@ class DspFragment : Fragment() {
     }
 
     /**
-     * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
-     * live data (the output scope, GLOBAL STAGES, the level readout and the MBC / all-pass boxes) fades to grey, so it is obvious
-     * at a glance. The stage cells stay tappable. The tiles, Settings and More keep their colour.
+     * Keeps the front page in step with MainActivity's real power state. While the DSP is off its
+     * live-data screens (GLOBAL STAGES, the centre screen and the output scope) are switched off:
+     * their content fades out quickly, leaving black glass. Powering on brings them back one after
+     * another, left to right then the bottom, like screens warming up. The chain cards, Settings
+     * and More stay lit throughout.
      */
     fun setPowerState(on: Boolean) {
         if (on == powerOn) return
@@ -382,38 +379,35 @@ class DspFragment : Fragment() {
             return
         }
         powerAnimator = ValueAnimator.ofFloat(powerLook, target).apply {
-            duration = POWER_FADE_MS
+            duration = ((if (on) POWER_ON_MS else POWER_OFF_MS) * kotlin.math.abs(target - powerLook)).toLong()
             addUpdateListener { setPowerLook(it.animatedValue as Float) }
             start()
         }
     }
 
     /**
-     * [look] 1 draws the powered views normally; below that each is drawn through a hardware layer
-     * whose paint drains its colour (saturation [look]) and fades it towards [OFF_ALPHA].
+     * [look] runs 0 (off) to 1 (on). Powering on, it is a timeline: each live screen in
+     * [powerScreens] fades up over [SCREEN_FADE_MS], starting [SCREEN_STAGGER_MS] after the one
+     * before. Powering off, every screen simply follows [look]. A screen that is fully off is
+     * INVISIBLE, so its content (GLOBAL STAGES' cells) can't be tapped while it shows black.
      */
     private fun setPowerLook(look: Float) {
         powerLook = look
-        val views = with(shortcutsBinding) { listOf(homeOutputScope, homeStages, homeLevelReadout, homeStageBoxes) }
-        if (look >= 1f) {
-            views.forEach {
-                it.setLayerType(View.LAYER_TYPE_NONE, null)
-                it.alpha = 1f
-            }
-            return
-        }
-        val paint = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(look) })
-        }
-        views.forEach {
-            if (it.layerType == View.LAYER_TYPE_HARDWARE) {
-                it.setLayerPaint(paint)
+        val screens = powerScreens()
+        screens.forEachIndexed { i, view ->
+            val alpha = if (powerOn) {
+                ((look * POWER_ON_MS - i * SCREEN_STAGGER_MS) / SCREEN_FADE_MS).coerceIn(0f, 1f)
             } else {
-                it.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+                look
             }
-            it.alpha = OFF_ALPHA + (1f - OFF_ALPHA) * look
+            view.alpha = alpha
+            view.visibility = if (alpha > 0f) View.VISIBLE else View.INVISIBLE
         }
     }
+
+    /** The live-data screens, in the order they come on: top left, top centre, then the bottom. */
+    private fun powerScreens(): List<View> =
+        with(shortcutsBinding) { listOf(homeStages, homeCentreScreen, homeOutputScope) }
 
     fun setUpdateCardVisible(visible: Boolean) {
         shortcutsBinding.updateNotice.isVisible = visible
@@ -447,9 +441,13 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 150L
-        private const val POWER_FADE_MS = 250L
-        /** How visible the live data stays while the DSP is off: dimmed, but still readable. */
-        private const val OFF_ALPHA = 0.45f
+        /** Switching off: every live screen fades to black together. */
+        private const val POWER_OFF_MS = 200f
+        /** Switching on: each live screen's own fade, and the delay before the next one starts. */
+        private const val SCREEN_FADE_MS = 400f
+        private const val SCREEN_STAGGER_MS = 120f
+        /** The whole power-on sequence: the last of the three screens finishes here. */
+        private const val POWER_ON_MS = SCREEN_FADE_MS + 2 * SCREEN_STAGGER_MS
 
         fun newInstance(): DspFragment {
             return DspFragment()

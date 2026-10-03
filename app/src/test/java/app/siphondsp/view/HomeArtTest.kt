@@ -168,16 +168,24 @@ class HomeArtTest {
     }
 
     @Test
+    fun topBandMirrorsTheRightEdgeAndTheBottomScreenEndsLevelWithIt() {
+        for (phone in listOf(false, true)) {
+            val top = HomeArt.frac("screen_top", phone)!!
+            val bottom = HomeArt.frac("screen_bottom", phone)!!
+            val rightEdge = 1f - (top.x + top.w)
+            assertEquals("top band's left edge differs from the right (phone=$phone)", rightEdge, top.x, 1e-4f)
+            assertEquals("bottom screen not level with the top band (phone=$phone)", top.x + top.w, bottom.x + bottom.w, 1e-4f)
+            assertTrue("no room left of the bottom screen for the power button (phone=$phone)", bottom.x > top.x + 0.1f)
+        }
+    }
+
+    @Test
     fun liveDataSitsInItsOwnTopScreen() {
         for (phone in listOf(false, true)) {
             val left = HomeArt.frac("screen_left", phone)!!
             val centre = HomeArt.frac("screen_centre", phone)!!
             assertTrue("stages escape the left screen (phone=$phone)", inside(HomeArt.frac("live_stages", phone)!!, left))
-            listOf("live_levels", "live_bands").forEach { key ->
-                assertTrue("$key escapes the centre screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, centre))
-            }
-            // The stages title and the readout's headings share a line.
-            assertEquals(HomeArt.frac("live_stages", phone)!!.y, HomeArt.frac("live_levels", phone)!!.y, 1e-4f)
+            assertTrue("centre block escapes the centre screen (phone=$phone)", inside(HomeArt.frac("live_centre", phone)!!, centre))
         }
     }
 
@@ -196,7 +204,7 @@ class HomeArtTest {
     fun powerButtonIsCentredInTheLeftPanel() {
         for (phone in listOf(false, true)) {
             val power = HomeArt.frac("power_btn", phone)!!
-            val screen = HomeArt.frac("screen_top", phone)!!
+            val screen = HomeArt.frac("screen_bottom", phone)!!
             assertEquals(screen.x / 2f, power.x + power.w / 2f, 2e-3f)
         }
     }
@@ -219,7 +227,7 @@ class HomeArtTest {
         for (phone in listOf(false, true)) {
             val (w, h) = artSize(phone)
             val power = HomeArt.frac("power_btn", phone)!!
-            val screen = HomeArt.frac("screen_top", phone)!!
+            val screen = HomeArt.frac("screen_bottom", phone)!!
             assertEquals("power button not round (phone=$phone)", power.w * w, power.h * h, 1f)
             assertTrue("power button overlaps the screen (phone=$phone)", power.x + power.w <= screen.x)
             assertTrue(power.x >= 0f && power.y >= 0f && power.y + power.h <= 1f)

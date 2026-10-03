@@ -33,7 +33,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * The centre screen's stage boxes, under the level readout: the MBC's four bands as numbered
+ * The centre screen's stage boxes, under the headroom line: the MBC's four bands as numbered
  * squares, lit green while that band is compressing, then one box per output for its all-pass
  * sections, lit green with each switched-on section's frequency in it.
  *
