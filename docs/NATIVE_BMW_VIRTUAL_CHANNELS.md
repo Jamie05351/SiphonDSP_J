@@ -113,6 +113,9 @@ per-output all-pass already does.
 published from the audio thread), same discipline as `readCompressorMeter()`. Idle `[0, -60]`
 while disabled.
 
+The CENTRE page shows both: **Centre found** (the weight, 0..1: how much is being treated as
+centre) and **Centre RMS** (the extracted centre's level over ~300 ms, -60..0 dBFS, with its value).
+
 ## Not modelled in the response graph
 
 The extraction is signal-dependent (it depends on how correlated the music is), so like the old
