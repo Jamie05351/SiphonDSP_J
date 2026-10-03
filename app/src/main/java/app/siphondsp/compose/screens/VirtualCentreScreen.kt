@@ -3,21 +3,24 @@ package app.siphondsp.compose.screens
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwPanel
@@ -45,11 +48,12 @@ import app.siphondsp.model.VirtualCentrePreset
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.isHeadUnitDisplay
+import kotlin.math.roundToInt
 
 /**
  * The CENTRE page (Gains & Delay pager, beside ALIGN): the virtual centre for the two-seat tune.
  * See docs/NATIVE_BMW_VIRTUAL_CHANNELS.md. On/off; a preset (Both seats / Driver / Custom, see
- * [VirtualCentrePreset]); a live meter of how much centre the engine is finding; centre and side
+ * [VirtualCentrePreset]); live meters of how much centre the engine is finding and how loud it is; centre and side
  * level; the centre's per-side delay; and the "spread" all-pass pair. The detector band and
  * attack/release keep their defaults (not exposed here).
  */
@@ -57,16 +61,16 @@ import app.siphondsp.view.isHeadUnitDisplay
 fun VirtualCentreScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val geometry = rememberSpeakerGeometry()
-    val centreWeight = rememberCentreWeight()
+    val meter = rememberCentreMeter()
     val headUnit = LocalContext.current.isHeadUnitDisplay()
     BmwDspTheme {
-        if (headUnit) HeadUnitCentrePage(dsp, geometry, centreWeight.floatValue, modifier)
-        else PhoneCentrePage(dsp, geometry, centreWeight.floatValue, modifier)
+        if (headUnit) HeadUnitCentrePage(dsp, geometry, meter, modifier)
+        else PhoneCentrePage(dsp, geometry, meter, modifier)
     }
 }
 
 @Composable
-private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, centreFound: Float, modifier: Modifier) {
+private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, meter: CentreMeterState, modifier: Modifier) {
     WorkspaceArtBox(modifier.fillMaxSize()) {
         ArtSwitchRow(
             label = "Virtual centre",
@@ -77,8 +81,11 @@ private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState,
             modifier = Modifier.artRect(artDp(190, 92, 420, 44)),
         )
         PresetControl(dsp, geometry, Modifier.artRect(artDp(640, 92, 590, 44)))
-        ArtRow("Centre found", Modifier.artRect(artDp(190, 150, 1040, 30)), labelWidth = 200.dp) {
-            CentreMeter(centreFound, Modifier.weight(1f))
+        ArtRow("Centre found", Modifier.artRect(artDp(190, 150, 505, 30)), labelWidth = 150.dp) {
+            CentreFoundMeter(meter.found.floatValue, Modifier.weight(1f))
+        }
+        ArtRow("Centre RMS", Modifier.artRect(artDp(725, 150, 505, 30)), labelWidth = 130.dp) {
+            CentreRmsMeter(meter.rmsDb.floatValue, Modifier.weight(1f))
         }
         DspArtSlider(dsp, "Centre level", NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB",
             CentreAccent, Modifier.artRect(artDp(190, 196, 505, 50)))
@@ -104,7 +111,7 @@ private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState,
 }
 
 @Composable
-private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, centreFound: Float, modifier: Modifier) {
+private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, meter: CentreMeterState, modifier: Modifier) {
     val labels = listOf("Centre level", "Side level", "Delay L", "Delay R", "Spread L", "Spread R")
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         BmwPanel(
@@ -119,7 +126,12 @@ private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, ce
             sliderLabels = labels,
         ) {
             PresetControl(dsp, geometry, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-            CentreMeter(centreFound, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+            ArtRow("Centre found", Modifier.fillMaxWidth().padding(vertical = 4.dp), labelWidth = 120.dp) {
+                CentreFoundMeter(meter.found.floatValue, Modifier.weight(1f))
+            }
+            ArtRow("Centre RMS", Modifier.fillMaxWidth().padding(vertical = 4.dp), labelWidth = 120.dp) {
+                CentreRmsMeter(meter.rmsDb.floatValue, Modifier.weight(1f))
+            }
             PhoneSlider(dsp, labels[0], NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB", CentreAccent)
             PhoneSlider(dsp, labels[1], NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB", SideAccent)
             PhoneSlider(dsp, labels[2], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent)
@@ -177,7 +189,7 @@ private fun PresetControl(dsp: BmwDspState, geometry: SpeakerGeometryState, modi
 
 /** How much of the signal the extractor currently reads as centre (0..1). */
 @Composable
-private fun CentreMeter(weight: Float, modifier: Modifier) {
+private fun CentreFoundMeter(weight: Float, modifier: Modifier) {
     BmwSegmentedLevelMeter(
         levelDb = weight,
         valueRange = 0f..1f,
@@ -187,22 +199,50 @@ private fun CentreMeter(weight: Float, modifier: Modifier) {
     )
 }
 
+/**
+ * The extracted centre's own level (RMS over ~300 ms, dBFS, -60..0), with its value beside the
+ * bar. Shows how loud the virtual centre is, where Centre found shows how much is treated as one.
+ */
+@Composable
+private fun RowScope.CentreRmsMeter(rmsDb: Float, modifier: Modifier) {
+    BmwSegmentedLevelMeter(
+        levelDb = rmsDb,
+        valueRange = -60f..0f,
+        accentColor = CentreAccent,
+        accessibilityLabel = "Centre RMS",
+        modifier = modifier,
+    )
+    ArtLabel(
+        text = if (rmsDb <= -60f) "-- dB" else "${rmsDb.roundToInt()} dB",
+        modifier = Modifier.width(64.dp).padding(start = 8.dp),
+        textAlign = TextAlign.End,
+    )
+}
+
+/** The virtual-centre meter's two live values; [found] 0..1 and [rmsDb] dBFS (-60 = none). */
+private class CentreMeterState {
+    val found = mutableFloatStateOf(0f)
+    val rmsDb = mutableFloatStateOf(-60f)
+}
+
 /** Polls the virtual-centre meter at ~30 fps while the page is at least STARTED. */
 @Composable
-private fun rememberCentreWeight(): MutableFloatState {
-    val weight = remember { mutableFloatStateOf(0f) }
+private fun rememberCentreMeter(): CentreMeterState {
+    val state = remember { CentreMeterState() }
     LifecycleStartEffect(Unit) {
         val handler = Handler(Looper.getMainLooper())
         val tick = object : Runnable {
             override fun run() {
-                weight.floatValue = RootlessAudioProcessorService.nativeBmwVirtualMeter()?.getOrNull(0) ?: 0f
+                val values = RootlessAudioProcessorService.nativeBmwVirtualMeter()
+                state.found.floatValue = values?.getOrNull(0) ?: 0f
+                state.rmsDb.floatValue = values?.getOrNull(1) ?: -60f
                 handler.postDelayed(this, 33L)
             }
         }
         handler.post(tick)
         onStopOrDispose { handler.removeCallbacks(tick) }
     }
-    return weight
+    return state
 }
 
 private fun spreadOn(dsp: BmwDspState): Boolean =
