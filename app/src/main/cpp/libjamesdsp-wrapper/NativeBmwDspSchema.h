@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 266;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 288;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -176,6 +176,28 @@ inline constexpr int kBusLimHighEnabled = 262;
 inline constexpr int kBusLimHighThreshold = 263;
 inline constexpr int kBusLimHighRelease = 264;
 inline constexpr int kBusLimHighMigrated = 265;  // Kotlin-only, never read natively.
+
+// --- Virtual-source stage (266..287), added in the 266 -> 288 growth. The virtual centre and
+// its per-side feeds; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md. Ships disabled.
+inline constexpr int kVirtualEnabled = 266;
+inline constexpr int kVirtualDetectHpf = 267;
+inline constexpr int kVirtualDetectLpf = 268;
+inline constexpr int kVirtualAttack = 269;
+inline constexpr int kVirtualRelease = 270;
+inline constexpr int kVirtualCentreLevel = 271;
+inline constexpr int kVirtualSideLevel = 272;
+// Centre feed into each internal side, Left (273..279) then Right (280..286), each
+// [gainDb, delayMs, polarity, apEnabled, apFreq, apQ, apOrder].
+inline constexpr int kVirtualFeedBase = 273;
+inline constexpr int kVirtualFeedWidth = 7;
+inline constexpr int kVirtualFeedGain = 0;
+inline constexpr int kVirtualFeedDelay = 1;
+inline constexpr int kVirtualFeedPolarity = 2;
+inline constexpr int kVirtualFeedApEnabled = 3;
+inline constexpr int kVirtualFeedApFreq = 4;
+inline constexpr int kVirtualFeedApQ = 5;
+inline constexpr int kVirtualFeedApOrder = 6;
+inline constexpr int kVirtualMigrated = 287;  // Kotlin-only, never read natively.
 
 }  // namespace nbschema
 

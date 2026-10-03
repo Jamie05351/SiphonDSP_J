@@ -53,7 +53,11 @@ object NativeBmwDspValues {
     // 262..265 are the High-bus brick-wall limiter, added in the 262 -> 266 growth (Phase 6
     // of the same work) -- the High counterpart of the Low/Mid bus limiters at 182..187.
     // Ships disabled; 265 is a one-time migration marker, see migrateHighBusLimiterIfNeeded().
-    const val SIZE = 266
+    //
+    // 266..287 are the virtual-source stage (the virtual centre and its per-side feeds), added
+    // in the 266 -> 288 growth. Ships disabled; 287 is a one-time migration marker, see
+    // migrateVirtualIfNeeded() and docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
+    const val SIZE = 288
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -358,6 +362,39 @@ object NativeBmwDspValues {
     // migrateHighBusLimiterIfNeeded.
     const val INDEX_BUS_LIMITER_HIGH_MIGRATED = 265
 
+    // Virtual-source stage (266..286): the virtual centre, extracted from L/R and fed back into
+    // each internal side with its own level/delay/polarity/all-pass, ahead of routing. Ships
+    // DISABLED. See docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
+    const val INDEX_VIRTUAL_ENABLED = 266
+    const val INDEX_VIRTUAL_DETECT_HPF = 267
+    const val INDEX_VIRTUAL_DETECT_LPF = 268
+    const val INDEX_VIRTUAL_ATTACK = 269
+    const val INDEX_VIRTUAL_RELEASE = 270
+    const val INDEX_VIRTUAL_CENTRE_LEVEL = 271
+    const val INDEX_VIRTUAL_SIDE_LEVEL = 272
+    // Centre feed into each internal side, Left (273..279) then Right (280..286).
+    const val INDEX_VIRTUAL_FEED = 273
+    const val VIRTUAL_FEED_WIDTH = 7
+    const val VIRTUAL_FEED_GAIN = 0
+    const val VIRTUAL_FEED_DELAY = 1
+    const val VIRTUAL_FEED_POLARITY = 2
+    const val VIRTUAL_FEED_AP_ENABLED = 3
+    const val VIRTUAL_FEED_AP_FREQ = 4
+    const val VIRTUAL_FEED_AP_Q = 5
+    const val VIRTUAL_FEED_AP_ORDER = 6
+    const val VIRTUAL_SIDE_LEFT = 0
+    const val VIRTUAL_SIDE_RIGHT = 1
+    // One-time marker: 1 once an existing saved config has had the virtual stage seeded off.
+    // Kotlin-only -- native never reads this index. See migrateVirtualIfNeeded.
+    const val INDEX_VIRTUAL_MIGRATED = 287
+
+    /** The flat index of [field] (a VIRTUAL_FEED_* constant) of the centre feed into [side]. */
+    fun virtualFeedIndex(side: Int, field: Int): Int {
+        require(side == VIRTUAL_SIDE_LEFT || side == VIRTUAL_SIDE_RIGHT) { "Invalid virtual feed side $side" }
+        require(field in 0 until VIRTUAL_FEED_WIDTH) { "Invalid virtual feed field $field" }
+        return INDEX_VIRTUAL_FEED + side * VIRTUAL_FEED_WIDTH + field
+    }
+
     fun highOutputIndex(output: Int, field: Int): Int {
         require(output == OUTPUT_HIGH_LEFT || output == OUTPUT_HIGH_RIGHT) {
             "Invalid BMW High output $output"
@@ -468,6 +505,16 @@ object NativeBmwDspValues {
         // --- High-bus limiter (262..265), ships DISABLED ---
         0f, -3f, 120f, // 262..264 High bus: enabled, threshold dBFS, release ms
         0f, // 265 migration marker (0 = seed the limiter disabled on next load)
+        // --- Virtual-source stage (266..287), ships DISABLED ---
+        0f, // 266 enabled
+        150f, 8000f, // 267..268 detector HPF / LPF Hz
+        10f, 200f, // 269..270 centre-weight attack / release ms
+        0f, 0f, // 271..272 centre level dB, side (residual) level dB
+        // Centre feed Left, then Right: gain dB, delay ms, polarity, all-pass enabled, freq Hz,
+        // Q, order (2 = second).
+        0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
+        0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
+        0f, // 287 migration marker (0 = seed the stage off on next load)
     )
 
     init {
@@ -490,7 +537,24 @@ object NativeBmwDspValues {
         migrateMidUpperCrossoverIfNeeded(store, values)
         migrateHighBandIfNeeded(store, values)
         migrateHighBusLimiterIfNeeded(store, values)
+        migrateVirtualIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed the virtual-source stage off (indices 266..287, added in the 266 -> 288 growth) on
+     * configs saved before it existed, so nobody's sound changes until they turn the virtual
+     * centre on. The index-keyed [NativeBmwDspStore] already backfills a missing index from
+     * [DEFAULTS] -- which ships it disabled -- so this mostly claims the marker at index 287,
+     * mirroring [migrateMbcIfNeeded]. Runs once; the marker then stops it so a deliberate later
+     * enable is respected.
+     */
+    private fun migrateVirtualIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
+        if (values[INDEX_VIRTUAL_MIGRATED] == 1f) return
+        values[INDEX_VIRTUAL_ENABLED] = 0f
+        values[INDEX_VIRTUAL_MIGRATED] = 1f
+        val saved = store?.save(values)
+        Timber.i("BMW DSP seeded virtual stage off success=$saved")
     }
 
     /**
@@ -633,6 +697,7 @@ object NativeBmwDspValues {
         migrateMidUpperCrossoverIfNeeded(store, padded)
         migrateHighBandIfNeeded(store, padded)
         migrateHighBusLimiterIfNeeded(store, padded)
+        migrateVirtualIfNeeded(store, padded)
         return padded
     }
 

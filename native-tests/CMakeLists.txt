@@ -39,6 +39,7 @@ add_executable(native_tests
     ${WRAPPER_DIR}/NativeBmwDynamics.cpp
     ${WRAPPER_DIR}/NativeBmwDelayGain.cpp
     ${WRAPPER_DIR}/NativeBmwMeasurement.cpp
+    ${WRAPPER_DIR}/NativeBmwVirtual.cpp
     concurrency_test.cpp
     capture_test.cpp
     crossover_test.cpp
@@ -49,6 +50,7 @@ add_executable(native_tests
     routing_bypass_test.cpp
     schema_agreement_test.cpp
     truth_snapshot_test.cpp
+    virtual_test.cpp
 )
 
 target_include_directories(native_tests PRIVATE

@@ -106,7 +106,7 @@ public:
     // contract as the Low/Mid bus limiters at 182..187; ships disabled:
     //   262      enabled   263  threshold dBFS   264  release ms
     //   265      Kotlin-only migration marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 266 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 288 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -194,6 +194,9 @@ public:
     // 1 float: gain reduction (dB, >= 0) of the master brick-wall limiter on the summed output.
     // 0 while the limiter is bypassed. Lock-free; published by MasterLimiter::process().
     void readMasterLimiterMeter(float* values, std::size_t count) const;
+    // 2 floats: [centreWeight 0..1, centreRmsDb] of the virtual centre. Idle [0, -60] while the
+    // virtual stage is disabled. Lock-free; published by VirtualSourceStage::process().
+    void readVirtualMeter(float* values, std::size_t count) const;
 
     // Read-only whole-state snapshot for the native-truth debug screen (proves what this
     // processor is actually running, as opposed to what Kotlin/UI last requested). Takes
@@ -263,6 +266,8 @@ private:
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyHighXo = 1u << 18,
         DirtyHighResume = 1u << 19,  // High un-silenced (highXoPass on -> off): clear its state
+        DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
+        DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
         DirtyAll = 0xffffffffu,
     };
 
@@ -355,6 +360,9 @@ private:
     // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
     // and processFrame's tail). delay (in samples) is set by updateDelays().
     NativeBmwDsp::StageDelay stageDelayL_, stageDelayR_;
+    // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
+    // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
+    NativeBmwDsp::VirtualSourceStage virtual_;
 
     // Dynamics.
     NativeBmwDsp::DetectorTiming detector_;
@@ -369,6 +377,7 @@ private:
     // configure()'s whole-struct p_ = next assignment from the control thread. Same "atomic
     // mirror, no lock" discipline the modules already use for the GR meters themselves.
     std::atomic<bool> mbcEnabledMeterFlag_{false};
+    std::atomic<bool> virtualEnabledMeterFlag_{false};
     std::atomic<bool> busLimLowEnabledMeterFlag_{false}, busLimMidEnabledMeterFlag_{false};
     std::atomic<bool> busLimHighEnabledMeterFlag_{false};
     std::atomic<bool> masterLimiterEnabledMeterFlag_{true};

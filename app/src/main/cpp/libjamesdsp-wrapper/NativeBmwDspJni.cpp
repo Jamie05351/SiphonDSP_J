@@ -204,6 +204,26 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv
     return result;
 }
 
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwVirtualMeter(JNIEnv* env, jobject,
+                                                                    jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
+    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    if (processor == nullptr) {
+        return nullptr;
+    }
+    float values[2];
+    processor->readVirtualMeter(values, 2);
+    jfloatArray result = env->NewFloatArray(2);
+    if (result != nullptr) {
+        env->SetFloatArrayRegion(result, 0, 2, values);
+    }
+    return result;
+}
+
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_getNativeTruthSnapshot(JNIEnv* env, jobject,
                                                                   jlong self) {

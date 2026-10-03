@@ -24,10 +24,11 @@ object WorkspaceArt {
     /** The 3-segment page finder (Xovers). */
     val finder3 = Frac(0.629f, 0.048f, 0.341f, 0.0693f)
 
-    /** The 4-segment page finder (Gains & Delay). Ends where the 3- and 5-segment ones do. */
+    /** A 4-segment page finder. Ends where the 3- and 5-segment ones do. (Gains & Delay used it
+     *  until its CENTRE page made it five.) */
     val finder4 = Frac(0.57f, 0.048f, 0.40f, 0.0693f)
 
-    /** The 5-segment page finder (Compressor). */
+    /** The 5-segment page finder (Compressor, Gains & Delay). */
     val finder5 = Frac(0.52f, 0.048f, 0.45f, 0.0693f)
 
     /** Where the content column started when the screens' rects were authored (the old 140dp

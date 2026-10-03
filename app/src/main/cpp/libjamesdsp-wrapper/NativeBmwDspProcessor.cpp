@@ -148,6 +148,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (p_.mbcEnabled) {
         mbc_.process(sL, sR, p_.mbcBand, detector_);
     }
+    // Virtual-source stage: extracts the virtual centre and feeds it back into the internal L/R
+    // with its own per-side level/delay/polarity/all-pass, ahead of routing so it then runs
+    // through every band chain. Skipped entirely while disabled (how it ships).
+    if (p_.virtualStage.enabled) {
+        virtual_.process(sL, sR);
+    }
     const auto routed = routing_.process({sL, sR});
     float lowL = routed[static_cast<std::size_t>(OutputId::LowLeft)],
           lowR = routed[static_cast<std::size_t>(OutputId::LowRight)];
@@ -340,6 +346,21 @@ void NativeBmwDspProcessor::readBusLimiterMeter(float* v, std::size_t n) const {
         v[2] = busLimHighEnabledMeterFlag_.load(std::memory_order_relaxed)
                    ? busLimHigh_.grDb.load(std::memory_order_relaxed) : 0.f;
     }
+}
+void NativeBmwDspProcessor::readVirtualMeter(float* v, std::size_t n) const {
+    if (!v) {
+        return;
+    }
+    if (!virtualEnabledMeterFlag_.load(std::memory_order_relaxed)) {
+        if (n > 0) {
+            v[0] = 0.f;
+        }
+        if (n > 1) {
+            v[1] = -60.f;
+        }
+        return;
+    }
+    virtual_.readMeter(v, n);
 }
 void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) const {
     if (!v || n < 1) {
