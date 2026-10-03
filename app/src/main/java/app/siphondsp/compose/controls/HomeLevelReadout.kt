@@ -22,11 +22,12 @@ import app.siphondsp.view.LevelReadout
 import java.util.Locale
 
 /**
- * The front page's top-screen level readout: big L and R RMS numbers with each channel's held peak
- * under it, and the headroom left before the limiter (or before clipping while the limiter is off).
- * The block is top-aligned in its box, so its headings line up with GLOBAL STAGES' title beside
- * it. Text is 18sp / 44sp at the head unit's size and scales down together only when the box is
- * smaller than that (a small phone), so nothing wraps or clips.
+ * The front page's level readout, top of the centre screen: big L and R RMS numbers, and the
+ * headroom left before the limiter (or before clipping while the limiter is off). Held peaks are
+ * on the output scope at the end of the signal chain, so they aren't repeated here. The block is
+ * top-aligned in its box, so its headings line up with GLOBAL STAGES' title in the left screen.
+ * Text is 18sp / 44sp at the head unit's size and scales down together only when the box is
+ * smaller than that, so nothing wraps or clips.
  *
  * [limiterDb] is the limiter threshold while the limiter is on, null while it is off.
  */
@@ -41,22 +42,30 @@ fun HomeLevelReadout(readout: LevelReadout, limiterDb: Float?, modifier: Modifie
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy((12 * k).dp),
         ) {
-            Column(Modifier.weight(2f)) {
+            Column(Modifier.weight(1.6f)) {
                 Heading("LEVELS", small)
                 Row {
-                    Channel("L", readout.leftRmsDb, readout.leftPeakDb, small, big, k, Modifier.weight(1f))
-                    Channel("R", readout.rightRmsDb, readout.rightPeakDb, small, big, k, Modifier.weight(1f))
+                    Channel("L", readout.leftRmsDb, small, big, k, Modifier.weight(1f))
+                    Channel("R", readout.rightRmsDb, small, big, k, Modifier.weight(1f))
                 }
             }
-            Column(Modifier.weight(1.1f)) {
+            Column(Modifier.weight(1.4f)) {
                 Heading("HEADROOM", small)
-                OneLine(
-                    if (headroom == null) "--" else "${formatDb(headroom)} dB",
-                    big,
-                    headroomColor(headroom),
-                    FontWeight.Medium,
-                )
-                OneLine(if (limiterDb != null) "before limiter" else "before clipping", small, SubColor)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    OneLine(
+                        if (headroom == null) "--" else "${formatDb(headroom)} dB",
+                        big,
+                        headroomColor(headroom),
+                        FontWeight.Medium,
+                    )
+                    // What the headroom is measured to, on the number's line instead of under it.
+                    OneLine(
+                        if (limiterDb != null) "to limiter" else "to clip",
+                        small,
+                        SubColor,
+                        modifier = Modifier.padding(start = (8 * k).dp, bottom = (6 * k).dp),
+                    )
+                }
             }
         }
     }
@@ -66,18 +75,14 @@ fun HomeLevelReadout(readout: LevelReadout, limiterDb: Float?, modifier: Modifie
 private fun Channel(
     name: String,
     rmsDb: Float,
-    peakDb: Float,
     small: TextUnit,
     big: TextUnit,
     k: Float,
     modifier: Modifier,
 ) {
-    Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OneLine(name, small, Purple, FontWeight.Bold, Modifier.padding(end = (8 * k).dp))
-            OneLine(levelText(rmsDb), big, Color.White, FontWeight.Medium)
-        }
-        OneLine("peak ${levelText(peakDb)}", small, SubColor, modifier = Modifier.padding(start = (24 * k).dp))
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        OneLine(name, small, Purple, FontWeight.Bold, Modifier.padding(end = (8 * k).dp))
+        OneLine(levelText(rmsDb), big, Color.White, FontWeight.Medium)
     }
 }
 
@@ -119,8 +124,8 @@ private fun headroomColor(db: Float?): Color = when {
 }
 
 private val DesignWidth = 531.dp
-// The block's natural height at 18sp / 44sp, with a little slack.
-private val DesignHeight = 104.dp
+// The block's natural height at 18sp / 44sp (a heading and one line of numbers), with a little slack.
+private val DesignHeight = 82.dp
 private const val SmallSp = 18f
 private const val BigSp = 44f
 private val Purple = Color(0xFFB14DFF)

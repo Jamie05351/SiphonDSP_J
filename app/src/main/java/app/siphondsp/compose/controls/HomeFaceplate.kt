@@ -20,11 +20,10 @@ import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.min
 
 /**
- * The front page's hardware faceplate, drawn live: a grained dark plate with two black glass screens
- * recessed into it right of the power panel (the smaller on top, a strip of plate between them), a
- * faint divider between the top screen's live blocks, the signal chain's purple line along the
- * bottom screen (behind the DSP cards, into the output scope), and a slim metal bezel around the
- * whole display.
+ * The front page's hardware faceplate, drawn live: a grained dark plate with black glass screens
+ * recessed into it right of the power panel (three across the top, one large one below, a strip of
+ * plate between the rows), the signal chain's purple line along the bottom screen (behind the DSP
+ * cards, into the output scope), and a slim metal bezel around the whole display.
  *
  * Everything is placed in the same art space as [HomeArt] (fit-scaled and centred, so it lines up
  * with the live views [app.siphondsp.view.HomeArtLayout] lays over it on any display aspect; the
@@ -57,15 +56,15 @@ private fun DrawScope.drawFaceplate(phone: Boolean, grain: ShaderBrush) {
 
     drawPlate(grain, corner)
 
-    // The two screens, each sunk into the plate.
+    // The screens, each sunk into the plate.
     for (key in HomeArt.SCREEN_KEYS) {
         val (at, extent) = rect(key)
         drawRecessedScreen(at, extent, unit)
     }
 
-    // The engraved seam across the strip of plate between the two screens: a dark groove with a
-    // thin highlight under it, so they read as two separate pieces of glass, not one split screen.
-    // It spans the screens' width only, so it never cuts across the meter on the left panel.
+    // The engraved seam across the strip of plate between the top screens and the bottom one: a
+    // dark groove with a thin highlight under it. It spans the screens' width only, so it never
+    // cuts across the power panel.
     val (topAt, topSize) = rect("screen_top")
     val (bottomAt, _) = rect("screen_bottom")
     val seamY = (topAt.y + topSize.height + bottomAt.y) / 2f
@@ -78,19 +77,6 @@ private fun DrawScope.drawFaceplate(phone: Boolean, grain: ShaderBrush) {
         Offset(seamRight, seamY + 2.5f * unit),
         strokeWidth = 1.5f * unit,
     )
-
-    // Faint dividers between the top screen's live blocks, inset from their top and bottom.
-    val blocks = HomeArt.LIVE_KEYS.map { rect(it) }
-    blocks.zipWithNext { (leftAt, leftSize), (rightAt, _) ->
-        val x = (leftAt.x + leftSize.width + rightAt.x) / 2f
-        val inset = leftSize.height * 0.1f
-        drawLine(
-            Color.White.copy(alpha = 0.12f),
-            Offset(x, leftAt.y + inset),
-            Offset(x, leftAt.y + leftSize.height - inset),
-            strokeWidth = 2f * unit,
-        )
-    }
 
     // The signal chain's line: in from the bottom screen's left edge, level with the cards' centres,
     // to the output scope, which splits it into L and R. The cards cover it where they sit.

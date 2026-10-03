@@ -33,6 +33,7 @@ import app.siphondsp.R
 import app.siphondsp.compose.controls.HomeFaceplate
 import app.siphondsp.compose.controls.HomeLevelReadout
 import app.siphondsp.compose.controls.HomeOutputScope
+import app.siphondsp.compose.controls.HomeStageBoxes
 import app.siphondsp.compose.controls.HomeTile
 import app.siphondsp.compose.controls.HomeTileKind
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -49,6 +50,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.view.HomeLevelFeed
+import app.siphondsp.view.HomeStageStatus
 import app.siphondsp.view.LevelHistory
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
@@ -86,16 +88,20 @@ class DspFragment : Fragment() {
     private var resumed = false
     private var homePageActive = true
 
-    /** The limiter threshold while the limiter is on, else null; see [refreshLimiter]. */
+    /** The limiter threshold while the limiter is on, else null; see [refreshValues]. */
     private var limiterDb by mutableStateOf<Float?>(null)
 
+    /** Which MBC bands and all-pass sections are on, for the centre screen's boxes. */
+    private var stageStatus by mutableStateOf(HomeStageStatus.OFF)
+
     /**
-     * Re-reads the limiter whenever settings change underneath the front page while it stays
-     * resumed: a preset or backup loaded, a Revert from the overflow menu, or any DSP edit.
+     * Re-reads the limiter and the MBC / all-pass boxes whenever settings change underneath the
+     * front page while it stays resumed: a preset or backup loaded, a Revert from the overflow
+     * menu, or any DSP edit.
      */
     private val settingsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            refreshLimiter(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
+            refreshValues(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
         }
     }
 
@@ -152,8 +158,8 @@ class DspFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         resumed = true
-        // Coming back from the limiter's screen; in-place changes arrive via settingsReceiver.
-        refreshLimiter(null)
+        // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
+        refreshValues(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
         onPageSelectedInternal(binding.dspPager.currentItem)
         // Posted: after a restore the pager may not be laid out yet, and a 0 width would put the
@@ -215,6 +221,7 @@ class DspFragment : Fragment() {
         shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
         shortcutsBinding.homeLevelReadout.setHomeContent { HomeLevelReadout(levelReadout, limiterDb) }
         shortcutsBinding.homeOutputScope.setHomeContent { HomeOutputScope(levelHistory, { scopeTick }, levelReadout) }
+        shortcutsBinding.homeStageBoxes.setHomeContent { HomeStageBoxes(stageStatus) }
         levelFeed = HomeLevelFeed(levelHistory, onFrame = { scopeTick++ }, onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
@@ -347,17 +354,21 @@ class DspFragment : Fragment() {
         prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
 
-    /** The limiter threshold while it is on, else null, from [fromBroadcast] or the saved values. */
-    private fun refreshLimiter(fromBroadcast: FloatArray?) {
+    /**
+     * Re-reads what the top screens show from settings: the limiter threshold while it is on (else
+     * null), and the MBC / all-pass boxes. From [fromBroadcast] or the saved values.
+     */
+    private fun refreshValues(fromBroadcast: FloatArray?) {
         val values = fromBroadcast?.takeIf { it.size == NativeBmwDspValues.SIZE }
             ?: NativeBmwDspValues.load(requireContext())
         limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
             .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
+        stageStatus = HomeStageStatus.from(values)
     }
 
     /**
      * Keeps the front page in step with MainActivity's real power state: while the DSP is off the
-     * live data (the output scope, GLOBAL STAGES and the level readout) fades to grey, so it is obvious
+     * live data (the output scope, GLOBAL STAGES, the level readout and the MBC / all-pass boxes) fades to grey, so it is obvious
      * at a glance. The stage cells stay tappable. The tiles, Settings and More keep their colour.
      */
     fun setPowerState(on: Boolean) {
@@ -383,7 +394,7 @@ class DspFragment : Fragment() {
      */
     private fun setPowerLook(look: Float) {
         powerLook = look
-        val views = with(shortcutsBinding) { listOf(homeOutputScope, homeStages, homeLevelReadout) }
+        val views = with(shortcutsBinding) { listOf(homeOutputScope, homeStages, homeLevelReadout, homeStageBoxes) }
         if (look >= 1f) {
             views.forEach {
                 it.setLayerType(View.LAYER_TYPE_NONE, null)

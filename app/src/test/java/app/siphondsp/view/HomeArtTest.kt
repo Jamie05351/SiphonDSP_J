@@ -10,7 +10,7 @@ class HomeArtTest {
     private val liveKeys = listOf(HomeArt.SCOPE_KEY) + HomeArt.LIVE_KEYS
 
     private val keys = HomeArt.TILE_KEYS + liveKeys +
-        HomeArt.SCREEN_KEYS + listOf("power_btn", "power_led", "cog", "overflow")
+        HomeArt.SCREEN_KEYS + listOf("screen_top", "power_btn", "power_led", "cog", "overflow")
 
     private val dspTiles = HomeArt.TILE_KEYS.take(5)
 
@@ -137,14 +137,47 @@ class HomeArtTest {
     }
 
     @Test
-    fun settingsEndsFlushWithTheOutputScopeAndMoreSitsLeftOfIt() {
+    fun moreAndSettingsAreCentredSideBySideInTheRightScreen() {
         for (phone in listOf(false, true)) {
-            val last = HomeArt.frac(HomeArt.SCOPE_KEY, phone)!!
+            val right = HomeArt.frac("screen_right", phone)!!
             val settings = HomeArt.frac("tile_settings", phone)!!
             val more = HomeArt.frac("tile_more", phone)!!
-            assertEquals(last.x + last.w, settings.x + settings.w, 1e-3f)
+            assertTrue("More escapes the right screen (phone=$phone)", inside(more, right))
+            assertTrue("Settings escapes the right screen (phone=$phone)", inside(settings, right))
             assertTrue("More not left of Settings (phone=$phone)", more.x + more.w <= settings.x)
             assertEquals(more.y, settings.y, 1e-4f)
+            val pairCentre = (more.x + settings.x + settings.w) / 2f
+            assertEquals(right.x + right.w / 2f, pairCentre, 1e-3f)
+        }
+    }
+
+    @Test
+    fun threeTopScreensFillTheTopBandLeftToRightWithPlateBetween() {
+        for (phone in listOf(false, true)) {
+            val band = HomeArt.frac("screen_top", phone)!!
+            val screens = HomeArt.TOP_SCREEN_KEYS.map { HomeArt.frac(it, phone)!! }
+            screens.forEach { assertTrue("top screen escapes the band (phone=$phone)", inside(it, band)) }
+            assertEquals(band.x, screens.first().x, 1e-4f)
+            assertEquals(band.x + band.w, screens.last().x + screens.last().w, 1e-3f)
+            screens.zipWithNext { a, b ->
+                // Wider than the two recess wells around the glass, so each screen is its own piece.
+                assertTrue("top screens too close (phone=$phone)", b.x - (a.x + a.w) >= 0.012f)
+            }
+            assertTrue("centre screen not the widest (phone=$phone)", screens[1].w > screens[0].w && screens[1].w > screens[2].w)
+        }
+    }
+
+    @Test
+    fun liveDataSitsInItsOwnTopScreen() {
+        for (phone in listOf(false, true)) {
+            val left = HomeArt.frac("screen_left", phone)!!
+            val centre = HomeArt.frac("screen_centre", phone)!!
+            assertTrue("stages escape the left screen (phone=$phone)", inside(HomeArt.frac("live_stages", phone)!!, left))
+            listOf("live_levels", "live_bands").forEach { key ->
+                assertTrue("$key escapes the centre screen (phone=$phone)", inside(HomeArt.frac(key, phone)!!, centre))
+            }
+            // The stages title and the readout's headings share a line.
+            assertEquals(HomeArt.frac("live_stages", phone)!!.y, HomeArt.frac("live_levels", phone)!!.y, 1e-4f)
         }
     }
 
