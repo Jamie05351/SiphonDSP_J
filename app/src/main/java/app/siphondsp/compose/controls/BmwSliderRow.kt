@@ -13,22 +13,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,7 +36,6 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val ValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 private const val DisabledRowAlpha = 0.4f
 private val DropdownTitleTextSize = 14.sp
 private val DropdownChevronSize = 18.sp
@@ -60,13 +56,14 @@ class BmwTitleDropdown(
 
 /**
  * Compose equivalent of `CrossoverDashboardBuilder.addSliderRow`: a boxed title, a fixed
- * toggle-zone gap (so slider starts line up whether or not a row has an inline switch), a
- * [BmwSlider] filling the middle, and a boxed value readout pinned at the end.
+ * toggle-zone gap (where a row's inline switch sits), then the value box and −/+ ([ValueStepper])
+ * pinned at the end. (It was a [BmwSlider] filling the middle; every DSP slider became a stepper,
+ * which is easier to use at a glance in a car and takes far less room.)
  *
- * State is hoisted -- [value] is the persisted value. While the user drags, a local copy drives
- * the thumb + readout; [onPreview] fires on every change (live, no disk) and [onCommit] fires on
- * release, matching the View path's `onChanged`-on-drag / persist model (see
- * [app.siphondsp.compose.state.BmwDspState]).
+ * State is hoisted -- [value] is the persisted value. [onPreview] fires on every step (live, no
+ * disk) and [onCommit] once a tap or hold is finished, matching the View path's
+ * `onChanged`-on-drag / persist model (see [app.siphondsp.compose.state.BmwDspState]). Typed
+ * values go to [onValueEntered] when it is set, else to [onCommit].
  */
 @Composable
 fun BmwSliderRow(
@@ -82,29 +79,17 @@ fun BmwSliderRow(
     enabled: Boolean = true,
     // When set, the title becomes a dropdown (see BmwTitleDropdown) and toggleChecked is ignored.
     titleDropdown: BmwTitleDropdown? = null,
-    // When set, tapping the value box opens the numeric-entry dialog (View parity); the parsed,
-    // snapped, coerced value is delivered here.
+    // Where a value typed into the value box goes (parsed, snapped, coerced); null sends it to
+    // onCommit. Tapping the value box always opens the numeric-entry dialog.
     onValueEntered: ((Float) -> Unit)? = null,
     // When set, an inline BmwSwitch sits in the toggle-zone slot between the title and the
     // slider (the View's addSliderRow `toggleIndex` case -- e.g. the compressor Mix row).
     toggleChecked: Boolean? = null,
     onToggleChange: ((Boolean) -> Unit)? = null,
-    // Material3's Slider pads itself out to a 48dp touch target, which is what sets the row
-    // pitch (48dp + padding vs. 30dp boxes). Pages that need to fit more rows on the 480dp head
-    // unit pass a smaller target here; Unspecified keeps the Material default.
+    // The stepper's height, which sets the row pitch. Pages that need to fit more rows on the
+    // 480dp head unit pass less; Unspecified uses StepperRowHeight.
     sliderMinTouchHeight: Dp = Dp.Unspecified,
 ) {
-    val context = LocalContext.current
-    var dragValue by remember(value) { mutableFloatStateOf(value) }
-    val steps = remember(valueRange, step) {
-        if (step > 0f) {
-            (((valueRange.endInclusive - valueRange.start) / step).roundToInt() - 1).coerceAtLeast(0)
-        } else {
-            0
-        }
-    }
-    val shown = dragValue.coerceIn(valueRange.start, valueRange.endInclusive)
-
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -134,51 +119,22 @@ fun BmwSliderRow(
                 Spacer(Modifier.width(RowToggleZoneWidth))
             }
         }
-        CompositionLocalProvider(
-            LocalMinimumInteractiveComponentSize provides
-                if (sliderMinTouchHeight.isSpecified) sliderMinTouchHeight else LocalMinimumInteractiveComponentSize.current,
-        ) {
-            BmwSlider(
-                value = shown,
-                onValueChange = {
-                    val snapped = snapToStep(it, valueRange, step)
-                    dragValue = snapped
-                    onPreview(snapped)
-                },
-                onValueChangeFinished = { onCommit(snapToStep(dragValue, valueRange, step)) },
-                valueRange = valueRange,
-                steps = steps,
-                accentColor = accentColor,
-                enabled = enabled,
-                valueText = { ValueFormat.format(it) + if (unit.isNotEmpty()) " $unit" else "" },
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Spacer(Modifier.width(RowValueGap))
-        val valueInteractionSource = remember { MutableInteractionSource() }
-        BoxedValue(
-            text = ValueFormat.format(shown),
+        Spacer(Modifier.weight(1f).widthIn(min = RowValueGap))
+        ValueStepper(
+            label = label,
+            value = value,
+            valueRange = valueRange,
+            step = step,
             unit = unit,
             accentColor = accentColor,
-            modifier = Modifier
-                .width(RowValueWidth)
-                .height(RowBoxHeight)
-                .then(
-                    if (onValueEntered != null) {
-                        Modifier
-                            .clickable(interactionSource = valueInteractionSource, indication = LocalIndication.current) {
-                                context.showBmwNumberInput(
-                                    label, valueRange.start, valueRange.endInclusive, dragValue, step, unit,
-                                ) { entered ->
-                                    dragValue = entered
-                                    onValueEntered(entered)
-                                }
-                            }
-                            .bmwFocusRing(valueInteractionSource)
-                    } else {
-                        Modifier
-                    },
-                ),
+            onPreview = onPreview,
+            onCommit = onCommit,
+            boxWidth = RowValueWidth,
+            height = if (sliderMinTouchHeight.isSpecified) sliderMinTouchHeight else StepperRowHeight,
+            textSize = StepperTextSize,
+            unitSize = CarUi.MinDenseText,
+            enabled = enabled,
+            onTyped = onValueEntered,
         )
     }
 }
@@ -244,6 +200,9 @@ private fun BoxedDropdownTitle(
         }
     }
 }
+
+private val StepperRowHeight = 44.dp
+private val StepperTextSize = 16.sp
 
 internal fun snapToStep(raw: Float, range: ClosedFloatingPointRange<Float>, step: Float): Float {
     if (step <= 0f) return raw.coerceIn(range.start, range.endInclusive)

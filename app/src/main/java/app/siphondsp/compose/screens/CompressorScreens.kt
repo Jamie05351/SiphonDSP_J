@@ -373,20 +373,25 @@ private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, r
             ArtLabel(rangeLabel)
         }
         ArtMeterRow(Modifier.artRect(artDp(190, 112, 1040, 20))) { BmwGrMeter(gr, it) }
-        Row(Modifier.artRect(artDp(190, 140, 1040, 292))) {
-            BandSliderSpecs.forEach { spec ->
-                DspArtKnob(
-                    dsp = dsp,
-                    label = spec.label,
-                    index = idx(spec.field),
-                    range = spec.range,
-                    step = spec.step,
-                    unit = spec.unit,
-                    accent = DefaultSliderAccent,
-                    diameter = 108.dp,
-                    valueWidth = 108.dp,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
+        // Two rows of three: a value box and -/+ is wider than the knob it replaced, so six no
+        // longer fit across one row.
+        Column(Modifier.artRect(artDp(190, 140, 1040, 292))) {
+            BandSliderSpecs.chunked(3).forEach { rowSpecs ->
+                Row(Modifier.fillMaxWidth().weight(1f)) {
+                    rowSpecs.forEach { spec ->
+                        DspArtKnob(
+                            dsp = dsp,
+                            label = spec.label,
+                            index = idx(spec.field),
+                            range = spec.range,
+                            step = spec.step,
+                            unit = spec.unit,
+                            accent = DefaultSliderAccent,
+                            valueWidth = 108.dp,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
+                }
             }
         }
     }

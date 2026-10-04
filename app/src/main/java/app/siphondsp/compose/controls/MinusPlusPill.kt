@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 
 /** Grey glyphs and divider, as on the PEQ filter list. */
 internal val MinusPlusGlyphColor = Color(0xFF9AA1AB)
-private val MinusPlusFill = Color(0xFF23272F)
+internal val MinusPlusFill = Color(0xFF23272F)
 
 /**
  * The PEQ filter list's −/+ stepper: one pill split by a thin divider, rather than two separate
