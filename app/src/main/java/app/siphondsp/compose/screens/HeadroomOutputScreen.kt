@@ -2,13 +2,11 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,8 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.R
+import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
-import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
@@ -78,7 +76,7 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
 
 @Composable
 private fun OutputGroup(dsp: BmwDspState, headroom: String, row: GroupRow) {
-    GroupHeader("Output", Color.White, row(0, HeaderHeight))
+    ArtGroupHeader("Output", Color.White, row(0, HeaderHeight))
     DspArtSlider(
         dsp, headroom, NativeBmwDspValues.INDEX_HEADROOM, -12f..0f, 1f, "dB", HeadroomAccent, row(52, 48),
     )
@@ -92,7 +90,7 @@ private fun OutputGroup(dsp: BmwDspState, headroom: String, row: GroupRow) {
 
 @Composable
 private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
-    GroupHeader(
+    ArtGroupHeader(
         title = "Limiter",
         accent = LimiterAccent,
         modifier = row(0, HeaderHeight),
@@ -106,27 +104,6 @@ private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
     Column(row(120, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ArtLabel("Gain reduction")
         LimiterGrMeter(Modifier.fillMaxWidth().height(36.dp))
-    }
-}
-
-/** A group's title in its colour, an optional switch at the far end, and a rule under both. */
-@Composable
-private fun GroupHeader(
-    title: String,
-    accent: Color,
-    modifier: Modifier,
-    checked: Boolean? = null,
-    onCheckedChange: ((Boolean) -> Unit)? = null,
-) {
-    Column(modifier) {
-        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            ArtLabel(title.uppercase(), Modifier.weight(1f), color = accent)
-            if (checked != null && onCheckedChange != null) {
-                BmwSwitch(checked = checked, onCheckedChange = onCheckedChange, contentDescription = title)
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(1.5.dp).background(accent.copy(alpha = 0.45f)))
     }
 }
 

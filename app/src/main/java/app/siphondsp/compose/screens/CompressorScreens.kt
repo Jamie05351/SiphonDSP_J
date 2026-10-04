@@ -2,14 +2,18 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,16 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwGrMeter
 import app.siphondsp.compose.controls.BmwPanel
-import app.siphondsp.compose.controls.BmwSectionHeader
-import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.controls.BmwTitleRowWithSwitches
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
@@ -212,90 +214,82 @@ private fun CompressorKnobGrid(band: Int, dsp: BmwDspState) {
     }
 }
 
+/**
+ * Where one row of a bus column goes: [y] dp down the column (its head-unit position) and [h] tall.
+ * The head unit places the row there; the phone stacks the rows and uses only [h].
+ */
+private typealias BusRow = (y: Int, h: Int) -> Modifier
+
+/**
+ * The bus limiters ("driver protection"), on the Gains & Delay pager: one matching column per bus
+ * -- Low, Mid, High -- laid out the same way on both screens (Figma "SiphonDSP Front Panel (from
+ * code)", Steppers page). Each column is the bus name in its band colour with its on/off switch,
+ * then Threshold and Release (cyan, label above the value box and −/+) and the live
+ * gain-reduction meter. The High bus only acts while 3-way is on, but stays editable so it can be
+ * set before the tweeters are ever switched in.
+ */
 @Composable
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val busMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwBusLimiterMeter() }
-
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        BmwDspTheme { HeadUnitDriverPage(dsp, busMeter, modifier) }
-        return
-    }
+    val bus: @Composable (Int, BusRow) -> Unit = { i, row -> BusLimiterColumn(dsp, BusColumns[i], busMeter?.getOrNull(i) ?: 0f, row) }
 
     BmwDspTheme {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-        ) {
-            BmwPanel(
-                title = "Driver protection",
-                modifier = Modifier.fillMaxWidth(),
-                leanStart = 20.dp,
-                leanEnd = 20.dp,
-                topContentGap = 2.dp,
-                sliderLabels = listOf("Threshold", "Release", "Low bus", "Mid bus", "High bus"),
-            ) {
-                BmwSectionHeader(
-                    title = "Low bus",
-                    accentColor = Color(BmwDashboardSkin.M_BLUE),
-                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED),
-                    onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED, if (it) 1f else 0f) },
-                )
-                CompressorSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD, -24f..0f, 0.5f, "dB", dsp)
-                CompressorSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_RELEASE, 20f..800f, 5f, "ms", dsp)
-                BmwGrMeter(busMeter?.getOrNull(0) ?: 0f, stage = MbcBandGrMeter.Stage.LIMITER)
-
-                BmwSectionHeader(
-                    title = "Mid bus",
-                    accentColor = Color(BmwDashboardSkin.MID_BAND_YELLOW),
-                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED),
-                    onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED, if (it) 1f else 0f) },
-                )
-                CompressorSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, -24f..0f, 0.5f, "dB", dsp)
-                CompressorSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE, 20f..800f, 5f, "ms", dsp)
-                BmwGrMeter(busMeter?.getOrNull(1) ?: 0f, stage = MbcBandGrMeter.Stage.LIMITER)
-
-                // Only acts while 3-way is on (High is silent otherwise), but stays editable so
-                // it can be set before the tweeters are ever switched in.
-                BmwSectionHeader(
-                    title = "High bus",
-                    accentColor = Color(BmwDashboardSkin.HIGH_BAND_PINK),
-                    toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED),
-                    onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED, if (it) 1f else 0f) },
-                )
-                CompressorSliderRow("Threshold", NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD, -24f..0f, 0.5f, "dB", dsp)
-                CompressorSliderRow("Release", NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE, 20f..800f, 5f, "ms", dsp)
-                BmwGrMeter(busMeter?.getOrNull(2) ?: 0f, stage = MbcBandGrMeter.Stage.LIMITER)
+        if (LocalContext.current.isHeadUnitDisplay()) {
+            WorkspaceArtBox(modifier.fillMaxSize()) {
+                BusColumns.indices.forEach { i ->
+                    val x = BusX + i * (BusWidthHeadUnit + BusGapHeadUnit)
+                    bus(i) { y, h -> Modifier.artRect(artDp(x, BusTop + y, BusWidthHeadUnit, h)) }
+                }
             }
+        } else {
+            PhoneBusLimiters(modifier, bus)
         }
     }
 }
 
 @Composable
-private fun CompressorSliderRow(
-    label: String,
-    index: Int,
-    range: ClosedFloatingPointRange<Float>,
-    step: Float,
-    unit: String,
-    dsp: BmwDspState,
-    compact: Boolean = false,
-) {
-    BmwSliderRow(
-        label = label,
-        value = dsp.get(index),
-        valueRange = range,
-        step = step,
-        unit = unit,
-        accentColor = LimiterAccent,
-        onPreview = { dsp.preview(index, it) },
-        onCommit = { dsp.commit(index, it) },
-        onValueEntered = { dsp.commit(index, it) },
-        // The band page stacks six rows plus the title and meter; 40dp keeps a fingertip-sized
-        // target while fitting them all on the 480dp head unit without scrolling.
-        sliderMinTouchHeight = if (compact) 40.dp else Dp.Unspecified,
+private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: Float, row: BusRow) {
+    ArtGroupHeader(
+        title = col.title,
+        accent = Color(col.accent),
+        modifier = row(0, 40),
+        checked = dsp.isOn(col.enabled),
+        onCheckedChange = { dsp.commit(col.enabled, if (it) 1f else 0f) },
     )
+    DspArtSlider(dsp, "Threshold", col.threshold, -24f..0f, 0.5f, "dB", LimiterAccent, row(56, 74), labelAbove = true)
+    DspArtSlider(dsp, "Release", col.release, 20f..800f, 5f, "ms", LimiterAccent, row(144, 74), labelAbove = true)
+    Column(row(232, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ArtLabel("Gain reduction")
+        BmwGrMeter(gainReductionDb, Modifier.fillMaxWidth().height(36.dp), stage = MbcBandGrMeter.Stage.LIMITER)
+    }
+}
+
+/** Phone: the three columns side by side, centred; a phone too narrow for them stacks them and
+ *  scrolls. */
+@Composable
+private fun PhoneBusLimiters(modifier: Modifier, bus: @Composable (Int, BusRow) -> Unit) {
+    val stack: BusRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+    val column: @Composable (Int) -> Unit = { i ->
+        Column(Modifier.width(BusWidthPhone.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { bus(i, stack) }
+    }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val sideBySide = maxWidth >= BusWidthPhone.dp * 3 + BusGapPhone * 2 + 24.dp
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sideBySide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(BusGapPhone)) { BusColumns.indices.forEach { column(it) } }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) { BusColumns.indices.forEach { column(it) } }
+            }
+        }
+    }
 }
 
 /** Polls [read] at ~30fps while the composition is at least STARTED; returns the latest result. */
@@ -415,48 +409,29 @@ private val BandSliderSpecs = listOf(
     BandSliderSpec("Makeup", NativeBmwDspValues.MBC_FIELD_MAKEUP, 0f..12f, 0.1f, "dB"),
 )
 
-/** Bus limiters: one matching column per bus -- enable, Threshold, Release, GR meter. */
-@Composable
-private fun HeadUnitDriverPage(dsp: BmwDspState, busMeter: FloatArray?, modifier: Modifier) {
-    WorkspaceArtBox(modifier.fillMaxSize()) {
-        BusColumns.forEachIndexed { bus, col ->
-            ArtSwitchRow(
-                label = col.title,
-                checked = dsp.isOn(col.enabled),
-                onCheckedChange = { dsp.commit(col.enabled, if (it) 1f else 0f) },
-                labelWidth = 120.dp,
-                labelColor = Color(col.accent),
-                modifier = Modifier.artRect(artDp(col.x, 104, 330, 40)),
-            )
-            DspArtSlider(
-                dsp, "Threshold", col.threshold, -24f..0f, 0.5f, "dB", LimiterAccent,
-                Modifier.artRect(artDp(col.x, 152, 330, 86)), labelAbove = true,
-            )
-            DspArtSlider(
-                dsp, "Release", col.release, 20f..800f, 5f, "ms", LimiterAccent,
-                Modifier.artRect(artDp(col.x, 246, 330, 86)), labelAbove = true,
-            )
-            ArtMeterRow(Modifier.artRect(artDp(col.x, 342, 330, 34))) {
-                BmwGrMeter(busMeter?.getOrNull(bus) ?: 0f, it, stage = MbcBandGrMeter.Stage.LIMITER)
-            }
-        }
-    }
-}
+private class BusColumn(val title: String, val accent: Int, val enabled: Int, val threshold: Int, val release: Int)
 
-private class BusColumn(val title: String, val accent: Int, val x: Int, val enabled: Int, val threshold: Int, val release: Int)
+// Head-unit layout, in the 1280x480 editor's dp: three 220dp columns, 120dp apart, centred across
+// the content area (x 190..1230). The phone's columns are 200dp, 40dp apart.
+private const val BusWidthHeadUnit = 220
+private const val BusGapHeadUnit = 120
+private const val BusX = 260
+private const val BusTop = 104
+private const val BusWidthPhone = 200
+private val BusGapPhone = 40.dp
 
 private val BusColumns = listOf(
     BusColumn(
-        "Low bus", BmwDashboardSkin.M_BLUE, 190, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,
+        "Low bus", BmwDashboardSkin.SLIDER_LOW_BAND_COLOR, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,
         NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_RELEASE,
     ),
     BusColumn(
-        "Mid bus", BmwDashboardSkin.MID_BAND_YELLOW, 540, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
+        "Mid bus", BmwDashboardSkin.SLIDER_MID_BAND_COLOR, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
         NativeBmwDspValues.INDEX_BUS_LIMITER_MID_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_MID_RELEASE,
     ),
     // Only acts while 3-way is on, but stays editable so it can be set before the tweeters are.
     BusColumn(
-        "High bus", BmwDashboardSkin.HIGH_BAND_PINK, 890, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED,
+        "High bus", BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED,
         NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_THRESHOLD, NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_RELEASE,
     ),
 )
