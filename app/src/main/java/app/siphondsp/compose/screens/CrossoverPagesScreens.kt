@@ -60,8 +60,8 @@ private typealias ControlRow = (y: Int, h: Int) -> Modifier
  * Phase 5 of the 3-way crossover (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md): the Crossovers
  * controls split into one swipe page per split point, each beside the same full response graph --
  * [CrossoverLowMidPage] (Low lowpass, Mid highpass, Subsonic) and [CrossoverMidHighPage] (the
- * master 3-way switch, the Mid/High corner, the linked Mid all-pass alignment and, on the phone, a
- * deep link to the full per-output All-pass screen) -- then [CrossoverTiltPage]. The graph mode is
+ * master 3-way switch, Mid lowpass, High highpass + slope, the linked Mid all-pass alignment
+ * and, on the phone, a deep link to the full per-output All-pass screen) -- then [CrossoverTiltPage]. The graph mode is
  * hoisted by the pager so all three pages keep the same MAG / PHASE / BOTH / DELAY choice.
  *
  * Both screens lay a page out the same way (Figma "SiphonDSP Front Panel (from code)", Steppers
@@ -94,13 +94,13 @@ fun CrossoverLowMidPage(
             lowPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
         )
     }
-    // Mid's type also shapes its upper (Mid/High) lowpass natively, so High's highpass follows
-    // it -- see ThreeWayCrossover.typeMirrors.
+    // Mid's type also shapes its upper (Mid/High) lowpass natively; High's highpass has its own
+    // slope on the Mid/High page.
     val onMidType: (Int) -> Unit = {
         dsp.commit(
             NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
             it.toFloat(),
-            midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE) + ThreeWayCrossover.typeMirrors,
+            midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
         )
     }
     val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)
@@ -158,32 +158,42 @@ fun CrossoverMidHighPage(
         NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
     val midAlignFreqMirror = intArrayOf(midRightBase + 2)
     val midAlignEnMirror = intArrayOf(midRightBase)
+    val highCrossoverType = dsp.get(ThreeWayCrossover.highTypeIndex).toInt().coerceIn(0, 4)
+    val onHighType: (Int) -> Unit = {
+        dsp.commit(ThreeWayCrossover.highTypeIndex, it.toFloat(), ThreeWayCrossover.highTypeMirrors)
+    }
 
     val controls: @Composable (ControlRow) -> Unit = { row ->
-        // Each switch sits directly over the value it enables: 3-way over the corner, Mid align
-        // over its frequency.
+        // Each switch sits directly over the values it enables: 3-way over the Mid lowpass and
+        // High highpass, Mid align over its frequency. Mid's lowpass uses Mid's slope (Low/Mid
+        // page); High's highpass has its own.
         ArtSwitchRow(
             label = "3-way",
             checked = ThreeWayCrossover.isEnabled(dsp.values),
             onCheckedChange = { on -> dsp.commitAll(ThreeWayCrossover.updates(dsp.values, on)) },
-            modifier = row(84, 36),
+            modifier = row(80, 36),
             labelWidth = ControlLabelWidth,
         )
         DspArtSlider(
-            dsp, MidHighLabel, ThreeWayCrossover.cornerIndex, 1000f..8000f, 10f, "Hz", highSlider,
-            row(132, 48), mirrors = ThreeWayCrossover.cornerMirrors,
+            dsp, MidLowpassLabel, ThreeWayCrossover.midLowpassIndex, 300f..8000f, 10f, "Hz", midSlider,
+            row(124, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
         )
+        DspArtSlider(
+            dsp, HighHighpassLabel, ThreeWayCrossover.highHighpassIndex, 1000f..8000f, 10f, "Hz", highSlider,
+            row(180, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
+        )
+        SlopeRow(highCrossoverType, onHighType, row(236, 40))
         ArtSwitchRow(
             label = "Mid align",
             checked = dsp.isOn(midLeftBase),
             onCheckedChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-            modifier = row(228, 36),
+            modifier = row(288, 36),
             labelWidth = ControlLabelWidth,
         )
         // "Mid align (all-pass)" is too long for the label column, so it sits over the stepper.
         DspArtSlider(
             dsp, MidAlignLabel, midLeftBase + 2, 20f..1000f, 1f, "Hz", midSlider,
-            row(272, 76), labelAbove = true, mirrors = midAlignFreqMirror,
+            row(328, 76), labelAbove = true, mirrors = midAlignFreqMirror,
         )
     }
 
@@ -379,5 +389,6 @@ private fun midPair(field: Int) = intArrayOf(
 
 private const val LowLowpassLabel = "Low lowpass"
 private const val MidHighpassLabel = "Mid highpass"
-private const val MidHighLabel = "Mid/High corner"
+private const val MidLowpassLabel = "Mid lowpass"
+private const val HighHighpassLabel = "High highpass"
 private const val MidAlignLabel = "Mid align (all-pass)"

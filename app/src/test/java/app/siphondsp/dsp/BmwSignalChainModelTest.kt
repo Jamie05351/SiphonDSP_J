@@ -484,11 +484,10 @@ class BmwSignalChainModelTest {
 
         val on = defaults.copyOf().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
         assertTrue(ThreeWayCrossover.isEnabled(on))
-        // Mid's upper lowpass and High's highpass must come up at the same corner and slope.
-        val corner = on[ThreeWayCrossover.cornerIndex]
-        ThreeWayCrossover.cornerMirrors.forEach { assertEquals(corner, on[it], 0f) }
-        val midType = on[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)]
-        ThreeWayCrossover.typeMirrors.forEach { assertEquals(midType, on[it], 0f) }
+        // Each band's Right side must come up matching its Left.
+        ThreeWayCrossover.midLowpassMirrors.forEach { assertEquals(on[ThreeWayCrossover.midLowpassIndex], on[it], 0f) }
+        ThreeWayCrossover.highHighpassMirrors.forEach { assertEquals(on[ThreeWayCrossover.highHighpassIndex], on[it], 0f) }
+        ThreeWayCrossover.highTypeMirrors.forEach { assertEquals(on[ThreeWayCrossover.highTypeIndex], on[it], 0f) }
 
         val result = compute(on)
         // 10 kHz is well above the 3 kHz default corner: High must be near unity, not silent.
@@ -543,6 +542,24 @@ class BmwSignalChainModelTest {
                 assertEquals(twoWay.midBranchDb[channel][i], toggledOff.midBranchDb[channel][i], 0.0)
             }
         }
+    }
+
+    @Test
+    fun midLowpassAndHighHighpassMoveIndependently() {
+        val on = baseValues().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        fun withHigh(hz: Float) = on.copyOf().also { v ->
+            v[ThreeWayCrossover.highHighpassIndex] = hz
+            ThreeWayCrossover.highHighpassMirrors.forEach { v[it] = hz }
+        }
+        val low = compute(withHigh(2_000f))
+        val high = compute(withHigh(6_000f))
+        val i = nearestIndex(3_000.0)
+        // Moving High's highpass changes High at 3 kHz but leaves Mid's lowpass untouched.
+        assertTrue(low.highBranchDb[0][i] - high.highBranchDb[0][i] > 6.0)
+        for (k in low.midBranchDb[0].indices) assertEquals(low.midBranchDb[0][k], high.midBranchDb[0][k], 0.0)
+        // Re-enabling 3-way keeps the user's separate High corner instead of snapping it to Mid's.
+        val reEnabled = withHigh(6_000f).also { v -> ThreeWayCrossover.updates(v, true).forEach { (j, x) -> v[j] = x } }
+        assertEquals(6_000f, reEnabled[ThreeWayCrossover.highHighpassIndex], 0f)
     }
 
     companion object {
