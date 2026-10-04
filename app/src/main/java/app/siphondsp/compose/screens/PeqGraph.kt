@@ -1400,7 +1400,7 @@ private fun PeqGraphOptionsButton(
             interactionSource = interactionSource,
             modifier = Modifier.bmwFocusRing(interactionSource),
         ) {
-            // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) — glyph it.
+            // material-icons isn't on the classpath here (see PeqBandList) — glyph it.
             Text("⋮", fontSize = 20.sp, color = Color(0xFFB0B2BA))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

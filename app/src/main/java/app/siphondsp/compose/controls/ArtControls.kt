@@ -144,8 +144,8 @@ fun ArtValueBox(
 }
 
 /**
- * A labelled [ValueStepper] -- value box and −/+ -- at head-unit size. (This was a [BmwSlider];
- * every DSP slider became a stepper, which is easier to use at a glance in a car and takes far
+ * A labelled [ValueStepper] -- value box and −/+ -- at head-unit size. (This was a slider; every
+ * DSP slider and knob became a stepper, which is easier to use at a glance in a car and takes far
  * less room.) [labelAbove] puts the label over the stepper's start (or end, with [alignEnd]);
  * otherwise it sits in a [labelWidth] column on the left. [valueWidth] is the value box's width.
  * [sliderMinTouchHeight] is kept for existing callers and ignored: the stepper is always
@@ -191,55 +191,6 @@ fun ArtSlider(
         ArtStacked(label, modifier.then(dim), alignEnd = alignEnd) { stepper() }
     } else {
         ArtRow(label, modifier.then(dim), labelWidth = labelWidth) { stepper() }
-    }
-}
-
-/**
- * A labelled [ValueStepper] in place of what was a rotary knob: the label centred over the value
- * box and −/+. [diameter] is kept for existing callers and ignored.
- */
-@Composable
-fun ArtKnob(
-    label: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    step: Float,
-    unit: String,
-    accentColor: Color,
-    onPreview: (Float) -> Unit,
-    onCommit: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-    @Suppress("UNUSED_PARAMETER") diameter: Dp = 104.dp,
-    valueWidth: Dp = 96.dp,
-    enabled: Boolean = true,
-) {
-    val dim = if (enabled) Modifier else Modifier.alpha(DisabledAlpha)
-    Column(
-        modifier = modifier.then(dim),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        ArtLabel(
-            text = label,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(6.dp))
-        ValueStepper(
-            label = label,
-            value = value,
-            valueRange = valueRange,
-            step = step,
-            unit = unit,
-            accentColor = accentColor,
-            onPreview = onPreview,
-            onCommit = onCommit,
-            boxWidth = valueWidth,
-            height = ArtValueHeight,
-            textSize = ArtValueSize,
-            unitSize = ArtUnitSize,
-            enabled = enabled,
-        )
     }
 }
 

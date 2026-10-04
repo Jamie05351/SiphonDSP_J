@@ -48,7 +48,7 @@ private val CenteredGlyphStyle = TextStyle(
 /**
  * Explicit prev/next page buttons for a DSP workspace's toolbar line -- the tap-driven answer to
  * the swipe-vs-slider conflict a plain [androidx.compose.foundation.pager.HorizontalPager] can't
- * resolve on its own: these pages are full of full-width [BmwSlider] rows, and a swipe/flick
+ * resolve on its own: these pages were full of full-width slider rows, and a swipe/flick
  * starting on one gets eaten by the slider's own drag detection instead of turning the page
  * (Compose has no equivalent of the View system's buffer-and-replay trick the old `DspPager` +
  * `PagerChildSwipeGate` used to solve this). A tap never has that ambiguity, so this sidesteps the
@@ -128,7 +128,7 @@ private fun ArrowSegment(glyph: String, enabled: Boolean, accent: Color, onClick
             .bmwFocusRing(interactionSource),
         contentAlignment = Alignment.Center,
     ) {
-        // material-icons isn't on the classpath here (see BmwSlider/PeqBandList) -- glyph it.
+        // material-icons isn't on the classpath here (see PeqBandList) -- glyph it.
         // Sized up from 20sp: at that size the glyph read as lost inside a 60x30dp box instead of
         // filling it the way the box's own border chrome does.
         Text(
