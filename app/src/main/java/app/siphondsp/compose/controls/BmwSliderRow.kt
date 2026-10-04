@@ -57,7 +57,7 @@ class BmwTitleDropdown(
 /**
  * Compose equivalent of `CrossoverDashboardBuilder.addSliderRow`: a boxed title, a fixed
  * toggle-zone gap (where a row's inline switch sits), then the value box and −/+ ([ValueStepper])
- * pinned at the end. (It was a [BmwSlider] filling the middle; every DSP slider became a stepper,
+ * pinned at the end. (It was a slider filling the middle; every DSP slider became a stepper,
  * which is easier to use at a glance in a car and takes far less room.)
  *
  * State is hoisted -- [value] is the persisted value. [onPreview] fires on every step (live, no

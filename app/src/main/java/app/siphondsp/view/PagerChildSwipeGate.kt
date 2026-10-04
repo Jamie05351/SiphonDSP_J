@@ -13,7 +13,7 @@ import kotlin.math.abs
  * Wraps one [ViewPager2] page and arbitrates a horizontal drag between the page's own content
  * (Compose sliders, mostly) and the pager.
  *
- * The problem: the DSP workspace pages are full-bleed and a [BmwSlider] fills most of every
+ * The problem: the DSP workspace pages are full-bleed and a slider used to fill most of every
  * slider row. A quick horizontal flick meant to turn the page would land on a slider and, because
  * the Compose slider claims the horizontal drag the instant it crosses touch slop (and Material3's
  * slider even seeks to the press position on pointer-down), the flick nudged -- and committed -- a

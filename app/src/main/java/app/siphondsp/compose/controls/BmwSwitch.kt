@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import app.siphondsp.view.BmwDashboardSkin
 
 /**
- * Toggle in the same hardware language as [BmwSlider]: a recessed slot with a metal hairline and a
+ * Toggle in the same hardware language as the old slider: a recessed slot with a metal hairline and a
  * machined thumb, instead of a saturated pill.
  *
  * State is carried by small, precise things rather than large colour: the thumb's edge ring, one

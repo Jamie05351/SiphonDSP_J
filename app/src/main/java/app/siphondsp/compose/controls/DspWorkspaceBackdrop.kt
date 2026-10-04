@@ -101,7 +101,7 @@ internal fun DrawScope.drawInsetShadow(corner: Float, depth: Float, steps: Int =
 }
 
 /**
- * Slim bezel matching [DspTile]: a metal ring lit from the top-left and dark at the bottom-right,
+ * Slim bezel: a metal ring lit from the top-left and dark at the bottom-right,
  * a black gap, and a hairline highlight on the inner lip. Occupies the rect
  * ([left], [top], [width], [height]) and reaches about 1.75 x [bezel] inwards from its edge.
  */
