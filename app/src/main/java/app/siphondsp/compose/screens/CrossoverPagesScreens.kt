@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.ArtSwitchRow
@@ -60,8 +61,8 @@ private typealias ControlRow = (y: Int, h: Int) -> Modifier
  * controls split into one swipe page per split point, each beside the same full response graph --
  * [CrossoverLowMidPage] (Low lowpass, Mid highpass, Subsonic) and [CrossoverMidHighPage] (the
  * master 3-way switch, the Mid/High corner, the linked Mid all-pass alignment and, on the phone, a
- * deep link to the full per-output All-pass screen). The graph mode is hoisted by the pager so
- * both pages keep the same MAG / PHASE / BOTH / DELAY choice.
+ * deep link to the full per-output All-pass screen) -- then [CrossoverTiltPage]. The graph mode is
+ * hoisted by the pager so all three pages keep the same MAG / PHASE / BOTH / DELAY choice.
  *
  * Both screens lay a page out the same way (Figma "SiphonDSP Front Panel (from code)", Steppers
  * page): the graph and its mode picker on the left, a [ControlColumnWidth] column of label +
@@ -206,6 +207,39 @@ fun CrossoverMidHighPage(
                 },
         )
     }
+}
+
+/**
+ * The third Crossovers page: Tonality Tilt, beside the same response graph as the other two (it
+ * already includes the tilt, so Amount and Pivot show on it as they change). The section switch
+ * sits in the column's header; Amount and Pivot stay adjustable while it is off, so they can be
+ * set before it is switched on.
+ */
+@Composable
+fun CrossoverTiltPage(
+    graphMode: CrossoverGraphMode,
+    onGraphModeChange: (CrossoverGraphMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dsp = rememberBmwDspState()
+    val tiltColor = Color(BmwDashboardSkin.SLIDER_TILT_COLOR)
+    val title = stringResource(R.string.bmw_dsp_tilt_section)
+    val amount = stringResource(R.string.bmw_dsp_tilt_amount)
+    val pivot = stringResource(R.string.bmw_dsp_tilt_pivot)
+
+    val controls: @Composable (ControlRow) -> Unit = { row ->
+        ArtGroupHeader(
+            title = title,
+            accent = tiltColor,
+            modifier = row(80, 40),
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_TILT_ENABLED),
+            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_TILT_ENABLED, if (on) 1f else 0f) },
+        )
+        DspArtSlider(dsp, amount, NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f..6f, 0.1f, "dB", tiltColor, row(132, 48))
+        DspArtSlider(dsp, pivot, NativeBmwDspValues.INDEX_TILT_FREQ, 200f..2000f, 1f, "Hz", tiltColor, row(192, 48))
+    }
+
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
 }
 
 /** A Crossovers page on either screen; [phoneExtra] is shown under the phone's controls. */

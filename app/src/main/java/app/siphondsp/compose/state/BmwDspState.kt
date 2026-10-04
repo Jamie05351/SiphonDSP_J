@@ -21,7 +21,7 @@ import app.siphondsp.utils.extensions.ContextExtensions.toast
 /**
  * v1 Compose state layer for the native BMW DSP config (`NativeBmwDspValues`, a `FloatArray`
  * indexed by `INDEX_*`). Composition-scoped -- one instance per [rememberBmwDspState] call site
- * (currently one: [app.siphondsp.compose.screens.TonalityTiltScreen]). Replaces the View
+ * (currently one: [app.siphondsp.compose.screens.CrossoverTiltPage]). Replaces the View
  * system's `Fragment.rebuild()` pattern of loading the array into a local, mutating it in place,
  * and calling `save` + `broadcast` on every change.
  *
