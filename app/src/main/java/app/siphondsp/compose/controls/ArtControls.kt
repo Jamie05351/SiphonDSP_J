@@ -15,19 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,16 +30,12 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
-import kotlin.math.roundToInt
 
 /*
  * Head-unit building blocks for the sub-menu pages laid out in REW/_UI/submenu_layout_editor.html.
  * Each control sits over an [artDp] rect of the workspace art inside a [WorkspaceArtBox]; the
- * controls themselves (BmwSlider, BmwSwitch, BoxedValue, BmwDropdown) are the app's own, unchanged
- * -- these only arrange them and size the label / value-box text.
+ * controls themselves (ValueStepper, BmwSwitch, BoxedValue, BmwDropdown) are the app's own,
+ * unchanged -- these only arrange them and size the label / value-box text.
  */
 
 /** A rect in dp on the 1280x480 head unit (the editor's units) as a fraction of the workspace art,
@@ -59,7 +49,6 @@ val ArtValueHeight = 48.dp
 private val ArtUnitSize = CarUi.MinText
 private val ArtLabelColor = Color(0xFF969EA8)
 private const val DisabledAlpha = 0.4f
-private val ArtValueFormat = DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
 
 @Composable
 fun ArtLabel(
@@ -154,9 +143,12 @@ fun ArtValueBox(
 }
 
 /**
- * A [BmwSlider] with its value box at the end, same drag/preview/commit model as [BmwSliderRow].
- * [labelAbove] puts the label over the slider's start (or end, with [alignEnd]); otherwise it
- * sits in a [labelWidth] column on the left.
+ * A labelled [ValueStepper] -- value box and −/+ -- at head-unit size. (This was a [BmwSlider];
+ * every DSP slider became a stepper, which is easier to use at a glance in a car and takes far
+ * less room.) [labelAbove] puts the label over the stepper's start (or end, with [alignEnd]);
+ * otherwise it sits in a [labelWidth] column on the left. [valueWidth] is the value box's width.
+ * [sliderMinTouchHeight] is kept for existing callers and ignored: the stepper is always
+ * [ArtValueHeight] tall.
  */
 @Composable
 fun ArtSlider(
@@ -174,58 +166,37 @@ fun ArtSlider(
     labelWidth: Dp = 150.dp,
     valueWidth: Dp = 96.dp,
     enabled: Boolean = true,
-    // Material3 pads the slider to a 48 dp touch target; tighter rows pass less.
-    sliderMinTouchHeight: Dp = 48.dp,
+    @Suppress("UNUSED_PARAMETER") sliderMinTouchHeight: Dp = 48.dp,
 ) {
-    val context = LocalContext.current
-    var dragValue by remember(value) { mutableFloatStateOf(value) }
-    val steps = remember(valueRange, step) {
-        if (step > 0f) (((valueRange.endInclusive - valueRange.start) / step).roundToInt() - 1).coerceAtLeast(0) else 0
+    val stepper: @Composable () -> Unit = {
+        ValueStepper(
+            label = label,
+            value = value,
+            valueRange = valueRange,
+            step = step,
+            unit = unit,
+            accentColor = accentColor,
+            onPreview = onPreview,
+            onCommit = onCommit,
+            boxWidth = valueWidth,
+            height = ArtValueHeight,
+            textSize = ArtValueSize,
+            unitSize = ArtUnitSize,
+            enabled = enabled,
+        )
     }
-    val shown = dragValue.coerceIn(valueRange.start, valueRange.endInclusive)
-
-    val sliderAndValue: @Composable (Modifier) -> Unit = { rowModifier ->
-        Row(rowModifier, verticalAlignment = Alignment.CenterVertically) {
-            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides sliderMinTouchHeight) {
-                BmwSlider(
-                    value = shown,
-                    onValueChange = {
-                        val snapped = snapToStep(it, valueRange, step)
-                        dragValue = snapped
-                        onPreview(snapped)
-                    },
-                    onValueChangeFinished = { onCommit(snapToStep(dragValue, valueRange, step)) },
-                    valueRange = valueRange,
-                    steps = steps,
-                    accentColor = accentColor,
-                    enabled = enabled,
-                    valueText = { ArtValueFormat.format(it) + if (unit.isNotEmpty()) " $unit" else "" },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Spacer(Modifier.width(RowValueGap))
-            ArtValueBox(ArtValueFormat.format(shown), unit, accentColor, width = valueWidth) {
-                context.showBmwNumberInput(label, valueRange.start, valueRange.endInclusive, dragValue, step, unit) {
-                    dragValue = it
-                    onCommit(it)
-                }
-            }
-        }
-    }
-
     val dim = if (enabled) Modifier else Modifier.alpha(DisabledAlpha)
     if (labelAbove) {
-        ArtStacked(label, modifier.then(dim), alignEnd = alignEnd) {
-            sliderAndValue(Modifier.fillMaxWidth().height(ArtValueHeight))
-        }
+        ArtStacked(label, modifier.then(dim), alignEnd = alignEnd) { stepper() }
     } else {
-        ArtRow(label, modifier.then(dim), labelWidth = labelWidth) {
-            sliderAndValue(Modifier.weight(1f).height(ArtValueHeight))
-        }
+        ArtRow(label, modifier.then(dim), labelWidth = labelWidth) { stepper() }
     }
 }
 
-/** A labelled [BmwDspKnob] with the existing tap-to-type value box beneath it. */
+/**
+ * A labelled [ValueStepper] in place of what was a rotary knob: the label centred over the value
+ * box and −/+. [diameter] is kept for existing callers and ignored.
+ */
 @Composable
 fun ArtKnob(
     label: String,
@@ -237,15 +208,11 @@ fun ArtKnob(
     onPreview: (Float) -> Unit,
     onCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    diameter: Dp = 104.dp,
+    @Suppress("UNUSED_PARAMETER") diameter: Dp = 104.dp,
     valueWidth: Dp = 96.dp,
     enabled: Boolean = true,
 ) {
-    val context = LocalContext.current
-    var dragValue by remember(value) { mutableFloatStateOf(value) }
-    val shown = dragValue.coerceIn(valueRange.start, valueRange.endInclusive)
     val dim = if (enabled) Modifier else Modifier.alpha(DisabledAlpha)
-
     Column(
         modifier = modifier.then(dim),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -256,35 +223,22 @@ fun ArtKnob(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
-        BmwDspKnob(
-            value = shown,
+        Spacer(Modifier.height(6.dp))
+        ValueStepper(
+            label = label,
+            value = value,
             valueRange = valueRange,
             step = step,
-            accentColor = accentColor,
-            onPreview = {
-                dragValue = it
-                onPreview(it)
-            },
-            onCommit = {
-                dragValue = it
-                onCommit(it)
-            },
-            enabled = enabled,
-            accessibilityLabel = label,
-            diameter = diameter,
-            modifier = Modifier.size(diameter),
-        )
-        ArtValueBox(
-            text = ArtValueFormat.format(shown),
             unit = unit,
             accentColor = accentColor,
-            width = valueWidth,
-        ) {
-            context.showBmwNumberInput(label, valueRange.start, valueRange.endInclusive, shown, step, unit) {
-                dragValue = it
-                onCommit(it)
-            }
-        }
+            onPreview = onPreview,
+            onCommit = onCommit,
+            boxWidth = valueWidth,
+            height = ArtValueHeight,
+            textSize = ArtValueSize,
+            unitSize = ArtUnitSize,
+            enabled = enabled,
+        )
     }
 }
 
