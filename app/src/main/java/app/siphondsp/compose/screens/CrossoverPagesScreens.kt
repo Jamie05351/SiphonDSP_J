@@ -2,12 +2,17 @@ package app.siphondsp.compose.screens
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -28,13 +33,8 @@ import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwDropdown
-import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSegmentedControl
-import app.siphondsp.compose.controls.BmwSliderRow
-import app.siphondsp.compose.controls.BmwTitleDropdown
-import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.controls.WorkspaceArtBox
-import app.siphondsp.compose.controls.WorkspaceArtScope
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
@@ -46,16 +46,28 @@ import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.isHeadUnitDisplay
 
 private val DefaultAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
-private val NoMirror = IntArray(0)
 private val CrossoverTypeOptions = listOf("BW2", "BW3", "LR4", "BW1 (6 dB/oct)", "BW4")
 
 /**
+ * Where one row of a page's controls goes: [y] down the head unit's 1280x480 editor space (its
+ * position there) and [h] tall in dp. The head unit places the row at that spot in its controls
+ * column; the phone stacks the rows in order and uses only [h].
+ */
+private typealias ControlRow = (y: Int, h: Int) -> Modifier
+
+/**
  * Phase 5 of the 3-way crossover (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md): the Crossovers
- * controls split into one swipe page per split point, each over the same full response graph --
+ * controls split into one swipe page per split point, each beside the same full response graph --
  * [CrossoverLowMidPage] (Low lowpass, Mid highpass, Subsonic) and [CrossoverMidHighPage] (the
- * master 3-way switch in its header, the Mid/High corner, the linked Mid all-pass alignment and a
+ * master 3-way switch, the Mid/High corner, the linked Mid all-pass alignment and, on the phone, a
  * deep link to the full per-output All-pass screen). The graph mode is hoisted by the pager so
  * both pages keep the same MAG / PHASE / BOTH / DELAY choice.
+ *
+ * Both screens lay a page out the same way (Figma "SiphonDSP Front Panel (from code)", Steppers
+ * page): the graph and its mode picker on the left, a [ControlColumnWidth] column of label +
+ * value box + −/+ rows on the right, no scrolling. Each page lists its controls once, against a
+ * [ControlRow] that the head unit ([HeadUnitCrossoverPage]) or the phone ([PhoneCrossoverPage])
+ * turns into a position.
  */
 @Composable
 fun CrossoverLowMidPage(
@@ -93,77 +105,37 @@ fun CrossoverLowMidPage(
     val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)
     val subsonicEnMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED)
 
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier) {
-            DspArtSlider(
-                dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
-                Modifier.artRect(controlRect(80, 48)),
-                mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-            )
-            SlopeRow(lowCrossoverType, onLowType, Modifier.artRect(controlRect(136, 40)))
-            DspArtSlider(
-                dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", midSlider,
-                Modifier.artRect(controlRect(196, 48)),
-                mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-            )
-            SlopeRow(midCrossoverType, onMidType, Modifier.artRect(controlRect(252, 40)))
-            DspArtSlider(
-                dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
-                Modifier.artRect(controlRect(312, 48)),
-                mirrors = subsonicFreqMirror,
-            )
-            ArtSwitchRow(
-                label = "Subsonic",
-                checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
-                onCheckedChange = { on ->
-                    dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
-                },
-                modifier = Modifier.artRect(controlRect(372, 36)),
-                labelWidth = ControlLabelWidth,
-            )
-        }
-        return
-    }
-
-    CrossoverPage(
-        title = "Low / Mid",
-        dsp = dsp,
-        graphMode = graphMode,
-        onGraphModeChange = onGraphModeChange,
-        sliderLabels = listOf(LowLowpassLabel, MidHighpassLabel, subsonicLabel),
-        modifier = modifier,
-    ) {
-        // The slope picker lives in the row's title box (a dropdown) rather than a segmented
-        // control on its own line, so it costs no extra height.
-        DspSliderRow(
-            LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
-            dsp, lowSlider, mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-            titleDropdown = BmwTitleDropdown(CrossoverTypeOptions, lowCrossoverType, onLowType),
+    val controls: @Composable (ControlRow) -> Unit = { row ->
+        DspArtSlider(
+            dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
+            row(80, 48), mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
-        DspSliderRow(
-            MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz",
-            dsp, midSlider, mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
-            titleDropdown = BmwTitleDropdown(CrossoverTypeOptions, midCrossoverType, onMidType),
+        SlopeRow(lowCrossoverType, onLowType, row(136, 40))
+        DspArtSlider(
+            dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", midSlider,
+            row(196, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
-
-        BmwSliderRow(
-            label = subsonicLabel,
-            value = dsp.get(NativeBmwDspValues.INDEX_SUBSONIC_FREQ),
-            valueRange = 20f..60f, step = 1f, unit = "Hz",
-            accentColor = DefaultAccent,
-            onPreview = { dsp.preview(NativeBmwDspValues.INDEX_SUBSONIC_FREQ, it, subsonicFreqMirror) },
-            onCommit = { dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_FREQ, it, subsonicFreqMirror) },
-            onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_FREQ, it, subsonicFreqMirror) },
-            toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
-            onToggleChange = { on ->
+        SlopeRow(midCrossoverType, onMidType, row(252, 40))
+        DspArtSlider(
+            dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
+            row(312, 48), mirrors = subsonicFreqMirror,
+        )
+        ArtSwitchRow(
+            label = "Subsonic",
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
+            onCheckedChange = { on ->
                 dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
             },
+            modifier = row(372, 36),
+            labelWidth = ControlLabelWidth,
         )
     }
+
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
 }
 
-/** See [CrossoverLowMidPage]. The header switch is the master 3-way on/off: off is
- *  bit-identical to the old 2-way crossover (see [ThreeWayCrossover]). */
+/** See [CrossoverLowMidPage]. The 3-way switch is the master 3-way on/off: off is bit-identical
+ *  to the old 2-way crossover (see [ThreeWayCrossover]). */
 @Composable
 fun CrossoverMidHighPage(
     graphMode: CrossoverGraphMode,
@@ -186,79 +158,44 @@ fun CrossoverMidHighPage(
     val midAlignFreqMirror = intArrayOf(midRightBase + 2)
     val midAlignEnMirror = intArrayOf(midRightBase)
 
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier) {
-            // Each switch sits directly over the value it enables: 3-way over the corner, Mid
-            // align over its frequency.
-            ArtSwitchRow(
-                label = "3-way",
-                checked = ThreeWayCrossover.isEnabled(dsp.values),
-                onCheckedChange = { on -> dsp.commitAll(ThreeWayCrossover.updates(dsp.values, on)) },
-                modifier = Modifier.artRect(controlRect(84, 36)),
-                labelWidth = ControlLabelWidth,
-            )
-            DspArtSlider(
-                dsp, MidHighLabel, ThreeWayCrossover.cornerIndex, 1000f..8000f, 10f, "Hz", highSlider,
-                Modifier.artRect(controlRect(132, 48)),
-                mirrors = ThreeWayCrossover.cornerMirrors,
-            )
-            ArtSwitchRow(
-                label = "Mid align",
-                checked = dsp.isOn(midLeftBase),
-                onCheckedChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-                modifier = Modifier.artRect(controlRect(228, 36)),
-                labelWidth = ControlLabelWidth,
-            )
-            // "Mid align (all-pass)" is too long for the label column, so it sits over the stepper.
-            DspArtSlider(
-                dsp, MidAlignLabel, midLeftBase + 2, 20f..1000f, 1f, "Hz", midSlider,
-                Modifier.artRect(controlRect(272, 76)), labelAbove = true,
-                mirrors = midAlignFreqMirror,
-            )
-        }
-        return
+    val controls: @Composable (ControlRow) -> Unit = { row ->
+        // Each switch sits directly over the value it enables: 3-way over the corner, Mid align
+        // over its frequency.
+        ArtSwitchRow(
+            label = "3-way",
+            checked = ThreeWayCrossover.isEnabled(dsp.values),
+            onCheckedChange = { on -> dsp.commitAll(ThreeWayCrossover.updates(dsp.values, on)) },
+            modifier = row(84, 36),
+            labelWidth = ControlLabelWidth,
+        )
+        DspArtSlider(
+            dsp, MidHighLabel, ThreeWayCrossover.cornerIndex, 1000f..8000f, 10f, "Hz", highSlider,
+            row(132, 48), mirrors = ThreeWayCrossover.cornerMirrors,
+        )
+        ArtSwitchRow(
+            label = "Mid align",
+            checked = dsp.isOn(midLeftBase),
+            onCheckedChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
+            modifier = row(228, 36),
+            labelWidth = ControlLabelWidth,
+        )
+        // "Mid align (all-pass)" is too long for the label column, so it sits over the stepper.
+        DspArtSlider(
+            dsp, MidAlignLabel, midLeftBase + 2, 20f..1000f, 1f, "Hz", midSlider,
+            row(272, 76), labelAbove = true, mirrors = midAlignFreqMirror,
+        )
     }
 
-    CrossoverPage(
-        title = "3-way Mid / High",
-        dsp = dsp,
-        graphMode = graphMode,
-        onGraphModeChange = onGraphModeChange,
-        sliderLabels = listOf(MidHighLabel, MidAlignLabel),
-        toggleChecked = ThreeWayCrossover.isEnabled(dsp.values),
-        onToggleChange = { on -> dsp.commitAll(ThreeWayCrossover.updates(dsp.values, on)) },
-        modifier = modifier,
-    ) {
-        BmwSliderRow(
-            label = MidHighLabel,
-            value = dsp.get(ThreeWayCrossover.cornerIndex),
-            valueRange = 1000f..8000f, step = 10f, unit = "Hz",
-            accentColor = highSlider,
-            onPreview = { dsp.preview(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
-            onCommit = { dsp.commit(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
-            onValueEntered = { dsp.commit(ThreeWayCrossover.cornerIndex, it, ThreeWayCrossover.cornerMirrors) },
-        )
-
-        BmwSliderRow(
-            label = MidAlignLabel,
-            value = dsp.get(midLeftBase + 2),
-            valueRange = 20f..1000f, step = 1f, unit = "Hz",
-            accentColor = midSlider,
-            onPreview = { dsp.preview(midLeftBase + 2, it, midAlignFreqMirror) },
-            onCommit = { dsp.commit(midLeftBase + 2, it, midAlignFreqMirror) },
-            onValueEntered = { dsp.commit(midLeftBase + 2, it, midAlignFreqMirror) },
-            toggleChecked = dsp.isOn(midLeftBase),
-            onToggleChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-        )
-
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls) {
+        // Phone only: the head unit reaches the full All-pass screen from its sidebar.
         Text(
-            text = "Open full All-pass \u203a",
+            text = "Open full All-pass ›",
             color = Color(BmwDashboardSkin.LIGHT_BLUE),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             textDecoration = TextDecoration.Underline,
             modifier = Modifier
-                .padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
+                .padding(top = 6.dp)
                 .clickable {
                     context.startActivity(
                         Intent(context, CrossoverTiltActivity::class.java).putExtra(
@@ -271,75 +208,33 @@ fun CrossoverMidHighPage(
     }
 }
 
-/** A Crossovers page: a titled [BmwPanel] (optionally with a header switch) holding the graph
- *  mode picker and the full response graph, then that page's [rows]. Scrolls if a screen is too
- *  short for everything. */
+/** A Crossovers page on either screen; [phoneExtra] is shown under the phone's controls. */
 @Composable
 private fun CrossoverPage(
-    title: String,
     dsp: BmwDspState,
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
-    sliderLabels: List<String>,
     modifier: Modifier,
-    toggleChecked: Boolean? = null,
-    onToggleChange: ((Boolean) -> Unit)? = null,
-    rows: @Composable () -> Unit,
+    controls: @Composable (ControlRow) -> Unit,
+    phoneExtra: @Composable () -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val peqState = remember { BmwPeqState.load(context) }
-
-    BmwDspTheme {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-        ) {
-            BmwPanel(
-                title = title,
-                modifier = Modifier.fillMaxWidth(),
-                toggleChecked = toggleChecked,
-                onToggleChange = onToggleChange,
-                leanStart = 20.dp,
-                leanEnd = 20.dp,
-                topContentGap = 4.dp,
-                sliderLabels = sliderLabels,
-            ) {
-                BmwSegmentedControl(
-                    options = listOf("MAG", "PHASE", "BOTH", "DELAY"),
-                    selectedIndex = graphMode.ordinal,
-                    onSelect = { onGraphModeChange(CrossoverGraphMode.entries[it]) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 2.dp),
-                    segmentGap = 4.dp,
-                )
-                CrossoverResponseGraph(
-                    mode = graphMode,
-                    systemValues = dsp.values,
-                    peqState = peqState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(164.dp)
-                        .padding(bottom = 4.dp),
-                )
-                rows()
-            }
-        }
+    if (LocalContext.current.isHeadUnitDisplay()) {
+        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+    } else {
+        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, phoneExtra)
     }
 }
 
-/** Head unit: the graph on the left with its mode picker under it, the page's [controls] in a
- *  [ControlColumnWidth] column on the right (Figma "SiphonDSP Front Panel (from code)", Steppers
- *  page) -- no scrolling. The steppers are narrower than the sliders they replaced, so the graph
- *  takes the room they freed. */
+/** Head unit: the graph and its mode picker on the left, [controls] placed at their editor
+ *  positions in the controls column on the right. The steppers are narrower than the sliders
+ *  they replaced, so the graph takes the room they freed. */
 @Composable
 private fun HeadUnitCrossoverPage(
     dsp: BmwDspState,
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
-    controls: @Composable WorkspaceArtScope.() -> Unit,
+    controls: @Composable (ControlRow) -> Unit,
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
@@ -353,18 +248,69 @@ private fun HeadUnitCrossoverPage(
                 modifier = Modifier.artRect(artDp(GraphX, 76, GraphWidth, 305)),
             )
             Box(Modifier.artRect(artDp(GraphX, 388, GraphWidth, 42)), contentAlignment = Alignment.Center) {
-                BmwSegmentedControl(
-                    options = listOf("MAG", "PHASE", "BOTH", "DELAY"),
-                    selectedIndex = graphMode.ordinal,
-                    onSelect = { onGraphModeChange(CrossoverGraphMode.entries[it]) },
-                    modifier = Modifier.fillMaxWidth(),
-                    segmentHeight = 34.dp,
-                    segmentGap = 4.dp,
-                )
+                GraphModePicker(graphMode, onGraphModeChange)
             }
-            controls()
+            controls { y, h -> Modifier.artRect(artDp(ControlX, y, ControlColumnWidth, h)) }
         }
     }
+}
+
+/** Phone: the same arrangement in the phone's workspace -- the graph filling the left, its mode
+ *  picker under it, and [controls] stacked in the controls column on the right (which scrolls
+ *  only if a small phone is too short for them). */
+@Composable
+private fun PhoneCrossoverPage(
+    dsp: BmwDspState,
+    graphMode: CrossoverGraphMode,
+    onGraphModeChange: (CrossoverGraphMode) -> Unit,
+    modifier: Modifier,
+    controls: @Composable (ControlRow) -> Unit,
+    extra: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val peqState = remember { BmwPeqState.load(context) }
+
+    BmwDspTheme {
+        Row(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(start = 12.dp, end = 12.dp, top = 7.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                CrossoverResponseGraph(
+                    mode = graphMode,
+                    systemValues = dsp.values,
+                    peqState = peqState,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+                Spacer(Modifier.height(8.dp))
+                GraphModePicker(graphMode, onGraphModeChange)
+            }
+            Column(
+                modifier = Modifier
+                    .width(ControlColumnWidth.dp)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                controls { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+                extra()
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraphModePicker(graphMode: CrossoverGraphMode, onGraphModeChange: (CrossoverGraphMode) -> Unit) {
+    BmwSegmentedControl(
+        options = listOf("MAG", "PHASE", "BOTH", "DELAY"),
+        selectedIndex = graphMode.ordinal,
+        onSelect = { onGraphModeChange(CrossoverGraphMode.entries[it]) },
+        modifier = Modifier.fillMaxWidth(),
+        segmentHeight = 34.dp,
+        segmentGap = 4.dp,
+    )
 }
 
 /** "Slope" beside the crossover type dropdown, its label in the controls' label column. */
@@ -379,15 +325,13 @@ private fun SlopeRow(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier)
 }
 
 // Head-unit layout, in the 1280x480 editor's dp: the graph from x 168, then the controls column
-// ending at x 1250 -- a label column, then a stepper (96dp value box, 6dp gap, 81dp -/+).
+// ending at x 1250 -- a label column, then a stepper (96dp value box, 6dp gap, 81dp -/+). The
+// phone uses the same column width.
 private const val GraphX = 168
 private const val GraphWidth = 719
 private const val ControlX = 917
 private const val ControlColumnWidth = 333
 private val ControlLabelWidth = 150.dp
-
-/** A row of the controls column, [y] down and [h] tall. */
-private fun controlRect(y: Int, h: Int) = artDp(ControlX, y, ControlColumnWidth, h)
 
 private fun lowPair(field: Int) = intArrayOf(
     NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
@@ -403,29 +347,3 @@ private const val LowLowpassLabel = "Low lowpass"
 private const val MidHighpassLabel = "Mid highpass"
 private const val MidHighLabel = "Mid/High corner"
 private const val MidAlignLabel = "Mid align (all-pass)"
-
-@Composable
-private fun DspSliderRow(
-    label: String,
-    index: Int,
-    range: ClosedFloatingPointRange<Float>,
-    step: Float,
-    unit: String,
-    dsp: BmwDspState,
-    accent: Color,
-    mirrors: IntArray = NoMirror,
-    titleDropdown: BmwTitleDropdown? = null,
-) {
-    BmwSliderRow(
-        label = label,
-        value = dsp.get(index),
-        valueRange = range,
-        step = step,
-        unit = unit,
-        accentColor = accent,
-        onPreview = { dsp.preview(index, it, mirrors) },
-        onCommit = { dsp.commit(index, it, mirrors) },
-        onValueEntered = { dsp.commit(index, it, mirrors) },
-        titleDropdown = titleDropdown,
-    )
-}
