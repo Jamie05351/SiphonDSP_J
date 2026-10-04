@@ -2,11 +2,13 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,7 +38,7 @@ import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwGrMeter
 import app.siphondsp.compose.controls.BmwPanel
-import app.siphondsp.compose.controls.BmwTitleRowWithSwitches
+import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
@@ -156,36 +158,116 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
         "${formatHz(lo)} – ${formatHz(hi.coerceAtLeast(lo * 1.01f))}"
     }
 
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        BmwDspTheme { HeadUnitCompressorBandPage(band, dsp, gr, rangeLabel, modifier) }
-        return
+    val header: @Composable (Modifier) -> Unit = { m -> BandHeader(band, rangeLabel, dsp, m) }
+    val meter: @Composable (Modifier) -> Unit = { m -> ArtMeterRow(m) { BmwGrMeter(gr, it) } }
+    val control: @Composable (BandSliderSpec, Modifier) -> Unit = { spec, m ->
+        DspArtSlider(dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, DefaultSliderAccent, m)
     }
 
     BmwDspTheme {
-        Column(
-            modifier = modifier
+        if (LocalContext.current.isHeadUnitDisplay()) {
+            HeadUnitCompressorBandPage(header, meter, control, modifier)
+        } else {
+            PhoneCompressorBandPage(header, meter, control, modifier)
+        }
+    }
+}
+
+/** "BAND 1  20 Hz – 80 Hz" on the left, the Enabled and Stereo link switches on the right, and a
+ *  rule under them. */
+@Composable
+private fun BandHeader(band: Int, rangeLabel: String, dsp: BmwDspState, modifier: Modifier) {
+    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            ArtLabel("BAND ${band + 1}", color = Color.White, size = 18.sp)
+            ArtLabel(rangeLabel, Modifier.padding(start = 14.dp).weight(1f))
+            ArtLabel("Enabled", Modifier.padding(end = 12.dp))
+            BmwSwitch(
+                checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
+                onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
+                contentDescription = "Band ${band + 1} enabled",
+            )
+            ArtLabel("Stereo link", Modifier.padding(start = 24.dp, end = 12.dp))
+            BmwSwitch(
+                checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
+                onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
+                contentDescription = "Band ${band + 1} stereo link",
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(1.5.dp).background(DefaultSliderAccent.copy(alpha = 0.45f)))
+    }
+}
+
+/** A small heading over one of the band page's two columns. */
+@Composable
+private fun BandColumnHeading(text: String, modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.BottomStart) {
+        ArtLabel(text.uppercase(), color = Color.White.copy(alpha = 0.55f), size = 13.sp)
+    }
+}
+
+/** Head unit: the header and meter across both columns, then the two columns of steppers. */
+@Composable
+private fun HeadUnitCompressorBandPage(
+    header: @Composable (Modifier) -> Unit,
+    meter: @Composable (Modifier) -> Unit,
+    control: @Composable (BandSliderSpec, Modifier) -> Unit,
+    modifier: Modifier,
+) {
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        header(Modifier.artRect(artDp(BandLeftX, BandTop, BandWidth, 46)))
+        meter(Modifier.artRect(artDp(BandLeftX, BandTop + 56, BandWidth, 28)))
+        listOf(BandLeftX to DynamicsHeading, BandRightX to TimingHeading).forEachIndexed { column, (x, heading) ->
+            BandColumnHeading(heading, Modifier.artRect(artDp(x, BandTop + 96, BandColumnWidth, 22)))
+            BandColumnSpecs[column].forEachIndexed { row, spec ->
+                control(spec, Modifier.artRect(artDp(x, BandTop + 124 + row * 60, BandColumnWidth, 48)))
+            }
+        }
+    }
+}
+
+/** Phone: the same arrangement in the phone's workspace. A phone too narrow for the two columns
+ *  side by side stacks them, and the page scrolls only if it doesn't fit the height. */
+@Composable
+private fun PhoneCompressorBandPage(
+    header: @Composable (Modifier) -> Unit,
+    meter: @Composable (Modifier) -> Unit,
+    control: @Composable (BandSliderSpec, Modifier) -> Unit,
+    modifier: Modifier,
+) {
+    val column: @Composable (Int) -> Unit = { i ->
+        Column(Modifier.width(BandColumnWidth.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            BandColumnHeading(if (i == 0) DynamicsHeading else TimingHeading, Modifier.fillMaxWidth().height(22.dp))
+            BandColumnSpecs[i].forEach { control(it, Modifier.fillMaxWidth().height(48.dp)) }
+        }
+    }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val sideBySide = maxWidth >= BandWidth.dp + 24.dp
+        Box(
+            Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            BmwPanel(
-                title = "",
-                modifier = Modifier.fillMaxWidth(),
-                leanStart = 20.dp,
-                leanEnd = 20.dp,
-                topContentGap = 2.dp,
-                sliderLabels = listOf("Threshold", "Ratio", "Soft knee", "Attack", "Release", "Makeup"),
+            Column(
+                Modifier.width(if (sideBySide) BandWidth.dp else BandColumnWidth.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                BmwTitleRowWithSwitches(
-                    title = "Band ${band + 1}",
-                    subheading = rangeLabel,
-                    enabledChecked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
-                    onEnabledChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
-                    secondLabel = "Stereo link",
-                    secondChecked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
-                    onSecondChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
-                )
-                BmwGrMeter(gr, Modifier.padding(top = 1.dp, bottom = 4.dp))
-                CompressorKnobGrid(band, dsp)
+                header(Modifier.fillMaxWidth().height(46.dp))
+                meter(Modifier.fillMaxWidth().height(28.dp))
+                if (sideBySide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy((BandWidth - 2 * BandColumnWidth).dp)) {
+                        column(0)
+                        column(1)
+                    }
+                } else {
+                    column(0)
+                    column(1)
+                }
             }
         }
     }
@@ -345,53 +427,6 @@ private fun HeadUnitVisualiserPage(dsp: BmwDspState, mbcMeter: FloatArray?, modi
     }
 }
 
-@Composable
-private fun HeadUnitCompressorBandPage(band: Int, dsp: BmwDspState, gr: Float, rangeLabel: String, modifier: Modifier) {
-    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
-
-    WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtSwitchRow(
-            label = "Enabled",
-            checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_ENABLED)),
-            onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_ENABLED), if (it) 1f else 0f) },
-            labelWidth = 100.dp,
-            modifier = Modifier.artRect(artDp(190, 72, 210, 36)),
-        )
-        ArtSwitchRow(
-            label = "Stereo link",
-            checked = dsp.isOn(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK)),
-            onCheckedChange = { dsp.commit(idx(NativeBmwDspValues.MBC_FIELD_STEREO_LINK), if (it) 1f else 0f) },
-            labelWidth = 120.dp,
-            modifier = Modifier.artRect(artDp(420, 72, 230, 36)),
-        )
-        Box(Modifier.artRect(artDp(790, 72, 440, 36)), contentAlignment = Alignment.CenterEnd) {
-            ArtLabel(rangeLabel)
-        }
-        ArtMeterRow(Modifier.artRect(artDp(190, 112, 1040, 20))) { BmwGrMeter(gr, it) }
-        // Two rows of three: a value box and -/+ is wider than the knob it replaced, so six no
-        // longer fit across one row.
-        Column(Modifier.artRect(artDp(190, 140, 1040, 292))) {
-            BandSliderSpecs.chunked(3).forEach { rowSpecs ->
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    rowSpecs.forEach { spec ->
-                        DspArtKnob(
-                            dsp = dsp,
-                            label = spec.label,
-                            index = idx(spec.field),
-                            range = spec.range,
-                            step = spec.step,
-                            unit = spec.unit,
-                            accent = DefaultSliderAccent,
-                            valueWidth = 108.dp,
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 private class BandSliderSpec(
     val label: String,
     val field: Int,
@@ -408,6 +443,19 @@ private val BandSliderSpecs = listOf(
     BandSliderSpec("Release", NativeBmwDspValues.MBC_FIELD_RELEASE, 20f..1000f, 5f, "ms"),
     BandSliderSpec("Makeup", NativeBmwDspValues.MBC_FIELD_MAKEUP, 0f..12f, 0.1f, "dB"),
 )
+
+/** The band page's two columns: the dynamics (threshold, ratio, knee), then timing and gain. */
+private val BandColumnSpecs = BandSliderSpecs.chunked(3)
+private const val DynamicsHeading = "Dynamics"
+private const val TimingHeading = "Timing & gain"
+
+// Band page layout, in the 1280x480 editor's dp: the same two 333dp columns as the Output page
+// (x 317 and 770), the header and GR meter spanning both. The phone uses the same widths.
+private const val BandLeftX = 317
+private const val BandRightX = 770
+private const val BandColumnWidth = 333
+private const val BandWidth = BandRightX + BandColumnWidth - BandLeftX
+private const val BandTop = 92
 
 private class BusColumn(val title: String, val accent: Int, val enabled: Int, val threshold: Int, val release: Int)
 
