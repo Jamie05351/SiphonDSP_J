@@ -35,9 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
-import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwGrMeter
-import app.siphondsp.compose.controls.BmwPanel
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
@@ -86,57 +84,78 @@ fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val mbcMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwMbcMeter() }
 
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        BmwDspTheme { HeadUnitVisualiserPage(dsp, mbcMeter, modifier) }
-        return
+    val graph: @Composable (Modifier) -> Unit = { m ->
+        // Compose port of CompressorSurface: band regions, grid, threshold lines, GR readouts,
+        // the live dry/wet spectrum + boost/cut delta fill, and the applied gain-reduction curve.
+        CompressorGraph(systemValues = dsp.values, mbcMeter = mbcMeter, modifier = m.clip(RoundedCornerShape(20.dp)))
     }
+    val controls: @Composable (MasterRow) -> Unit = { row -> MbcMasterControls(dsp, row) }
 
     BmwDspTheme {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-        ) {
-            // Compose port of CompressorSurface: band regions, grid, threshold lines, GR
-            // readouts, the live dry/wet spectrum + boost/cut delta fill, and the applied
-            // gain-reduction curve.
-            CompressorGraph(
-                systemValues = dsp.values,
-                mbcMeter = mbcMeter,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .height(220.dp),
-            )
-            BmwPanel(
-                title = "Multiband compressor",
-                titleFontSize = 18.sp,
-                // Enable toggle nested by the header (same pattern as the bus limiters), not on
-                // the Mix row.
-                toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
-                onToggleChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
-                subtitle = "Mix sets the dry/wet blend: 0% bypasses the compressor, 100% is fully processed. Pre-crossover, 4 bands.",
-                modifier = Modifier.fillMaxWidth(),
-                leanStart = 20.dp,
-                leanEnd = 20.dp,
-                sliderLabels = emptyList(),
+        if (LocalContext.current.isHeadUnitDisplay()) {
+            WorkspaceArtBox(modifier.fillMaxSize()) {
+                graph(Modifier.artRect(artDp(MasterGraphX, 76, MasterGraphWidth, 354)))
+                controls { y, h -> Modifier.artRect(artDp(MasterControlX, y, MasterColumnWidth, h)) }
+            }
+        } else {
+            Row(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(start = 12.dp, end = 12.dp, top = 7.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                DspArtKnob(
-                    dsp = dsp,
-                    label = "Mix",
-                    index = NativeBmwDspValues.INDEX_MBC_MIX,
-                    range = 0f..100f,
-                    step = 1f,
-                    unit = "%",
-                    accent = DefaultSliderAccent,
-                    diameter = 96.dp,
-                    modifier = Modifier.fillMaxWidth().height(156.dp),
-                )
+                graph(Modifier.weight(1f).fillMaxHeight())
+                Column(
+                    modifier = Modifier
+                        .width(MasterColumnWidth.dp)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    controls { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+                }
             }
         }
     }
 }
+
+/**
+ * Where one row of the master column goes: [y] down the head unit's editor space (its position
+ * there) and [h] tall in dp. The head unit places it there; the phone stacks the rows in order.
+ */
+private typealias MasterRow = (y: Int, h: Int) -> Modifier
+
+/**
+ * The multiband compressor's master column: its on/off switch, the dry/wet Mix (0% bypasses the
+ * compressor, 100% is fully processed), and the three band splits -- where band 1 meets band 2
+ * and so on (defaults 80 / 500 / 4000 Hz). The engine sorts and clamps the splits itself and
+ * rebuilds the bands live; here each split's range stops a whole tone short of its neighbours,
+ * so the −/+ can never push one past another.
+ */
+@Composable
+private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
+    val xo = FloatArray(3) { dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + it) }
+    ArtGroupHeader(
+        title = "Multiband",
+        accent = DefaultSliderAccent,
+        modifier = row(80, 40),
+        checked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
+        onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
+    )
+    DspArtSlider(dsp, "Mix", NativeBmwDspValues.INDEX_MBC_MIX, 0f..100f, 1f, "%", DefaultSliderAccent, row(132, 48))
+    Box(row(196, 22), contentAlignment = Alignment.BottomStart) {
+        ArtLabel("BAND SPLITS", color = Color.White.copy(alpha = 0.55f), size = 13.sp)
+    }
+    MbcSplitBounds.forEachIndexed { i, (min, max) ->
+        val lo = if (i == 0) min else maxOf(min, xo[i - 1] * SplitGap)
+        val hi = if (i == 2) max else minOf(max, xo[i + 1] / SplitGap)
+        DspArtSlider(
+            dsp, "Bands ${i + 1} | ${i + 2}", NativeBmwDspValues.INDEX_MBC_XO_0 + i,
+            lo..maxOf(lo, hi), 1f, "Hz", DefaultSliderAccent, row(222 + i * 58, 48),
+        )
+    }
+}
+
 
 @Composable
 fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
@@ -273,29 +292,6 @@ private fun PhoneCompressorBandPage(
     }
 }
 
-@Composable
-private fun CompressorKnobGrid(band: Int, dsp: BmwDspState) {
-    fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
-
-    BandSliderSpecs.chunked(3).forEach { rowSpecs ->
-        Row(Modifier.fillMaxWidth().height(154.dp)) {
-            rowSpecs.forEach { spec ->
-                DspArtKnob(
-                    dsp = dsp,
-                    label = spec.label,
-                    index = idx(spec.field),
-                    range = spec.range,
-                    step = spec.step,
-                    unit = spec.unit,
-                    accent = DefaultSliderAccent,
-                    diameter = 82.dp,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            }
-        }
-    }
-}
-
 /**
  * Where one row of a bus column goes: [y] dp down the column (its head-unit position) and [h] tall.
  * The head unit places the row there; the phone stacks the rows and uses only [h].
@@ -396,37 +392,6 @@ private fun rememberMeterPoll(read: () -> FloatArray?): FloatArray? {
 // ---- Head unit: the same controls placed on the workspace art (REW/_UI/submenu_layout_editor.html)
 // so every page fits the 480 dp screen without scrolling.
 
-@Composable
-private fun HeadUnitVisualiserPage(dsp: BmwDspState, mbcMeter: FloatArray?, modifier: Modifier) {
-    WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtSwitchRow(
-            label = "Multiband compressor",
-            checked = dsp.isOn(NativeBmwDspValues.INDEX_MBC_ENABLED),
-            onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MBC_ENABLED, if (it) 1f else 0f) },
-            labelWidth = 230.dp,
-            labelColor = Color.White,
-            modifier = Modifier.artRect(artDp(190, 72, 400, 38)),
-        )
-        CompressorGraph(
-            systemValues = dsp.values,
-            mbcMeter = mbcMeter,
-            modifier = Modifier.artRect(artDp(190, 116, 820, 256)).clip(RoundedCornerShape(20.dp)),
-        )
-        DspArtKnob(
-            dsp = dsp,
-            label = "Mix",
-            index = NativeBmwDspValues.INDEX_MBC_MIX,
-            range = 0f..100f,
-            step = 1f,
-            unit = "%",
-            accent = DefaultSliderAccent,
-            diameter = 116.dp,
-            valueWidth = 112.dp,
-            modifier = Modifier.artRect(artDp(1030, 126, 200, 240)),
-        )
-    }
-}
-
 private class BandSliderSpec(
     val label: String,
     val field: Int,
@@ -456,6 +421,19 @@ private const val BandRightX = 770
 private const val BandColumnWidth = 333
 private const val BandWidth = BandRightX + BandColumnWidth - BandLeftX
 private const val BandTop = 92
+
+// Master page layout, the same as the Crossovers pages: the graph from x 168, then the 333dp
+// controls column ending at x 1250.
+private const val MasterGraphX = 168
+private const val MasterGraphWidth = 719
+private const val MasterControlX = 917
+private const val MasterColumnWidth = 333
+
+/** Each band split's own limits, as the engine clamps them (NativeBmwDspProcessorConfig). */
+private val MbcSplitBounds = listOf(20f to 2000f, 40f to 8000f, 80f to 20000f)
+
+/** The least two neighbouring splits may be apart: a whole tone. */
+private const val SplitGap = 1.12f
 
 private class BusColumn(val title: String, val accent: Int, val enabled: Int, val threshold: Int, val release: Int)
 
