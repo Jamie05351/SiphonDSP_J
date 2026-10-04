@@ -486,6 +486,7 @@ class BmwSignalChainModelTest {
         assertTrue(ThreeWayCrossover.isEnabled(on))
         // Each band's Right side must come up matching its Left.
         ThreeWayCrossover.midLowpassMirrors.forEach { assertEquals(on[ThreeWayCrossover.midLowpassIndex], on[it], 0f) }
+        ThreeWayCrossover.midLowpassTypeMirrors.forEach { assertEquals(on[ThreeWayCrossover.midLowpassTypeIndex], on[it], 0f) }
         ThreeWayCrossover.highHighpassMirrors.forEach { assertEquals(on[ThreeWayCrossover.highHighpassIndex], on[it], 0f) }
         ThreeWayCrossover.highTypeMirrors.forEach { assertEquals(on[ThreeWayCrossover.highTypeIndex], on[it], 0f) }
 
@@ -560,6 +561,26 @@ class BmwSignalChainModelTest {
         // Re-enabling 3-way keeps the user's separate High corner instead of snapping it to Mid's.
         val reEnabled = withHigh(6_000f).also { v -> ThreeWayCrossover.updates(v, true).forEach { (j, x) -> v[j] = x } }
         assertEquals(6_000f, reEnabled[ThreeWayCrossover.highHighpassIndex], 0f)
+    }
+
+    @Test
+    fun midLowpassSlopeIsIndependentOfMidHighpassSlope() {
+        val on = baseValues().also { v -> ThreeWayCrossover.updates(v, true).forEach { (i, x) -> v[i] = x } }
+        fun withLowpassType(type: Float) = on.copyOf().also { v ->
+            v[ThreeWayCrossover.midLowpassTypeIndex] = type
+            ThreeWayCrossover.midLowpassTypeMirrors.forEach { v[it] = type }
+        }
+        val lr4 = compute(withLowpassType(NativeBmwDspValues.CROSSOVER_TYPE_LR4))
+        val bw2 = compute(withLowpassType(NativeBmwDspValues.CROSSOVER_TYPE_BW2))
+        // One octave 3 -> 6 x above the 3 kHz corner: LR4 drops ~24 dB/oct, BW2 ~12 dB/oct.
+        val near = nearestIndex(9_000.0)
+        val far = nearestIndex(18_000.0)
+        val lr4Slope = lr4.midBranchDb[0][far] - lr4.midBranchDb[0][near]
+        val bw2Slope = bw2.midBranchDb[0][far] - bw2.midBranchDb[0][near]
+        assertTrue("lowpass slope should follow its own type: lr4=$lr4Slope bw2=$bw2Slope", lr4Slope < bw2Slope - 6.0)
+        // The Low/Mid highpass side (well below Mid's 3 kHz lowpass) is unchanged.
+        val i = nearestIndex(40.0)
+        assertEquals(lr4.midBranchDb[0][i], bw2.midBranchDb[0][i], 0.01)
     }
 
     companion object {

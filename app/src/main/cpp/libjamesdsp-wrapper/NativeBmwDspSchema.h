@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 288;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 291;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -198,6 +198,12 @@ inline constexpr int kVirtualFeedApFreq = 4;
 inline constexpr int kVirtualFeedApQ = 5;
 inline constexpr int kVirtualFeedApOrder = 6;
 inline constexpr int kVirtualMigrated = 287;  // Kotlin-only, never read natively.
+
+// --- Mid upper-corner slope (288..290), added in the 288 -> 291 growth. Mid's Mid/High lowpass
+// slope, independent of Mid's own FIELD_CROSSOVER_TYPE (which now shapes only its highpass).
+inline constexpr int kMidUpperXoTypeLeft = 288;
+inline constexpr int kMidUpperXoTypeRight = 289;
+inline constexpr int kMidUpperXoTypeMigrated = 290;  // Kotlin-only, never read natively.
 
 }  // namespace nbschema
 

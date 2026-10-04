@@ -43,6 +43,17 @@ class NativeBmwDspValuesTest {
         seedHighBandMigrated(values)
         seedHighBusLimiterMigrated(values)
         seedVirtualMigrated(values)
+        seedMidUpperXoTypeMigrated(values)
+    }
+
+    /** Mirrors [NativeBmwDspValues.migrateMidUpperXoTypeIfNeeded]: each Mid upper slope copied
+     *  from that output's own type, marker claimed. Runs last, matching load()'s real call order. */
+    private fun seedMidUpperXoTypeMigrated(values: FloatArray) {
+        for (output in intArrayOf(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_MID_RIGHT)) {
+            values[NativeBmwDspValues.midUpperXoTypeIndex(output)] =
+                values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)]
+        }
+        values[NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED] = 1f
     }
 
     /** Mirrors [NativeBmwDspValues.migrateVirtualIfNeeded]: marker claimed. DEFAULTS already
@@ -164,6 +175,7 @@ class NativeBmwDspValuesTest {
             seedHighBandMigrated(it)
             seedHighBusLimiterMigrated(it)
             seedVirtualMigrated(it)
+            seedMidUpperXoTypeMigrated(it)
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
@@ -455,6 +467,41 @@ class NativeBmwDspValuesTest {
             loaded[NativeBmwDspValues.midUpperXoIndex(
                 NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
             )],
+            0f,
+        )
+    }
+
+    @Test
+    fun loadSeedsMidUpperSlopeFromMidTypeOnConfigsSavedBeforeItExisted() {
+        // A pre-feature save whose Mid band uses BW2: its lowpass was shaped by that BW2, so the
+        // new slope fields must come up BW2 too, not the LR4 default.
+        val midLeftType = NativeBmwDspValues.outputIndex(
+            NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
+        )
+        val midRightType = NativeBmwDspValues.outputIndex(
+            NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE,
+        )
+        val values = migratedDefaults().also {
+            it[midLeftType] = 0f
+            it[midRightType] = 0f
+            it[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT)] = 2f
+            it[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT)] = 2f
+            it[NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED] = 0f
+        }
+        NativeBmwDspValues.save(context, values)
+
+        val loaded = NativeBmwDspValues.load(context)
+
+        assertEquals(0f, loaded[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT)], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT)], 0f)
+        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED], 0f)
+
+        // Once migrated, a deliberately different lowpass slope survives the next load.
+        loaded[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT)] = 4f
+        NativeBmwDspValues.save(context, loaded)
+        assertEquals(
+            4f,
+            NativeBmwDspValues.load(context)[NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT)],
             0f,
         )
     }

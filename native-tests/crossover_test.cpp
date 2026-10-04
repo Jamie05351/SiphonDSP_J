@@ -78,15 +78,18 @@ float stopbandSlopeDbPerOctave(const std::array<float, kConfigSize>& cfg, double
 }
 
 // Same isolated Mid setup as midOnlyConfig(), plus Mid's optional upper (Mid/High) bandpass
-// corner enabled at fcHigh -- turns Mid from HPF-only into a true bandpass. Both corners share
-// the same crossoverType, matching how the UI presents one slope selector per band.
-std::array<float, kConfigSize> midBandpassConfig(float fcLow, float fcHigh, float type) {
+// corner enabled at fcHigh -- turns Mid from HPF-only into a true bandpass. The upper lowpass
+// has its own slope (kMidUpperXoTypeLeft/Right); upperType < 0 means "same as type".
+std::array<float, kConfigSize> midBandpassConfig(float fcLow, float fcHigh, float type,
+                                                 float upperType = -1.f) {
     auto c = midOnlyConfig(fcLow, type);
     for (int out = 2; out < 4; ++out) {  // Mid L, Mid R
         const int slot = out - 2;  // Mid's upper-corner block is 2-wide (Left, Right), not 4-wide.
         c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = fcHigh;
         c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
     }
+    c[sch::kMidUpperXoTypeLeft] = upperType < 0.f ? type : upperType;
+    c[sch::kMidUpperXoTypeRight] = upperType < 0.f ? type : upperType;
     return c;
 }
 
@@ -186,6 +189,18 @@ TEST_CASE("Mid's upper crossover corner still rolls off correctly at the lower c
     constexpr float fcLow = 200.f, fcHigh = 1000.f;
     CHECK(stopbandSlopeDbPerOctave(midBandpassConfig(fcLow, fcHigh, kLr4), fcLow / 4, fcLow / 8) ==
           doctest::Approx(-24.f).epsilon(0.05));
+}
+
+TEST_CASE("Mid's upper lowpass slope is independent of its highpass slope") {
+    // LR4 (-24 dB/oct) highpass with a BW2 (-12 dB/oct) lowpass, and the reverse: each corner
+    // rolls off at its own slope, so the lowpass reads kMidUpperXoType*, not kOutCrossoverType.
+    constexpr float fcLow = 200.f, fcHigh = 1000.f;
+    const auto lr4Hpf = midBandpassConfig(fcLow, fcHigh, kLr4, kBw2);
+    CHECK(stopbandSlopeDbPerOctave(lr4Hpf, fcHigh * 4, fcHigh * 8) == doctest::Approx(-12.f).epsilon(0.15));
+    CHECK(stopbandSlopeDbPerOctave(lr4Hpf, fcLow / 4, fcLow / 8) == doctest::Approx(-24.f).epsilon(0.05));
+    const auto bw2Hpf = midBandpassConfig(fcLow, fcHigh, kBw2, kLr4);
+    CHECK(stopbandSlopeDbPerOctave(bw2Hpf, fcHigh * 4, fcHigh * 8) == doctest::Approx(-24.f).epsilon(0.15));
+    CHECK(stopbandSlopeDbPerOctave(bw2Hpf, fcLow / 4, fcLow / 8) == doctest::Approx(-12.f).epsilon(0.05));
 }
 
 // High band -- Phase 3 of the 2-way -> 3-way output crossover work. HPF-only, same shape as Mid

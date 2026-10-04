@@ -12,6 +12,7 @@ import app.siphondsp.model.NativeBmwDspValues.OUTPUT_MID_LEFT
 import app.siphondsp.model.NativeBmwDspValues.OUTPUT_MID_RIGHT
 import app.siphondsp.model.NativeBmwDspValues.highOutputIndex
 import app.siphondsp.model.NativeBmwDspValues.midUpperXoIndex
+import app.siphondsp.model.NativeBmwDspValues.midUpperXoTypeIndex
 
 /**
  * The Crossovers page's master 3-way on/off switch -- a UI-level convenience over existing
@@ -24,8 +25,8 @@ import app.siphondsp.model.NativeBmwDspValues.midUpperXoIndex
  * the switch would enable a band that stays silent. Turning it back off leaves the mute alone
  * since `highXoPass` alone is enough to silence High.
  *
- * Mid's lowpass and High's highpass are independent: each has its own frequency, and High has
- * its own slope (Mid's lowpass still shares Mid's slope natively, see rebuildMidCrossover).
+ * Mid's lowpass and High's highpass are independent: each has its own frequency and slope, and
+ * Mid's lowpass slope is separate from Mid's highpass slope.
  */
 object ThreeWayCrossover {
     private val midUpperEnabledL = midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_ENABLED)
@@ -34,6 +35,10 @@ object ThreeWayCrossover {
     /** Mid's lowpass (Mid Left's upper corner); [midLowpassMirrors] keeps Mid Right equal. */
     val midLowpassIndex = midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_FREQ)
     val midLowpassMirrors = intArrayOf(midUpperXoIndex(OUTPUT_MID_RIGHT, MID_UPPER_XO_FIELD_FREQ))
+
+    /** Mid's lowpass slope (Mid Left's upper type); [midLowpassTypeMirrors] keeps Mid Right equal. */
+    val midLowpassTypeIndex = midUpperXoTypeIndex(OUTPUT_MID_LEFT)
+    val midLowpassTypeMirrors = intArrayOf(midUpperXoTypeIndex(OUTPUT_MID_RIGHT))
 
     /** High's highpass (High Left's corner); [highHighpassMirrors] keeps High Right equal. */
     val highHighpassIndex = highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_CROSSOVER_FREQ)
@@ -67,6 +72,7 @@ object ThreeWayCrossover {
             put(highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_MUTE), 0f)
             put(highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_MUTE), 0f)
             for (mirror in midLowpassMirrors) put(mirror, values[midLowpassIndex])
+            for (mirror in midLowpassTypeMirrors) put(mirror, values[midLowpassTypeIndex])
             for (mirror in highHighpassMirrors) put(mirror, values[highHighpassIndex])
             for (mirror in highTypeMirrors) put(mirror, values[highTypeIndex])
         }
