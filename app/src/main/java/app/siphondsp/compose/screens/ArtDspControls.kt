@@ -28,6 +28,8 @@ internal fun DspArtSlider(
     mirrors: IntArray = NoMirrors,
     valueWidth: Dp = 96.dp,
     sliderMinTouchHeight: Dp = 48.dp,
+    labelWidth: Dp = 150.dp,
+    enabled: Boolean = true,
 ) {
     ArtSlider(
         label = label,
@@ -39,7 +41,9 @@ internal fun DspArtSlider(
         onPreview = { dsp.preview(index, it, mirrors) },
         onCommit = { dsp.commit(index, it, mirrors) },
         labelAbove = labelAbove,
+        labelWidth = labelWidth,
         valueWidth = valueWidth,
+        enabled = enabled,
         sliderMinTouchHeight = sliderMinTouchHeight,
         modifier = modifier,
     )
