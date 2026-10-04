@@ -2,10 +2,16 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -13,21 +19,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtRow
-import app.siphondsp.compose.controls.ArtSwitchRow
-import app.siphondsp.compose.controls.BmwPanel
-import app.siphondsp.compose.controls.BmwSectionHeader
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSegmentedLevelMeter
-import app.siphondsp.compose.controls.BmwSliderRow
 import app.siphondsp.compose.controls.DriverId
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.compose.controls.SpeakerKind
@@ -53,120 +56,134 @@ import kotlin.math.roundToInt
 /**
  * The CENTRE page (Gains & Delay pager, beside ALIGN): the virtual centre for the two-seat tune.
  * See docs/NATIVE_BMW_VIRTUAL_CHANNELS.md. On/off; a preset (Both seats / Driver / Custom, see
- * [VirtualCentrePreset]); live meters of how much centre the engine is finding and how loud it is; centre and side
- * level; the centre's per-side delay; and the "spread" all-pass pair. The detector band and
- * attack/release keep their defaults (not exposed here).
+ * [VirtualCentrePreset]); live meters of how much centre the engine is finding and how loud it is;
+ * then three columns of steppers -- Level (centre and side), Delay (the centre's per-side delay)
+ * and Spread (the all-pass pair, with its switch). Laid out the same way on both screens (Figma
+ * "SiphonDSP Front Panel (from code)", Steppers page). The detector band and attack/release keep
+ * their defaults (not exposed here).
  */
 @Composable
 fun VirtualCentreScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val geometry = rememberSpeakerGeometry()
     val meter = rememberCentreMeter()
+    val parts = centreParts(dsp, geometry, meter)
     val headUnit = LocalContext.current.isHeadUnitDisplay()
     BmwDspTheme {
-        if (headUnit) HeadUnitCentrePage(dsp, geometry, meter, modifier)
-        else PhoneCentrePage(dsp, geometry, meter, modifier)
+        if (headUnit) HeadUnitCentrePage(parts, modifier) else PhoneCentrePage(parts, modifier)
     }
 }
 
-@Composable
-private fun HeadUnitCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, meter: CentreMeterState, modifier: Modifier) {
-    WorkspaceArtBox(modifier.fillMaxSize()) {
-        ArtSwitchRow(
-            label = "Virtual centre",
-            checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED),
-            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED, if (on) 1f else 0f) },
-            labelColor = CentreAccent,
-            labelWidth = 200.dp,
-            modifier = Modifier.artRect(artDp(190, 92, 420, 44)),
-        )
-        PresetControl(dsp, geometry, Modifier.artRect(artDp(640, 92, 590, 44)))
-        ArtRow("Centre found", Modifier.artRect(artDp(190, 150, 505, 30)), labelWidth = 150.dp) {
-            CentreFoundMeter(meter.found.floatValue, Modifier.weight(1f))
-        }
-        ArtRow("Centre RMS", Modifier.artRect(artDp(725, 150, 505, 30)), labelWidth = 130.dp) {
-            CentreRmsMeter(meter.rmsDb.floatValue, Modifier.weight(1f))
-        }
-        DspArtSlider(dsp, "Centre level", NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB",
-            CentreAccent, Modifier.artRect(artDp(190, 196, 505, 50)))
-        DspArtSlider(dsp, "Side level", NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB",
-            SideAccent, Modifier.artRect(artDp(725, 196, 505, 50)))
-        DspArtSlider(dsp, "Delay L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms",
-            DelayAccent, Modifier.artRect(artDp(190, 254, 505, 50)))
-        DspArtSlider(dsp, "Delay R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms",
-            DelayAccent, Modifier.artRect(artDp(725, 254, 505, 50)))
-        ArtSwitchRow(
-            label = "Spread",
-            checked = spreadOn(dsp),
-            onCheckedChange = { on -> setSpread(dsp, on) },
-            labelColor = SpreadAccent,
-            labelWidth = 200.dp,
-            modifier = Modifier.artRect(artDp(190, 312, 420, 44)),
-        )
-        DspArtSlider(dsp, "Spread L", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz",
-            SpreadAccent, Modifier.artRect(artDp(190, 366, 505, 50)))
-        DspArtSlider(dsp, "Spread R", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz",
-            SpreadAccent, Modifier.artRect(artDp(725, 366, 505, 50)))
-    }
-}
+/**
+ * Where one row of a column goes: [y] dp down the column (its head-unit position) and [h] tall.
+ * The head unit places the row there; the phone stacks the rows and uses only [h].
+ */
+private typealias CentreRow = (y: Int, h: Int) -> Modifier
 
-@Composable
-private fun PhoneCentrePage(dsp: BmwDspState, geometry: SpeakerGeometryState, meter: CentreMeterState, modifier: Modifier) {
-    val labels = listOf("Centre level", "Side level", "Delay L", "Delay R", "Spread L", "Spread R")
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        BmwPanel(
-            title = "Virtual centre",
-            modifier = Modifier.fillMaxWidth(),
-            toggleChecked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED),
-            onToggleChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED, if (on) 1f else 0f) },
-            titleColor = CentreAccent,
-            leanStart = 20.dp,
-            leanEnd = 20.dp,
-            topContentGap = 2.dp,
-            sliderLabels = labels,
-        ) {
-            PresetControl(dsp, geometry, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-            ArtRow("Centre found", Modifier.fillMaxWidth().padding(vertical = 4.dp), labelWidth = 120.dp) {
-                CentreFoundMeter(meter.found.floatValue, Modifier.weight(1f))
-            }
-            ArtRow("Centre RMS", Modifier.fillMaxWidth().padding(vertical = 4.dp), labelWidth = 120.dp) {
-                CentreRmsMeter(meter.rmsDb.floatValue, Modifier.weight(1f))
-            }
-            PhoneSlider(dsp, labels[0], NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB", CentreAccent)
-            PhoneSlider(dsp, labels[1], NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB", SideAccent)
-            PhoneSlider(dsp, labels[2], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent)
-            PhoneSlider(dsp, labels[3], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent)
-            BmwSectionHeader(
-                title = "Spread",
-                accentColor = SpreadAccent,
-                fontSize = 16.sp,
-                toggleChecked = spreadOn(dsp),
-                onToggleChange = { on -> setSpread(dsp, on) },
-            )
-            PhoneSlider(dsp, labels[4], virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent)
-            PhoneSlider(dsp, labels[5], virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent)
-        }
-    }
-}
-
-@Composable
-private fun PhoneSlider(
-    dsp: BmwDspState,
-    label: String,
-    index: Int,
-    range: ClosedFloatingPointRange<Float>,
-    step: Float,
-    unit: String,
-    accent: Color,
-) = BmwSliderRow(
-    label = label,
-    value = dsp.get(index),
-    valueRange = range, step = step, unit = unit,
-    accentColor = accent,
-    onPreview = { dsp.preview(index, it) },
-    onCommit = { dsp.commit(index, it) },
-    onValueEntered = { dsp.commit(index, it) },
+/** The page's pieces, each written once and placed by [HeadUnitCentrePage] or [PhoneCentrePage]. */
+private class CentreParts(
+    val header: @Composable (Modifier) -> Unit,
+    val preset: @Composable (Modifier) -> Unit,
+    val foundMeter: @Composable (Modifier) -> Unit,
+    val rmsMeter: @Composable (Modifier) -> Unit,
+    /** The three columns -- Level, Delay, Spread -- each a heading and two steppers. */
+    val columns: List<@Composable (CentreRow) -> Unit>,
 )
+
+private fun centreParts(dsp: BmwDspState, geometry: SpeakerGeometryState, meter: CentreMeterState): CentreParts {
+    val stepper: @Composable (String, Int, ClosedFloatingPointRange<Float>, Float, String, Color, Modifier) -> Unit =
+        { label, index, range, step, unit, accent, m -> DspArtSlider(dsp, label, index, range, step, unit, accent, m, labelAbove = true) }
+    return CentreParts(
+        header = { m ->
+            ArtGroupHeader(
+                title = "Virtual centre",
+                accent = CentreAccent,
+                modifier = m,
+                checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED),
+                onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED, if (on) 1f else 0f) },
+            )
+        },
+        preset = { m -> PresetControl(dsp, geometry, m) },
+        foundMeter = { m ->
+            ArtRow("Centre found", m, labelWidth = MeterLabelWidth) { CentreFoundMeter(meter.found.floatValue, Modifier.weight(1f)) }
+        },
+        rmsMeter = { m ->
+            ArtRow("Centre RMS", m, labelWidth = MeterLabelWidth) { CentreRmsMeter(meter.rmsDb.floatValue, Modifier.weight(1f)) }
+        },
+        columns = listOf(
+            { row ->
+                ArtGroupHeader("Level", Color.White, row(0, 40))
+                stepper("Centre", NativeBmwDspValues.INDEX_VIRTUAL_CENTRE_LEVEL, CentreLevelRange, 0.5f, "dB", CentreAccent, row(52, 74))
+                stepper("Side", NativeBmwDspValues.INDEX_VIRTUAL_SIDE_LEVEL, CentreLevelRange, 0.5f, "dB", SideAccent, row(138, 74))
+            },
+            { row ->
+                ArtGroupHeader("Delay", Color.White, row(0, 40))
+                stepper("Left", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent, row(52, 74))
+                stepper("Right", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_DELAY), CentreDelayRange, 0.01f, "ms", DelayAccent, row(138, 74))
+            },
+            { row ->
+                ArtGroupHeader("Spread", SpreadAccent, row(0, 40), checked = spreadOn(dsp), onCheckedChange = { on -> setSpread(dsp, on) })
+                stepper("Left", virtualFeedIndex(VIRTUAL_SIDE_LEFT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent, row(52, 74))
+                stepper("Right", virtualFeedIndex(VIRTUAL_SIDE_RIGHT, VIRTUAL_FEED_AP_FREQ), CentreSpreadRange, 50f, "Hz", SpreadAccent, row(138, 74))
+            },
+        ),
+    )
+}
+
+/** Head unit: header and preset across the top, the two meters, then the three columns. */
+@Composable
+private fun HeadUnitCentrePage(parts: CentreParts, modifier: Modifier) {
+    val half = (ContentWidth - 24) / 2
+    WorkspaceArtBox(modifier.fillMaxSize()) {
+        parts.header(Modifier.artRect(artDp(ContentX, Top, half, 40)))
+        parts.preset(Modifier.artRect(artDp(ContentX + half + 24, Top, half, 40)))
+        parts.foundMeter(Modifier.artRect(artDp(ContentX, Top + 54, half, 26)))
+        parts.rmsMeter(Modifier.artRect(artDp(ContentX + half + 24, Top + 54, half, 26)))
+        val gap = (ContentWidth - 3 * ColumnWidthHeadUnit) / 2
+        parts.columns.forEachIndexed { i, column ->
+            val x = ContentX + i * (ColumnWidthHeadUnit + gap)
+            column { y, h -> Modifier.artRect(artDp(x, Top + 98 + y, ColumnWidthHeadUnit, h)) }
+        }
+    }
+}
+
+/** Phone: the same arrangement, the columns side by side; a phone too narrow for them stacks
+ *  them, and the page scrolls only if it doesn't fit. */
+@Composable
+private fun PhoneCentrePage(parts: CentreParts, modifier: Modifier) {
+    val stack: CentreRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val width = (maxWidth - 24.dp).coerceAtMost(PhoneMaxWidth)
+        val sideBySide = width >= ColumnWidthPhone * 3 + 32.dp
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    parts.header(Modifier.weight(1f).height(40.dp))
+                    parts.preset(Modifier.weight(1f).height(40.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    parts.foundMeter(Modifier.weight(1f).height(26.dp))
+                    parts.rmsMeter(Modifier.weight(1f).height(26.dp))
+                }
+                val column: @Composable (Int) -> Unit = { i ->
+                    Column(Modifier.width(ColumnWidthPhone), verticalArrangement = Arrangement.spacedBy(12.dp)) { parts.columns[i](stack) }
+                }
+                if (sideBySide) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { repeat(3) { column(it) } }
+                } else {
+                    repeat(3) { column(it) }
+                }
+            }
+        }
+    }
+}
 
 /** Both seats / Driver / Custom. Shows whichever preset the current values match. */
 @Composable
@@ -259,6 +276,16 @@ private fun setSpread(dsp: BmwDspState, on: Boolean) {
         ),
     )
 }
+
+// Head-unit layout, in the 1280x480 editor's dp: the content area x 190..1230, three 300dp
+// columns. The phone's columns are 233dp, within at most 749dp.
+private const val ContentX = 190
+private const val ContentWidth = 1040
+private const val Top = 80
+private const val ColumnWidthHeadUnit = 300
+private val ColumnWidthPhone = 233.dp
+private val PhoneMaxWidth = 749.dp
+private val MeterLabelWidth = 120.dp
 
 private val CentreLevelRange = -24f..6f
 private val CentreDelayRange = 0f..NativeBmwDspValues.STAGE_DELAY_MAX_MS
