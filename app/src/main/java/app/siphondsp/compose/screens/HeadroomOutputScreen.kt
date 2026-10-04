@@ -2,25 +2,35 @@ package app.siphondsp.compose.screens
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import app.siphondsp.R
-import app.siphondsp.compose.controls.ArtSwitchRow
-import app.siphondsp.compose.controls.BmwPanel
-import app.siphondsp.compose.controls.BmwSectionHeader
-import app.siphondsp.compose.controls.BmwSliderRow
+import app.siphondsp.compose.controls.ArtLabel
+import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
@@ -33,130 +43,149 @@ import app.siphondsp.view.MbcBandGrMeter
 import app.siphondsp.view.isHeadUnitDisplay
 
 /**
- * Phase 5 of COMPOSE_MIGRATION_ROADMAP.md -- ports `GainLimiterFragment`'s Output page. Same
- * shape as [TonalityTiltScreen] (a lean [BmwPanel] of [BmwSliderRow]s) plus two firsts:
- * [BmwSectionHeader] (the "Limiter" sub-header + enable toggle) and an `AndroidView`-hosted
- * live meter ([LimiterGrMeter], the master-limiter gain-reduction bar).
+ * Where one row of a group goes: [y] dp down the group (its head-unit position) and [h] tall.
+ * The head unit places the row at that spot; the phone stacks the rows and uses only [h].
+ */
+private typealias GroupRow = (y: Int, h: Int) -> Modifier
+
+/**
+ * The Gains & Delay pager's Output page (alongside the Gains & Delay diagram page and the
+ * bus-limiter page, [CompressorDriverPage]): two groups side by side, laid out the same way on
+ * both screens (Figma "SiphonDSP Front Panel (from code)", Steppers page) --
  *
- * A Compose `HorizontalPager` (see `GainLimiterFragment`) hosts this alongside the Gains & Delay
- * diagram page and the bus-limiter page ([CompressorDriverPage], moved here from the compressor
- * pager).
+ * - **Output**: Headroom (purple), Post gain L and R (green), each a label + value box + −/+ row.
+ * - **Limiter** (cyan): the master limiter's on/off switch in the group's header, its Threshold,
+ *   and the live gain-reduction meter ([LimiterGrMeter]).
+ *
+ * Each group lists its rows once against a [GroupRow] that the head unit ([HeadUnitOutputPage])
+ * or the phone ([PhoneOutputPage]) turns into a position.
  */
 @Composable
 fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val headroomColor = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
-    val greenColor = Color(BmwDashboardSkin.M_GREEN)
-    val blueColor = Color(BmwDashboardSkin.M_BLUE)
-    val limiterOn = dsp.isOn(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED)
     val headroom = stringResource(R.string.bmw_dsp_headroom)
-
-    if (LocalContext.current.isHeadUnitDisplay()) {
-        BmwDspTheme { HeadUnitOutputPage(dsp, headroom, modifier) }
-        return
-    }
+    val output: @Composable (GroupRow) -> Unit = { row -> OutputGroup(dsp, headroom, row) }
+    val limiter: @Composable (GroupRow) -> Unit = { row -> LimiterGroup(dsp, row) }
 
     BmwDspTheme {
-        BmwPanel(
-            title = "Output",
-            modifier = modifier.fillMaxWidth(),
-            // Match the centered 20dp content frame used by every DSP workspace page.
-            leanStart = 20.dp,
-            leanEnd = 20.dp,
-            // dashboardPanel default topContentGapDp -- this panel doesn't bump it.
-            topContentGap = 2.dp,
-            sliderLabels = listOf(headroom, "Post gain L", "Post gain R", "Threshold", "Limiter"),
-        ) {
-            BmwSliderRow(
-                label = headroom,
-                value = dsp.get(NativeBmwDspValues.INDEX_HEADROOM),
-                valueRange = -12f..0f, step = 1f, unit = "dB",
-                accentColor = headroomColor,
-                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_HEADROOM, it) },
-                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_HEADROOM, it) },
-                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_HEADROOM, it) },
-            )
-            BmwSliderRow(
-                label = "Post gain L",
-                value = dsp.get(NativeBmwDspValues.INDEX_POST_GAIN_L),
-                valueRange = -6f..6f, step = 0.5f, unit = "dB",
-                accentColor = greenColor,
-                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
-                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
-                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_L, it) },
-            )
-            BmwSliderRow(
-                label = "Post gain R",
-                value = dsp.get(NativeBmwDspValues.INDEX_POST_GAIN_R),
-                valueRange = -6f..6f, step = 0.5f, unit = "dB",
-                accentColor = greenColor,
-                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
-                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
-                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_POST_GAIN_R, it) },
-            )
-            BmwSectionHeader(
-                title = "Limiter",
-                accentColor = blueColor,
-                fontSize = 16.sp,
-                toggleChecked = limiterOn,
-                onToggleChange = { on ->
-                    dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, if (on) 1f else 0f)
-                },
-            )
-            BmwSliderRow(
-                label = "Threshold",
-                value = dsp.get(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD),
-                valueRange = -12f..0f, step = 0.5f, unit = "dB",
-                accentColor = blueColor,
-                onPreview = { dsp.preview(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
-                onCommit = { dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
-                onValueEntered = { dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, it) },
-            )
-            LimiterGrMeter(modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+        if (LocalContext.current.isHeadUnitDisplay()) {
+            HeadUnitOutputPage(output, limiter, modifier)
+        } else {
+            PhoneOutputPage(output, limiter, modifier)
         }
     }
 }
 
-/** Head unit: the same controls placed on the workspace art (REW/_UI/submenu_layout_editor.html),
- *  so the page fits the 480 dp screen without scrolling. */
 @Composable
-private fun HeadUnitOutputPage(dsp: BmwDspState, headroom: String, modifier: Modifier) {
-    val headroomColor = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
-    val greenColor = Color(BmwDashboardSkin.M_GREEN)
-    val blueColor = Color(BmwDashboardSkin.M_BLUE)
+private fun OutputGroup(dsp: BmwDspState, headroom: String, row: GroupRow) {
+    GroupHeader("Output", Color.White, row(0, HeaderHeight))
+    DspArtSlider(
+        dsp, headroom, NativeBmwDspValues.INDEX_HEADROOM, -12f..0f, 1f, "dB", HeadroomAccent, row(52, 48),
+    )
+    DspArtSlider(
+        dsp, "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f..6f, 0.5f, "dB", PostGainAccent, row(112, 48),
+    )
+    DspArtSlider(
+        dsp, "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f..6f, 0.5f, "dB", PostGainAccent, row(172, 48),
+    )
+}
 
+@Composable
+private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
+    GroupHeader(
+        title = "Limiter",
+        accent = LimiterAccent,
+        modifier = row(0, HeaderHeight),
+        checked = dsp.isOn(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED),
+        onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, if (on) 1f else 0f) },
+    )
+    DspArtSlider(
+        dsp, "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f..0f, 0.5f, "dB", LimiterAccent,
+        row(52, 48),
+    )
+    Column(row(120, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ArtLabel("Gain reduction")
+        LimiterGrMeter(Modifier.fillMaxWidth().height(36.dp))
+    }
+}
+
+/** A group's title in its colour, an optional switch at the far end, and a rule under both. */
+@Composable
+private fun GroupHeader(
+    title: String,
+    accent: Color,
+    modifier: Modifier,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+) {
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            ArtLabel(title.uppercase(), Modifier.weight(1f), color = accent)
+            if (checked != null && onCheckedChange != null) {
+                BmwSwitch(checked = checked, onCheckedChange = onCheckedChange, contentDescription = title)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(1.5.dp).background(accent.copy(alpha = 0.45f)))
+    }
+}
+
+/** Head unit: the two groups side by side, centred on the page. */
+@Composable
+private fun HeadUnitOutputPage(
+    output: @Composable (GroupRow) -> Unit,
+    limiter: @Composable (GroupRow) -> Unit,
+    modifier: Modifier,
+) {
     WorkspaceArtBox(modifier.fillMaxSize()) {
-        DspArtSlider(
-            dsp, headroom, NativeBmwDspValues.INDEX_HEADROOM, -12f..0f, 1f, "dB", headroomColor,
-            Modifier.artRect(artDp(190, 100, 1040, 50)),
-        )
-        DspArtSlider(
-            dsp, "Post gain L", NativeBmwDspValues.INDEX_POST_GAIN_L, -6f..6f, 0.5f, "dB", greenColor,
-            Modifier.artRect(artDp(190, 156, 1040, 50)),
-        )
-        DspArtSlider(
-            dsp, "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f..6f, 0.5f, "dB", greenColor,
-            Modifier.artRect(artDp(190, 212, 1040, 50)),
-        )
-        ArtSwitchRow(
-            label = "Limiter",
-            checked = dsp.isOn(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED),
-            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, if (on) 1f else 0f) },
-            labelColor = blueColor,
-            modifier = Modifier.artRect(artDp(190, 270, 400, 38)),
-        )
-        DspArtSlider(
-            dsp, "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f..0f, 0.5f, "dB", blueColor,
-            Modifier.artRect(artDp(190, 314, 1040, 50)),
-        )
-        ArtMeterRow(Modifier.artRect(artDp(190, 372, 1040, 36))) { LimiterGrMeter(it) }
+        output { y, h -> Modifier.artRect(artDp(OutputX, GroupTop + y, GroupWidth, h)) }
+        limiter { y, h -> Modifier.artRect(artDp(LimiterX, GroupTop + y, GroupWidth, h)) }
+    }
+}
+
+/** Phone: the same two groups side by side, centred in the phone's workspace. A phone too narrow
+ *  for both stacks them instead, and the page scrolls only if they don't fit its height. */
+@Composable
+private fun PhoneOutputPage(
+    output: @Composable (GroupRow) -> Unit,
+    limiter: @Composable (GroupRow) -> Unit,
+    modifier: Modifier,
+) {
+    val stack: GroupRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+    val group: @Composable (@Composable (GroupRow) -> Unit) -> Unit = { content ->
+        Column(Modifier.width(GroupWidth.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content(stack) }
+    }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val sideBySide = maxWidth >= GroupWidth.dp * 2 + PhoneGroupGap + 24.dp
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sideBySide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(PhoneGroupGap)) {
+                    group(output)
+                    group(limiter)
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    group(output)
+                    group(limiter)
+                }
+            }
+        }
     }
 }
 
 /**
  * The master-limiter gain-reduction meter -- the View `MbcBandGrMeter` (stage = LIMITER) kept
- * as-is via `AndroidView` (roadmap section 2 / Phase 5). Polled at ~30fps while the composition
- * is at least STARTED, mirroring the fragment's old `onStart`/`onStop` `Handler` loop.
+ * as-is via `AndroidView` (roadmap section 2 / Phase 5): its bar is coloured by how hard the
+ * limiter is working (clear / working / heavy), which reads faster than one fixed colour. Polled
+ * at ~30fps while the composition is at least STARTED, mirroring the fragment's old
+ * `onStart`/`onStop` `Handler` loop.
  */
 @Composable
 private fun LimiterGrMeter(modifier: Modifier = Modifier) {
@@ -180,3 +209,17 @@ private fun LimiterGrMeter(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth(),
     )
 }
+
+private val HeadroomAccent = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
+private val PostGainAccent = Color(BmwDashboardSkin.M_GREEN)
+private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
+
+// Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
+// stepper) with 120dp between them, centred across the content area (x 190..1230), and centred
+// vertically on the taller group.
+private const val GroupWidth = 333
+private const val OutputX = 317
+private const val LimiterX = 770
+private const val GroupTop = 150
+private const val HeaderHeight = 40
+private val PhoneGroupGap = 60.dp

@@ -66,6 +66,7 @@ import kotlin.math.roundToInt
 
 private const val MeterTickMs = 33L
 private val DefaultSliderAccent = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
+private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 
 /** "80 Hz" / "1.5 kHz" / "4 kHz" -- compact frequency label for the band crossover subheadings. */
 private fun formatHz(hz: Float): String =
@@ -287,7 +288,7 @@ private fun CompressorSliderRow(
         valueRange = range,
         step = step,
         unit = unit,
-        accentColor = DefaultSliderAccent,
+        accentColor = LimiterAccent,
         onPreview = { dsp.preview(index, it) },
         onCommit = { dsp.commit(index, it) },
         onValueEntered = { dsp.commit(index, it) },
@@ -428,11 +429,11 @@ private fun HeadUnitDriverPage(dsp: BmwDspState, busMeter: FloatArray?, modifier
                 modifier = Modifier.artRect(artDp(col.x, 104, 330, 40)),
             )
             DspArtSlider(
-                dsp, "Threshold", col.threshold, -24f..0f, 0.5f, "dB", DefaultSliderAccent,
+                dsp, "Threshold", col.threshold, -24f..0f, 0.5f, "dB", LimiterAccent,
                 Modifier.artRect(artDp(col.x, 152, 330, 86)), labelAbove = true,
             )
             DspArtSlider(
-                dsp, "Release", col.release, 20f..800f, 5f, "ms", DefaultSliderAccent,
+                dsp, "Release", col.release, 20f..800f, 5f, "ms", LimiterAccent,
                 Modifier.artRect(artDp(col.x, 246, 330, 86)), labelAbove = true,
             )
             ArtMeterRow(Modifier.artRect(artDp(col.x, 342, 330, 34))) {
