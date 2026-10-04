@@ -1,6 +1,7 @@
 package app.siphondsp.compose.controls
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -254,6 +255,30 @@ fun ArtSwitchRow(
 ) {
     ArtRow(label, modifier, labelWidth = labelWidth, labelColor = labelColor) {
         BmwSwitch(checked = checked, onCheckedChange = onCheckedChange, contentDescription = label)
+    }
+}
+
+/**
+ * A group's title in its colour, an optional switch at the far end, and a rule under both -- the
+ * heading of each column of controls (the Output page's Output / Limiter, the bus limiters).
+ */
+@Composable
+fun ArtGroupHeader(
+    title: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+) {
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            ArtLabel(title.uppercase(), Modifier.weight(1f), color = accent)
+            if (checked != null && onCheckedChange != null) {
+                BmwSwitch(checked = checked, onCheckedChange = onCheckedChange, contentDescription = title)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(1.5.dp).background(accent.copy(alpha = 0.45f)))
     }
 }
 
