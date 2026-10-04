@@ -174,6 +174,9 @@ object BmwDashboardSkin {
     // blue / yellow / purple / orange / green already spoken for.
     const val SLIDER_STAGE_COLOR = 0xFFFF3D8B.toInt()
     const val SLIDER_DEFAULT_COLOR = 0xFFB14DFF.toInt()
+    // Limiters, master and per bus: a neon cyan, clear of the band colours (Low dark blue, Mid
+    // yellow, High pink), headroom purple, post-gain green and tilt orange.
+    const val SLIDER_LIMITER_COLOR = 0xFF00E5FF.toInt()
 
     // The exact neon green the ON/OFF glass switch lights up with -- reused by the page-toggle
     // strip so a selected page reads as "on" in the same language.
