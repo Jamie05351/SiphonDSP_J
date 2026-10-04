@@ -20,7 +20,7 @@ import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.compose.screens.CrossoverGraphMode
 import app.siphondsp.compose.screens.CrossoverLowMidPage
 import app.siphondsp.compose.screens.CrossoverMidHighPage
-import app.siphondsp.compose.screens.TonalityTiltScreen
+import app.siphondsp.compose.screens.CrossoverTiltPage
 
 /**
  * Crossovers & Tilt workspace -- three Compose pages:
@@ -28,7 +28,7 @@ import app.siphondsp.compose.screens.TonalityTiltScreen
  *   rows.
  * - [CrossoverMidHighPage] -- the same graph under the master 3-way switch, over the Mid/High
  *   corner and Mid-align rows, plus a deep link to the full All-pass screen.
- * - [TonalityTiltScreen] -- Tilt amount / pivot.
+ * - [CrossoverTiltPage] -- the same graph beside the Tonality Tilt switch, amount and pivot.
  * The two crossover pages share one graph-mode choice, held here.
  *
  * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same
@@ -64,7 +64,7 @@ private fun CrossoverTiltPager(pagerState: PagerState) {
         when (page) {
             0 -> CrossoverLowMidPage(graphMode, { graphMode = it })
             1 -> CrossoverMidHighPage(graphMode, { graphMode = it })
-            else -> TonalityTiltScreen()
+            else -> CrossoverTiltPage(graphMode, { graphMode = it })
         }
     }
 }
