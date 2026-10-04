@@ -175,7 +175,7 @@ class HomeArtTest {
             val rightEdge = 1f - (top.x + top.w)
             assertEquals("top band's left edge differs from the right (phone=$phone)", rightEdge, top.x, 1e-4f)
             assertEquals("bottom screen not level with the top band (phone=$phone)", top.x + top.w, bottom.x + bottom.w, 1e-4f)
-            assertTrue("no room left of the bottom screen for the power button (phone=$phone)", bottom.x > top.x + 0.1f)
+            assertTrue("no power panel left of the bottom screen (phone=$phone)", bottom.x > top.x + 0.05f)
         }
     }
 

@@ -364,7 +364,7 @@ class DspFragment : Fragment() {
     /**
      * Keeps the front page in step with MainActivity's real power state. While the DSP is off its
      * live-data screens (GLOBAL STAGES, the centre screen and the output scope) are switched off:
-     * their content fades out quickly, leaving black glass. Powering on brings them back one after
+     * their content fades out, leaving black glass. Powering on brings them back one after
      * another, left to right then the bottom, like screens warming up. The chain cards, Settings
      * and More stay lit throughout.
      */
@@ -442,10 +442,10 @@ class DspFragment : Fragment() {
     companion object {
         private const val TILE_FLASH_MS = 150L
         /** Switching off: every live screen fades to black together. */
-        private const val POWER_OFF_MS = 200f
+        private const val POWER_OFF_MS = 800f
         /** Switching on: each live screen's own fade, and the delay before the next one starts. */
-        private const val SCREEN_FADE_MS = 400f
-        private const val SCREEN_STAGGER_MS = 120f
+        private const val SCREEN_FADE_MS = 1200f
+        private const val SCREEN_STAGGER_MS = 400f
         /** The whole power-on sequence: the last of the three screens finishes here. */
         private const val POWER_ON_MS = SCREEN_FADE_MS + 2 * SCREEN_STAGGER_MS
 

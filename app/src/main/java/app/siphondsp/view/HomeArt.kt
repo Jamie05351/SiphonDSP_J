@@ -86,29 +86,33 @@ object HomeArt {
         "overflow" to Frac(0.9471f, 0.0544f, 0.04f, 0.1289f),
     )
 
-    // Phone (2340x1080): the head unit's layout, scaled and centred vertically, so the screens keep
-    // the head unit's proportions and the tiles fill the bottom screen instead of floating in a
-    // stretched one; the taller art just leaves more plate above and below. Each head-unit y maps
-    // to (y * 878 + 101) / 1080 and each height to h * 878 / 1080. More and Settings are wider
-    // than the head unit's so they stay at least 48dp when a 16:9 phone fits the art to only
-    // ~640dp wide; with a narrower gap between them they still fit the right screen.
+    // Phone (2340x1080): the head unit's arrangement, laid out for the phone's own shape (Figma
+    // "SiphonDSP Front Panel (from code)", phone frames) rather than the head unit's layout
+    // letterboxed into the taller art. The plate above and below the screens is cut to about the
+    // head unit's, and the height goes to both rows: a taller top row (330 px), and a taller,
+    // wider bottom screen (480 px, starting further left, so the power panel is narrower) whose
+    // cards are 270x400 -- wide enough for their titles -- and whose scope is at its full design
+    // size. The x edges of the top row match the head unit's. More and Settings are wider than the
+    // head unit's so they stay at least 48dp when a 16:9 phone fits the art to only ~640dp wide.
     private val phoneRects = mapOf(
-        "screen_top" to Frac(0.0450f, 0.1477f, 0.9100f, 0.2461f),
-        "screen_left" to Frac(0.04500f, 0.1477f, 0.20882f, 0.2461f),
-        "screen_centre" to Frac(0.26663f, 0.1477f, 0.46159f, 0.2461f),
-        "screen_right" to Frac(0.74104f, 0.1477f, 0.21396f, 0.2461f),
-        "screen_bottom" to Frac(0.2085f, 0.4870f, 0.7465f, 0.3306f),
-        "tile_peq" to Frac(0.22451f, 0.51620f, 0.10256f, 0.27222f),
-        "tile_gains" to Frac(0.33861f, 0.51620f, 0.10256f, 0.27222f),
-        "tile_xovers" to Frac(0.45271f, 0.51620f, 0.10256f, 0.27222f),
-        "tile_compressor" to Frac(0.56682f, 0.51620f, 0.10256f, 0.27222f),
-        "tile_allpass" to Frac(0.68092f, 0.51620f, 0.10256f, 0.27222f),
-        "live_scope" to Frac(0.79374f, 0.49259f, 0.15226f, 0.31944f),
-        "tile_more" to Frac(0.75308f, 0.1789f, 0.0770f, 0.1843f),
-        "tile_settings" to Frac(0.86595f, 0.1789f, 0.0770f, 0.1843f),
-        "live_stages" to Frac(0.0540f, 0.16259f, 0.19082f, 0.21632f),
-        "live_centre" to Frac(0.26663f, 0.1477f, 0.46159f, 0.2461f),
-        "power_btn" to Frac(0.0554f, 0.5475f, 0.0977f, 0.2119f),
+        "screen_top" to Frac(0.0450f, 0.06481f, 0.9100f, 0.30556f),
+        "screen_left" to Frac(0.04500f, 0.06481f, 0.20882f, 0.30556f),
+        "screen_centre" to Frac(0.26663f, 0.06481f, 0.46159f, 0.30556f),
+        "screen_right" to Frac(0.74104f, 0.06481f, 0.21396f, 0.30556f),
+        "screen_bottom" to Frac(0.12585f, 0.46296f, 0.82915f, 0.44444f),
+        // Five 270x400 cards on a 297 px pitch, centred vertically in the bottom screen, then the
+        // 400 px scope, level with them.
+        "tile_peq" to Frac(0.14188f, 0.50000f, 0.11538f, 0.37037f),
+        "tile_gains" to Frac(0.26880f, 0.50000f, 0.11538f, 0.37037f),
+        "tile_xovers" to Frac(0.39572f, 0.50000f, 0.11538f, 0.37037f),
+        "tile_compressor" to Frac(0.52264f, 0.50000f, 0.11538f, 0.37037f),
+        "tile_allpass" to Frac(0.64957f, 0.50000f, 0.11538f, 0.37037f),
+        "live_scope" to Frac(0.77521f, 0.50000f, 0.17094f, 0.37037f),
+        "tile_more" to Frac(0.75308f, 0.12544f, 0.0770f, 0.1843f),
+        "tile_settings" to Frac(0.86595f, 0.12544f, 0.0770f, 0.1843f),
+        "live_stages" to Frac(0.0540f, 0.07963f, 0.19082f, 0.27593f),
+        "live_centre" to Frac(0.26663f, 0.06481f, 0.46159f, 0.30556f),
+        "power_btn" to Frac(0.01408f, 0.57935f, 0.0977f, 0.21169f),
         "power_led" to Frac(0.034f, 0.85f, 0.004f, 0.01f),
         "cog" to ph(30, 50, 90, 90),
         "overflow" to ph(2220, 50, 90, 90),
