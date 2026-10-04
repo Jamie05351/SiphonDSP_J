@@ -56,6 +56,38 @@ object CompressorSurfaceMath {
         return doubleArrayOf(f0, f1, f2)
     }
 
+    /** Each split slot's own bounds, as configure() clamps them after sorting. */
+    private val SPLIT_SLOT_BOUNDS = listOf(20f to 2000f, 40f to 8000f, 80f to 20000f)
+
+    /**
+     * Stage 1 of [splitFrequencies] only -- configure()'s sort, then each slot clamped to its own
+     * bounds -- as the 3 values to store. A triple saved out of order (a restored or imported
+     * preset) normalizes to the order the engine already uses, so storing it changes nothing
+     * audible but lets each split's control edit the slot it shows.
+     */
+    fun normalizedSplitSlots(values: FloatArray): FloatArray {
+        val sorted = floatArrayOf(
+            values[NativeBmwDspValues.INDEX_MBC_XO_0],
+            values[NativeBmwDspValues.INDEX_MBC_XO_1],
+            values[NativeBmwDspValues.INDEX_MBC_XO_2],
+        ).also { it.sort() }
+        return FloatArray(3) { i -> SPLIT_SLOT_BOUNDS[i].let { (lo, hi) -> maxOf(lo, minOf(hi, sorted[i])) } }
+    }
+
+    /**
+     * The range split [index]'s −/+ may move it over, given already-normalized [slots]: its slot's
+     * own bounds, kept [gap] (a ratio; default a whole tone) clear of its neighbours so one split
+     * can't be pushed past another. Always contains the current value, so a split stored closer
+     * than [gap] to a neighbour still shows that value and can still move away from it.
+     */
+    fun splitStepRange(slots: FloatArray, index: Int, gap: Float = 1.12f): ClosedFloatingPointRange<Float> {
+        val (min, max) = SPLIT_SLOT_BOUNDS[index]
+        val lo = if (index == 0) min else maxOf(min, slots[index - 1] * gap)
+        val hi = if (index == 2) max else minOf(max, slots[index + 1] / gap)
+        val current = slots[index]
+        return minOf(lo, current)..maxOf(hi, current)
+    }
+
     /** Mirrors NativeBmwDspProcessor.cpp's clampf: well-defined (returns [lo]) even if [lo] > [hi]. */
     private fun clampD(x: Double, lo: Double, hi: Double): Double = maxOf(lo, minOf(hi, x))
 
