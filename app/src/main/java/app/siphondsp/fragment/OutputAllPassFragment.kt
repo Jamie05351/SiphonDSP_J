@@ -53,12 +53,12 @@ class OutputAllPassFragment : Fragment() {
 private fun OutputAllPassPager(pagerState: PagerState) {
     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
         when (page) {
-            0 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
-            1 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.LIGHT_BLUE, BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
-            2 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
-            3 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.MID_BAND_YELLOW, BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
-            4 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_LEFT, "Left High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
-            else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, "Right High", BmwDashboardSkin.HIGH_BAND_PINK, BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
+            0 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_LEFT, "Left Low", BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+            1 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_LOW_RIGHT, "Right Low", BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+            2 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_LEFT, "Left Mid", BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            3 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_MID_RIGHT, "Right Mid", BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
+            4 -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_LEFT, "Left High", BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
+            else -> OutputAllPassScreen(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, "Right High", BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
         }
     }
 }
