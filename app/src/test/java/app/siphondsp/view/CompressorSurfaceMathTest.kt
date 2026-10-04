@@ -125,4 +125,45 @@ class CompressorSurfaceMathTest {
         assertEquals(-6.0, CompressorSurfaceMath.gainCurveDbForReduction(6f), 0.0)
         assertEquals(CompressorSurfaceMath.MIN_DB, CompressorSurfaceMath.gainCurveDbForReduction(999f), 0.0)
     }
+
+    private fun withSplits(a: Float, b: Float, c: Float) = defaults().also {
+        it[NativeBmwDspValues.INDEX_MBC_XO_0] = a
+        it[NativeBmwDspValues.INDEX_MBC_XO_1] = b
+        it[NativeBmwDspValues.INDEX_MBC_XO_2] = c
+    }
+
+    @Test
+    fun normalizedSplitSlotsSortAnOutOfOrderTripleLikeNative() {
+        // The engine processes [4000, 500, 80] as [80, 500, 4000]; the stored slots normalize to it.
+        val slots = CompressorSurfaceMath.normalizedSplitSlots(withSplits(4000f, 500f, 80f))
+        assertEquals(listOf(80f, 500f, 4000f), slots.toList())
+    }
+
+    @Test
+    fun normalizedSplitSlotsClampEachSlotAfterSorting() {
+        val slots = CompressorSurfaceMath.normalizedSplitSlots(withSplits(30000f, 1f, 9000f))
+        assertEquals(listOf(20f, 8000f, 20000f), slots.toList())
+    }
+
+    @Test
+    fun splitStepRangeComesFromTheNormalizedNeighbours() {
+        // The out-of-order example: the middle split's range is a tone clear of 80 and 4000, not
+        // the collapsed 4480..4480 that the raw slots would give.
+        val slots = CompressorSurfaceMath.normalizedSplitSlots(withSplits(4000f, 500f, 80f))
+        val middle = CompressorSurfaceMath.splitStepRange(slots, 1)
+        assertEquals(80f * 1.12f, middle.start, 1e-3f)
+        assertEquals(4000f / 1.12f, middle.endInclusive, 1e-2f)
+        assertTrue(500f in middle)
+        assertEquals(20f, CompressorSurfaceMath.splitStepRange(slots, 0).start, 0f)
+        assertEquals(20000f, CompressorSurfaceMath.splitStepRange(slots, 2).endInclusive, 0f)
+    }
+
+    @Test
+    fun splitStepRangeAlwaysContainsTheCurrentValue() {
+        // Neighbours closer than a tone: the range still holds the stored value and can move.
+        val slots = CompressorSurfaceMath.normalizedSplitSlots(withSplits(100f, 105f, 4000f))
+        val middle = CompressorSurfaceMath.splitStepRange(slots, 1)
+        assertTrue(105f in middle)
+        assertTrue(middle.endInclusive > 105f)
+    }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,7 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
+import app.siphondsp.view.CompressorSurfaceMath
 import app.siphondsp.view.MbcBandGrMeter
 import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.roundToInt
@@ -128,13 +130,24 @@ private typealias MasterRow = (y: Int, h: Int) -> Modifier
 /**
  * The multiband compressor's master column: its on/off switch, the dry/wet Mix (0% bypasses the
  * compressor, 100% is fully processed), and the three band splits -- where band 1 meets band 2
- * and so on (defaults 80 / 500 / 4000 Hz). The engine sorts and clamps the splits itself and
- * rebuilds the bands live; here each split's range stops a whole tone short of its neighbours,
- * so the −/+ can never push one past another.
+ * and so on (defaults 80 / 500 / 4000 Hz).
+ *
+ * The engine sorts the stored splits and clamps each to its slot's bounds before using them, so
+ * the controls work from that same normalized triple ([CompressorSurfaceMath.normalizedSplitSlots]):
+ * a triple stored out of order (a restored or imported preset) is saved back in the engine's
+ * order -- nothing audible changes -- so each control edits the slot it shows. Each split's range
+ * then stops a whole tone short of its neighbours ([CompressorSurfaceMath.splitStepRange]), so
+ * the −/+ can never push one past another.
  */
 @Composable
 private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
-    val xo = FloatArray(3) { dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + it) }
+    val raw = List(3) { dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + it) }
+    val slots = CompressorSurfaceMath.normalizedSplitSlots(dsp.values)
+    LaunchedEffect(raw) {
+        if (raw != slots.toList()) {
+            dsp.commitAll(List(3) { NativeBmwDspValues.INDEX_MBC_XO_0 + it to slots[it] }.toMap())
+        }
+    }
     ArtGroupHeader(
         title = "Multiband",
         accent = DefaultSliderAccent,
@@ -146,12 +159,10 @@ private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
     Box(row(196, 22), contentAlignment = Alignment.BottomStart) {
         ArtLabel("BAND SPLITS", color = Color.White.copy(alpha = 0.55f), size = 13.sp)
     }
-    MbcSplitBounds.forEachIndexed { i, (min, max) ->
-        val lo = if (i == 0) min else maxOf(min, xo[i - 1] * SplitGap)
-        val hi = if (i == 2) max else minOf(max, xo[i + 1] / SplitGap)
+    repeat(3) { i ->
         DspArtSlider(
             dsp, "Bands ${i + 1} | ${i + 2}", NativeBmwDspValues.INDEX_MBC_XO_0 + i,
-            lo..maxOf(lo, hi), 1f, "Hz", DefaultSliderAccent, row(222 + i * 58, 48),
+            CompressorSurfaceMath.splitStepRange(slots, i), 1f, "Hz", DefaultSliderAccent, row(222 + i * 58, 48),
         )
     }
 }
@@ -166,15 +177,11 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
     fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
     // Crossover range this band spans, live off the three MBC split frequencies (defaults
-    // 80 / 500 / 4000 Hz). Band 1 runs from 20 Hz, band 4 up to 20 kHz.
+    // 80 / 500 / 4000 Hz) normalized as the engine (and the graph) use them, so a triple stored
+    // out of order still labels each band correctly. Band 1 runs from 20 Hz, band 4 to 20 kHz.
     val rangeLabel = run {
-        val lo = if (band == 0) 20f else dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + band - 1)
-        val hi = if (band == NativeBmwDspValues.MBC_BAND_COUNT - 1) {
-            20_000f
-        } else {
-            dsp.get(NativeBmwDspValues.INDEX_MBC_XO_0 + band)
-        }
-        "${formatHz(lo)} – ${formatHz(hi.coerceAtLeast(lo * 1.01f))}"
+        val (lo, hi) = CompressorSurfaceMath.bandRange(band, CompressorSurfaceMath.splitFrequencies(dsp.values))
+        "${formatHz(lo.toFloat())} – ${formatHz(maxOf(hi, lo * 1.01).toFloat())}"
     }
 
     val header: @Composable (Modifier) -> Unit = { m -> BandHeader(band, rangeLabel, dsp, m) }
@@ -428,12 +435,6 @@ private const val MasterGraphX = 168
 private const val MasterGraphWidth = 719
 private const val MasterControlX = 917
 private const val MasterColumnWidth = 333
-
-/** Each band split's own limits, as the engine clamps them (NativeBmwDspProcessorConfig). */
-private val MbcSplitBounds = listOf(20f to 2000f, 40f to 8000f, 80f to 20000f)
-
-/** The least two neighbouring splits may be apart: a whole tone. */
-private const val SplitGap = 1.12f
 
 private class BusColumn(val title: String, val accent: Int, val enabled: Int, val threshold: Int, val release: Int)
 
