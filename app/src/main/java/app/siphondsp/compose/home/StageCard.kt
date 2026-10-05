@@ -3,7 +3,6 @@ package app.siphondsp.compose.home
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -30,15 +28,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import app.siphondsp.R
 
 /**
  * One signal-chain tile: a menu button that opens its DSP screen. The tile's fill and artwork
@@ -50,11 +43,6 @@ import app.siphondsp.R
  * the left-middle edge, splitting both ways round the tile, and meeting at the right-middle edge
  * where the line carries on. Read while drawing, so the sweep redraws without recomposing.
  *
- * [stageOn] is the stage's own on/off, or null for a stage the engine can't bypass (no badge). The
- * badge reads ON, solid in [accent], or BYPASSED in grey; its colour is lit by the stage's own
- * animated fraction times [globalActive], so while the whole DSP is bypassed an ON stage keeps its
- * label but goes grey (globally held).
- *
  * [selected] brightens the glow; the front page sets it for a moment when the tile is tapped, just
  * before its screen zooms open.
  */
@@ -64,8 +52,6 @@ fun StageCard(
     subtitle: String,
     accent: Color,
     art: ImageVector,
-    stageOn: Boolean?,
-    globalActive: Float,
     borderLit: () -> Float,
     selected: Boolean,
     onClick: () -> Unit,
@@ -74,7 +60,6 @@ fun StageCard(
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
     val glow = animateActive(selected, "tile glow $title")
-    val stateText = stageOn?.let { stringResource(if (it) R.string.home_stage_on else R.string.home_stage_bypassed) }
     Column(
         modifier
             .width(s.dp(CardWidth))
@@ -100,15 +85,9 @@ fun StageCard(
             .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.32f + 0.15f * glow), Color.Transparent)))
             .sweptBorder(s.dp(2.5f), s.dp(16f), accent, borderLit)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { if (stateText != null) stateDescription = stateText }
             .padding(s.dp(12f)),
     ) {
-        Box(Modifier.fillMaxWidth().height(s.dp(BadgeHeight))) {
-            if (stageOn != null && stateText != null) {
-                StateBadge(stateText, accent, animateActive(stageOn, "badge $title") * globalActive)
-            }
-        }
-        Spacer(Modifier.weight(0.4f))
+        Spacer(Modifier.weight(1f))
         Image(
             imageVector = art,
             contentDescription = null,
@@ -190,28 +169,5 @@ private fun Modifier.sweptBorder(width: Dp, radius: Dp, colour: Color, lit: () -
     }
 }
 
-/** The badge across the tile's top: solid [accent] with white text at [t] = 1, grey at 0. */
-@Composable
-private fun StateBadge(text: String, accent: Color, t: Float) {
-    val s = LocalHomeScale.current
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(s.dp(BadgeHeight))
-            .background(lerp(HomePalette.BadgeIdle, accent, t), RoundedCornerShape(s.dp(10f))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            color = lerp(HomePalette.CellLabel, Color.White, t),
-            fontSize = s.sp(18f),
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            softWrap = false,
-        )
-    }
-}
-
 /** A tile's width in design units. */
 internal const val CardWidth = 170f
-private const val BadgeHeight = 34f

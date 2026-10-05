@@ -22,31 +22,6 @@ class HomeEngineStateTest {
     }
 
     @Test
-    fun onlyTheCompressorAndAllPassHaveAPill() {
-        val state = HomeEngineState.OFF
-        assertNull(state.stageOn(HomeStage.PEQ))
-        assertNull(state.stageOn(HomeStage.GAINS))
-        assertNull(state.stageOn(HomeStage.XOVERS))
-        assertEquals(false, state.stageOn(HomeStage.COMPRESSOR))
-        assertEquals(false, state.stageOn(HomeStage.ALLPASS))
-    }
-
-    @Test
-    fun theCompressorIsOnWithTheMbcABusLimiterOrALegacyCompressor() {
-        for (index in listOf(
-            NativeBmwDspValues.INDEX_MBC_ENABLED,
-            NativeBmwDspValues.INDEX_BUS_LIMITER_LOW_ENABLED,
-            NativeBmwDspValues.INDEX_BUS_LIMITER_MID_ENABLED,
-            NativeBmwDspValues.INDEX_BUS_LIMITER_HIGH_ENABLED,
-            NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_COMPRESSOR_ENABLED),
-        )) {
-            val v = values()
-            v[index] = 1f
-            assertTrue("index $index", HomeEngineState.from(v).compressorOn)
-        }
-    }
-
-    @Test
     fun allPassIsOnWithAnySectionOnAnyOutput() {
         val v = values()
         assertFalse(HomeEngineState.from(v).allPassOn)

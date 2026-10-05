@@ -71,8 +71,8 @@ import app.siphondsp.view.LevelReadout
  *   between them, and OUT.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
- * [animateActive]) times, for the tile badges and live-data cells, each one's own fraction. The
- * tiles are menu buttons and stay in colour whatever the state.
+ * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
+ * buttons and carry no state of their own; the live-data cells show which stages are on.
  *
  * Powering on also sends the signal down the chain ([ChainSweep]): the line lights from the power
  * node to the first tile, that tile's border lights round both sides, the next stretch of line,
@@ -263,8 +263,6 @@ private fun ChainPanel(
                         subtitle = stringResource(tile.subtitle),
                         accent = tile.accent,
                         art = tile.art,
-                        stageOn = engine.stageOn(stage),
-                        globalActive = g,
                         borderLit = { ChainSweep.tile(index, sweep()) },
                         selected = openingStage == stage,
                         onClick = { onOpenStage(stage) },
@@ -384,7 +382,6 @@ private const val SweepOffMs = 900
 // --- Previews: sample data only. The app passes real engine state. ---
 
 private val PreviewEngine = HomeEngineState(
-    compressorOn = true,
     allPassOutputs = 0,
     tiltDb = 1f,
     mbcBands = 4,
