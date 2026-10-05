@@ -14,10 +14,10 @@ import androidx.compose.ui.unit.sp
 import java.util.Locale
 
 /**
- * The front page is laid out in the Figma frame's units ("Home · DSP ON", 1920 x 830) and scaled
- * as a whole by [k], picked by [HomeScreen] so the frame's height fits: the head unit's 1280x480
- * and a phone in landscape both get the same proportions, with spare width going to the meter
- * panel and the gaps between tiles.
+ * The front page is designed in dp at the head unit's own size, 1280 x 480 (Figma "v3 · Head unit
+ * 1280×480"), so [k] is 1 there. Anything smaller, such as a phone in landscape, scales the whole
+ * design down by [k] to fit its width or height, and [HomeScreen] shares out any spare height
+ * between the top screen and the signal chain.
  */
 @Immutable
 class HomeScale(val k: Float) {
@@ -57,13 +57,25 @@ internal object HomePalette {
     val NodeFill = Color(0xFF141519)
     val NodeEdgeOff = Color(0xFF3A3D45)
     val OutFill = Color(0xFF0B0B0D)
-    val MeterTrack = Color(0xFF17181C)
-    val MeterGreen = Color(0xFF22C55E)
-    val MeterAmber = Color(0xFFEAB308)
-    val MeterRed = Color(0xFFEF4444)
     val Ceiling = Color(0xFFFF3B5C)
     val LimiterChip = Color(0xFFE5E7EB)
+    val Cell = Color(0xFF111216)
+    val CellLabel = Color(0xFFC9CCD1)
+    val Hollow = Color(0xFF5A5F6A)
+    val BadgeIdle = Color(0xFF2A2C31)
+    val ButtonTop = Color(0xFF2E3036)
+    val ButtonBottom = Color(0xFF1A1B1F)
+    val ButtonEdge = Color(0xFF3A3D45)
+    val MeterHot = Color(0xFFF040CC)
+    val MeterPeak = Color(0xFFF3E8FF)
+    val HeadroomGood = Color(0xFF22C55E)
+    val HeadroomLow = Color(0xFFEAB308)
+    val HeadroomCritical = Color(0xFFEF4444)
 }
+
+/** The design's size in dp; see [HomeScale]. */
+internal const val DesignWidth = 1280f
+internal const val DesignHeight = 480f
 
 /** "+1.5", "−1.0": one decimal, with a real minus sign (and a plus when [signed]). */
 internal fun formatDb(db: Float, signed: Boolean = false): String {

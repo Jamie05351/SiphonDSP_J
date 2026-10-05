@@ -1,31 +1,33 @@
 package app.siphondsp.compose.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.Dp
 
 /**
- * One global stage in the status panel: a dot, the stage's name and its setting ("TILT +1.5 dB").
- * Lit in [accent] while the stage is on and the DSP is powered; idle grey otherwise, blending
- * between the two by [globalActive] times the chip's own animated on fraction. Tapping it opens the
- * screen that owns the stage.
+ * One global stage on the top screen: a status dot and the stage's name over its setting in large
+ * type ("● TILT / +1.0 dB"). The dot is the at-a-glance state: lit in [accent] with a glow while
+ * the stage is on and the DSP is powered, a hollow grey ring otherwise. Everything else stays
+ * neutral, white while lit and grey while not, blending by [globalActive] times the cell's own
+ * animated on fraction. Tapping it opens the screen that owns the stage.
  */
 @Composable
 fun GlobalChip(
@@ -38,35 +40,52 @@ fun GlobalChip(
     modifier: Modifier = Modifier,
 ) {
     val s = LocalHomeScale.current
-    val t = animateActive(on, "chip $label") * globalActive
-    val shape = CircleShape
-    Row(
+    val t = animateActive(on, "cell $label") * globalActive
+    Column(
         modifier
-            .clip(shape)
-            .background(lerp(HomePalette.Idle.copy(alpha = 0.25f), accent.copy(alpha = 0.14f), t))
-            .border(s.dp(1.5f), lerp(HomePalette.Idle.copy(alpha = 0.6f), accent.copy(alpha = 0.55f), t), shape)
+            .clip(RoundedCornerShape(s.dp(10f)))
+            .background(HomePalette.Cell)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = s.dp(12f), end = s.dp(16f), top = s.dp(9f), bottom = s.dp(9f)),
-        horizontalArrangement = Arrangement.spacedBy(s.dp(8f)),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = s.dp(14f), vertical = s.dp(8f)),
+        verticalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.size(s.dp(8f)).background(lerp(HomePalette.Label, accent, t), CircleShape))
-        Text(
-            text = label,
-            color = lerp(HomePalette.Label, accent, t),
-            fontSize = s.sp(14f),
-            fontWeight = FontWeight.SemiBold,
-            style = TextStyle(letterSpacing = 0.06.em),
-            maxLines = 1,
-            softWrap = false,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s.dp(10f))) {
+            StatusDot(accent, t, s.dp(14f))
+            Text(
+                text = label,
+                color = lerp(HomePalette.Muted, HomePalette.CellLabel, t),
+                fontSize = s.sp(16f),
+                fontWeight = FontWeight.SemiBold,
+                style = TextStyle(lineHeight = s.sp(20f)),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
         Text(
             text = value,
-            color = lerp(HomePalette.Label, Color.White.copy(alpha = 0.85f), t),
-            fontSize = s.sp(14f),
-            style = TextStyle(fontFeatureSettings = "tnum"),
+            color = lerp(HomePalette.Muted, Color.White, t),
+            fontSize = s.sp(28f),
+            fontWeight = FontWeight.Bold,
+            // Tight line height, so the value fits the cell at every scale.
+            style = TextStyle(fontFeatureSettings = "tnum", lineHeight = s.sp(32f)),
             maxLines = 1,
             softWrap = false,
         )
+    }
+}
+
+/**
+ * The at-a-glance state light: at [t] = 1 a solid [colour] dot with a soft halo, at 0 a hollow
+ * grey ring, cross-fading in between.
+ */
+@Composable
+internal fun StatusDot(colour: Color, t: Float, size: Dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val r = this.size.minDimension / 2
+        // Halo, drawn past the dot's own bounds.
+        for (step in 1..3) drawCircle(colour.copy(alpha = 0.18f * t / step), r * (1f + 0.35f * step))
+        drawCircle(colour.copy(alpha = t), r)
+        val ring = r * 0.28f
+        drawCircle(HomePalette.Hollow.copy(alpha = 1 - t), r - ring / 2, style = Stroke(ring))
     }
 }

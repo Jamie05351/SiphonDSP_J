@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,10 +24,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -35,13 +38,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.assets.AllpassGraphic
 import app.siphondsp.compose.assets.CompressorGraphic
@@ -54,12 +57,21 @@ import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.view.LevelReadout
 
 /**
- * The front page: the global stages, the output meter and More / Settings across the top, and the
- * signal chain below it, from the power node through the five DSP tiles to OUT.
+ * The front page, as a faceplate (the page background) holding one top screen and the signal
+ * chain (Figma "v3 · Head unit 1280×480"):
+ * - 15 dp of faceplate above and beside the top screen, a 30 dp strip under it.
+ * - The top screen: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
+ *   headroom and the L / R output meters. More and Settings are raised buttons on the faceplate
+ *   to its right.
+ * - The signal chain: the power node, the five DSP tiles with the chain's line showing in the gaps
+ *   between them, and OUT.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
- * [animateActive]) times, for the tile pills and chips, each one's own fraction. The tiles are
- * menu buttons and stay in colour whatever the state.
+ * [animateActive]) times, for the tile badges and live-data cells, each one's own fraction. The
+ * tiles are menu buttons and stay in colour whatever the state.
+ *
+ * Laid out in dp at 1280 x 480 and scaled down as a whole on a smaller screen (see [HomeScale]);
+ * spare height on a taller screen goes to the top screen and the chain in proportion.
  *
  * [onOpenStage] and [onMore] get the tapped element's bounds in this composable's root (the
  * hosting view's coordinates), for the screen's zoom-open and the overflow menu's anchor.
@@ -79,173 +91,226 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(HomePalette.Page)) {
-        val k = minOf(maxWidth.value / DesignWidth, maxHeight.value / DesignHeight)
+        val k = minOf(1f, maxWidth.value / DesignWidth, maxHeight.value / DesignHeight)
+        // Height the design doesn't use at this scale, shared between the top screen and the chain.
+        val spare = (maxHeight.value - DesignHeight * k).coerceAtLeast(0f)
         CompositionLocalProvider(LocalHomeScale provides HomeScale(k)) {
             val s = LocalHomeScale.current
             val g = animateActive(powered, "dsp power")
             val bounds = remember { mutableMapOf<Any, Rect>() }
             fun Modifier.tracked(key: Any) = onGloballyPositioned { bounds[key] = it.boundsInRoot() }
 
-            Column(
-                Modifier.fillMaxSize().padding(s.dp(30f)),
-                verticalArrangement = Arrangement.spacedBy(s.dp(32f)),
-            ) {
+            Column(Modifier.fillMaxSize()) {
                 Row(
-                    Modifier.fillMaxWidth().height(s.dp(210f)),
-                    horizontalArrangement = Arrangement.spacedBy(s.dp(20f)),
+                    Modifier
+                        .padding(start = s.dp(Facia), end = s.dp(Facia), top = s.dp(Facia))
+                        .fillMaxWidth()
+                        .height(s.dp(TopHeight) + (spare * TopShare).dp),
+                    horizontalArrangement = Arrangement.spacedBy(s.dp(Facia)),
                 ) {
-                    Panel(s.dp(18f), Modifier.width(s.dp(560f)).fillMaxHeight()) {
-                        StatusPanel(engine, g, onOpenGlobal)
-                    }
-                    Panel(s.dp(18f), Modifier.weight(1f).fillMaxHeight()) {
-                        OutputMeter(readout, engine.ceilingDb, g, Modifier.fillMaxSize())
-                    }
-                    Column(Modifier.width(s.dp(120f)), verticalArrangement = Arrangement.spacedBy(s.dp(16f))) {
-                        HomeButton(
+                    TopScreen(engine, readout, g, onOpenGlobal, Modifier.weight(1f).fillMaxHeight())
+                    Column(
+                        Modifier.width(s.dp(ButtonWidth)).fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        FaciaButton(
                             stringResource(R.string.home_tile_more), { onMore(bounds[MoreKey] ?: Rect.Zero) },
-                            Modifier.weight(1f).tracked(MoreKey),
+                            Modifier.tracked(MoreKey),
                         ) { drawMoreGlyph() }
-                        HomeButton(stringResource(R.string.title_activity_settings), onSettings, Modifier.weight(1f)) {
-                            drawSettingsGlyph()
-                        }
+                        FaciaButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
                     }
                 }
-                Panel(s.dp(22f), Modifier.weight(1f).fillMaxWidth()) {
-                    SignalPath(g)
-                    Row(Modifier.fillMaxSize().padding(start = s.dp(ChainInset), end = s.dp(ChainInset), top = s.dp(ChainTop))) {
-                        PowerNode(powered, g, onTogglePower)
-                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            for (stage in HomeStage.entries) {
-                                val tile = stage.tile()
-                                StageCard(
-                                    title = stringResource(tile.title),
-                                    subtitle = stringResource(tile.subtitle),
-                                    accent = tile.accent,
-                                    art = tile.art,
-                                    stageOn = engine.stageOn(stage),
-                                    globalActive = g,
-                                    selected = openingStage == stage,
-                                    onClick = { onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
-                                    modifier = Modifier.tracked(stage),
-                                )
-                            }
-                        }
-                        OutputNode(g)
-                    }
-                }
+                ChainPanel(
+                    engine, powered, g, openingStage, onTogglePower,
+                    onOpenStage = { stage -> onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
+                    tileModifier = { stage -> Modifier.tracked(stage) },
+                    modifier = Modifier
+                        .padding(start = s.dp(Facia), end = s.dp(Facia), top = s.dp(FaciaStrip), bottom = s.dp(BottomFacia))
+                        .fillMaxWidth()
+                        .weight(1f),
+                )
             }
         }
     }
 }
 
-/** The status panel: GLOBAL (BYPASSED while the DSP is off) over the global stages' chips. */
+/** The top screen: the live-data cells, a divider, then the headroom and the meters. */
 @Composable
-private fun StatusPanel(engine: HomeEngineState, g: Float, onOpenGlobal: (GlobalStage) -> Unit) {
+private fun TopScreen(
+    engine: HomeEngineState,
+    readout: LevelReadout,
+    g: Float,
+    onOpenGlobal: (GlobalStage) -> Unit,
+    modifier: Modifier,
+) {
     val s = LocalHomeScale.current
     val off = stringResource(R.string.home_chip_off)
-    Column(Modifier.padding(start = s.dp(26f), end = s.dp(20f), top = s.dp(24f))) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.home_global),
-                color = HomePalette.Label,
-                fontSize = s.sp(13f),
-                fontWeight = FontWeight.SemiBold,
-                style = TextStyle(letterSpacing = 0.14.em),
-                maxLines = 1,
+    Screen(s.dp(14f), modifier) {
+        Row(Modifier.fillMaxSize().padding(horizontal = s.dp(14f)), verticalAlignment = Alignment.CenterVertically) {
+            Column(verticalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
+                Row(horizontalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
+                    Cell(
+                        GlobalStage.TILT, stringResource(R.string.home_chip_tilt),
+                        engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off,
+                        BmwTheme.colors.sliderTilt, engine.tiltDb != null, g, onOpenGlobal,
+                    )
+                    Cell(
+                        GlobalStage.MBC, stringResource(R.string.home_chip_mbc),
+                        if (engine.mbcBands > 0) stringResource(R.string.home_chip_bands, engine.mbcBands) else off,
+                        DspColors.Comp, engine.mbcBands > 0, g, onOpenGlobal,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
+                    Cell(
+                        GlobalStage.LIMITER, stringResource(R.string.home_chip_limiter),
+                        engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off,
+                        HomePalette.LimiterChip, engine.limiterDb != null, g, onOpenGlobal,
+                    )
+                    Cell(
+                        GlobalStage.ALLPASS, stringResource(R.string.home_chip_allpass),
+                        if (engine.allPassOn) {
+                            pluralStringResource(R.plurals.home_chip_allpass_outputs, engine.allPassOutputs, engine.allPassOutputs)
+                        } else {
+                            off
+                        },
+                        DspColors.Allpass, engine.allPassOn, g, onOpenGlobal,
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .padding(horizontal = s.dp(16f))
+                    .width(s.dp(2f))
+                    .fillMaxHeight()
+                    .padding(vertical = s.dp(16f))
+                    .background(HomePalette.PanelEdge),
             )
-            val tag = RoundedCornerShape(s.dp(6f))
-            Text(
-                text = stringResource(R.string.home_bypassed),
-                color = HomePalette.Button,
-                fontSize = s.sp(11f),
-                fontWeight = FontWeight.Bold,
-                style = TextStyle(letterSpacing = 0.12.em),
-                maxLines = 1,
-                modifier = Modifier
-                    .padding(start = s.dp(12f))
-                    .alpha(1 - g)
-                    .background(Color.White.copy(alpha = 0.08f), tag)
-                    .border(s.dp(1.5f), Color.White.copy(alpha = 0.25f), tag)
-                    .padding(horizontal = s.dp(10f), vertical = s.dp(4f)),
-            )
-        }
-        Row(
-            Modifier.padding(top = s.dp(28f)),
-            horizontalArrangement = Arrangement.spacedBy(s.dp(10f)),
-        ) {
-            GlobalChip(
-                stringResource(R.string.home_chip_tilt),
-                engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off,
-                BmwTheme.colors.sliderTilt, engine.tiltDb != null, g, { onOpenGlobal(GlobalStage.TILT) },
-            )
-            GlobalChip(
-                stringResource(R.string.home_chip_mbc),
-                if (engine.mbcBands > 0) stringResource(R.string.home_chip_bands, engine.mbcBands) else off,
-                DspColors.Comp, engine.mbcBands > 0, g, { onOpenGlobal(GlobalStage.MBC) },
-            )
-            GlobalChip(
-                stringResource(R.string.home_chip_limiter),
-                engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off,
-                HomePalette.LimiterChip, engine.limiterDb != null, g, { onOpenGlobal(GlobalStage.LIMITER) },
-            )
+            OutputMeter(readout, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
         }
     }
 }
 
-/** A dark rounded panel with the page's hairline edge. */
 @Composable
-private fun Panel(radius: Dp, modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+private fun Cell(
+    stage: GlobalStage,
+    label: String,
+    value: String,
+    accent: Color,
+    on: Boolean,
+    g: Float,
+    onOpenGlobal: (GlobalStage) -> Unit,
+) {
+    val s = LocalHomeScale.current
+    GlobalChip(label, value, accent, on, g, { onOpenGlobal(stage) }, Modifier.width(s.dp(CellWidth)).heightIn(min = s.dp(CellHeight)))
+}
+
+/** The signal chain: power, the five tiles spaced so the line shows between them, and OUT. */
+@Composable
+private fun ChainPanel(
+    engine: HomeEngineState,
+    powered: Boolean,
+    g: Float,
+    openingStage: HomeStage?,
+    onTogglePower: () -> Unit,
+    onOpenStage: (HomeStage) -> Unit,
+    tileModifier: (HomeStage) -> Modifier,
+    modifier: Modifier,
+) {
+    val s = LocalHomeScale.current
+    Screen(s.dp(16f), modifier) {
+        SignalPath(g)
+        Row(Modifier.fillMaxSize()) {
+            PowerNode(powered, g, onTogglePower)
+            Row(
+                Modifier.weight(1f).fillMaxHeight().padding(vertical = s.dp(TileInset)),
+                horizontalArrangement = Arrangement.spacedBy(s.dp(TileGap), Alignment.CenterHorizontally),
+            ) {
+                for (stage in HomeStage.entries) {
+                    val tile = stage.tile()
+                    StageCard(
+                        title = stringResource(tile.title),
+                        subtitle = stringResource(tile.subtitle),
+                        accent = tile.accent,
+                        art = tile.art,
+                        stageOn = engine.stageOn(stage),
+                        globalActive = g,
+                        selected = openingStage == stage,
+                        onClick = { onOpenStage(stage) },
+                        modifier = tileModifier(stage),
+                    )
+                }
+            }
+            OutputNode(g)
+        }
+    }
+}
+
+/** A dark rounded screen set into the faceplate, with its hairline edge. */
+@Composable
+private fun Screen(radius: Dp, modifier: Modifier, content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(radius)
     Box(
         modifier
             .clip(shape)
             .background(HomePalette.Panel)
             .border(LocalHomeScale.current.dp(2f), HomePalette.PanelEdge, shape),
-        content = content,
-    )
+    ) { content() }
 }
 
-/** More / Settings: a small panel with a glyph over its label. */
+/** More / Settings: a raised button on the faceplate, with a glyph over its label. */
 @Composable
-private fun HomeButton(label: String, onClick: () -> Unit, modifier: Modifier, glyph: DrawScope.() -> Unit) {
+private fun FaciaButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, glyph: DrawScope.() -> Unit) {
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
     Column(
         modifier
-            .fillMaxWidth()
+            .size(s.dp(ButtonWidth), s.dp(ButtonHeight))
+            .drawBehind {
+                // A drop shadow under the button, so it stands off the plate.
+                val drop = s.dp(3f).toPx()
+                for (step in 1..3) {
+                    val grow = s.dp(2f).toPx() * step
+                    drawRoundRect(
+                        Color.Black.copy(alpha = 0.22f),
+                        topLeft = Offset(-grow / 2, drop - grow / 2),
+                        size = Size(size.width + grow, size.height + grow),
+                        cornerRadius = CornerRadius(s.dp(16f).toPx() + grow),
+                    )
+                }
+            }
             .clip(shape)
-            .background(HomePalette.Panel)
-            .border(s.dp(2f), HomePalette.PanelEdge, shape)
+            .background(Brush.verticalGradient(listOf(HomePalette.ButtonTop, HomePalette.ButtonBottom)))
+            .border(s.dp(1.5f), HomePalette.ButtonEdge, shape)
             .clickable(role = Role.Button, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Canvas(Modifier.size(s.dp(36f), s.dp(28f)), onDraw = glyph)
+        Canvas(Modifier.size(s.dp(36f), s.dp(24f)), onDraw = glyph)
         Text(
             text = label,
-            color = HomePalette.Button,
+            color = HomePalette.CellLabel,
             fontSize = s.sp(14f),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            modifier = Modifier.padding(top = s.dp(10f)),
+            modifier = Modifier.padding(top = s.dp(6f)),
         )
     }
 }
 
 /** Three dots across the middle. */
 private fun DrawScope.drawMoreGlyph() {
-    val r = size.height * 0.12f
+    val r = size.height * 0.17f
     for (fx in listOf(0.22f, 0.5f, 0.78f)) drawCircle(HomePalette.Button, r, Offset(size.width * fx, size.height / 2))
 }
 
 /** Three slider rails, each with its knob at a different place. */
 private fun DrawScope.drawSettingsGlyph() {
-    val stroke = size.height * 0.08f
-    val knob = size.height * 0.13f
-    for ((fy, fx) in listOf(0.2f to 0.68f, 0.5f to 0.32f, 0.8f to 0.58f)) {
+    val stroke = size.height * 0.12f
+    val knob = size.height * 0.17f
+    for ((fy, fx) in listOf(0.15f to 0.72f, 0.5f to 0.28f, 0.85f to 0.58f)) {
         val y = size.height * fy
-        drawLine(HomePalette.Button, Offset(size.width * 0.12f, y), Offset(size.width * 0.88f, y), stroke, StrokeCap.Round)
-        drawCircle(HomePalette.Page, knob, Offset(size.width * fx, y))
+        drawLine(HomePalette.Button, Offset(size.width * 0.1f, y), Offset(size.width * 0.9f, y), stroke, StrokeCap.Round)
+        drawCircle(HomePalette.ButtonBottom, knob, Offset(size.width * fx, y))
         drawCircle(HomePalette.Button, knob, Offset(size.width * fx, y), style = Stroke(stroke))
     }
 }
@@ -261,16 +326,28 @@ private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.ALLPASS -> TileSpec(R.string.home_card_allpass, R.string.home_card_allpass_sub, DspColors.Allpass, AllpassGraphic)
 }
 
-private const val DesignWidth = 1920f
-private const val DesignHeight = 830f
+// The layout in design dp (Figma "v3"): faceplate margins, the top screen's height at 1280 x 480,
+// and the buttons, cells and tile spacing. The chain panel takes the rest of the height.
+private const val Facia = 15f
+private const val FaciaStrip = 30f
+private const val BottomFacia = 12f
+private const val TopHeight = 179f
+private const val TopShare = 0.45f
+private const val ButtonWidth = 88f
+private const val ButtonHeight = 80f
+private const val CellWidth = 200f
+private const val CellHeight = 76f
+private const val CellGap = 10f
+private const val TileGap = 27.5f
+private const val TileInset = 14f
 private const val MoreKey = "more"
 
-// --- Previews: sample data only, matching the Figma frames. The app passes real engine state. ---
+// --- Previews: sample data only. The app passes real engine state. ---
 
 private val PreviewEngine = HomeEngineState(
     compressorOn = true,
-    allPassOn = false,
-    tiltDb = 1.5f,
+    allPassOutputs = 0,
+    tiltDb = 1f,
     mbcBands = 4,
     limiterDb = -1f,
 )
@@ -281,7 +358,7 @@ private fun HomeScreenOnPreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = true,
-        readout = LevelReadout(leftRmsDb = -9.4f, leftPeakDb = -7.2f, rightRmsDb = -10.1f, rightPeakDb = -7.8f),
+        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
     )
@@ -293,7 +370,19 @@ private fun HomeScreenOffPreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = false,
-        readout = LevelReadout(leftRmsDb = -16f, leftPeakDb = -12.5f, rightRmsDb = -16.8f, rightPeakDb = -13.2f),
+        readout = LevelReadout(leftRmsDb = -20f, leftPeakDb = -12.5f, rightRmsDb = -21f, rightPeakDb = -13.2f),
+        openingStage = null,
+        onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
+    )
+}
+
+@Preview(name = "Home · phone", widthDp = 891, heightDp = 411)
+@Composable
+private fun HomeScreenPhonePreview() = BmwDspTheme {
+    HomeScreen(
+        engine = PreviewEngine,
+        powered = true,
+        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
     )
