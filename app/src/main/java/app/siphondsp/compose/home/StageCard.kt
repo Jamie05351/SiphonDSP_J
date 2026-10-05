@@ -15,6 +15,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import app.siphondsp.compose.theme.BmwTheme
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathMeasure
@@ -41,7 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
  * Its border is the signal passing through: grey while dark, lit in [accent] by [borderLit]
  * (0..1, from the power-on sweep, see [ChainSweep]) starting where the chain's line comes in at
  * the left-middle edge, splitting both ways round the tile, and meeting at the right-middle edge
- * where the line carries on. Read while drawing, so the sweep redraws without recomposing.
+ * where the line carries on, with a spark in the power button's purple at the front of each side
+ * while [spark] (powering on, not off). Read while drawing, so the sweep redraws without
+ * recomposing.
  *
  * [selected] brightens the glow; the front page sets it for a moment when the tile is tapped, just
  * before its screen zooms open.
@@ -53,6 +57,7 @@ fun StageCard(
     accent: Color,
     art: ImageVector,
     borderLit: () -> Float,
+    spark: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -60,6 +65,8 @@ fun StageCard(
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
     val glow = animateActive(selected, "tile glow $title")
+    val signal = BmwTheme.colors.sliderHeadroom
+    val px = s.k * LocalDensity.current.density
     Column(
         modifier
             .width(s.dp(CardWidth))
@@ -80,10 +87,11 @@ fun StageCard(
                     )
                 }
             }
+            // Outside the clip, so the spark's glow isn't cut off at the tile's edge.
+            .sweptBorder(s.dp(2.5f), s.dp(16f), accent, borderLit, if (spark) signal else null, px)
             .clip(shape)
             .background(HomePalette.TileBase)
             .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.32f + 0.15f * glow), Color.Transparent)))
-            .sweptBorder(s.dp(2.5f), s.dp(16f), accent, borderLit)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(s.dp(12f)),
     ) {
@@ -118,9 +126,17 @@ fun StageCard(
 /**
  * A rounded border in [HomePalette.Idle], lit in [colour] along two paths that both start at the
  * left-middle edge, one round the top and one round the bottom, each [lit] (0..1) of the way to
- * the right-middle edge.
+ * the right-middle edge. With a [spark] colour, a spark ([drawSpark], [scale] px per design unit)
+ * rides the front of each path until they meet.
  */
-private fun Modifier.sweptBorder(width: Dp, radius: Dp, colour: Color, lit: () -> Float) = drawWithCache {
+private fun Modifier.sweptBorder(
+    width: Dp,
+    radius: Dp,
+    colour: Color,
+    lit: () -> Float,
+    spark: Color?,
+    scale: Float,
+) = drawWithCache {
     val w = width.toPx()
     val h = w / 2
     val r = radius.toPx() - h
@@ -165,6 +181,12 @@ private fun Modifier.sweptBorder(width: Dp, radius: Dp, colour: Color, lit: () -
             measure.getSegment(0f, half * t, litLower, true)
             drawPath(litUpper, colour, style = stroke)
             drawPath(litLower, colour, style = stroke)
+            if (spark != null && t < 1f) {
+                measure.setPath(upper, false)
+                drawSpark(measure.getPosition(half * t), spark, scale)
+                measure.setPath(lower, false)
+                drawSpark(measure.getPosition(half * t), spark, scale)
+            }
         }
     }
 }

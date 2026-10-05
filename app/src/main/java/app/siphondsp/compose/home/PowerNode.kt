@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -57,17 +56,7 @@ fun PowerNode(
                 .size(s.dp(NodeSize))
                 .drawBehind {
                     // The glow: a soft purple halo past the rim, gone while bypassed.
-                    val r = size.minDimension / 2
-                    val halo = r + s.dp(28f).toPx()
-                    drawCircle(
-                        Brush.radialGradient(
-                            0.7f to signal.copy(alpha = 0.65f * g),
-                            1f to Color.Transparent,
-                            center = center,
-                            radius = halo,
-                        ),
-                        radius = halo,
-                    )
+                    drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
                 }
                 .clip(CircleShape)
                 .toggleable(value = powered, role = Role.Switch, onValueChange = { onToggle() })
