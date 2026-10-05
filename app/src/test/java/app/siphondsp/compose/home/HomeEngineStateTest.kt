@@ -51,7 +51,11 @@ class HomeEngineStateTest {
         val v = values()
         assertFalse(HomeEngineState.from(v).allPassOn)
         v[NativeBmwDspValues.highAllPassIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, 1, 0)] = 1f
+        v[NativeBmwDspValues.highAllPassIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, 0, 0)] = 1f
         assertTrue(HomeEngineState.from(v).allPassOn)
+        assertEquals(1, HomeEngineState.from(v).allPassOutputs)
+        v[NativeBmwDspValues.highAllPassIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, 0, 0)] = 1f
+        assertEquals(2, HomeEngineState.from(v).allPassOutputs)
     }
 
     @Test

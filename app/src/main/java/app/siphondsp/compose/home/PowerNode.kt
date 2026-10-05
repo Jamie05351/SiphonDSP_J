@@ -3,6 +3,8 @@ package app.siphondsp.compose.home
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,8 +37,7 @@ import app.siphondsp.compose.theme.BmwTheme
 /**
  * The DSP power button at the start of the signal chain, with its state and hint under it. Lit
  * purple and glowing while [powered], a dark grey button while bypassed, blending by
- * [globalActive]. Its centre sits [NodeCentreY] design units below the column's top, so the chain's
- * line meets it level with the tiles' centres.
+ * [globalActive]. The button is centred in the column's height, where the chain's line runs.
  */
 @Composable
 fun PowerNode(
@@ -49,15 +50,15 @@ fun PowerNode(
     val g = globalActive
     val signal = BmwTheme.colors.sliderHeadroom
     val description = stringResource(R.string.home_power_description)
-    Column(modifier.width(s.dp(ColumnWidth)), horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(modifier.width(s.dp(ColumnWidth)).fillMaxHeight()) {
         Box(
             Modifier
-                .padding(top = s.dp(NodeCentreY - NodeSize / 2))
+                .align(Alignment.Center)
                 .size(s.dp(NodeSize))
                 .drawBehind {
                     // The glow: a soft purple halo past the rim, gone while bypassed.
                     val r = size.minDimension / 2
-                    val halo = r + s.dp(36f).toPx()
+                    val halo = r + s.dp(28f).toPx()
                     drawCircle(
                         Brush.radialGradient(
                             0.7f to signal.copy(alpha = 0.65f * g),
@@ -79,9 +80,9 @@ fun PowerNode(
                 drawCircle(lerp(HomePalette.NodeEdgeOff, signal, g), r - rim / 2, style = Stroke(rim))
                 // The power glyph: an open ring with a bar through its gap.
                 val glyph = lerp(HomePalette.Caption, Color(0xFFE9D5FF), g)
-                val stroke = s.dp(6f).toPx()
-                val gr = s.dp(24f).toPx()
-                val c = center + Offset(0f, s.dp(3f).toPx())
+                val stroke = s.dp(5f).toPx()
+                val gr = s.dp(18f).toPx()
+                val c = center + Offset(0f, s.dp(2f).toPx())
                 drawArc(
                     glyph, startAngle = -60f, sweepAngle = 300f, useCenter = false,
                     topLeft = c - Offset(gr, gr), size = Size(gr * 2, gr * 2),
@@ -90,28 +91,32 @@ fun PowerNode(
                 drawLine(glyph, c - Offset(0f, gr + s.dp(5f).toPx()), c - Offset(0f, s.dp(4f).toPx()), stroke, StrokeCap.Round)
             }
         }
-        Text(
-            text = stringResource(if (powered) R.string.home_power_on else R.string.home_power_off),
-            color = lerp(HomePalette.Caption, Color(0xFFC084FC), g),
-            fontSize = s.sp(18f),
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            style = TextStyle(letterSpacing = 0.1.em),
-            maxLines = 1,
-            modifier = Modifier.padding(top = s.dp(22f)),
-        )
-        Text(
-            text = stringResource(if (powered) R.string.home_power_on_hint else R.string.home_power_off_hint),
-            color = HomePalette.Muted,
-            fontSize = s.sp(13f),
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier.padding(top = s.dp(6f)),
-        )
+        // The state and hint, under the button.
+        Column(
+            Modifier.align(Alignment.Center).offset(y = s.dp(NodeSize / 2 + 30f)),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(if (powered) R.string.home_power_on else R.string.home_power_off),
+                color = lerp(HomePalette.Caption, Color(0xFFC084FC), g),
+                fontSize = s.sp(20f),
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                style = TextStyle(letterSpacing = 0.06.em),
+                maxLines = 1,
+            )
+            Text(
+                text = stringResource(if (powered) R.string.home_power_on_hint else R.string.home_power_off_hint),
+                color = HomePalette.Muted,
+                fontSize = s.sp(14f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.padding(top = s.dp(2f)),
+            )
+        }
     }
 }
 
-/** The power column's width, and its node's size and centre, in design units. */
-internal const val ColumnWidth = 200f
-internal const val NodeSize = 150f
-internal const val NodeCentreY = 165f
+/** The power column's width and its button's size, in design units. */
+internal const val ColumnWidth = 152f
+internal const val NodeSize = 104f

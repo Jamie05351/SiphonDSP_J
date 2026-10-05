@@ -286,6 +286,8 @@ class DspFragment : Fragment() {
                 .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_CROSSOVER)
             GlobalStage.MBC -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
             GlobalStage.LIMITER -> Intent(requireContext(), GainLimiterActivity::class.java)
+            GlobalStage.ALLPASS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
+                .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
         }
         startActivity(intent)
     }
