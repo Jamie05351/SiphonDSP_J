@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * One workspace sidebar tile, made as a small square version of the front page's signal-chain
- * card ([HomeChainCard]) so the two read as one set: dark glass with a tint of the module's
+ * tile ([app.siphondsp.compose.home.StageCard]) so the two read as one set: dark glass with a tint of the module's
  * colour from the top-left corner, the coloured border running from [accent] to [accent2], the
  * module's [graphic] across the top and its short [label] under it.
  *

@@ -13,7 +13,6 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -27,11 +26,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.siphondsp.R
-import app.siphondsp.compose.controls.HomeFaceplate
-import app.siphondsp.compose.controls.HomeOutputScope
-import app.siphondsp.compose.controls.HomeCentreScreen
-import app.siphondsp.compose.controls.HomeTile
-import app.siphondsp.compose.controls.HomeTileKind
+import androidx.compose.ui.geometry.Rect
+import app.siphondsp.compose.home.GlobalStage
+import app.siphondsp.compose.home.HomeEngineState
+import app.siphondsp.compose.home.HomeScreen
+import app.siphondsp.compose.home.HomeStage
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
@@ -46,8 +45,6 @@ import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.view.HomeLevelFeed
-import app.siphondsp.view.HomeStageStatus
-import app.siphondsp.view.LevelHistory
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
@@ -67,31 +64,24 @@ class DspFragment : Fragment() {
      * The DSP tile being opened: its glow is lit, and every other front-page tap is ignored, from the
      * tap until this page stops (the DSP screen covers it) or the launch is cancelled. Null otherwise.
      */
-    private var openingTile by mutableStateOf<HomeTileKind?>(null)
+    private var openingTile by mutableStateOf<HomeStage?>(null)
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
 
-    /** The held output levels, for the top screen's readout and the output scope's numbers. */
+    /** The held output levels, for the output meter and the headroom. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
 
-    /** The output scope's last few seconds of levels; [scopeTick] moves on each new frame. */
-    private val levelHistory = LevelHistory()
-    private var scopeTick by mutableIntStateOf(0)
-
-    /** Feeds [levelHistory] and [levelReadout] while the front page is live; see [updateLevelFeed]. */
+    /** Feeds [levelReadout] while the front page is live; see [updateLevelFeed]. */
     private var levelFeed: HomeLevelFeed? = null
     private var resumed = false
     private var homePageActive = true
 
-    /** The limiter threshold while the limiter is on, else null; see [refreshValues]. */
-    private var limiterDb by mutableStateOf<Float?>(null)
-
-    /** Which MBC bands and all-pass sections are on, for the centre screen's boxes. */
-    private var stageStatus by mutableStateOf(HomeStageStatus.OFF)
+    /** The stages, chips and meter ceiling, from the saved DSP values; see [refreshValues]. */
+    private var engineState by mutableStateOf(HomeEngineState.OFF)
 
     /**
-     * Re-reads the limiter and the MBC / all-pass boxes whenever settings change underneath the
+     * Re-reads [engineState] whenever settings change underneath the
      * front page while it stays resumed: a preset or backup loaded, a Revert from the overflow
      * menu, or any DSP edit.
      */
@@ -102,11 +92,7 @@ class DspFragment : Fragment() {
     }
 
     /** MainActivity's real power state. Off until the processor service reports it running. */
-    private var powerOn = false
-
-    /** How "on" the front page looks: 1 in full colour, 0 greyed out (see [setPowerLook]). */
-    private var powerLook = 1f
-    private var powerAnimator: ValueAnimator? = null
+    private var powerOn by mutableStateOf(false)
 
     /**
      * Called with the artwork front page's horizontal offset in px as the pager moves it (0 =
@@ -116,6 +102,8 @@ class DspFragment : Fragment() {
     var onHomePageOffset: ((Float) -> Unit)? = null
     var onSettingsClick: (() -> Unit)? = null
     var onMoreClick: ((View) -> Unit)? = null
+    /** The power node was tapped; MainActivity owns the engine and reports back via [setPowerState]. */
+    var onPowerClick: (() -> Unit)? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -176,8 +164,6 @@ class DspFragment : Fragment() {
         levelFeed?.running = false
         levelFeed = null
         requireContext().unregisterLocalReceiver(settingsReceiver)
-        powerAnimator?.cancel()
-        powerAnimator = null
         super.onDestroyView()
     }
 
@@ -212,12 +198,20 @@ class DspFragment : Fragment() {
     }
 
     private fun setUpShortcutsPage() {
-        // The faceplate and the seven tiles are Compose. HomeFaceplate and HomeArtLayout both pick
-        // the head-unit or phone rect set from isHeadUnitDisplay(), so a phone needs no swap.
-        shortcutsBinding.homeBackdrop.setHomeContent { HomeFaceplate() }
-        shortcutsBinding.homeCentreScreen.setHomeContent { HomeCentreScreen(levelReadout, limiterDb, stageStatus) }
-        shortcutsBinding.homeOutputScope.setHomeContent { HomeOutputScope(levelHistory, { scopeTick }, levelReadout) }
-        levelFeed = HomeLevelFeed(levelHistory, onFrame = { scopeTick++ }, onReadout = { levelReadout = it })
+        shortcutsBinding.homeScreen.setHomeContent {
+            HomeScreen(
+                engine = engineState,
+                powered = powerOn,
+                readout = levelReadout,
+                openingStage = openingTile,
+                onTogglePower = { if (openingTile == null) onPowerClick?.invoke() },
+                onOpenStage = ::openStage,
+                onOpenGlobal = ::openGlobal,
+                onSettings = { if (openingTile == null) onSettingsClick?.invoke() },
+                onMore = ::openMore,
+            )
+        }
+        levelFeed = HomeLevelFeed(onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
             IntentFilter().apply {
@@ -226,14 +220,6 @@ class DspFragment : Fragment() {
                 addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
             },
         )
-        setPowerLook(if (powerOn) 1f else 0f)
-        shortcutsBinding.cardShortcutPeq.setHomeContent { HomeTile(HomeTileKind.PEQ, selected = openingTile == HomeTileKind.PEQ) }
-        shortcutsBinding.cardShortcutGainsDelay.setHomeContent { HomeTile(HomeTileKind.GAINS, selected = openingTile == HomeTileKind.GAINS) }
-        shortcutsBinding.cardShortcutCrossovers.setHomeContent { HomeTile(HomeTileKind.XOVERS, selected = openingTile == HomeTileKind.XOVERS) }
-        shortcutsBinding.cardShortcutCompressor.setHomeContent { HomeTile(HomeTileKind.COMPRESSOR, selected = openingTile == HomeTileKind.COMPRESSOR) }
-        shortcutsBinding.cardShortcutAllpass.setHomeContent { HomeTile(HomeTileKind.ALLPASS, selected = openingTile == HomeTileKind.ALLPASS) }
-        shortcutsBinding.cardShortcutSettings.setHomeContent { HomeTile(HomeTileKind.SETTINGS) }
-        shortcutsBinding.cardShortcutMore.setHomeContent { HomeTile(HomeTileKind.MORE) }
         shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
         shortcutsBinding.translationNotice.setOnRootClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/project/siphondsp".toUri()))
@@ -247,36 +233,6 @@ class DspFragment : Fragment() {
             updateNoticeOnClick?.invoke()
         }
 
-        // Seven primary home actions. The first five open DSP workspaces; Settings and More
-        // delegate to MainActivity so its existing settings/overflow behaviour remains the single
-        // source of truth. The power button remains activity-owned because it controls the engine.
-        shortcutsBinding.cardShortcutPeq.setOnClickListener { tile ->
-            openFromTile(HomeTileKind.PEQ, tile, Intent(requireContext(), ParametricEqualizerActivity::class.java))
-        }
-        shortcutsBinding.cardShortcutGainsDelay.setOnClickListener { tile ->
-            openFromTile(HomeTileKind.GAINS, tile, Intent(requireContext(), GainLimiterActivity::class.java))
-        }
-        shortcutsBinding.cardShortcutCompressor.setOnClickListener { tile ->
-            openFromTile(HomeTileKind.COMPRESSOR, tile, Intent(requireContext(), NativeBmwCompressorActivity::class.java))
-        }
-        shortcutsBinding.cardShortcutCrossovers.setOnClickListener { tile ->
-            openFromTile(HomeTileKind.XOVERS, tile, Intent(requireContext(), CrossoverTiltActivity::class.java))
-        }
-        shortcutsBinding.cardShortcutAllpass.setOnClickListener { tile ->
-            openFromTile(
-                HomeTileKind.ALLPASS,
-                tile,
-                Intent(requireContext(), CrossoverTiltActivity::class.java)
-                    .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS),
-            )
-        }
-        shortcutsBinding.cardShortcutSettings.setOnClickListener {
-            if (openingTile == null) onSettingsClick?.invoke()
-        }
-        shortcutsBinding.homeStages.canOpen = { openingTile == null }
-        shortcutsBinding.cardShortcutMore.setOnClickListener { anchor ->
-            if (openingTile == null) onMoreClick?.invoke(anchor)
-        }
         // Should show notice?
         Timber.e(Locale.getDefault().language.toString())
         shortcutsBinding.translationNotice.isVisible =
@@ -291,24 +247,56 @@ class DspFragment : Fragment() {
 
     /**
      * Opens a DSP screen from its front-page tile: the tile's glow flashes on for [TILE_FLASH_MS]
-     * so the tap reads as confirmed, then the screen zooms open out of the tile's own rect. With
-     * animations turned off in system settings there is no flash wait, and the platform skips the
-     * zoom.
+     * so the tap reads as confirmed, then the screen zooms open out of the tile's own rect
+     * ([bounds], in the home screen view's coordinates). With animations turned off in system
+     * settings there is no flash wait, and the platform skips the zoom.
      *
-     * Other tile, Settings, More and GLOBAL STAGES taps are ignored from the tap until this page
+     * Other tile, chip, power, Settings and More taps are ignored from the tap until this page
      * stops (see [openingTile]), not just during the flash, so a quick second tap can't open a
      * second screen underneath. Leaving the page during the flash (swiping to the settings page,
      * or anything pausing it) cancels the launch, so the DSP screen never opens over where the
      * user went.
      */
-    private fun openFromTile(kind: HomeTileKind, tile: View, intent: Intent) {
+    private fun openStage(stage: HomeStage, bounds: Rect) {
         if (openingTile != null) return
-        openingTile = kind
+        val intent = when (stage) {
+            HomeStage.PEQ -> Intent(requireContext(), ParametricEqualizerActivity::class.java)
+            HomeStage.GAINS -> Intent(requireContext(), GainLimiterActivity::class.java)
+            HomeStage.XOVERS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
+            HomeStage.COMPRESSOR -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
+            HomeStage.ALLPASS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
+                .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
+        }
+        openingTile = stage
+        val host = shortcutsBinding.homeScreen
         pendingOpen = viewLifecycleOwner.lifecycleScope.launch {
             if (ValueAnimator.areAnimatorsEnabled()) delay(TILE_FLASH_MS)
-            val zoom = ActivityOptions.makeScaleUpAnimation(tile, 0, 0, tile.width, tile.height)
+            val zoom = ActivityOptions.makeScaleUpAnimation(
+                host, bounds.left.toInt(), bounds.top.toInt(), bounds.width.toInt(), bounds.height.toInt(),
+            )
             startActivity(intent, zoom.toBundle())
         }
+    }
+
+    /** A global stage's chip: opens the screen that owns the stage, as the workspace toolbar does. */
+    private fun openGlobal(stage: GlobalStage) {
+        if (openingTile != null) return
+        val intent = when (stage) {
+            GlobalStage.TILT -> Intent(requireContext(), CrossoverTiltActivity::class.java)
+                .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_CROSSOVER)
+            GlobalStage.MBC -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
+            GlobalStage.LIMITER -> Intent(requireContext(), GainLimiterActivity::class.java)
+        }
+        startActivity(intent)
+    }
+
+    /** Opens MainActivity's overflow menu, anchored on the More button ([bounds]). */
+    private fun openMore(bounds: Rect) {
+        if (openingTile != null) return
+        val anchor = shortcutsBinding.homeMoreAnchor
+        anchor.translationX = bounds.left
+        anchor.translationY = bounds.bottom
+        onMoreClick?.invoke(anchor)
     }
 
     /** Drops a tile launch that is still waiting out its flash, and the tile's glow with it. */
@@ -350,64 +338,22 @@ class DspFragment : Fragment() {
     }
 
     /**
-     * Re-reads what the top screens show from settings: the limiter threshold while it is on (else
-     * null), and the MBC / all-pass boxes. From [fromBroadcast] or the saved values.
+     * Re-reads what the front page shows from settings (stage pills, global chips, the meter's
+     * ceiling). From [fromBroadcast] or the saved values.
      */
     private fun refreshValues(fromBroadcast: FloatArray?) {
         val values = fromBroadcast?.takeIf { it.size == NativeBmwDspValues.SIZE }
             ?: NativeBmwDspValues.load(requireContext())
-        limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
-            .takeIf { values[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] >= 0.5f }
-        stageStatus = HomeStageStatus.from(values)
+        engineState = HomeEngineState.from(values)
     }
 
     /**
-     * Keeps the front page in step with MainActivity's real power state. While the DSP is off its
-     * live-data screens (GLOBAL STAGES, the centre screen and the output scope) are switched off:
-     * their content fades out, leaving black glass. Powering on brings them back one after
-     * another, left to right then the bottom, like screens warming up. The chain cards, Settings
-     * and More stay lit throughout.
+     * Keeps the front page in step with MainActivity's real power state. [HomeScreen] animates the
+     * change itself: the power node, signal path, meter and chips fade between lit and bypassed.
      */
     fun setPowerState(on: Boolean) {
-        if (on == powerOn) return
         powerOn = on
-        if (!::shortcutsBinding.isInitialized || view == null) return
-        val target = if (on) 1f else 0f
-        powerAnimator?.cancel()
-        if (!ValueAnimator.areAnimatorsEnabled()) {
-            setPowerLook(target)
-            return
-        }
-        powerAnimator = ValueAnimator.ofFloat(powerLook, target).apply {
-            duration = ((if (on) POWER_ON_MS else POWER_OFF_MS) * kotlin.math.abs(target - powerLook)).toLong()
-            addUpdateListener { setPowerLook(it.animatedValue as Float) }
-            start()
-        }
     }
-
-    /**
-     * [look] runs 0 (off) to 1 (on). Powering on, it is a timeline: each live screen in
-     * [powerScreens] fades up over [SCREEN_FADE_MS], starting [SCREEN_STAGGER_MS] after the one
-     * before. Powering off, every screen simply follows [look]. A screen that is fully off is
-     * INVISIBLE, so its content (GLOBAL STAGES' cells) can't be tapped while it shows black.
-     */
-    private fun setPowerLook(look: Float) {
-        powerLook = look
-        val screens = powerScreens()
-        screens.forEachIndexed { i, view ->
-            val alpha = if (powerOn) {
-                ((look * POWER_ON_MS - i * SCREEN_STAGGER_MS) / SCREEN_FADE_MS).coerceIn(0f, 1f)
-            } else {
-                look
-            }
-            view.alpha = alpha
-            view.visibility = if (alpha > 0f) View.VISIBLE else View.INVISIBLE
-        }
-    }
-
-    /** The live-data screens, in the order they come on: top left, top centre, then the bottom. */
-    private fun powerScreens(): List<View> =
-        with(shortcutsBinding) { listOf(homeStages, homeCentreScreen, homeOutputScope) }
 
     fun setUpdateCardVisible(visible: Boolean) {
         shortcutsBinding.updateNotice.isVisible = visible
@@ -441,14 +387,6 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 150L
-        /** Switching off: every live screen fades to black together. */
-        private const val POWER_OFF_MS = 800f
-        /** Switching on: each live screen's own fade, and the delay before the next one starts. */
-        private const val SCREEN_FADE_MS = 1200f
-        private const val SCREEN_STAGGER_MS = 400f
-        /** The whole power-on sequence: the last of the three screens finishes here. */
-        private const val POWER_ON_MS = SCREEN_FADE_MS + 2 * SCREEN_STAGGER_MS
-
         fun newInstance(): DspFragment {
             return DspFragment()
         }

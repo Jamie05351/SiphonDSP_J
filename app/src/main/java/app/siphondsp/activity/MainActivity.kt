@@ -76,7 +76,6 @@ import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.utils.storage.StorageUtils
-import app.siphondsp.view.PowerHotspot
 import app.siphondsp.view.isHeadUnitDisplay
 import app.siphondsp.view.isHeadUnitDisplay
 import org.koin.core.component.inject
@@ -228,51 +227,11 @@ class MainActivity : BaseActivity() {
         }
         registerLocalReceiver(processorMessageReceiver, IntentFilter(Constants.ACTION_PROCESSOR_MESSAGE))
 
-        // Rootless: don't toggle on click, we handle that in the onClickListener
+        // The power button is the home screen's PowerNode (Compose). PowerHotspot stays as the
+        // power state's holder (isToggled) but is no longer drawn or tapped.
         binding.powerToggle.toggleOnClick = false
-        binding.powerToggle.setOnToggleClickListener(object : PowerHotspot.OnToggleClickListener {
-            override fun onClick() {
-                sdkAbove(Build.VERSION_CODES.R) {
-                    binding.powerToggle.performHapticFeedback(
-                        if(binding.powerToggle.isToggled)
-                            HapticFeedbackConstants.CONFIRM
-                        else
-                            HapticFeedbackConstants.REJECT
-                    )
-                }
-
-                if(SdkCheck.isQ && isRootless()) {
-                    if (binding.powerToggle.isToggled) {
-                        // Currently on, let's turn it off
-                        RootlessAudioProcessorService.stop(this@MainActivity)
-                        setPowerUi(false)
-                    } else {
-                        // Currently off, let's turn it on
-                        requestCapturePermission()
-                    }
-                }
-                else if (isRoot()) {
-                    when(JamesDspRemoteEngine.isPluginInstalled()) {
-                        JamesDspRemoteEngine.PluginState.Available -> {
-                            val next = !binding.powerToggle.isToggled
-                            setPowerUi(next)
-                            prefsApp.set(R.string.key_powered_on, next)
-                        }
-                        JamesDspRemoteEngine.PluginState.Unsupported -> {
-                            toast(getString(R.string.version_mismatch_root_toast))
-                        }
-                        JamesDspRemoteEngine.PluginState.Unavailable -> {
-                            toast(getString(R.string.load_fail_header))
-                        }
-                    }
-                }
-                else if(isPlugin()) {
-                    val next = !binding.powerToggle.isToggled
-                    setPowerUi(next)
-                    prefsApp.set(R.string.key_powered_on, next)
-                }
-            }
-        })
+        binding.powerToggle.isVisible = false
+        dspFragment.onPowerClick = ::togglePower
 
         if (SdkCheck.isQ && isRootless()) {
             capturePermissionLauncher = registerForActivityResult(
@@ -463,6 +422,49 @@ class MainActivity : BaseActivity() {
 
         if(isRootless())
             setPowerUi(processorService != null)
+    }
+
+    /** The power node was tapped: start or stop the engine for this build flavour. */
+    private fun togglePower() {
+        sdkAbove(Build.VERSION_CODES.R) {
+            binding.root.performHapticFeedback(
+                if(binding.powerToggle.isToggled)
+                    HapticFeedbackConstants.CONFIRM
+                else
+                    HapticFeedbackConstants.REJECT
+            )
+        }
+
+        if(SdkCheck.isQ && isRootless()) {
+            if (binding.powerToggle.isToggled) {
+                // Currently on, let's turn it off
+                RootlessAudioProcessorService.stop(this@MainActivity)
+                setPowerUi(false)
+            } else {
+                // Currently off, let's turn it on
+                requestCapturePermission()
+            }
+        }
+        else if (isRoot()) {
+            when(JamesDspRemoteEngine.isPluginInstalled()) {
+                JamesDspRemoteEngine.PluginState.Available -> {
+                    val next = !binding.powerToggle.isToggled
+                    setPowerUi(next)
+                    prefsApp.set(R.string.key_powered_on, next)
+                }
+                JamesDspRemoteEngine.PluginState.Unsupported -> {
+                    toast(getString(R.string.version_mismatch_root_toast))
+                }
+                JamesDspRemoteEngine.PluginState.Unavailable -> {
+                    toast(getString(R.string.load_fail_header))
+                }
+            }
+        }
+        else if(isPlugin()) {
+            val next = !binding.powerToggle.isToggled
+            setPowerUi(next)
+            prefsApp.set(R.string.key_powered_on, next)
+        }
     }
 
     /** Updates the physical-looking power control, and greys the front page out while off. */
