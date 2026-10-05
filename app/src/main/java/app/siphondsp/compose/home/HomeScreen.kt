@@ -1,5 +1,8 @@
 package app.siphondsp.compose.home
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +37,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
@@ -67,8 +71,12 @@ import app.siphondsp.view.LevelReadout
  *   between them, and OUT.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
- * [animateActive]) times, for the tile badges and live-data cells, each one's own fraction. The
- * tiles are menu buttons and stay in colour whatever the state.
+ * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
+ * buttons and carry no state of their own; the live-data cells show which stages are on.
+ *
+ * Powering on also sends the signal down the chain ([ChainSweep]): the line lights from the power
+ * node to the first tile, that tile's border lights round both sides, the next stretch of line,
+ * and so on to OUT. While on, the chain panel glows faintly purple.
  *
  * Laid out in dp at 1280 x 480 and scaled down as a whole on a smaller screen (see [HomeScale]);
  * spare height on a taller screen goes to the top screen and the chain in proportion.
@@ -97,6 +105,13 @@ fun HomeScreen(
         CompositionLocalProvider(LocalHomeScale provides HomeScale(k)) {
             val s = LocalHomeScale.current
             val g = animateActive(powered, "dsp power")
+            // The signal travelling through the chain as the DSP powers on (see ChainSweep); it
+            // runs back out, faster, as it powers off. Read only while drawing.
+            val sweep = animateFloatAsState(
+                if (powered) 1f else 0f,
+                tween(if (powered) SweepOnMs else SweepOffMs, easing = LinearEasing),
+                label = "chain sweep",
+            )
             val bounds = remember { mutableMapOf<Any, Rect>() }
             fun Modifier.tracked(key: Any) = onGloballyPositioned { bounds[key] = it.boundsInRoot() }
 
@@ -121,7 +136,7 @@ fun HomeScreen(
                     }
                 }
                 ChainPanel(
-                    engine, powered, g, openingStage, onTogglePower,
+                    engine, powered, g, { sweep.value }, openingStage, onTogglePower,
                     onOpenStage = { stage -> onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
                     tileModifier = { stage -> Modifier.tracked(stage) },
                     modifier = Modifier
@@ -210,6 +225,7 @@ private fun ChainPanel(
     engine: HomeEngineState,
     powered: Boolean,
     g: Float,
+    sweep: () -> Float,
     openingStage: HomeStage?,
     onTogglePower: () -> Unit,
     onOpenStage: (HomeStage) -> Unit,
@@ -217,23 +233,37 @@ private fun ChainPanel(
     modifier: Modifier,
 ) {
     val s = LocalHomeScale.current
-    Screen(s.dp(16f), modifier) {
-        SignalPath(g)
+    val signal = BmwTheme.colors.sliderHeadroom
+    // While the DSP is on the panel glows faintly purple: a soft halo onto the faceplate round it
+    // and a purple tint to its edge.
+    val glowing = modifier.drawBehind {
+        val radius = s.dp(16f).toPx()
+        for (step in 1..4) {
+            val grow = s.dp(4f).toPx() * step
+            drawRoundRect(
+                signal.copy(alpha = 0.05f * g),
+                topLeft = Offset(-grow, -grow),
+                size = Size(size.width + 2 * grow, size.height + 2 * grow),
+                cornerRadius = CornerRadius(radius + grow),
+            )
+        }
+    }
+    Screen(s.dp(16f), glowing, edge = lerp(HomePalette.PanelEdge, signal.copy(alpha = 0.55f), g)) {
+        SignalPath(g, sweep)
         Row(Modifier.fillMaxSize()) {
             PowerNode(powered, g, onTogglePower)
             Row(
                 Modifier.weight(1f).fillMaxHeight().padding(vertical = s.dp(TileInset)),
                 horizontalArrangement = Arrangement.spacedBy(s.dp(TileGap), Alignment.CenterHorizontally),
             ) {
-                for (stage in HomeStage.entries) {
+                for ((index, stage) in HomeStage.entries.withIndex()) {
                     val tile = stage.tile()
                     StageCard(
                         title = stringResource(tile.title),
                         subtitle = stringResource(tile.subtitle),
                         accent = tile.accent,
                         art = tile.art,
-                        stageOn = engine.stageOn(stage),
-                        globalActive = g,
+                        borderLit = { ChainSweep.tile(index, sweep()) },
                         selected = openingStage == stage,
                         onClick = { onOpenStage(stage) },
                         modifier = tileModifier(stage),
@@ -247,13 +277,18 @@ private fun ChainPanel(
 
 /** A dark rounded screen set into the faceplate, with its hairline edge. */
 @Composable
-private fun Screen(radius: Dp, modifier: Modifier, content: @Composable () -> Unit) {
+private fun Screen(
+    radius: Dp,
+    modifier: Modifier,
+    edge: Color = HomePalette.PanelEdge,
+    content: @Composable () -> Unit,
+) {
     val shape = RoundedCornerShape(radius)
     Box(
         modifier
             .clip(shape)
             .background(HomePalette.Panel)
-            .border(LocalHomeScale.current.dp(2f), HomePalette.PanelEdge, shape),
+            .border(LocalHomeScale.current.dp(2f), edge, shape),
     ) { content() }
 }
 
@@ -338,14 +373,15 @@ private const val ButtonHeight = 80f
 private const val CellWidth = 200f
 private const val CellHeight = 76f
 private const val CellGap = 10f
-private const val TileGap = 27.5f
+internal const val TileGap = 27.5f
 private const val TileInset = 14f
 private const val MoreKey = "more"
+private const val SweepOnMs = 1800
+private const val SweepOffMs = 900
 
 // --- Previews: sample data only. The app passes real engine state. ---
 
 private val PreviewEngine = HomeEngineState(
-    compressorOn = true,
     allPassOutputs = 0,
     tiltDb = 1f,
     mbcBands = 4,

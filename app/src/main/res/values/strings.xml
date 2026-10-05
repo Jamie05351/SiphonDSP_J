@@ -289,8 +289,6 @@
     </plurals>
     <string name="home_chip_off">off</string>
     <string name="home_chip_bands">%1$d bands</string>
-    <string name="home_stage_on">ON</string>
-    <string name="home_stage_bypassed">BYPASSED</string>
     <string name="home_headroom">HEADROOM</string>
     <string name="home_to_ceiling">to %1$s dB ceiling</string>
     <string name="home_dsp_bypassed">DSP bypassed</string>
