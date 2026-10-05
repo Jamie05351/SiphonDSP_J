@@ -58,8 +58,8 @@ void buildMidCrossover(OutputRuntime& out, const OutputConfig& cfg, float sample
             break;
     }
     // Optional upper (Mid/High) corner -- turns Mid from HPF-only into a true bandpass.
-    // Same crossoverType table as the HPF pair above, mirrored as a lowpass and cascaded
-    // after it in processMidCrossover(). Forced to identity when disabled (rather than
+    // Same slope table as the HPF pair above, mirrored as a lowpass, but driven by its own
+    // upperCrossoverType, and cascaded after it in processMidCrossover(). Forced to identity when disabled (rather than
     // skipped per-sample) so processMidCrossover stays branch-free on the audio-thread hot
     // path -- same pattern as crossover2 being forced inert for BW1/BW2 above.
     if (!cfg.upperCrossoverEnabled) {
@@ -67,7 +67,7 @@ void buildMidCrossover(OutputRuntime& out, const OutputConfig& cfg, float sample
         makeIdentity(out.crossover4);
         return;
     }
-    switch (cfg.crossoverType) {
+    switch (cfg.upperCrossoverType) {
         case CrossoverType::Butterworth1:
             makeLowPass1(out.crossover3, cfg.upperCrossoverFreq, sampleRate);
             makeIdentity(out.crossover4);

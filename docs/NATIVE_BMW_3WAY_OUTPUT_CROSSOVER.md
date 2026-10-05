@@ -91,6 +91,25 @@ Mid's original HPF-only code (before Phase 2's bandpass addition) at the shared 
 `processFrame()` gets a High branch parallel to Low/Mid; `sumToStereo()` gains a third term.
 `captureTruthSnapshot()`'s output block count grows 4 → 6.
 
+### Mid lowpass slope (tail growth: `288..290`, `SIZE` 288 → 291)
+
+Mid's upper (Mid/High) lowpass originally reused Mid's own `FIELD_CROSSOVER_TYPE`, so its slope
+was tied to Mid's highpass. It now has its own slope per Mid output:
+
+| Index | Name | Meaning |
+|---|---|---|
+| 288 | `midUpperXoTypeIndex(OUTPUT_MID_LEFT)` | Mid Left's lowpass slope (same 0..4 encoding as `FIELD_CROSSOVER_TYPE`) |
+| 289 | `midUpperXoTypeIndex(OUTPUT_MID_RIGHT)` | Mid Right's lowpass slope |
+| 290 | `INDEX_MID_UPPER_XO_TYPE_MIGRATED` | Kotlin-only migration marker |
+
+`migrateMidUpperXoTypeIfNeeded()` runs once (after `migrateCrossoverTypeIfNeeded()`) and copies
+each Mid output's own type into its new lowpass slope, so an existing save's Mid band is
+bit-identical until the user picks a different lowpass slope. Native `buildMidCrossover()` builds
+crossover3/4 from `upperCrossoverType`; `BmwResponseCalculator` mirrors it.
+
+The Mid/High page also no longer links Mid's lowpass to High's highpass: each has its own
+frequency and slope (High's were already separate fields natively, just mirrored by the UI).
+
 ### Phase 4 — High-band PEQ (no `SIZE` growth)
 
 PEQ bands are a separate ABI (`configurePeq(enabled, preampDb, fullBands, lowBands, midBands, ...)`

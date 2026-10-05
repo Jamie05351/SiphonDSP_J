@@ -106,7 +106,13 @@ public:
     // contract as the Low/Mid bus limiters at 182..187; ships disabled:
     //   262      enabled   263  threshold dBFS   264  release ms
     //   265      Kotlin-only migration marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 288 };
+    //
+    // 266..287 -- the virtual-source stage (see NativeBmwDspSchema.h).
+    //
+    // 288..290 -- Mid's upper (Mid/High) lowpass slope, added in the 288 -> 291 growth:
+    //   288      Mid Left upper slope   289  Mid Right upper slope
+    //   290      Kotlin-only migration marker -- never read here
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 291 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,

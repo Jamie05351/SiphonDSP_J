@@ -129,6 +129,20 @@ void enableThreeWay(Config& c) {
     c[nbschema::kMidUpperXo + nbschema::kMidUpperXoWidth + nbschema::kMidUpperXoEnabled] = 1;
 }
 
+// Mid's lowpass got its own slope in the 288 -> 291 growth (v[288] Mid Left, v[289] Mid Right);
+// before that it used Mid's own crossover type. Kotlin's migrateMidUpperXoTypeIfNeeded() seeds
+// the new slots from that type, so do the same here to keep a non-LR4 Mid scenario comparable
+// with an older BASELINE_REF build. Raw indices behind a size check, since an older build's
+// nbschema has no names for them (and its Config is too short to hold them).
+void matchMidUpperSlopes(Config& c) {
+    if (c.size() <= 289) {
+        return;
+    }
+    const int b = nbschema::kOutputConfigBase;
+    c[288] = c[b + 2 * nbschema::kOutputConfigWidth + nbschema::kOutCrossoverType];  // Mid Left
+    c[289] = c[b + 3 * nbschema::kOutputConfigWidth + nbschema::kOutCrossoverType];  // Mid Right
+}
+
 void mixedCrossovers(Config& c) {
     const int b = nbschema::kOutputConfigBase;
     setOutput(c, b, 0, nbschema::kOutCrossoverType, 1);  // LowLeft  BW3 (one-pole + Svf2)
@@ -138,6 +152,7 @@ void mixedCrossovers(Config& c) {
     setOutput(c, b, 0, nbschema::kOutSubsonicEnabled, 1);  // subsonic on LowLeft only
     setOutput(c, nbschema::kHighOutputConfigBase, 0, nbschema::kOutCrossoverType, 0);  // BW2
     setOutput(c, nbschema::kHighOutputConfigBase, 1, nbschema::kOutCrossoverType, 1);  // BW3
+    matchMidUpperSlopes(c);
 }
 
 void allPasses(Config& c) {

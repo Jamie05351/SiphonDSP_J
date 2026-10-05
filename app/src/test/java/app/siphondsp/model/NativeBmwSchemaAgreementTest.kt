@@ -154,6 +154,10 @@ class NativeBmwSchemaAgreementTest {
         "kVirtualFeedApQ" to NativeBmwDspValues.VIRTUAL_FEED_AP_Q,
         "kVirtualFeedApOrder" to NativeBmwDspValues.VIRTUAL_FEED_AP_ORDER,
         "kVirtualMigrated" to NativeBmwDspValues.INDEX_VIRTUAL_MIGRATED,
+
+        "kMidUpperXoTypeLeft" to NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT),
+        "kMidUpperXoTypeRight" to NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT),
+        "kMidUpperXoTypeMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED,
     )
 
     @Test

@@ -554,8 +554,8 @@ private fun drawBandAreas(
 }
 
 /**
- * Faint vertical marker + Hz label at the Lowpass / Highpass corner frequencies (and the 3-way
- * Mid/High corner while 3-way is on). Not in
+ * Faint vertical marker + Hz label at the Lowpass / Highpass corner frequencies (and, while 3-way
+ * is on, Mid's lowpass and High's highpass). Not in
  * `NativeBmwDspResponseView`; matches what `CrossoverHandoffSurface.drawCornerMarker` showed on
  * this page.
  */
@@ -572,7 +572,10 @@ private fun drawCrossoverMarkers(
 ) {
     if (values.size != BmwSignalChain.VALUE_COUNT) return
     val markers = if (ThreeWayCrossover.isEnabled(values)) {
-        intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, ThreeWayCrossover.cornerIndex)
+        intArrayOf(
+            NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ,
+            ThreeWayCrossover.midLowpassIndex, ThreeWayCrossover.highHighpassIndex,
+        )
     } else {
         intArrayOf(NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ)
     }

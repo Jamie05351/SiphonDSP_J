@@ -270,6 +270,25 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         midLeftCfg.upperCrossoverEnabled = midLeftEnabled >= .5f;
         midRightCfg.upperCrossoverFreq = clampf(midRightFreq, 300, 8000);
         midRightCfg.upperCrossoverEnabled = midRightEnabled >= .5f;
+
+        // The upper corner's own slope, v[288] (Mid Left) / v[289] (Mid Right), added in the
+        // 288 -> 291 growth; same 0 BW2 / 1 BW3 / 2 LR4 / 3 BW1 / 4 BW4 encoding as
+        // FIELD_CROSSOVER_TYPE. Kotlin seeds both from Mid's own type on first load (marker
+        // v[290]), so an existing save's lowpass keeps its old slope.
+        const float midLeftType = v[nbschema::kMidUpperXoTypeLeft];
+        const float midRightType = v[nbschema::kMidUpperXoTypeRight];
+        if (!std::isfinite(midLeftType) || !std::isfinite(midRightType)) {
+            return false;
+        }
+        auto decodeType = [](float t) {
+            return t == 3.f ? OutputConfig::CrossoverType::Butterworth1
+                   : t == 4.f ? OutputConfig::CrossoverType::Butterworth4
+                   : t < .5f ? OutputConfig::CrossoverType::Butterworth2
+                   : t < 1.5f ? OutputConfig::CrossoverType::Butterworth3
+                              : OutputConfig::CrossoverType::LinkwitzRiley4;
+        };
+        midLeftCfg.upperCrossoverType = decodeType(midLeftType);
+        midRightCfg.upperCrossoverType = decodeType(midRightType);
     }
 
     // High band: routing/all-pass/output-config, v[215..260] (added in the 210 -> 262 growth).
@@ -376,7 +395,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         // in this loop yet and that was equivalent to Mid-only by construction).
         if (band == NativeBmwRouting::Band::Mid &&
             (changed(old.upperCrossoverFreq, now.upperCrossoverFreq) ||
-             old.upperCrossoverEnabled != now.upperCrossoverEnabled)) {
+             old.upperCrossoverEnabled != now.upperCrossoverEnabled ||
+             old.upperCrossoverType != now.upperCrossoverType)) {
             dirty |= DirtyMidXo;
             // Isolate-Mid's upper bus LPF follows Mid's upper corner (and its enable).
             if (next.measurementMute == 1) {

@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (288 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (291 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -376,3 +376,7 @@
 0.70710677   # 285 centre feed Right all-pass Q
 2            # 286 centre feed Right all-pass order (2 = 2nd)
 0            # 287 virtualMigrated (0 = seed the stage off on next load)
+
+2            # 288 Mid Left upper (lowpass) slope (2 = LR4)
+2            # 289 Mid Right upper (lowpass) slope (2 = LR4)
+0            # 290 midUpperXoTypeMigrated (0 = seed from Mid's own type on next load)

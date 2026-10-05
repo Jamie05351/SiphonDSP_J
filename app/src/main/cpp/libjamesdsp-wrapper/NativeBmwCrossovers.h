@@ -46,6 +46,9 @@ struct OutputConfig {
     // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     bool upperCrossoverEnabled = false;
     float upperCrossoverFreq = 3000;
+    // The upper corner's own slope (v[288]/v[289], added in the 288 -> 291 growth), independent
+    // of crossoverType above, which only shapes the lower (Low/Mid) highpass.
+    CrossoverType upperCrossoverType = CrossoverType::LinkwitzRiley4;
 };
 
 struct OutputRuntime {

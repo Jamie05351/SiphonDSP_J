@@ -12,7 +12,7 @@ import app.siphondsp.model.NativeBmwDspValues.OUTPUT_MID_LEFT
 import app.siphondsp.model.NativeBmwDspValues.OUTPUT_MID_RIGHT
 import app.siphondsp.model.NativeBmwDspValues.highOutputIndex
 import app.siphondsp.model.NativeBmwDspValues.midUpperXoIndex
-import app.siphondsp.model.NativeBmwDspValues.outputIndex
+import app.siphondsp.model.NativeBmwDspValues.midUpperXoTypeIndex
 
 /**
  * The Crossovers page's master 3-way on/off switch -- a UI-level convenience over existing
@@ -24,30 +24,29 @@ import app.siphondsp.model.NativeBmwDspValues.outputIndex
  * `migrateHighBandIfNeeded`), and nothing else in the UI exposes High's mute, so without this
  * the switch would enable a band that stays silent. Turning it back off leaves the mute alone
  * since `highXoPass` alone is enough to silence High.
+ *
+ * Mid's lowpass and High's highpass are independent: each has its own frequency and slope, and
+ * Mid's lowpass slope is separate from Mid's highpass slope.
  */
 object ThreeWayCrossover {
     private val midUpperEnabledL = midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_ENABLED)
     private val midUpperEnabledR = midUpperXoIndex(OUTPUT_MID_RIGHT, MID_UPPER_XO_FIELD_ENABLED)
 
-    /** The Mid/High corner's primary index (Mid Left's upper freq); see [cornerMirrors]. */
-    val cornerIndex = midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_FREQ)
+    /** Mid's lowpass (Mid Left's upper corner); [midLowpassMirrors] keeps Mid Right equal. */
+    val midLowpassIndex = midUpperXoIndex(OUTPUT_MID_LEFT, MID_UPPER_XO_FIELD_FREQ)
+    val midLowpassMirrors = intArrayOf(midUpperXoIndex(OUTPUT_MID_RIGHT, MID_UPPER_XO_FIELD_FREQ))
 
-    /** Every other index the Mid/High corner frequency is kept equal to -- Mid Right's upper
-     *  corner and both High outputs' HPF corner -- the same mirroring the Lowpass/Highpass rows
-     *  already do onto their bands' per-output blocks. */
-    val cornerMirrors = intArrayOf(
-        midUpperXoIndex(OUTPUT_MID_RIGHT, MID_UPPER_XO_FIELD_FREQ),
-        highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_CROSSOVER_FREQ),
-        highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_CROSSOVER_FREQ),
-    )
+    /** Mid's lowpass slope (Mid Left's upper type); [midLowpassTypeMirrors] keeps Mid Right equal. */
+    val midLowpassTypeIndex = midUpperXoTypeIndex(OUTPUT_MID_LEFT)
+    val midLowpassTypeMirrors = intArrayOf(midUpperXoTypeIndex(OUTPUT_MID_RIGHT))
 
-    /** High's slope indices. Native Mid's upper lowpass has no type of its own -- it reuses
-     *  Mid's FIELD_CROSSOVER_TYPE (see rebuildMidCrossover) -- so High's highpass follows that
-     *  same type to keep both sides of the Mid/High corner a matched pair. */
-    val typeMirrors = intArrayOf(
-        highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_CROSSOVER_TYPE),
-        highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_CROSSOVER_TYPE),
-    )
+    /** High's highpass (High Left's corner); [highHighpassMirrors] keeps High Right equal. */
+    val highHighpassIndex = highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_CROSSOVER_FREQ)
+    val highHighpassMirrors = intArrayOf(highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_CROSSOVER_FREQ))
+
+    /** High's slope (High Left's type); [highTypeMirrors] keeps High Right equal. */
+    val highTypeIndex = highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_CROSSOVER_TYPE)
+    val highTypeMirrors = intArrayOf(highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_CROSSOVER_TYPE))
 
     /** Both Mid upper-corner flags are persisted independently, so a restored/imported array can
      *  have only one set -- native would then play High on that side with the other Mid branch
@@ -64,18 +63,18 @@ object ThreeWayCrossover {
                 midUpperEnabledR to 0f,
             )
         }
-        // Re-align every mirror onto the primary corner so Mid's lowpass and High's highpass
-        // can't come up at different frequencies (and leave a gap or overlap) if they drifted.
-        val corner = values[cornerIndex]
-        val midType = values[outputIndex(OUTPUT_MID_LEFT, FIELD_CROSSOVER_TYPE)]
+        // Re-align each Right output onto its Left so neither band comes up with mismatched
+        // sides if they drifted (e.g. an imported array); Mid and High stay independent.
         return buildMap {
             put(INDEX_HIGH_XO_PASS, 0f)
             put(midUpperEnabledL, 1f)
             put(midUpperEnabledR, 1f)
             put(highOutputIndex(OUTPUT_HIGH_LEFT, FIELD_MUTE), 0f)
             put(highOutputIndex(OUTPUT_HIGH_RIGHT, FIELD_MUTE), 0f)
-            for (mirror in cornerMirrors) put(mirror, corner)
-            for (mirror in typeMirrors) put(mirror, midType)
+            for (mirror in midLowpassMirrors) put(mirror, values[midLowpassIndex])
+            for (mirror in midLowpassTypeMirrors) put(mirror, values[midLowpassTypeIndex])
+            for (mirror in highHighpassMirrors) put(mirror, values[highHighpassIndex])
+            for (mirror in highTypeMirrors) put(mirror, values[highTypeIndex])
         }
     }
 }

@@ -185,15 +185,17 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 val upperFreq = values[NativeBmwDspValues.midUpperXoIndex(
                     output, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
                 )].toDouble()
+                // The upper lowpass has its own slope (288/289), not Mid's crossoverType.
+                val upperType = values[NativeBmwDspValues.midUpperXoTypeIndex(output)]
                 when {
-                    crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
+                    upperType == NativeBmwDspValues.CROSSOVER_TYPE_BW1 ->
                         cascade.addLowPass1(upperFreq, sampleRate)
-                    crossoverType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
+                    upperType == NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> {
                         cascade.addLowPass(upperFreq, BUTTERWORTH4_Q_LOW, sampleRate)
                         cascade.addLowPass(upperFreq, BUTTERWORTH4_Q_HIGH, sampleRate)
                     }
-                    crossoverType < .5f -> cascade.addLowPass(upperFreq, BUTTERWORTH_Q, sampleRate)
-                    crossoverType < 1.5f -> {
+                    upperType < .5f -> cascade.addLowPass(upperFreq, BUTTERWORTH_Q, sampleRate)
+                    upperType < 1.5f -> {
                         cascade.addLowPass1(upperFreq, sampleRate)
                         cascade.addLowPass(upperFreq, BUTTERWORTH3_Q, sampleRate)
                     }

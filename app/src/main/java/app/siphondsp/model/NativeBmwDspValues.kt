@@ -57,7 +57,10 @@ object NativeBmwDspValues {
     // 266..287 are the virtual-source stage (the virtual centre and its per-side feeds), added
     // in the 266 -> 288 growth. Ships disabled; 287 is a one-time migration marker, see
     // migrateVirtualIfNeeded() and docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
-    const val SIZE = 288
+    //
+    // 288..290 are Mid's upper (Mid/High) lowpass slope, Left/Right, added in the 288 -> 291
+    // growth; 290 is a one-time migration marker, see migrateMidUpperXoTypeIfNeeded().
+    const val SIZE = 291
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -310,6 +313,20 @@ object NativeBmwDspValues {
     const val INDEX_MID_UPPER_XO_MIGRATED = 209
     const val DEFAULT_MID_UPPER_XO_FREQ = 3000f
 
+    // Mid's upper-corner lowpass slope (288..290), independent of Mid's own FIELD_CROSSOVER_TYPE,
+    // which now shapes only Mid's highpass. Same 0..4 encoding. Use midUpperXoTypeIndex().
+    const val INDEX_MID_UPPER_XO_TYPE = 288
+    // One-time marker: 1 once an existing saved config has had both upper slopes seeded from Mid's
+    // own type. Kotlin-only -- native never reads this index. See migrateMidUpperXoTypeIfNeeded.
+    const val INDEX_MID_UPPER_XO_TYPE_MIGRATED = 290
+
+    fun midUpperXoTypeIndex(output: Int): Int {
+        require(output == OUTPUT_MID_LEFT || output == OUTPUT_MID_RIGHT) {
+            "Mid upper crossover slope only exists for Mid outputs, got $output"
+        }
+        return INDEX_MID_UPPER_XO_TYPE + if (output == OUTPUT_MID_LEFT) 0 else 1
+    }
+
     fun midUpperXoIndex(output: Int, field: Int): Int {
         require(output == OUTPUT_MID_LEFT || output == OUTPUT_MID_RIGHT) {
             "Mid upper crossover corner only exists for Mid outputs, got $output"
@@ -515,6 +532,9 @@ object NativeBmwDspValues {
         0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
         0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
         0f, // 287 migration marker (0 = seed the stage off on next load)
+        // --- Mid upper-corner slope (288..290) ---
+        2f, 2f, // 288..289 Mid Left / Right upper slope (LR4)
+        0f, // 290 migration marker (0 = seed from Mid's own type on next load)
     )
 
     init {
@@ -538,7 +558,26 @@ object NativeBmwDspValues {
         migrateHighBandIfNeeded(store, values)
         migrateHighBusLimiterIfNeeded(store, values)
         migrateVirtualIfNeeded(store, values)
+        migrateMidUpperXoTypeIfNeeded(store, values)
         return values
+    }
+
+    /**
+     * Seed Mid's upper (Mid/High) lowpass slope (indices 288..290, added in the 288 -> 291
+     * growth) from each Mid output's own FIELD_CROSSOVER_TYPE on configs saved before it existed.
+     * Until this growth native shaped the upper lowpass with Mid's own type, so copying it keeps
+     * every existing save's Mid band bit-identical until the user picks a separate slope. Must run
+     * after [migrateCrossoverTypeIfNeeded], which can rewrite that type. Runs once; the marker
+     * then stops it so a deliberate later choice is respected.
+     */
+    private fun migrateMidUpperXoTypeIfNeeded(store: NativeBmwDspStore?, values: FloatArray) {
+        if (values[INDEX_MID_UPPER_XO_TYPE_MIGRATED] == 1f) return
+        for (output in intArrayOf(OUTPUT_MID_LEFT, OUTPUT_MID_RIGHT)) {
+            values[midUpperXoTypeIndex(output)] = values[outputIndex(output, FIELD_CROSSOVER_TYPE)]
+        }
+        values[INDEX_MID_UPPER_XO_TYPE_MIGRATED] = 1f
+        val saved = store?.save(values)
+        Timber.i("BMW DSP seeded Mid upper slope from Mid type success=$saved")
     }
 
     /**
@@ -698,6 +737,7 @@ object NativeBmwDspValues {
         migrateHighBandIfNeeded(store, padded)
         migrateHighBusLimiterIfNeeded(store, padded)
         migrateVirtualIfNeeded(store, padded)
+        migrateMidUpperXoTypeIfNeeded(store, padded)
         return padded
     }
 
