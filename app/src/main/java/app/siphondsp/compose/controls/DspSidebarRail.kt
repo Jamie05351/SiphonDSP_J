@@ -29,7 +29,7 @@ import app.siphondsp.view.DspDestination
  * The submenu sidebar drawn entirely in Compose: a housing made of the front page's faceplate (the
  * same grained plate and metal bezel, see FaceplatePlate.kt) holding the five nav tiles from the
  * front page's signal chain as small square cards ([RailChainCard], with the same artwork and
- * colours as the front page's [HomeChainCard]s). It sits on top of [DspWorkspaceBackdrop].
+ * colours as the front page's signal-chain tiles). It sits on top of [DspWorkspaceBackdrop].
  *
  * Size it from the caller: the calibrated head unit rail is about 106dp wide inset 9dp from the
  * screen edge (`Modifier.padding(9.dp).width(106.dp)`, inside the 124dp column), which gives ~78dp tiles at 480dp height.
@@ -99,3 +99,8 @@ private fun DspDestination.cardStyle(): Triple<Color, Color, ImageVector> = when
     DspDestination.COMPRESSOR -> Triple(DspColors.Comp, ChainRose, CompressorGraphic)
     DspDestination.ALLPASS -> Triple(DspColors.Allpass, ChainIndigo, AllpassGraphic)
 }
+
+// Each card's second border colour, from the Figma cards (the others reuse DspColors).
+private val ChainTeal = Color(0xFF14B8A6)
+private val ChainRose = Color(0xFFFF4D8D)
+private val ChainIndigo = Color(0xFF5B5BFF)

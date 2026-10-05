@@ -8,120 +8,21 @@
     tools:context=".fragment.DspFragment"
     tools:ignore="SpeakableTextPresentCheck">
 
-    <!-- Front page: one full-bleed hardware faceplate, drawn live by HomeFaceplate (Compose) with no
-         margins, padding, header or bottom bar around it. Everything live is laid over the faceplate's
-         own regions by HomeArtLayout, which places each child by its tag (see HomeArt.kt) using the
-         same fit mapping as the faceplate: the 7 menu tiles (the five DSP signal-chain cards, then
-         Settings and More, each Compose in a clickable ComposeView, so its picture and its touch
-         area are the same box), the bottom screen's live output scope, and the top screens' global
-         stages, level readout and MBC / all-pass boxes. The power button remains
-         in the activity overlay (PowerHotspot draws it). Must never scroll. -->
+    <!-- Front page: one Compose screen (HomeScreen) filling the page, with no margins, padding,
+         header or bottom bar around it: the global stages, the output meter, More and Settings,
+         and the signal chain from the power button through the five DSP tiles to OUT. Must never
+         scroll. -->
     <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/home_backdrop"
+        android:id="@+id/home_screen"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- The More menu's anchor: moved onto the More button before the menu opens. -->
+    <View
+        android:id="@+id/home_more_anchor"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
         android:importantForAccessibility="no" />
-
-    <app.siphondsp.view.HomeArtLayout
-        android:id="@+id/dsp_destination_cards"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_peq"
-            android:tag="tile_peq"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/action_parametric_eq" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_gains_delay"
-            android:tag="tile_gains"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/action_gain_limiter" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_crossovers"
-            android:tag="tile_xovers"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/action_crossover_tilt" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_compressor"
-            android:tag="tile_compressor"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/action_compressor" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_allpass"
-            android:tag="tile_allpass"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/action_allpass" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_settings"
-            android:tag="tile_settings"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/title_activity_settings" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/card_shortcut_more"
-            android:tag="tile_more"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            android:contentDescription="@string/abc_action_menu_overflow_description" />
-
-        <!-- Live output at the end of the signal chain; redraws 20 times a second, so not announced. -->
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/home_output_scope"
-            android:tag="live_scope"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="noHideDescendants" />
-
-        <!-- Centre screen: headroom over the MBC band squares and all-pass boxes. The headroom
-             changes several times a second, so it is not announced. -->
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/home_centre_screen"
-            android:tag="live_centre"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="noHideDescendants" />
-
-        <!-- Each stage cell opens the screen that owns it, as on the workspace toolbar. -->
-        <app.siphondsp.view.DspStatusStrip
-            android:id="@+id/home_stages"
-            android:tag="live_stages"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:stacked="true" />
-    </app.siphondsp.view.HomeArtLayout>
 
     <!-- Notices float over the top of the artwork instead of pushing it down. -->
     <LinearLayout

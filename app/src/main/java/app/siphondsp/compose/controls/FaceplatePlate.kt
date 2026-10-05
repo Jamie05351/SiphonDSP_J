@@ -13,9 +13,8 @@ import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 
 /**
- * The hardware faceplate's plate and bezel, shared so every surface made of it matches: the front
- * page ([HomeFaceplate]) and the workspace sidebar ([DspSidebarRail]). Draw [drawPlate], then
- * [drawBezelRing] with [FaceplateCorner] and [FaceplateBezel].
+ * The hardware faceplate's plate and bezel, drawn behind the workspace sidebar ([DspSidebarRail]).
+ * Draw [drawPlate], then [drawBezelRing] with [FaceplateCorner] and [FaceplateBezel].
  */
 internal val FaceplateCorner = 12.dp
 internal val FaceplateBezel = 4.dp
