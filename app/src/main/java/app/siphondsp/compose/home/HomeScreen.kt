@@ -74,7 +74,7 @@ import app.siphondsp.view.LevelReadout
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
  * buttons and carry no state of their own; the live-data cells show which stages are on.
  *
- * Powering on also sends the signal down the chain ([ChainSweep], 3 s): a purple spark runs from
+ * Powering on also sends the signal down the chain ([ChainSweep], 6 s): a purple spark runs from
  * the power node along the line to the first tile, splits round both sides of its border lighting
  * it as it goes, carries on along the next stretch of line, and so on until it lights OUT. While
  * on, the chain panel glows faintly purple.
@@ -378,7 +378,7 @@ private const val CellGap = 10f
 internal const val TileGap = 27.5f
 private const val TileInset = 14f
 private const val MoreKey = "more"
-private const val SweepOnMs = 3000
+private const val SweepOnMs = 6000
 private const val SweepOffMs = 900
 
 // --- Previews: sample data only. The app passes real engine state. ---
