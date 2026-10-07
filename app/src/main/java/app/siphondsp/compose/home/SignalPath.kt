@@ -28,36 +28,57 @@ import app.siphondsp.R
 import app.siphondsp.compose.theme.BmwTheme
 
 /**
- * The power-on sweep's timeline: the signal travels from the power node along the line to the first
- * tile, around that tile's border, along the next stretch of line, and so on to OUT, which lights
- * as it arrives. [progress] runs 0..1 over the whole chain; each piece of line and each tile gets
- * its own 0..1 from it.
- *
- * Each piece's share of the time is its length, so the spark at the front moves at one speed: a
- * stretch of line (about 27 dp) is [LineWeight] of a tile's half-perimeter (about 375 dp), which
- * the spark covers both ways round at once.
+ * The power-on sweep's timeline, over [SweepOnMs] (3 s). [progress] runs 0..1 over the whole
+ * sequence; each piece of line and each tile gets its own 0..1 from it:
+ * - 0.0–0.3 s: the power button lights and the spark leaves it.
+ * - 0.3–1.1 s: the five lines into the tiles (power → first tile, and the four gaps) each carry
+ *   their own spark at once, in sync.
+ * - 1.1–2.3 s: each spark splits round both sides of its tile's border, so all five light together.
+ * - 2.3–2.8 s: the last tile's spark follows the last line to OUT.
+ * - 2.8–3.0 s: OUT lights.
+ * Powering off runs the same timeline backwards, faster.
  */
 internal object ChainSweep {
-    private const val LineWeight = 0.075f
     private val tiles = HomeStage.entries.size
-    private val total = (tiles + 1) * LineWeight + tiles
+    private const val LinesStart = 0.3f / 3f
+    private const val TilesStart = 1.1f / 3f
+    private const val LastLineStart = 2.3f / 3f
+    private const val OutStart = 2.8f / 3f
 
-    /** Piece [k] of the chain in order (line, tile, line, ... line), lit 0..1 at [progress]. */
-    private fun piece(k: Int, progress: Float): Float {
-        val start = (k + 1) / 2 * LineWeight + k / 2 * 1f
-        val weight = if (k % 2 == 0) LineWeight else 1f
-        return ((progress * total - start) / weight).coerceIn(0f, 1f)
-    }
+    private fun span(progress: Float, from: Float, to: Float) = ((progress - from) / (to - from)).coerceIn(0f, 1f)
 
     /** The stretch of line before tile [i] (or, at [i] = 5, from the last tile to OUT). */
-    fun line(i: Int, progress: Float) = piece(2 * i, progress)
+    fun line(i: Int, progress: Float) =
+        if (i < tiles) span(progress, LinesStart, TilesStart) else span(progress, LastLineStart, OutStart)
 
-    /** Tile [i]'s border. */
-    fun tile(i: Int, progress: Float) = piece(2 * i + 1, progress)
+    /** Every tile's border: they all light together. */
+    fun tiles(progress: Float) = span(progress, TilesStart, LastLineStart)
 
-    /** How lit OUT is: it lights as the last stretch of line reaches it. */
-    fun arrived(progress: Float) = line(tiles, progress)
+    /** How lit OUT is: it lights once the last line's spark reaches it. */
+    fun arrived(progress: Float) = span(progress, OutStart, 1f)
 }
+
+/**
+ * Where the chain's pieces sit across the chain screen, in design units at the chain's own scale
+ * (see [ChainScale]) for a screen [width] wide: the power button [ChainPad] in from the left edge,
+ * OUT [ChainPad] in from the right, and the five tiles between them with the six stretches of line
+ * all the same length ([gap]).
+ */
+internal class ChainLayout(val width: Float) {
+    private val tiles = HomeStage.entries.size
+    val gap = (width - 2 * ChainPad - NodeSize - OutSize - tiles * CardWidth) / (tiles + 1)
+    val powerX = ChainPad + NodeSize / 2
+    val outX = width - ChainPad - OutSize / 2
+    fun tileLeft(i: Int) = ChainPad + NodeSize + gap + i * (CardWidth + gap)
+    fun tileRight(i: Int) = tileLeft(i) + CardWidth
+
+    /** The stretch of line before tile [i] (or, at [i] = 5, from the last tile to OUT). */
+    fun lineStart(i: Int) = if (i == 0) ChainPad + NodeSize else tileRight(i - 1)
+    fun lineEnd(i: Int) = if (i == tiles) width - ChainPad - OutSize else tileLeft(i)
+}
+
+/** How far the power button and OUT sit in from the chain screen's sides, in chain units. */
+internal const val ChainPad = 39f
 
 /**
  * The spark at the front of the sweep, in the power button's purple: a soft glow round a bright
@@ -114,35 +135,30 @@ private val SparkCore = Color(0xFFF3E8FF)
  * ([drawSpark]) at the front while [spark] (powering on, not off). The bypass route fades with
  * [globalActive]: white at 0, gone at 1.
  *
- * The geometry matches [HomeScreen]'s chain row: the power column ([ColumnWidth]) at the left and
- * the OUT column ([OutColumnWidth]) at the right, both centred on the line.
+ * The geometry is [layout], the same [ChainLayout] the chain screen places its pieces by.
  */
 @Composable
-fun SignalPath(globalActive: Float, sweep: () -> Float, spark: Boolean, modifier: Modifier = Modifier) {
+internal fun SignalPath(globalActive: Float, sweep: () -> Float, spark: Boolean, layout: ChainLayout, modifier: Modifier = Modifier) {
     val s = LocalHomeScale.current
     val g = globalActive
     val signal = BmwTheme.colors.sliderHeadroom
     Canvas(modifier.fillMaxSize()) {
         val p = sweep()
         fun u(v: Float) = v * s.k * density
-        val powerX = u(ColumnWidth / 2)
-        val outX = size.width - u(OutColumnWidth / 2)
+        val powerX = u(layout.powerX)
+        val outX = u(layout.outX)
         val lineY = size.height / 2
         val from = Offset(powerX + u(NodeSize / 2), lineY)
         val to = Offset(outX - u(OutSize / 2), lineY)
 
-        // Processing route: the dashed line, lit over stretch by stretch. The stretches run between
-        // the tiles, laid out as HomeScreen's chain row lays them out.
+        // Processing route: the dashed line, lit stretch by stretch.
         drawLine(
             HomePalette.Idle, from, to, u(2f),
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(8f), u(8f))),
         )
-        val tiles = HomeStage.entries.size
-        val row = tiles * u(CardWidth) + (tiles - 1) * u(TileGap)
-        val firstTile = u(ColumnWidth) + (size.width - u(ColumnWidth) - u(OutColumnWidth) - row) / 2
-        for (i in 0..tiles) {
-            val start = if (i == 0) from.x else firstTile + i * (u(CardWidth) + u(TileGap)) - u(TileGap)
-            val end = if (i == tiles) to.x else firstTile + i * (u(CardWidth) + u(TileGap))
+        for (i in 0..HomeStage.entries.size) {
+            val start = u(layout.lineStart(i))
+            val end = u(layout.lineEnd(i))
             val lit = ChainSweep.line(i, p)
             if (lit <= 0f) continue
             val a = Offset(start, lineY)

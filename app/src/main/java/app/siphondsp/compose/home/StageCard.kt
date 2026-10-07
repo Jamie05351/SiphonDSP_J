@@ -91,7 +91,14 @@ fun StageCard(
             .sweptBorder(s.dp(2.5f), s.dp(16f), accent, borderLit, if (spark) signal else null, px)
             .clip(shape)
             .background(HomePalette.TileBase)
-            .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.32f + 0.15f * glow), Color.Transparent)))
+            // A gentle wash of the accent over the whole tile, fading slowly towards the bottom.
+            .background(
+                Brush.verticalGradient(
+                    0f to accent.copy(alpha = 0.30f + 0.15f * glow),
+                    0.45f to accent.copy(alpha = 0.14f + 0.07f * glow),
+                    1f to accent.copy(alpha = 0.02f),
+                ),
+            )
             .clickable(role = Role.Button, onClick = onClick)
             .padding(s.dp(12f)),
     ) {
