@@ -234,7 +234,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
-        cfg.crossoverFreq = clampIn(v[base], 80, 320);
+        cfg.crossoverFreq = clampIn(v[base], 60, 320);
         // v[base+1]: 0 = BW2, 1 = BW3, 2 = LR4, 3 = BW1, 4 = BW4. Keep the old threshold
         // decoding for existing saves; only the explicit new IDs select first-order / BW4.
         const float typeVal = v[base + 1];

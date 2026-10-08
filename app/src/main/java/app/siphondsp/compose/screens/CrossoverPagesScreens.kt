@@ -113,7 +113,7 @@ fun CrossoverLowMidPage(
         )
         SlopeRow(lowCrossoverType, onLowType, row(136, 40))
         DspArtSlider(
-            dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", midSlider,
+            dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 60f..320f, 1f, "Hz", midSlider,
             row(196, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
         SlopeRow(midCrossoverType, onMidType, row(252, 40))
