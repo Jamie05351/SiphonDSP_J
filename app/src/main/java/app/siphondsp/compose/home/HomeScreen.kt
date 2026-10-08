@@ -95,7 +95,9 @@ import kotlin.math.sin
  *
  * [onOpenStage] and [onMore] get the tapped element's bounds in this composable's root (the
  * hosting view's coordinates), for the screen's zoom-open and the overflow menu's anchor.
- * [openingStage] is the tile whose screen is opening; its glow is lit.
+ * [openingStage] is the tile whose screen is opening; its glow is lit, and the front page then
+ * turns into the workspace ([SidebarMorph]) as [morphProgress] runs 0..1, landing on a sidebar
+ * column [sidebarWidth] wide.
  */
 @Composable
 fun HomeScreen(
@@ -109,6 +111,8 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onMore: (Rect) -> Unit,
     modifier: Modifier = Modifier,
+    morphProgress: () -> Float = { 0f },
+    sidebarWidth: Dp = 124.dp,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(HomePalette.Page)) {
         val k = minOf(1f, maxWidth.value / DesignWidth, maxHeight.value / DesignHeight)
@@ -169,9 +173,15 @@ fun HomeScreen(
                         modifier = Modifier
                             .padding(horizontal = s.dp(ChainSide))
                             .fillMaxWidth()
-                            .height(s.dp(ChainHeight * ChainScale)),
+                            .height(s.dp(ChainHeight * ChainScale))
+                            .tracked(ChainKey),
                     )
                 }
+            }
+            val chain = bounds[ChainKey]
+            val tiles = HomeStage.entries.mapNotNull { bounds[it] }
+            if (openingStage != null && chain != null && tiles.size == HomeStage.entries.size) {
+                SidebarMorph(morphProgress, openingStage.ordinal, tiles, chain, sidebarWidth)
             }
         }
     }
@@ -465,6 +475,7 @@ private const val CellGap = 10f
 private const val TileInset = 14f
 private const val GlowBands = 20
 private const val MoreKey = "more"
+private const val ChainKey = "chain"
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900
 

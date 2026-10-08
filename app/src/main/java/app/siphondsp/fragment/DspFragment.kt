@@ -1,5 +1,7 @@
 package app.siphondsp.fragment
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.LayoutTransition
 import android.animation.ValueAnimator
 import android.app.ActivityOptions
@@ -11,12 +13,15 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -25,12 +30,15 @@ import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import app.siphondsp.R
 import androidx.compose.ui.geometry.Rect
 import app.siphondsp.compose.home.GlobalStage
 import app.siphondsp.compose.home.HomeEngineState
 import app.siphondsp.compose.home.HomeScreen
 import app.siphondsp.compose.home.HomeStage
+import app.siphondsp.compose.home.SidebarMorphMs
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
@@ -44,6 +52,7 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.HomeLevelFeed
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
@@ -68,6 +77,9 @@ class DspFragment : Fragment() {
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
+
+    /** The front page turning into the workspace (SidebarMorph), 0..1, while a tile opens. */
+    private var morphProgress by mutableFloatStateOf(0f)
 
     /** The held output levels, for the output meter and the headroom. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
@@ -172,6 +184,7 @@ class DspFragment : Fragment() {
         // The DSP screen (or whatever else) now covers this page, so taps can't reach it: release
         // the guard. The glow fades out as the page comes back.
         openingTile = null
+        morphProgress = 0f
     }
 
     private fun onPageSelectedInternal(position: Int) {
@@ -209,6 +222,8 @@ class DspFragment : Fragment() {
                 onOpenGlobal = ::openGlobal,
                 onSettings = { if (openingTile == null) onSettingsClick?.invoke() },
                 onMore = ::openMore,
+                morphProgress = { morphProgress },
+                sidebarWidth = DspCrossNavBar.sidebarWidthDp(requireActivity()).dp,
             )
         }
         levelFeed = HomeLevelFeed(onReadout = { levelReadout = it })
@@ -247,17 +262,18 @@ class DspFragment : Fragment() {
 
     /**
      * Opens a DSP screen from its front-page tile: the tile's glow flashes on for [TILE_FLASH_MS]
-     * so the tap reads as confirmed, then the screen zooms open out of the tile's own rect
-     * ([bounds], in the home screen view's coordinates). With animations turned off in system
-     * settings there is no flash wait, and the platform skips the zoom.
+     * so the tap reads as confirmed, then the front page turns into the workspace over
+     * [SidebarMorphMs] (the tiles fold into the sidebar, see SidebarMorph) and the screen opens
+     * over that last frame with no animation, since it already looks the same. With animations
+     * turned off in system settings it opens at once.
      *
      * Other tile, chip, power, Settings and More taps are ignored from the tap until this page
      * stops (see [openingTile]), not just during the flash, so a quick second tap can't open a
-     * second screen underneath. Leaving the page during the flash (swiping to the settings page,
-     * or anything pausing it) cancels the launch, so the DSP screen never opens over where the
-     * user went.
+     * second screen underneath. Leaving the page before the screen opens (swiping to the settings
+     * page, or anything pausing it) cancels the launch, so the DSP screen never opens over where
+     * the user went. [bounds] is the tile's rect; the morph tracks the tiles itself.
      */
-    private fun openStage(stage: HomeStage, bounds: Rect) {
+    private fun openStage(stage: HomeStage, @Suppress("UNUSED_PARAMETER") bounds: Rect) {
         if (openingTile != null) return
         val intent = when (stage) {
             HomeStage.PEQ -> Intent(requireContext(), ParametricEqualizerActivity::class.java)
@@ -268,14 +284,31 @@ class DspFragment : Fragment() {
                 .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
         }
         openingTile = stage
-        val host = shortcutsBinding.homeScreen
         pendingOpen = viewLifecycleOwner.lifecycleScope.launch {
-            if (ValueAnimator.areAnimatorsEnabled()) delay(TILE_FLASH_MS)
-            val zoom = ActivityOptions.makeScaleUpAnimation(
-                host, bounds.left.toInt(), bounds.top.toInt(), bounds.width.toInt(), bounds.height.toInt(),
-            )
-            startActivity(intent, zoom.toBundle())
+            if (ValueAnimator.areAnimatorsEnabled()) {
+                delay(TILE_FLASH_MS)
+                runSidebarMorph()
+            }
+            val noAnimation = ActivityOptions.makeCustomAnimation(requireContext(), 0, 0)
+            startActivity(intent, noAnimation.toBundle())
         }
+    }
+
+    /** Runs [morphProgress] 0..1 over [SidebarMorphMs]; cancelling the caller stops it. */
+    private suspend fun runSidebarMorph() = suspendCancellableCoroutine { cont ->
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = SidebarMorphMs
+            // The morph eases each piece itself.
+            interpolator = LinearInterpolator()
+            addUpdateListener { morphProgress = it.animatedValue as Float }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            })
+        }
+        cont.invokeOnCancellation { animator.cancel() }
+        animator.start()
     }
 
     /** A global stage's chip: opens the screen that owns the stage, as the workspace toolbar does. */
@@ -301,11 +334,12 @@ class DspFragment : Fragment() {
         onMoreClick?.invoke(anchor)
     }
 
-    /** Drops a tile launch that is still waiting out its flash, and the tile's glow with it. */
+    /** Drops a tile launch that has not opened yet (still in its flash or morph), and the glow and morph with it. */
     private fun cancelPendingOpen() {
         if (pendingOpen?.isActive == true) {
             pendingOpen?.cancel()
             openingTile = null
+            morphProgress = 0f
         }
         pendingOpen = null
     }
@@ -388,7 +422,7 @@ class DspFragment : Fragment() {
     }
 
     companion object {
-        private const val TILE_FLASH_MS = 150L
+        private const val TILE_FLASH_MS = 80L
         fun newInstance(): DspFragment {
             return DspFragment()
         }

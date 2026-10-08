@@ -7,8 +7,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -54,8 +53,8 @@ enum class DspDestination(
 
 object DspCrossNavBar {
     // The workspace's faceplate is drawn live: DspWorkspaceBackdrop (Compose) fills R.id.dsp_workspace_
-    // backdrop with the textured background and the screen bezel, and DspSidebarRail (Compose) draws
-    // the rail housing and the five tiles, hosted in the dsp_cross_nav ComposeView over dsp_sidebar's
+    // backdrop with the facia and the content window cut into it, and DspSidebarRail (Compose) draws
+    // the sidebar screen and the five tiles, hosted in the dsp_cross_nav ComposeView over dsp_sidebar's
     // reserved column (see that column's own comment in activity_parametric_eq.xml). populate() sets
     // both and pushes this destination's state into the rail.
 
@@ -74,6 +73,17 @@ object DspCrossNavBar {
     private const val PHONE_RAIL_WIDTH_DP = 118
     private const val NAV_INSET_BUFFER_DP = 43
     private const val STATUS_STRIP_GAP_DP = 72
+
+    /**
+     * The sidebar column's width in dp: the head unit's fixed dsp_sidebar_width, or the phone rail.
+     * The front page's tile-to-sidebar morph lands on a sidebar this wide.
+     */
+    fun sidebarWidthDp(activity: FragmentActivity): Float =
+        if (isHeadUnitDisplay(activity)) {
+            activity.resources.getDimension(R.dimen.dsp_sidebar_width) / activity.resources.displayMetrics.density
+        } else {
+            PHONE_RAIL_WIDTH_DP.toFloat()
+        }
 
     private fun applyPhoneRailGeometry(activity: FragmentActivity) {
         val sidebar = activity.findViewById<View>(R.id.dsp_sidebar) ?: return
@@ -104,10 +114,11 @@ object DspCrossNavBar {
         val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
         val headUnit = isHeadUnitDisplay(activity)
 
-        // The screen faceplate: textured background + slim metal bezel, behind everything.
+        // The screen faceplate: the facia with the content window cut into it, behind everything.
+        val sidebarWidth = sidebarWidthDp(activity).dp
         activity.findViewById<ComposeView>(R.id.dsp_workspace_backdrop)?.let { backdrop ->
             backdrop.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            backdrop.setContent { DspWorkspaceBackdrop() }
+            backdrop.setContent { DspWorkspaceBackdrop(sidebarWidth) }
         }
         if (!headUnit) applyPhoneRailGeometry(activity)
 
@@ -116,13 +127,8 @@ object DspCrossNavBar {
                 DspSidebarRail(
                     destinations = destinations,
                     current = current,
-                    // The head unit's rail housing sits 9dp in from the screen edge and is 106dp wide,
-                    // inside the fixed 124dp column; a phone's column is the rail's width already.
-                    modifier = if (headUnit) {
-                        Modifier.padding(start = 9.dp, top = 9.dp, bottom = 9.dp).width(106.dp)
-                    } else {
-                        Modifier.padding(6.dp)
-                    },
+                    // Fills the column; the rail insets its own screen by SidebarFacia.
+                    modifier = Modifier.fillMaxSize(),
                     canNavigate = canNavigate,
                     onNavigate = { destination ->
                         // Rail navigation is a clean cut, not a transition: picking another DSP
