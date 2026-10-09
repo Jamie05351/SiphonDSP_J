@@ -34,9 +34,9 @@ import kotlin.math.roundToInt
  * the same facia carries on round the sidebar screen that [DspSidebarRail] draws on top.
  *
  * Needs `res/drawable-nodpi/dsp_workspace_bg.webp` (the 2340x878 texture, which is the head unit's
- * own aspect; other aspects are cover-cropped). It is James's dark navy texture (average about
- * 20/255, a blue cast), saved lossless: a lossy re-encode once flattened an earlier texture to
- * near solid black.
+ * own aspect; other aspects are cover-cropped). It is James's charcoal texture (average about
+ * 25/255, neutral grey; it replaced the old navy one), saved lossless: a lossy re-encode once
+ * flattened an earlier texture to near solid black.
  *
  * The content container's right and bottom margin (dsp_workspace_bezel_inset, 7dp) is
  * [SidebarFacia], so the content sits inside the window.
