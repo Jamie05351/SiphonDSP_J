@@ -21,6 +21,7 @@ import app.siphondsp.compose.controls.FaciaColour
 import app.siphondsp.compose.controls.SidebarFacia
 import app.siphondsp.compose.controls.SidebarLayout
 import app.siphondsp.compose.controls.SidebarScreenCorner
+import app.siphondsp.compose.controls.SidebarSignal
 import app.siphondsp.compose.controls.cardStyle
 import app.siphondsp.compose.controls.contentWindowRect
 import app.siphondsp.compose.controls.drawChainScreen
@@ -30,7 +31,6 @@ import app.siphondsp.compose.controls.drawSignalLine
 import app.siphondsp.compose.controls.measureTileLabel
 import app.siphondsp.compose.controls.stubEnds
 import app.siphondsp.compose.controls.tileLabelRes
-import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.view.DspDestination
 
 /**
@@ -63,7 +63,7 @@ internal fun SidebarMorph(
     val labels = destinations.map { stringResource(it.tileLabelRes()) }
     val measurer = rememberTextMeasurer()
     val texture = ImageBitmap.imageResource(R.drawable.dsp_workspace_bg)
-    val signal = BmwTheme.colors.sliderHeadroom
+    val signal = SidebarSignal
     val count = minOf(destinations.size, tiles.size)
 
     Spacer(
