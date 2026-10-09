@@ -145,43 +145,41 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCompressorMeter(JNIEnv* e
     return result;
 }
 
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMbcMeter(JNIEnv* env, jobject, jlong self) {
-    if (env == nullptr || self == 0) {
-        return nullptr;
+// Fills [out] with one meter's current values instead of returning a new array, so a UI poll
+// running ~30 times a second allocates nothing. kind (JamesDspWrapper.METER_*): 1 = MBC
+// (12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]), 2 = bus limiters (3 floats:
+// [lowGrDb, midGrDb, highGrDb]). False, with [out] untouched, for an unknown kind, a short
+// array or a gone handle. The readers only load atomics, so no lock is taken.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_readNativeBmwMeter(JNIEnv* env, jobject, jlong self,
+                                                             jint kind, jfloatArray out) {
+    if (env == nullptr || self == 0 || out == nullptr) {
+        return JNI_FALSE;
     }
     auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
     auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     if (processor == nullptr) {
-        return nullptr;
+        return JNI_FALSE;
     }
     float values[12];
-    processor->readMbcMeter(values, 12);
-    jfloatArray result = env->NewFloatArray(12);
-    if (result != nullptr) {
-        env->SetFloatArrayRegion(result, 0, 12, values);
+    jsize count = 0;
+    switch (kind) {
+        case 1:
+            count = 12;
+            processor->readMbcMeter(values, 12);
+            break;
+        case 2:
+            count = 3;
+            processor->readBusLimiterMeter(values, 3);
+            break;
+        default:
+            return JNI_FALSE;
     }
-    return result;
-}
-
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwBusLimiterMeter(JNIEnv* env, jobject,
-                                                                       jlong self) {
-    if (env == nullptr || self == 0) {
-        return nullptr;
+    if (env->GetArrayLength(out) < count) {
+        return JNI_FALSE;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
-    float values[3];
-    processor->readBusLimiterMeter(values, 3);
-    jfloatArray result = env->NewFloatArray(3);
-    if (result != nullptr) {
-        env->SetFloatArrayRegion(result, 0, 3, values);
-    }
-    return result;
+    env->SetFloatArrayRegion(out, 0, count, values);
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL

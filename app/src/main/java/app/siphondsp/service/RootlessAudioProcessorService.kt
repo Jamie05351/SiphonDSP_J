@@ -1336,11 +1336,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeBmwCompressorMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwCompressorMeter()
 
-        fun nativeBmwMbcMeter(): FloatArray? =
-            activeInstance?.engine?.nativeBmwMbcMeter()
-
-        fun nativeBmwBusLimiterMeter(): FloatArray? =
-            activeInstance?.engine?.nativeBmwBusLimiterMeter()
+        /** Fills [out] from one native meter (see [JamesDspWrapper.readNativeBmwMeter]); false
+         *  while no service or engine is running. */
+        fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
+            activeInstance?.engine?.readNativeBmwMeter(kind, out) ?: false
 
         fun nativeBmwMasterLimiterMeter(): FloatArray? =
             activeInstance?.engine?.nativeBmwMasterLimiterMeter()
