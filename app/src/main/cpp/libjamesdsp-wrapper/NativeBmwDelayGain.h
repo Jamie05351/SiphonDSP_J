@@ -55,6 +55,61 @@ struct StageDelay {
     }
 };
 
+// ---- Time-alignment delay (per-output and stage-centering) ------------------------------------
+// Delay/StageDelay above interpolate linearly, which is a low-pass whose depth depends on the
+// fractional part: at half a sample, -2 dB at 10 kHz and -6 dB at 16 kHz. Fine for the master
+// limiter's integer lookahead, but on the per-output time alignment it changed each tweeter's
+// treble by a different amount L vs R. This line uses a 16-tap Kaiser-windowed sinc instead:
+// within 0.01 dB to 18 kHz and -0.6 dB at 20 kHz (48 kHz, worst-case fraction).
+//
+// The price is a fixed kAlignmentLatency samples (7, ~0.15 ms at 48 kHz) on top of the requested
+// delay, so the kernel has samples on both sides of the read point. Every output and both stage
+// sides carry it, so relative alignment is unchanged. Not used where an undelayed path is summed
+// back in (the virtual-centre feeds) or where the delay must stay exact against a gain path (the
+// master limiter's lookahead) -- those keep Delay/StageDelay.
+constexpr unsigned kAlignmentTaps = 16;
+constexpr unsigned kAlignmentLatency = kAlignmentTaps / 2 - 1;
+// Kernel for a fractional part in [0, 1): taps[k] multiplies x[n - whole - k]. A zero fraction
+// gives an exact unit impulse at kAlignmentLatency, so integer delays stay bit-exact.
+void buildAlignmentTaps(float fraction, std::array<float, kAlignmentTaps>& taps);
+
+template <unsigned Capacity>
+struct AlignmentDelay {
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two");
+    static_assert(Capacity > kAlignmentTaps, "Capacity must exceed the kernel length");
+    std::array<float, Capacity> data{};
+    std::array<float, kAlignmentTaps> taps{};
+    unsigned write = 0;
+    unsigned whole = 0;
+    // Requested delay in samples, excluding kAlignmentLatency (what the truth snapshot reports).
+    float delay = 0;
+
+    AlignmentDelay() {
+        setDelay(0);
+    }
+    // Config thread. Clamped so the kernel's oldest tap stays inside the ring.
+    void setDelay(float samples) {
+        delay = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
+        whole = static_cast<unsigned>(delay);
+        buildAlignmentTaps(delay - static_cast<float>(whole), taps);
+    }
+    float run(float x) {
+        constexpr unsigned mask = Capacity - 1;
+        data[write] = x;
+        const unsigned newest = (write + Capacity - whole) & mask;
+        float y = 0;
+        for (unsigned k = 0; k < kAlignmentTaps; ++k) {
+            y += taps[k] * data[(newest + Capacity - k) & mask];
+        }
+        write = (write + 1) & mask;
+        return y;
+    }
+    void clear() {
+        data.fill(0);
+        write = 0;
+    }
+};
+
 // Delay in ms -> fractional samples, clamped to what a ring of `capacity` can hold.
 inline float delaySamples(float ms, float sampleRate, unsigned capacity) {
     return clampf(ms * sampleRate * .001f, 0, capacity - 1.f);

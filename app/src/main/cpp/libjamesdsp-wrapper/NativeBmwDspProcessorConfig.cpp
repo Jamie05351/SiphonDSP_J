@@ -662,15 +662,15 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
 }
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;
-    output(OutputId::LowLeft).delay.delay = delaySamples(p_.lowDelayL, sampleRate_, kDelayLineCapacity);
-    output(OutputId::LowRight).delay.delay = delaySamples(p_.lowDelayR, sampleRate_, kDelayLineCapacity);
-    output(OutputId::MidLeft).delay.delay = delaySamples(p_.midDelayL, sampleRate_, kDelayLineCapacity);
-    output(OutputId::MidRight).delay.delay = delaySamples(p_.midDelayR, sampleRate_, kDelayLineCapacity);
-    output(OutputId::HighLeft).delay.delay = delaySamples(p_.highDelayL, sampleRate_, kDelayLineCapacity);
-    output(OutputId::HighRight).delay.delay = delaySamples(p_.highDelayR, sampleRate_, kDelayLineCapacity);
+    output(OutputId::LowLeft).delay.setDelay(delaySamples(p_.lowDelayL, sampleRate_, kDelayLineCapacity));
+    output(OutputId::LowRight).delay.setDelay(delaySamples(p_.lowDelayR, sampleRate_, kDelayLineCapacity));
+    output(OutputId::MidLeft).delay.setDelay(delaySamples(p_.midDelayL, sampleRate_, kDelayLineCapacity));
+    output(OutputId::MidRight).delay.setDelay(delaySamples(p_.midDelayR, sampleRate_, kDelayLineCapacity));
+    output(OutputId::HighLeft).delay.setDelay(delaySamples(p_.highDelayL, sampleRate_, kDelayLineCapacity));
+    output(OutputId::HighRight).delay.setDelay(delaySamples(p_.highDelayR, sampleRate_, kDelayLineCapacity));
     // Stage-centering delay -- its own (larger) ring buffer, so clamp to kStageDelayCapacity.
-    stageDelayL_.delay = delaySamples(p_.stageDelayL, sampleRate_, kStageDelayCapacity);
-    stageDelayR_.delay = delaySamples(p_.stageDelayR, sampleRate_, kStageDelayCapacity);
+    stageDelayL_.setDelay(delaySamples(p_.stageDelayL, sampleRate_, kStageDelayCapacity));
+    stageDelayR_.setDelay(delaySamples(p_.stageDelayR, sampleRate_, kStageDelayCapacity));
 }
 void NativeBmwDspProcessor::rebuildCompressorTiming() {
     detector_.rebuild(sampleRate_);

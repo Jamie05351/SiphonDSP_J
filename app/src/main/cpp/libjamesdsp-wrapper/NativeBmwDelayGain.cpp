@@ -26,4 +26,41 @@ void Delay::clear() {
     write = 0;
 }
 
+namespace {
+// Modified Bessel function of the first kind, order 0 (for the Kaiser window).
+double besselI0(double x) {
+    double sum = 1, term = 1;
+    for (int k = 1; k < 32; ++k) {
+        term *= (x / (2 * k)) * (x / (2 * k));
+        sum += term;
+    }
+    return sum;
+}
+}  // namespace
+
+void buildAlignmentTaps(float fraction, std::array<float, kAlignmentTaps>& taps) {
+    taps.fill(0.f);
+    if (!(fraction > 1e-6f)) {
+        taps[kAlignmentLatency] = 1.f;
+        return;
+    }
+    // Sinc centred on kAlignmentLatency + fraction, Kaiser window (beta 6) centred on the same
+    // point with a half-width of half the kernel, normalised to unity DC gain.
+    constexpr double kPi = 3.14159265358979323846, kBeta = 6.0;
+    const double centre = kAlignmentLatency + static_cast<double>(fraction);
+    const double halfWidth = kAlignmentTaps / 2.0, norm = besselI0(kBeta);
+    std::array<double, kAlignmentTaps> h{};
+    double sum = 0;
+    for (unsigned k = 0; k < kAlignmentTaps; ++k) {
+        const double d = static_cast<double>(k) - centre;
+        const double r = d / halfWidth;
+        const double window = besselI0(kBeta * std::sqrt(std::max(0.0, 1 - r * r))) / norm;
+        h[k] = std::sin(kPi * d) / (kPi * d) * window;
+        sum += h[k];
+    }
+    for (unsigned k = 0; k < kAlignmentTaps; ++k) {
+        taps[k] = static_cast<float>(h[k] / sum);
+    }
+}
+
 }  // namespace NativeBmwDsp
