@@ -119,9 +119,20 @@ private:
 // ---- Per-bus brick-wall limiter (Low / Mid / High) ---------------------------------------------
 // Infinite ratio, fixed-fast attack, one stereo-linked gain follower. No lookahead -- the master
 // limiter downstream already carries that. Threshold is read live per sample.
+//
+// Each sample's required gain (ceiling / peak) goes through a moving minimum over holdSamples
+// before the attack/release follower. Without it the target swung back to 1 at every zero
+// crossing, so on bass the gain dipped at each crest and recovered in between: gain modulation
+// inside the waveform's own cycle, i.e. added harmonics (~2.6% THD on a 40 Hz tone at the 20 ms
+// minimum release). Holding for at least half the bus's lowest period keeps the gain flat across
+// the cycle. Same moving-minimum idea as MasterLimiter's peak hold.
 struct BusLimiter {
+    // Hold window cap, in samples: kBusLimLowHoldMs (the longest) at up to ~160 kHz.
+    static constexpr unsigned kMaxHoldSamples = 4096;
     float gain = 1.f;
     float releaseMix = 0.f;
+    // Moving-minimum window length; 0 disables the hold (the old per-sample behaviour).
+    unsigned holdSamples = 0;
     // Published gain reduction (dB, >= 0), for readBusLimiterMeter(). Written only through
     // process()/zeroMeter()/reset(), which keep meteredGain_ in step with it.
     std::atomic<float> grDb{0.f};
@@ -133,14 +144,27 @@ struct BusLimiter {
     // the next time it runs -- which would fade that band back in over the release time.
     // Guarded so the steady skipped state costs no atomic store per sample.
     void reset();
+    // Sets the hold window (clamped to kMaxHoldSamples) and empties it.
+    void setHold(float holdMs, float sampleRate);
 
 private:
+    // Monotonic queue: holdGain_ ascending from the front, so the front is the smallest required
+    // gain still inside the window. holdAt_ is each entry's sample index.
+    std::array<float, kMaxHoldSamples> holdGain_{};
+    std::array<uint32_t, kMaxHoldSamples> holdAt_{};
+    unsigned holdHead_ = 0, holdCount_ = 0;
+    uint32_t sampleIndex_ = 0;
     // dbToLin(cachedThresholdDb_), so process() only pays the pow when the threshold changes.
     float cachedThresholdDb_ = std::numeric_limits<float>::quiet_NaN();
     float cachedCeilingLin_ = 1.f;
     // The gain grDb was last computed from (NaN = republish on the next process()).
     float meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 };
+// Hold windows: half the period of the lowest frequency each bus normally carries, so the window
+// always spans from one crest of |x| to the next. Low: 20 Hz. Mid: 40 Hz (its high-pass is
+// >= 60 Hz, with margin for the LR slope and for hpfPass running it full-range). High: 200 Hz
+// (its high-pass is >= 300 Hz). Longer than needed only delays the start of release by that much.
+constexpr float kBusLimLowHoldMs = 25.f, kBusLimMidHoldMs = 12.5f, kBusLimHighHoldMs = 2.5f;
 // ~1 ms attack shared by all three bus limiters.
 inline float busLimiterAttackMix(float sampleRate) {
     return 1 - std::exp(-1 / (.001f * sampleRate));

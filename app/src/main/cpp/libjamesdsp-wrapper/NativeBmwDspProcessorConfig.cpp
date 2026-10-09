@@ -687,6 +687,11 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimLow_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimLowReleaseMs, sampleRate_);
     busLimMid_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimMidReleaseMs, sampleRate_);
     busLimHigh_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimHighReleaseMs, sampleRate_);
+    // Also empties each hold window; the follower's gain is left alone, so a release/enable edit
+    // mid-limiting just releases from where it is.
+    busLimLow_.setHold(NativeBmwDsp::kBusLimLowHoldMs, sampleRate_);
+    busLimMid_.setHold(NativeBmwDsp::kBusLimMidHoldMs, sampleRate_);
+    busLimHigh_.setHold(NativeBmwDsp::kBusLimHighHoldMs, sampleRate_);
 }
 void NativeBmwDspProcessor::rebuildPolarityAndMute() {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {

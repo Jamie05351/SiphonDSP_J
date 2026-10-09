@@ -201,3 +201,33 @@ TEST_CASE("per-bus limiter: zero GR when disabled, engages only when its bus run
         CHECK(m[0] < 0.5f);
     }
 }
+
+TEST_CASE("per-bus limiter: hold keeps gain flat across a bass cycle (no in-cycle modulation)") {
+    // Low-bus limiter driven hot by 40 Hz at the fastest release. Without the hold, the target
+    // gain swung back to 1 at every zero crossing and the 20 ms release let the gain recover
+    // between crests: ~0.7 dB of gain ripple per cycle, i.e. added harmonics. With the 25 ms
+    // hold the gain sits still once settled.
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    quietUpstream(c);
+    c[182] = 1.f; c[183] = -6.f; c[184] = 20.f;   // low bus limiter on, fastest release
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+
+    // One continuous tone (no phase resets between chunks), processed in 32-frame chunks so the
+    // meter -- republished whenever the gain moves -- is sampled ~37 times per 40 Hz cycle.
+    auto sig = stereoSine(40.0, 0.9, 96000);
+    constexpr std::size_t kWarmFrames = 48000, kChunkFrames = 32;
+    proc.process(sig.data(), kWarmFrames * 2);
+    float grMin = 1e9f, grMax = -1e9f;
+    for (std::size_t f = kWarmFrames; f + kChunkFrames <= 96000; f += kChunkFrames) {
+        proc.process(sig.data() + f * 2, kChunkFrames * 2);
+        float m[2] = {0.f, 0.f};
+        proc.readBusLimiterMeter(m, 2);
+        grMin = std::min(grMin, m[0]);
+        grMax = std::max(grMax, m[0]);
+    }
+    INFO("low-bus GR range over 1 s: ", grMin, " .. ", grMax, " dB");
+    CHECK(grMin > 1.0f);                // it is limiting
+    CHECK(grMax - grMin < 0.05f);       // and the gain is flat across the cycle
+}
