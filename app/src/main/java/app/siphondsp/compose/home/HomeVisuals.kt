@@ -65,8 +65,6 @@ internal object HomePalette {
     val Cell = Color(0xFF111216)
     val CellLabel = Color(0xFFC9CCD1)
     val Hollow = Color(0xFF5A5F6A)
-    val ButtonTop = Color(0xFF2E3036)
-    val ButtonBottom = Color(0xFF1A1B1F)
     val ButtonEdge = Color(0xFF3A3D45)
     val MeterHot = Color(0xFFF040CC)
     val MeterPeak = Color(0xFFF3E8FF)
