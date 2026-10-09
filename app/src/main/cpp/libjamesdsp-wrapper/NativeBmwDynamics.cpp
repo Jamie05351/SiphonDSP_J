@@ -245,7 +245,25 @@ void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix)
     }
     const float ceilingLin = cachedCeilingLin_;
     const float pk = std::max(std::fabs(l), std::fabs(r));
-    const float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
+    float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
+    if (holdSamples > 0) {
+        // Moving minimum over the last holdSamples + 1 readings (see MasterLimiter::process):
+        // drop entries that left the window, then any this one undercuts, then append.
+        while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > holdSamples) {
+            holdHead_ = (holdHead_ + 1) % kMaxHoldSamples;
+            --holdCount_;
+        }
+        while (holdCount_ > 0 &&
+               holdGain_[(holdHead_ + holdCount_ - 1) % kMaxHoldSamples] >= target) {
+            --holdCount_;
+        }
+        const unsigned tail = (holdHead_ + holdCount_) % kMaxHoldSamples;
+        holdGain_[tail] = target;
+        holdAt_[tail] = sampleIndex_;
+        ++holdCount_;
+        ++sampleIndex_;
+        target = holdGain_[holdHead_];
+    }
     const float mix = target < gain ? attackMix : releaseMix;
     gain = std::min(1.f, ftz(gain + (target - gain) * mix));
     // Meter: republish only when the gain moved since the last store. Same gain -> same log10 ->
@@ -263,11 +281,21 @@ void BusLimiter::zeroMeter() {
     meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 }
 void BusLimiter::reset() {
+    // The window is emptied too (plain stores, so unguarded): a held reduction left over from
+    // before the skip would otherwise clamp the first holdSamples after it resumes.
+    holdCount_ = 0;
     if (gain != 1.f) {
         gain = 1.f;
         grDb.store(0.f, std::memory_order_relaxed);
         meteredGain_ = std::numeric_limits<float>::quiet_NaN();
     }
+}
+void BusLimiter::setHold(float holdMs, float sampleRate) {
+    // The window holds holdSamples + 1 readings, so the cap leaves room for that extra slot.
+    holdSamples = static_cast<unsigned>(clampf(std::round(holdMs * .001f * sampleRate), 0.f,
+                                               static_cast<float>(kMaxHoldSamples - 1)));
+    holdHead_ = holdCount_ = 0;
+    sampleIndex_ = 0;
 }
 
 // ---- Pre-crossover multiband compressor --------------------------------------------------------
