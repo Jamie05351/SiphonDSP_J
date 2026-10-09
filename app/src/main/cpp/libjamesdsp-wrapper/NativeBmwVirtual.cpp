@@ -41,7 +41,7 @@ double onePoleCoef(double ms, float sampleRate) {
 void VirtualFeed::rebuild(VirtualFeedConfig& cfg, float sampleRate, bool keepState) {
     gain = dbToLin(cfg.gainDb);
     inverted = cfg.polarityInverted;
-    delay.delay = delaySamples(cfg.delayMs, sampleRate, kStageDelayCapacity);
+    delay.setDelayNoLatency(delaySamples(cfg.delayMs, sampleRate, kStageDelayCapacity));
     // An all-pass that can't be built at this sample rate degrades to identity (rebuild() leaves
     // identity coefficients), the same policy as the per-output all-pass sections.
     (void)cfg.allPass.rebuild(sampleRate);

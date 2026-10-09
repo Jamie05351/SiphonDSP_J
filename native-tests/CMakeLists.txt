@@ -51,6 +51,7 @@ add_executable(native_tests
     schema_agreement_test.cpp
     truth_snapshot_test.cpp
     virtual_test.cpp
+    alignment_delay_test.cpp
 )
 
 target_include_directories(native_tests PRIVATE

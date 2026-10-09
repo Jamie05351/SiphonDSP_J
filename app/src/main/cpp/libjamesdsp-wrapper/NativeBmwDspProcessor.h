@@ -365,7 +365,9 @@ private:
     NativeBmwDsp::Tilt tilt_;
     // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
     // and processFrame's tail). delay (in samples) is set by updateDelays().
-    NativeBmwDsp::StageDelay stageDelayL_, stageDelayR_;
+    NativeBmwDsp::AlignmentDelay<NativeBmwDsp::kStageDelayCapacity> stageDelayL_, stageDelayR_;
+    // Fixed AlignmentDelay latency for a bypassed Low/Mid band: [LowL, LowR, MidL, MidR].
+    std::array<NativeBmwDsp::FixedAlignmentLatency, 4> bypassLatency_{};
     // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
     // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
     NativeBmwDsp::VirtualSourceStage virtual_;

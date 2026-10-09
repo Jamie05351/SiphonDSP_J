@@ -64,7 +64,7 @@ struct OutputRuntime {
     // one filter direction. Inert (identity pass-through, Biquad's default) unless Mid's upper
     // corner is enabled. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     Biquad crossover3, crossover4;
-    Delay delay;
+    AlignmentDelay<kDelayLineCapacity> delay;  // time alignment (see AlignmentDelay)
     std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>
         allPass{};
     std::array<Biquad, NativeBmwRouting::kAllPassSectionsPerOutput> allPassState{};
