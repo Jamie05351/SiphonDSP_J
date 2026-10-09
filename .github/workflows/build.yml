@@ -99,11 +99,20 @@ jobs:
           print(f"Stamped versionCode={version_code}")
           PY
 
-      # PRs from branches of this repo are signed with the release key too, so their private APK
-      # installs over a master build without an uninstall (which would wipe the saved tuning).
-      # Fork PRs are excluded: their code must never run with the keystore on disk.
+      # PRs are signed with the release key too, so their private APK installs over a master build
+      # without an uninstall (which would wipe the saved tuning) -- but only when the repo owner both
+      # opened the PR and triggered this run, from a branch of this repo. The build runs the PR's own
+      # Gradle scripts with the keystore on disk, so this is the same trust as the owner pushing to
+      # master. Fork PRs, and PRs opened or updated by anyone else (a collaborator, a bot), stay
+      # debug-signed and never see the secrets.
       - name: Configure release signing
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: >-
+          github.event_name != 'pull_request' || (
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.user.login == github.repository_owner &&
+            github.actor == github.repository_owner &&
+            github.triggering_actor == github.repository_owner
+          )
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -114,8 +123,8 @@ jobs:
           set -euo pipefail
 
           if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
-            # A same-repo PR can still lack the secrets (e.g. Dependabot, which gets its own
-            # secret store): fall back to the debug key there rather than fail the build.
+            # A PR that passed the condition above can still lack the secrets: fall back to
+            # the debug key there rather than fail the build.
             if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
               echo "::warning::Release signing secrets unavailable for this PR; the APK is debug-signed and will not install over a master build."
               exit 0
