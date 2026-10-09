@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.siphondsp.compose.controls.FaciaColour
 import java.util.Locale
 
 /**
@@ -21,7 +22,9 @@ import java.util.Locale
  */
 @Immutable
 class HomeScale(val k: Float) {
+    /** [design] dp at this scale. */
     fun dp(design: Float): Dp = (design * k).dp
+    /** [design] sp at this scale. */
     fun sp(design: Float): TextUnit = (design * k).sp
 }
 
@@ -41,7 +44,9 @@ fun animateActive(on: Boolean, label: String): Float {
 
 /** The page's neutral colours, from the Figma frames. Stage accents come from the app theme. */
 internal object HomePalette {
-    val Page = Color(0xFF0E0F12)
+    // The facia: the same as the workspace's bezel and sidebar housing, so the tile-to-sidebar morph
+    // fades between matching colours.
+    val Page = FaciaColour
     val Panel = Color(0xFF050506)
     val PanelEdge = Color(0xFF2A2C31)
     val TileBase = Color(0xFF0A0A0D)
@@ -62,8 +67,6 @@ internal object HomePalette {
     val Cell = Color(0xFF111216)
     val CellLabel = Color(0xFFC9CCD1)
     val Hollow = Color(0xFF5A5F6A)
-    val ButtonTop = Color(0xFF2E3036)
-    val ButtonBottom = Color(0xFF1A1B1F)
     val ButtonEdge = Color(0xFF3A3D45)
     val MeterHot = Color(0xFFF040CC)
     val MeterPeak = Color(0xFFF3E8FF)

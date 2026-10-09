@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -35,20 +35,18 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -76,10 +74,10 @@ import kotlin.math.sin
  *   drawn at [ChainScale] of their design size with the six stretches of line between them all the
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
- * - The top screen, [TopMargin] from the top, from the chain screen's left edge to the last tile's
- *   right edge: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
- *   headroom and the L / R output meters, all at [TopContentScale]. More and Settings are raised
- *   squircle buttons on the faceplate to its right, centred over OUT.
+ * - The top screen, [TopMargin] from the top, lined up with the chain screen's left and right
+ *   edges: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the headroom
+ *   and the L / R output meters, all at [TopContentScale], then a divider and the More and
+ *   Settings buttons (just an outline and a glyph, [ScreenButton]), centred over OUT.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
@@ -129,13 +127,17 @@ fun HomeScreen(
                 label = "chain sweep",
             )
             val bounds = remember { mutableMapOf<Any, Rect>() }
+            /** Records this element's bounds in the root under [key], for taps and the morph. */
             fun Modifier.tracked(key: Any) = onGloballyPositioned { bounds[key] = it.boundsInRoot() }
 
             // The chain's geometry, in chain units, for the chain screen's actual width; the top row
             // lines up with it.
             val layout = ChainLayout((maxWidth.value / k - 2 * ChainSide) / ChainScale)
-            val topRight = ChainSide + layout.tileRight(HomeStage.entries.size - 1) * ChainScale
+            val screenRight = maxWidth.value / k - ChainSide
             val outCentre = ChainSide + layout.outX * ChainScale
+            // More and Settings sit inside the top screen's right end, centred over OUT; the
+            // screen's own content stops at a divider [ButtonsGap] before them.
+            val buttonsInset = screenRight - (outCentre - ButtonSize / 2) + ButtonsGap
 
             Column(Modifier.fillMaxSize()) {
                 Box(
@@ -145,18 +147,18 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, g, onOpenGlobal,
-                        Modifier.offset(x = s.dp(ChainSide)).width(s.dp(topRight - ChainSide)).fillMaxHeight(),
+                        engine, readout, g, onOpenGlobal, buttonsInset,
+                        Modifier.offset(x = s.dp(ChainSide)).width(s.dp(screenRight - ChainSide)).fillMaxHeight(),
                     )
                     Column(
                         Modifier.align(Alignment.CenterStart).offset(x = s.dp(outCentre - ButtonSize / 2)),
                         verticalArrangement = Arrangement.spacedBy(s.dp(ButtonGap)),
                     ) {
-                        FaciaButton(
+                        ScreenButton(
                             stringResource(R.string.home_tile_more), { onMore(bounds[MoreKey] ?: Rect.Zero) },
                             Modifier.tracked(MoreKey),
                         ) { drawMoreGlyph() }
-                        FaciaButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
+                        ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
                     }
                 }
                 Box(
@@ -197,16 +199,36 @@ private fun TopScreen(
     readout: LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
+    buttonsInset: Float,
     modifier: Modifier,
 ) {
     val off = stringResource(R.string.home_chip_off)
-    Screen(LocalHomeScale.current.dp(14f), modifier) {
-        CompositionLocalProvider(LocalHomeScale provides HomeScale(LocalHomeScale.current.k * TopContentScale)) {
-            TopScreenContent(engine, readout, g, onOpenGlobal, off)
+    val s = LocalHomeScale.current
+    Screen(s.dp(14f), modifier) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
+                    TopScreenContent(engine, readout, g, onOpenGlobal, off)
+                }
+            }
+            // The same divider as between the cells and the meters; More and Settings (drawn by
+            // the caller, over this screen) sit in the space after it.
+            Box(
+                Modifier
+                    .width(s.dp(2f * TopContentScale))
+                    .fillMaxHeight()
+                    .padding(vertical = s.dp(16f * TopContentScale))
+                    .background(HomePalette.PanelEdge),
+            )
+            Spacer(Modifier.width(s.dp(buttonsInset - 2f * TopContentScale)))
         }
     }
 }
 
+/**
+ * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, a
+ * divider, then the output meter. [off] is the cells' text for a stage that is off.
+ */
 @Composable
 private fun TopScreenContent(
     engine: HomeEngineState,
@@ -259,6 +281,7 @@ private fun TopScreenContent(
     }
 }
 
+/** One live-data cell: [stage]'s [label] and [value] in [accent], lit by [on] times [g]; opens [stage]. */
 @Composable
 private fun Cell(
     stage: GlobalStage,
@@ -369,36 +392,23 @@ private fun Screen(
     ) { content() }
 }
 
-/** More / Settings: a raised squircle button on the faceplate, with a glyph over its label. */
+/**
+ * More / Settings, inside the top screen: just the squircle outline and the glyph. The label isn't
+ * shown, only announced.
+ */
 @Composable
-private fun FaciaButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, glyph: DrawScope.() -> Unit) {
+private fun ScreenButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, glyph: DrawScope.() -> Unit) {
     val s = LocalHomeScale.current
-    Column(
+    Box(
         modifier
             .size(s.dp(ButtonSize))
-            .drawBehind {
-                // A drop shadow under the button, so it stands off the plate.
-                val outline = Squircle.createOutline(size, layoutDirection, this)
-                for (step in 1..3) {
-                    translate(top = s.dp(1f + step).toPx()) { drawOutline(outline, Color.Black.copy(alpha = 0.22f)) }
-                }
-            }
             .clip(Squircle)
-            .background(Brush.verticalGradient(listOf(HomePalette.ButtonTop, HomePalette.ButtonBottom)))
             .border(s.dp(1.5f), HomePalette.ButtonEdge, Squircle)
-            .clickable(role = Role.Button, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(s.dp(26f), s.dp(17f)), onDraw = glyph)
-        Text(
-            text = label,
-            color = HomePalette.CellLabel,
-            fontSize = s.sp(10f),
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            modifier = Modifier.padding(top = s.dp(4f)),
-        )
     }
 }
 
@@ -431,7 +441,7 @@ private fun DrawScope.drawSettingsGlyph() {
     for ((fy, fx) in listOf(0.15f to 0.72f, 0.5f to 0.28f, 0.85f to 0.58f)) {
         val y = size.height * fy
         drawLine(HomePalette.Button, Offset(size.width * 0.1f, y), Offset(size.width * 0.9f, y), stroke, StrokeCap.Round)
-        drawCircle(HomePalette.ButtonBottom, knob, Offset(size.width * fx, y))
+        drawCircle(HomePalette.Panel, knob, Offset(size.width * fx, y))
         drawCircle(HomePalette.Button, knob, Offset(size.width * fx, y), style = Stroke(stroke))
     }
 }
@@ -439,6 +449,7 @@ private fun DrawScope.drawSettingsGlyph() {
 /** A tile's fixed content: its name, what it does, its colour and its artwork. */
 private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: ImageVector)
 
+/** Each front-page tile's title, subtitle, colour and artwork. */
 private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, PeqGraphic)
     HomeStage.GAINS -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
@@ -458,6 +469,8 @@ private const val BottomFacia = 15f
 private const val ChainSide = 48f
 private const val ButtonSize = 58f
 private const val ButtonGap = 12f
+// Between the top screen's divider and the buttons.
+private const val ButtonsGap = 16f
 
 /** The chain screen's contents (and the screen) at this fraction of their design size. */
 private const val ChainScale = 0.82f

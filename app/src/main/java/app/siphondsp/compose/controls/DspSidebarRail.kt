@@ -21,7 +21,6 @@ import app.siphondsp.compose.assets.CompressorGraphic
 import app.siphondsp.compose.assets.GainsDelayGraphic
 import app.siphondsp.compose.assets.PeqGraphic
 import app.siphondsp.compose.assets.XoversGraphic
-import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.view.DspDestination
 import kotlin.math.roundToInt
 
@@ -42,7 +41,7 @@ fun DspSidebarRail(
     onNavigate: (DspDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val signal = BmwTheme.colors.sliderHeadroom
+    val signal = SidebarSignal
     val density = LocalDensity.current
     BoxWithConstraints(modifier.fillMaxSize()) {
         val count = destinations.size.coerceAtLeast(1)
@@ -74,6 +73,7 @@ fun DspSidebarRail(
     }
 }
 
+/** Each page's short tile caption ("PEQ", "Xover"): the same as its tile on the front page. */
 internal fun DspDestination.tileLabelRes(): Int = when (this) {
     DspDestination.PARAMETRIC_EQ -> R.string.home_tile_peq
     DspDestination.GAINS_DELAY -> R.string.home_tile_gains

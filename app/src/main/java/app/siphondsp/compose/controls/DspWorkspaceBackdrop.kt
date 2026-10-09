@@ -34,11 +34,11 @@ import kotlin.math.roundToInt
  * the same facia carries on round the sidebar screen that [DspSidebarRail] draws on top.
  *
  * Needs `res/drawable-nodpi/dsp_workspace_bg.webp` (the 2340x878 texture, which is the head unit's
- * own aspect; other aspects are cover-cropped). It is James's dark navy texture (average about
- * 20/255, a blue cast), saved lossless: a lossy re-encode once flattened an earlier texture to
- * near solid black.
+ * own aspect; other aspects are cover-cropped). It is James's charcoal texture, brightened 1.2x
+ * (average about 29/255, neutral grey; it replaced the old navy one), saved lossless: a lossy
+ * re-encode once flattened an earlier texture to near solid black.
  *
- * The content container's right and bottom margin (dsp_workspace_bezel_inset, 7dp) is
+ * The content container's right and bottom margin (dsp_workspace_bezel_inset, 8dp) is
  * [SidebarFacia], so the content sits inside the window.
  */
 @Composable
@@ -56,26 +56,16 @@ fun DspWorkspaceBackdrop(sidebarWidth: Dp, modifier: Modifier = Modifier) {
 
 /**
  * The content window in [window]: the texture cover-cropped into it, shaded at its edges so it
- * reads as set into the facia, and a grey hairline round it. [alpha] fades it as a whole.
+ * reads as set into the facia. [alpha] fades it as a whole.
  */
 internal fun DrawScope.drawContentWindow(window: Rect, image: ImageBitmap, alpha: Float = 1f) {
     if (alpha <= 0f) return
     val corner = ContentWindowCorner.toPx()
     translate(window.left, window.top) {
         drawCoverImage(image, corner, window.size, alpha)
-        drawInsetShadow(corner, depth = 10.dp.toPx(), window.size, alpha)
-        val edge = 1.5.dp.toPx() * EdgeScale
-        drawRoundRect(
-            WindowEdge.copy(alpha = alpha),
-            topLeft = Offset(edge / 2, edge / 2),
-            size = Size(window.width - edge, window.height - edge),
-            cornerRadius = CornerRadius(corner - edge / 2),
-            style = Stroke(edge),
-        )
+        drawInsetShadow(corner, depth = 9.5.dp.toPx(), window.size, alpha)
     }
 }
-
-private val WindowEdge = Color(0xFF2A2C31)
 
 /** Cover-crops [image] to [area] at the origin, clipped to a rounded rect of radius [corner]. */
 private fun DrawScope.drawCoverImage(image: ImageBitmap, corner: Float, area: Size, alpha: Float) {
