@@ -62,6 +62,14 @@ data class NativeConfigRevisionStatus(
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
     private val nativeLock = Any()
+    // Guards only the handle's lifetime for the UI-polled meter getters. The native meter readers
+    // are lock-free atomics, so all they need is a handle close() can't free mid-call -- not
+    // nativeLock, which processFloat()/processInt16() hold for the whole audio buffer. Sharing
+    // nativeLock made every UI meter poll (plus its JNI NewFloatArray) a point where the
+    // URGENT_AUDIO loop could block behind a default-priority thread. close() takes meterLock
+    // then nativeLock; meter getters take meterLock only, process*() nativeLock only -- one
+    // fixed order, so no deadlock.
+    private val meterLock = Any()
     @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.loadPersisted(context)
     @Volatile private var peqRestorePending = true
 
@@ -176,6 +184,13 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
+    // Meter getters only -- see meterLock. Never call a native function that touches DSP state
+    // (configure, process, truth snapshot, capture) through this.
+    private inline fun <T> withMeterHandle(default: T, block: (JamesDspHandle) -> T): T = synchronized(meterLock) {
+        val current = handle
+        if(current == 0L) default else block(current)
+    }
+
     fun isNativeHandleReady(): Boolean = synchronized(nativeLock) { handle != 0L }
 
     fun nativeConfigRevisionStatus(): NativeConfigRevisionStatus = synchronized(nativeLock) {
@@ -255,14 +270,18 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     override fun close() {
         super.close()
 
-        synchronized(nativeLock) {
-            val oldHandle = handle
-            handle = 0L
-            if(oldHandle != 0L) {
-                JamesDspWrapper.free(oldHandle)
-                Timber.d("Handle $oldHandle has been freed")
+        // meterLock first (see its declaration): a meter read already in flight finishes before
+        // the handle is freed, and any later one sees handle == 0.
+        synchronized(meterLock) {
+            synchronized(nativeLock) {
+                val oldHandle = handle
+                handle = 0L
+                if(oldHandle != 0L) {
+                    JamesDspWrapper.free(oldHandle)
+                    Timber.d("Handle $oldHandle has been freed")
+                }
+                BmwPeqState.clearActiveSession(context, this)
             }
-            BmwPeqState.clearActiveSession(context, this)
         }
         context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
     }
@@ -479,19 +498,19 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     }
 
     fun nativeBmwCompressorMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
+        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
     fun nativeBmwMbcMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
+        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
 
     fun nativeBmwBusLimiterMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwBusLimiterMeter(it) }
+        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwBusLimiterMeter(it) }
 
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
+        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 
     fun nativeBmwVirtualMeter(): FloatArray? =
-        withHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwVirtualMeter(it) }
+        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwVirtualMeter(it) }
 
     fun startNativeBmwCapture() {
         freePendingCaptureSnapshot()
