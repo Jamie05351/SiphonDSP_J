@@ -99,8 +99,11 @@ jobs:
           print(f"Stamped versionCode={version_code}")
           PY
 
+      # PRs from branches of this repo are signed with the release key too, so their private APK
+      # installs over a master build without an uninstall (which would wipe the saved tuning).
+      # Fork PRs are excluded: their code must never run with the keystore on disk.
       - name: Configure release signing
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -111,6 +114,12 @@ jobs:
           set -euo pipefail
 
           if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            # A same-repo PR can still lack the secrets (e.g. Dependabot, which gets its own
+            # secret store): fall back to the debug key there rather than fail the build.
+            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+              echo "::warning::Release signing secrets unavailable for this PR; the APK is debug-signed and will not install over a master build."
+              exit 0
+            fi
             echo "Release signing secrets are missing. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD."
             exit 1
           fi
