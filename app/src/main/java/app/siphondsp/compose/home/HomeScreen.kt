@@ -127,6 +127,7 @@ fun HomeScreen(
                 label = "chain sweep",
             )
             val bounds = remember { mutableMapOf<Any, Rect>() }
+            /** Records this element's bounds in the root under [key], for taps and the morph. */
             fun Modifier.tracked(key: Any) = onGloballyPositioned { bounds[key] = it.boundsInRoot() }
 
             // The chain's geometry, in chain units, for the chain screen's actual width; the top row
@@ -224,6 +225,10 @@ private fun TopScreen(
     }
 }
 
+/**
+ * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, a
+ * divider, then the output meter. [off] is the cells' text for a stage that is off.
+ */
 @Composable
 private fun TopScreenContent(
     engine: HomeEngineState,
@@ -276,6 +281,7 @@ private fun TopScreenContent(
     }
 }
 
+/** One live-data cell: [stage]'s [label] and [value] in [accent], lit by [on] times [g]; opens [stage]. */
 @Composable
 private fun Cell(
     stage: GlobalStage,
@@ -443,6 +449,7 @@ private fun DrawScope.drawSettingsGlyph() {
 /** A tile's fixed content: its name, what it does, its colour and its artwork. */
 private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: ImageVector)
 
+/** Each front-page tile's title, subtitle, colour and artwork. */
 private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, PeqGraphic)
     HomeStage.GAINS -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)

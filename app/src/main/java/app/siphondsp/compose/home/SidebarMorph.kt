@@ -98,7 +98,9 @@ internal fun SidebarMorph(
 
                     // Each line leaves a tile's right-middle (then bottom-middle) and enters the next
                     // one's left-middle (then top-middle), so the lines swing round as the tiles fold.
+                    /** Where the line leaves tile [i]: its right-middle, swinging to its bottom-middle. */
                     fun outPort(i: Int) = lerp(at[i].centerRight, at[i].bottomCenter, k[i])
+                    /** Where the line enters tile [i]: its left-middle, swinging to its top-middle. */
                     fun inPort(i: Int) = lerp(at[i].centerLeft, at[i].topCenter, k[i])
                     val (stubTop, stubBottom) = stubEnds(screen)
                     val first = lerp(Offset(screen.left + pad, at[0].center.y), stubTop, k[0])

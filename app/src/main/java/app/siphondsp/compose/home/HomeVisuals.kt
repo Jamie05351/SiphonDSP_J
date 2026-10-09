@@ -22,7 +22,9 @@ import java.util.Locale
  */
 @Immutable
 class HomeScale(val k: Float) {
+    /** [design] dp at this scale. */
     fun dp(design: Float): Dp = (design * k).dp
+    /** [design] sp at this scale. */
     fun sp(design: Float): TextUnit = (design * k).sp
 }
 

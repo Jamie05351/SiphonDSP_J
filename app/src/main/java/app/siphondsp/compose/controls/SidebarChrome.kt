@@ -76,6 +76,7 @@ internal class SidebarLayout(columnWidth: Float, height: Float, facia: Float, pr
     private val gap = tile * GapRatio
     private val first = screen.top + (screen.height - count * tile - (count - 1) * gap) / 2
 
+    /** Tile [i]'s square, counting down from the top. */
     fun tileRect(i: Int): Rect {
         val left = screen.center.x - tile / 2
         val top = first + i * (tile + gap)

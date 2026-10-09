@@ -73,6 +73,7 @@ fun DspSidebarRail(
     }
 }
 
+/** Each page's short tile caption ("PEQ", "Xover"): the same as its tile on the front page. */
 internal fun DspDestination.tileLabelRes(): Int = when (this) {
     DspDestination.PARAMETRIC_EQ -> R.string.home_tile_peq
     DspDestination.GAINS_DELAY -> R.string.home_tile_gains
