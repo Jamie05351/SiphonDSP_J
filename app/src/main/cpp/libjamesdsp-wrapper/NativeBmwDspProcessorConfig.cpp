@@ -794,6 +794,9 @@ void NativeBmwDspProcessor::rebuildAll() {
     limiter_.clear();
     stageDelayL_.clear();
     stageDelayR_.clear();
+    for (auto& line : bypassLatency_) {
+        line.clear();
+    }
     mbc_.resetState();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
         b->gain = 1.f;

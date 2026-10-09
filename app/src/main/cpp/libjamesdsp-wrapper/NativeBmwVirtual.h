@@ -46,7 +46,7 @@ struct VirtualFeed {
     float gain = 1;
     bool inverted = false;
     bool allPassOn = false;
-    StageDelay delay;
+    AlignmentDelay<kStageDelayCapacity> delay;  // setDelayNoLatency(): summed with the undelayed side
     Biquad allPass;
 
     /** [keepState]: carry the all-pass history over (see rebuildKeepingState). */

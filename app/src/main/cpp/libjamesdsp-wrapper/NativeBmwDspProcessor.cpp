@@ -162,14 +162,23 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     float highL = routed[static_cast<std::size_t>(OutputId::HighLeft)],
           highR = routed[static_cast<std::size_t>(OutputId::HighRight)];
 
+    // A bypassed band (lpfPass/hpfPass) skips the band chain and its AlignmentDelay, so it takes
+    // the same fixed latency here to stay aligned with the processed bands. Run every frame,
+    // bypassed or not, so a line is never stale the moment its bypass flag flips on.
+    const float lowLBypassed = bypassLatency_[0].run(lowL), lowRBypassed = bypassLatency_[1].run(lowR);
+    const float midLBypassed = bypassLatency_[2].run(midL), midRBypassed = bypassLatency_[3].run(midR);
     if (!p_.lpfPass) {
         processBandChain(Band::Low, lowL, lowR);
     } else {
+        lowL = lowLBypassed;
+        lowR = lowRBypassed;
         idleBandChain(Band::Low);
     }
     if (!p_.hpfPass) {
         processBandChain(Band::Mid, midL, midR);
     } else {
+        midL = midLBypassed;
+        midR = midRBypassed;
         idleBandChain(Band::Mid);
     }
     if (!p_.highXoPass) {
