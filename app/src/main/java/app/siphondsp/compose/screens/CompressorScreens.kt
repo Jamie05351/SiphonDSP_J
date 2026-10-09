@@ -21,11 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +41,7 @@ import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
+import app.siphondsp.interop.JamesDspWrapper
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
@@ -84,12 +83,14 @@ private fun formatHz(hz: Float): String =
 @Composable
 fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val mbcMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwMbcMeter() }
+    val mbcMeter = rememberMeterPoll(JamesDspWrapper.METER_MBC, MbcMeterSize)
 
     val graph: @Composable (Modifier) -> Unit = { m ->
         // Compose port of CompressorSurface: band regions, grid, threshold lines, GR readouts,
         // the live dry/wet spectrum + boost/cut delta fill, and the applied gain-reduction curve.
-        CompressorGraph(systemValues = dsp.values, mbcMeter = mbcMeter, modifier = m.clip(RoundedCornerShape(20.dp)))
+        // The meter goes in as a provider the graph calls from its draw lambda, so a meter tick
+        // redraws the graph without recomposing this page.
+        CompressorGraph(systemValues = dsp.values, mbcMeter = mbcMeter::latest, modifier = m.clip(RoundedCornerShape(20.dp)))
     }
     val controls: @Composable (MasterRow) -> Unit = { row -> MbcMasterControls(dsp, row) }
 
@@ -171,8 +172,7 @@ private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
 @Composable
 fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val mbcMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwMbcMeter() }
-    val gr = mbcMeter?.getOrNull(band * 3 + 2) ?: 0f
+    val mbcMeter = rememberMeterPoll(JamesDspWrapper.METER_MBC, MbcMeterSize)
 
     fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
@@ -185,7 +185,9 @@ fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
     }
 
     val header: @Composable (Modifier) -> Unit = { m -> BandHeader(band, rangeLabel, dsp, m) }
-    val meter: @Composable (Modifier) -> Unit = { m -> ArtMeterRow(m) { BmwGrMeter(gr, it) } }
+    val meter: @Composable (Modifier) -> Unit = { m ->
+        ArtMeterRow(m) { BmwGrMeter({ mbcMeter.value(band * 3 + 2, 0f) }, it) }
+    }
     val control: @Composable (BandSliderSpec, Modifier) -> Unit = { spec, m ->
         DspArtSlider(dsp, spec.label, idx(spec.field), spec.range, spec.step, spec.unit, DefaultSliderAccent, m)
     }
@@ -316,8 +318,10 @@ private typealias BusRow = (y: Int, h: Int) -> Modifier
 @Composable
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val busMeter = rememberMeterPoll { RootlessAudioProcessorService.nativeBmwBusLimiterMeter() }
-    val bus: @Composable (Int, BusRow) -> Unit = { i, row -> BusLimiterColumn(dsp, BusColumns[i], busMeter?.getOrNull(i) ?: 0f, row) }
+    val busMeter = rememberMeterPoll(JamesDspWrapper.METER_BUS_LIMITER, BusMeterSize)
+    val bus: @Composable (Int, BusRow) -> Unit = { i, row ->
+        BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row)
+    }
 
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
@@ -334,7 +338,7 @@ fun CompressorDriverPage(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: Float, row: BusRow) {
+private fun BusLimiterColumn(dsp: BmwDspState, col: BusColumn, gainReductionDb: () -> Float, row: BusRow) {
     ArtGroupHeader(
         title = col.title,
         accent = Color(col.accent),
@@ -377,23 +381,51 @@ private fun PhoneBusLimiters(modifier: Modifier, bus: @Composable (Int, BusRow) 
     }
 }
 
-/** Polls [read] at ~30fps while the composition is at least STARTED; returns the latest result. */
+private const val MbcMeterSize = 12
+private const val BusMeterSize = 3
+
+/**
+ * One native meter, refreshed into a single reused array ~30 times a second while the page is
+ * STARTED. Nothing here is read during composition: [value] and [latest] read [tick], so call them
+ * only where the meter is drawn (a Canvas lambda, an AndroidView update). A refresh then redraws
+ * just that meter instead of recomposing the whole page and its sliders, and the poll allocates
+ * nothing (JamesDspWrapper.readNativeBmwMeter fills [values] in place).
+ */
+@Stable
+private class MeterPoll(size: Int) {
+    val values = FloatArray(size)
+    val tick = mutableIntStateOf(0)
+    var valid = false
+
+    /** values[index], or [fallback] before the first successful read. Draw/update phase only. */
+    fun value(index: Int, fallback: Float): Float {
+        tick.intValue
+        return if (valid) values.getOrElse(index) { fallback } else fallback
+    }
+
+    /** The whole array, or null before the first successful read. Draw/update phase only. */
+    fun latest(): FloatArray? {
+        tick.intValue
+        return if (valid) values else null
+    }
+}
+
 @Composable
-private fun rememberMeterPoll(read: () -> FloatArray?): FloatArray? {
-    var value by remember { mutableStateOf<FloatArray?>(null) }
-    val currentRead by rememberUpdatedState(read)
-    LifecycleStartEffect(Unit) {
+private fun rememberMeterPoll(kind: Int, size: Int): MeterPoll {
+    val poll = remember(kind, size) { MeterPoll(size) }
+    LifecycleStartEffect(poll) {
         val handler = Handler(Looper.getMainLooper())
         val tick = object : Runnable {
             override fun run() {
-                value = currentRead()
+                poll.valid = RootlessAudioProcessorService.readNativeBmwMeter(kind, poll.values)
+                poll.tick.intValue++
                 handler.postDelayed(this, MeterTickMs)
             }
         }
         handler.post(tick)
         onStopOrDispose { handler.removeCallbacks(tick) }
     }
-    return value
+    return poll
 }
 
 // ---- Head unit: the same controls placed on the workspace art (REW/_UI/submenu_layout_editor.html)

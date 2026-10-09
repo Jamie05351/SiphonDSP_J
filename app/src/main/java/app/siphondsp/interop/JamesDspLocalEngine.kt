@@ -500,11 +500,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun nativeBmwCompressorMeter(): FloatArray? =
         withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
 
-    fun nativeBmwMbcMeter(): FloatArray? =
-        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMbcMeter(it) }
-
-    fun nativeBmwBusLimiterMeter(): FloatArray? =
-        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwBusLimiterMeter(it) }
+    /** See [JamesDspWrapper.readNativeBmwMeter]. */
+    fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
+        withMeterHandle(false) { JamesDspWrapper.readNativeBmwMeter(it, kind, out) }
 
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }

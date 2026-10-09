@@ -41,8 +41,8 @@ import kotlinx.coroutines.delay
  * Geometry, grid sets, colours, alpha values, label positions and the boost/cut-by-sign-change
  * delta technique are kept 1:1 with `CompressorSurface.onDraw`. `CompressorSurfaceMath` is a pure
  * object -- splits, band ranges, the freq/dB fraction mapping and the GR->dB conversion are
- * shared verbatim with the View. The page's existing `rememberMeterPoll { nativeBmwMbcMeter() }`
- * feeds [mbcMeter]; the spectrum runs its own poll while this composable is on screen.
+ * shared verbatim with the View. [mbcMeter] provides the page's MBC meter poll and is called only
+ * in the draw lambda; the spectrum runs its own poll while this composable is on screen.
  *
  * 2026-10-01 restyle to match the redesigned PEQ graph: the whole graph sits on [graphPanel]; the
  * four band regions are soft washes fading down the plot instead of flat blocks, the split lines
@@ -73,7 +73,7 @@ private val BandTints = intArrayOf(
 @Composable
 fun CompressorGraph(
     systemValues: FloatArray,
-    mbcMeter: FloatArray?,
+    mbcMeter: () -> FloatArray?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -181,6 +181,8 @@ fun CompressorGraph(
             CompressorSurfaceMath.splitFrequencies(systemValues)
         }
         val mbcOn = systemValues[NativeBmwDspValues.INDEX_MBC_ENABLED] >= .5f
+        // Read here, in the draw phase: a meter tick redraws the graph, nothing recomposes.
+        val meter = mbcMeter()
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
             drawBandRegions(nc, left, right, top, bottom, splits, bandFillPaints, splitLinePaint)
@@ -188,9 +190,9 @@ fun CompressorGraph(
             drawSpectrum(nc, left, right, top, bottom, frame, scratch, dryStrokePaint, wetStrokePaint, boostFillPaint, cutFillPaint)
             drawThresholdLines(nc, systemValues, left, right, top, bottom, splits, thresholdPaint)
             if (mbcOn) {
-                drawGainCurve(nc, mbcMeter, left, right, top, bottom, splits, scratch, gridPaint, gainCurvePaint, gainGlowPaint)
+                drawGainCurve(nc, meter, left, right, top, bottom, splits, scratch, gridPaint, gainCurvePaint, gainGlowPaint)
             }
-            drawBandReadouts(nc, systemValues, mbcMeter, left, right, top, density, splits, readoutPaint)
+            drawBandReadouts(nc, systemValues, meter, left, right, top, density, splits, readoutPaint)
         }
     }
 }

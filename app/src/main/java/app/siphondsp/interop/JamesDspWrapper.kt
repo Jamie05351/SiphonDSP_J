@@ -37,11 +37,14 @@ object JamesDspWrapper {
     external fun getNativeBmwPeqActiveRevision(self: JamesDspHandle): Long
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
     external fun getNativeBmwCompressorMeter(self: JamesDspHandle): FloatArray?
-    // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. Null when the native
-    // handle is gone; all-idle (-60/-60/0) while the multiband compressor is disabled.
-    external fun getNativeBmwMbcMeter(self: JamesDspHandle): FloatArray?
-    // 2 floats: [lowBusGrDb, midBusGrDb] -- per-bus limiter gain reduction; 0 for a disabled bus.
-    external fun getNativeBmwBusLimiterMeter(self: JamesDspHandle): FloatArray?
+    // Fills [out] with one meter's values (no allocation, for ~30 Hz UI polls); false and [out]
+    // untouched when the handle is gone or [out] is too short. [kind]:
+    //   METER_MBC          12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb];
+    //                      all-idle (-60/-60/0) while the multiband compressor is disabled.
+    //   METER_BUS_LIMITER  3 floats: [lowGrDb, midGrDb, highGrDb]; 0 for a disabled bus.
+    external fun readNativeBmwMeter(self: JamesDspHandle, kind: Int, out: FloatArray): Boolean
+    const val METER_MBC = 1
+    const val METER_BUS_LIMITER = 2
     // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
     external fun getNativeBmwMasterLimiterMeter(self: JamesDspHandle): FloatArray?
     // 2 floats: [centreWeight 0..1, centreRmsDb] of the virtual centre; [0, -60] while the
