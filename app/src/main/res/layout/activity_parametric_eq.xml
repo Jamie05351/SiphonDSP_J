@@ -5,9 +5,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".activity.ParametricEqualizerActivity">
 
-    <!-- Full-screen workspace faceplate (textured background + slim metal screen bezel), drawn live by
-         DspWorkspaceBackdrop (Compose): DspCrossNavBar.populate() sets its content. The rail housing
-         and tiles are drawn by dsp_cross_nav below, not by this view. Authored for 1280x480 mdpi, edge
+    <!-- Full-screen workspace faceplate (the front page's facia with the textured content window cut
+         into it), drawn live by DspWorkspaceBackdrop (Compose): DspCrossNavBar.populate() sets its
+         content. The sidebar screen and tiles are drawn by dsp_cross_nav below, not by this view. Authored for 1280x480 mdpi, edge
          to edge (the head unit runs with no system bars), so it fills the whole activity behind every
          other layer. -->
     <androidx.compose.ui.platform.ComposeView
@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Full-height column for the rail: dsp_cross_nav draws the rail housing and the 5 tiles live
+        <!-- Full-height column for the rail: dsp_cross_nav draws the sidebar screen and the 5 tiles live
              (DspSidebarRail, Compose) and hosts their touch targets; the current destination's tile
              is lit and inert. Fixed width, since the rail is a fixed fixture; see
              @dimen/dsp_sidebar_width. -->
