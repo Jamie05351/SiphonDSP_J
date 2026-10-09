@@ -38,13 +38,13 @@ import kotlin.math.min
  * Shared by [DspSidebarRail] and [DspWorkspaceBackdrop], and by the front page's tile-to-sidebar
  * morph, whose last frame has to be exactly the workspace's first.
  */
-internal val FaciaColour = Color(0xFF1B1D23)
+internal val FaciaColour = Color(0xFF1B1D23) // also the front page's background (HomePalette.Page)
 
 /** The sidebar's purple: the ring, the glow and the signal line. */
 internal val SidebarSignal = Color(0xFFA42EFF)
 
 /** Facia between the screen edges and the windows, and between the two windows. */
-internal val SidebarFacia = 12.dp
+internal val SidebarFacia = 8.dp
 internal val SidebarScreenCorner = 10.dp
 internal val ContentWindowCorner = 10.dp
 

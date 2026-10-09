@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.siphondsp.compose.controls.FaciaColour
 import java.util.Locale
 
 /**
@@ -41,7 +42,9 @@ fun animateActive(on: Boolean, label: String): Float {
 
 /** The page's neutral colours, from the Figma frames. Stage accents come from the app theme. */
 internal object HomePalette {
-    val Page = Color(0xFF0E0F12)
+    // The facia: the same as the workspace's bezel and sidebar housing, so the tile-to-sidebar morph
+    // fades between matching colours.
+    val Page = FaciaColour
     val Panel = Color(0xFF050506)
     val PanelEdge = Color(0xFF2A2C31)
     val TileBase = Color(0xFF0A0A0D)

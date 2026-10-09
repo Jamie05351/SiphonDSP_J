@@ -38,7 +38,7 @@ import kotlin.math.roundToInt
  * (average about 29/255, neutral grey; it replaced the old navy one), saved lossless: a lossy
  * re-encode once flattened an earlier texture to near solid black.
  *
- * The content container's right and bottom margin (dsp_workspace_bezel_inset, 12dp) is
+ * The content container's right and bottom margin (dsp_workspace_bezel_inset, 8dp) is
  * [SidebarFacia], so the content sits inside the window.
  */
 @Composable

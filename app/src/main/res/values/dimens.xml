@@ -27,11 +27,11 @@
     <dimen name="dsp_workspace_toolbar_height">69dp</dimen>
     <!-- The facia round DspWorkspaceBackdrop's content window on the right and bottom (SidebarFacia
          in SidebarChrome.kt; keep the two equal). The workspace content stops short of it. -->
-    <dimen name="dsp_workspace_bezel_inset">12dp</dimen>
+    <dimen name="dsp_workspace_bezel_inset">8dp</dimen>
     <!-- BMW ///M stripe divider under the top banner; see view_m_stripe_divider.xml. -->
     <dimen name="m_stripe_height">3dp</dimen>
-    <!-- Head-unit sidebar column: DspSidebarRail's screen (SidebarFacia, 12dp, in from the column's
-         edges, so 100dp wide) and the facia between it and the content window. Was 140dp; the
+    <!-- Head-unit sidebar column: DspSidebarRail's screen (SidebarFacia, 8dp, in from the column's
+         edges, so 108dp wide) and the facia between it and the content window. Was 140dp; the
          extra 16dp now belongs to the screen, and WorkspaceArtBox stretches the head-unit screens'
          art rects (authored against the old 140dp edge) to fill it. -->
     <dimen name="dsp_sidebar_width">124dp</dimen>
