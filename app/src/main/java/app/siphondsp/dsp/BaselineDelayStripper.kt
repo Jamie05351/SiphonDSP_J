@@ -48,6 +48,9 @@ object BaselineDelayStripper {
      * @param minDelaySec   allow slightly negative values in case the capture was over-compensated.
      * @param maxDelaySec   search ceiling; covers flight time + typical unreferenced capture latency.
      * @param delayOverrideSec use this instead of estimating (e.g. IR onset, if you have the IR).
+     * @throws IllegalArgumentException if equally spaced in-band pairs make the search cover a
+     *         full delay-alias period. Supply [delayOverrideSec] or narrower delay bounds based on
+     *         an independent timing prior; wrapped phase alone cannot select the correct alias.
      */
     fun strip(
         m: MeasuredResponse,
@@ -93,6 +96,15 @@ object BaselineDelayStripper {
         var dfMax = 0.0
         for (i in 0 until m) if (pw[i] > 0.0) dfMax = max(dfMax, dF[i])
         if (dfMax == 0.0) return 0.0 // nothing in band; leave untouched
+
+        // For uniform spacing dF, every adjacent-bin term repeats at tau + k / dF.
+        // Numeric roundoff cannot tell those delays apart. Only inspect pairs the fit uses:
+        // gating may leave a uniform passband even when the full grid is nonuniform.
+        val uniformSpacing = (0 until m).all { pw[it] <= 0.0 || abs(dF[it] - dfMax) <= dfMax * 1e-8 }
+        require(!uniformSpacing || tauMax - tauMin < 1.0 / dfMax) {
+            "Ambiguous delay on equally spaced frequencies: supply delayOverrideSec or " +
+                "constrain the delay search to less than ${1.0 / dfMax} seconds using a timing prior"
+        }
 
         fun cost(tau: Double): Double {
             var c = 0.0
