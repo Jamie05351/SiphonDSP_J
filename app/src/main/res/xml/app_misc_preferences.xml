@@ -19,6 +19,17 @@
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/graphs"
+        app:iconSpaceReserved="false">
+        <app.siphondsp.preference.MaterialSwitchPreference
+            app:key="@string/key_factory_baseline_enabled"
+            app:title="@string/factory_baseline_enabled"
+            app:defaultValue="@bool/default_factory_baseline_enabled"
+            app:summaryOff="@string/factory_baseline_enabled_off"
+            app:summaryOn="@string/factory_baseline_enabled_on"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/assets"
         app:iconSpaceReserved="false">
         <Preference

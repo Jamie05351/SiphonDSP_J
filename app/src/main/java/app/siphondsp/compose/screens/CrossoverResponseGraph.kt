@@ -11,12 +11,17 @@ import android.graphics.Shader
 import androidx.core.graphics.ColorUtils
 import android.util.TypedValue
 import androidx.compose.foundation.Canvas as ComposeCanvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -29,6 +34,9 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
+import app.siphondsp.dsp.FactoryAcousticCurves
+import app.siphondsp.dsp.FactoryBaseline
+import app.siphondsp.dsp.FactoryDriver
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
@@ -74,6 +82,12 @@ import kotlin.math.pow
  * plain lines, and the sum is drawn per channel -- L neon purple, R neon green, solid, with a glow
  * -- instead of one white L/R average with a white area fill. The crossover markers are faint solid
  * lines (no dashes). Phase and group delay keep their curves.
+ *
+ * With a [FactoryBaseline] the graph shows the REAL response by default: this app's output
+ * multiplied by the factory amplifier's measured response per driver ([FactoryAcousticCurves]).
+ * The band washes stay (they are what this app does); the L/R sums become the acoustic sums, and
+ * each driver is drawn in its band colour (woofer = Low, mid = Mid, tweeter = High; L solid, R
+ * dashed). A tap toggles back to the app-only view.
  */
 enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
 
@@ -93,6 +107,11 @@ private const val SPECTRUM_TICK_MS = 33L
 private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 private val GroupDelayGridLines = floatArrayOf(10f, 6f, 2f, 0f, -2f)
+// The real (factory) response carries the woofers' factory low-pass and the side's arrival, so
+// its group delay runs far past the app-only scale.
+private val RealGroupDelayGridLines = floatArrayOf(20f, 15f, 10f, 5f, 0f)
+private const val REAL_DELAY_MIN = -2f
+private const val REAL_DELAY_MAX = 22f
 private val FreqGridLines =
     floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f)
 
@@ -116,8 +135,11 @@ fun CrossoverResponseGraph(
     peqState: BmwPeqState,
     modifier: Modifier = Modifier,
     showSpectrum: Boolean = true,
+    factory: FactoryBaseline? = null,
 ) {
     val context = LocalContext.current
+    var preferReal by rememberSaveable { mutableStateOf(true) }
+    val showReal = factory != null && preferReal
     val density = LocalDensity.current.density
     val lowArgb = BmwTheme.colors.sliderLowBand.toArgb()
     val midArgb = BmwTheme.colors.midBandYellow.toArgb()
@@ -270,12 +292,33 @@ fun CrossoverResponseGraph(
     // only when the DSP values / PEQ snapshot change (not per spectrum frame).
     val calculator = remember { BmwResponseCalculator(pointCount = POINT_COUNT) }
     val curves = remember { BmwResponseCurves(POINT_COUNT) }
+    val acoustic = remember { FactoryAcousticCurves(POINT_COUNT) }
     val valuesHash = systemValues.contentHashCode()
-    remember(valuesHash, peqState) {
+    remember(valuesHash, peqState, factory) {
         if (systemValues.size == BmwSignalChain.VALUE_COUNT) {
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
             calculator.invalidateAll()
             calculator.compute(systemValues, peqState, curves)
+            if (factory != null) acoustic.compute(curves, factory)
+        }
+    }
+    // BOTH mode, real response: each side's acoustic phase, dashed in its channel colour.
+    val realPhasePaints = remember(density) {
+        listOf(LeftChannelColor, RightChannelColor).map { color ->
+            channelCurvePaint(density, color).apply {
+                strokeWidth = 1.5f * density
+                pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
+            }
+        }.let { it[0] to it[1] }
+    }
+    // Per driver: (left = solid, right = dashed), woofer / mid / tweeter in the Low / Mid / High colours.
+    val driverPaints = remember(density, lowArgb, midArgb, highArgb) {
+        intArrayOf(lowArgb, midArgb, highArgb).map { color ->
+            channelCurvePaint(density, color).apply { strokeWidth = 1.8f * density } to
+                channelCurvePaint(density, color).apply {
+                    strokeWidth = 1.8f * density
+                    pathEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
+                }
         }
     }
 
@@ -296,7 +339,12 @@ fun CrossoverResponseGraph(
         }
     }
 
-    ComposeCanvas(modifier.graphPanel()) {
+    val tapModifier = if (factory != null) {
+        Modifier.pointerInput(Unit) { detectTapGestures { preferReal = !preferReal } }
+    } else {
+        Modifier
+    }
+    ComposeCanvas(modifier.graphPanel().then(tapModifier)) {
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
         val top = PAD_TOP_DP * density
@@ -305,17 +353,26 @@ fun CrossoverResponseGraph(
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
-            if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
+            val sumsKnown = factory?.hasSeatSums == true
+            // Real, drivers only: BOTH draws magnitudes alone, so its solid/dashed key would lie.
+            if (mode == CrossoverGraphMode.MAGNITUDE_PHASE && (!showReal || sumsKnown)) {
+                drawBothModeKey(nc, left, top, density, legendPaint)
+            }
+            if (factory != null) drawRealKey(nc, right, top, density, legendPaint, showReal, sumsKnown)
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
                     { v -> dbToY(v, top, bottom) }
                 CrossoverGraphMode.PHASE -> { v -> valueToY(v, -180f, 180f, top, bottom) }
-                CrossoverGraphMode.GROUP_DELAY -> { v -> valueToY(v, -2f, 10f, top, bottom) }
+                CrossoverGraphMode.GROUP_DELAY -> if (showReal) {
+                    { v -> valueToY(v, REAL_DELAY_MIN, REAL_DELAY_MAX, top, bottom) }
+                } else {
+                    { v -> valueToY(v, -2f, 10f, top, bottom) }
+                }
             }
             val gridLines = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE -> DbGridLines
                 CrossoverGraphMode.PHASE -> PhaseGridLines
-                CrossoverGraphMode.GROUP_DELAY -> GroupDelayGridLines
+                CrossoverGraphMode.GROUP_DELAY -> if (showReal) RealGroupDelayGridLines else GroupDelayGridLines
             }
             drawGrid(
                 nc, left, right, top, bottom, density, gridLines,
@@ -328,10 +385,111 @@ fun CrossoverResponseGraph(
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
                 drawBandAreas(nc, curves, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint)
             }
-            drawResponse(
-                nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
-                ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
-            )
+            if (showReal) {
+                drawRealResponse(
+                    nc, mode, acoustic, sumsKnown, left, right, top, bottom, driverPaints, realPhasePaints,
+                    ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+                )
+            } else {
+                drawResponse(
+                    nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
+                    ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+                )
+            }
+        }
+    }
+}
+
+/** Top-right: which response is on screen, and that a tap switches it. */
+private fun drawRealKey(
+    nc: Canvas, right: Float, top: Float, density: Float, legendPaint: Paint, real: Boolean, sumsKnown: Boolean,
+) {
+    val text = when {
+        !real -> "DSP ONLY - TAP FOR REAL"
+        sumsKnown -> "REAL AT SEAT + PER DRIVER - TAP FOR DSP"
+        else -> "REAL, PER DRIVER (FACTORY BASELINE) - TAP FOR DSP"
+    }
+    nc.drawText(text, right - legendPaint.measureText(text) - 8f * density, top + 14f * density, legendPaint)
+}
+
+/**
+ * The real response: per driver (woofer / mid / tweeter in the Low / Mid / High colours, L solid,
+ * R dashed) and, when the file has seat sweeps ([sumsKnown], [FactoryBaseline.seatSums]), each
+ * side at the listening seat (L purple, R green, with glow).
+ * NaN points -- outside a driver's measured band -- break the line instead of being drawn.
+ */
+private fun drawRealResponse(
+    nc: Canvas,
+    mode: CrossoverGraphMode,
+    acoustic: FactoryAcousticCurves,
+    sumsKnown: Boolean,
+    left: Float,
+    right: Float,
+    top: Float,
+    bottom: Float,
+    driverPaints: List<Pair<Paint, Paint>>,
+    phasePaints: Pair<Paint, Paint>,
+    channels: ChannelPaints,
+) {
+    val lastIndex = POINT_COUNT - 1
+    fun pathFor(values: DoubleArray, toY: (Float) -> Float, wraps: Boolean = false): Path = Path().apply {
+        var open = false
+        var previous = Float.NaN
+        for (i in 0 until POINT_COUNT) {
+            val v = values[i]
+            if (v.isNaN()) { open = false; continue }
+            val value = v.toFloat()
+            val x = left + (i.toFloat() / lastIndex) * (right - left)
+            // A wrapped phase jumping +-180 would draw a vertical stroke across the plot.
+            if (!open || (wraps && kotlin.math.abs(value - previous) > 180f)) moveTo(x, toY(value)) else lineTo(x, toY(value))
+            open = true
+            previous = value
+        }
+    }
+    val db: (Float) -> Float = { v -> dbToY(v.coerceIn(-24f, 12f), top, bottom) }
+    val deg: (Float) -> Float = { v -> valueToY(v, -180f, 180f, top, bottom) }
+    val sides = listOf(BmwOutputChannel.LEFT, BmwOutputChannel.RIGHT)
+    fun degrees(values: DoubleArray) = DoubleArray(values.size) { Math.toDegrees(values[it]) }
+    fun drawDrivers(series: (BmwOutputChannel, FactoryDriver) -> DoubleArray, toY: (Float) -> Float, wraps: Boolean) {
+        FactoryDriver.entries.forEach { driver ->
+            val (solid, dashed) = driverPaints[driver.ordinal]
+            nc.drawPath(pathFor(series(BmwOutputChannel.RIGHT, driver), toY, wraps), dashed)
+            nc.drawPath(pathFor(series(BmwOutputChannel.LEFT, driver), toY, wraps), solid)
+        }
+    }
+    fun drawSums(series: (BmwOutputChannel) -> DoubleArray, toY: (Float) -> Float, wraps: Boolean) {
+        sides.reversed().forEach { side ->
+            val path = pathFor(series(side), toY, wraps)
+            if (side == BmwOutputChannel.LEFT) {
+                nc.drawPath(path, channels.leftGlow); nc.drawPath(path, channels.left)
+            } else {
+                nc.drawPath(path, channels.rightGlow); nc.drawPath(path, channels.right)
+            }
+        }
+    }
+    val delayY: (Float) -> Float = { v -> valueToY(v, REAL_DELAY_MIN, REAL_DELAY_MAX, top, bottom) }
+    when (mode) {
+        CrossoverGraphMode.MAGNITUDE -> {
+            drawDrivers({ s, d -> acoustic.driverDbFor(s, d) }, db, wraps = false)
+            if (sumsKnown) drawSums({ s -> acoustic.sumDbFor(s) }, db, wraps = false)
+        }
+        CrossoverGraphMode.PHASE -> {
+            drawDrivers({ s, d -> degrees(acoustic.driverPhaseFor(s, d)) }, deg, wraps = true)
+            if (sumsKnown) drawSums({ s -> degrees(acoustic.sumPhaseFor(s)) }, deg, wraps = true)
+        }
+        CrossoverGraphMode.MAGNITUDE_PHASE -> if (!sumsKnown) {
+            drawDrivers({ s, d -> acoustic.driverDbFor(s, d) }, db, wraps = false)
+        } else {
+            drawSums({ s -> acoustic.sumDbFor(s) }, db, wraps = false)
+            sides.forEach { side ->
+                val dashed = if (side == BmwOutputChannel.LEFT) phasePaints.first else phasePaints.second
+                nc.drawPath(pathFor(degrees(acoustic.sumPhaseFor(side)), deg, wraps = true), dashed)
+            }
+        }
+        CrossoverGraphMode.GROUP_DELAY -> if (sumsKnown) {
+            drawSums({ s -> acoustic.groupDelayMsFor(s) }, delayY, wraps = false)
+        } else {
+            drawDrivers({ s, d -> acoustic.driverGroupDelayMsFor(s, d) }, delayY, wraps = false)
         }
     }
 }
