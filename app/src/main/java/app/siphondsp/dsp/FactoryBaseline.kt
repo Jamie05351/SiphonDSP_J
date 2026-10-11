@@ -74,6 +74,25 @@ class FactoryDriverResponse(
         out.im = mag * sin(angle)
         return true
     }
+
+    /**
+     * Group delay (ms) at [frequencyHz], NaN outside [minHz]..[maxHz]: [arrivalMs] plus
+     * -d(phase)/d(omega) of the stored *unwrapped* phase, taken analytically from the same
+     * log-frequency interpolation [evaluate] uses. Never derived from a wrapped phase, so a long
+     * arrival cannot alias however sparse the caller's frequency axis is.
+     */
+    fun groupDelayMs(frequencyHz: Double): Double {
+        if (!covers(frequencyHz)) return Double.NaN
+        val f = frequencyHz.coerceIn(freqHz.first(), freqHz.last())
+        var hi = freqHz.binarySearch(f)
+        if (hi < 0) hi = -hi - 1
+        // Between grid points: that segment. On a grid point: the segment below it (above, at the bottom end).
+        if (hi == 0) hi = 1
+        val lo = hi - 1
+        // phase = a + b * ln(f)  =>  d(phase)/d(omega) = b / (2 pi f)
+        val slope = (phaseRad[hi] - phaseRad[lo]) / ln(freqHz[hi] / freqHz[lo])
+        return arrivalMs - slope / (2.0 * PI * f) * 1000.0
+    }
 }
 
 /**

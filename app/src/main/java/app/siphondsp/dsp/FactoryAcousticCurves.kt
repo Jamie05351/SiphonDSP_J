@@ -1,6 +1,5 @@
 package app.siphondsp.dsp
 
-import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -32,6 +31,17 @@ class FactoryAcousticCurves(val pointCount: Int) {
     val sumDb = Array(2) { DoubleArray(pointCount) }
     val sumPhase = Array(2) { DoubleArray(pointCount) }
 
+    /**
+     * Group delay (ms), same indexing and NaNs as the dB arrays. Built as a SUM of group delays
+     * (that of a product): the measured part analytically from its unwrapped phase and known
+     * arrival ([FactoryDriverResponse.groupDelayMs]), plus this app's own
+     * ([BmwResponseCurves.groupDelayMsFor], what the DSP-only view shows). Never differentiated
+     * from the combined wrapped phase, where an arrival of several ms turns more than pi between
+     * neighbouring points of a sparse log axis and aliases.
+     */
+    val driverGroupDelayMs = Array(2) { Array(FactoryDriver.entries.size) { DoubleArray(pointCount) } }
+    val sumGroupDelayMs = Array(2) { DoubleArray(pointCount) }
+
     private val electrical = ComplexAcc()
     private val plant = ComplexAcc()
 
@@ -49,13 +59,17 @@ class FactoryAcousticCurves(val pointCount: Int) {
             val eDb = curves.sumDbFor(side)
             val ePhase = curves.sumPhaseFor(side)
             val seat = baseline.seatSum(side)
+            val appDelayMs = curves.groupDelayMsFor(side)
             for (i in 0 until pointCount) {
                 val f = frequencies[i]
                 val mag = 10.0.pow(eDb[i] / 20.0)
                 for (driver in FactoryDriver.entries) {
-                    applyPlant(mag, ePhase[i], f, baseline.driver(side, driver), driverDb[s][driver.ordinal], driverPhase[s][driver.ordinal], i)
+                    val response = baseline.driver(side, driver)
+                    applyPlant(mag, ePhase[i], f, response, driverDb[s][driver.ordinal], driverPhase[s][driver.ordinal], i)
+                    driverGroupDelayMs[s][driver.ordinal][i] = (response?.groupDelayMs(f) ?: Double.NaN) + appDelayMs[i]
                 }
                 applyPlant(mag, ePhase[i], f, seat, sumDb[s], sumPhase[s], i)
+                sumGroupDelayMs[s][i] = (seat?.groupDelayMs(f) ?: Double.NaN) + appDelayMs[i]
             }
         }
     }
@@ -82,38 +96,10 @@ class FactoryAcousticCurves(val pointCount: Int) {
         phase[i] = electrical.phase()
     }
 
-    /** Group delay (ms) of the side's acoustic sum. NaN where the sum is NaN. */
-    fun groupDelayMsFor(side: BmwOutputChannel): DoubleArray = groupDelayMs(sumPhaseFor(side))
+    /** Group delay (ms) of the side at the seat. NaN where the sum is NaN. */
+    fun groupDelayMsFor(side: BmwOutputChannel): DoubleArray = sumGroupDelayMs[side.ordinal]
 
     /** Group delay (ms) of one driver. NaN outside its measured band. */
     fun driverGroupDelayMsFor(side: BmwOutputChannel, driver: FactoryDriver): DoubleArray =
-        groupDelayMs(driverPhaseFor(side, driver))
-
-    /**
-     * -d(phase)/d(omega) from unwrapped [phase] -- same finite difference as
-     * [BmwResponseCurves.groupDelayMsFor], restarting the unwrap after each NaN gap.
-     */
-    private fun groupDelayMs(phase: DoubleArray): DoubleArray {
-        val unwrapped = DoubleArray(pointCount) { Double.NaN }
-        var last = Double.NaN
-        for (i in 0 until pointCount) {
-            if (phase[i].isNaN()) { last = Double.NaN; continue }
-            if (last.isNaN()) {
-                unwrapped[i] = phase[i]
-            } else {
-                var delta = phase[i] - phase[i - 1]
-                while (delta > PI) delta -= 2.0 * PI
-                while (delta < -PI) delta += 2.0 * PI
-                unwrapped[i] = last + delta
-            }
-            last = unwrapped[i]
-        }
-        return DoubleArray(pointCount) { i ->
-            val lo = (i - 1).coerceAtLeast(0)
-            val hi = (i + 1).coerceAtMost(pointCount - 1)
-            val dPhase = unwrapped[hi] - unwrapped[lo]
-            val dOmega = 2.0 * PI * (frequencies[hi] - frequencies[lo])
-            if (hi == lo || dOmega == 0.0 || dPhase.isNaN()) Double.NaN else -dPhase / dOmega * 1000.0
-        }
-    }
+        driverGroupDelayMs[side.ordinal][driver.ordinal]
 }

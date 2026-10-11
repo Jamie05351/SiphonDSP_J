@@ -128,13 +128,34 @@ class FactoryBaselineTest {
     }
 
     @Test
-    fun aDelayedDriverReadsAsGroupDelay() {
-        val baseline = FactoryBaseline.parse(baselineJson(driverJson("LEFT", "MID", arrivalMs = 5.0)))
+    fun longArrivalsReadAsGroupDelayAcrossTheWholeBand() {
+        // 11 ms turns the phase far more than pi between neighbouring points of a 192-point log
+        // axis above a few hundred Hz; wrapped-phase differencing aliased there.
+        val baseline = FactoryBaseline.parse(
+            baselineJson(driverJson("LEFT", "MID", arrivalMs = 11.0), seatSums = listOf(seatJson("LEFT", 0.0))),
+        )
         val curves = unityCurves(points = 192)
         val real = FactoryAcousticCurves(curves.pointCount)
         real.compute(curves, baseline)
-        val delay = real.driverGroupDelayMsFor(BmwOutputChannel.LEFT, FactoryDriver.MID)
-        // Away from the ends, where the log grid is fine enough for the 5 ms phase slope to unwrap.
-        for (i in 10 until 60) assertEquals(5.0, delay[i], 1e-6)
+        val driver = real.driverGroupDelayMsFor(BmwOutputChannel.LEFT, FactoryDriver.MID)
+        val seat = real.groupDelayMsFor(BmwOutputChannel.LEFT)
+        for (i in 0 until curves.pointCount) {
+            assertEquals("driver at ${curves.frequencies[i]} Hz", 11.0, driver[i], 1e-9)
+            assertEquals("seat at ${curves.frequencies[i]} Hz", 0.0, seat[i], 1e-9)
+        }
+    }
+
+    @Test
+    fun groupDelayFollowsTheStoredPhaseSlope() {
+        // -90 deg per decade of log-frequency: tau = -dphi/domega = 0.25 / (ln(10) * f) seconds.
+        val json = baselineJson(
+            """{"side":"RIGHT","driver":"TWEETER","arrivalMs":2.0,"minHz":1000,"maxHz":10000,
+            "freqHz":[1000,10000],"magDb":[0,0],"phaseDeg":[0,-90]}""",
+        )
+        val tweeter = FactoryBaseline.parse(json).driver(BmwOutputChannel.RIGHT, FactoryDriver.TWEETER)!!
+        for (f in doubleArrayOf(1000.0, 3162.0, 10000.0)) {
+            assertEquals(2.0 + 0.25 / (kotlin.math.ln(10.0) * f) * 1000.0, tweeter.groupDelayMs(f), 1e-9)
+        }
+        assertTrue(tweeter.groupDelayMs(500.0).isNaN())
     }
 }
