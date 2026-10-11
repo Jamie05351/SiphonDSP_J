@@ -37,6 +37,7 @@ import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.FactoryAcousticCurves
 import app.siphondsp.dsp.FactoryBaseline
 import app.siphondsp.dsp.FactoryDriver
+import app.siphondsp.dsp.averagePhaseRad
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
@@ -398,7 +399,7 @@ private fun drawRealKey(
     nc.drawText(text, right - legendPaint.measureText(text) - 8f * density, top + 14f * density, legendPaint)
 }
 
-/** One point of an L/R pair as the DSP-only view averages it; NaN only where both sides are NaN. */
+/** One point of an L/R pair (dB or ms -- never a wrapped phase, see [averagePhaseRad]); NaN only where both sides are NaN. */
 private fun averageLr(left: Double, right: Double): Double = when {
     left.isNaN() -> right
     right.isNaN() -> left
@@ -454,7 +455,7 @@ private fun drawRealResponse(
         nc.drawPath(path, sumPaint)
     }
     fun averagedDeg(lr: (BmwOutputChannel) -> DoubleArray): (Int) -> Double =
-        { i -> Math.toDegrees(averageLr(lr(l)[i], lr(r)[i])) }
+        { i -> Math.toDegrees(averagePhaseRad(lr(l)[i], lr(r)[i])) }
     fun strokeChannelSums() {
         val leftPath = pathFor({ i -> acoustic.sumDbFor(l)[i] }, db)
         val rightPath = pathFor({ i -> acoustic.sumDbFor(r)[i] }, db)
@@ -800,8 +801,12 @@ private fun drawCrossoverMarkers(
 private fun averageDb(left: Double, right: Double): Float =
     ((left + right) * 0.5).toFloat().coerceIn(-24f, 12f)
 
-private fun averageDeg(left: Double, right: Double): Float =
-    Math.toDegrees((left + right) * 0.5).toFloat().coerceIn(-180f, 180f)
+// Circular mean, not (left + right) / 2: that turns +179 / -179 into 0 instead of 180.
+// Opposite phases have no mean; 0 keeps the View's always-drawn line.
+private fun averageDeg(left: Double, right: Double): Float {
+    val mean = averagePhaseRad(left, right)
+    return if (mean.isNaN()) 0f else Math.toDegrees(mean).toFloat().coerceIn(-180f, 180f)
+}
 
 private fun dbToY(db: Float, top: Float, bottom: Float): Float = valueToY(db, -24f, 12f, top, bottom)
 
