@@ -137,6 +137,12 @@ fun CrossoverResponseGraph(
     modifier: Modifier = Modifier,
     showSpectrum: Boolean = true,
     factory: FactoryBaseline? = null,
+    /**
+     * Real PHASE mode, drivers: false (default) draws each driver with its own arrival taken out --
+     * its shape; true keeps the timing between one side's drivers, for phase match at a crossover.
+     * The seat sums always have their own arrival out. Timing proper is the DELAY mode.
+     */
+    phaseTimed: Boolean = false,
 ) {
     val context = LocalContext.current
     var preferReal by rememberSaveable { mutableStateOf(true) }
@@ -257,6 +263,15 @@ fun CrossoverResponseGraph(
             color = sumArgb
         }
     }
+    // Real phase is drawn per side (L/R phase cannot be averaged -- 173 deg apart at 2 kHz in this
+    // car): drivers in their band colours, L solid / R dashed; the seat sums in the channel colours.
+    val driverDashPaints = remember(lowPaint, midPaint, highPaint, density) {
+        listOf(lowPaint, midPaint, highPaint).map { base ->
+            Paint(base).apply { pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f) }
+        }
+    }
+    val leftPhasePaint = remember(phasePaint) { Paint(phasePaint).apply { color = LeftChannelColor } }
+    val rightPhasePaint = remember(phasePaint) { Paint(phasePaint).apply { color = RightChannelColor } }
     val spectrumFillPaint = remember(density, gridArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -341,6 +356,9 @@ fun CrossoverResponseGraph(
                 drawBothModeKey(nc, left, top, density, legendPaint)
             }
             if (factory != null) drawRealKey(nc, right, top, density, legendPaint, showReal, sumsKnown)
+            if (showReal && mode == CrossoverGraphMode.PHASE) {
+                drawRealPhaseKey(nc, left, top, density, legendPaint, phaseTimed)
+            }
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
                     { v -> dbToY(v, top, bottom) }
@@ -375,7 +393,8 @@ fun CrossoverResponseGraph(
             if (showReal) {
                 drawRealResponse(
                     nc, mode, acoustic, sumsKnown, left, right, top, bottom, lowPaint, midPaint, highPaint,
-                    sumPaint, sumGlowPaint, phasePaint, ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+                    sumPaint, sumGlowPaint, ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+                    RealPhasePaints(driverDashPaints, leftPhasePaint, rightPhasePaint), phaseTimed,
                 )
             } else {
                 drawResponse(
@@ -399,6 +418,15 @@ private fun drawRealKey(
     nc.drawText(text, right - legendPaint.measureText(text) - 8f * density, top + 14f * density, legendPaint)
 }
 
+/** Top-left in real PHASE: which line is which side, and what timing the drivers carry. */
+private fun drawRealPhaseKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint, timed: Boolean) {
+    val text = if (timed) "L SOLID, R DASHED - SIDE TIMING" else "L SOLID, R DASHED - ARRIVALS OUT"
+    nc.drawText(text, left + 8f * density, top + 14f * density, legendPaint)
+}
+
+/** Per-side phase strokes for the real response: R driver dashes, and the L / R phase in BOTH mode. */
+private class RealPhasePaints(val driverDash: List<Paint>, val left: Paint, val right: Paint)
+
 /** One point of an L/R pair (dB or ms -- never a wrapped phase, see [averagePhaseRad]); NaN only where both sides are NaN. */
 private fun averageLr(left: Double, right: Double): Double = when {
     left.isNaN() -> right
@@ -411,6 +439,9 @@ private fun averageLr(left: Double, right: Double): Double = when {
  * pair is averaged wherever the DSP-only view averages it): the side sums at the seat in the
  * magnitude modes, the drivers + sum in PHASE, one sum line in DELAY. Without seat sums the
  * drivers stand in where a sum would be drawn. NaN points break the line.
+ *
+ * Phase is the exception (2026-10-12): never L/R averaged and never with the arrival in it -- see
+ * [FactoryAcousticCurves.driverPhaseShape]. Each side is its own line.
  */
 private fun drawRealResponse(
     nc: Canvas,
@@ -426,8 +457,9 @@ private fun drawRealResponse(
     highPaint: Paint,
     sumPaint: Paint,
     sumGlowPaint: Paint,
-    phasePaint: Paint,
     channels: ChannelPaints,
+    phasePaints: RealPhasePaints,
+    phaseTimed: Boolean,
 ) {
     val lastIndex = POINT_COUNT - 1
     fun pathFor(sample: (Int) -> Double, toY: (Float) -> Float, wraps: Boolean = false): Path = Path().apply {
@@ -454,8 +486,9 @@ private fun drawRealResponse(
         nc.drawPath(path, sumGlowPaint)
         nc.drawPath(path, sumPaint)
     }
-    fun averagedDeg(lr: (BmwOutputChannel) -> DoubleArray): (Int) -> Double =
-        { i -> Math.toDegrees(averagePhaseRad(lr(l)[i], lr(r)[i])) }
+    fun degOf(rad: DoubleArray): (Int) -> Double = { i -> Math.toDegrees(rad[i]) }
+    fun driverPhase(side: BmwOutputChannel, d: FactoryDriver): DoubleArray =
+        if (phaseTimed) acoustic.driverPhaseTimedFor(side, d) else acoustic.driverPhaseShapeFor(side, d)
     fun strokeChannelSums() {
         val leftPath = pathFor({ i -> acoustic.sumDbFor(l)[i] }, db)
         val rightPath = pathFor({ i -> acoustic.sumDbFor(r)[i] }, db)
@@ -468,13 +501,22 @@ private fun drawRealResponse(
         CrossoverGraphMode.MAGNITUDE -> if (sumsKnown) strokeChannelSums()
         CrossoverGraphMode.PHASE -> {
             FactoryDriver.entries.forEach { d ->
-                nc.drawPath(pathFor(averagedDeg { acoustic.driverPhaseFor(it, d) }, deg, wraps = true), driverPaints[d.ordinal])
+                nc.drawPath(pathFor(degOf(driverPhase(r, d)), deg, wraps = true), phasePaints.driverDash[d.ordinal])
+                nc.drawPath(pathFor(degOf(driverPhase(l, d)), deg, wraps = true), driverPaints[d.ordinal])
             }
-            if (sumsKnown) strokeSum(pathFor(averagedDeg { acoustic.sumPhaseFor(it) }, deg, wraps = true))
+            if (sumsKnown) {
+                val rightPath = pathFor(degOf(acoustic.sumPhaseShapeFor(r)), deg, wraps = true)
+                val leftPath = pathFor(degOf(acoustic.sumPhaseShapeFor(l)), deg, wraps = true)
+                nc.drawPath(rightPath, channels.rightGlow)
+                nc.drawPath(rightPath, channels.right)
+                nc.drawPath(leftPath, channels.leftGlow)
+                nc.drawPath(leftPath, channels.left)
+            }
         }
         CrossoverGraphMode.MAGNITUDE_PHASE -> if (sumsKnown) {
             strokeChannelSums()
-            nc.drawPath(pathFor(averagedDeg { acoustic.sumPhaseFor(it) }, deg, wraps = true), phasePaint)
+            nc.drawPath(pathFor(degOf(acoustic.sumPhaseShapeFor(r)), deg, wraps = true), phasePaints.right)
+            nc.drawPath(pathFor(degOf(acoustic.sumPhaseShapeFor(l)), deg, wraps = true), phasePaints.left)
         }
         CrossoverGraphMode.GROUP_DELAY -> if (sumsKnown) {
             strokeSum(pathFor({ i -> averageLr(acoustic.groupDelayMsFor(l)[i], acoustic.groupDelayMsFor(r)[i]) }, delayY))

@@ -1,5 +1,6 @@
 package app.siphondsp.dsp
 
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -42,6 +43,20 @@ class FactoryAcousticCurves(val pointCount: Int) {
     val driverGroupDelayMs = Array(2) { Array(FactoryDriver.entries.size) { DoubleArray(pointCount) } }
     val sumGroupDelayMs = Array(2) { DoubleArray(pointCount) }
 
+    /**
+     * Phase for DRAWING (wrapped radians, same indexing and NaNs as [driverPhase] / [sumPhase]).
+     * [driverPhase] / [sumPhase] carry each curve's whole arrival, so a 1 ms arrival alone turns
+     * the wrapped line 20 times by 20 kHz and it reads as noise. These take it back out:
+     *  - [driverPhaseShape] / [sumPhaseShape]: each curve's OWN arrival removed -- its shape (factory
+     *    filters, this app's filters, the driver) with no timing in it;
+     *  - [driverPhaseTimed]: the SIDE's earliest driver arrival removed -- relative timing between
+     *    that side's drivers kept, for reading phase match at a crossover.
+     * Timing itself is in the group delay arrays, which never go through a wrapped phase.
+     */
+    val driverPhaseShape = Array(2) { Array(FactoryDriver.entries.size) { DoubleArray(pointCount) } }
+    val driverPhaseTimed = Array(2) { Array(FactoryDriver.entries.size) { DoubleArray(pointCount) } }
+    val sumPhaseShape = Array(2) { DoubleArray(pointCount) }
+
     private val electrical = ComplexAcc()
     private val plant = ComplexAcc()
 
@@ -49,6 +64,9 @@ class FactoryAcousticCurves(val pointCount: Int) {
     fun driverPhaseFor(side: BmwOutputChannel, driver: FactoryDriver): DoubleArray = driverPhase[side.ordinal][driver.ordinal]
     fun sumDbFor(side: BmwOutputChannel): DoubleArray = sumDb[side.ordinal]
     fun sumPhaseFor(side: BmwOutputChannel): DoubleArray = sumPhase[side.ordinal]
+    fun driverPhaseShapeFor(side: BmwOutputChannel, driver: FactoryDriver): DoubleArray = driverPhaseShape[side.ordinal][driver.ordinal]
+    fun driverPhaseTimedFor(side: BmwOutputChannel, driver: FactoryDriver): DoubleArray = driverPhaseTimed[side.ordinal][driver.ordinal]
+    fun sumPhaseShapeFor(side: BmwOutputChannel): DoubleArray = sumPhaseShape[side.ordinal]
 
     /** Recomputes everything from [curves] (already computed) and [baseline]. */
     fun compute(curves: BmwResponseCurves, baseline: FactoryBaseline) {
@@ -60,6 +78,7 @@ class FactoryAcousticCurves(val pointCount: Int) {
             val ePhase = curves.sumPhaseFor(side)
             val seat = baseline.seatSum(side)
             val appDelayMs = curves.groupDelayMsFor(side)
+            val sideFirstMs = FactoryDriver.entries.mapNotNull { baseline.driver(side, it)?.arrivalMs }.minOrNull() ?: 0.0
             for (i in 0 until pointCount) {
                 val f = frequencies[i]
                 val mag = 10.0.pow(eDb[i] / 20.0)
@@ -67,9 +86,13 @@ class FactoryAcousticCurves(val pointCount: Int) {
                     val response = baseline.driver(side, driver)
                     applyPlant(mag, ePhase[i], f, response, driverDb[s][driver.ordinal], driverPhase[s][driver.ordinal], i)
                     driverGroupDelayMs[s][driver.ordinal][i] = (response?.groupDelayMs(f) ?: Double.NaN) + appDelayMs[i]
+                    val phase = driverPhase[s][driver.ordinal][i]
+                    driverPhaseShape[s][driver.ordinal][i] = withoutDelay(phase, f, response?.arrivalMs ?: 0.0)
+                    driverPhaseTimed[s][driver.ordinal][i] = withoutDelay(phase, f, sideFirstMs)
                 }
                 applyPlant(mag, ePhase[i], f, seat, sumDb[s], sumPhase[s], i)
                 sumGroupDelayMs[s][i] = (seat?.groupDelayMs(f) ?: Double.NaN) + appDelayMs[i]
+                sumPhaseShape[s][i] = withoutDelay(sumPhase[s][i], f, seat?.arrivalMs ?: 0.0)
             }
         }
     }
@@ -95,6 +118,11 @@ class FactoryAcousticCurves(val pointCount: Int) {
         db[i] = electrical.magnitudeDb()
         phase[i] = electrical.phase()
     }
+
+    /** [phaseRad] with a pure delay of [delayMs] taken out, wrapped to -pi..pi. NaN stays NaN. */
+    private fun withoutDelay(phaseRad: Double, frequencyHz: Double, delayMs: Double): Double =
+        if (phaseRad.isNaN()) Double.NaN
+        else Math.IEEEremainder(phaseRad + 2.0 * PI * frequencyHz * delayMs / 1000.0, 2.0 * PI)
 
     /** Group delay (ms) of the side at the seat. NaN where the sum is NaN. */
     fun groupDelayMsFor(side: BmwOutputChannel): DoubleArray = sumGroupDelayMs[side.ordinal]
