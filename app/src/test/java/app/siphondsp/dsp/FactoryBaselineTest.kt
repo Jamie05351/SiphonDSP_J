@@ -158,4 +158,35 @@ class FactoryBaselineTest {
         }
         assertTrue(tweeter.groupDelayMs(500.0).isNaN())
     }
+    @Test
+    fun displayPhaseTakesTheArrivalBackOut() {
+        // Flat stored phase, 1.2 ms tweeter / 0 ms mid / 0.4 ms seat: raw phase spins, display phase
+        // must not. Shape = each curve's own arrival out; timed = the side's earliest (the mid's).
+        val baseline = FactoryBaseline.parse(
+            baselineJson(
+                driverJson("RIGHT", "MID", arrivalMs = 0.0),
+                driverJson("RIGHT", "TWEETER", arrivalMs = 1.2),
+                seatSums = listOf(seatJson("RIGHT", 0.0).replace("\"arrivalMs\":0", "\"arrivalMs\":0.4")),
+            ),
+        )
+        val curves = unityCurves(points = 192)
+        val real = FactoryAcousticCurves(curves.pointCount)
+        real.compute(curves, baseline)
+        val r = BmwOutputChannel.RIGHT
+        val shape = real.driverPhaseShapeFor(r, FactoryDriver.TWEETER)
+        val timed = real.driverPhaseTimedFor(r, FactoryDriver.TWEETER)
+        val raw = real.driverPhaseFor(r, FactoryDriver.TWEETER)
+        val sum = real.sumPhaseShapeFor(r)
+        var rawMoves = false
+        for (i in 0 until curves.pointCount) {
+            val f = curves.frequencies[i]
+            assertEquals("tweeter shape at $f Hz", 0.0, shape[i], 1e-9)
+            assertEquals("seat sum shape at $f Hz", 0.0, sum[i], 1e-9)
+            // Timed keeps the 1.2 ms against the mid, so it still turns -- exactly by that delay.
+            assertEquals("tweeter timed at $f Hz", 0.0, Math.IEEEremainder(timed[i] + 2.0 * PI * f * 0.0012, 2.0 * PI), 1e-9)
+            if (kotlin.math.abs(raw[i]) > 0.1) rawMoves = true
+        }
+        assertTrue(rawMoves)
+        assertTrue(real.driverPhaseShapeFor(BmwOutputChannel.LEFT, FactoryDriver.MID).all { it.isNaN() })
+    }
 }
