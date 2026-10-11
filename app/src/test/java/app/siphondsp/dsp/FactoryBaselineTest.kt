@@ -48,6 +48,17 @@ class FactoryBaselineTest {
     }
 
     @Test
+    fun theBuiltInBaselineParses() {
+        val asset = java.io.File("src/main/assets/factory_baseline.json")
+        if (!asset.isFile) return // built-in baseline is optional
+        val baseline = FactoryBaseline.parse(asset.readText())
+        for (side in BmwOutputChannel.entries) for (driver in FactoryDriver.entries) {
+            assertTrue("$side $driver missing", baseline.driver(side, driver) != null)
+        }
+        assertTrue(baseline.hasSeatSums)
+    }
+
+    @Test
     fun rejectsWrongFormatVersionAndDuplicates() {
         assertThrows(IllegalArgumentException::class.java) { FactoryBaseline.parse("""{"format":"other","version":1,"drivers":[]}""") }
         assertThrows(IllegalArgumentException::class.java) {
