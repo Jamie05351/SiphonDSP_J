@@ -19,6 +19,31 @@
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/graphs"
+        app:iconSpaceReserved="false">
+        <app.siphondsp.preference.MaterialSwitchPreference
+            app:key="@string/key_factory_baseline_enabled"
+            app:title="@string/factory_baseline_enabled"
+            app:defaultValue="@bool/default_factory_baseline_enabled"
+            app:summaryOff="@string/factory_baseline_enabled_off"
+            app:summaryOn="@string/factory_baseline_enabled_on"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:key="@string/key_factory_baseline_import"
+            android:title="@string/factory_baseline_import"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:key="@string/key_factory_baseline_export"
+            android:title="@string/factory_baseline_export"
+            android:summary="@string/factory_baseline_export_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:key="@string/key_factory_baseline_reset"
+            android:title="@string/factory_baseline_reset"
+            android:summary="@string/factory_baseline_reset_summary"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/assets"
         app:iconSpaceReserved="false">
         <Preference
