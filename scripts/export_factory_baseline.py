@@ -90,9 +90,9 @@ def main():
     ap.add_argument("--mirror", action="append", default=[], metavar="DRIVER=SIDE",
                     help="use SIDE's sweep shape for both sides of DRIVER, e.g. TWEETER=LEFT when the other "
                          "side's near-field capture is the worse one. Each side keeps its own arrival and level.")
-    ap.add_argument("--seat", default="DRV+PAS",
-                    help="seat(s) whose L/R sweeps become each side's real sum (title suffix; default DRV+PAS: "
-                         "magnitude power-averaged over the seats, phase from the first; 'none' leaves it out)")
+    ap.add_argument("--seat", default="DRV",
+                    help="seat whose L/R sweeps become each side's real sum (title suffix, default DRV; "
+                         "'none' leaves the sum out)")
     a = ap.parse_args()
     mirror = {}
     for spec in a.mirror:
@@ -142,22 +142,14 @@ def main():
     # Each side is ONE signal into the factory amplifier, so that side's sweep at a seat is its whole
     # real response there -- factory, every driver, off-axis, cabin -- and app x it is exact. The
     # near-field drivers cannot be summed into it: they are on-axis and cabin-free.
-    # Several seats (DRV+PAS, a multi-seat tune): magnitude is their power average; phase cannot be
-    # averaged across seats, so it is the FIRST seat's.
     sums = []
     if a.seat.lower() != "none":
-        seat_names = a.seat.split("+")
         for side, ch in (("LEFT", "L"), ("RIGHT", "R")):
-            taken = []
-            for name in seat_names:
-                mid, meta = find(f"{ch}_{a.series} (sw) {name}")
-                taken.append((meta, *response(mid)))
-            meta0, h0, arrival = taken[0]
-            mag = np.sqrt(np.mean([np.abs(h) ** 2 for _, h, _ in taken], axis=0))
-            h = mag * np.exp(1j * np.angle(h0))
-            sums.append(dict(side=side, title=" + ".join(m["title"] for m, _, _ in taken), h=h, arrival=arrival,
-                             minHz=max(20.0, max(float(m.get("startFreq", 20.0)) for m, _, _ in taken)),
-                             maxHz=min(20000.0, min(float(m.get("endFreq", 20000.0)) for m, _, _ in taken))))
+            mid, meta = find(f"{ch}_{a.series} (sw) {a.seat}")
+            h, arrival = response(mid)
+            sums.append(dict(side=side, title=meta["title"], h=h, arrival=arrival,
+                             minHz=max(20.0, float(meta.get("startFreq", 20.0))),
+                             maxHz=min(20000.0, float(meta.get("endFreq", 20000.0)))))
 
     # Normalise: 0 dB = the seat sums' (else the drivers') 200 Hz - 2 kHz level with the app bypassed.
     if sums:
