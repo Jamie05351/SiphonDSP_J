@@ -285,3 +285,42 @@ TEST_CASE("High: turning kHighPass back off clears the chain's frozen state (no 
     INFO("peak after resuming High's chain with silence in = ", peakAbs(after));
     CHECK(peakAbs(after) < 1e-4f);
 }
+
+namespace {
+// Shared by the Low/Mid resume tests below: process a tone with the band's chain running, freeze
+// it with its passthrough flag over silence, then resume -- silence in must give silence out.
+float peakAfterPassthroughResume(std::array<float, kConfigSize> processing, int passIndex, float toneHz) {
+    auto passthrough = processing;
+    passthrough[passIndex] = 1.f;
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(processing.data(), processing.size()));
+    auto tone = stereoSine(toneHz, 0.5, 8192, kSampleRate);
+    proc.process(tone.data(), tone.size());
+    REQUIRE(proc.configure(passthrough.data(), passthrough.size()));
+    std::vector<float> silence(8192 * 2, 0.f);
+    proc.process(silence.data(), silence.size());
+    REQUIRE(proc.configure(processing.data(), processing.size()));
+    std::vector<float> after(4096 * 2, 0.f);
+    proc.process(after.data(), after.size());
+    return peakAbs(after);
+}
+}  // namespace
+
+TEST_CASE("Low: turning kLpfPass back off clears the chain's frozen state (no stale burst)") {
+    auto c = lowOnlyConfig(80.f, kLr4);
+    c[sch::kLowDelayL] = 2.f;
+    c[sch::kLowDelayR] = 2.f;
+    const float pk = peakAfterPassthroughResume(c, sch::kLpfPass, 50.f);
+    INFO("peak after resuming Low's chain with silence in = ", pk);
+    CHECK(pk < 1e-4f);
+}
+
+TEST_CASE("Mid: turning kHpfPass back off clears the chain's frozen state (no stale burst)") {
+    auto c = midOnlyConfig(300.f, kLr4);
+    c[sch::kMidDelayL] = 2.f;
+    c[sch::kMidDelayR] = 2.f;
+    const float pk = peakAfterPassthroughResume(c, sch::kHpfPass, 1000.f);
+    INFO("peak after resuming Mid's chain with silence in = ", pk);
+    CHECK(pk < 1e-4f);
+}

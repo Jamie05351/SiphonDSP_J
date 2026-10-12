@@ -277,6 +277,8 @@ private:
         DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass/highPass off): clear its state
         DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
+        DirtyLowResume = 1u << 22,  // Low's chain runs again (lpfPass off): clear its state
+        DirtyMidResume = 1u << 23,  // Mid's chain runs again (hpfPass off): clear its state
         DirtyAll = 0xffffffffu,
     };
 

@@ -431,6 +431,13 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (highChainWasFrozen && highChainRunsNow) {
         dirty |= DirtyHighResume;
     }
+    // Same for Low and Mid: lpfPass / hpfPass skip their chains just the same.
+    if (p_.lpfPass && !next.lpfPass) {
+        dirty |= DirtyLowResume;
+    }
+    if (p_.hpfPass && !next.hpfPass) {
+        dirty |= DirtyMidResume;
+    }
     if (next.measurementMute != p_.measurementMute) {
         dirty |= DirtyPolarity | DirtyMeasBus;
     }
@@ -734,6 +741,16 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         output(OutputId::HighLeft).clearState();
         output(OutputId::HighRight).clearState();
         highPeq_.clear();
+    }
+    if (d & DirtyLowResume) {
+        output(OutputId::LowLeft).clearState();
+        output(OutputId::LowRight).clearState();
+        lowPeq_.clear();
+    }
+    if (d & DirtyMidResume) {
+        output(OutputId::MidLeft).clearState();
+        output(OutputId::MidRight).clearState();
+        midPeq_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();
