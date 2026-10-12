@@ -60,7 +60,10 @@ object NativeBmwDspValues {
     //
     // 288..290 are Mid's upper (Mid/High) lowpass slope, Left/Right, added in the 288 -> 291
     // growth; 290 is a one-time migration marker, see migrateMidUpperXoTypeIfNeeded().
-    const val SIZE = 291
+    //
+    // 291 is High's crossover passthrough, added in the 291 -> 292 growth. Defaults off, so an
+    // older save padded with it behaves exactly as before -- no migration needed.
+    const val SIZE = 292
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -352,6 +355,9 @@ object NativeBmwDspValues {
     const val OUTPUT_HIGH_RIGHT = 5
 
     const val INDEX_HIGH_XO_PASS = 210
+    // High's own crossover passthrough (291): the INDEX_LPF_PASS/INDEX_HPF_PASS contract for High
+    // -- its chain skipped, the raw routed signal through. INDEX_HIGH_XO_PASS still wins.
+    const val INDEX_HIGH_PASS = 291
     const val INDEX_HIGH_GAIN_L = 211
     const val INDEX_HIGH_GAIN_R = 212
     const val INDEX_HIGH_DELAY_L = 213
@@ -535,6 +541,8 @@ object NativeBmwDspValues {
         // --- Mid upper-corner slope (288..290) ---
         2f, 2f, // 288..289 Mid Left / Right upper slope (LR4)
         0f, // 290 migration marker (0 = seed from Mid's own type on next load)
+        // --- High crossover passthrough (291) ---
+        0f, // 291 High passthrough (off)
     )
 
     init {

@@ -507,6 +507,8 @@
     <string name="signal_generator_hpf_passthrough">HPF passthrough</string>
     <string name="signal_generator_mute_low_band">Mute low band</string>
     <string name="signal_generator_mute_mid_band">Mute mid band</string>
+    <string name="signal_generator_high_passthrough">High passthrough</string>
+    <string name="signal_generator_mute_high_band">Mute high band</string>
     <string name="signal_generator_channel_isolation">Channel isolation</string>
     <string name="signal_generator_section_timing_ref">Timing reference (REW)</string>
     <string name="signal_generator_timing_ref_explainer">Reverse-engineered from real REW Acoustic Timing Reference files, not REW\'s own spec -- validate against an actual REW measurement before trusting it for tuning. Wraps the sweep in: chirp, Mid sweep, chirp pair, Low sweep, chirp pair, Mid sweep, chirp.</string>

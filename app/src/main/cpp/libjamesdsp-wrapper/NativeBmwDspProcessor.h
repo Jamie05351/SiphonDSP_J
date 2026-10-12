@@ -112,7 +112,10 @@ public:
     // 288..290 -- Mid's upper (Mid/High) lowpass slope, added in the 288 -> 291 growth:
     //   288      Mid Left upper slope   289  Mid Right upper slope
     //   290      Kotlin-only migration marker -- never read here
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 291 };
+    //
+    // 291 -- High crossover passthrough, added in the 291 -> 292 growth (lpfPass/hpfPass
+    //   contract: chain skipped, raw routed signal through). highXoPass still silences High.
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 292 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -271,9 +274,11 @@ private:
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyHighXo = 1u << 18,
-        DirtyHighResume = 1u << 19,  // High un-silenced (highXoPass on -> off): clear its state
+        DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass/highPass off): clear its state
         DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
+        DirtyLowResume = 1u << 22,  // Low's chain runs again (lpfPass off): clear its state
+        DirtyMidResume = 1u << 23,  // Mid's chain runs again (hpfPass off): clear its state
         DirtyAll = 0xffffffffu,
     };
 
@@ -367,7 +372,7 @@ private:
     // and processFrame's tail). delay (in samples) is set by updateDelays().
     NativeBmwDsp::AlignmentDelay<NativeBmwDsp::kStageDelayCapacity> stageDelayL_, stageDelayR_;
     // Fixed AlignmentDelay latency for a bypassed Low/Mid band: [LowL, LowR, MidL, MidR].
-    std::array<NativeBmwDsp::FixedAlignmentLatency, 4> bypassLatency_{};
+    std::array<NativeBmwDsp::FixedAlignmentLatency, 6> bypassLatency_{};
     // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
     // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
     NativeBmwDsp::VirtualSourceStage virtual_;

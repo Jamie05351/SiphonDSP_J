@@ -220,6 +220,12 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         } else {
             NativeBmwDspValues.OUTPUT_HIGH_RIGHT
         }
+        // High's own passthrough (INDEX_HIGH_PASS): like lpfPass/hpfPass, an identity cascade --
+        // native skips High's whole chain (filters and PEQ) and passes the raw routed signal.
+        if (values[NativeBmwDspValues.INDEX_HIGH_PASS] >= .5f) {
+            rebuildHighAllPassCascade(highAllPass[channel.ordinal], values, output)
+            return
+        }
         val crossoverFreq = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
         val crossoverType = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
         // Mirrors NativeBmwDspProcessor::rebuildHighCrossover's switch exactly -- HPF-only, the
@@ -315,6 +321,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // NativeBmwDspProcessor::processFrame's else-branch comment on why. Folded into
         // highMuted below rather than into a "bothBypassed"-style raw-passthrough shortcut.
         val highXoPass = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f
+        val highPass = values[NativeBmwDspValues.INDEX_HIGH_PASS] >= .5f
         val channelMuteMode = values[NativeBmwDspValues.INDEX_CHANNEL_MUTE].toInt()
         // measurementMute only zeroes the excluded branch here. The native engine also drops an
         // LR8 brick-wall on the summed bus (NativeBmwDspProcessor::rebuildMeasBus, offset by
@@ -423,9 +430,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
                 branchAcc.setFrom(pre)
                 highCascade[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
-                highAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
-                applyDelay(branchAcc, frequencies[i], highDelayMs.toDouble())
-                branchAcc.scale(dbToLinear(highGainDb.toDouble()))
+                if (!highPass) {
+                    highAllPass[ch].accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], branchAcc)
+                    applyDelay(branchAcc, frequencies[i], highDelayMs.toDouble())
+                    branchAcc.scale(dbToLinear(highGainDb.toDouble()))
+                }
                 if (highInvert) branchAcc.scale(-1.0)
                 if (highMuted) branchAcc.setZero()
                 out.highBranchDb[ch][i] = branchAcc.magnitudeDb()

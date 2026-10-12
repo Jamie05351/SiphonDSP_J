@@ -82,6 +82,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // High band scalars (v[210..214], added in the 210 -> 262 growth). Routing/all-pass/
     // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
     next.highXoPass = flagIn(v[210]);
+    next.highPass = flagIn(v[nbschema::kHighPass]);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -421,11 +422,21 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             dirty |= DirtyGains;
         }
     }
-    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it, so they
-    // still hold whatever was playing when 3-way was switched off. Clear them on the way back
-    // on, or that stale audio replays as a burst for the first few milliseconds.
-    if (p_.highXoPass && !next.highXoPass) {
+    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it or highPass
+    // passes it through raw, so they still hold whatever was playing when its chain stopped.
+    // Clear them whenever the chain starts running again (either flag, or both, turning off),
+    // or that stale audio replays through the tweeter as a burst for the first few milliseconds.
+    const bool highChainWasFrozen = p_.highXoPass || p_.highPass;
+    const bool highChainRunsNow = !next.highXoPass && !next.highPass;
+    if (highChainWasFrozen && highChainRunsNow) {
         dirty |= DirtyHighResume;
+    }
+    // Same for Low and Mid: lpfPass / hpfPass skip their chains just the same.
+    if (p_.lpfPass && !next.lpfPass) {
+        dirty |= DirtyLowResume;
+    }
+    if (p_.hpfPass && !next.hpfPass) {
+        dirty |= DirtyMidResume;
     }
     if (next.measurementMute != p_.measurementMute) {
         dirty |= DirtyPolarity | DirtyMeasBus;
@@ -730,6 +741,16 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         output(OutputId::HighLeft).clearState();
         output(OutputId::HighRight).clearState();
         highPeq_.clear();
+    }
+    if (d & DirtyLowResume) {
+        output(OutputId::LowLeft).clearState();
+        output(OutputId::LowRight).clearState();
+        lowPeq_.clear();
+    }
+    if (d & DirtyMidResume) {
+        output(OutputId::MidLeft).clearState();
+        output(OutputId::MidRight).clearState();
+        midPeq_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();

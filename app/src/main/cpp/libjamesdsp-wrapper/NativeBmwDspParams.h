@@ -22,6 +22,9 @@ struct Params {
     // reliance on outputConfigs_[High*].muted also being set correctly. See
     // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     bool highXoPass = false;
+    // v[291]: High's own crossover passthrough -- the lpfPass/hpfPass contract for High (its
+    // chain skipped, the raw routed signal through). Only audible while highXoPass is off.
+    bool highPass = false;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     // Stage-centering L/R alignment delay (ms), applied to the summed stereo bus after the
     // master limiter -- the last thing before the deliberate hardware L/R swap. A separate
