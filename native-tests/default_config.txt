@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (292 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (294 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -382,3 +382,6 @@
 0            # 290 midUpperXoTypeMigrated (0 = seed from Mid's own type on next load)
 
 0            # 291 highPass (High crossover passthrough off)
+
+0            # 292 masterVolumeDb (0 dB = full)
+0            # 293 masterMute (off)

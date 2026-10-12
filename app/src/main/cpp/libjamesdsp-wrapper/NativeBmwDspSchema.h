@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 292;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 294;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -209,6 +209,12 @@ inline constexpr int kMidUpperXoTypeMigrated = 290;  // Kotlin-only, never read 
 // kLpfPass/kHpfPass: High's chain is skipped and the raw routed signal passes through.
 // highXoPass (210) still wins -- while it is set High is silent whatever this says.
 inline constexpr int kHighPass = 291;
+
+// --- Master volume (292..293), added in the 292 -> 294 growth. The DSP as the car's volume:
+// the last gain before the hardware swap, after the limiter, so the limiter always sees full
+// level. Driven by the steering-wheel +/- through KSW Toolkit -> Tasker -> a broadcast.
+inline constexpr int kMasterVolumeDb = 292;  // -80..0 dB
+inline constexpr int kMasterMute = 293;
 
 }  // namespace nbschema
 
