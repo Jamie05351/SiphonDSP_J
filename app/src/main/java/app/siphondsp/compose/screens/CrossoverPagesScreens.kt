@@ -41,7 +41,6 @@ import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.FactoryBaselineStore
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
 import app.siphondsp.view.BmwDashboardSkin
@@ -287,7 +286,6 @@ private fun HeadUnitCrossoverPage(
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
-    val factory = remember { FactoryBaselineStore.load(context) }
 
     BmwDspTheme {
         WorkspaceArtBox(modifier.fillMaxSize()) {
@@ -296,7 +294,6 @@ private fun HeadUnitCrossoverPage(
                 systemValues = dsp.values,
                 peqState = peqState,
                 modifier = Modifier.artRect(artDp(GraphX, 76, GraphWidth, 305)),
-                factory = factory,
             )
             Box(Modifier.artRect(artDp(GraphX, 388, GraphWidth, 42)), contentAlignment = Alignment.Center) {
                 GraphModePicker(graphMode, onGraphModeChange)
@@ -320,7 +317,6 @@ private fun PhoneCrossoverPage(
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
-    val factory = remember { FactoryBaselineStore.load(context) }
 
     BmwDspTheme {
         Row(
@@ -335,7 +331,6 @@ private fun PhoneCrossoverPage(
                     systemValues = dsp.values,
                     peqState = peqState,
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    factory = factory,
                 )
                 Spacer(Modifier.height(8.dp))
                 GraphModePicker(graphMode, onGraphModeChange)
