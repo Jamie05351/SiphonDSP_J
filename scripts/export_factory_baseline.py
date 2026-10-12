@@ -16,15 +16,7 @@ What it does to the sweeps:
   * the side's real SUM is that side's seat sweep (L_N / R_N (sw) <seat>), not a sum of the
     near-field drivers: those are on-axis and cabin-free, and summed they miss the seat by a 10 dB
     false dip at the mid/tweeter crossover. Everything is normalised so the seat sums average
-    0 dB over 200 Hz - 2 kHz with the app bypassed;
-  * smoothing (2026-10-12): magnitude is POWER-averaged over --smooth octaves (default 1/6), like
-    REW's 1/N smoothing -- a complex average let cabin reflections cancel and deepened the notches.
-    Phase comes from a frequency-dependent window instead (--fdw-cycles, default 8, about the
-    resolution of 1/6 oct), the way REW makes in-room phase readable: a Hann window N cycles wide
-    at each frequency, so high frequencies only see the direct sound;
-  * any pure delay left in the phase after the IR-peak arrival is fitted (upper half of each
-    curve's band) and moved into arrivalMs. The complex response, and so every graph's maths and
-    group delay, is unchanged; the stored phase just stops rotating, so it can be drawn.
+    0 dB over 200 Hz - 2 kHz with the app bypassed.
 
 Needs numpy and scipy.  Example:
     py scripts/export_factory_baseline.py -o factory_baseline.json
@@ -46,9 +38,6 @@ DRIVERS = [("LEFT", "WOOFER", "w-L"), ("RIGHT", "WOOFER", "w-R"), ("LEFT", "MID"
 # Where each driver dominates the seat response, for the level match.
 DOMINANT = {"WOOFER": (40.0, 80.0), "MID": (400.0, 800.0), "TWEETER": (5000.0, 10000.0)}
 GRID = np.geomspace(20.0, 20000.0, 241)  # 1/24 octave
-SMOOTH_OCT = 1.0 / 6.0  # magnitude power-smoothing width, set from --smooth
-FDW_CYCLES = 8.0        # phase frequency-dependent window, set from --fdw-cycles (0 = complex average)
-FDW_MIN_S = 0.0         # FDW never shorter than this each side of the peak, set from --fdw-min-ms
 
 
 def get(path):
@@ -69,33 +58,8 @@ def impulse(mid):
     return t0 + np.arange(len(x)) / fs, x, fs
 
 
-def half_hann(n, rising):
-    """n samples of a half Hann, 0 -> just under 1 (rising) or just under 1 -> 0 (falling)."""
-    if n <= 0:
-        return np.empty(0)
-    w = 0.5 - 0.5 * np.cos(np.pi * np.arange(n) / n)
-    return w if rising else w[::-1]
-
-
-def fdw_phase(t, x, fs, pk, arrival, max_left, max_right):
-    """Phase (rad) on GRID through a frequency-dependent window: Hann, FDW_CYCLES cycles wide,
-    peaked on the IR peak, read against [arrival]. One direct DFT per grid frequency."""
-    out = np.empty(len(GRID))
-    for i, fc in enumerate(GRID):
-        half = max(FDW_CYCLES / fc / 2.0, FDW_MIN_S)
-        lft = min(int(half * fs), pk, max_left)
-        rgt = min(int(half * fs), len(x) - pk - 1, max_right)
-        w = np.concatenate([half_hann(lft, True), [1.0], half_hann(rgt, False)])
-        seg = x[pk - lft: pk + rgt + 1] * w
-        tt = t[pk - lft: pk + rgt + 1] - arrival
-        out[i] = np.angle(np.sum(seg * np.exp(-2j * np.pi * fc * tt)))
-    return out
-
-
 def response(mid):
-    """Complex response on GRID against the shared t=0, plus the IR-peak arrival (s). Magnitude is
-    power-smoothed over SMOOTH_OCT; phase is through the FDW (or, with FDW_CYCLES 0, the angle of
-    the complex average over the same band, the pre-2026-10-12 behaviour)."""
+    """Complex response on GRID against the shared t=0, 1/6-oct smoothed, plus the IR-peak arrival (s)."""
     t, x, fs = impulse(mid)
     pk = int(np.argmax(np.abs(x)))
     left = min(pk, int(0.125 * fs))
@@ -106,49 +70,11 @@ def response(mid):
     arrival = t[pk]
     # Spectrum with the arrival already removed, so a complex average does not cancel itself.
     h = np.fft.rfft(seg, n)[1:] * np.exp(-2j * np.pi * f * (t[pk - left] - arrival))
-    k = 2 ** (SMOOTH_OCT / 2)
-    power = np.abs(h) ** 2
-    mag = np.empty(len(GRID))
-    avg = np.empty(len(GRID), complex)
+    out = np.empty(len(GRID), complex)
     for i, fc in enumerate(GRID):
-        m = (f >= fc / k) & (f <= fc * k)
-        if m.any():
-            mag[i] = np.sqrt(power[m].mean())
-            avg[i] = h[m].mean()
-        else:
-            avg[i] = np.interp(fc, f, h.real) + 1j * np.interp(fc, f, h.imag)
-            mag[i] = abs(avg[i])
-    if FDW_CYCLES > 0:
-        phase = fdw_phase(t, x, fs, pk, arrival, left, right - 1)
-    else:
-        phase = np.angle(avg)
-    return mag * np.exp(1j * phase), arrival
-
-
-def refit_arrival(d):
-    """Moves the pure delay still left in d["h"] into d["arrival"]: a straight-line fit of the
-    unwrapped phase against frequency over the upper half (log) of the curve's band. The product
-    (phase x arrival) is unchanged, only how it is split. Returns the delay moved (s)."""
-    inside = (GRID >= d["minHz"]) & (GRID <= d["maxHz"])
-    f = GRID[inside]
-    if len(f) < 4:
-        return 0.0
-    ph = np.unwrap(np.angle(d["h"][inside]))
-    fit = f >= np.sqrt(f[0] * f[-1])
-    if fit.sum() < 3:
-        return 0.0
-    tau = -np.polyfit(f[fit], ph[fit], 1)[0] / (2 * np.pi)
-    d["h"] = d["h"] * np.exp(2j * np.pi * GRID * tau)
-    d["arrival"] += tau
-    return tau
-
-
-def max_phase_step_deg(d):
-    """Largest phase change between neighbouring grid points: over ~90 deg the 1/24-oct grid is
-    too coarse to follow it and the app's interpolation will guess."""
-    inside = (GRID >= d["minHz"]) & (GRID <= d["maxHz"])
-    ph = np.unwrap(np.angle(d["h"][inside]))
-    return float(np.degrees(np.max(np.abs(np.diff(ph))))) if len(ph) > 1 else 0.0
+        m = (f >= fc * 2 ** (-1 / 12)) & (f <= fc * 2 ** (1 / 12))
+        out[i] = h[m].mean() if m.any() else np.interp(fc, f, h.real) + 1j * np.interp(fc, f, h.imag)
+    return out, arrival
 
 
 def band_db(h, lo, hi):
@@ -167,19 +93,7 @@ def main():
     ap.add_argument("--seat", default="DRV+PAS",
                     help="seat(s) whose L/R sweeps become each side's real sum (title suffix; default DRV+PAS: "
                          "magnitude power-averaged over the seats, phase from the first; 'none' leaves it out)")
-    ap.add_argument("--smooth", type=float, default=6.0, metavar="N",
-                    help="magnitude power-smoothing, 1/N octave (default 6; 3 for a calmer seat curve)")
-    ap.add_argument("--fdw-cycles", type=float, default=8.0, metavar="C",
-                    help="phase frequency-dependent window in cycles (default 8; 0 = the old complex average)")
-    ap.add_argument("--fdw-min-ms", type=float, default=0.0, metavar="MS",
-                    help="never window phase tighter than this each side of the IR peak (default 0). Raise it "
-                         "(e.g. 1.5) if a seat sum's tweeter arrives far from the IR peak and its phase looks lost")
-    ap.add_argument("--no-refit", action="store_true", help="keep the IR-peak arrivals as they are")
     a = ap.parse_args()
-    global SMOOTH_OCT, FDW_CYCLES, FDW_MIN_S
-    SMOOTH_OCT = 1.0 / a.smooth
-    FDW_CYCLES = a.fdw_cycles
-    FDW_MIN_S = a.fdw_min_ms / 1000.0
     mirror = {}
     for spec in a.mirror:
         driver, _, side = spec.upper().partition("=")
@@ -245,10 +159,6 @@ def main():
                              minHz=max(20.0, max(float(m.get("startFreq", 20.0)) for m, _, _ in taken)),
                              maxHz=min(20000.0, min(float(m.get("endFreq", 20000.0)) for m, _, _ in taken))))
 
-    if not a.no_refit:
-        for d in drivers + sums:
-            d["refitMs"] = refit_arrival(d) * 1000
-
     # Normalise: 0 dB = the seat sums' (else the drivers') 200 Hz - 2 kHz level with the app bypassed.
     if sums:
         norm = -np.mean([band_db(s["h"], 200, 2000) for s in sums])
@@ -278,18 +188,15 @@ def main():
     for d in drivers:
         out.append({**curve(d, first_by_side[d["side"]]), "driver": d["driver"], "trimDb": round(d.get("trimDb", 0.0), 2)})
         print(f"{d['side']:5s} {d['driver']:7s} {d['title']:18s} arrival +{out[-1]['arrivalMs']:6.3f} ms"
-              f"  {d['minHz']:7.0f}-{d['maxHz']:5.0f} Hz  trim {out[-1]['trimDb']:+6.2f} dB"
-              f"  refit {d.get('refitMs', 0.0):+.3f} ms  max step {max_phase_step_deg(d):4.0f} deg")
+              f"  {d['minHz']:7.0f}-{d['maxHz']:5.0f} Hz  trim {out[-1]['trimDb']:+6.2f} dB")
     seat_out = []
     for s in sums:
         seat_out.append(curve(s, first_sum))
-        print(f"{s['side']:5s} SUM     {s['title']:18s} arrival +{seat_out[-1]['arrivalMs']:6.3f} ms"
-              f"  refit {s.get('refitMs', 0.0):+.3f} ms  max step {max_phase_step_deg(s):4.0f} deg")
+        print(f"{s['side']:5s} SUM     {s['title']:18s} arrival +{seat_out[-1]['arrivalMs']:6.3f} ms")
 
     doc = {
         "format": "siphondsp-factory-baseline", "version": 1,
-        "source": f"REW near-field series {a.series}, exported {datetime.date.today().isoformat()}, "
-                  f"1/{a.smooth:g} oct power, " + (f"FDW {a.fdw_cycles:g} cycles" if a.fdw_cycles > 0 else "complex avg"),
+        "source": f"REW near-field series {a.series}, exported {datetime.date.today().isoformat()}",
         "drivers": out,
     }
     if seat_out:
