@@ -274,7 +274,7 @@ private:
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyHighXo = 1u << 18,
-        DirtyHighResume = 1u << 19,  // High un-silenced (highXoPass on -> off): clear its state
+        DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass/highPass off): clear its state
         DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
         DirtyAll = 0xffffffffu,

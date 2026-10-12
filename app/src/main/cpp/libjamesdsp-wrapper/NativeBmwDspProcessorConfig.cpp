@@ -422,10 +422,13 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             dirty |= DirtyGains;
         }
     }
-    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it, so they
-    // still hold whatever was playing when 3-way was switched off. Clear them on the way back
-    // on, or that stale audio replays as a burst for the first few milliseconds.
-    if (p_.highXoPass && !next.highXoPass) {
+    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it or highPass
+    // passes it through raw, so they still hold whatever was playing when its chain stopped.
+    // Clear them whenever the chain starts running again (either flag, or both, turning off),
+    // or that stale audio replays through the tweeter as a burst for the first few milliseconds.
+    const bool highChainWasFrozen = p_.highXoPass || p_.highPass;
+    const bool highChainRunsNow = !next.highXoPass && !next.highPass;
+    if (highChainWasFrozen && highChainRunsNow) {
         dirty |= DirtyHighResume;
     }
     if (next.measurementMute != p_.measurementMute) {

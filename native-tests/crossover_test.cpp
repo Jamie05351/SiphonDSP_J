@@ -257,3 +257,31 @@ TEST_CASE("High: kHighPass passes the raw signal like kLpfPass/kHpfPass, but kHi
     proc.process(buf.data(), buf.size());
     CHECK(peakAbs(buf) < 1e-4f);
 }
+
+TEST_CASE("High: turning kHighPass back off clears the chain's frozen state (no stale burst)") {
+    // While kHighPass passes High through raw, its crossover/PEQ/all-pass/delay stop advancing and
+    // keep the audio from the moment passthrough went on. Going back to processing must start
+    // from clean state: with silence in, nothing may come out of the tweeter path.
+    constexpr float fc = 3000.f;
+    auto processing = highOnlyConfig(fc, kLr4);
+    processing[sch::kHighDelayL] = 2.f;  // a delay line full of tone is the loudest stale state
+    processing[sch::kHighDelayR] = 2.f;
+    auto passthrough = processing;
+    passthrough[sch::kHighPass] = 1.f;
+
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(processing.data(), processing.size()));
+    auto tone = stereoSine(fc * 2, 0.5, 8192, kSampleRate);
+    proc.process(tone.data(), tone.size());  // High's chain now holds loud history
+
+    REQUIRE(proc.configure(passthrough.data(), passthrough.size()));
+    std::vector<float> silence(8192 * 2, 0.f);
+    proc.process(silence.data(), silence.size());  // chain frozen, bypass line drains
+
+    REQUIRE(proc.configure(processing.data(), processing.size()));
+    std::vector<float> after(4096 * 2, 0.f);
+    proc.process(after.data(), after.size());
+    INFO("peak after resuming High's chain with silence in = ", peakAbs(after));
+    CHECK(peakAbs(after) < 1e-4f);
+}
