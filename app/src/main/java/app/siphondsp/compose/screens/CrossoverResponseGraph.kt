@@ -11,17 +11,12 @@ import android.graphics.Shader
 import androidx.core.graphics.ColorUtils
 import android.util.TypedValue
 import androidx.compose.foundation.Canvas as ComposeCanvas
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -34,10 +29,6 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
-import app.siphondsp.dsp.FactoryAcousticCurves
-import app.siphondsp.dsp.FactoryBaseline
-import app.siphondsp.dsp.FactoryDriver
-import app.siphondsp.dsp.averagePhaseRad
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
@@ -83,12 +74,6 @@ import kotlin.math.pow
  * plain lines, and the sum is drawn per channel -- L neon purple, R neon green, solid, with a glow
  * -- instead of one white L/R average with a white area fill. The crossover markers are faint solid
  * lines (no dashes). Phase and group delay keep their curves.
- *
- * With a [FactoryBaseline] the graph shows the REAL response by default: this app's output
- * multiplied by the factory amplifier's measured response per driver ([FactoryAcousticCurves]).
- * The band washes stay (they are what this app does); the L/R sums become the acoustic sums, and
- * each driver is drawn in its band colour (woofer = Low, mid = Mid, tweeter = High; L solid, R
- * dashed). A tap toggles back to the app-only view.
  */
 enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
 
@@ -108,11 +93,6 @@ private const val SPECTRUM_TICK_MS = 33L
 private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 private val GroupDelayGridLines = floatArrayOf(10f, 6f, 2f, 0f, -2f)
-// The real (factory) response carries the woofers' factory low-pass and the side's arrival, so
-// its group delay runs far past the app-only scale.
-private val RealGroupDelayGridLines = floatArrayOf(20f, 15f, 10f, 5f, 0f)
-private const val REAL_DELAY_MIN = -2f
-private const val REAL_DELAY_MAX = 22f
 private val FreqGridLines =
     floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f)
 
@@ -136,17 +116,8 @@ fun CrossoverResponseGraph(
     peqState: BmwPeqState,
     modifier: Modifier = Modifier,
     showSpectrum: Boolean = true,
-    factory: FactoryBaseline? = null,
-    /**
-     * Real PHASE mode, drivers: false (default) draws each driver with its own arrival taken out --
-     * its shape; true keeps the timing between one side's drivers, for phase match at a crossover.
-     * The seat sums always have their own arrival out. Timing proper is the DELAY mode.
-     */
-    phaseTimed: Boolean = false,
 ) {
     val context = LocalContext.current
-    var preferReal by rememberSaveable { mutableStateOf(true) }
-    val showReal = factory != null && preferReal
     val density = LocalDensity.current.density
     val lowArgb = BmwTheme.colors.sliderLowBand.toArgb()
     val midArgb = BmwTheme.colors.midBandYellow.toArgb()
@@ -263,15 +234,6 @@ fun CrossoverResponseGraph(
             color = sumArgb
         }
     }
-    // Real phase is drawn per side (L/R phase cannot be averaged -- 173 deg apart at 2 kHz in this
-    // car): drivers in their band colours, L solid / R dashed; the seat sums in the channel colours.
-    val driverDashPaints = remember(lowPaint, midPaint, highPaint, density) {
-        listOf(lowPaint, midPaint, highPaint).map { base ->
-            Paint(base).apply { pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f) }
-        }
-    }
-    val leftPhasePaint = remember(phasePaint) { Paint(phasePaint).apply { color = LeftChannelColor } }
-    val rightPhasePaint = remember(phasePaint) { Paint(phasePaint).apply { color = RightChannelColor } }
     val spectrumFillPaint = remember(density, gridArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -308,14 +270,12 @@ fun CrossoverResponseGraph(
     // only when the DSP values / PEQ snapshot change (not per spectrum frame).
     val calculator = remember { BmwResponseCalculator(pointCount = POINT_COUNT) }
     val curves = remember { BmwResponseCurves(POINT_COUNT) }
-    val acoustic = remember { FactoryAcousticCurves(POINT_COUNT) }
     val valuesHash = systemValues.contentHashCode()
-    remember(valuesHash, peqState, factory) {
+    remember(valuesHash, peqState) {
         if (systemValues.size == BmwSignalChain.VALUE_COUNT) {
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
             calculator.invalidateAll()
             calculator.compute(systemValues, peqState, curves)
-            if (factory != null) acoustic.compute(curves, factory)
         }
     }
 
@@ -336,12 +296,7 @@ fun CrossoverResponseGraph(
         }
     }
 
-    val tapModifier = if (factory != null) {
-        Modifier.pointerInput(Unit) { detectTapGestures { preferReal = !preferReal } }
-    } else {
-        Modifier
-    }
-    ComposeCanvas(modifier.graphPanel().then(tapModifier)) {
+    ComposeCanvas(modifier.graphPanel()) {
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
         val top = PAD_TOP_DP * density
@@ -350,29 +305,17 @@ fun CrossoverResponseGraph(
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
-            val sumsKnown = factory?.hasSeatSums == true
-            // Real, drivers only: BOTH draws magnitudes alone, so its solid/dashed key would lie.
-            if (mode == CrossoverGraphMode.MAGNITUDE_PHASE && (!showReal || sumsKnown)) {
-                drawBothModeKey(nc, left, top, density, legendPaint)
-            }
-            if (factory != null) drawRealKey(nc, right, top, density, legendPaint, showReal, sumsKnown)
-            if (showReal && mode == CrossoverGraphMode.PHASE) {
-                drawRealPhaseKey(nc, left, top, density, legendPaint, phaseTimed)
-            }
+            if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
                     { v -> dbToY(v, top, bottom) }
                 CrossoverGraphMode.PHASE -> { v -> valueToY(v, -180f, 180f, top, bottom) }
-                CrossoverGraphMode.GROUP_DELAY -> if (showReal) {
-                    { v -> valueToY(v, REAL_DELAY_MIN, REAL_DELAY_MAX, top, bottom) }
-                } else {
-                    { v -> valueToY(v, -2f, 10f, top, bottom) }
-                }
+                CrossoverGraphMode.GROUP_DELAY -> { v -> valueToY(v, -2f, 10f, top, bottom) }
             }
             val gridLines = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE -> DbGridLines
                 CrossoverGraphMode.PHASE -> PhaseGridLines
-                CrossoverGraphMode.GROUP_DELAY -> if (showReal) RealGroupDelayGridLines else GroupDelayGridLines
+                CrossoverGraphMode.GROUP_DELAY -> GroupDelayGridLines
             }
             drawGrid(
                 nc, left, right, top, bottom, density, gridLines,
@@ -383,205 +326,12 @@ fun CrossoverResponseGraph(
                 drawSpectrum(nc, left, right, top, bottom, frame, spectrumFillPaint, spectrumPaint)
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
-                val colors = intArrayOf(lowArgb, midArgb, highArgb)
-                if (showReal) {
-                    drawRealBandAreas(nc, acoustic, left, right, top, bottom, colors, bandWashPaint, bandEdgePaint)
-                } else {
-                    drawBandAreas(nc, curves, left, right, top, bottom, colors, bandWashPaint, bandEdgePaint)
-                }
+                drawBandAreas(nc, curves, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint)
             }
-            if (showReal) {
-                drawRealResponse(
-                    nc, mode, acoustic, sumsKnown, left, right, top, bottom, lowPaint, midPaint, highPaint,
-                    sumPaint, sumGlowPaint, ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
-                    RealPhasePaints(driverDashPaints, leftPhasePaint, rightPhasePaint), phaseTimed,
-                )
-            } else {
-                drawResponse(
-                    nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
-                    ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
-                )
-            }
-        }
-    }
-}
-
-/** Top-right: which response is on screen, and that a tap switches it. */
-private fun drawRealKey(
-    nc: Canvas, right: Float, top: Float, density: Float, legendPaint: Paint, real: Boolean, sumsKnown: Boolean,
-) {
-    val text = when {
-        !real -> "DSP ONLY - TAP FOR REAL"
-        sumsKnown -> "REAL - TAP FOR DSP"
-        else -> "REAL, DRIVERS ONLY - TAP FOR DSP"
-    }
-    nc.drawText(text, right - legendPaint.measureText(text) - 8f * density, top + 14f * density, legendPaint)
-}
-
-/** Top-left in real PHASE: which line is which side, and what timing the drivers carry. */
-private fun drawRealPhaseKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint, timed: Boolean) {
-    val text = if (timed) "L SOLID, R DASHED - SIDE TIMING" else "L SOLID, R DASHED - ARRIVALS OUT"
-    nc.drawText(text, left + 8f * density, top + 14f * density, legendPaint)
-}
-
-/** Per-side phase strokes for the real response: R driver dashes, and the L / R phase in BOTH mode. */
-private class RealPhasePaints(val driverDash: List<Paint>, val left: Paint, val right: Paint)
-
-/** One point of an L/R pair (dB or ms -- never a wrapped phase, see [averagePhaseRad]); NaN only where both sides are NaN. */
-private fun averageLr(left: Double, right: Double): Double = when {
-    left.isNaN() -> right
-    right.isNaN() -> left
-    else -> (left + right) * 0.5
-}
-
-/**
- * The real response laid out exactly like [drawResponse] (the tune is multi-seat, so the L/R
- * pair is averaged wherever the DSP-only view averages it): the side sums at the seat in the
- * magnitude modes, the drivers + sum in PHASE, one sum line in DELAY. Without seat sums the
- * drivers stand in where a sum would be drawn. NaN points break the line.
- *
- * Phase is the exception (2026-10-12): never L/R averaged and never with the arrival in it -- see
- * [FactoryAcousticCurves.driverPhaseShape]. Each side is its own line.
- */
-private fun drawRealResponse(
-    nc: Canvas,
-    mode: CrossoverGraphMode,
-    acoustic: FactoryAcousticCurves,
-    sumsKnown: Boolean,
-    left: Float,
-    right: Float,
-    top: Float,
-    bottom: Float,
-    lowPaint: Paint,
-    midPaint: Paint,
-    highPaint: Paint,
-    sumPaint: Paint,
-    sumGlowPaint: Paint,
-    channels: ChannelPaints,
-    phasePaints: RealPhasePaints,
-    phaseTimed: Boolean,
-) {
-    val lastIndex = POINT_COUNT - 1
-    fun pathFor(sample: (Int) -> Double, toY: (Float) -> Float, wraps: Boolean = false): Path = Path().apply {
-        var open = false
-        var previous = Float.NaN
-        for (i in 0 until POINT_COUNT) {
-            val v = sample(i)
-            if (v.isNaN()) { open = false; continue }
-            val value = v.toFloat()
-            val x = left + (i.toFloat() / lastIndex) * (right - left)
-            // A wrapped phase jumping +-180 would draw a vertical stroke across the plot.
-            if (!open || (wraps && kotlin.math.abs(value - previous) > 180f)) moveTo(x, toY(value)) else lineTo(x, toY(value))
-            open = true
-            previous = value
-        }
-    }
-    val db: (Float) -> Float = { v -> dbToY(v.coerceIn(-24f, 12f), top, bottom) }
-    val deg: (Float) -> Float = { v -> valueToY(v, -180f, 180f, top, bottom) }
-    val delayY: (Float) -> Float = { v -> valueToY(v, REAL_DELAY_MIN, REAL_DELAY_MAX, top, bottom) }
-    val l = BmwOutputChannel.LEFT
-    val r = BmwOutputChannel.RIGHT
-    val driverPaints = listOf(lowPaint, midPaint, highPaint)
-    fun strokeSum(path: Path) {
-        nc.drawPath(path, sumGlowPaint)
-        nc.drawPath(path, sumPaint)
-    }
-    fun degOf(rad: DoubleArray): (Int) -> Double = { i -> Math.toDegrees(rad[i]) }
-    fun driverPhase(side: BmwOutputChannel, d: FactoryDriver): DoubleArray =
-        if (phaseTimed) acoustic.driverPhaseTimedFor(side, d) else acoustic.driverPhaseShapeFor(side, d)
-    fun strokeChannelSums() {
-        val leftPath = pathFor({ i -> acoustic.sumDbFor(l)[i] }, db)
-        val rightPath = pathFor({ i -> acoustic.sumDbFor(r)[i] }, db)
-        nc.drawPath(rightPath, channels.rightGlow)
-        nc.drawPath(rightPath, channels.right)
-        nc.drawPath(leftPath, channels.leftGlow)
-        nc.drawPath(leftPath, channels.left)
-    }
-    when (mode) {
-        CrossoverGraphMode.MAGNITUDE -> if (sumsKnown) strokeChannelSums()
-        CrossoverGraphMode.PHASE -> {
-            FactoryDriver.entries.forEach { d ->
-                nc.drawPath(pathFor(degOf(driverPhase(r, d)), deg, wraps = true), phasePaints.driverDash[d.ordinal])
-                nc.drawPath(pathFor(degOf(driverPhase(l, d)), deg, wraps = true), driverPaints[d.ordinal])
-            }
-            if (sumsKnown) {
-                val rightPath = pathFor(degOf(acoustic.sumPhaseShapeFor(r)), deg, wraps = true)
-                val leftPath = pathFor(degOf(acoustic.sumPhaseShapeFor(l)), deg, wraps = true)
-                nc.drawPath(rightPath, channels.rightGlow)
-                nc.drawPath(rightPath, channels.right)
-                nc.drawPath(leftPath, channels.leftGlow)
-                nc.drawPath(leftPath, channels.left)
-            }
-        }
-        CrossoverGraphMode.MAGNITUDE_PHASE -> if (sumsKnown) {
-            strokeChannelSums()
-            nc.drawPath(pathFor(degOf(acoustic.sumPhaseShapeFor(r)), deg, wraps = true), phasePaints.right)
-            nc.drawPath(pathFor(degOf(acoustic.sumPhaseShapeFor(l)), deg, wraps = true), phasePaints.left)
-        }
-        CrossoverGraphMode.GROUP_DELAY -> if (sumsKnown) {
-            strokeSum(pathFor({ i -> averageLr(acoustic.groupDelayMsFor(l)[i], acoustic.groupDelayMsFor(r)[i]) }, delayY))
-        } else {
-            FactoryDriver.entries.forEach { d ->
-                val leftDelay = acoustic.driverGroupDelayMsFor(l, d)
-                val rightDelay = acoustic.driverGroupDelayMsFor(r, d)
-                nc.drawPath(pathFor({ i -> averageLr(leftDelay[i], rightDelay[i]) }, delayY), driverPaints[d.ordinal])
-            }
-        }
-    }
-}
-
-/**
- * [drawBandAreas] for the real response: each driver (woofer / mid / tweeter in the Low / Mid /
- * High colours, L/R averaged) as a wash under its curve, over the stretch it was measured.
- */
-private fun drawRealBandAreas(
-    nc: Canvas,
-    acoustic: FactoryAcousticCurves,
-    left: Float,
-    right: Float,
-    top: Float,
-    bottom: Float,
-    colors: IntArray,
-    washPaint: Paint,
-    edgePaint: Paint,
-) {
-    val lastIndex = POINT_COUNT - 1
-    FactoryDriver.entries.forEach { driver ->
-        val leftDb = acoustic.driverDbFor(BmwOutputChannel.LEFT, driver)
-        val rightDb = acoustic.driverDbFor(BmwOutputChannel.RIGHT, driver)
-        val color = colors[driver.ordinal]
-        washPaint.shader = LinearGradient(
-            0f, top, 0f, bottom,
-            ColorUtils.setAlphaComponent(color, BAND_WASH_ALPHA),
-            ColorUtils.setAlphaComponent(color, 0),
-            Shader.TileMode.CLAMP,
-        )
-        edgePaint.color = color
-        edgePaint.alpha = BAND_EDGE_ALPHA
-        // One wash per measured stretch; NaN (not measured) ends a stretch.
-        var i = 0
-        while (i < POINT_COUNT) {
-            if (averageLr(leftDb[i], rightDb[i]).isNaN()) { i++; continue }
-            val edge = Path()
-            val firstX = left + (i.toFloat() / lastIndex) * (right - left)
-            var lastX = firstX
-            var first = true
-            while (i < POINT_COUNT) {
-                val v = averageLr(leftDb[i], rightDb[i])
-                if (v.isNaN()) break
-                lastX = left + (i.toFloat() / lastIndex) * (right - left)
-                val y = dbToY(v.toFloat().coerceIn(-24f, 12f), top, bottom)
-                if (first) edge.moveTo(lastX, y) else edge.lineTo(lastX, y)
-                first = false
-                i++
-            }
-            val area = Path(edge).apply {
-                lineTo(lastX, bottom)
-                lineTo(firstX, bottom)
-                close()
-            }
-            nc.drawPath(area, washPaint)
-            nc.drawPath(edge, edgePaint)
+            drawResponse(
+                nc, mode, curves, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
+                ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+            )
         }
     }
 }
@@ -843,12 +593,8 @@ private fun drawCrossoverMarkers(
 private fun averageDb(left: Double, right: Double): Float =
     ((left + right) * 0.5).toFloat().coerceIn(-24f, 12f)
 
-// Circular mean, not (left + right) / 2: that turns +179 / -179 into 0 instead of 180.
-// Opposite phases have no mean; 0 keeps the View's always-drawn line.
-private fun averageDeg(left: Double, right: Double): Float {
-    val mean = averagePhaseRad(left, right)
-    return if (mean.isNaN()) 0f else Math.toDegrees(mean).toFloat().coerceIn(-180f, 180f)
-}
+private fun averageDeg(left: Double, right: Double): Float =
+    Math.toDegrees((left + right) * 0.5).toFloat().coerceIn(-180f, 180f)
 
 private fun dbToY(db: Float, top: Float, bottom: Float): Float = valueToY(db, -24f, 12f, top, bottom)
 

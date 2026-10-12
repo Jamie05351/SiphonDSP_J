@@ -17,11 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,7 +41,6 @@ import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.BmwPeqState
-import app.siphondsp.model.FactoryBaselineStore
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
 import app.siphondsp.view.BmwDashboardSkin
@@ -271,12 +266,10 @@ private fun CrossoverPage(
     controls: @Composable (ControlRow) -> Unit,
     phoneExtra: @Composable () -> Unit = {},
 ) {
-    var phaseTimed by rememberSaveable { mutableStateOf(false) }
-    val onPhaseTimedChange: (Boolean) -> Unit = { phaseTimed = it }
     if (LocalContext.current.isHeadUnitDisplay()) {
-        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, phaseTimed, onPhaseTimedChange, modifier, controls)
+        HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
     } else {
-        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, phaseTimed, onPhaseTimedChange, modifier, controls, phoneExtra)
+        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, phoneExtra)
     }
 }
 
@@ -288,14 +281,11 @@ private fun HeadUnitCrossoverPage(
     dsp: BmwDspState,
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
-    phaseTimed: Boolean,
-    onPhaseTimedChange: (Boolean) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
-    val factory = remember { FactoryBaselineStore.load(context) }
 
     BmwDspTheme {
         WorkspaceArtBox(modifier.fillMaxSize()) {
@@ -304,16 +294,9 @@ private fun HeadUnitCrossoverPage(
                 systemValues = dsp.values,
                 peqState = peqState,
                 modifier = Modifier.artRect(artDp(GraphX, 76, GraphWidth, 305)),
-                factory = factory,
-                phaseTimed = phaseTimed,
             )
             Box(Modifier.artRect(artDp(GraphX, 388, GraphWidth, 42)), contentAlignment = Alignment.Center) {
                 GraphModePicker(graphMode, onGraphModeChange)
-            }
-            if (factory != null && graphMode == CrossoverGraphMode.PHASE) {
-                Box(Modifier.artRect(artDp(GraphX, 434, GraphWidth, 38)), contentAlignment = Alignment.Center) {
-                    PhaseTimingPicker(phaseTimed, onPhaseTimedChange)
-                }
             }
             controls { y, h -> Modifier.artRect(artDp(ControlX, y, ControlColumnWidth, h)) }
         }
@@ -328,15 +311,12 @@ private fun PhoneCrossoverPage(
     dsp: BmwDspState,
     graphMode: CrossoverGraphMode,
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
-    phaseTimed: Boolean,
-    onPhaseTimedChange: (Boolean) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
     extra: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
-    val factory = remember { FactoryBaselineStore.load(context) }
 
     BmwDspTheme {
         Row(
@@ -351,15 +331,9 @@ private fun PhoneCrossoverPage(
                     systemValues = dsp.values,
                     peqState = peqState,
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    factory = factory,
-                    phaseTimed = phaseTimed,
                 )
                 Spacer(Modifier.height(8.dp))
                 GraphModePicker(graphMode, onGraphModeChange)
-                if (factory != null && graphMode == CrossoverGraphMode.PHASE) {
-                    Spacer(Modifier.height(4.dp))
-                    PhaseTimingPicker(phaseTimed, onPhaseTimedChange)
-                }
             }
             Column(
                 modifier = Modifier
@@ -373,18 +347,6 @@ private fun PhoneCrossoverPage(
             }
         }
     }
-}
-
-@Composable
-private fun PhaseTimingPicker(phaseTimed: Boolean, onPhaseTimedChange: (Boolean) -> Unit) {
-    BmwSegmentedControl(
-        options = listOf("ARRIVALS OUT", "SIDE TIMING"),
-        selectedIndex = if (phaseTimed) 1 else 0,
-        onSelect = { onPhaseTimedChange(it == 1) },
-        modifier = Modifier.fillMaxWidth(),
-        segmentHeight = 34.dp,
-        segmentGap = 4.dp,
-    )
 }
 
 @Composable
