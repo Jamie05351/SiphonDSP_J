@@ -115,7 +115,10 @@ public:
     //
     // 291 -- High crossover passthrough, added in the 291 -> 292 growth (lpfPass/hpfPass
     //   contract: chain skipped, raw routed signal through). highXoPass still silences High.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 292 };
+    //
+    // 292..293 -- master volume, added in the 292 -> 294 growth:
+    //   292      volume dB (-80..0)   293  mute
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 294 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -348,6 +351,15 @@ private:
     std::array<CompressorState, NativeBmwRouting::kOutputCount> outputDynamics_{};
     NativeBmwRouting::RoutingMatrix routing_{};
     float sampleRate_ = 48000.0f;
+
+    // Master volume (v[292..293]). masterGain_ ramps toward masterGainTarget_ every sample with
+    // a ~10 ms one-pole (masterRampCoef_, rebuilt with the sample rate) so a step never clicks.
+    // The first configure() snaps straight to the target, so start-up never ramps down from
+    // full level at a low saved volume.
+    float masterGainTarget_ = 1.f;
+    float masterGain_ = 1.f;
+    float masterRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
+    bool masterGainPrimed_ = false;
 
     // Input stage.
     NativeBmwDsp::DcBlocker inputDcL_, inputDcR_;

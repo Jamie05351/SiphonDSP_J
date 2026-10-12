@@ -160,6 +160,8 @@ class NativeBmwSchemaAgreementTest {
         "kMidUpperXoTypeMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED,
 
         "kHighPass" to NativeBmwDspValues.INDEX_HIGH_PASS,
+        "kMasterVolumeDb" to NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
+        "kMasterMute" to NativeBmwDspValues.INDEX_MASTER_MUTE,
     )
 
     @Test

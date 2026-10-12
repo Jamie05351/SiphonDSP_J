@@ -63,7 +63,10 @@ object NativeBmwDspValues {
     //
     // 291 is High's crossover passthrough, added in the 291 -> 292 growth. Defaults off, so an
     // older save padded with it behaves exactly as before -- no migration needed.
-    const val SIZE = 292
+    //
+    // 292..293 are the master volume (dB, mute), added in the 292 -> 294 growth. Default 0 dB /
+    // unmuted, so older saves are unchanged; see MasterVolume.
+    const val SIZE = 294
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -358,6 +361,12 @@ object NativeBmwDspValues {
     // High's own crossover passthrough (291): the INDEX_LPF_PASS/INDEX_HPF_PASS contract for High
     // -- its chain skipped, the raw routed signal through. INDEX_HIGH_XO_PASS still wins.
     const val INDEX_HIGH_PASS = 291
+
+    // Master volume: the DSP as the car's volume, applied last (after the limiter). -80..0 dB.
+    const val INDEX_MASTER_VOLUME_DB = 292
+    const val INDEX_MASTER_MUTE = 293
+    const val MASTER_VOLUME_MIN_DB = -80f
+    const val MASTER_VOLUME_MAX_DB = 0f
     const val INDEX_HIGH_GAIN_L = 211
     const val INDEX_HIGH_GAIN_R = 212
     const val INDEX_HIGH_DELAY_L = 213
@@ -543,6 +552,9 @@ object NativeBmwDspValues {
         0f, // 290 migration marker (0 = seed from Mid's own type on next load)
         // --- High crossover passthrough (291) ---
         0f, // 291 High passthrough (off)
+        // --- Master volume (292..293) ---
+        0f, // 292 master volume dB (0 = full)
+        0f, // 293 master mute (off)
     )
 
     init {

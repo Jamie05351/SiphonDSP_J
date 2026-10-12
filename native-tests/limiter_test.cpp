@@ -231,3 +231,48 @@ TEST_CASE("per-bus limiter: hold keeps gain flat across a bass cycle (no in-cycl
     CHECK(grMin > 1.0f);                // it is limiting
     CHECK(grMax - grMin < 0.05f);       // and the gain is flat across the cycle
 }
+
+namespace {
+float masterVolumePeak(float volumeDb, bool mute, std::size_t frames) {
+    auto c = defaultConfig();
+    c[nbschema::kMasterVolumeDb] = volumeDb;
+    c[nbschema::kMasterMute] = mute ? 1.f : 0.f;
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(48000.f);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto buf = stereoSine(1000.0, 0.25, frames, 48000.f);
+    proc.process(buf.data(), buf.size());
+    return peakAbs(buf);
+}
+}  // namespace
+
+TEST_CASE("Master volume attenuates by its dB, mutes, and starts at its level with no ramp") {
+    const float full = masterVolumePeak(0.f, false, 8192);
+    const float minus20 = masterVolumePeak(-20.f, false, 8192);
+    INFO("0 dB peak ", full, ", -20 dB peak ", minus20);
+    CHECK(20.f * std::log10(minus20 / full) == doctest::Approx(-20.f).epsilon(0.02));
+    CHECK(masterVolumePeak(-20.f, true, 8192) < 1e-5f);
+    // A saved low volume must apply from the very first block: no 10 ms ramp down from full.
+    CHECK(masterVolumePeak(-40.f, false, 64) < full * 0.0125f);
+}
+
+TEST_CASE("Master volume steps are ramped, not instant (no click)") {
+    auto c = defaultConfig();
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(48000.f);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto warm = stereoSine(1000.0, 0.25, 8192, 48000.f);
+    proc.process(warm.data(), warm.size());
+    const float before = peakAbs(std::vector<float>(warm.end() - 96 * 2, warm.end()));
+    c[nbschema::kMasterVolumeDb] = -40.f;
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto after = stereoSine(1000.0, 0.25, 8192, 48000.f);
+    proc.process(after.data(), after.size());
+    // The first millisecond after the step is still near full level (a ~10 ms ramp, not a jump);
+    // ~150 ms later the level has arrived at -40 dB.
+    const float firstMs = peakAbs(std::vector<float>(after.begin(), after.begin() + 48 * 2));
+    const float settled = peakAbs(std::vector<float>(after.end() - 96 * 2, after.end()));
+    INFO("before ", before, ", first ms ", firstMs, ", settled ", settled);
+    CHECK(firstMs > before * 0.8f);
+    CHECK(settled == doctest::Approx(before * 0.01f).epsilon(0.1));
+}

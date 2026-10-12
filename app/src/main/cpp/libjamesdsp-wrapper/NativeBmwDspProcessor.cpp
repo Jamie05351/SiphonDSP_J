@@ -51,6 +51,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
     std::lock_guard<std::mutex> lock(stateMutex_);
     if (sr >= 8000 && std::fabs(sr - sampleRate_) > .5f) {
         sampleRate_ = sr;
+        masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         rebuildAll();
     }
 }
@@ -255,6 +256,11 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // lines and the per-output all-pass sections, which all run pre-sum.
     oL = NativeBmwDsp::ftz(stageDelayL_.run(oL));
     oR = NativeBmwDsp::ftz(stageDelayR_.run(oR));
+    // Master volume -- the very last gain, after the limiter (which so always sees full level),
+    // ramped toward its target so a steering-wheel step never clicks.
+    masterGain_ += (masterGainTarget_ - masterGain_) * masterRampCoef_;
+    oL *= masterGain_;
+    oR *= masterGain_;
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap

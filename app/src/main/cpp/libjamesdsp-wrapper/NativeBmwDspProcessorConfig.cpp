@@ -83,6 +83,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
     next.highXoPass = flagIn(v[210]);
     next.highPass = flagIn(v[nbschema::kHighPass]);
+    next.masterVolumeDb = clampIn(v[nbschema::kMasterVolumeDb], -80, 0);
+    next.masterMute = flagIn(v[nbschema::kMasterMute]);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -533,6 +535,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
 
     p_ = next;
+    masterGainTarget_ = p_.masterMute ? 0.f : std::pow(10.f, p_.masterVolumeDb / 20.f);
+    if (!masterGainPrimed_) {
+        masterGain_ = masterGainTarget_;
+        masterGainPrimed_ = true;
+    }
     routing_ = nextRouting;
     outputs_ = nextOutputs;
     outputConfigs_ = nextOutputConfigs;

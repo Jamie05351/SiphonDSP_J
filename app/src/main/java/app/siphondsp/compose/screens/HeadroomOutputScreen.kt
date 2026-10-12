@@ -63,7 +63,10 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val headroom = stringResource(R.string.bmw_dsp_headroom)
     val output: @Composable (GroupRow) -> Unit = { row -> OutputGroup(dsp, headroom, row) }
-    val limiter: @Composable (GroupRow) -> Unit = { row -> LimiterGroup(dsp, row) }
+    val limiter: @Composable (GroupRow) -> Unit = { row ->
+        LimiterGroup(dsp, row)
+        VolumeGroup(dsp, row)
+    }
 
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
@@ -105,6 +108,27 @@ private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
         ArtLabel("Gain reduction")
         LimiterGrMeter(Modifier.fillMaxWidth().height(36.dp))
     }
+}
+
+/**
+ * The DSP master volume, under the limiter -- the last gain in the chain. The header switch is
+ * "sound on" (off = muted); the steering-wheel +/- move the same value through Tasker
+ * (MasterVolumeReceiver), so this page always shows the exact level a measurement was taken at.
+ */
+@Composable
+private fun VolumeGroup(dsp: BmwDspState, row: GroupRow) {
+    ArtGroupHeader(
+        title = "Volume",
+        accent = VolumeAccent,
+        modifier = row(200, HeaderHeight),
+        checked = !dsp.isOn(NativeBmwDspValues.INDEX_MASTER_MUTE),
+        onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_MASTER_MUTE, if (on) 0f else 1f) },
+    )
+    DspArtSlider(
+        dsp, "Master", NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
+        NativeBmwDspValues.MASTER_VOLUME_MIN_DB..NativeBmwDspValues.MASTER_VOLUME_MAX_DB, 1f, "dB", VolumeAccent,
+        row(252, 48),
+    )
 }
 
 /** Head unit: the two groups side by side, centred on the page. */
@@ -190,13 +214,15 @@ private fun LimiterGrMeter(modifier: Modifier = Modifier) {
 private val HeadroomAccent = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
 private val PostGainAccent = Color(BmwDashboardSkin.M_GREEN)
 private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
+private val VolumeAccent = Color.White
 
 // Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
 // stepper) with 120dp between them, centred across the content area (x 190..1230), and centred
-// vertically on the taller group.
+// vertically on the taller group -- now the Limiter + Volume column (300dp; it was Output's 220dp
+// at GroupTop 150, so the same centre line puts it at 110).
 private const val GroupWidth = 333
 private const val OutputX = 317
 private const val LimiterX = 770
-private const val GroupTop = 150
+private const val GroupTop = 110
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp
