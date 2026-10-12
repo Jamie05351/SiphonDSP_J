@@ -167,6 +167,7 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     // bypassed or not, so a line is never stale the moment its bypass flag flips on.
     const float lowLBypassed = bypassLatency_[0].run(lowL), lowRBypassed = bypassLatency_[1].run(lowR);
     const float midLBypassed = bypassLatency_[2].run(midL), midRBypassed = bypassLatency_[3].run(midR);
+    const float highLBypassed = bypassLatency_[4].run(highL), highRBypassed = bypassLatency_[5].run(highR);
     if (!p_.lpfPass) {
         processBandChain(Band::Low, lowL, lowR);
     } else {
@@ -181,7 +182,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
         midR = midRBypassed;
         idleBandChain(Band::Mid);
     }
-    if (!p_.highXoPass) {
+    if (!p_.highXoPass && p_.highPass) {
+        // High's own passthrough: the lpfPass/hpfPass contract (raw routed signal, chain skipped).
+        highL = highLBypassed;
+        highR = highRBypassed;
+        idleBandChain(Band::High);
+    } else if (!p_.highXoPass) {
         processBandChain(Band::High, highL, highR);
     } else {
         // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed

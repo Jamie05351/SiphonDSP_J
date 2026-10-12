@@ -247,6 +247,9 @@ private fun RoutingColumn(dsp: BmwDspState, accent: Color) {
     RoutingSwitch(stringResource(R.string.signal_generator_hpf_passthrough), dsp.isOn(NativeBmwDspValues.INDEX_HPF_PASS)) {
         dsp.commit(NativeBmwDspValues.INDEX_HPF_PASS, if (it) 1f else 0f)
     }
+    RoutingSwitch(stringResource(R.string.signal_generator_high_passthrough), dsp.isOn(NativeBmwDspValues.INDEX_HIGH_PASS)) {
+        dsp.commit(NativeBmwDspValues.INDEX_HIGH_PASS, if (it) 1f else 0f)
+    }
     RoutingSwitch(stringResource(R.string.signal_generator_mute_low_band), dsp.isOn(NativeBmwDspValues.INDEX_LOW_MUTE)) {
         dsp.commit(
             NativeBmwDspValues.INDEX_LOW_MUTE, if (it) 1f else 0f,
@@ -264,6 +267,12 @@ private fun RoutingColumn(dsp: BmwDspState, accent: Color) {
                 NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.FIELD_MUTE),
             ),
         )
+    }
+    // High has no aggregate mute index -- its per-output mute (L) is the switch, mirrored onto R.
+    val highMuteL = NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)
+    val highMuteR = NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)
+    RoutingSwitch(stringResource(R.string.signal_generator_mute_high_band), dsp.isOn(highMuteL)) {
+        dsp.commit(highMuteL, if (it) 1f else 0f, mirrors = intArrayOf(highMuteR))
     }
     Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
         ArtLabel("Channels", Modifier.width(110.dp))

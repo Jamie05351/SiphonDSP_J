@@ -82,6 +82,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // High band scalars (v[210..214], added in the 210 -> 262 growth). Routing/all-pass/
     // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
     next.highXoPass = flagIn(v[210]);
+    next.highPass = flagIn(v[nbschema::kHighPass]);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);

@@ -167,6 +167,26 @@ class BmwSignalChainModelTest {
     }
 
     @Test
+    fun highPassthroughCarriesThePreSplitSignalButHighXoPassStillSilencesIt() {
+        // INDEX_HIGH_PASS is the lpfPass/hpfPass contract for High: an identity branch (no HPF, no
+        // PEQ, no gain/delay), so the branch equals the pre-split signal even far below the corner.
+        fun activeHigh(values: FloatArray) = values.also {
+            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
+            it[NativeBmwDspValues.INDEX_HIGH_GAIN_L] = 6f
+            it[NativeBmwDspValues.INDEX_HIGH_PASS] = 1f
+        }
+        val passed = compute(activeHigh(baseValues()), peqWith(high = listOf(band(6_000.0, -12.0))))
+        for (i in passed.highBranchDb[0].indices) {
+            assertEquals(passed.preSplitDb[0][i], passed.highBranchDb[0][i], 1e-6)
+        }
+        // highXoPass wins: High stays silent however its own passthrough is set.
+        val silenced = compute(activeHigh(baseValues()).also { it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 1f })
+        assertTrue(silenced.highBranchDb[0].all { it < -100.0 })
+    }
+
+    @Test
     fun lowCrossoverBypassAlsoBypassesSubsonicLikeNative() {
         val withSubsonicConfigured = compute(baseValues().also { it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f })
         val subsonicDisabled = compute(baseValues().also {

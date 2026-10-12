@@ -234,3 +234,26 @@ TEST_CASE("High: kHighXoPass alone fully silences it, independent of the per-out
     proc.process(buf.data(), buf.size());
     CHECK(peakAbs(buf) < 1e-4f);
 }
+
+TEST_CASE("High: kHighPass passes the raw signal like kLpfPass/kHpfPass, but kHighXoPass still silences it") {
+    // kHighPass is High's own crossover passthrough (the 291 -> 292 growth): its chain is skipped,
+    // so a tone two octaves under the 3 kHz HPF comes through at full level instead of ~-48 dB.
+    constexpr float fc = 3000.f;
+    auto filtered = highOnlyConfig(fc, kLr4);
+    auto passed = highOnlyConfig(fc, kLr4);
+    passed[sch::kHighPass] = 1.f;
+    NativeBmwDspProcessor a, b;
+    const float filteredDb = outLevelDbAt(a, filtered, fc / 4);
+    const float passedDb = outLevelDbAt(b, passed, fc / 4);
+    INFO("750 Hz through High: filtered ", filteredDb, " dB, passthrough ", passedDb, " dB");
+    CHECK(passedDb - filteredDb > 30.f);
+
+    // The silence switch wins over the passthrough.
+    passed[sch::kHighXoPass] = 1.f;
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(passed.data(), passed.size()));
+    auto buf = stereoSine(fc / 4, 0.3, 8192, kSampleRate);
+    proc.process(buf.data(), buf.size());
+    CHECK(peakAbs(buf) < 1e-4f);
+}

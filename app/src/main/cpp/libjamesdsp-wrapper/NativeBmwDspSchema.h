@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 291;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 292;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -204,6 +204,11 @@ inline constexpr int kVirtualMigrated = 287;  // Kotlin-only, never read nativel
 inline constexpr int kMidUpperXoTypeLeft = 288;
 inline constexpr int kMidUpperXoTypeRight = 289;
 inline constexpr int kMidUpperXoTypeMigrated = 290;  // Kotlin-only, never read natively.
+
+// --- High crossover passthrough (291), added in the 291 -> 292 growth. Same contract as
+// kLpfPass/kHpfPass: High's chain is skipped and the raw routed signal passes through.
+// highXoPass (210) still wins -- while it is set High is silent whatever this says.
+inline constexpr int kHighPass = 291;
 
 }  // namespace nbschema
 

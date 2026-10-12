@@ -158,6 +158,8 @@ class NativeBmwSchemaAgreementTest {
         "kMidUpperXoTypeLeft" to NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_LEFT),
         "kMidUpperXoTypeRight" to NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT),
         "kMidUpperXoTypeMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED,
+
+        "kHighPass" to NativeBmwDspValues.INDEX_HIGH_PASS,
     )
 
     @Test
