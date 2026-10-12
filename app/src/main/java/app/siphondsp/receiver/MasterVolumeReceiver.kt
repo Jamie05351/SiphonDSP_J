@@ -24,7 +24,10 @@ class MasterVolumeReceiver : BroadcastReceiver() {
         intent ?: return
         val state = when {
             intent.hasExtra(EXTRA_STEP) -> MasterVolume.step(context, readInt(intent, EXTRA_STEP))
-            intent.hasExtra(EXTRA_DB) -> MasterVolume.set(context, readFloat(intent, EXTRA_DB) ?: return)
+            intent.hasExtra(EXTRA_DB) -> MasterVolume.set(context, parseDb(intent.extras?.get(EXTRA_DB)) ?: run {
+                Timber.w("MasterVolumeReceiver: ignoring a db extra that is not a finite number")
+                return
+            })
             intent.hasExtra(EXTRA_MUTE) -> MasterVolume.setMuted(
                 context,
                 when (intent.getStringExtra(EXTRA_MUTE)?.lowercase()) {
@@ -49,10 +52,10 @@ class MasterVolumeReceiver : BroadcastReceiver() {
     private fun readInt(intent: Intent, key: String): Int =
         intent.extras?.get(key)?.toString()?.trim()?.toFloatOrNull()?.toInt() ?: 0
 
-    private fun readFloat(intent: Intent, key: String): Float? =
-        intent.extras?.get(key)?.toString()?.trim()?.toFloatOrNull()
-
     companion object {
+        /** A finite dB from a broadcast extra (number or string), else null -- NaN and infinity included. */
+        internal fun parseDb(raw: Any?): Float? = raw?.toString()?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }
+
         const val ACTION = "app.siphondsp.action.MASTER_VOLUME"
         const val EXTRA_STEP = "step"
         const val EXTRA_DB = "db"

@@ -13,6 +13,8 @@ import kotlin.math.roundToInt
  */
 object MasterVolume {
     const val STEP_DB = 1f
+    /** What an unreadable stored volume falls back to: quiet, never full level. */
+    const val SAFE_FALLBACK_DB = -40f
 
     data class State(val db: Float, val muted: Boolean)
 
@@ -23,10 +25,11 @@ object MasterVolume {
 
     /** Moves the volume by [steps] of [STEP_DB]. Turning it up also unmutes, like a car's volume knob. */
     fun step(context: Context, steps: Int): State? = update(context) { s ->
-        State(clamp(s.db + steps * STEP_DB), if (steps > 0) false else s.muted)
+        State(clamp(s.db + steps * STEP_DB) ?: return@update null, if (steps > 0) false else s.muted)
     }
 
-    fun set(context: Context, db: Float): State? = update(context) { s -> State(clamp(db), s.muted) }
+    /** Null (nothing saved) for a non-finite [db] -- see [clamp]. */
+    fun set(context: Context, db: Float): State? = update(context) { s -> State(clamp(db) ?: return@update null, s.muted) }
 
     /** [muted] null toggles. */
     fun setMuted(context: Context, muted: Boolean?): State? = update(context) { s -> State(s.db, muted ?: !s.muted) }
@@ -35,17 +38,27 @@ object MasterVolume {
         if (state.muted) "DSP volume: muted (${formatDb(state.db)})" else "DSP volume: ${formatDb(state.db)}"
 
     private fun formatDb(db: Float): String {
+        if (!db.isFinite()) return "?"
         val whole = db.roundToInt()
         return if (whole == 0) "0 dB" else "$whole dB"
     }
 
-    private fun clamp(db: Float) = db.coerceIn(NativeBmwDspValues.MASTER_VOLUME_MIN_DB, NativeBmwDspValues.MASTER_VOLUME_MAX_DB)
+    /**
+     * The volume to store, or null for NaN / infinity. coerceIn() passes NaN straight through, and a
+     * non-finite value in the saved config makes native configure() reject the WHOLE config -- on
+     * every start, since it is persisted -- so it must never get that far.
+     */
+    internal fun clamp(db: Float): Float? =
+        if (db.isFinite()) db.coerceIn(NativeBmwDspValues.MASTER_VOLUME_MIN_DB, NativeBmwDspValues.MASTER_VOLUME_MAX_DB) else null
 
     @Synchronized
-    private fun update(context: Context, change: (State) -> State): State? {
+    private fun update(context: Context, change: (State) -> State?): State? {
         val values = NativeBmwDspValues.load(context)
-        val now = State(values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB], values[NativeBmwDspValues.INDEX_MASTER_MUTE] >= .5f)
-        val next = change(now)
+        // A stored value that is somehow not finite reads as a safe, quiet level -- never as full
+        // volume -- rather than poisoning every step after it.
+        val stored = values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB].takeIf { it.isFinite() } ?: SAFE_FALLBACK_DB
+        val now = State(stored, values[NativeBmwDspValues.INDEX_MASTER_MUTE] >= .5f)
+        val next = change(now) ?: return null
         values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = next.db
         values[NativeBmwDspValues.INDEX_MASTER_MUTE] = if (next.muted) 1f else 0f
         if (!NativeBmwDspValues.save(context, values)) return null
