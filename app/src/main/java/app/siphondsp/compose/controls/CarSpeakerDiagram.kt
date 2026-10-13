@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -95,6 +96,9 @@ const val CarDiagramAspect = 1400f / 703f
  *
  * Assets: res/drawable-nodpi/car_top.webp, spk_mid.webp, spk_woofer.webp. Tweeters are drawn in
  * code. Size it with `Modifier.width(...)`; the height follows from [CarDiagramAspect].
+ *
+ * With [interactive] off it is a picture only (the Delay page's backdrop): no taps, no focus,
+ * nothing announced. [carAlpha] dims the car photo, leaving the drivers and paths at full strength.
  */
 @Composable
 fun CarSpeakerDiagram(
@@ -106,6 +110,8 @@ fun CarSpeakerDiagram(
     title: String? = null,
     label: (SpeakerKind, Boolean) -> String? = { _, _ -> null },
     level: ((SpeakerKind, Boolean) -> Float)? = null,
+    interactive: Boolean = true,
+    carAlpha: Float = 1f,
 ) {
     val mid = ImageBitmap.imageResource(R.drawable.spk_mid)
     val woofer = ImageBitmap.imageResource(R.drawable.spk_woofer)
@@ -117,9 +123,10 @@ fun CarSpeakerDiagram(
         LaunchedEffect(Unit) { while (true) withFrameNanos { frame = it } }
     }
 
-    Box(
-        modifier
-            .aspectRatio(CarDiagramAspect)
+    val input = if (!interactive) {
+        Modifier.clearAndSetSemantics { }
+    } else {
+        Modifier
             .semantics { contentDescription = "Speaker map. Tap a driver to choose its band." }
             // D-pad / rotary: focus the map, then left/up = previous band, right/down = next band.
             .onKeyEvent { event ->
@@ -151,9 +158,14 @@ fun CarSpeakerDiagram(
                     }
                     best?.let(currentOnSelect)
                 }
-            },
+            }
+    }
+    Box(
+        modifier
+            .aspectRatio(CarDiagramAspect)
+            .then(input),
     ) {
-        Image(painterResource(R.drawable.car_top), contentDescription = null, modifier = Modifier.fillMaxSize())
+        Image(painterResource(R.drawable.car_top), contentDescription = null, alpha = carAlpha, modifier = Modifier.fillMaxSize())
         Canvas(Modifier.fillMaxSize()) {
             val t = if (level != null) frame / 1_000_000f else 0f // ms; only ticks when animated
             val w = size.width
