@@ -294,6 +294,11 @@
     <string name="home_dsp_bypassed">DSP bypassed</string>
     <string name="home_out">OUT</string>
     <string name="home_to_amp">to amp</string>
+    <string name="home_volume">VOLUME</string>
+    <string name="home_volume_muted">MUTED</string>
+    <string name="home_volume_mute">Mute</string>
+    <string name="home_volume_up">Volume up</string>
+    <string name="home_volume_down">Volume down</string>
     <string name="session_exclude_restricted">Exclude unsupported apps</string>
     <string name="session_exclude_restricted_off">Apps blocking audio capture stay muted (default Android behavior)</string>
     <string name="session_exclude_restricted_on">Apps blocking audio capture are excluded and remain unprocessed (recommended)</string>

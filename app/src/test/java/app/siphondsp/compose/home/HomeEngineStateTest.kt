@@ -13,7 +13,18 @@ class HomeEngineStateTest {
 
     @Test
     fun allOffReadsAsOff() {
-        assertEquals(HomeEngineState.OFF, HomeEngineState.from(values()))
+        // Every stage off; the master volume is a level, not a stage, and reads as stored (0 dB).
+        assertEquals(HomeEngineState.OFF.copy(masterVolumeDb = 0f), HomeEngineState.from(values()))
+    }
+
+    @Test
+    fun masterVolumeAndMuteReadThrough() {
+        val v = values()
+        v[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = -24f
+        v[NativeBmwDspValues.INDEX_MASTER_MUTE] = 1f
+        val state = HomeEngineState.from(v)
+        assertEquals(-24f, state.masterVolumeDb, 0f)
+        assertTrue(state.masterMuted)
     }
 
     @Test

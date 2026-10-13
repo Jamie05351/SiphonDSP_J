@@ -16,7 +16,8 @@ enum class GlobalStage { TILT, MBC, LIMITER, ALLPASS }
  *
  * [tiltDb] and [limiterDb] are the settings while the stage is on, else null; [mbcBands] is how
  * many bands are compressing (0 while the MBC is off); [allPassOutputs] is how many outputs have
- * at least one all-pass section on.
+ * at least one all-pass section on. [masterVolumeDb] and [masterMuted] are the DSP master volume
+ * (see [app.siphondsp.model.MasterVolume]).
  */
 @Immutable
 data class HomeEngineState(
@@ -24,6 +25,8 @@ data class HomeEngineState(
     val tiltDb: Float?,
     val mbcBands: Int,
     val limiterDb: Float?,
+    val masterVolumeDb: Float = NativeBmwDspValues.MASTER_VOLUME_MIN_DB,
+    val masterMuted: Boolean = false,
 ) {
     val allPassOn: Boolean get() = allPassOutputs > 0
 
@@ -49,6 +52,8 @@ data class HomeEngineState(
                 mbcBands = stages.mbcBands.count { it },
                 limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
                     .takeIf { on(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED) },
+                masterVolumeDb = values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB],
+                masterMuted = on(NativeBmwDspValues.INDEX_MASTER_MUTE),
             )
         }
     }

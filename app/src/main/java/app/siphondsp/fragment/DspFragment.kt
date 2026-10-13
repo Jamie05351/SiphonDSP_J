@@ -47,6 +47,7 @@ import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
+import app.siphondsp.model.MasterVolume
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
@@ -222,6 +223,10 @@ class DspFragment : Fragment() {
                 onOpenGlobal = ::openGlobal,
                 onSettings = { if (openingTile == null) onSettingsClick?.invoke() },
                 onMore = ::openMore,
+                // The DSP master volume: same path as the steering-wheel buttons, without the toast
+                // (the level is on screen); the saved value comes back through settingsReceiver.
+                onVolumeStep = { steps -> MasterVolume.step(requireContext(), steps) },
+                onToggleMute = { MasterVolume.setMuted(requireContext(), null) },
                 morphProgress = { morphProgress },
                 sidebarWidth = DspCrossNavBar.sidebarWidthDp(requireActivity()).dp,
             )
