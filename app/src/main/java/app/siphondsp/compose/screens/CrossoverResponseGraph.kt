@@ -322,7 +322,7 @@ fun CrossoverResponseGraph(
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
         // Before this generation's spring starts, the clock may still hold the last one's overshoot.
         val morphT = if (morph.started == generation) (morphClock.value - (generation - 1)).coerceAtLeast(0f) else 0f
-        morph.blend(curves, morphT)
+        morph.blend(curves, morphT, generation)
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
             if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
@@ -523,6 +523,10 @@ private class MagnitudeMorph(pointCount: Int) {
     private var t = 1f
     private var highFrom = false
     private var highShown = false
+    private var blendedGeneration = 0
+
+    /** The curves' arrays, which the calculator fills in place; looked up once. */
+    private var targets: Array<DoubleArray>? = null
 
     /** Starts the next morph from what is on screen now. */
     fun freeze() {
@@ -542,16 +546,19 @@ private class MagnitudeMorph(pointCount: Int) {
     }
 
     /** [shown] at [t] of the way from the frozen shape to [curves]; past 1 while the spring overshoots. */
-    fun blend(curves: BmwResponseCurves, t: Float) {
+    fun blend(curves: BmwResponseCurves, t: Float, generation: Int) {
+        // The spectrum redraws every frame; once settled there is nothing new to blend.
+        if (drawn && generation == blendedGeneration && t == this.t) return
         this.t = t
+        blendedGeneration = generation
         val l = BmwOutputChannel.LEFT
         val r = BmwOutputChannel.RIGHT
-        val targets = arrayOf(
+        val targets = targets ?: arrayOf(
             curves.sumDbFor(l), curves.sumDbFor(r),
             curves.lowBranchDbFor(l), curves.lowBranchDbFor(r),
             curves.midBranchDbFor(l), curves.midBranchDbFor(r),
             curves.highBranchDbFor(l), curves.highBranchDbFor(r),
-        )
+        ).also { this.targets = it }
         // The first curves drawn appear as they are.
         if (!drawn) {
             for (c in 0 until CURVES) targets[c].copyInto(from[c])
@@ -561,7 +568,8 @@ private class MagnitudeMorph(pointCount: Int) {
             val a = from[c]
             val b = targets[c]
             val out = shown[c]
-            for (i in out.indices) out[i] = a[i] + (b[i] - a[i]) * t
+            // Kept above the calculator's floor while the spring overshoots.
+            for (i in out.indices) out[i] = (a[i] + (b[i] - a[i]) * t).coerceAtLeast(FloorDb)
         }
     }
 
@@ -575,6 +583,7 @@ private class MagnitudeMorph(pointCount: Int) {
         const val HIGH_L = 6
         const val HIGH_R = 7
         const val CURVES = 8
+        const val FloorDb = -120.0
     }
 }
 
