@@ -1,6 +1,5 @@
 package app.siphondsp.compose.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -30,14 +29,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 
 /**
  * One signal-chain tile: a menu button that opens its DSP screen. The tile's fill and artwork
- * always show in its [accent], whatever the stage or the DSP power is doing. It is [width] wide
+ * always show in its [accent], whatever the stage or the DSP power is doing; the artwork plays its
+ * own small loop ([TileArt]). It is [width] wide
  * (in design units, from [ChainLayout]) and as tall as the chain panel allows.
  *
  * Its border is the signal passing through: grey while dark, lit in [accent] by [borderLit]
@@ -55,7 +53,7 @@ fun StageCard(
     title: String,
     subtitle: String,
     accent: Color,
-    art: ImageVector,
+    art: TileArt,
     borderLit: () -> Float,
     spark: Boolean,
     selected: Boolean,
@@ -104,12 +102,7 @@ fun StageCard(
             .padding(s.dp(12f)),
     ) {
         Spacer(Modifier.weight(1f))
-        Image(
-            imageVector = art,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth().height(s.dp(80f)),
-        )
+        AnimatedTileArt(art, Modifier.fillMaxWidth().height(s.dp(80f)))
         Spacer(Modifier.weight(1f))
         Text(
             text = title,
