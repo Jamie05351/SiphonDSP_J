@@ -213,8 +213,9 @@ private fun PhoneDelayPage(
 
 // ---------------------------------------------------------------- pieces
 
+/** The High / Mid / Low tabs, each in its band colour. Shared with the ALLPASS page. */
 @Composable
-private fun BandTabs(band: GainsBand, onSelect: (GainsBand) -> Unit, modifier: Modifier) {
+internal fun BandTabs(band: GainsBand, onSelect: (GainsBand) -> Unit, modifier: Modifier) {
     BmwSegmentedControl(
         options = GainsBand.entries.map { it.title },
         selectedIndex = band.ordinal,

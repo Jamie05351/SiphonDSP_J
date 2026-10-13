@@ -16,7 +16,10 @@ import app.siphondsp.view.DspDestination
 class GainLimiterActivity : DspWorkspaceActivity() {
     /** Shared with [GainLimiterFragment]'s `HorizontalPager` so [DspPagerArrows] (hosted here, on
      *  the toolbar line) can drive it -- see `dsp_toolbar_actions` in activity_parametric_eq.xml. */
-    val pagerState: PagerState by lazy { PagerState(currentPage = 0) { GainLimiterFragment.PAGE_COUNT } }
+    val pagerState: PagerState by lazy {
+        val start = intent.getIntExtra(EXTRA_PAGE, 0).coerceIn(0, GainLimiterFragment.PAGE_COUNT - 1)
+        PagerState(currentPage = start) { GainLimiterFragment.PAGE_COUNT }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,7 +31,7 @@ class GainLimiterActivity : DspWorkspaceActivity() {
         // show); the backdrop's lit rail tile identifies the screen.
         supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), DspDestination.GAINS_DELAY)
+        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), DspDestination.ALIGNMENT)
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, GainLimiterFragment())
@@ -42,5 +45,10 @@ class GainLimiterActivity : DspWorkspaceActivity() {
             }
             visibility = android.view.View.VISIBLE
         }
+    }
+
+    companion object {
+        /** The page to open on, a GainLimiterFragment.PAGE_* index (the front page's ALLPASS cell). */
+        const val EXTRA_PAGE = "dsp_workspace_page"
     }
 }

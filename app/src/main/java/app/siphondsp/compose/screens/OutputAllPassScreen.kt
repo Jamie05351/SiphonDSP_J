@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,6 +31,7 @@ import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.BmwDropdown
+import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
@@ -35,6 +42,58 @@ import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.abs
 
 private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
+
+/**
+ * The Alignment workspace's ALLPASS page: one output at a time, picked with LEFT / RIGHT and the
+ * Delay page's High / Mid / Low tabs, instead of the six swipe pages All-pass had as its own menu
+ * (Figma "Menus · PROPOSED", frame 3). The output's sections are an [OutputAllPassScreen].
+ */
+@Composable
+fun AllPassPage(modifier: Modifier = Modifier) {
+    var right by rememberSaveable { mutableStateOf(false) }
+    var bandIndex by rememberSaveable { mutableIntStateOf(GainsBand.LOW.ordinal) }
+    val band = GainsBand.entries[bandIndex.coerceIn(0, GainsBand.entries.size - 1)]
+    val output = if (right) band.rightOutput else band.leftOutput
+    val title = "${if (right) "Right" else "Left"} ${band.title}"
+    val sides: @Composable (Modifier) -> Unit = { m ->
+        BmwSegmentedControl(
+            options = listOf("LEFT", "RIGHT"),
+            selectedIndex = if (right) 1 else 0,
+            onSelect = { right = it == 1 },
+            modifier = m,
+            segmentHeight = 36.dp,
+            segmentGap = 6.dp,
+        )
+    }
+    val bands: @Composable (Modifier) -> Unit = { m -> BandTabs(band, { bandIndex = it.ordinal }, m) }
+    val page: @Composable (Modifier) -> Unit = { m ->
+        // Keyed so each output's page starts fresh rather than reusing the last one's state.
+        key(output) { OutputAllPassScreen(output, title, band.slider, m) }
+    }
+
+    BmwDspTheme {
+        if (LocalContext.current.isHeadUnitDisplay()) {
+            Box(modifier.fillMaxSize()) {
+                page(Modifier.fillMaxSize())
+                WorkspaceArtBox(Modifier.fillMaxSize()) {
+                    sides(Modifier.artRect(artDp(SectionLeftX, SelectorTop, 170, 44)))
+                    bands(Modifier.artRect(artDp(SectionLeftX + 186, SelectorTop, 420, 44)))
+                }
+            }
+        } else {
+            Column(modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    sides(Modifier.width(150.dp).height(44.dp))
+                    bands(Modifier.weight(1f).height(44.dp))
+                }
+                page(Modifier.weight(1f))
+            }
+        }
+    }
+}
 
 /**
  * Where one row of a section goes: [y] dp down the section (its head-unit position) and [h] tall.
@@ -50,8 +109,8 @@ private typealias SectionRow = (y: Int, h: Int) -> Modifier
  * Laid out the same way on both screens (Figma "SiphonDSP Front Panel (from code)", Steppers
  * page): the output's name across the top, then its two sections side by side -- each a header
  * with its on/off switch, the order, and Frequency and Q steppers -- everything in the output's
- * band colour ([colorArgb]). A Compose `HorizontalPager` (see `OutputAllPassFragment`) hosts six of
- * these, one per output (Low / Mid / High x L/R).
+ * band colour ([colorArgb]). [AllPassPage] shows one of these at a time, for the output picked
+ * on it (Low / Mid / High x L/R).
  */
 @Composable
 fun OutputAllPassScreen(
@@ -197,9 +256,11 @@ private fun PhoneAllPassPage(
 }
 
 // Head-unit layout, in the 1280x480 editor's dp: the same two 333dp columns as the Output and
-// Compressor pages (x 317 and 770), under the output's name. The phone uses the same widths.
+// Compressor pages (x 317 and 770), under the output's name, under [AllPassPage]'s selectors. The
+// phone uses the same widths.
 private const val SectionLeftX = 317
 private const val SectionRightX = 770
 private const val SectionWidth = 333
-private const val PageTop = 112
+private const val PageTop = 120
+private const val SelectorTop = 68
 private val SectionLabelWidth = 150.dp

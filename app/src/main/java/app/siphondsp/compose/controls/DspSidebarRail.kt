@@ -16,7 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import app.siphondsp.R
-import app.siphondsp.compose.assets.AllpassGraphic
+import app.siphondsp.compose.assets.OutputGraphic
 import app.siphondsp.compose.assets.CompressorGraphic
 import app.siphondsp.compose.assets.GainsDelayGraphic
 import app.siphondsp.compose.assets.PeqGraphic
@@ -76,22 +76,22 @@ fun DspSidebarRail(
 /** Each page's short tile caption ("PEQ", "Xover"): the same as its tile on the front page. */
 internal fun DspDestination.tileLabelRes(): Int = when (this) {
     DspDestination.PARAMETRIC_EQ -> R.string.home_tile_peq
-    DspDestination.GAINS_DELAY -> R.string.home_tile_gains
+    DspDestination.ALIGNMENT -> R.string.home_tile_gains
     DspDestination.CROSSOVER_TILT -> R.string.home_tile_xovers
-    DspDestination.COMPRESSOR -> R.string.home_tile_compressor
-    DspDestination.ALLPASS -> R.string.home_tile_allpass
+    DspDestination.DYNAMICS -> R.string.home_tile_compressor
+    DspDestination.OUTPUT -> R.string.home_tile_output
 }
 
 /** Each page's card colours and artwork: the same as its card on the front page. */
 internal fun DspDestination.cardStyle(): Triple<Color, Color, ImageVector> = when (this) {
     DspDestination.PARAMETRIC_EQ -> Triple(DspColors.Peq, DspColors.BandMagenta, PeqGraphic)
-    DspDestination.GAINS_DELAY -> Triple(DspColors.Delay, ChainTeal, GainsDelayGraphic)
+    DspDestination.ALIGNMENT -> Triple(DspColors.Delay, ChainTeal, GainsDelayGraphic)
     DspDestination.CROSSOVER_TILT -> Triple(DspColors.Xover, DspColors.XoverLow, XoversGraphic)
-    DspDestination.COMPRESSOR -> Triple(DspColors.Comp, ChainRose, CompressorGraphic)
-    DspDestination.ALLPASS -> Triple(DspColors.Allpass, ChainIndigo, AllpassGraphic)
+    DspDestination.DYNAMICS -> Triple(DspColors.Comp, ChainRose, CompressorGraphic)
+    DspDestination.OUTPUT -> Triple(DspColors.Output, ChainSky, OutputGraphic)
 }
 
 // Each card's second border colour, from the Figma cards (the others reuse DspColors).
 private val ChainTeal = Color(0xFF14B8A6)
 private val ChainRose = Color(0xFFFF4D8D)
-private val ChainIndigo = Color(0xFF5B5BFF)
+private val ChainSky = Color(0xFF38BDF8)

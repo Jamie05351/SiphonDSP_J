@@ -53,9 +53,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
-import app.siphondsp.compose.assets.AllpassGraphic
 import app.siphondsp.compose.assets.CompressorGraphic
 import app.siphondsp.compose.assets.GainsDelayGraphic
+import app.siphondsp.compose.assets.OutputGraphic
 import app.siphondsp.compose.assets.PeqGraphic
 import app.siphondsp.compose.assets.XoversGraphic
 import app.siphondsp.compose.controls.DspColors
@@ -72,12 +72,12 @@ import kotlin.math.sin
 /**
  * The front page, as a faceplate (the page background) holding two screens set into it (Figma
  * "Front faceplate · redesign", frame "Head unit · 8 · ON · Master volume"):
- * - The chain screen, [ScreenLeft] / [ScreenRight] in from the sides: the power node, the five DSP tiles and OUT,
+ * - The chain screen, [ScreenLeft] / [ChainRight] in from the sides: the power node, the five DSP tiles and OUT,
  *   drawn at [ChainScale] of their design size with the six stretches of line between them all the
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
- * - The top screen, [TopMargin] from the top, lined up with the chain screen's left and right
- *   edges: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
+ * - The top screen, [TopMargin] from the top, lined up with the chain screen's left edge and
+ *   stopping [ScreenRight] from the right, where Settings and More sit: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
  *   headroom and the L / R output meters, all at [TopContentScale].
  * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]): + and − round the
  *   level; down the right side, Settings and More as bare glyphs ([ScreenButton]).
@@ -138,7 +138,8 @@ fun HomeScreen(
             // The chain's geometry, in chain units, for the chain screen's actual width; the top row
             // lines up with it.
             val screenRight = maxWidth.value / k - ScreenRight
-            val layout = ChainLayout((screenRight - ScreenLeft) / ChainScale)
+            // The chain screen runs on past the top screen, to [ChainRight] from the edge.
+            val layout = ChainLayout((maxWidth.value / k - ChainRight - ScreenLeft) / ChainScale)
             // Settings and More sit on the faceplate, centred in the strip right of the screens.
             val buttonsCentre = screenRight + ScreenRight / 2
 
@@ -176,7 +177,7 @@ fun HomeScreen(
                         onOpenStage = { stage -> onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
                         tileModifier = { stage -> Modifier.tracked(stage) },
                         modifier = Modifier
-                            .padding(start = s.dp(ScreenLeft), end = s.dp(ScreenRight))
+                            .padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight))
                             .fillMaxWidth()
                             .height(s.dp(ChainHeight * ChainScale))
                             .tracked(ChainKey),
@@ -447,10 +448,10 @@ private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val
 /** Each front-page tile's title, subtitle, colour and artwork. */
 private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, PeqGraphic)
-    HomeStage.GAINS -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
+    HomeStage.ALIGNMENT -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
     HomeStage.XOVERS -> TileSpec(R.string.home_card_xovers, R.string.home_card_xovers_sub, DspColors.Xover, XoversGraphic)
-    HomeStage.COMPRESSOR -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, CompressorGraphic)
-    HomeStage.ALLPASS -> TileSpec(R.string.home_card_allpass, R.string.home_card_allpass_sub, DspColors.Allpass, AllpassGraphic)
+    HomeStage.DYNAMICS -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, CompressorGraphic)
+    HomeStage.OUTPUT -> TileSpec(R.string.home_card_output, R.string.home_card_output_sub, DspColors.Output, OutputGraphic)
 }
 
 // The layout in design dp (Figma "Head unit · 8 · ON · Master volume"): the top screen's margin
@@ -464,6 +465,8 @@ private const val ChainTopGap = 32f
 private const val BottomFacia = 32f
 private const val ScreenLeft = 176f
 private const val ScreenRight = 144f
+// The chain screen's right margin: the same facia as above and below it.
+private const val ChainRight = 32f
 private const val ButtonSize = 58f
 private const val ButtonGap = 18f
 private const val GlyphSize = 42f

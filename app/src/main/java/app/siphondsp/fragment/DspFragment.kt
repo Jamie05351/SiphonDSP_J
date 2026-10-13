@@ -43,6 +43,7 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
+import app.siphondsp.activity.OutputActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
 import app.siphondsp.databinding.FragmentDspPageSettingsBinding
@@ -282,11 +283,10 @@ class DspFragment : Fragment() {
         if (openingTile != null) return
         val intent = when (stage) {
             HomeStage.PEQ -> Intent(requireContext(), ParametricEqualizerActivity::class.java)
-            HomeStage.GAINS -> Intent(requireContext(), GainLimiterActivity::class.java)
+            HomeStage.ALIGNMENT -> Intent(requireContext(), GainLimiterActivity::class.java)
             HomeStage.XOVERS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
-            HomeStage.COMPRESSOR -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
-            HomeStage.ALLPASS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
-                .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
+            HomeStage.DYNAMICS -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
+            HomeStage.OUTPUT -> Intent(requireContext(), OutputActivity::class.java)
         }
         openingTile = stage
         pendingOpen = viewLifecycleOwner.lifecycleScope.launch {
@@ -323,9 +323,10 @@ class DspFragment : Fragment() {
             GlobalStage.TILT -> Intent(requireContext(), CrossoverTiltActivity::class.java)
                 .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_CROSSOVER)
             GlobalStage.MBC -> Intent(requireContext(), NativeBmwCompressorActivity::class.java)
-            GlobalStage.LIMITER -> Intent(requireContext(), GainLimiterActivity::class.java)
-            GlobalStage.ALLPASS -> Intent(requireContext(), CrossoverTiltActivity::class.java)
-                .putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, CrossoverTiltActivity.MODE_ALLPASS)
+            // The master limiter lives on Output; ALLPASS opens the Alignment pager on its page.
+            GlobalStage.LIMITER -> Intent(requireContext(), OutputActivity::class.java)
+            GlobalStage.ALLPASS -> Intent(requireContext(), GainLimiterActivity::class.java)
+                .putExtra(GainLimiterActivity.EXTRA_PAGE, GainLimiterFragment.PAGE_ALLPASS)
         }
         startActivity(intent)
     }

@@ -32,7 +32,7 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
         // show); the rail's lit tile identifies the screen.
         supportActionBar?.title = null
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), DspDestination.COMPRESSOR)
+        DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), DspDestination.DYNAMICS)
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, NativeBmwCompressorFragment())
@@ -43,7 +43,7 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
             val headUnit = isHeadUnitDisplay()
             setContent {
                 BmwDspTheme {
-                    if (headUnit) ArtPagerFinder(pagerState, COMPRESSOR_PAGE_LABELS, WorkspaceArt.finder5)
+                    if (headUnit) ArtPagerFinder(pagerState, COMPRESSOR_PAGE_LABELS, WorkspaceArt.finder6)
                     else DspPagerArrows(pagerState)
                 }
             }
@@ -60,7 +60,7 @@ class NativeBmwCompressorActivity : DspWorkspaceActivity() {
     }
 
     private companion object {
-        /** The visualiser page, then one per MBC band (NativeBmwCompressorFragment's pager order). */
-        val COMPRESSOR_PAGE_LABELS = listOf("OVERVIEW") + List(NativeBmwDspValues.MBC_BAND_COUNT) { "B${it + 1}" }
+        /** The visualiser page, one per MBC band, then the bus limiters (NativeBmwCompressorFragment's pager order). */
+        val COMPRESSOR_PAGE_LABELS = listOf("OVERVIEW") + List(NativeBmwDspValues.MBC_BAND_COUNT) { "B${it + 1}" } + "LIMITERS"
     }
 }

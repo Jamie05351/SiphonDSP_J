@@ -5,7 +5,7 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.HomeStageStatus
 
 /** The five signal-chain menu tiles, in chain order. */
-enum class HomeStage { PEQ, GAINS, XOVERS, COMPRESSOR, ALLPASS }
+enum class HomeStage { PEQ, ALIGNMENT, XOVERS, DYNAMICS, OUTPUT }
 
 /** The global stages shown as live-data cells on the top screen. */
 enum class GlobalStage { TILT, MBC, LIMITER, ALLPASS }

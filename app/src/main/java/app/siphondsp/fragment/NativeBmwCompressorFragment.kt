@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.compose.screens.CompressorBandPage
+import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.CompressorVisualiserPage
 import app.siphondsp.model.NativeBmwDspValues
 
@@ -52,7 +53,8 @@ class NativeBmwCompressorFragment : Fragment() {
     }
 
     companion object {
-        val PAGE_COUNT = 1 + NativeBmwDspValues.MBC_BAND_COUNT
+        /** The visualiser, one page per MBC band, then the bus limiters. */
+        val PAGE_COUNT = 2 + NativeBmwDspValues.MBC_BAND_COUNT
     }
 }
 
@@ -66,6 +68,10 @@ private fun NativeBmwCompressorPager(pagerState: PagerState) {
         modifier = Modifier.fillMaxSize(),
         verticalAlignment = Alignment.Top,
     ) { page ->
-        if (page == 0) CompressorVisualiserPage() else CompressorBandPage(page - 1)
+        when (page) {
+            0 -> CompressorVisualiserPage()
+            NativeBmwCompressorFragment.PAGE_COUNT - 1 -> CompressorDriverPage()
+            else -> CompressorBandPage(page - 1)
+        }
     }
 }

@@ -16,24 +16,24 @@ import androidx.fragment.app.Fragment
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtPagerFinder
 import app.siphondsp.compose.controls.WorkspaceArt
-import app.siphondsp.compose.screens.CompressorDriverPage
+import app.siphondsp.compose.screens.AllPassPage
 import app.siphondsp.compose.screens.GainsDelayScreen
-import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.compose.screens.SpeakerAlignScreen
 import app.siphondsp.compose.screens.VirtualCentreScreen
 import kotlinx.coroutines.launch
 
 /**
- * Dedicated Gains & Delay workspace. Swipes between four pages, all Compose:
- * - [GainsDelayScreen] -- the tuning controls for one crossover band at a time (High / Mid / Low
- *   tabs): Left/Right Delay, Gain, Polarity and Stage Alignment, and the global stereo link.
- * - [SpeakerAlignScreen] -- time-alignment setup: the live car map, the seat target, all six
- *   drivers' measured path distances and the alignment they imply, and "Apply to delays". Split
- *   off the Delay page, which was too cramped with both on it.
- * - [HeadroomOutputScreen] -- Headroom, the post-gain L/R sliders and the master limiter
- *   (enable + threshold + a live GR meter).
- * - [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus), moved here
- *   from the compressor pager so every limiter stage lives on one screen.
+ * The Alignment workspace (was Gains & Delay): everything that lines the drivers up in time and
+ * phase. Swipes between four pages, all Compose:
+ * - [GainsDelayScreen] -- DELAY: the tuning controls for one crossover band at a time (High / Mid
+ *   / Low tabs): Left/Right Delay, Gain and Polarity, and the global stereo link.
+ * - [SpeakerAlignScreen] -- ALIGN: time-alignment setup: the live car map, the seat target, all
+ *   six drivers' measured path distances and the alignment they imply, and "Apply to delays".
+ * - [AllPassPage] -- ALLPASS: the per-output all-pass sections, one output at a time.
+ * - [VirtualCentreScreen] -- CENTRE: the virtual centre (two-seat imaging).
+ *
+ * The Output page and the bus limiters that used to be here are now the Output workspace and the
+ * Dynamics pager's LIMITERS page (Figma "Menus · PROPOSED").
  *
  * All pages read/write the same `NativeBmwDspValues` indices and broadcast the same way via
  * `BmwDspState`. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the
@@ -58,8 +58,9 @@ class GainLimiterFragment : Fragment() {
     }
 
     companion object {
-        /** Delay, Align, Centre, Output, then Bus limiters; the finder's five segments map 1:1. */
-        const val PAGE_COUNT = 5
+        /** Delay, Align, All-pass, Centre; the finder's four segments map 1:1. */
+        const val PAGE_COUNT = 4
+        const val PAGE_ALLPASS = 2
     }
 }
 
@@ -69,25 +70,20 @@ private fun GainLimiterPager(pagerState: PagerState) {
         when (page) {
             0 -> GainsDelayScreen()
             1 -> SpeakerAlignScreen()
-            2 -> VirtualCentreScreen()
-            3 -> HeadroomOutputScreen()
-            else -> CompressorDriverPage()
+            GainLimiterFragment.PAGE_ALLPASS -> AllPassPage()
+            else -> VirtualCentreScreen()
         }
     }
 }
 
-/**
- * Head unit's DELAY | ALIGN | CENTRE | GAINS | LIMITERS finder for this pager: DELAY the band
- * controls, ALIGN the speaker map and time alignment, CENTRE the virtual centre (two-seat
- * imaging), GAINS the Output page and LIMITERS the bus limiters.
- */
+/** Head unit's DELAY | ALIGN | ALLPASS | CENTRE finder for this pager. */
 @Composable
 fun GainLimiterPageFinder(pagerState: PagerState) {
     val scope = rememberCoroutineScope()
     ArtPagerFinder(
         pagerState = pagerState,
-        labels = listOf("DELAY", "ALIGN", "CENTRE", "GAINS", "LIMITERS"),
-        frac = WorkspaceArt.finder5,
+        labels = listOf("DELAY", "ALIGN", "ALLPASS", "CENTRE"),
+        frac = WorkspaceArt.finder4,
         selected = pagerState.currentPage,
         onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
     )

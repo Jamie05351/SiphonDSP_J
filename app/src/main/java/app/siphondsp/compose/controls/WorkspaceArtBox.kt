@@ -28,8 +28,11 @@ object WorkspaceArt {
      *  until its CENTRE page made it five.) */
     val finder4 = Frac(0.57f, 0.048f, 0.40f, 0.0693f)
 
-    /** The 5-segment page finder (Compressor, Gains & Delay). */
+    /** The 5-segment page finder. */
     val finder5 = Frac(0.52f, 0.048f, 0.45f, 0.0693f)
+
+    /** The 6-segment page finder (Dynamics: OVERVIEW, B1-B4, LIMITERS). Ends where the others do. */
+    val finder6 = Frac(0.466f, 0.048f, 0.504f, 0.0693f)
 
     /** Where the content column started when the screens' rects were authored (the old 140dp
      *  sidebar). Content pages stretch x from here to the current column; see [WorkspaceArtScope]. */

@@ -3,8 +3,9 @@
 
     <!-- Main menu bar -->
     <string name="action_parametric_eq">Parametric EQ</string>
-    <string name="action_gain_limiter">Gains &amp; Delay</string>
-    <string name="action_compressor">Compressor</string>
+    <string name="action_gain_limiter">Alignment</string>
+    <string name="action_compressor">Dynamics</string>
+    <string name="action_output">Output</string>
     <string name="action_crossover_tilt">Crossovers &amp; Tilt</string>
     <string name="action_revert">Reset to defaults</string>
     <string name="action_blocked_apps">Excluded apps</string>
@@ -80,7 +81,8 @@
 
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>
-    <string name="title_activity_gain_limiter">Gains &amp; Delay</string>
+    <string name="title_activity_gain_limiter">Alignment</string>
+    <string name="title_activity_output">Output</string>
     <string name="title_activity_crossover_tilt">Crossovers &amp; Tilt</string>
     <string name="peq_add_filter_row">Add filter</string>
     <string name="peq_import">Import</string>
@@ -258,22 +260,22 @@
     <string name="title_activity_settings">Settings</string>
     <!-- Labels on the front-page tiles and the workspace rail tiles (they used to be baked into art). -->
     <string name="home_tile_peq">PEQ</string>
-    <string name="home_tile_gains">Delay</string>
+    <string name="home_tile_gains">Align</string>
     <string name="home_tile_xovers">Xover</string>
-    <string name="home_tile_compressor">Comp</string>
-    <string name="home_tile_allpass">Allpass</string>
+    <string name="home_tile_compressor">Dynamics</string>
+    <string name="home_tile_output">Output</string>
     <string name="home_tile_more">More</string>
     <!-- Front-page signal-chain cards: title, then a short line on what the module does. -->
     <string name="home_card_peq">PEQ</string>
     <string name="home_card_peq_sub">Parametric EQ</string>
-    <string name="home_card_gains">Gains / Delay</string>
-    <string name="home_card_gains_sub">Time alignment</string>
+    <string name="home_card_gains">Alignment</string>
+    <string name="home_card_gains_sub">Time &amp; phase</string>
     <string name="home_card_xovers">Xovers</string>
     <string name="home_card_xovers_sub">Crossover</string>
-    <string name="home_card_compressor">Compressor</string>
-    <string name="home_card_compressor_sub">Dynamics</string>
-    <string name="home_card_allpass">Allpass</string>
-    <string name="home_card_allpass_sub">Phase alignment</string>
+    <string name="home_card_compressor">Dynamics</string>
+    <string name="home_card_compressor_sub">Comp · limiters</string>
+    <string name="home_card_output">Output</string>
+    <string name="home_card_output_sub">Level · volume</string>
     <string name="home_power_on">DSP ON</string>
     <string name="home_power_off">BYPASS</string>
     <string name="home_power_on_hint">tap to bypass</string>

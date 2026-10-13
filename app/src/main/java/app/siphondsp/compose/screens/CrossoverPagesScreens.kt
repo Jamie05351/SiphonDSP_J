@@ -28,7 +28,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
-import app.siphondsp.activity.CrossoverTiltActivity
+import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
@@ -39,6 +39,7 @@ import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
+import app.siphondsp.fragment.GainLimiterFragment
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
@@ -202,7 +203,7 @@ fun CrossoverMidHighPage(
     }
 
     CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls) {
-        // Phone only: the head unit reaches the full All-pass screen from its sidebar.
+        // Phone only: the All-pass page (Alignment's ALLPASS) is a sidebar tap away on the head unit.
         Text(
             text = "Open full All-pass ›",
             color = Color(BmwDashboardSkin.LIGHT_BLUE),
@@ -213,10 +214,8 @@ fun CrossoverMidHighPage(
                 .padding(top = 6.dp)
                 .clickable {
                     context.startActivity(
-                        Intent(context, CrossoverTiltActivity::class.java).putExtra(
-                            CrossoverTiltActivity.EXTRA_WORKSPACE_MODE,
-                            CrossoverTiltActivity.MODE_ALLPASS,
-                        ),
+                        Intent(context, GainLimiterActivity::class.java)
+                            .putExtra(GainLimiterActivity.EXTRA_PAGE, GainLimiterFragment.PAGE_ALLPASS),
                     )
                 },
         )
