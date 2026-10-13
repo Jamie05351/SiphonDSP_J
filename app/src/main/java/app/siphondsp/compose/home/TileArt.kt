@@ -73,8 +73,8 @@ enum class TileArt(val loopMs: Int) {
             drawLine(DelayFloorLine, Offset(7f, 135f), Offset(223f, 135f), 1.8f, StrokeCap.Round)
             // The impulse, as drawn.
             drawPath(DelayImpulse, DelayWhite, style = CurveStroke)
-            // Its echo swells as the travelling dash reaches it, then settles.
-            val landed = ((t + 0.08f) % 1f)
+            // Its echo swells each time a dash reaches it (twice a loop), then settles.
+            val landed = ((2 * t + 0.08f) % 1f)
             val swell = 0.62f + 0.38f * exp(-landed * 5f)
             withTransform({ scale(1f, swell, Offset(172f, 135f)) }) {
                 drawPath(DelayEcho, DelayGreen, style = CurveStroke)
