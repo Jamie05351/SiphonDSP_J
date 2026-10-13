@@ -111,6 +111,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     morphProgress: () -> Float = { 0f },
     sidebarWidth: Dp = 124.dp,
+    animateTiles: Boolean = true,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(HomePalette.Page)) {
         val k = minOf(1f, maxWidth.value / DesignWidth, maxHeight.value / DesignHeight)
@@ -168,7 +169,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     ChainPanel(
-                        engine, powered, g, { sweep.value }, openingStage, onTogglePower, layout,
+                        engine, powered, g, { sweep.value }, openingStage, onTogglePower, layout, animateTiles,
                         onOpenStage = { stage -> onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
                         tileModifier = { stage -> Modifier.tracked(stage) },
                         modifier = Modifier
@@ -290,6 +291,7 @@ private fun ChainPanel(
     openingStage: HomeStage?,
     onTogglePower: () -> Unit,
     layout: ChainLayout,
+    animateTiles: Boolean,
     onOpenStage: (HomeStage) -> Unit,
     tileModifier: (HomeStage) -> Modifier,
     modifier: Modifier,
@@ -348,6 +350,7 @@ private fun ChainPanel(
                         onClick = { onOpenStage(stage) },
                         modifier = tileModifier(stage),
                         width = layout.cardWidth,
+                        animateArt = animateTiles,
                     )
                 }
             }

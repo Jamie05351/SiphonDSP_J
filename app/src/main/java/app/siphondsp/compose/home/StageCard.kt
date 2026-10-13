@@ -35,7 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 /**
  * One signal-chain tile: a menu button that opens its DSP screen. The tile's fill and artwork
  * always show in its [accent], whatever the stage or the DSP power is doing; the artwork plays its
- * own small loop ([TileArt]). It is [width] wide
+ * own small loop ([TileArt]) while [animateArt]. It is [width] wide
  * (in design units, from [ChainLayout]) and as tall as the chain panel allows.
  *
  * Its border is the signal passing through: grey while dark, lit in [accent] by [borderLit]
@@ -60,6 +60,7 @@ fun StageCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Float = CardWidth,
+    animateArt: Boolean = true,
 ) {
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
@@ -102,7 +103,7 @@ fun StageCard(
             .padding(s.dp(12f)),
     ) {
         Spacer(Modifier.weight(1f))
-        AnimatedTileArt(art, Modifier.fillMaxWidth().height(s.dp(80f)))
+        AnimatedTileArt(art, animateArt, Modifier.fillMaxWidth().height(s.dp(80f)))
         Spacer(Modifier.weight(1f))
         Text(
             text = title,
