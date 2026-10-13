@@ -288,10 +288,11 @@ fun CrossoverResponseGraph(
         ++morph.generation
     }
     // Runs from generation - 1 to generation for each new set of curves; until it starts, the
-    // morph sits at the shape last drawn.
+    // morph sits at the shape last drawn (see the draw below).
     val morphClock = remember { Animatable(0f) }
     LaunchedEffect(generation) {
         morphClock.snapTo(generation - 1f)
+        morph.started = generation
         morphClock.animateTo(generation.toFloat(), MorphSpring)
     }
 
@@ -319,7 +320,9 @@ fun CrossoverResponseGraph(
         val bottom = size.height - PAD_BOTTOM_DP * density
         if (right <= left || bottom <= top) return@ComposeCanvas
         val frame = spectrumTick.intValue // read in the draw phase -> redraws each spectrum tick
-        morph.blend(curves, (morphClock.value - (generation - 1)).coerceAtLeast(0f))
+        // Before this generation's spring starts, the clock may still hold the last one's overshoot.
+        val morphT = if (morph.started == generation) (morphClock.value - (generation - 1)).coerceAtLeast(0f) else 0f
+        morph.blend(curves, morphT)
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
             if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
@@ -508,21 +511,39 @@ private fun drawResponse(
 /**
  * The magnitude curves as drawn: the L / R sums and the Low / Mid / High branches, each per
  * channel, [blend]ed from the shape last drawn ([freeze]) towards the newly computed curves.
- * [generation] counts the sets of curves computed, for the morph's clock.
+ * [generation] counts the sets of curves computed, for the morph's clock; [started] is the last
+ * generation whose spring has begun.
  */
 private class MagnitudeMorph(pointCount: Int) {
     private val from = Array(CURVES) { DoubleArray(pointCount) }
     val shown = Array(CURVES) { DoubleArray(pointCount) }
     var generation = 0
+    var started = 0
     private var drawn = false
+    private var t = 1f
+    private var highFrom = false
+    private var highShown = false
 
     /** Starts the next morph from what is on screen now. */
     fun freeze() {
         if (drawn) for (c in 0 until CURVES) shown[c].copyInto(from[c])
+        highFrom = highShown
+    }
+
+    /**
+     * Whether the High band is drawn: while [curves] has it, and while it is still morphing out to
+     * the floor after being switched off.
+     */
+    fun showsHigh(curves: BmwResponseCurves): Boolean {
+        // Once the spring first reaches the floor it stays hidden, even while it overshoots back.
+        if (t >= 1f) highFrom = false
+        highShown = curves.highBranchActive || highFrom
+        return highShown
     }
 
     /** [shown] at [t] of the way from the frozen shape to [curves]; past 1 while the spring overshoots. */
     fun blend(curves: BmwResponseCurves, t: Float) {
+        this.t = t
         val l = BmwOutputChannel.LEFT
         val r = BmwOutputChannel.RIGHT
         val targets = arrayOf(
@@ -600,7 +621,7 @@ private fun drawBandAreas(
     val branches = buildList {
         add(shown[MagnitudeMorph.LOW_L] to shown[MagnitudeMorph.LOW_R])
         add(shown[MagnitudeMorph.MID_L] to shown[MagnitudeMorph.MID_R])
-        if (curves.highBranchActive) add(shown[MagnitudeMorph.HIGH_L] to shown[MagnitudeMorph.HIGH_R])
+        if (morph.showsHigh(curves)) add(shown[MagnitudeMorph.HIGH_L] to shown[MagnitudeMorph.HIGH_R])
     }
     branches.forEachIndexed { band, (leftDb, rightDb) ->
         val color = colors[band]
