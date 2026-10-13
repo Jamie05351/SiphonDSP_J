@@ -1,12 +1,12 @@
 package app.siphondsp.compose.home
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -172,18 +172,20 @@ enum class TileArt(val loopMs: Int) {
 }
 
 /**
- * [art] looping in a box, scaled to fit and centred like the static vectors were. The phase is
+ * [art] looping in a box, scaled to fit and centred like the static vectors were, while [running]
+ * (the front page is on screen); stopped, it holds its place and picks up from there. The phase is
  * read only while drawing, so the loop redraws the box and recomposes nothing.
  */
 @Composable
-internal fun AnimatedTileArt(art: TileArt, modifier: Modifier = Modifier) {
-    val loop = rememberInfiniteTransition(label = "tile art")
-    val phase = loop.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(art.loopMs, easing = LinearEasing)),
-        label = art.name,
-    )
+internal fun AnimatedTileArt(art: TileArt, running: Boolean, modifier: Modifier = Modifier) {
+    val phase = remember { Animatable(0f) }
+    LaunchedEffect(running) {
+        if (!running) return@LaunchedEffect
+        while (true) {
+            phase.animateTo(1f, tween((art.loopMs * (1f - phase.value)).toInt(), easing = LinearEasing))
+            phase.snapTo(0f)
+        }
+    }
     Spacer(
         modifier.drawWithCache {
             val scale = min(size.width / ArtWidth, size.height / ArtHeight)

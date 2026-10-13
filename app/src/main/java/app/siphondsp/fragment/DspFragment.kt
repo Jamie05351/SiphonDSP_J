@@ -91,6 +91,9 @@ class DspFragment : Fragment() {
     private var resumed = false
     private var homePageActive = true
 
+    /** Whether the front page is on screen, so its tile loops run; see [updateLevelFeed]. */
+    private var homeLive by mutableStateOf(false)
+
     /** The stages, chips and meter ceiling, from the saved DSP values; see [refreshValues]. */
     private var engineState by mutableStateOf(HomeEngineState.OFF)
 
@@ -199,11 +202,13 @@ class DspFragment : Fragment() {
     }
 
     /**
-     * Runs the level feed (and so the analyzer) only while the front page is resumed and the pager
-     * is on the artwork page: it stays attached and "visible" when swiped away or covered.
+     * Runs the level feed (and so the analyzer) and the tiles' loops only while the front page is
+     * resumed and the pager is on the artwork page: it stays attached and "visible" when swiped
+     * away or covered.
      */
     private fun updateLevelFeed() {
-        levelFeed?.running = resumed && homePageActive
+        homeLive = resumed && homePageActive
+        levelFeed?.running = homeLive
     }
 
     /** [scrolledPx] is how far the pager has scrolled past the artwork page, in reading order. */
@@ -230,6 +235,7 @@ class DspFragment : Fragment() {
                 onToggleMute = { MasterVolume.setMuted(requireContext(), null) },
                 morphProgress = { morphProgress },
                 sidebarWidth = DspCrossNavBar.sidebarWidthDp(requireActivity()).dp,
+                animateTiles = homeLive,
             )
         }
         levelFeed = HomeLevelFeed(onReadout = { levelReadout = it })
