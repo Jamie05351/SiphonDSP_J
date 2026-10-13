@@ -18,8 +18,8 @@ import androidx.appcompat.app.AppCompatActivity
 import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.EngineLauncherActivity
-import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
+import app.siphondsp.activity.OutputActivity
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.AudioHealthLog
 import app.siphondsp.service.DspHealthBadge
@@ -84,7 +84,8 @@ class DspStatusStrip @JvmOverloads constructor(
         Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
         Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, NativeBmwCompressorActivity::class.java),
         Segment(
-            "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, GainLimiterActivity::class.java,
+            // The master limiter lives on the Output workspace.
+            "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, OutputActivity::class.java,
             valueIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD,
         ),
     )
