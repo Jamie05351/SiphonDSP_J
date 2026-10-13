@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -44,7 +45,8 @@ enum class TileArt(val loopMs: Int) {
     PEQ(4800) {
         override fun DrawScope.draw(t: Float, paths: Array<Path>) {
             drawPeqGrid()
-            for ((i, band) in PeqBands.withIndex()) {
+            for (i in PeqBands.indices) {
+                val band = PeqBands[i]
                 val swing = 0.72f + 0.28f * sin(TwoPi * (t + band.offset))
                 val peakY = Baseline + (band.peakY - Baseline) * swing
                 val path = paths[i].apply {
@@ -58,17 +60,17 @@ enum class TileArt(val loopMs: Int) {
                 }
                 drawPath(path, band.colour, style = CurveStroke)
             }
-            for ((i, band) in PeqBands.withIndex()) {
+            for (band in PeqBands) {
                 val swing = 0.72f + 0.28f * sin(TwoPi * (t + band.offset))
                 val node = Offset(band.x, Baseline + (band.peakY - Baseline) * swing)
                 drawCircle(NodeRing, 6.8f, node)
-                drawCircle(PeqBands[i].colour, 4.3f, node)
+                drawCircle(band.colour, 4.3f, node)
             }
         }
     },
     DELAY(2400) {
         override fun DrawScope.draw(t: Float, paths: Array<Path>) {
-            drawLine(DelayFloor.copy(alpha = 0.7f), Offset(7f, 135f), Offset(223f, 135f), 1.8f, StrokeCap.Round)
+            drawLine(DelayFloorLine, Offset(7f, 135f), Offset(223f, 135f), 1.8f, StrokeCap.Round)
             // The impulse, as drawn.
             drawPath(DelayImpulse, DelayWhite, style = CurveStroke)
             // Its echo swells as the travelling dash reaches it, then settles.
@@ -78,17 +80,21 @@ enum class TileArt(val loopMs: Int) {
                 drawPath(DelayEcho, DelayGreen, style = CurveStroke)
             }
             // The arrow's dashes march towards the echo.
-            drawLine(
-                DelayArrow.copy(alpha = 0.6f), Offset(55f, 31f), Offset(159f, 31f), 1.7f, StrokeCap.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 6f), -t * 22f),
-            )
+            // Drawn dash by dash, so nothing is allocated per frame.
+            var x = 55f - DashPitch + (t * 2 * DashPitch) % DashPitch
+            while (x < 159f) {
+                val from = x.coerceAtLeast(55f)
+                val to = (x + DashLength).coerceAtMost(159f)
+                if (to > from) drawLine(DelayDash, Offset(from, 31f), Offset(to, 31f), 1.7f, StrokeCap.Round)
+                x += DashPitch
+            }
             val head = paths[0].apply {
                 reset()
                 moveTo(153f, 27f)
                 lineTo(160f, 31f)
                 lineTo(153f, 35f)
             }
-            drawPath(head, DelayArrow, style = Stroke(2f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(head, DelayArrow, style = ArrowStroke)
         }
     },
     XOVERS(5000) {
@@ -98,26 +104,27 @@ enum class TileArt(val loopMs: Int) {
             val high = Baseline - 50f * open
             val low = Baseline + 51f * open
             drawLine(XoverInput, Offset(7f, Baseline), Offset(split, Baseline), XoverWidth, StrokeCap.Round)
-            for ((i, y) in listOf(high, Baseline, low).withIndex()) {
+            for (i in 0 until 3) {
+                val y = when (i) {
+                    0 -> high
+                    1 -> Baseline
+                    else -> low
+                }
                 val path = paths[i].apply {
                     reset()
                     moveTo(split, Baseline)
                     cubicTo(split + 35f, Baseline, split + 36f, y, split + 71f, y)
                     lineTo(223f, y)
                 }
-                drawPath(path, XoverColours[i], style = Stroke(XoverWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawPath(path, XoverColours[i], style = XoverStroke)
             }
         }
     },
     COMPRESSOR(1800) {
         override fun DrawScope.draw(t: Float, paths: Array<Path>) {
             // The threshold, above and below.
-            for (y in floatArrayOf(39f, 111f)) {
-                drawLine(
-                    CompThreshold.copy(alpha = 0.6f), Offset(115f, y), Offset(219f, y), 1.7f, StrokeCap.Round,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 6f), 0f),
-                )
-            }
+            drawLine(CompThresholdDash, Offset(115f, 39f), Offset(219f, 39f), 1.7f, StrokeCap.Round, pathEffect = ThresholdDashes)
+            drawLine(CompThresholdDash, Offset(115f, 111f), Offset(219f, 111f), 1.7f, StrokeCap.Round, pathEffect = ThresholdDashes)
             // The input: a burst whose waves travel through its envelope. One period a loop.
             val input = paths[0].apply {
                 reset()
@@ -148,7 +155,8 @@ enum class TileArt(val loopMs: Int) {
     },
     OUTPUT(6000) {
         override fun DrawScope.draw(t: Float, paths: Array<Path>) {
-            for ((row, top) in floatArrayOf(42f, 86f).withIndex()) {
+            for (row in 0 until 2) {
+                val top = if (row == 0) 42f else 86f
                 val level = 0.66f +
                     0.14f * sin(TwoPi * (2 * t + row * 0.13f)) +
                     0.08f * sin(TwoPi * (5 * t + row * 0.31f)) +
@@ -156,7 +164,7 @@ enum class TileArt(val loopMs: Int) {
                 val lit = (level * MeterSegments).roundToInt().coerceIn(1, MeterSegments)
                 for (i in 0 until MeterSegments) {
                     val colour = when {
-                        i >= lit -> MeterCyan.copy(alpha = 0.18f)
+                        i >= lit -> MeterUnlit
                         i >= MeterSegments - 3 -> MeterMagenta
                         else -> MeterCyan
                     }
@@ -180,7 +188,9 @@ enum class TileArt(val loopMs: Int) {
 internal fun AnimatedTileArt(art: TileArt, running: Boolean, modifier: Modifier = Modifier) {
     val phase = remember { Animatable(0f) }
     LaunchedEffect(running) {
-        if (!running) return@LaunchedEffect
+        // With animations turned off system-wide, animateTo would finish at once and this would
+        // spin every frame on a still picture; hold the picture instead.
+        if (!running || coroutineContext[MotionDurationScale]?.scaleFactor == 0f) return@LaunchedEffect
         while (true) {
             phase.animateTo(1f, tween((art.loopMs * (1f - phase.value)).toInt(), easing = LinearEasing))
             phase.snapTo(0f)
@@ -206,9 +216,9 @@ internal fun AnimatedTileArt(art: TileArt, running: Boolean, modifier: Modifier 
 private fun DrawScope.drawPeqGrid() {
     for (k in 0 until 10) {
         val x = 5f + k * 24f
-        drawLine(PeqGrid.copy(alpha = 0.35f), Offset(x, 10f), Offset(x, 145f), 0.7f, StrokeCap.Round)
+        drawLine(PeqGridLine, Offset(x, 10f), Offset(x, 145f), 0.7f, StrokeCap.Round)
     }
-    drawLine(PeqAxis.copy(alpha = 0.65f), Offset(3f, Baseline), Offset(227f, Baseline), 1.3f, StrokeCap.Round)
+    drawLine(PeqAxisLine, Offset(3f, Baseline), Offset(227f, Baseline), 1.3f, StrokeCap.Round)
 }
 
 private fun smoothstep(from: Float, to: Float, x: Float): Float {
@@ -242,19 +252,26 @@ private const val ScratchPaths = 4
 private const val MeterSegments = 13
 private const val XoverWidth = 3.4f
 private val CurveStroke = Stroke(3f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+private val ArrowStroke = Stroke(2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+private val XoverStroke = Stroke(XoverWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+private val ThresholdDashes = PathEffect.dashPathEffect(floatArrayOf(5f, 6f), 0f)
+private const val DashLength = 5f
+private const val DashPitch = 11f
 
-private val PeqGrid = Color(0xFF263340)
-private val PeqAxis = Color(0xFF678475)
+private val PeqGridLine = Color(0xFF263340).copy(alpha = 0.35f)
+private val PeqAxisLine = Color(0xFF678475).copy(alpha = 0.65f)
 private val NodeRing = Color(0xFFD5DFE8)
-private val DelayFloor = Color(0xFF459875)
+private val DelayFloorLine = Color(0xFF459875).copy(alpha = 0.7f)
 private val DelayWhite = Color(0xFFF3F7F5)
 private val DelayGreen = Color(0xFF28D77B)
 private val DelayArrow = Color(0xFFE0E8E4)
+private val DelayDash = DelayArrow.copy(alpha = 0.6f)
 private val XoverInput = Color(0xFFF5F4E9)
 private val XoverColours = listOf(Color(0xFF20A9FA), Color(0xFFF9B719), Color(0xFFFF751B))
-private val CompThreshold = Color(0xFFCB2344)
+private val CompThresholdDash = Color(0xFFCB2344).copy(alpha = 0.6f)
 private val CompInput = Color(0xFFF2EDF0)
 private val CompOutput = Color(0xFFF12B4B)
 private val MeterCyan = Color(0xFF00E5FF)
+private val MeterUnlit = MeterCyan.copy(alpha = 0.18f)
 private val MeterMagenta = Color(0xFFF040CC)
 private val MeterCeiling = Color(0xFFFF3B5C)
