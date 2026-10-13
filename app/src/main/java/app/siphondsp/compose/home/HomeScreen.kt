@@ -104,7 +104,8 @@ import kotlin.math.sin
 fun HomeScreen(
     engine: HomeEngineState,
     powered: Boolean,
-    readout: LevelReadout,
+    readout: () -> LevelReadout,
+    meterLevels: () -> LevelReadout,
     openingStage: HomeStage?,
     onTogglePower: () -> Unit,
     onOpenStage: (HomeStage, Rect) -> Unit,
@@ -151,7 +152,7 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, g, onOpenGlobal,
+                        engine, readout, meterLevels, g, onOpenGlobal,
                         Modifier.offset(x = s.dp(ScreenLeft)).width(s.dp(screenRight - ScreenLeft)).fillMaxHeight(),
                     )
                     Column(
@@ -201,7 +202,8 @@ fun HomeScreen(
 @Composable
 private fun TopScreen(
     engine: HomeEngineState,
-    readout: LevelReadout,
+    readout: () -> LevelReadout,
+    meterLevels: () -> LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     modifier: Modifier,
@@ -210,7 +212,7 @@ private fun TopScreen(
     val s = LocalHomeScale.current
     Screen(s.dp(14f), modifier) {
         CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-            TopScreenContent(engine, readout, g, onOpenGlobal, off)
+            TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
         }
     }
 }
@@ -222,7 +224,8 @@ private fun TopScreen(
 @Composable
 private fun TopScreenContent(
     engine: HomeEngineState,
-    readout: LevelReadout,
+    readout: () -> LevelReadout,
+    meterLevels: () -> LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     off: String,
@@ -260,7 +263,7 @@ private fun TopScreenContent(
             }
         }
         Spacer(Modifier.width(s.dp(MeterGap)))
-        OutputMeter(readout, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
+        OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
     }
 }
 
@@ -506,13 +509,17 @@ private val PreviewEngine = HomeEngineState(
     masterVolumeDb = -24f,
 )
 
+private val PreviewLevelsOn = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f)
+private val PreviewLevelsOff = LevelReadout(leftRmsDb = -20f, leftPeakDb = -12.5f, rightRmsDb = -21f, rightPeakDb = -13.2f)
+
 @Preview(name = "Home · DSP ON", widthDp = 1280, heightDp = 480)
 @Composable
 private fun HomeScreenOnPreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = true,
-        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
+        readout = { PreviewLevelsOn },
+        meterLevels = { PreviewLevelsOn },
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
         onVolumeStep = {}, onToggleMute = {},
@@ -525,7 +532,8 @@ private fun HomeScreenOffPreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = false,
-        readout = LevelReadout(leftRmsDb = -20f, leftPeakDb = -12.5f, rightRmsDb = -21f, rightPeakDb = -13.2f),
+        readout = { PreviewLevelsOff },
+        meterLevels = { PreviewLevelsOff },
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
         onVolumeStep = {}, onToggleMute = {},
@@ -551,7 +559,8 @@ private fun HomeScreenPhonePreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = true,
-        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
+        readout = { PreviewLevelsOn },
+        meterLevels = { PreviewLevelsOn },
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
         onVolumeStep = {}, onToggleMute = {},
