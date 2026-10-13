@@ -579,7 +579,23 @@ object NativeBmwDspValues {
         migrateHighBusLimiterIfNeeded(store, values)
         migrateVirtualIfNeeded(store, values)
         migrateMidUpperXoTypeIfNeeded(store, values)
+        if (retireStageDelay(values)) {
+            val saved = store.save(values)
+            Timber.i("BMW DSP zeroed the retired stage delay success=$saved")
+        }
         return values
+    }
+
+    /**
+     * Stage alignment (141/142) no longer has a control -- the virtual centre does that job -- so
+     * it is held at 0 on every load, save and restore: a leftover value would otherwise keep
+     * shifting the image with nothing on screen to show or undo it. True if it changed anything.
+     */
+    private fun retireStageDelay(values: FloatArray): Boolean {
+        if (values[INDEX_STAGE_DELAY_L] == 0f && values[INDEX_STAGE_DELAY_R] == 0f) return false
+        values[INDEX_STAGE_DELAY_L] = 0f
+        values[INDEX_STAGE_DELAY_R] = 0f
+        return true
     }
 
     /**
@@ -710,8 +726,10 @@ object NativeBmwDspValues {
         Timber.i("BMW DSP seeded master limiter enable/threshold default success=$saved")
     }
 
+    /** Persists [values], zeroing the retired stage delay in place first (see [retireStageDelay]). */
     fun save(context: Context, values: FloatArray): Boolean {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
+        retireStageDelay(values)
         return store(context).save(values)
     }
 
@@ -758,6 +776,7 @@ object NativeBmwDspValues {
         migrateHighBusLimiterIfNeeded(store, padded)
         migrateVirtualIfNeeded(store, padded)
         migrateMidUpperXoTypeIfNeeded(store, padded)
+        retireStageDelay(padded)
         return padded
     }
 

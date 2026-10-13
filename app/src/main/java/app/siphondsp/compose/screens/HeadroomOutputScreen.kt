@@ -47,8 +47,7 @@ import app.siphondsp.view.isHeadUnitDisplay
 private typealias GroupRow = (y: Int, h: Int) -> Modifier
 
 /**
- * The Gains & Delay pager's Output page (alongside the Gains & Delay diagram page and the
- * bus-limiter page, [CompressorDriverPage]): two groups side by side, laid out the same way on
+ * The Output workspace's page (OutputFragment): two groups side by side, laid out the same way on
  * both screens (Figma "SiphonDSP Front Panel (from code)", Steppers page) --
  *
  * - **Output**: Headroom (purple), Post gain L and R (green), each a label + value box + −/+ row.

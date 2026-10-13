@@ -10,19 +10,15 @@ import app.siphondsp.compose.controls.DspPagerArrows
 import app.siphondsp.compose.controls.WorkspaceArt
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.fragment.CrossoverTiltFragment
-import app.siphondsp.fragment.OutputAllPassFragment
 import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.isHeadUnitDisplay
 import com.google.android.material.appbar.MaterialToolbar
 
 class CrossoverTiltActivity : DspWorkspaceActivity() {
-    /** Shared with whichever fragment this hosts (see [pageCount]) so [DspPagerArrows] (hosted
-     *  here, on the toolbar line) can drive its `HorizontalPager` -- see `dsp_toolbar_actions` in
-     *  activity_parametric_eq.xml. Page count is fixed for the activity's lifetime (decided once
-     *  below, from the launch intent), so a `by lazy` reading it after `onCreate` has run is safe. */
-    val pagerState: PagerState by lazy { PagerState(currentPage = 0) { pageCount } }
-    private var pageCount = CrossoverTiltFragment.PAGE_COUNT
+    /** Shared with [CrossoverTiltFragment] so [DspPagerArrows] (hosted here, on the toolbar line)
+     *  can drive its `HorizontalPager` -- see `dsp_toolbar_actions` in activity_parametric_eq.xml. */
+    val pagerState: PagerState by lazy { PagerState(currentPage = 0) { CrossoverTiltFragment.PAGE_COUNT } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,27 +28,21 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        val mode = intent.getStringExtra(EXTRA_WORKSPACE_MODE) ?: MODE_CROSSOVER
-        val allPassMode = mode == MODE_ALLPASS
-        pageCount = if (allPassMode) OutputAllPassFragment.PAGE_COUNT else CrossoverTiltFragment.PAGE_COUNT
-        // DspDestination.ALLPASS's primary-nav tile opens All-pass directly, so All-pass shares
-        // its nav identity here rather than leaving a gap.
-        val current = if (allPassMode) DspDestination.ALLPASS else DspDestination.CROSSOVER_TILT
+        val current = DspDestination.CROSSOVER_TILT
         // No toolbar title on the full-screen workspace -- the backdrop's lit rail tile already
         // says which screen this is.
         supportActionBar?.title = null
         DspCrossNavBar.populate(this, findViewById<ComposeView>(R.id.dsp_cross_nav), current)
 
         if (savedInstanceState == null) {
-            val fragment = if (allPassMode) OutputAllPassFragment() else CrossoverTiltFragment()
+            val fragment = CrossoverTiltFragment()
             supportFragmentManager.beginTransaction()
                 .replace(R.id.params, fragment)
                 .commit()
         }
 
         findViewById<ComposeView>(R.id.dsp_toolbar_actions).apply {
-            // All-pass keeps the generic arrows; the crossover pages get the v4 page finder.
-            val finder = !allPassMode && isHeadUnitDisplay()
+            val finder = isHeadUnitDisplay()
             setContent {
                 BmwDspTheme {
                     if (finder) ArtPagerFinder(pagerState, CROSSOVER_PAGE_LABELS, WorkspaceArt.finder3)
@@ -66,7 +56,6 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
     companion object {
         const val EXTRA_WORKSPACE_MODE = "dsp_workspace_mode"
         const val MODE_CROSSOVER = "crossover"
-        const val MODE_ALLPASS = "allpass"
 
         /** One per CrossoverTiltFragment page, in pager order. */
         private val CROSSOVER_PAGE_LABELS = listOf("LOW/MID", "MID/HIGH", "TILT")

@@ -196,6 +196,16 @@
         </activity>
 
         <activity
+            android:name=".activity.OutputActivity"
+            android:exported="false"
+            android:label="@string/title_activity_output"
+            android:theme="@style/Theme.SiphonDSP">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".activity.MainActivity" />
+        </activity>
+
+        <activity
             android:name=".activity.CrossoverTiltActivity"
             android:exported="false"
             android:label="@string/title_activity_crossover_tilt"

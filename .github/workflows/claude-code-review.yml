@@ -1,0 +1,49 @@
+name: Claude Code Review
+
+# Claude reviews every pull request, alongside the Codex connector (which reviews on its own).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude review
+    runs-on: ubuntu-latest
+    # Fork PRs can't read the token secret; skip rather than fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. SiphonDSP_J is an Android (Kotlin / Jetpack Compose) DSP app
+            with a native C++ audio engine, used on a 1280x480 car head unit and on phones.
+
+            Focus on real defects: correctness bugs, audio-safety issues (anything that could send
+            full-scale or non-finite values to the engine, or silently change the sound), broken
+            persistence or migrations in NativeBmwDspValues, threading and lifecycle mistakes, and
+            layouts that break on the head unit or a phone. Skip style nits.
+
+            Use `gh pr diff` and `gh pr view` to read the change. Put findings on the exact lines
+            with inline comments, then post one short summary comment with `gh pr comment`. If you
+            find nothing worth fixing, say so in one line.
+          claude_args: >-
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

@@ -36,6 +36,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -51,9 +53,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
-import app.siphondsp.compose.assets.AllpassGraphic
 import app.siphondsp.compose.assets.CompressorGraphic
 import app.siphondsp.compose.assets.GainsDelayGraphic
+import app.siphondsp.compose.assets.OutputGraphic
 import app.siphondsp.compose.assets.PeqGraphic
 import app.siphondsp.compose.assets.XoversGraphic
 import app.siphondsp.compose.controls.DspColors
@@ -69,15 +71,16 @@ import kotlin.math.sin
 
 /**
  * The front page, as a faceplate (the page background) holding two screens set into it (Figma
- * "Front plate · Home · PROPOSED"):
- * - The chain screen, [ChainSide] in from each side: the power node, the five DSP tiles and OUT,
+ * "Front faceplate · redesign", frame "Head unit · 8 · ON · Master volume"):
+ * - The chain screen, [ScreenLeft] / [ChainRight] in from the sides: the power node, the five DSP tiles and OUT,
  *   drawn at [ChainScale] of their design size with the six stretches of line between them all the
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
- * - The top screen, [TopMargin] from the top, lined up with the chain screen's left and right
- *   edges: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the headroom
- *   and the L / R output meters, all at [TopContentScale], then a divider and the More and
- *   Settings buttons (just an outline and a glyph, [ScreenButton]), centred over OUT.
+ * - The top screen, [TopMargin] from the top, lined up with the chain screen's left edge and
+ *   stopping [ScreenRight] from the right, where Settings and More sit: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
+ *   headroom and the L / R output meters, all at [TopContentScale].
+ * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]): + and − round the
+ *   level; down the right side, Settings and More as bare glyphs ([ScreenButton]).
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
@@ -108,6 +111,8 @@ fun HomeScreen(
     onOpenGlobal: (GlobalStage) -> Unit,
     onSettings: () -> Unit,
     onMore: (Rect) -> Unit,
+    onVolumeStep: (Int) -> Unit,
+    onToggleMute: () -> Unit,
     modifier: Modifier = Modifier,
     morphProgress: () -> Float = { 0f },
     sidebarWidth: Dp = 124.dp,
@@ -132,12 +137,11 @@ fun HomeScreen(
 
             // The chain's geometry, in chain units, for the chain screen's actual width; the top row
             // lines up with it.
-            val layout = ChainLayout((maxWidth.value / k - 2 * ChainSide) / ChainScale)
-            val screenRight = maxWidth.value / k - ChainSide
-            val outCentre = ChainSide + layout.outX * ChainScale
-            // More and Settings sit inside the top screen's right end, centred over OUT; the
-            // screen's own content stops at a divider [ButtonsGap] before them.
-            val buttonsInset = screenRight - (outCentre - ButtonSize / 2) + ButtonsGap
+            val screenRight = maxWidth.value / k - ScreenRight
+            // The chain screen runs on past the top screen, to [ChainRight] from the edge.
+            val layout = ChainLayout((maxWidth.value / k - ChainRight - ScreenLeft) / ChainScale)
+            // Settings and More sit on the faceplate, centred in the strip right of the screens.
+            val buttonsCentre = screenRight + ScreenRight / 2
 
             Column(Modifier.fillMaxSize()) {
                 Box(
@@ -147,18 +151,18 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, g, onOpenGlobal, buttonsInset,
-                        Modifier.offset(x = s.dp(ChainSide)).width(s.dp(screenRight - ChainSide)).fillMaxHeight(),
+                        engine, readout, g, onOpenGlobal,
+                        Modifier.offset(x = s.dp(ScreenLeft)).width(s.dp(screenRight - ScreenLeft)).fillMaxHeight(),
                     )
                     Column(
-                        Modifier.align(Alignment.CenterStart).offset(x = s.dp(outCentre - ButtonSize / 2)),
+                        Modifier.align(Alignment.CenterStart).offset(x = s.dp(buttonsCentre - ButtonSize / 2)),
                         verticalArrangement = Arrangement.spacedBy(s.dp(ButtonGap)),
                     ) {
+                        ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
                         ScreenButton(
                             stringResource(R.string.home_tile_more), { onMore(bounds[MoreKey] ?: Rect.Zero) },
                             Modifier.tracked(MoreKey),
                         ) { drawMoreGlyph() }
-                        ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
                     }
                 }
                 Box(
@@ -173,13 +177,17 @@ fun HomeScreen(
                         onOpenStage = { stage -> onOpenStage(stage, bounds[stage] ?: Rect.Zero) },
                         tileModifier = { stage -> Modifier.tracked(stage) },
                         modifier = Modifier
-                            .padding(horizontal = s.dp(ChainSide))
+                            .padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight))
                             .fillMaxWidth()
                             .height(s.dp(ChainHeight * ChainScale))
                             .tracked(ChainKey),
                     )
                 }
             }
+            VolumeColumn(
+                engine.masterVolumeDb, engine.masterMuted, g, onVolumeStep, onToggleMute,
+                Modifier.align(Alignment.CenterStart).offset(x = s.dp((ScreenLeft - VolumeScreen) / 2)),
+            )
             val chain = bounds[ChainKey]
             val tiles = HomeStage.entries.mapNotNull { bounds[it] }
             if (openingStage != null && chain != null && tiles.size == HomeStage.entries.size) {
@@ -189,45 +197,27 @@ fun HomeScreen(
     }
 }
 
-/**
- * The top screen: the live-data cells, a divider, then the headroom and the meters, all drawn at
- * [TopContentScale] so they fit the screen's height.
- */
+/** The top screen: its content drawn at [TopContentScale] so it fits the screen's height. */
 @Composable
 private fun TopScreen(
     engine: HomeEngineState,
     readout: LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
-    buttonsInset: Float,
     modifier: Modifier,
 ) {
     val off = stringResource(R.string.home_chip_off)
     val s = LocalHomeScale.current
     Screen(s.dp(14f), modifier) {
-        Row(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-                    TopScreenContent(engine, readout, g, onOpenGlobal, off)
-                }
-            }
-            // The same divider as between the cells and the meters; More and Settings (drawn by
-            // the caller, over this screen) sit in the space after it.
-            Box(
-                Modifier
-                    .width(s.dp(2f * TopContentScale))
-                    .fillMaxHeight()
-                    .padding(vertical = s.dp(16f * TopContentScale))
-                    .background(HomePalette.PanelEdge),
-            )
-            Spacer(Modifier.width(s.dp(buttonsInset - 2f * TopContentScale)))
+        CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
+            TopScreenContent(engine, readout, g, onOpenGlobal, off)
         }
     }
 }
 
 /**
- * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, a
- * divider, then the output meter. [off] is the cells' text for a stage that is off.
+ * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, then
+ * the output meter. [off] is the cells' text for a stage that is off.
  */
 @Composable
 private fun TopScreenContent(
@@ -269,14 +259,7 @@ private fun TopScreenContent(
                 )
             }
         }
-        Box(
-            Modifier
-                .padding(horizontal = s.dp(16f))
-                .width(s.dp(2f))
-                .fillMaxHeight()
-                .padding(vertical = s.dp(16f))
-                .background(HomePalette.PanelEdge),
-        )
+        Spacer(Modifier.width(s.dp(MeterGap)))
         OutputMeter(readout, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
     }
 }
@@ -393,8 +376,8 @@ private fun Screen(
 }
 
 /**
- * More / Settings, inside the top screen: just the squircle outline and the glyph. The label isn't
- * shown, only announced.
+ * Settings / More, on the faceplate right of the screens: just the glyph, in a [ButtonSize] touch
+ * target. The label isn't shown, only announced.
  */
 @Composable
 private fun ScreenButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, glyph: DrawScope.() -> Unit) {
@@ -403,12 +386,11 @@ private fun ScreenButton(label: String, onClick: () -> Unit, modifier: Modifier 
         modifier
             .size(s.dp(ButtonSize))
             .clip(Squircle)
-            .border(s.dp(1.5f), HomePalette.ButtonEdge, Squircle)
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(s.dp(26f), s.dp(17f)), onDraw = glyph)
+        Canvas(Modifier.size(s.dp(GlyphSize)), onDraw = glyph)
     }
 }
 
@@ -430,20 +412,34 @@ private val Squircle = GenericShape { size, _ ->
 
 /** Three dots across the middle. */
 private fun DrawScope.drawMoreGlyph() {
-    val r = size.height * 0.17f
-    for (fx in listOf(0.22f, 0.5f, 0.78f)) drawCircle(HomePalette.Button, r, Offset(size.width * fx, size.height / 2))
+    val r = size.width * 0.085f
+    for (fx in listOf(0.2f, 0.5f, 0.8f)) drawCircle(HomePalette.Button, r, Offset(size.width * fx, size.height / 2))
 }
 
-/** Three slider rails, each with its knob at a different place. */
+/** A gear: [GearTeeth] square-ish teeth round a ring with a hole through the middle. */
 private fun DrawScope.drawSettingsGlyph() {
-    val stroke = size.height * 0.12f
-    val knob = size.height * 0.17f
-    for ((fy, fx) in listOf(0.15f to 0.72f, 0.5f to 0.28f, 0.85f to 0.58f)) {
-        val y = size.height * fy
-        drawLine(HomePalette.Button, Offset(size.width * 0.1f, y), Offset(size.width * 0.9f, y), stroke, StrokeCap.Round)
-        drawCircle(HomePalette.Panel, knob, Offset(size.width * fx, y))
-        drawCircle(HomePalette.Button, knob, Offset(size.width * fx, y), style = Stroke(stroke))
+    val outer = size.minDimension / 2
+    val root = outer * 0.79f
+    val tooth = (PI / GearTeeth).toFloat()
+    val gear = Path().apply {
+        for (k in 0 until GearTeeth) {
+            val a = k * 2 * tooth
+            val points = listOf(
+                a - tooth * 0.55f to root, a - tooth * 0.35f to outer, a + tooth * 0.35f to outer,
+                a + tooth * 0.55f to root, a + tooth * 1.45f to root,
+            )
+            for ((i, point) in points.withIndex()) {
+                val (angle, r) = point
+                val x = center.x + r * cos(angle)
+                val y = center.y + r * sin(angle)
+                if (k == 0 && i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        }
+        close()
+        addOval(Rect(center, outer * 0.33f))
+        fillType = PathFillType.EvenOdd
     }
+    drawPath(gear, HomePalette.Button)
 }
 
 /** A tile's fixed content: its name, what it does, its colour and its artwork. */
@@ -452,40 +448,47 @@ private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val
 /** Each front-page tile's title, subtitle, colour and artwork. */
 private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, PeqGraphic)
-    HomeStage.GAINS -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
+    HomeStage.ALIGNMENT -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
     HomeStage.XOVERS -> TileSpec(R.string.home_card_xovers, R.string.home_card_xovers_sub, DspColors.Xover, XoversGraphic)
-    HomeStage.COMPRESSOR -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, CompressorGraphic)
-    HomeStage.ALLPASS -> TileSpec(R.string.home_card_allpass, R.string.home_card_allpass_sub, DspColors.Allpass, AllpassGraphic)
+    HomeStage.DYNAMICS -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, CompressorGraphic)
+    HomeStage.OUTPUT -> TileSpec(R.string.home_card_output, R.string.home_card_output_sub, DspColors.Output, OutputGraphic)
 }
 
-// The layout in design dp (Figma "Front plate · Home · PROPOSED"): the top screen's margin and
-// height at 1280 x 480, the chain screen's side margins, scale and the faceplate round it, and the
-// buttons. The chain screen is centred in the height left under the top screen.
-private const val TopMargin = 40f
-private const val TopHeight = 154f
+// The layout in design dp (Figma "Head unit · 8 · ON · Master volume"): the top screen's margin
+// and height at 1280 x 480, the screens' side margins (the volume column on the left, Settings and
+// More on the right), the chain's scale and the faceplate round it, and the buttons. The chain
+// screen is centred in the height left under the top screen.
+private const val TopMargin = 32f
+private const val TopHeight = 152f
 private const val TopShare = 0.45f
-private const val ChainTopGap = 22f
-private const val BottomFacia = 15f
-private const val ChainSide = 48f
+private const val ChainTopGap = 32f
+private const val BottomFacia = 32f
+private const val ScreenLeft = 176f
+private const val ScreenRight = 144f
+// The chain screen's right margin: the same facia as above and below it.
+private const val ChainRight = 32f
 private const val ButtonSize = 58f
-private const val ButtonGap = 12f
-// Between the top screen's divider and the buttons.
-private const val ButtonsGap = 16f
+private const val ButtonGap = 18f
+private const val GlyphSize = 42f
+private const val GearTeeth = 8
 
-/** The chain screen's contents (and the screen) at this fraction of their design size. */
-private const val ChainScale = 0.82f
+/** The chain screen's contents at this fraction of their design size. */
+private const val ChainScale = 0.76f
 
-/** The chain screen's height in chain units: the old full-height chain panel's. */
-private const val ChainHeight = 244f
+/** The chain screen's height in chain units: 232 dp at [ChainScale], room round the tiles. */
+private const val ChainHeight = 305f
 
 /** The top screen's contents at this fraction of their design size, to fit its shorter height. */
 private const val TopContentScale = TopHeight / 179f
 
 // In the scaled units of the screens they sit in.
-private const val CellWidth = 200f
-private const val CellHeight = 76f
+private const val CellWidth = 168f
+private const val CellHeight = 64f
 private const val CellGap = 10f
-private const val TileInset = 14f
+// Above and below the tiles: they stand 225 units tall in the chain screen, as in Figma.
+private const val TileInset = 40f
+// Between the cells and the output meter, which takes the rest of the top screen.
+private const val MeterGap = 40f
 private const val GlowBands = 20
 private const val MoreKey = "more"
 private const val ChainKey = "chain"
@@ -499,6 +502,7 @@ private val PreviewEngine = HomeEngineState(
     tiltDb = 1f,
     mbcBands = 4,
     limiterDb = -1f,
+    masterVolumeDb = -24f,
 )
 
 @Preview(name = "Home · DSP ON", widthDp = 1280, heightDp = 480)
@@ -510,6 +514,7 @@ private fun HomeScreenOnPreview() = BmwDspTheme {
         readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
+        onVolumeStep = {}, onToggleMute = {},
     )
 }
 
@@ -522,6 +527,7 @@ private fun HomeScreenOffPreview() = BmwDspTheme {
         readout = LevelReadout(leftRmsDb = -20f, leftPeakDb = -12.5f, rightRmsDb = -21f, rightPeakDb = -13.2f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
+        onVolumeStep = {}, onToggleMute = {},
     )
 }
 
@@ -534,5 +540,6 @@ private fun HomeScreenPhonePreview() = BmwDspTheme {
         readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
+        onVolumeStep = {}, onToggleMute = {},
     )
 }

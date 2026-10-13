@@ -57,9 +57,7 @@ import kotlin.math.roundToInt
  *   MBC enable / dry-wet Mix master strip.
  * - [CompressorBandPage] x4 -- per-band enable + stereo-link, a live GR meter, and the
  *   threshold / ratio / knee / attack / release / makeup sliders.
- *
- * [CompressorDriverPage] -- the per-bus brick-wall limiters (Low bus / Mid bus) -- is defined
- * here too but hosted on the Gains & Delay pager (with the master limiter), not this screen.
+ * - [CompressorDriverPage] -- LIMITERS: the per-bus brick-wall limiters (Low / Mid / High bus).
  *
  * Each page polls only the meters it shows, on a `LifecycleStartEffect` `Handler` loop scoped to
  * that page's composition -- and since Compose's `HorizontalPager` only composes the current page

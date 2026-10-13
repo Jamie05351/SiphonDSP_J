@@ -18,6 +18,7 @@ import app.siphondsp.R
 import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.activity.NativeBmwCompressorActivity
+import app.siphondsp.activity.OutputActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.compose.controls.DspSidebarRail
 import app.siphondsp.compose.controls.DspWorkspaceBackdrop
@@ -34,21 +35,18 @@ enum class DspDestination(
     val showInPrimaryNav: Boolean = true,
 ) {
     // Declaration order is display order (used directly by DspCrossNavBar.populate()) --
-    // matches the main tile grid's PEQ, Gains, Xovers, Compressor, All-pass order
-    // (fragment_dsp_page_shortcuts.xml) rather than an arbitrary/functional grouping, so the
-    // sidebar doesn't present a different sequence than the page the user navigated in from.
+    // matches the front page's chain: PEQ, Alignment, Xovers, Dynamics, Output -- so the sidebar
+    // doesn't present a different sequence than the page the user navigated in from.
     //
     // The workspace's faceplate (background, bezel, rail housing) and each rail tile's glyph are
     // drawn live by DspWorkspaceBackdrop / DspSidebarRail (Compose); there is no per-destination art.
     PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
-    GAINS_DELAY(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
+    ALIGNMENT(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
     CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    COMPRESSOR(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    // 5th tile: the per-output all-pass screen (MODE_ALLPASS, OutputAllPassFragment). Was the
-    // routing-matrix editor historically; that screen is gone (the matrix itself still runs in
-    // the native chain). The Measurements / routing rows now live in the Signal Generator screen
-    // (SignalGeneratorScreen) instead of a Settings-page inline card.
-    ALLPASS(R.string.action_allpass, R.string.action_allpass, R.drawable.ic_twotone_route_24dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_ALLPASS),
+    DYNAMICS(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
+    // 5th tile: the end of the chain -- headroom, post gains, master limiter, master volume.
+    // It replaced the per-output all-pass menu, which is now the Alignment pager's ALLPASS page.
+    OUTPUT(R.string.action_output, R.string.sidebar_label_output, R.drawable.ic_twotone_gain_knob_28dp, OutputActivity::class),
 }
 
 object DspCrossNavBar {

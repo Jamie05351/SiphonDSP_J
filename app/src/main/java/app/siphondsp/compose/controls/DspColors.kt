@@ -14,6 +14,7 @@ object DspColors {
     val XoverLow = Color(0xFFFF6A00)
     val Comp = Color(0xFFEA1A26)
     val Allpass = Color(0xFFAE4AF6)
+    val Output = Color(0xFF00E5FF)
     val BandMagenta = Color(0xFFD64BE0)
     val Label = Color(0xFFC9CCCF)
 }
