@@ -284,8 +284,11 @@ fun CrossoverResponseGraph(
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
             calculator.invalidateAll()
             calculator.compute(systemValues, peqState, curves)
+            // Only new curves start a morph. (Like the compute itself, this runs while composing; a
+            // discarded composition just freezes the same on-screen shape again.)
+            morph.generation++
         }
-        ++morph.generation
+        morph.generation
     }
     // Runs from generation - 1 to generation for each new set of curves; until it starts, the
     // morph sits at the shape last drawn (see the draw below).
