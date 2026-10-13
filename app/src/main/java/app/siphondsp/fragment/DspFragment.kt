@@ -83,8 +83,11 @@ class DspFragment : Fragment() {
     /** The front page turning into the workspace (SidebarMorph), 0..1, while a tile opens. */
     private var morphProgress by mutableFloatStateOf(0f)
 
-    /** The held output levels, for the output meter and the headroom. */
+    /** The held output levels, about 5 a second, for the numbers: headroom and held peaks. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
+
+    /** The same levels every frame, for the LED rows; read only while drawing. */
+    private var levelFrame by mutableStateOf(LevelReadout.SILENT)
 
     /** Feeds [levelReadout] while the front page is live; see [updateLevelFeed]. */
     private var levelFeed: HomeLevelFeed? = null
@@ -217,7 +220,8 @@ class DspFragment : Fragment() {
             HomeScreen(
                 engine = engineState,
                 powered = powerOn,
-                readout = levelReadout,
+                readout = { levelReadout },
+                meterLevels = { levelFrame },
                 openingStage = openingTile,
                 onTogglePower = { if (openingTile == null) onPowerClick?.invoke() },
                 onOpenStage = ::openStage,
@@ -232,7 +236,7 @@ class DspFragment : Fragment() {
                 sidebarWidth = DspCrossNavBar.sidebarWidthDp(requireActivity()).dp,
             )
         }
-        levelFeed = HomeLevelFeed(onReadout = { levelReadout = it })
+        levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
             IntentFilter().apply {

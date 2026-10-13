@@ -42,10 +42,15 @@ import kotlin.math.floor
  *
  * [globalActive] blends everything to grey while the DSP is bypassed, when the headroom reads
  * "—". Purely visual: the numbers change several times a second, too often to announce.
+ *
+ * [readout] (about 5 a second) drives the numbers; [meterLevels] (every frame) drives the LED rows.
+ * The rows read it only while drawing, so a new frame redraws the meter canvas and recomposes
+ * nothing; only the headroom figure recomposes, at the slower rate.
  */
 @Composable
 fun OutputMeter(
-    readout: LevelReadout,
+    readout: () -> LevelReadout,
+    meterLevels: () -> LevelReadout,
     ceilingDb: Float,
     globalActive: Float,
     modifier: Modifier = Modifier,
@@ -54,17 +59,19 @@ fun OutputMeter(
     val signal = BmwTheme.colors.sliderHeadroom
     val measurer = rememberTextMeasurer()
     Row(modifier.clearAndSetSemantics { }, verticalAlignment = Alignment.CenterVertically) {
-        Headroom(readout.headroomDb(ceilingDb), ceilingDb, globalActive, Modifier.width(s.dp(HeadroomWidth)))
+        Headroom({ readout().headroomDb(ceilingDb) }, ceilingDb, globalActive, Modifier.width(s.dp(HeadroomWidth)))
         Canvas(Modifier.weight(1f).fillMaxHeight()) {
-            drawMeters(measurer, readout, ceilingDb, globalActive, signal, s)
+            drawMeters(measurer, meterLevels(), readout(), ceilingDb, globalActive, signal, s)
         }
     }
 }
 
 /** "HEADROOM / 6.2 dB / ● to −1.0 dB ceiling", or "— / ○ DSP bypassed" while the DSP is off. */
 @Composable
-private fun Headroom(headroomDb: Float?, ceilingDb: Float, g: Float, modifier: Modifier) {
+private fun Headroom(headroom: () -> Float?, ceilingDb: Float, g: Float, modifier: Modifier) {
     val s = LocalHomeScale.current
+    // Read here, so a new readout recomposes only this.
+    val headroomDb = headroom()
     val powered = g >= 0.5f
     Column(modifier) {
         Text(
@@ -127,10 +134,12 @@ private fun headroomColour(db: Float?): Color = when {
 /**
  * Both LED rows, the ceiling line and the scale, in design units: the channel letter in a 24-unit
  * gutter, the rows from there to [ReadoutWidth] short of the right edge, where the held-peak
- * readouts sit. The block is centred vertically in the canvas.
+ * readouts sit. The block is centred vertically in the canvas. The rows show [levels]; the held-peak
+ * numbers show [readout].
  */
 private fun DrawScope.drawMeters(
     measurer: TextMeasurer,
+    levels: LevelReadout,
     readout: LevelReadout,
     ceilingDb: Float,
     g: Float,
@@ -159,15 +168,16 @@ private fun DrawScope.drawMeters(
     val hotStart = 1f - 6f / -FloorDb
 
     for ((index, row) in listOf(
-        Triple("L", readout.leftRmsDb, readout.leftPeakDb),
-        Triple("R", readout.rightRmsDb, readout.rightPeakDb),
+        Triple("L", levels.leftRmsDb, levels.leftPeakDb),
+        Triple("R", levels.rightRmsDb, levels.rightPeakDb),
     ).withIndex()) {
         val (name, rmsDb, peakDb) = row
+        val shownPeakDb = if (index == 0) readout.leftPeakDb else readout.rightPeakDb
         val top = oy + u(if (index == 0) RowL else RowR)
         val mid = top + segH / 2
         drawLabel(measurer, name, Offset(0f, mid), s.sp(20f), HomePalette.Caption, FontWeight.Bold)
-        val litTo = if (readout.silent) 0f else (rmsDb - FloorDb) / -FloorDb
-        val peakAt = if (readout.silent) -1 else ((peakDb - FloorDb) / -FloorDb * count).toInt().coerceIn(0, count - 1)
+        val litTo = if (levels.silent) 0f else (rmsDb - FloorDb) / -FloorDb
+        val peakAt = if (levels.silent) -1 else ((peakDb - FloorDb) / -FloorDb * count).toInt().coerceIn(0, count - 1)
         // A soft glow under the lit run while powered.
         val litCount = (litTo * count).toInt().coerceIn(0, count)
         if (litCount > 0 && g > 0f) {
@@ -191,7 +201,7 @@ private fun DrawScope.drawMeters(
         }
         drawLabel(
             measurer,
-            if (readout.silent) "--" else formatDb(peakDb),
+            if (readout.silent) "--" else formatDb(shownPeakDb),
             Offset(right + u(16f), mid),
             s.sp(22f),
             lerp(HomePalette.Label, Color.White, g),
