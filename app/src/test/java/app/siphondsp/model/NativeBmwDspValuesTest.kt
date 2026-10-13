@@ -283,17 +283,24 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
-    fun loadKeepsAUserSetStageDelayOnceTheReclaimMigrationHasRun() {
+    fun stageDelayIsHeldAtZeroNowItHasNoControl() {
         val values = migratedDefaults().also {
             it[NativeBmwDspValues.INDEX_STAGE_DELAY_L] = 3.5f
+            it[NativeBmwDspValues.INDEX_STAGE_DELAY_R] = 1.2f
             it[NativeBmwDspValues.INDEX_MEAS_MUTE_STOPBAND_MIGRATED] = 2f
         }
         NativeBmwDspValues.save(context, values)
 
+        // Zeroed in the caller's array (what gets broadcast) and on disk.
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
         val loaded = NativeBmwDspValues.load(context)
-
-        assertEquals(3.5f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_L], 0f)
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
+
+        val restored = NativeBmwDspValues.migrateRestoredValues(
+            context, migratedDefaults().also { it[NativeBmwDspValues.INDEX_STAGE_DELAY_R] = 4f },
+        )
+        assertEquals(0f, restored[NativeBmwDspValues.INDEX_STAGE_DELAY_R], 0f)
     }
 
     @Test
