@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.pluralStringResource
@@ -53,11 +52,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
-import app.siphondsp.compose.assets.CompressorGraphic
-import app.siphondsp.compose.assets.GainsDelayGraphic
-import app.siphondsp.compose.assets.OutputGraphic
-import app.siphondsp.compose.assets.PeqGraphic
-import app.siphondsp.compose.assets.XoversGraphic
 import app.siphondsp.compose.controls.DspColors
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.compose.theme.BmwTheme
@@ -447,15 +441,15 @@ private fun DrawScope.drawSettingsGlyph() {
 }
 
 /** A tile's fixed content: its name, what it does, its colour and its artwork. */
-private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: ImageVector)
+private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: TileArt)
 
 /** Each front-page tile's title, subtitle, colour and artwork. */
 private fun HomeStage.tile(): TileSpec = when (this) {
-    HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, PeqGraphic)
-    HomeStage.ALIGNMENT -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, GainsDelayGraphic)
-    HomeStage.XOVERS -> TileSpec(R.string.home_card_xovers, R.string.home_card_xovers_sub, DspColors.Xover, XoversGraphic)
-    HomeStage.DYNAMICS -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, CompressorGraphic)
-    HomeStage.OUTPUT -> TileSpec(R.string.home_card_output, R.string.home_card_output_sub, DspColors.Output, OutputGraphic)
+    HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, TileArt.PEQ)
+    HomeStage.ALIGNMENT -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, TileArt.DELAY)
+    HomeStage.XOVERS -> TileSpec(R.string.home_card_xovers, R.string.home_card_xovers_sub, DspColors.Xover, TileArt.XOVERS)
+    HomeStage.DYNAMICS -> TileSpec(R.string.home_card_compressor, R.string.home_card_compressor_sub, DspColors.Comp, TileArt.COMPRESSOR)
+    HomeStage.OUTPUT -> TileSpec(R.string.home_card_output, R.string.home_card_output_sub, DspColors.Output, TileArt.OUTPUT)
 }
 
 // The layout in design dp (Figma "Head unit · 8 · ON · Master volume"): the top screen's margin
