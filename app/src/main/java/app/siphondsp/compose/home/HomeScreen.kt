@@ -350,6 +350,7 @@ private fun ChainPanel(
                         selected = openingStage == stage,
                         onClick = { onOpenStage(stage) },
                         modifier = tileModifier(stage),
+                        width = layout.cardWidth,
                     )
                 }
             }
@@ -525,6 +526,19 @@ private fun HomeScreenOffPreview() = BmwDspTheme {
         engine = PreviewEngine,
         powered = false,
         readout = LevelReadout(leftRmsDb = -20f, leftPeakDb = -12.5f, rightRmsDb = -21f, rightPeakDb = -13.2f),
+        openingStage = null,
+        onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
+        onVolumeStep = {}, onToggleMute = {},
+    )
+}
+
+@Preview(name = "Home · wide", widthDp = 1920, heightDp = 540)
+@Composable
+private fun HomeScreenWidePreview() = BmwDspTheme {
+    HomeScreen(
+        engine = PreviewEngine,
+        powered = true,
+        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
         onVolumeStep = {}, onToggleMute = {},

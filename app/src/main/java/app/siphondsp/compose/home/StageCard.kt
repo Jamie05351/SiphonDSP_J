@@ -37,8 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 
 /**
  * One signal-chain tile: a menu button that opens its DSP screen. The tile's fill and artwork
- * always show in its [accent], whatever the stage or the DSP power is doing. It is [CardWidth]
- * wide and as tall as the chain panel allows.
+ * always show in its [accent], whatever the stage or the DSP power is doing. It is [width] wide
+ * (in design units, from [ChainLayout]) and as tall as the chain panel allows.
  *
  * Its border is the signal passing through: grey while dark, lit in [accent] by [borderLit]
  * (0..1, from the power-on sweep, see [ChainSweep]) starting where the chain's line comes in at
@@ -61,6 +61,7 @@ fun StageCard(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    width: Float = CardWidth,
 ) {
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(16f))
@@ -69,7 +70,7 @@ fun StageCard(
     val px = s.k * LocalDensity.current.density
     Column(
         modifier
-            .width(s.dp(CardWidth))
+            .width(s.dp(width))
             .fillMaxHeight()
             .drawBehind {
                 // A soft halo just outside the tile once its border is lit, stronger while it is
@@ -198,5 +199,5 @@ private fun Modifier.sweptBorder(
     }
 }
 
-/** A tile's width in design units. */
+/** A tile's width in design units on a 1280-wide screen, and the narrowest it gets. */
 internal const val CardWidth = 170f

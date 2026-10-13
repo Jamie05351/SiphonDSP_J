@@ -63,14 +63,19 @@ internal object ChainSweep {
  * (see [ChainScale]) for a screen [width] wide: the power button [ChainPad] in from the left edge,
  * OUT [ChainPad] in from the right, and the five tiles between them with the six stretches of line
  * all the same length ([gap]).
+ *
+ * The tiles take up the screen's width: with the lines at [ChainGap], they share what is left,
+ * never narrower than [CardWidth] nor wider than [MaxCardWidth]. Past that the lines grow instead.
  */
 internal class ChainLayout(val width: Float) {
     private val tiles = HomeStage.entries.size
-    val gap = (width - 2 * ChainPad - NodeSize - OutSize - tiles * CardWidth) / (tiles + 1)
+    private val room = width - 2 * ChainPad - NodeSize - OutSize
+    val cardWidth = ((room - (tiles + 1) * ChainGap) / tiles).coerceIn(CardWidth, MaxCardWidth)
+    val gap = (room - tiles * cardWidth) / (tiles + 1)
     val powerX = ChainPad + NodeSize / 2
     val outX = width - ChainPad - OutSize / 2
-    fun tileLeft(i: Int) = ChainPad + NodeSize + gap + i * (CardWidth + gap)
-    fun tileRight(i: Int) = tileLeft(i) + CardWidth
+    fun tileLeft(i: Int) = ChainPad + NodeSize + gap + i * (cardWidth + gap)
+    fun tileRight(i: Int) = tileLeft(i) + cardWidth
 
     /** The stretch of line before tile [i] (or, at [i] = 5, from the last tile to OUT). */
     fun lineStart(i: Int) = if (i == 0) ChainPad + NodeSize else tileRight(i - 1)
@@ -79,6 +84,12 @@ internal class ChainLayout(val width: Float) {
 
 /** How far the power button and OUT sit in from the chain screen's sides, in chain units. */
 internal const val ChainPad = 39f
+
+/** The line between neighbours, in chain units: its length on a 1280-wide screen. */
+private const val ChainGap = 49f
+
+/** How wide a tile may grow, in chain units, before the lines take the extra width instead. */
+private const val MaxCardWidth = CardWidth * 1.6f
 
 /**
  * The spark at the front of the sweep, in the power button's purple: a soft glow round a bright
