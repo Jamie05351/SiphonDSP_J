@@ -297,15 +297,21 @@ void NativeBmwDspProcessor::processBlock(float* w, std::size_t n, BlockHook hook
         return;
     }
     // With a host stage before the master limiter: the front of the chain over the whole buffer,
-    // the host stage on the block, then the back.
+    // the host stage on the block, then the back. The raw input is kept so the capture can still
+    // take each frame's input and output together, after the back.
+    if (rawInWork_.size() < n) {
+        rawInWork_.resize(n);
+    }
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
-        capture_.tapIn(w[i], w[i + 1]);
+        rawInWork_[i] = w[i];
+        rawInWork_[i + 1] = w[i + 1];
         processFrameFront(w[i], w[i + 1]);
     }
     hook(ctx, w, n / 2);
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         processFrameBack(w[i], w[i + 1]);
+        capture_.tapIn(rawInWork_[i], rawInWork_[i + 1]);
         capture_.tapOut(w[i], w[i + 1]);
     }
 }

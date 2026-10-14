@@ -108,3 +108,32 @@ TEST_CASE("the hook sees the logical channels, before the hardware L/R swap") {
     CHECK(probe.leftEnergy > 100.0 * probe.rightEnergy);   // logical left, as the controls label it
     CHECK(outRight > 100.0 * outLeft);                     // then swapped for the reversed harness
 }
+
+TEST_CASE("a capture records the same input and output with a hook as without") {
+    auto c = defaultConfig();
+    NativeBmwDspProcessor plain, hooked;
+    plain.setSampleRate(kSampleRate);
+    hooked.setSampleRate(kSampleRate);
+    REQUIRE(plain.configure(c.data(), c.size()));
+    REQUIRE(hooked.configure(c.data(), c.size()));
+    plain.startCapture();
+    hooked.startCapture();
+
+    auto a = stereoSine(330.0, 0.5, 4800);
+    auto b = a;
+    HookProbe probe;
+    for (std::size_t off = 0; off < a.size(); off += 960) {
+        plain.process(a.data() + off, 960);
+        hooked.process(b.data() + off, 960, &probeHook, &probe);
+    }
+    auto plainTake = plain.takeCaptureSnapshot();
+    auto hookedTake = hooked.takeCaptureSnapshot();
+    REQUIRE(plainTake);
+    REQUIRE(hookedTake);
+    CHECK(hookedTake->frames == plainTake->frames);
+    CHECK(hookedTake->frames == a.size() / 2);
+    CHECK(hookedTake->rawInL == plainTake->rawInL);
+    CHECK(hookedTake->rawInR == plainTake->rawInR);
+    CHECK(hookedTake->outL == plainTake->outL);
+    CHECK(hookedTake->outR == plainTake->outR);
+}

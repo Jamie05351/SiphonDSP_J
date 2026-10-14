@@ -315,6 +315,9 @@ private:
     void processBlock(float* interleaved, std::size_t sampleCount, BlockHook hook, void* hookContext);
     // Float workspace for the integer formats while a hook runs; grows only.
     std::vector<float> intWork_;
+    // Each buffer's raw input while a hook runs, so the measurement capture still records input
+    // and output in pairs (CaptureRecorder advances only on tapOut); grows only.
+    std::vector<float> rawInWork_;
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay,
     // per-output compressor (idle meter while muted), driver gain, then the band's
     // stereo-linked bus limiter.
