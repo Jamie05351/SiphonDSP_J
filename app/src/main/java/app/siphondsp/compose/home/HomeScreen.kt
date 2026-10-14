@@ -546,7 +546,8 @@ private fun HomeScreenWidePreview() = BmwDspTheme {
     HomeScreen(
         engine = PreviewEngine,
         powered = true,
-        readout = LevelReadout(leftRmsDb = -9.6f, leftPeakDb = -7.2f, rightRmsDb = -10.6f, rightPeakDb = -7.8f),
+        readout = { PreviewLevelsOn },
+        meterLevels = { PreviewLevelsOn },
         openingStage = null,
         onTogglePower = {}, onOpenStage = { _, _ -> }, onOpenGlobal = {}, onSettings = {}, onMore = {},
         onVolumeStep = {}, onToggleMute = {},
