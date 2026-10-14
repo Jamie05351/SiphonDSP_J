@@ -1,13 +1,19 @@
 package app.siphondsp.compose.home
 
+import android.content.ContentResolver
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -22,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.platform.LocalContext
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -179,6 +186,30 @@ enum class TileArt(val loopMs: Int) {
     abstract fun DrawScope.draw(t: Float, paths: Array<Path>)
 }
 
+/** The system Animator duration scale (developer options), updated live as it changes. */
+@Composable
+private fun rememberAnimatorDurationScale(): Float {
+    val resolver = LocalContext.current.contentResolver
+    val scale = remember(resolver) { mutableFloatStateOf(readAnimatorDurationScale(resolver)) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                scale.floatValue = readAnimatorDurationScale(resolver)
+            }
+        }
+        resolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer,
+        )
+        // The setting may have changed between the first read and registering.
+        scale.floatValue = readAnimatorDurationScale(resolver)
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
+    return scale.floatValue
+}
+
+private fun readAnimatorDurationScale(resolver: ContentResolver): Float =
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+
 /**
  * [art] looping in a box, scaled to fit and centred like the static vectors were, while [running]
  * (the front page is on screen); stopped, it holds its place and picks up from there. The phase is
@@ -187,10 +218,13 @@ enum class TileArt(val loopMs: Int) {
 @Composable
 internal fun AnimatedTileArt(art: TileArt, running: Boolean, modifier: Modifier = Modifier) {
     val phase = remember { Animatable(0f) }
-    LaunchedEffect(running) {
+    // Keyed on the scale too, so switching animations off or on while the page is up takes effect
+    // at once rather than on the next hide/show.
+    val animationsOff = rememberAnimatorDurationScale() == 0f
+    LaunchedEffect(running, animationsOff) {
         // With animations turned off system-wide, animateTo would finish at once and this would
         // spin every frame on a still picture; hold the picture instead.
-        if (!running || coroutineContext[MotionDurationScale]?.scaleFactor == 0f) return@LaunchedEffect
+        if (!running || animationsOff) return@LaunchedEffect
         while (true) {
             phase.animateTo(1f, tween((art.loopMs * (1f - phase.value)).toInt(), easing = LinearEasing))
             phase.snapTo(0f)
