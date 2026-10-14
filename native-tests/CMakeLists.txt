@@ -41,6 +41,7 @@ add_executable(native_tests
     ${WRAPPER_DIR}/NativeBmwMeasurement.cpp
     ${WRAPPER_DIR}/NativeBmwVirtual.cpp
     concurrency_test.cpp
+    convolver_hook_test.cpp
     capture_test.cpp
     crossover_test.cpp
     default_config_test.cpp
