@@ -492,6 +492,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_setConvolver(JNIEnv *env, jobject obj
 
         LOGD("JamesDspWrapper::setConvolver: Impulse response loaded: channels=%d, frames=%d", irChannels, irFrames);
 
+        wrapper->convolverWanted.store(false);
         Convolver1DDisable(dsp);
 
         auto* nativeImpulse = (env->GetFloatArrayElements(impulseResponse, nullptr));
@@ -499,9 +500,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_setConvolver(JNIEnv *env, jobject obj
         env->ReleaseFloatArrayElements(impulseResponse, nativeImpulse, JNI_ABORT);
     }
 
-    if(enable)
-        Convolver1DEnable(dsp);
-    else
+    // JamesDSP's own convolver switch is left to the process paths, which turn it on only for a
+    // buffer the BMW chain didn't already convolve (syncCoreConvolver). Turning it off here is
+    // always safe.
+    const bool wanted = enable && success > 0 && dsp->conv.process != nullptr;
+    wrapper->convolverWanted.store(wanted);
+    if(!wanted)
         Convolver1DDisable(dsp);
 
     if(success <= 0)

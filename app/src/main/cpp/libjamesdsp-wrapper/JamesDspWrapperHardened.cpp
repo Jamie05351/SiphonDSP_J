@@ -39,6 +39,77 @@ static const char* safeNseelCodeError(void* vm)
 
 #include "JamesDspWrapper.cpp"
 
+extern "C" {
+// Defined in JamesDSP's jdspController.c but not declared in its header.
+void JamesDSPRefreshConvolutions(JamesDSPLib* jdsp, char refreshAll);
+}
+
+namespace {
+// One buffer's convolver pass: whether it is wanted, and whether the BMW chain ran it.
+struct ConvolverPass
+{
+    JamesDSPLib* dsp;
+    bool wanted;
+    bool ran;
+};
+
+// The convolver's place in the BMW chain: run by NativeBmwDspProcessor::process() just before its
+// master limiter (see BlockHook), so the limiter catches whatever the impulse response adds and
+// its channels are the logical L / R. The same block-size bookkeeping as JamesDSP's own entry
+// points, then its convolver on JamesDSP's work buffers, under its lock as in its own pass.
+void convolveBeforeMasterLimiter(void* context, float* x, std::size_t frames)
+{
+    auto& pass = *static_cast<ConvolverPass*>(context);
+    pass.ran = true;
+    if(!pass.wanted)
+        return;
+    JamesDSPLib* jdsp = pass.dsp;
+    if(jdsp->blockSizeMax < frames)
+        JamesDSPReallocateBlock(jdsp, frames);
+    if(jdsp->blockSize != frames)
+    {
+        jdsp->blockSize = frames;
+        JamesDSPRefreshConvolutions(jdsp, 1);
+    }
+    jdsp_lock(jdsp);
+    if(jdsp->conv.process)
+    {
+        for(std::size_t i = 0; i < frames; ++i)
+        {
+            jdsp->tmpBuffer[0][i] = x[i << 1];
+            jdsp->tmpBuffer[1][i] = x[(i << 1) + 1];
+        }
+        jdsp->conv.process(jdsp, frames);
+        for(std::size_t i = 0; i < frames; ++i)
+        {
+            x[i << 1] = jdsp->tmpBuffer[0][i];
+            x[(i << 1) + 1] = jdsp->tmpBuffer[1][i];
+        }
+    }
+    jdsp_unlock(jdsp);
+}
+
+// The hook to give the BMW chain: none while JamesDSP resamples internally (ASRC), when the
+// convolver has to run at the internal rate inside JamesDSP's own pass.
+NativeBmwDspProcessor::BlockHook convolverHook(const JamesDSPLib* dsp)
+{
+    return dsp->enableASRC ? nullptr : &convolveBeforeMasterLimiter;
+}
+
+// Sets JamesDSP's own convolver switch for the pass about to run: on only when the convolver is
+// wanted and the BMW chain didn't already run it on this buffer.
+void syncCoreConvolver(const JamesDspWrapper* wrapper, JamesDSPLib* dsp, bool ranInChain)
+{
+    const int on = wrapper->convolverWanted.load() && !ranInChain && dsp->conv.process ? 1 : 0;
+    if(dsp->convolverEnabled != on)
+    {
+        jdsp_lock(dsp);
+        dsp->convolverEnabled = on;
+        jdsp_unlock(dsp);
+    }
+}
+} // namespace
+
 #undef Java_app_siphondsp_interop_JamesDspWrapper_alloc
 #undef Java_app_siphondsp_interop_JamesDspWrapper_free
 #undef Java_app_siphondsp_interop_JamesDspWrapper_processInt16
@@ -190,9 +261,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
 
     const jint safeOffset = std::max(offset, 0);
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const int16_t* processed = bmw != nullptr
-        ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples),
+                       convolverHook(dsp), &pass)
         : reinterpret_cast<int16_t*>(input + safeOffset);
+    syncCoreConvolver(wrapper, dsp, pass.ran);
     dsp->processInt16Multiplexd(dsp, const_cast<int16_t*>(processed), output, samples / 2);
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
@@ -223,9 +297,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
 
     const jint safeOffset = std::max(offset, 0);
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const int32_t* processed = bmw != nullptr
-        ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples))
+        ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples),
+                       convolverHook(dsp), &pass)
         : reinterpret_cast<int32_t*>(input + safeOffset);
+    syncCoreConvolver(wrapper, dsp, pass.ran);
     dsp->processInt32Multiplexd(dsp, const_cast<int32_t*>(processed), output, samples / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
@@ -256,9 +333,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
 
     const jint safeOffset = std::max(offset, 0);
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const float* processed = bmw != nullptr
-        ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples))
+        ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples), convolverHook(dsp), &pass)
         : input + safeOffset;
+    syncCoreConvolver(wrapper, dsp, pass.ran);
     dsp->processFloatMultiplexd(dsp, const_cast<float*>(processed), output, samples / 2);
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
@@ -290,6 +369,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
         return inputObj;
     }
 
+    // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
+    syncCoreConvolver(wrapper, dsp, false);
     dsp->processInt24PackedMultiplexd(dsp, input, output, byteCount / 6);
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
@@ -322,6 +403,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv* env, jobject, 
         return inputObj;
     }
 
+    // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
+    syncCoreConvolver(wrapper, dsp, false);
     dsp->processInt8_24Multiplexd(dsp, input, output, sampleCount / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);

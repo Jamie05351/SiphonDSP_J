@@ -51,6 +51,10 @@ typedef struct
     // synchronous NativeBmwDspProcessor configure call has returned success.
     std::atomic<std::int64_t> nativeBmwDspRevision{0};
     std::atomic<std::int64_t> nativeBmwPeqRevision{0};
+    // Whether the user has the convolver on with an impulse response loaded (setConvolver). Where
+    // it runs is decided per buffer by the process paths: inside the BMW chain before its master
+    // limiter, or JamesDSP's own pass, whose switch only they set.
+    std::atomic<bool> convolverWanted{false};
     JniEnvironmentHandle env;
     jobject callbackInterface;
     jmethodID callbackOnLiveprogOutput;

@@ -191,9 +191,18 @@ public:
                       std::size_t fullValueCount, const double* lowBands, std::size_t lowValueCount,
                       const double* midBands, std::size_t midValueCount, const double* highBands,
                       std::size_t highValueCount);
-    const int16_t* process(const int16_t* samples, std::size_t sampleCount);
-    const int32_t* process(const int32_t* samples, std::size_t sampleCount);
-    const float* process(const float* samples, std::size_t sampleCount);
+    // Runs a stage owned by the host (the JamesDSP convolver) on an interleaved stereo float
+    // block of `frames` frames, in place. process() calls it once per buffer, between the front
+    // of the chain (up to and including post gain) and the master limiter, so whatever it adds is
+    // still caught by the limiter and its channels are the logical, unswapped L / R. Only called
+    // while this processor is enabled.
+    using BlockHook = void (*)(void* context, float* interleaved, std::size_t frames);
+    const int16_t* process(const int16_t* samples, std::size_t sampleCount,
+                           BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
+    const int32_t* process(const int32_t* samples, std::size_t sampleCount,
+                           BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
+    const float* process(const float* samples, std::size_t sampleCount,
+                         BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
     void readCompressorMeter(float* values, std::size_t count) const;
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. All-idle (-60/-60/0)
     // while the multiband compressor is disabled. Lock-free, same discipline as
@@ -297,6 +306,18 @@ private:
     Params p_;
 
     void processFrame(float& l, float& r);
+    // processFrame in two halves, for a host stage in between (see BlockHook): the front runs
+    // everything up to the master limiter and leaves logical L / R in l / r; the back runs the
+    // master limiter, stage delay, master volume and the hardware swap.
+    void processFrameFront(float& l, float& r);
+    void processFrameBack(float& l, float& r);
+    // The float processing for one buffer, shared by the three sample formats.
+    void processBlock(float* interleaved, std::size_t sampleCount, BlockHook hook, void* hookContext);
+    // Float workspace for the integer formats while a hook runs; grows only.
+    std::vector<float> intWork_;
+    // Each buffer's raw input while a hook runs, so the measurement capture still records input
+    // and output in pairs (CaptureRecorder advances only on tapOut); grows only.
+    std::vector<float> rawInWork_;
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay,
     // per-output compressor (idle meter while muted), driver gain, then the band's
     // stereo-linked bus limiter.

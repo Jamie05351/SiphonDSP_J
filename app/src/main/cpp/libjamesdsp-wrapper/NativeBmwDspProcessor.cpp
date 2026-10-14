@@ -132,10 +132,15 @@ void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
 }
 
 void NativeBmwDspProcessor::processFrame(float& l, float& r) {
-    using Band = NativeBmwRouting::Band;
     if (!p_.enabled) {
         return;
     }
+    processFrameFront(l, r);
+    processFrameBack(l, r);
+}
+
+void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
+    using Band = NativeBmwRouting::Band;
     float sL = inputDcL_.run(l, dcR_), sR = inputDcR_.run(r, dcR_);
     if (peqEnabled_) {
         sL *= peqPreamp_;
@@ -245,6 +250,12 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     if (measBus_.active()) {
         measBus_.process(oL, oR);
     }
+    l = oL;
+    r = oR;
+}
+
+void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
+    float oL = l, oR = r;
     // Master brick-wall limiter. enabled == false is a true bypass: the stage is skipped
     // entirely and nothing constrains the summed output level.
     if (p_.limiterEnabled) {
@@ -275,7 +286,37 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
     r = oL;
 }
 
-const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
+void NativeBmwDspProcessor::processBlock(float* w, std::size_t n, BlockHook hook, void* ctx) {
+    if (!hook) {
+        for (std::size_t i = 0; i + 1 < n; i += 2) {
+            NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
+            capture_.tapIn(w[i], w[i + 1]);
+            processFrame(w[i], w[i + 1]);
+            capture_.tapOut(w[i], w[i + 1]);
+        }
+        return;
+    }
+    // With a host stage before the master limiter: the front of the chain over the whole buffer,
+    // the host stage on the block, then the back. The raw input is kept so the capture can still
+    // take each frame's input and output together, after the back.
+    if (rawInWork_.size() < n) {
+        rawInWork_.resize(n);
+    }
+    for (std::size_t i = 0; i + 1 < n; i += 2) {
+        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
+        rawInWork_[i] = w[i];
+        rawInWork_[i + 1] = w[i + 1];
+        processFrameFront(w[i], w[i + 1]);
+    }
+    hook(ctx, w, n / 2);
+    for (std::size_t i = 0; i + 1 < n; i += 2) {
+        processFrameBack(w[i], w[i + 1]);
+        capture_.tapIn(rawInWork_[i], rawInWork_[i + 1]);
+        capture_.tapOut(w[i], w[i + 1]);
+    }
+}
+
+const float* NativeBmwDspProcessor::process(const float* s, std::size_t n, BlockHook hook, void* ctx) {
     if (!s) {
         return s;
     }
@@ -283,16 +324,11 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
     if (!p_.enabled) {
         return s;
     }
-    auto* w = const_cast<float*>(s);
-    for (std::size_t i = 0; i + 1 < n; i += 2) {
-        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
-        capture_.tapIn(w[i], w[i + 1]);
-        processFrame(w[i], w[i + 1]);
-        capture_.tapOut(w[i], w[i + 1]);
-    }
+    processBlock(const_cast<float*>(s), n, hook, ctx);
     return s;
 }
-const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
+
+const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n, BlockHook hook, void* ctx) {
     if (!s) {
         return s;
     }
@@ -302,6 +338,20 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     }
     constexpr float scale = 32768.f, invScale = 1.f / scale;
     auto* w = const_cast<int16_t*>(s);
+    if (hook) {
+        // The host stage works on a float block, so the whole buffer goes through intWork_.
+        if (intWork_.size() < n) {
+            intWork_.resize(n);
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            intWork_[i] = static_cast<float>(w[i]) * invScale;
+        }
+        processBlock(intWork_.data(), n, hook, ctx);
+        for (std::size_t i = 0; i < n; ++i) {
+            w[i] = NativeBmwDsp::clampInt<int16_t>(intWork_[i] * scale);
+        }
+        return s;
+    }
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
@@ -313,7 +363,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     }
     return s;
 }
-const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
+const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n, BlockHook hook, void* ctx) {
     if (!s) {
         return s;
     }
@@ -323,6 +373,20 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
     }
     constexpr float scale = 2147483648.f, invScale = 1.f / scale;
     auto* w = const_cast<int32_t*>(s);
+    if (hook) {
+        // The host stage works on a float block, so the whole buffer goes through intWork_.
+        if (intWork_.size() < n) {
+            intWork_.resize(n);
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            intWork_[i] = static_cast<float>(w[i]) * invScale;
+        }
+        processBlock(intWork_.data(), n, hook, ctx);
+        for (std::size_t i = 0; i < n; ++i) {
+            w[i] = NativeBmwDsp::clampInt<int32_t>(intWork_[i] * scale);
+        }
+        return s;
+    }
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
