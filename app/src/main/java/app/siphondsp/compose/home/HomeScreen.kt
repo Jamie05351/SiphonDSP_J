@@ -70,11 +70,12 @@ import kotlin.math.sin
  *   drawn at [ChainScale] of their design size with the six stretches of line between them all the
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
- * - The top screen, [TopMargin] from the top, lined up with the chain screen's left edge and
- *   stopping [ScreenRight] from the right, where Settings and More sit: the global stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the
- *   headroom and the L / R output meters, all at [TopContentScale].
- * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]): + and − round the
- *   level; down the right side, Settings and More as bare glyphs ([ScreenButton]).
+ * - The top screen, [TopMargin] from the top, the same width as the chain screen: the global
+ *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the headroom and the L / R
+ *   output meters, all at [TopContentScale]; then, past a dividing line, Settings and More as bare
+ *   glyphs ([ScreenButton]).
+ * - Down the faceplate's left side, on its own screen, the DSP master volume ([VolumeColumn]): +
+ *   and − round the level.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
@@ -131,13 +132,9 @@ fun HomeScreen(
             /** Records this element's bounds in the root under [key], for taps and the morph. */
             fun Modifier.tracked(key: Any) = onGloballyPositioned { bounds[key] = it.boundsInRoot() }
 
-            // The chain's geometry, in chain units, for the chain screen's actual width; the top row
-            // lines up with it.
-            val screenRight = maxWidth.value / k - ScreenRight
-            // The chain screen runs on past the top screen, to [ChainRight] from the edge.
+            // The chain's geometry, in chain units, for the chain screen's actual width; the top
+            // screen is the same width.
             val layout = ChainLayout((maxWidth.value / k - ChainRight - ScreenLeft) / ChainScale)
-            // Settings and More sit on the faceplate, centred in the strip right of the screens.
-            val buttonsCentre = screenRight + ScreenRight / 2
 
             Column(Modifier.fillMaxSize()) {
                 Box(
@@ -148,11 +145,7 @@ fun HomeScreen(
                 ) {
                     TopScreen(
                         engine, readout, meterLevels, g, onOpenGlobal,
-                        Modifier.offset(x = s.dp(ScreenLeft)).width(s.dp(screenRight - ScreenLeft)).fillMaxHeight(),
-                    )
-                    Column(
-                        Modifier.align(Alignment.CenterStart).offset(x = s.dp(buttonsCentre - ButtonSize / 2)),
-                        verticalArrangement = Arrangement.spacedBy(s.dp(ButtonGap)),
+                        Modifier.padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight)).fillMaxSize(),
                     ) {
                         ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
                         ScreenButton(
@@ -182,7 +175,7 @@ fun HomeScreen(
             }
             VolumeColumn(
                 engine.masterVolumeDb, engine.masterMuted, g, onVolumeStep, onToggleMute,
-                Modifier.align(Alignment.CenterStart).offset(x = s.dp((ScreenLeft - VolumeScreen) / 2)),
+                Modifier.align(Alignment.CenterStart).offset(x = s.dp((ScreenLeft - VolumePanelWidth) / 2)),
             )
             val chain = bounds[ChainKey]
             val tiles = HomeStage.entries.mapNotNull { bounds[it] }
@@ -193,7 +186,10 @@ fun HomeScreen(
     }
 }
 
-/** The top screen: its content drawn at [TopContentScale] so it fits the screen's height. */
+/**
+ * The top screen: its content drawn at [TopContentScale] so it fits the screen's height, then a
+ * dividing line and the [buttons] (Settings and More) stacked at the right-hand end.
+ */
 @Composable
 private fun TopScreen(
     engine: HomeEngineState,
@@ -202,12 +198,28 @@ private fun TopScreen(
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     modifier: Modifier,
+    buttons: @Composable () -> Unit,
 ) {
     val off = stringResource(R.string.home_chip_off)
     val s = LocalHomeScale.current
     Screen(s.dp(14f), modifier) {
-        CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-            TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
+                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
+                }
+            }
+            Box(
+                Modifier
+                    .padding(vertical = s.dp(DividerInset))
+                    .fillMaxHeight()
+                    .width(s.dp(2f))
+                    .background(HomePalette.PanelEdge),
+            )
+            Column(
+                Modifier.padding(horizontal = s.dp(ButtonInset)),
+                verticalArrangement = Arrangement.spacedBy(s.dp(ButtonGap)),
+            ) { buttons() }
         }
     }
 }
@@ -361,7 +373,7 @@ private fun ChainPanel(
 
 /** A dark rounded screen set into the faceplate, with its hairline edge. */
 @Composable
-private fun Screen(
+internal fun Screen(
     radius: Dp,
     modifier: Modifier,
     edge: Color = HomePalette.PanelEdge,
@@ -377,7 +389,7 @@ private fun Screen(
 }
 
 /**
- * Settings / More, on the faceplate right of the screens: just the glyph, in a [ButtonSize] touch
+ * Settings / More, at the top screen's right-hand end: just the glyph, in a [ButtonSize] touch
  * target. The label isn't shown, only announced.
  */
 @Composable
@@ -455,21 +467,26 @@ private fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.OUTPUT -> TileSpec(R.string.home_card_output, R.string.home_card_output_sub, DspColors.Output, TileArt.OUTPUT)
 }
 
-// The layout in design dp (Figma "Head unit · 8 · ON · Master volume"): the top screen's margin
-// and height at 1280 x 480, the screens' side margins (the volume column on the left, Settings and
-// More on the right), the chain's scale and the faceplate round it, and the buttons. The chain
-// screen is centred in the height left under the top screen.
-private const val TopMargin = 32f
-private const val TopHeight = 152f
+// The layout in design dp (Figma "Head unit · 8 · ON · Master volume", then the volume put on its
+// own smaller screen, the top screen run out to the chain screen's width and dropped further from
+// the top edge): the top screen's margin and height at 1280 x 480, the screens' side margins (the
+// volume panel on the left), the chain's scale and the faceplate round it, and the buttons. The
+// chain screen is centred in the height left under the top screen.
+private const val TopMargin = 48f
+private const val TopHeight = 136f
 private const val TopShare = 0.45f
 private const val ChainTopGap = 32f
 private const val BottomFacia = 32f
-private const val ScreenLeft = 176f
-private const val ScreenRight = 144f
-// The chain screen's right margin: the same facia as above and below it.
+// The screens' right margin: the same facia as between and below them.
 private const val ChainRight = 32f
+// The volume panel with that same facia either side of it.
+private const val ScreenLeft = VolumePanelWidth + 2 * ChainRight
 private const val ButtonSize = 58f
-private const val ButtonGap = 18f
+// The glyphs fill most of their touch targets, so these sit close to fit the top screen.
+private const val ButtonGap = 4f
+// Either side of Settings and More inside the top screen, and the dividing line's gap top and bottom.
+private const val ButtonInset = 20f
+private const val DividerInset = 20f
 private const val GlyphSize = 42f
 private const val GearTeeth = 8
 

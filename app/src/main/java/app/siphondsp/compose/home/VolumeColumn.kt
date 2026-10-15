@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -56,7 +57,8 @@ import kotlin.math.roundToInt
 
 /**
  * The DSP master volume, down the faceplate's left side (Figma "Head unit · 8 · ON · Master
- * volume"): + over a small screen with the level in dB, over −. The buttons are drawn like the
+ * volume"), on its own dark screen like the top and chain screens: + over the level in dB, over −,
+ * all at [VolumeScale]. The buttons are drawn like the
  * power button and OUT (dark disc, purple rim and glow, lit by [g]); holding one repeats. Tapping
  * the level toggles mute. [volumeDb] / [muted] are the saved values, which come back round through
  * the settings broadcast after every step, so this only ever shows what the engine has.
@@ -71,14 +73,19 @@ internal fun VolumeColumn(
     modifier: Modifier = Modifier,
 ) {
     val s = LocalHomeScale.current
-    Column(
-        modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(s.dp(VolumeGap)),
-    ) {
-        VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
-        VolumeReadout(volumeDb, muted, g, onToggleMute)
-        VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
+    Screen(s.dp(14f), modifier) {
+        CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * VolumeScale)) {
+            val v = LocalHomeScale.current
+            Column(
+                Modifier.padding(horizontal = v.dp(VolumePadX), vertical = v.dp(VolumePadY)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(v.dp(VolumeGap)),
+            ) {
+                VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
+                VolumeReadout(volumeDb, muted, g, onToggleMute)
+                VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
+            }
+        }
     }
 }
 
@@ -132,7 +139,7 @@ private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> U
 }
 
 /**
- * The level on its own small screen: "VOLUME", the dB in large type, and a bar along the
+ * The level in a cell like the top screen's: "VOLUME", the dB in large type, and a bar along the
  * −80..0 dB range. Muted, the number dims and the caption reads MUTED. Tapping toggles mute.
  */
 @Composable
@@ -149,7 +156,7 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
         Modifier
             .size(s.dp(VolumeScreen))
             .clip(shape)
-            .background(HomePalette.Panel)
+            .background(HomePalette.Cell)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
             .clickable(role = Role.Switch, onClickLabel = muteLabel, onClick = onToggleMute)
             .semantics { stateDescription = state }
@@ -213,10 +220,19 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
     }
 }
 
-// In design units (Figma frame 8): buttons the size between OUT and the power button, and the
-// small screen between them, with the same gap above and below it.
+// In design units (Figma frame 8), drawn at [VolumeScale]: buttons the size between OUT and the
+// power button, and the level cell between them, with the same gap above and below it.
 internal const val VolumeButtonSize = 72f
 internal const val VolumeScreen = 112f
 internal const val VolumeGap = 20f
+// Inside the panel's edge: more above and below, so the buttons' glow fades out before the edge.
+private const val VolumePadX = 12f
+private const val VolumePadY = 18f
+
+/** The volume column at this fraction of its design size. */
+internal const val VolumeScale = 0.75f
+
+/** The volume panel's width on the faceplate, in faceplate units. */
+internal const val VolumePanelWidth = (VolumeScreen + 2 * VolumePadX) * VolumeScale
 private const val RepeatDelayMs = 400L
 private const val RepeatEveryMs = 110L
