@@ -174,11 +174,14 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         })
 
         // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
-        // Never unregistered on purpose: it lives exactly as long as the process.
-        ContextCompat.registerReceiver(
-            this, MasterVolumeReceiver(), IntentFilter(MasterVolumeReceiver.ACTION),
-            ContextCompat.RECEIVER_EXPORTED,
-        )
+        // Never unregistered on purpose: it lives exactly as long as the process. Main process only,
+        // so a component moved to its own process later can't make one press step twice.
+        if (getProcessName() == packageName) {
+            ContextCompat.registerReceiver(
+                this, MasterVolumeReceiver(), IntentFilter(MasterVolumeReceiver.ACTION),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+        }
 
         try {
             if (isRoot() && isLegacyMode)
