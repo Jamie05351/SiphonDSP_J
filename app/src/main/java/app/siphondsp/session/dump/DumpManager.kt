@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
+import app.siphondsp.session.dump.data.AudioServiceDump
 import app.siphondsp.session.dump.data.ISessionInfoDump
 import app.siphondsp.session.dump.data.ISessionPolicyInfoDump
 import app.siphondsp.session.dump.provider.AudioFlingerServiceDumpProvider
@@ -61,7 +62,9 @@ class DumpManager constructor(val context: Context): KoinComponent {
             Timber.e(ex)
         }
 
-        if(!allowFallback || (dump != null && dump.sessions.isNotEmpty()))
+        // An AudioService dump that read every player's state and found none playing is a real
+        // answer; another method would list paused players' sessions as if they were playing.
+        if(!allowFallback || (dump != null && dump.sessions.isNotEmpty()) || (dump as? AudioServiceDump)?.nothingPlaying == true)
         {
             return dump
         }
