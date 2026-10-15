@@ -51,6 +51,8 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         if(matches.count() <= 0)
             matches = playbackConfRegex29.findAll(dump)
 
+        val nothingPlaying = nothingPlaying(matches.map { it.value }.toList())
+
         // Note: API 29 & 30 lack a session id
         matches.forEach next@ {
             try {
@@ -114,7 +116,7 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         }
 
         Timber.d("Dump processed")
-        return AudioServiceDump(sessions)
+        return AudioServiceDump(sessions, nothingPlaying)
     }
 
     override fun dumpString(context: Context): String {
@@ -133,6 +135,17 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
     companion object {
         const val TARGET_SERVICE = "audio"
         private val PLAYER_STATE_REGEX = """(?:--\s*)?state:\s*([A-Za-z_]+)""".toRegex(RegexOption.IGNORE_CASE)
+
+        internal fun hasPlayerState(line: String): Boolean = PLAYER_STATE_REGEX.containsMatchIn(line)
+
+        /**
+         * Whether these playback configurations show that nothing is playing: at least one has a
+         * readable state and none is active. A paused player (Spotify left paused, for one) keeps
+         * its session open in AudioPolicyService, so falling back to that dump on an empty result
+         * would count it as playing and flip the processor between idle and active.
+         */
+        internal fun nothingPlaying(configurations: List<String>): Boolean =
+            configurations.any(::hasPlayerState) && configurations.none(::isPlaybackConfigurationActive)
 
         /**
          * AudioPlaybackConfiguration.isActive() is true only for PLAYER_STATE_STARTED. Mirror

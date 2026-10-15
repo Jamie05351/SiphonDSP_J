@@ -6,6 +6,33 @@ import org.junit.Test
 
 class AudioServiceDumpProviderPlaybackStateTest {
 
+    @Test fun pausedPlayersMeanNothingPlaying() {
+        assertTrue(
+            AudioServiceDumpProvider.nothingPlaying(
+                listOf(
+                    "AudioPlaybackConfiguration piid:1 u/pid:10473/28335 state:paused usage=USAGE_MEDIA content=CONTENT_TYPE_MUSIC sessionId:6057",
+                    "AudioPlaybackConfiguration piid:2 u/pid:1000/3189 state:idle usage=USAGE_ASSISTANCE_SONIFICATION content=CONTENT_TYPE_SONIFICATION sessionId:9",
+                )
+            )
+        )
+    }
+
+    @Test fun aStartedPlayerMeansSomethingPlaying() {
+        assertFalse(
+            AudioServiceDumpProvider.nothingPlaying(
+                listOf(
+                    "AudioPlaybackConfiguration piid:1 u/pid:10473/28335 state:paused usage=USAGE_MEDIA content=CONTENT_TYPE_MUSIC sessionId:6057",
+                    "AudioPlaybackConfiguration piid:2 u/pid:10514/10014 state:started usage=USAGE_MEDIA content=CONTENT_TYPE_MUSIC sessionId:6001",
+                )
+            )
+        )
+    }
+
+    @Test fun noReadableStateIsNotProofOfNothingPlaying() {
+        assertFalse(AudioServiceDumpProvider.nothingPlaying(emptyList()))
+        assertFalse(AudioServiceDumpProvider.nothingPlaying(listOf("ID:1 u/pid:1000/2000 usage=USAGE_MEDIA content=CONTENT_TYPE_MUSIC")))
+    }
+
     @Test fun startedPlayerIsActive() {
         assertTrue(
             AudioServiceDumpProvider.isPlaybackConfigurationActive(
