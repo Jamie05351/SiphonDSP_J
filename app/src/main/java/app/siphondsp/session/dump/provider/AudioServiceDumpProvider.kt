@@ -136,12 +136,6 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         const val TARGET_SERVICE = "audio"
         private val PLAYER_STATE_REGEX = """(?:--\s*)?state:\s*([A-Za-z_]+)""".toRegex(RegexOption.IGNORE_CASE)
 
-        /**
-         * AudioPlaybackConfiguration.isActive() is true only for PLAYER_STATE_STARTED. Mirror
-         * that semantics when AudioService exposes a state token in its text dump. A missing
-         * token means an older/OEM format we cannot classify, so preserve the provider's legacy
-         * behaviour rather than dropping a potentially real session.
-         */
         internal fun hasPlayerState(line: String): Boolean = PLAYER_STATE_REGEX.containsMatchIn(line)
 
         /**
@@ -153,6 +147,12 @@ class AudioServiceDumpProvider : ISessionDumpProvider {
         internal fun nothingPlaying(configurations: List<String>): Boolean =
             configurations.any(::hasPlayerState) && configurations.none(::isPlaybackConfigurationActive)
 
+        /**
+         * AudioPlaybackConfiguration.isActive() is true only for PLAYER_STATE_STARTED. Mirror
+         * that semantics when AudioService exposes a state token in its text dump. A missing
+         * token means an older/OEM format we cannot classify, so preserve the provider's legacy
+         * behaviour rather than dropping a potentially real session.
+         */
         internal fun isPlaybackConfigurationActive(line: String): Boolean {
             val state = PLAYER_STATE_REGEX.find(line)?.groupValues?.getOrNull(1) ?: return true
             return state.equals("started", ignoreCase = true)
