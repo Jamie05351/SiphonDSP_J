@@ -17,11 +17,18 @@ import timber.log.Timber
  *  - `step`  (int)    +1 / -1 moves the volume by [MasterVolume.STEP_DB] per step
  *  - `db`    (float)  sets it outright, e.g. -30
  *  - `mute`  (string) `toggle`, `on` or `off`
+ *
+ * Two copies listen: the manifest one, and a [live] one [MainApplication] registers at runtime for
+ * as long as the app's process runs. Some head-unit firmware (KSW) never delivers broadcasts to
+ * manifest receivers, even with the app open; the live one still gets them. When both get the
+ * same broadcast, the manifest copy stands aside so a step is applied once.
  */
-class MasterVolumeReceiver : BroadcastReceiver() {
+class MasterVolumeReceiver(private val live: Boolean = false) : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         context ?: return
         intent ?: return
+        if (!live && liveRegistered) return
+        Timber.i("MasterVolumeReceiver (${if (live) "live" else "manifest"}): ${intent.extras?.keySet()}")
         val state = when {
             intent.hasExtra(EXTRA_STEP) -> MasterVolume.step(context, readInt(intent, EXTRA_STEP))
             intent.hasExtra(EXTRA_DB) -> MasterVolume.set(context, parseDb(intent.extras?.get(EXTRA_DB)) ?: run {
@@ -53,6 +60,10 @@ class MasterVolumeReceiver : BroadcastReceiver() {
         intent.extras?.get(key)?.toString()?.trim()?.toFloatOrNull()?.toInt() ?: 0
 
     companion object {
+        /** Whether the [live] receiver is registered in this process. */
+        @Volatile
+        var liveRegistered = false
+
         /** A finite dB from a broadcast extra (number or string), else null -- NaN and infinity included. */
         internal fun parseDb(raw: Any?): Float? = raw?.toString()?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }
 
