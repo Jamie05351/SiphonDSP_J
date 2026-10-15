@@ -3,8 +3,10 @@ package app.siphondsp.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import app.siphondsp.model.MasterVolume
 import timber.log.Timber
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The DSP master volume, driven from outside the app -- the steering-wheel +/- remapped in KSW
@@ -20,14 +22,22 @@ import timber.log.Timber
  *
  * Two copies listen: the manifest one, and a [live] one [MainApplication] registers at runtime for
  * as long as the app's process runs. Some head-unit firmware (KSW) never delivers broadcasts to
- * manifest receivers, even with the app open; the live one still gets them. When both get the
- * same broadcast, the manifest copy stands aside so a step is applied once.
+ * manifest receivers, even with the app open; the live one still gets them.
+ *
+ * When both get the same broadcast, the live one gets it first (its filter has a higher priority)
+ * and the manifest one stands aside, so a step is applied once. They're paired by count, not by
+ * whether the live one exists: a broadcast that cold-starts the process reaches only the manifest
+ * copy, and must still be applied.
  */
 class MasterVolumeReceiver(private val live: Boolean = false) : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         context ?: return
         intent ?: return
-        if (!live && liveRegistered) return
+        if (live) {
+            liveUnmatched.incrementAndGet()
+        } else if (liveUnmatched.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) {
+            return
+        }
         Timber.i("MasterVolumeReceiver (${if (live) "live" else "manifest"}): ${intent.extras?.keySet()}")
         val state = when {
             intent.hasExtra(EXTRA_STEP) -> MasterVolume.step(context, readInt(intent, EXTRA_STEP))
@@ -60,9 +70,11 @@ class MasterVolumeReceiver(private val live: Boolean = false) : BroadcastReceive
         intent.extras?.get(key)?.toString()?.trim()?.toFloatOrNull()?.toInt() ?: 0
 
     companion object {
-        /** Whether the [live] receiver is registered in this process. */
-        @Volatile
-        var liveRegistered = false
+        /** Broadcasts the [live] copy has applied that the manifest copy hasn't seen yet. */
+        private val liveUnmatched = AtomicInteger(0)
+
+        /** The live copy's filter: ahead of the manifest copy (priority 0) for the same broadcast. */
+        fun liveFilter() = IntentFilter(ACTION).apply { priority = 1 }
 
         /** A finite dB from a broadcast extra (number or string), else null -- NaN and infinity included. */
         internal fun parseDb(raw: Any?): Float? = raw?.toString()?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }

@@ -175,10 +175,9 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
         // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
         ContextCompat.registerReceiver(
-            this, MasterVolumeReceiver(live = true), IntentFilter(MasterVolumeReceiver.ACTION),
+            this, MasterVolumeReceiver(live = true), MasterVolumeReceiver.liveFilter(),
             ContextCompat.RECEIVER_EXPORTED,
         )
-        MasterVolumeReceiver.liveRegistered = true
 
         try {
             if (isRoot() && isLegacyMode)
