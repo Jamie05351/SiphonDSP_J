@@ -82,7 +82,7 @@ class DumpManager constructor(val context: Context): KoinComponent {
                         dump = null
                     }
                 }
-                if(dump != null && dump.sessions.isNotEmpty())
+                if(dump != null && (dump.sessions.isNotEmpty() || (dump as? AudioServiceDump)?.nothingPlaying == true))
                 {
                     return dump
                 }
