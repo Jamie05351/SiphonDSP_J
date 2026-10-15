@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.StrictMode
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import com.pluto.Pluto
 import com.pluto.plugins.exceptions.PlutoExceptions
 import com.pluto.plugins.exceptions.PlutoExceptionsPlugin
@@ -26,6 +27,7 @@ import app.siphondsp.flavor.UpdateManager
 import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
+import app.siphondsp.receiver.MasterVolumeReceiver
 import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.session.dump.DumpManager
 import app.siphondsp.session.root.RootSessionDatabase
@@ -170,6 +172,16 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
             addAction(Constants.ACTION_DISCARD_AUTHORIZATION)
         })
+
+        // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
+        // Never unregistered on purpose: it lives exactly as long as the process. Main process only,
+        // so a component moved to its own process later can't make one press step twice.
+        if (getProcessName() == packageName) {
+            ContextCompat.registerReceiver(
+                this, MasterVolumeReceiver(), IntentFilter(MasterVolumeReceiver.ACTION),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+        }
 
         try {
             if (isRoot() && isLegacyMode)

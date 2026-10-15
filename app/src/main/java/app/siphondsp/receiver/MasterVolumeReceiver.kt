@@ -17,11 +17,17 @@ import timber.log.Timber
  *  - `step`  (int)    +1 / -1 moves the volume by [MasterVolume.STEP_DB] per step
  *  - `db`    (float)  sets it outright, e.g. -30
  *  - `mute`  (string) `toggle`, `on` or `off`
+ *
+ * Registered at runtime by [app.siphondsp.MainApplication] for as long as the app's process runs,
+ * not in the manifest: the KSW head unit's firmware never delivered this broadcast to a manifest
+ * receiver, even with the app open. The DSP service runs in this same process, so whenever the DSP
+ * is processing audio this is listening; a press while the app isn't running at all does nothing.
  */
 class MasterVolumeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         context ?: return
         intent ?: return
+        Timber.i("MasterVolumeReceiver: ${intent.extras?.keySet()}")
         val state = when {
             intent.hasExtra(EXTRA_STEP) -> MasterVolume.step(context, readInt(intent, EXTRA_STEP))
             intent.hasExtra(EXTRA_DB) -> MasterVolume.set(context, parseDb(intent.extras?.get(EXTRA_DB)) ?: run {
