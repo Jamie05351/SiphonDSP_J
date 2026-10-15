@@ -3,8 +3,6 @@ package app.siphondsp.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.SystemClock
 import app.siphondsp.model.MasterVolume
 import timber.log.Timber
 
@@ -20,22 +18,16 @@ import timber.log.Timber
  *  - `db`    (float)  sets it outright, e.g. -30
  *  - `mute`  (string) `toggle`, `on` or `off`
  *
- * Two copies listen: the manifest one, and a [live] one [MainApplication] registers at runtime for
- * as long as the app's process runs. Some head-unit firmware (KSW) never delivers broadcasts to
- * manifest receivers, even with the app open; the live one still gets them.
- *
- * When both get the same broadcast, the live one gets it first (its filter has a higher priority)
- * and the manifest one stands aside, so a step is applied once. Each live receipt pairs with at
- * most one manifest receipt, and only within [PairWindowMs]: a broadcast that cold-starts the
- * process reaches only the manifest copy and must still be applied, and on firmware that never
- * delivers to the manifest copy, old live receipts expire rather than swallowing later presses.
+ * Registered at runtime by [app.siphondsp.MainApplication] for as long as the app's process runs,
+ * not in the manifest: the KSW head unit's firmware never delivered this broadcast to a manifest
+ * receiver, even with the app open. The DSP service runs in this same process, so whenever the DSP
+ * is processing audio this is listening; a press while the app isn't running at all does nothing.
  */
-class MasterVolumeReceiver(private val live: Boolean = false) : BroadcastReceiver() {
+class MasterVolumeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         context ?: return
         intent ?: return
-        if (live) liveApplied() else if (pairedWithLive()) return
-        Timber.i("MasterVolumeReceiver (${if (live) "live" else "manifest"}): ${intent.extras?.keySet()}")
+        Timber.i("MasterVolumeReceiver: ${intent.extras?.keySet()}")
         val state = when {
             intent.hasExtra(EXTRA_STEP) -> MasterVolume.step(context, readInt(intent, EXTRA_STEP))
             intent.hasExtra(EXTRA_DB) -> MasterVolume.set(context, parseDb(intent.extras?.get(EXTRA_DB)) ?: run {
@@ -67,32 +59,6 @@ class MasterVolumeReceiver(private val live: Boolean = false) : BroadcastReceive
         intent.extras?.get(key)?.toString()?.trim()?.toFloatOrNull()?.toInt() ?: 0
 
     companion object {
-        /** When the [live] copy applied broadcasts the manifest copy hasn't seen yet, oldest first. */
-        private val liveUnmatched = ArrayDeque<Long>()
-
-        /** How long a live receipt waits for its manifest twin, which comes within milliseconds. */
-        private const val PairWindowMs = 500L
-
-        @Synchronized
-        private fun liveApplied() {
-            dropExpired(SystemClock.elapsedRealtime())
-            liveUnmatched.addLast(SystemClock.elapsedRealtime())
-        }
-
-        /** Whether the live copy already applied this broadcast; if so, uses up that receipt. */
-        @Synchronized
-        private fun pairedWithLive(): Boolean {
-            dropExpired(SystemClock.elapsedRealtime())
-            return liveUnmatched.removeFirstOrNull() != null
-        }
-
-        private fun dropExpired(now: Long) {
-            while (liveUnmatched.firstOrNull()?.let { now - it > PairWindowMs } == true) liveUnmatched.removeFirst()
-        }
-
-        /** The live copy's filter: ahead of the manifest copy (priority 0) for the same broadcast. */
-        fun liveFilter() = IntentFilter(ACTION).apply { priority = 1 }
-
         /** A finite dB from a broadcast extra (number or string), else null -- NaN and infinity included. */
         internal fun parseDb(raw: Any?): Float? = raw?.toString()?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }
 

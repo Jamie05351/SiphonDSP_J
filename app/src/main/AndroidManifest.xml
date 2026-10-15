@@ -314,16 +314,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- DSP master volume from Tasker (steering-wheel +/- via KSW Toolkit). No permission:
-             Tasker cannot hold one, and a sender can only move the volume within -80..0 dB. -->
-        <receiver
-            android:name=".receiver.MasterVolumeReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="app.siphondsp.action.MASTER_VOLUME" />
-            </intent-filter>
-        </receiver>
-
         <!-- Providers -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
