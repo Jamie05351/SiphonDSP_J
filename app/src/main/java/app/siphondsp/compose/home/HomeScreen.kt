@@ -71,11 +71,12 @@ import kotlin.math.sin
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
  * - The top screen, [TopMargin] from the top, the same width as the chain screen: the global
- *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), then the headroom and the L / R
- *   output meters, all at [TopContentScale]; then, past a dividing line, Settings and More as bare
- *   glyphs ([ScreenButton]).
- * - Down the faceplate's left side, on its own screen, the DSP master volume ([VolumeColumn]): +
- *   and − round the level.
+ *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), each in its menu's colour, then the
+ *   live spectrum ([SpectrumStrip]), then the headroom and the L / R output meters, all at
+ *   [TopContentScale]; then, past a dividing line, Settings and More as bare glyphs ([ScreenButton]).
+ * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]) spanning the top
+ *   screen's top edge to the chain screen's bottom edge: the level on its own small screen in the
+ *   middle, the + and − buttons each centred in the gap above and below it.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
@@ -144,7 +145,7 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, meterLevels, g, onOpenGlobal,
+                        engine, readout, meterLevels, g, onOpenGlobal, animateTiles,
                         Modifier.padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight)).fillMaxSize(),
                     ) {
                         ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
@@ -173,9 +174,17 @@ fun HomeScreen(
                     )
                 }
             }
+            // The volume column runs from the top screen's top edge to the chain screen's bottom
+            // edge, which sits centred in the height left under the top screen (as laid out above).
+            val volumeTop = TopMargin * k
+            val chainBoxTop = volumeTop + TopHeight * k + spare * TopShare + ChainTopGap * k
+            val chainBoxBottom = maxHeight.value - BottomFacia * k
+            val chainBottom = (chainBoxTop + chainBoxBottom + ChainHeight * ChainScale * k) / 2
             VolumeColumn(
                 engine.masterVolumeDb, engine.masterMuted, g, onVolumeStep, onToggleMute,
-                Modifier.align(Alignment.CenterStart).offset(x = s.dp((ScreenLeft - VolumePanelWidth) / 2)),
+                Modifier
+                    .offset(x = s.dp((ScreenLeft - VolumeWidth) / 2), y = volumeTop.dp)
+                    .height((chainBottom - volumeTop).coerceAtLeast(0f).dp),
             )
             val chain = bounds[ChainKey]
             val tiles = HomeStage.entries.mapNotNull { bounds[it] }
@@ -197,6 +206,7 @@ private fun TopScreen(
     meterLevels: () -> LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
+    live: Boolean,
     modifier: Modifier,
     buttons: @Composable () -> Unit,
 ) {
@@ -206,7 +216,7 @@ private fun TopScreen(
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
+                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off, live)
                 }
             }
             Box(
@@ -236,6 +246,7 @@ private fun TopScreenContent(
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     off: String,
+    live: Boolean,
 ) {
     val s = LocalHomeScale.current
     Row(Modifier.fillMaxSize().padding(horizontal = s.dp(14f)), verticalAlignment = Alignment.CenterVertically) {
@@ -256,7 +267,8 @@ private fun TopScreenContent(
                 Cell(
                     GlobalStage.LIMITER, stringResource(R.string.home_chip_limiter),
                     engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off,
-                    HomePalette.LimiterChip, engine.limiterDb != null, g, onOpenGlobal,
+                    // The limiter lives on the Output screen, so it takes Output's colour.
+                    DspColors.Output, engine.limiterDb != null, g, onOpenGlobal,
                 )
                 Cell(
                     GlobalStage.ALLPASS, stringResource(R.string.home_chip_allpass),
@@ -270,7 +282,9 @@ private fun TopScreenContent(
             }
         }
         Spacer(Modifier.width(s.dp(MeterGap)))
-        OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
+        SpectrumStrip(meterLevels, g, live, Modifier.weight(1f).fillMaxHeight())
+        Spacer(Modifier.width(s.dp(MeterGap)))
+        OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(MeterShare).fillMaxHeight())
     }
 }
 
@@ -479,8 +493,8 @@ private const val ChainTopGap = 32f
 private const val BottomFacia = 32f
 // The screens' right margin: the same facia as between and below them.
 private const val ChainRight = 32f
-// The volume panel with that same facia either side of it.
-private const val ScreenLeft = VolumePanelWidth + 2 * ChainRight
+// The volume column with that same facia either side of it.
+private const val ScreenLeft = VolumeWidth + 2 * ChainRight
 private const val ButtonSize = 58f
 // The glyphs fill most of their touch targets, so these sit close to fit the top screen.
 private const val ButtonGap = 4f
@@ -507,6 +521,8 @@ private const val CellGap = 10f
 private const val TileInset = 40f
 // Between the cells and the output meter, which takes the rest of the top screen.
 private const val MeterGap = 40f
+// The output meters' share of the top screen's width next to the spectrum's 1.
+private const val MeterShare = 2f
 private const val GlowBands = 20
 private const val MoreKey = "more"
 private const val ChainKey = "chain"

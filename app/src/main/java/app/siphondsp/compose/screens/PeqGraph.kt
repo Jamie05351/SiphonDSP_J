@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -56,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.BiquadCascade
@@ -452,10 +454,7 @@ private fun rememberPeqSurfacePaints(): PeqSurfacePaints {
             unifiedGridPaint.alpha = 90
             unifiedZeroPaint.color = AndroidColor.rgb(132, 136, 146)
             unifiedZeroPaint.alpha = 255
-            // §7: push the live spectrum further into the background — greyer + fainter.
-            unifiedSpectrumStrokePaint.color =
-                ColorUtils.blendARGB(spectrumAccentColor, AndroidColor.rgb(150, 150, 150), 0.55f)
-            unifiedSpectrumStrokePaint.alpha = 110
+            // The pre-DSP reference line stays faint, behind the live spectrum bars.
             dryStrokePaint.alpha = 120
 
             // The summed-response curve: a cool white (the old warm yellow read as the Mid band),
@@ -489,7 +488,7 @@ private fun renderPeqGraph(
     canvasW: Int,
     canvasH: Int,
     drawSpectrum: Boolean,
-    @Suppress("UNUSED_PARAMETER") spectrumFrame: Int,
+    spectrumFrame: Int,
 ) {
     val m = ctx.model
     val w = canvasW.coerceAtLeast(1)
@@ -510,7 +509,7 @@ private fun renderPeqGraph(
     }
 
     nc.drawBitmap(bg, 0f, 0f, null)
-    if (drawSpectrum && ctx.mode == PeqGraphMode.MAGNITUDE) drawUnifiedSpectrum(nc, ctx)
+    if (drawSpectrum && ctx.mode == PeqGraphMode.MAGNITUDE) drawUnifiedSpectrum(nc, ctx, spectrumFrame)
     nc.drawBitmap(fg, 0f, 0f, null)
     if (ctx.showGainMeters && ctx.mode == PeqGraphMode.MAGNITUDE) drawGainMeters(nc, ctx)
 }
@@ -1023,118 +1022,41 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     }
 }
 
-// --- live spectrum trace — 1:1 with drawUnifiedSpectrum / drawSpectrumDelta / fillDeltaSegment -
+// --- live spectrum: bars in the front page's style, with the faint pre-DSP reference line ----------
 
-// §7: EMA weight toward the raw magnitude, and peak-hold decay, both per ~33 ms frame.
-private const val SPECTRUM_EMA_ALPHA = 0.35f
-private const val SPECTRUM_PEAK_DECAY_DB_PER_FRAME = 0.6f // ≈ 12 dB/s at the ~50 ms tick
+// The live spectrum bars' opacity: background to the curves, not competing with them.
+private const val SPECTRUM_BAR_ALPHA = 110
 
-private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext) {
+/**
+ * The live spectrum behind the curves: the processed output as third-octave bars
+ * ([GraphSpectrumBars], the style the front page and the crossover graph share), stepped once per
+ * [frame], and the faint pre-DSP trace over them as the reference for what the DSP changed.
+ */
+private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext, frame: Int) {
     val g = ctx.geometry
     val p = ctx.paints
     val m = ctx.model
-    m.spectrumStrokePath.rewind()
-    m.spectrumFillPath.rewind()
+    m.spectrumBars.draw(
+        nc, frame, g.top, g.bottom, p.spectrumAccentColor, HomePalette.MeterHot.toArgb(), SPECTRUM_BAR_ALPHA, ctx.density,
+        minHz = PeqGraphMath.MIN_FREQUENCY,
+        maxHz = ctx.maxFrequency,
+        xForHz = { hz -> g.xForFrequency(hz) },
+        yForDb = { db ->
+            g.yForGain(PeqGraphMath.spectrumDbToGraphGain(db, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB, g.minGain, g.maxGain))
+        },
+    )
     m.dryStrokePath.rewind()
-    m.spectrumPeakPath.rewind()
-    m.spectrumFillPath.moveTo(g.left, g.bottom)
-    // Whether the dry (pre-DSP) reference trace carries real data this frame. When it doesn't
-    // (no feed wired, or the analyzer hasn't primed yet) every dry sample sits on the floor, so
-    // the whole band reads as one "boost" segment and drawSpectrumDelta floods the graph with the
-    // green boost fill. Gate the delta shading on this so a missing dry feed stays invisible
-    // instead of painting a solid green mass behind the curves.
-    var dryHasSignal = false
     for (i in 0..SPECTRUM_STEPS) {
         val fraction = i / SPECTRUM_STEPS.toFloat()
         val freq = PeqGraphMath.fractionToFrequency(fraction, PeqGraphMath.MIN_FREQUENCY, ctx.maxFrequency)
-        // §7: exponential moving average across frames removes the raw per-frame jitter.
-        val rawWetDb = SpectrumEngine.magnitudeDbAt(freq)
-        val wetDb = if (m.spectrumPrimed) {
-            m.spectrumDbDisplayed[i] + SPECTRUM_EMA_ALPHA * (rawWetDb - m.spectrumDbDisplayed[i])
-        } else {
-            rawWetDb
-        }
-        m.spectrumDbDisplayed[i] = wetDb
-        // §7: peak-hold — jump up instantly, decay slowly.
-        m.spectrumDbPeak[i] = if (wetDb >= m.spectrumDbPeak[i]) {
-            wetDb
-        } else {
-            maxOf(wetDb, m.spectrumDbPeak[i] - SPECTRUM_PEAK_DECAY_DB_PER_FRAME)
-        }
-
-        val wetGain = PeqGraphMath.spectrumDbToGraphGain(wetDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB, g.minGain, g.maxGain)
-        val dryDb = SpectrumEngine.dryMagnitudeDbAt(freq)
-        if (dryDb > SpectrumEngine.FLOOR_DB + 1f) dryHasSignal = true
         val dryGain = PeqGraphMath.spectrumDbToGraphGain(
-            dryDb, SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB, g.minGain, g.maxGain,
+            SpectrumEngine.dryMagnitudeDbAt(freq), SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB, g.minGain, g.maxGain,
         )
-        val peakGain = PeqGraphMath.spectrumDbToGraphGain(m.spectrumDbPeak[i], SpectrumEngine.FLOOR_DB, SpectrumEngine.CEILING_DB, g.minGain, g.maxGain)
         val x = g.left + fraction * (g.right - g.left)
-        val wetY = g.yForGain(wetGain)
-        val dryY = g.yForGain(dryGain)
-        val peakY = g.yForGain(peakGain)
-        m.spectrumXs[i] = x
-        m.spectrumWetYs[i] = wetY
-        m.spectrumDryYs[i] = dryY
-        if (i == 0) {
-            m.spectrumStrokePath.moveTo(x, wetY)
-            m.dryStrokePath.moveTo(x, dryY)
-            m.spectrumPeakPath.moveTo(x, peakY)
-        } else {
-            m.spectrumStrokePath.lineTo(x, wetY)
-            m.dryStrokePath.lineTo(x, dryY)
-            m.spectrumPeakPath.lineTo(x, peakY)
-        }
-        m.spectrumFillPath.lineTo(x, wetY)
+        val y = g.yForGain(dryGain)
+        if (i == 0) m.dryStrokePath.moveTo(x, y) else m.dryStrokePath.lineTo(x, y)
     }
-    m.spectrumPrimed = true
-    m.spectrumFillPath.lineTo(g.right, g.bottom)
-    m.spectrumFillPath.close()
-    if (dryHasSignal) drawSpectrumDelta(nc, ctx, SPECTRUM_STEPS + 1)
-    if (g.top != p.spectrumFillShaderTop || g.bottom != p.spectrumFillShaderBottom) {
-        // §7: fainter than before (was 150) so it stays ambient context, not a competing element.
-        p.unifiedSpectrumFillPaint.shader = LinearGradient(
-            0f, g.top, 0f, g.bottom,
-            ColorUtils.setAlphaComponent(
-                ColorUtils.blendARGB(p.spectrumAccentColor, AndroidColor.rgb(150, 150, 150), 0.55f), 80,
-            ),
-            ColorUtils.setAlphaComponent(p.spectrumAccentColor, 0),
-            Shader.TileMode.CLAMP,
-        )
-        p.spectrumFillShaderTop = g.top
-        p.spectrumFillShaderBottom = g.bottom
-    }
-    nc.drawPath(m.spectrumFillPath, p.unifiedSpectrumFillPaint)
     nc.drawPath(m.dryStrokePath, p.dryStrokePaint)
-    nc.drawPath(m.spectrumStrokePath, p.unifiedSpectrumStrokePaint)
-    nc.drawPath(m.spectrumPeakPath, ctx.glass.spectrumPeakPaint)
-}
-
-private fun drawSpectrumDelta(nc: Canvas, ctx: PeqDrawContext, pointCount: Int) {
-    if (pointCount < 2) return
-    val m = ctx.model
-    var segmentStart = 0
-    var segmentBoost = m.spectrumWetYs[0] <= m.spectrumDryYs[0]
-    for (i in 1 until pointCount) {
-        val isBoost = m.spectrumWetYs[i] <= m.spectrumDryYs[i]
-        if (isBoost != segmentBoost) {
-            fillDeltaSegment(nc, ctx, segmentStart, i, segmentBoost)
-            segmentStart = i
-            segmentBoost = isBoost
-        }
-    }
-    fillDeltaSegment(nc, ctx, segmentStart, pointCount - 1, segmentBoost)
-}
-
-private fun fillDeltaSegment(nc: Canvas, ctx: PeqDrawContext, startIndex: Int, endIndex: Int, boost: Boolean) {
-    if (endIndex <= startIndex) return
-    val m = ctx.model
-    m.deltaFillPath.rewind()
-    m.deltaFillPath.moveTo(m.spectrumXs[startIndex], m.spectrumWetYs[startIndex])
-    for (i in startIndex + 1..endIndex) m.deltaFillPath.lineTo(m.spectrumXs[i], m.spectrumWetYs[i])
-    for (i in endIndex downTo startIndex) m.deltaFillPath.lineTo(m.spectrumXs[i], m.spectrumDryYs[i])
-    m.deltaFillPath.close()
-    nc.drawPath(m.deltaFillPath, if (boost) ctx.paints.spectrumBoostFillPaint else ctx.paints.spectrumCutFillPaint)
 }
 
 // --- nodes (focused bank) / tilt handles / gain meters --------------------------------------------
@@ -1503,21 +1425,8 @@ private class PeqResponseModel {
     val fillBottomY = FloatArray(SYSTEM_POINT_COUNT)
     val scratchPath = Path()
 
-    val spectrumXs = FloatArray(SPECTRUM_STEPS + 1)
-    val spectrumDryYs = FloatArray(SPECTRUM_STEPS + 1)
-    val spectrumWetYs = FloatArray(SPECTRUM_STEPS + 1)
-    val spectrumStrokePath = Path()
-    val spectrumFillPath = Path()
     val dryStrokePath = Path()
-    val deltaFillPath = Path()
-
-    // §7: cross-frame smoothing state for the spectrum overlay. dbDisplayed EMA-tracks the raw
-    // magnitude; dbPeak holds the max and decays slowly. `spectrumPrimed` guards the first frame
-    // so the EMA doesn't ramp up from the floor.
-    val spectrumDbDisplayed = FloatArray(SPECTRUM_STEPS + 1) { SpectrumEngine.FLOOR_DB }
-    val spectrumDbPeak = FloatArray(SPECTRUM_STEPS + 1) { SpectrumEngine.FLOOR_DB }
-    val spectrumPeakPath = Path()
-    var spectrumPrimed = false
+    val spectrumBars = GraphSpectrumBars()
 
     // Cached static layers so the per-frame spectrum tick doesn't re-run the grid, the curves,
     // the real-blur sum glow and the glass nodes (the blur passes are what pegs a software-GL
@@ -1651,12 +1560,6 @@ private class PeqGlassPaints(density: Float) {
         color = AndroidColor.argb(150, 255, 255, 255)
     }
 
-    // §7: peak-hold marker line above the smoothed spectrum trace.
-    val spectrumPeakPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * density
-        color = AndroidColor.argb(140, 170, 176, 186)
-    }
 
     // §5: corner vignette; shader rebuilt when the plot rect changes.
     val vignettePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }

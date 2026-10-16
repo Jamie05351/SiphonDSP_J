@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwResponseCalculator
@@ -36,7 +37,6 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ThreeWayCrossover
 import kotlinx.coroutines.delay
 import kotlin.math.log10
-import kotlin.math.pow
 
 /**
  * Compose port of [app.siphondsp.fragment.NativeBmwDspResponseView] -- the read-only "unified
@@ -67,9 +67,9 @@ import kotlin.math.pow
  *    is meaningless);
  *  - §4 grid hierarchy: the 0 line is brightest, the 100 Hz / 1 k / 10 k octave verticals are
  *    mid, every other gridline recedes.
- * §7 (spectrum EMA / peak-hold) is deliberately skipped -- this graph's spectrum is already a
- * subtle 28/105-alpha wash, drawn behind the curves in only two of the four modes, so it never
- * reads as a competing element the way PEQ's foreground spectrum did.
+ * The live spectrum is third-octave bars ([GraphSpectrumBars], the front page's style, shared with
+ * the PEQ graph) at [SPECTRUM_ALPHA], drawn behind the curves in only two of the four modes, so it
+ * never reads as a competing element.
  *
  * 2026-10-01 restyle to match the redesigned PEQ graph: the whole graph sits on [graphPanel]; in
  * the magnitude modes the Low / Mid / High branches are soft washes under their curves instead of
@@ -93,7 +93,8 @@ private const val LEGEND_TEXT_SP = 14f
 private const val MARKER_TEXT_SP = 13f
 private const val POINT_COUNT = 192
 private const val SAMPLE_RATE = 48_000.0
-private const val SPECTRUM_POINTS = 180
+// The live spectrum bars' opacity: behind the curves, not competing with them.
+private const val SPECTRUM_ALPHA = 110
 private const val SPECTRUM_TICK_MS = 33L
 
 private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
@@ -240,21 +241,8 @@ fun CrossoverResponseGraph(
             color = sumArgb
         }
     }
-    val spectrumFillPaint = remember(density, gridArgb) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-            alpha = 28
-            color = gridArgb
-        }
-    }
-    val spectrumPaint = remember(density, gridArgb) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1.1f * density
-            alpha = 105
-            color = gridArgb
-        }
-    }
+    val spectrumBars = remember { GraphSpectrumBars() }
+    val spectrumSignalArgb = BmwTheme.colors.sliderHeadroom.toArgb()
     val markerPaint = remember(density, gridArgb) {
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -346,7 +334,18 @@ fun CrossoverResponseGraph(
             )
             drawCrossoverMarkers(nc, systemValues, left, right, top, bottom, density, markerPaint, markerLabelPaint)
             if (showSpectrum && mode.showsSpectrum()) {
-                drawSpectrum(nc, left, right, top, bottom, frame, spectrumFillPaint, spectrumPaint)
+                spectrumBars.draw(
+                    nc, frame, top, bottom, spectrumSignalArgb, HomePalette.MeterHot.toArgb(), SPECTRUM_ALPHA, density,
+                    minHz = 20.0,
+                    maxHz = 20000.0,
+                    xForHz = { hz -> left + (log10(hz / 20.0) / 3.0).toFloat() * (right - left) },
+                    yForDb = { db ->
+                        dbToY(
+                            (db - SpectrumEngine.FLOOR_DB) / (SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB) * 36f - 24f,
+                            top, bottom,
+                        )
+                    },
+                )
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
                 drawBandAreas(nc, curves, morph, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint)
@@ -405,36 +404,6 @@ private fun drawGrid(
  */
 private fun drawBothModeKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint) {
     nc.drawText("SOLID = MAGNITUDE, DASHED = PHASE", left + 8f * density, top + 14f * density, legendPaint)
-}
-
-/** = `NativeBmwDspResponseView.drawSpectrum`. `tick` only forces the snapshot read to count. */
-private fun drawSpectrum(
-    nc: Canvas,
-    left: Float,
-    right: Float,
-    top: Float,
-    bottom: Float,
-    @Suppress("UNUSED_PARAMETER") tick: Int,
-    fillPaint: Paint,
-    strokePaint: Paint,
-) {
-    val line = Path()
-    val fill = Path().apply { moveTo(left, bottom) }
-    for (i in 0 until SPECTRUM_POINTS) {
-        val fraction = i.toDouble() / (SPECTRUM_POINTS - 1)
-        val frequency = 20.0 * 1000.0.pow(fraction)
-        val spectrumDb = SpectrumEngine.magnitudeDbAt(frequency)
-        val displayDb = ((spectrumDb - SpectrumEngine.FLOOR_DB) /
-            (SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB) * 36f - 24f)
-        val x = left + fraction.toFloat() * (right - left)
-        val y = dbToY(displayDb, top, bottom)
-        if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
-        fill.lineTo(x, y)
-    }
-    fill.lineTo(right, bottom)
-    fill.close()
-    nc.drawPath(fill, fillPaint)
-    nc.drawPath(line, strokePaint)
 }
 
 /**

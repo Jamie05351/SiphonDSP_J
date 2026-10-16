@@ -2,6 +2,7 @@ package app.siphondsp.compose.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
@@ -24,10 +30,12 @@ import androidx.compose.ui.unit.Dp
 
 /**
  * One global stage on the top screen: a status dot and the stage's name over its setting in large
- * type ("● TILT / +1.0 dB"). The dot is the at-a-glance state: lit in [accent] with a glow while
- * the stage is on and the DSP is powered, a hollow grey ring otherwise. Everything else stays
- * neutral, white while lit and grey while not, blending by [globalActive] times the cell's own
- * animated on fraction. Tapping it opens the screen that owns the stage.
+ * type ("● TILT / +1.0 dB"), in [accent], the colour of the menu the stage lives in. Lit (the stage
+ * on and the DSP powered), the cell is lit like the screens: an [accent] edge with a glow fading
+ * inwards from it over a faint [accent] tint, and the dot lit with its halo. Off, it is a plain dark
+ * cell with a grey edge and a hollow grey dot. Text is white while lit and grey while not; it all
+ * blends by [globalActive] times the cell's own animated on fraction. Tapping it opens the screen
+ * that owns the stage.
  */
 @Composable
 fun GlobalChip(
@@ -41,10 +49,13 @@ fun GlobalChip(
 ) {
     val s = LocalHomeScale.current
     val t = animateActive(on, "cell $label") * globalActive
+    val shape = RoundedCornerShape(s.dp(CellCorner))
     Column(
         modifier
-            .clip(RoundedCornerShape(s.dp(10f)))
+            .clip(shape)
             .background(HomePalette.Cell)
+            .drawBehind { drawCellGlow(accent, t, s.dp(CellCorner).toPx(), s.dp(1.2f).toPx()) }
+            .border(s.dp(1.5f), lerp(HomePalette.IdleEdge, accent, t), shape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = s.dp(14f), vertical = s.dp(8f)),
         verticalArrangement = Arrangement.Center,
@@ -73,6 +84,30 @@ fun GlobalChip(
         )
     }
 }
+
+/**
+ * The lit cell's glow, as the chain screen's ring does it: a faint [accent] tint, then thin bands
+ * fading to nothing inwards from the edge, all scaled by [t]. [radius] is the cell's corner and
+ * [band] the width of one band.
+ */
+private fun DrawScope.drawCellGlow(accent: Color, t: Float, radius: Float, band: Float) {
+    if (t <= 0f) return
+    drawRoundRect(accent.copy(alpha = 0.08f * t), cornerRadius = CornerRadius(radius))
+    for (step in 0 until CellGlowBands) {
+        val inset = band * (step + 0.5f)
+        val fade = 1 - (step + 1f) / CellGlowBands
+        drawRoundRect(
+            accent.copy(alpha = 0.32f * t * fade * fade),
+            topLeft = Offset(inset, inset),
+            size = Size(size.width - 2 * inset, size.height - 2 * inset),
+            cornerRadius = CornerRadius((radius - inset).coerceAtLeast(0f)),
+            style = Stroke(band),
+        )
+    }
+}
+
+private const val CellCorner = 10f
+private const val CellGlowBands = 10
 
 /**
  * The at-a-glance state light: at [t] = 1 a solid [colour] dot with a soft halo, at 0 a hollow

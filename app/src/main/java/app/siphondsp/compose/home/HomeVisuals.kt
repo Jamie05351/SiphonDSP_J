@@ -63,7 +63,6 @@ internal object HomePalette {
     val NodeEdgeOff = Color(0xFF3A3D45)
     val OutFill = Color(0xFF0B0B0D)
     val Ceiling = Color(0xFFFF3B5C)
-    val LimiterChip = Color(0xFFE5E7EB)
     val Cell = Color(0xFF111216)
     val CellLabel = Color(0xFFC9CCD1)
     val Hollow = Color(0xFF5A5F6A)

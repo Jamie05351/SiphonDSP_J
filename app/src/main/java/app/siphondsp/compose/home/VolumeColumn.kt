@@ -11,16 +11,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -56,12 +55,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * The DSP master volume, down the faceplate's left side (Figma "Head unit · 8 · ON · Master
- * volume"), on its own dark screen like the top and chain screens: + over the level in dB, over −,
- * all at [VolumeScale]. The buttons are drawn like the
- * power button and OUT (dark disc, purple rim and glow, lit by [g]); holding one repeats. Tapping
- * the level toggles mute. [volumeDb] / [muted] are the saved values, which come back round through
- * the settings broadcast after every step, so this only ever shows what the engine has.
+ * The DSP master volume, down the faceplate's left side, in a column the caller spans from the top
+ * screen's top edge to the chain screen's bottom edge: the level on its own small screen in the
+ * middle, the + button centred in the gap above it and the − button in the gap below. The
+ * buttons are rounded squares, about the size of the power button, drawn like it and OUT (dark
+ * face, purple rim and glow, lit by [g]); holding one repeats. Tapping the level
+ * toggles mute. [volumeDb] / [muted] are the saved values, which come back round through the
+ * settings broadcast after every step, so this only ever shows what the engine has.
  */
 @Composable
 internal fun VolumeColumn(
@@ -73,48 +73,61 @@ internal fun VolumeColumn(
     modifier: Modifier = Modifier,
 ) {
     val s = LocalHomeScale.current
-    Screen(s.dp(14f), modifier) {
-        CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * VolumeScale)) {
-            val v = LocalHomeScale.current
-            Column(
-                Modifier.padding(horizontal = v.dp(VolumePadX), vertical = v.dp(VolumePadY)),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(v.dp(VolumeGap)),
-            ) {
-                VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
-                VolumeReadout(volumeDb, muted, g, onToggleMute)
-                VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
-            }
-        }
+    Column(modifier.width(s.dp(VolumeWidth)), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.weight(1f))
+        VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
+        Spacer(Modifier.weight(1f))
+        VolumeReadout(volumeDb, muted, g, onToggleMute)
+        Spacer(Modifier.weight(1f))
+        VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
+        Spacer(Modifier.weight(1f))
     }
 }
 
-/** A round + or − button. One step on press, then repeating while held. */
+/** A rounded-square + or − button. One step on press, then repeating while held. */
 @Composable
 private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> Unit) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
     val step by rememberUpdatedState(onStep)
     val scope = rememberCoroutineScope()
+    val shape = RoundedCornerShape(s.dp(VolumeCorner))
     Box(
         Modifier
             .size(s.dp(VolumeButtonSize))
             .drawBehind {
-                drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
-                val r = size.minDimension / 2
-                drawCircle(
-                    Brush.radialGradient(listOf(Color(0xFF1F2027), HomePalette.NodeFill), center, r),
-                    r,
+                val r = s.dp(VolumeCorner).toPx()
+                // The glow, spreading past the button onto the faceplate.
+                if (g > 0f) {
+                    for (i in 1..GlowSteps) {
+                        val grow = s.dp(NodeGlow).toPx() * i / GlowSteps
+                        drawRoundRect(
+                            signal.copy(alpha = 0.16f * g * (1f - (i - 1f) / GlowSteps)),
+                            Offset(-grow, -grow),
+                            Size(size.width + 2 * grow, size.height + 2 * grow),
+                            CornerRadius(r + grow),
+                        )
+                    }
+                }
+                drawRoundRect(
+                    Brush.verticalGradient(listOf(Color(0xFF1F2027), HomePalette.NodeFill)),
+                    cornerRadius = CornerRadius(r),
                 )
                 val rim = s.dp(3f + g).toPx()
-                drawCircle(lerp(HomePalette.NodeEdgeOff, signal, g), r - rim / 2, style = Stroke(rim))
+                drawRoundRect(
+                    lerp(HomePalette.NodeEdgeOff, signal, g),
+                    Offset(rim / 2, rim / 2),
+                    Size(size.width - rim, size.height - rim),
+                    CornerRadius(r - rim / 2),
+                    style = Stroke(rim),
+                )
                 val glyph = lerp(HomePalette.Caption, Color(0xFFE9D5FF), g)
                 val arm = s.dp(17f).toPx()
                 val stroke = s.dp(5.5f).toPx()
                 drawLine(glyph, center - Offset(arm, 0f), center + Offset(arm, 0f), stroke, StrokeCap.Round)
                 if (plus) drawLine(glyph, center - Offset(0f, arm), center + Offset(0f, arm), stroke, StrokeCap.Round)
             }
-            .clip(CircleShape)
+            .clip(shape)
             .semantics {
                 role = Role.Button
                 contentDescription = label
@@ -139,7 +152,7 @@ private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> U
 }
 
 /**
- * The level in a cell like the top screen's: "VOLUME", the dB in large type, and a bar along the
+ * The level on its own small screen: "VOLUME", the dB in large type, and a bar along the
  * −80..0 dB range. Muted, the number dims and the caption reads MUTED. Tapping toggles mute.
  */
 @Composable
@@ -154,9 +167,10 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
     val state = if (muted) stringResource(R.string.home_volume_muted) else "$number dB"
     Column(
         Modifier
-            .size(s.dp(VolumeScreen))
+            .fillMaxWidth()
+            .height(s.dp(VolumeScreen))
             .clip(shape)
-            .background(HomePalette.Cell)
+            .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
             .clickable(role = Role.Switch, onClickLabel = muteLabel, onClick = onToggleMute)
             .semantics { stateDescription = state }
@@ -220,19 +234,12 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
     }
 }
 
-// In design units (Figma frame 8), drawn at [VolumeScale]: buttons the size between OUT and the
-// power button, and the level cell between them, with the same gap above and below it.
-internal const val VolumeButtonSize = 72f
-internal const val VolumeScreen = 112f
-internal const val VolumeGap = 20f
-// Inside the panel's edge: more above and below, so the buttons' glow fades out before the edge.
-private const val VolumePadX = 12f
-private const val VolumePadY = 18f
-
-/** The volume column at this fraction of its design size. */
-internal const val VolumeScale = 0.75f
-
-/** The volume panel's width on the faceplate, in faceplate units. */
-internal const val VolumePanelWidth = (VolumeScreen + 2 * VolumePadX) * VolumeScale
+// In design units: the column as wide as the level's screen; the buttons between OUT and the
+// power button in size.
+internal const val VolumeWidth = 112f
+private const val VolumeScreen = 112f
+private const val VolumeButtonSize = 80f
+private const val VolumeCorner = 18f
+private const val GlowSteps = 6
 private const val RepeatDelayMs = 400L
 private const val RepeatEveryMs = 110L
