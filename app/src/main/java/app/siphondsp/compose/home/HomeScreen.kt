@@ -72,11 +72,11 @@ import kotlin.math.sin
  *   inside it and a purple glow that stays inside the screen.
  * - The top screen, [TopMargin] from the top, the same width as the chain screen: the global
  *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), each in its menu's colour, then the
- *   headroom and the L / R output meters, then the live spectrum ([SpectrumStrip]), all at
+ *   live spectrum ([SpectrumStrip]), then the headroom and the L / R output meters, all at
  *   [TopContentScale]; then, past a dividing line, Settings and More as bare glyphs ([ScreenButton]).
  * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]) spanning the top
- *   screen's top edge to the chain screen's bottom edge: tall + and − buttons round the level on
- *   its own small screen.
+ *   screen's top edge to the chain screen's bottom edge: + and − buttons at those two edges, the
+ *   level on its own small screen centred between them.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu
@@ -282,9 +282,9 @@ private fun TopScreenContent(
             }
         }
         Spacer(Modifier.width(s.dp(MeterGap)))
-        OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(MeterShare).fillMaxHeight())
-        Spacer(Modifier.width(s.dp(MeterGap)))
         SpectrumStrip(meterLevels, g, live, Modifier.weight(1f).fillMaxHeight())
+        Spacer(Modifier.width(s.dp(MeterGap)))
+        OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(MeterShare).fillMaxHeight())
     }
 }
 

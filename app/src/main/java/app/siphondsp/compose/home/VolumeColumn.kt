@@ -10,12 +10,12 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -55,11 +55,11 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * The DSP master volume, down the faceplate's left side: a tall + button from the top screen's
- * top edge, the level on its own small screen, and a tall − button down to the chain screen's
- * bottom edge. The caller sets the column's height to span those two edges; the buttons share
- * what the screen and gaps leave. The buttons are rounded squares drawn like the power button
- * and OUT (dark face, purple rim and glow, lit by [g]); holding one repeats. Tapping the level
+ * The DSP master volume, down the faceplate's left side: a + button level with the top screen's
+ * top edge, a − button level with the chain screen's bottom edge, and the level on its own small
+ * screen centred between them. The caller sets the column's height to span those two edges. The
+ * buttons are rounded squares, about the size of the power button, drawn like it and OUT (dark
+ * face, purple rim and glow, lit by [g]); holding one repeats. Tapping the level
  * toggles mute. [volumeDb] / [muted] are the saved values, which come back round through the
  * settings broadcast after every step, so this only ever shows what the engine has.
  */
@@ -75,16 +75,16 @@ internal fun VolumeColumn(
     val s = LocalHomeScale.current
     Column(modifier.width(s.dp(VolumeWidth)), horizontalAlignment = Alignment.CenterHorizontally) {
         VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
-        Spacer(Modifier.height(s.dp(VolumeGap)))
+        Spacer(Modifier.weight(1f))
         VolumeReadout(volumeDb, muted, g, onToggleMute)
-        Spacer(Modifier.height(s.dp(VolumeGap)))
+        Spacer(Modifier.weight(1f))
         VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
     }
 }
 
-/** A tall rounded + or − button filling its share of the column. One step on press, then repeating while held. */
+/** A rounded-square + or − button. One step on press, then repeating while held. */
 @Composable
-private fun ColumnScope.VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> Unit) {
+private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> Unit) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
     val step by rememberUpdatedState(onStep)
@@ -92,8 +92,7 @@ private fun ColumnScope.VolumeButton(label: String, plus: Boolean, g: Float, onS
     val shape = RoundedCornerShape(s.dp(VolumeCorner))
     Box(
         Modifier
-            .fillMaxWidth()
-            .weight(1f)
+            .size(s.dp(VolumeButtonSize))
             .drawBehind {
                 val r = s.dp(VolumeCorner).toPx()
                 // The glow, spreading past the button onto the faceplate.
@@ -233,12 +232,12 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
     }
 }
 
-// In design units: the column as wide as the level's screen, the buttons sharing the rest of its
-// height, with the same gap either side of the screen.
+// In design units: the column as wide as the level's screen; the buttons between OUT and the
+// power button in size.
 internal const val VolumeWidth = 112f
 private const val VolumeScreen = 112f
-private const val VolumeGap = 16f
-private const val VolumeCorner = 22f
+private const val VolumeButtonSize = 80f
+private const val VolumeCorner = 18f
 private const val GlowSteps = 6
 private const val RepeatDelayMs = 400L
 private const val RepeatEveryMs = 110L
