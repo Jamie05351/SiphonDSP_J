@@ -301,6 +301,10 @@
     <string name="home_volume_mute">Mute</string>
     <string name="home_volume_up">Volume up</string>
     <string name="home_volume_down">Volume down</string>
+    <!-- Launcher entries for the steering-wheel remapper (KSW Toolkit "Start App"). -->
+    <string name="shortcut_volume_up">DSP volume +</string>
+    <string name="shortcut_volume_down">DSP volume −</string>
+    <string name="shortcut_volume_mute">DSP mute</string>
     <string name="session_exclude_restricted">Exclude unsupported apps</string>
     <string name="session_exclude_restricted_off">Apps blocking audio capture stay muted (default Android behavior)</string>
     <string name="session_exclude_restricted_on">Apps blocking audio capture are excluded and remain unprocessed (recommended)</string>

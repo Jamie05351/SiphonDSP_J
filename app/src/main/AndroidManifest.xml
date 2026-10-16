@@ -115,6 +115,64 @@
             </intent-filter>
         </activity>
 
+        <!-- DSP master volume shortcuts for the steering-wheel remapper (KSW Toolkit "Start App"):
+             launcher entries so an app picker lists them; each steps the volume and finishes
+             without drawing. See MasterVolumeShortcutActivity. -->
+        <activity
+            android:name=".activity.MasterVolumeUpActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_dsp_launcher"
+            android:label="@string/shortcut_volume_up"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="app.siphondsp.action.VOLUME_UP" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".activity.MasterVolumeDownActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_dsp_launcher"
+            android:label="@string/shortcut_volume_down"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="app.siphondsp.action.VOLUME_DOWN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".activity.MasterVolumeMuteActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_dsp_launcher"
+            android:label="@string/shortcut_volume_mute"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="app.siphondsp.action.VOLUME_MUTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".activity.SettingsActivity"
             android:exported="false"
