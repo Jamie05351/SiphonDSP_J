@@ -39,6 +39,10 @@ fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, live: Bo
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
     val measurer = rememberTextMeasurer()
+    // The frequency marks change only with the scale, so they are measured once, not every frame.
+    val marks = remember(measurer, s.k) {
+        Marks.map { (hz, label) -> hz to measurer.measure(label, TextStyle(fontSize = s.sp(13f))) }
+    }
     val bars = remember { SpectrumBars(LowestHz, BandCount) }
     // The clock tick the bars last stepped on: a redraw for any other reason (the power fade, a
     // layout change) repaints without stepping, so the fall rate stays the same.
@@ -77,10 +81,9 @@ fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, live: Bo
             val h = (barsBottom - barsTop) * bars.level[i]
             if (h > 0f) drawRoundRect(brush, Offset(x, barsBottom - h), Size(barW, h), corner)
         }
-        for ((hz, label) in Marks) {
+        for ((hz, layout) in marks) {
             val band = 3 * ln(hz / LowestHz) / ln(2.0)
             val cx = (band.toFloat() + 0.5f) * pitch
-            val layout = measurer.measure(label, TextStyle(fontSize = s.sp(13f)))
             drawText(layout, HomePalette.Muted, Offset(cx - layout.size.width / 2f, oy + u(ScaleTop)))
         }
     }
