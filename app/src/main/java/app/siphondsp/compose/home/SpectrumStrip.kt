@@ -2,6 +2,8 @@ package app.siphondsp.compose.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -16,6 +18,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.view.LevelReadout
+import kotlinx.coroutines.delay
 import kotlin.math.ln
 import kotlin.math.pow
 
@@ -24,19 +27,28 @@ import kotlin.math.pow
  * 25 Hz to 16 kHz, lined up with the output meters' block (bars across its height, frequency marks
  * where the meters have their dB scale).
  *
- * It reads [SpectrumEngine], which the front page's level feed already keeps running, and redraws
- * on each new meter frame: [meterLevels] is read only while drawing, so a frame redraws this canvas
- * and recomposes nothing. Bars rise at once and fall at [FallPerFrame] of full height a frame, so
- * they read like a meter rather than flicker. A silent frame (the feed stopped) lets them fall to
- * the floor. [globalActive] blends the bars to grey while the DSP is bypassed. Purely visual.
+ * It reads [SpectrumEngine], which the front page's level feed already keeps running. While [live]
+ * (the front page showing and resumed) it redraws every [FrameMs] off its own clock, read only while
+ * drawing, so a frame redraws this canvas and recomposes nothing; bars rise at once and fall at
+ * [FallPerFrame] of full height a frame, so they read like a meter rather than flicker. When the
+ * output is silent ([meterLevels] at the floor, as it is once the feed stops) the bars drop to the
+ * floor at once. [globalActive] blends the bars to grey while the DSP is bypassed. Purely visual.
  */
 @Composable
-fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, modifier: Modifier = Modifier) {
+fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, live: Boolean, modifier: Modifier = Modifier) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
     val measurer = rememberTextMeasurer()
     val shown = remember { FloatArray(BandCount) }
+    val clock = remember { mutableIntStateOf(0) }
+    LaunchedEffect(live) {
+        while (live) {
+            delay(FrameMs)
+            clock.intValue++
+        }
+    }
     Canvas(modifier.clearAndSetSemantics { }) {
+        clock.intValue // read while drawing: each tick redraws this canvas only
         fun u(v: Float) = v * s.k * density
         val silent = meterLevels().silent
         val g = globalActive
@@ -61,7 +73,11 @@ fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, modifier
             )
             val target = if (silent) 0f else
                 ((db - SpectrumEngine.FLOOR_DB) / (SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB)).coerceIn(0f, 1f)
-            shown[i] = if (target >= shown[i]) target else (shown[i] - FallPerFrame).coerceAtLeast(target)
+            shown[i] = when {
+                silent -> 0f
+                target >= shown[i] -> target
+                else -> (shown[i] - FallPerFrame).coerceAtLeast(target)
+            }
             val x = i * pitch + (pitch - barW) / 2
             drawRoundRect(unlit, Offset(x, barsTop), Size(barW, barsBottom - barsTop), corner)
             val h = (barsBottom - barsTop) * shown[i]
@@ -82,6 +98,7 @@ private const val LowestHz = 25.0
 private const val BandCount = 29
 private val EdgeRatio = 2.0.pow(1.0 / 6.0)
 private const val BarFill = 0.62f
+private const val FrameMs = 50L
 private const val FallPerFrame = 0.035f
 private const val BlockHeight = 112f
 private const val BarsHeight = 92f

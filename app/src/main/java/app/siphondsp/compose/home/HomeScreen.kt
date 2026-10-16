@@ -145,7 +145,7 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, meterLevels, g, onOpenGlobal,
+                        engine, readout, meterLevels, g, onOpenGlobal, animateTiles,
                         Modifier.padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight)).fillMaxSize(),
                     ) {
                         ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
@@ -206,6 +206,7 @@ private fun TopScreen(
     meterLevels: () -> LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
+    live: Boolean,
     modifier: Modifier,
     buttons: @Composable () -> Unit,
 ) {
@@ -215,7 +216,7 @@ private fun TopScreen(
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
+                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off, live)
                 }
             }
             Box(
@@ -245,6 +246,7 @@ private fun TopScreenContent(
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     off: String,
+    live: Boolean,
 ) {
     val s = LocalHomeScale.current
     Row(Modifier.fillMaxSize().padding(horizontal = s.dp(14f)), verticalAlignment = Alignment.CenterVertically) {
@@ -282,7 +284,7 @@ private fun TopScreenContent(
         Spacer(Modifier.width(s.dp(MeterGap)))
         OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(MeterShare).fillMaxHeight())
         Spacer(Modifier.width(s.dp(MeterGap)))
-        SpectrumStrip(meterLevels, g, Modifier.weight(1f).fillMaxHeight())
+        SpectrumStrip(meterLevels, g, live, Modifier.weight(1f).fillMaxHeight())
     }
 }
 
