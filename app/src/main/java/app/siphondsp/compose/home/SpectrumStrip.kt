@@ -40,6 +40,9 @@ fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, live: Bo
     val signal = BmwTheme.colors.sliderHeadroom
     val measurer = rememberTextMeasurer()
     val bars = remember { SpectrumBars(LowestHz, BandCount) }
+    // The clock tick the bars last stepped on: a redraw for any other reason (the power fade, a
+    // layout change) repaints without stepping, so the fall rate stays the same.
+    val lastStep = remember { intArrayOf(Int.MIN_VALUE) }
     val clock = remember { mutableIntStateOf(0) }
     LaunchedEffect(live) {
         while (live) {
@@ -48,9 +51,14 @@ fun SpectrumStrip(meterLevels: () -> LevelReadout, globalActive: Float, live: Bo
         }
     }
     Canvas(modifier.clearAndSetSemantics { }) {
-        clock.intValue // read while drawing: each tick redraws this canvas only
+        val tick = clock.intValue // read while drawing: each tick redraws this canvas only
         fun u(v: Float) = v * s.k * density
-        bars.update(silent = meterLevels().silent)
+        val silent = meterLevels().silent
+        // Silence zeroes the bars at once (repeating that is harmless); otherwise one step a tick.
+        if (silent || tick != lastStep[0]) {
+            bars.update(silent)
+            lastStep[0] = tick
+        }
         val g = globalActive
         val oy = (size.height - u(BlockHeight)) / 2f
         val barsTop = oy
