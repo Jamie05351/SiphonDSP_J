@@ -75,8 +75,8 @@ import kotlin.math.sin
  *   live spectrum ([SpectrumStrip]), then the headroom and the L / R output meters, all at
  *   [TopContentScale]; then, past a dividing line, Settings and More as bare glyphs ([ScreenButton]).
  * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]) spanning the top
- *   screen's top edge to the chain screen's bottom edge: + and − buttons at those two edges, the
- *   level on its own small screen centred between them.
+ *   screen's top edge to the chain screen's bottom edge: the level on its own small screen in the
+ *   middle, the + and − buttons each centred in the gap above and below it.
  *
  * Everything that looks on or off is driven by one animated global fraction from [powered] (see
  * [animateActive]) times, for the live-data cells, each one's own fraction. The tiles are menu

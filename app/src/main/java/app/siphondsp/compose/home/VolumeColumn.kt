@@ -55,9 +55,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * The DSP master volume, down the faceplate's left side: a + button level with the top screen's
- * top edge, a − button level with the chain screen's bottom edge, and the level on its own small
- * screen centred between them. The caller sets the column's height to span those two edges. The
+ * The DSP master volume, down the faceplate's left side, in a column the caller spans from the top
+ * screen's top edge to the chain screen's bottom edge: the level on its own small screen in the
+ * middle, the + button centred in the gap above it and the − button in the gap below. The
  * buttons are rounded squares, about the size of the power button, drawn like it and OUT (dark
  * face, purple rim and glow, lit by [g]); holding one repeats. Tapping the level
  * toggles mute. [volumeDb] / [muted] are the saved values, which come back round through the
@@ -74,11 +74,13 @@ internal fun VolumeColumn(
 ) {
     val s = LocalHomeScale.current
     Column(modifier.width(s.dp(VolumeWidth)), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.weight(1f))
         VolumeButton(stringResource(R.string.home_volume_up), plus = true, g) { onStep(1) }
         Spacer(Modifier.weight(1f))
         VolumeReadout(volumeDb, muted, g, onToggleMute)
         Spacer(Modifier.weight(1f))
         VolumeButton(stringResource(R.string.home_volume_down), plus = false, g) { onStep(-1) }
+        Spacer(Modifier.weight(1f))
     }
 }
 
