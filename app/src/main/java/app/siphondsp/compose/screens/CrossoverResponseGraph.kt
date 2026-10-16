@@ -336,6 +336,7 @@ fun CrossoverResponseGraph(
             if (showSpectrum && mode.showsSpectrum()) {
                 spectrumBars.draw(
                     nc, frame, top, bottom, spectrumSignalArgb, HomePalette.MeterHot.toArgb(), SPECTRUM_ALPHA, density,
+                    minHz = 20.0,
                     maxHz = 20000.0,
                     xForHz = { hz -> left + (log10(hz / 20.0) / 3.0).toFloat() * (right - left) },
                     yForDb = { db ->

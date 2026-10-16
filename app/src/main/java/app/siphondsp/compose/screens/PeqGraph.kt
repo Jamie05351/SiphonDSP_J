@@ -1038,6 +1038,7 @@ private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext, frame: Int) {
     val m = ctx.model
     m.spectrumBars.draw(
         nc, frame, g.top, g.bottom, p.spectrumAccentColor, HomePalette.MeterHot.toArgb(), SPECTRUM_BAR_ALPHA, ctx.density,
+        minHz = PeqGraphMath.MIN_FREQUENCY,
         maxHz = ctx.maxFrequency,
         xForHz = { hz -> g.xForFrequency(hz) },
         yForDb = { db ->

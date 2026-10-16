@@ -21,11 +21,16 @@ internal class GraphSpectrumBars {
     private val bars = SpectrumBars(LOWEST_HZ, BAND_COUNT)
     private var lastFrame = Int.MIN_VALUE
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private var shaderKey: List<Any>? = null
+    // What the cached gradient was built for.
+    private var shaderTop = Float.NaN
+    private var shaderBottom = Float.NaN
+    private var shaderSignal = 0
+    private var shaderHot = 0
+    private var shaderAlpha = -1
 
     /**
      * Draws the bars between [top] and [bottom]; [xForHz] and [yForDb] are the graph's own axes
-     * ([yForDb] takes the spectrum engine's dB). Bands above [maxHz] are left out.
+     * ([yForDb] takes the spectrum engine's dB). Bars are clipped to the axis, [minHz] to [maxHz].
      */
     fun draw(
         nc: Canvas,
@@ -36,6 +41,7 @@ internal class GraphSpectrumBars {
         hotArgb: Int,
         alpha: Int,
         density: Float,
+        minHz: Double,
         maxHz: Double,
         xForHz: (Double) -> Float,
         yForDb: (Float) -> Float,
@@ -44,20 +50,24 @@ internal class GraphSpectrumBars {
             bars.update()
             lastFrame = frame
         }
-        val key = listOf(top, bottom, signalArgb, hotArgb, alpha)
-        if (key != shaderKey) {
+        if (top != shaderTop || bottom != shaderBottom || signalArgb != shaderSignal || hotArgb != shaderHot || alpha != shaderAlpha) {
             paint.shader = LinearGradient(
                 0f, top, 0f, bottom,
                 intArrayOf(ColorUtils.setAlphaComponent(hotArgb, alpha), ColorUtils.setAlphaComponent(signalArgb, alpha), ColorUtils.setAlphaComponent(signalArgb, alpha)),
                 floatArrayOf(0f, 0.35f, 1f),
                 Shader.TileMode.CLAMP,
             )
-            shaderKey = key
+            shaderTop = top
+            shaderBottom = bottom
+            shaderSignal = signalArgb
+            shaderHot = hotArgb
+            shaderAlpha = alpha
         }
         val corner = CORNER_DP * density
         for (i in 0 until bars.bandCount) {
             if (bars.lowEdgeHz(i) >= maxHz) break
-            val x0 = xForHz(bars.lowEdgeHz(i))
+            if (bars.highEdgeHz(i) <= minHz) continue
+            val x0 = xForHz(maxOf(bars.lowEdgeHz(i), minHz))
             val x1 = xForHz(minOf(bars.highEdgeHz(i), maxHz))
             val w = (x1 - x0) * SpectrumBars.BAR_FILL
             val x = x0 + (x1 - x0 - w) / 2
