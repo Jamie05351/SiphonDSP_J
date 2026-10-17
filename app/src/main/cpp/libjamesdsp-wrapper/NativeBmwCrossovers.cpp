@@ -5,6 +5,7 @@ namespace NativeBmwDsp {
 
 void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate) {
     makeHighPass(out.subsonic1, cfg.subsonicFreq, BW, sampleRate);
+    makeHighPass(out.subsonic2, cfg.subsonicFreq, BW, sampleRate);
 }
 void buildLowCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate) {
     using CrossoverType = OutputConfig::CrossoverType;
@@ -134,10 +135,11 @@ void processLowCrossover(OutputRuntime& left, const OutputConfig& leftConfig, Ou
                          const OutputConfig& rightConfig, float& xl, float& xr) {
     if (leftConfig.subsonicEnabled && rightConfig.subsonicEnabled) {
         Biquad::runPair(left.subsonic1, right.subsonic1, xl, xr);
+        Biquad::runPair(left.subsonic2, right.subsonic2, xl, xr);
     } else if (leftConfig.subsonicEnabled) {
-        xl = left.subsonic1.run(xl);
+        xl = left.subsonic2.run(left.subsonic1.run(xl));
     } else if (rightConfig.subsonicEnabled) {
-        xr = right.subsonic1.run(xr);
+        xr = right.subsonic2.run(right.subsonic1.run(xr));
     }
     Biquad::runPair(left.crossover1, right.crossover1, xl, xr);
     Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
