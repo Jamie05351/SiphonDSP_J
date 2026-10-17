@@ -60,6 +60,10 @@ struct AlignmentDelay {
     unsigned fadeRemaining = 0;
     unsigned fadeBase = 0;
     std::array<float, kAlignmentTaps> fadeTaps{};
+    // A setDelay() landing mid-fade is held here and started when the current fade ends, so each
+    // fade begins exactly where the output is (no jump back to a previous target mid-drag).
+    bool pendingSet = false;
+    float pendingDelay = 0;
 
     AlignmentDelay() {
         buildAlignmentTaps(0.f, taps);  // a zero delay (setDelay(0) would skip: delay is already 0)
@@ -68,13 +72,17 @@ struct AlignmentDelay {
     // tap stays inside the ring.
     void setDelay(float samples) {
         const float next = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
+        if (fadeRemaining > 0) {
+            pendingSet = true;  // started from run() once the current fade lands
+            pendingDelay = next;
+            return;
+        }
+        pendingSet = false;
         if (next == delay) {
             return;  // unchanged: no rebuild, no fade
         }
         beginFade();
-        delay = next;
-        base = static_cast<unsigned>(delay);
-        buildAlignmentTaps(delay - static_cast<float>(base), taps);
+        retarget(next);
     }
     // Config thread. Total delay = samples exactly, for a line summed with an undelayed path
     // (the virtual-centre feeds). The kernel borrows its latency from the delay itself, so it
@@ -103,7 +111,14 @@ struct AlignmentDelay {
             const float oldWeight = std::min(1.f, static_cast<float>(fadeRemaining) /
                                                       static_cast<float>(std::max(1u, fadeLength)));
             y += (read(fadeBase, fadeTaps) - y) * oldWeight;
-            --fadeRemaining;
+            if (--fadeRemaining == 0 && pendingSet) {
+                // The fade has landed on the current target: start the held change from there.
+                pendingSet = false;
+                if (pendingDelay != delay) {
+                    beginFade();
+                    retarget(pendingDelay);
+                }
+            }
         }
         write = (write + 1) & (Capacity - 1);
         return y;
@@ -111,11 +126,15 @@ struct AlignmentDelay {
     void clear() {
         data.fill(0);
         write = 0;
-        fadeRemaining = 0;
+        snap();
     }
-    // Ends any fade in progress: the new read point applies at once (start-up, full rebuilds).
+    // Ends any fade in progress and applies any held change at once (start-up, full rebuilds).
     void snap() {
         fadeRemaining = 0;
+        if (pendingSet) {
+            pendingSet = false;
+            retarget(pendingDelay);
+        }
     }
 
 private:
@@ -128,9 +147,13 @@ private:
         }
         return y;
     }
-    // Remembers the current read point as the one to fade from. A change landing mid-fade restarts
-    // from the latest target -- config pushes arrive at most every ~33 ms, longer than the fade, so
-    // that is rare -- and is still far smaller than the jump this replaces.
+    void retarget(float d) {
+        delay = d;
+        base = static_cast<unsigned>(delay);
+        buildAlignmentTaps(delay - static_cast<float>(base), taps);
+    }
+    // Remembers the current read point as the one to fade from (only ever called with no fade in
+    // progress, so it is exactly where the output is).
     void beginFade() {
         if (fadeLength == 0) {
             return;

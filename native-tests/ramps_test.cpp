@@ -116,3 +116,37 @@ TEST_CASE("changing a band's delay mid-signal crossfades instead of jumping") {
     REQUIRE(steady > 0.f);
     CHECK(edit < steady * kAllowed);
 }
+
+TEST_CASE("two delay changes in quick succession don't jump mid-fade") {
+    // A drag can land a second delay change while the first 10 ms crossfade is still running.
+    NativeBmwDspProcessor proc;
+    auto c = baseConfig();
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    std::size_t pos = 0;
+    float last[2] = {0.f, 0.f};
+    for (int i = 0; i < 12; ++i, pos += kBlock) {
+        auto warm = sineBlock(pos, kBlock);
+        proc.process(warm.data(), warm.size());
+        last[0] = warm[warm.size() - 2];
+        last[1] = warm[warm.size() - 1];
+    }
+    auto steady = sineBlock(pos, kBlock);
+    pos += kBlock;
+    proc.process(steady.data(), steady.size());
+    const float steadyStep = maxStep(steady, last);
+    float worst = 0.f;
+    for (float d : {1.0f, 2.0f, 2.8f}) {  // each lands ~4 ms into the previous fade
+        c[sch::kLowDelayL] = c[sch::kLowDelayR] = d;
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto chunk = sineBlock(pos, 192);
+        pos += 192;
+        proc.process(chunk.data(), chunk.size());
+        worst = std::max(worst, maxStep(chunk, last));
+    }
+    auto tail = sineBlock(pos, kBlock);
+    proc.process(tail.data(), tail.size());
+    worst = std::max(worst, maxStep(tail, last));
+    INFO("steady step ", steadyStep, "  worst step across the burst ", worst);
+    CHECK(worst < steadyStep * kAllowed);
+}
