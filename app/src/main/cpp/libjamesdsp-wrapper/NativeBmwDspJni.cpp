@@ -125,31 +125,6 @@ Java_app_siphondsp_interop_JamesDspWrapper_setNativeBmwDspSampleRate(JNIEnv* env
     }
 }
 
-extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCompressorMeter(JNIEnv* env, jobject,
-                                                                       jlong self) {
-    if (env == nullptr || self == 0) {
-        return nullptr;
-    }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
-    float values[6];
-    processor->readCompressorMeter(values, 6);
-    jfloatArray result = env->NewFloatArray(6);
-    if (result != nullptr) {
-        env->SetFloatArrayRegion(result, 0, 6, values);
-    }
-    return result;
-}
-
-// Fills [out] with one meter's current values instead of returning a new array, so a UI poll
-// running ~30 times a second allocates nothing. kind (JamesDspWrapper.METER_*): 1 = MBC
-// (12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]), 2 = bus limiters (3 floats:
-// [lowGrDb, midGrDb, highGrDb]). False, with [out] untouched, for an unknown kind, a short
-// array or a gone handle. The readers only load atomics, so no lock is taken.
 extern "C" JNIEXPORT jboolean JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_readNativeBmwMeter(JNIEnv* env, jobject, jlong self,
                                                              jint kind, jfloatArray out) {

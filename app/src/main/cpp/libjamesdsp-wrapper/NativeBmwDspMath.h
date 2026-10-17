@@ -117,8 +117,7 @@ inline float dbToLin(float db) {
     return std::pow(10.f, db / 20.f);
 }
 // Soft-knee gain reduction (dB, <= 0) for a detector level `overDb` dB above threshold, given
-// `ratio` and knee width `kneeDb`. Shared by processCompressor's per-output path and the MBC's
-// per-band path -- deliberately identical math, one place for a knee-shape fix.
+// `ratio` and knee width `kneeDb`. Used by the MBC's per-band gain computer.
 inline float softKneeGainReductionDb(float overDb, float ratio, float kneeDb) {
     const float slope = 1 - 1 / std::max(1.001f, ratio);
     if (kneeDb > 0) {

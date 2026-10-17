@@ -36,7 +36,6 @@ struct OutputConfig {
     float subsonicFreq = 32;
     bool muted = false;
     bool polarityInverted = false;
-    CompressorParams compressor{};
     // Mid's optional upper (Mid/High) bandpass corner -- only meaningful when the owning
     // output is Mid; carried-but-ignored for Low/High, same as subsonicEnabled/subsonicFreq
     // above being carried-but-ignored outside Low. Appended at the end of this struct (not
