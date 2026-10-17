@@ -1,6 +1,7 @@
 package app.siphondsp.dsp
 
 import java.io.BufferedReader
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sqrt
 
@@ -26,6 +27,9 @@ object CarBaselineParser {
     /** REW's full-resolution export is ~32k lines; anything far past that isn't a measurement. */
     const val MAX_LINES = 200_000
     const val MIN_POINTS = 8
+    /** No real SPL or relative level gets near this; a point past it is an outlier or not dB
+     *  at all, and one such point would skew the levelling and blow out the graph's gain window. */
+    const val MAX_ABS_DB = 200.0
 
     private val whitespace = Regex("\\s+")
     private val semicolonFields = Regex("[\\s;]+")
@@ -57,7 +61,7 @@ object CarBaselineParser {
             if (fields.size < 2) continue
             val frequency = fields[0].toDoubleOrNull() ?: continue
             val level = fields[1].toDoubleOrNull() ?: continue
-            if (!frequency.isFinite() || frequency <= 0.0 || !level.isFinite()) continue
+            if (!frequency.isFinite() || frequency <= 0.0 || !level.isFinite() || abs(level) > MAX_ABS_DB) continue
             points += frequency to level
         }
         points.sortBy { it.first }

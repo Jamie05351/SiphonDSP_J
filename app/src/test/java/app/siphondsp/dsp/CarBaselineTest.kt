@@ -70,6 +70,14 @@ class CarBaselineTest {
     }
 
     @Test
+    fun `skips implausible levels`() {
+        val text = (0 until 12).joinToString("\n") { "${100 * (it + 1)} ${if (it == 3) "1e30" else "80"}" }
+        val m = parse(text)
+        assertEquals(11, m.frequencies.size)
+        assertEquals(80.0, m.db.max(), 0.0)
+    }
+
+    @Test
     fun `rejects files that are not measurements`() {
         assertThrows(IllegalArgumentException::class.java) { parse("hello\nworld\n") }
         assertThrows(IllegalArgumentException::class.java) { parse("Preamp: -3 dB\nFilter 1: ON PK Fc 100 Hz Gain 3 dB Q 1") }
