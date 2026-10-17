@@ -701,18 +701,25 @@ void NativeBmwDspProcessor::updateDelays() {
     stageDelayR_.setDelay(delaySamples(p_.stageDelayR, sampleRate_, kStageDelayCapacity));
 }
 void NativeBmwDspProcessor::rebuildBusLimiter() {
-    busLimAttackMix_ = NativeBmwDsp::busLimiterAttackMix(sampleRate_);
     busLimLow_.zeroMeter();
     busLimMid_.zeroMeter();
     busLimHigh_.zeroMeter();
     busLimLow_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimLowReleaseMs, sampleRate_);
     busLimMid_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimMidReleaseMs, sampleRate_);
     busLimHigh_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimHighReleaseMs, sampleRate_);
-    // Also empties each hold window; the follower's gain is left alone, so a release/enable edit
-    // mid-limiting just releases from where it is.
+    // Hold windows keep their contents unless their length changes (a sample-rate change), and
+    // the follower's gain is left alone, so a release/enable edit mid-limiting just releases from
+    // where it is -- peaks already in the lookahead delay keep their hold.
     busLimLow_.setHold(NativeBmwDsp::kBusLimLowHoldMs, sampleRate_);
     busLimMid_.setHold(NativeBmwDsp::kBusLimMidHoldMs, sampleRate_);
     busLimHigh_.setHold(NativeBmwDsp::kBusLimHighHoldMs, sampleRate_);
+    for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
+        b->setLookahead(sampleRate_);
+    }
+    // Bypassed bands skip both the alignment kernel and the bus limiter, so they carry both.
+    for (auto& line : bypassLatency_) {
+        line.delay = static_cast<float>(NativeBmwDsp::kAlignmentLatency + busLimLow_.lookahead());
+    }
 }
 void NativeBmwDspProcessor::rebuildPolarityAndMute() {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
@@ -751,16 +758,19 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         output(OutputId::HighLeft).clearState();
         output(OutputId::HighRight).clearState();
         highPeq_.clear();
+        busLimHigh_.clear();
     }
     if (d & DirtyLowResume) {
         output(OutputId::LowLeft).clearState();
         output(OutputId::LowRight).clearState();
         lowPeq_.clear();
+        busLimLow_.clear();
     }
     if (d & DirtyMidResume) {
         output(OutputId::MidLeft).clearState();
         output(OutputId::MidRight).clearState();
         midPeq_.clear();
+        busLimMid_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();
@@ -833,7 +843,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     }
     mbc_.resetState();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
-        b->gain = 1.f;
+        b->clear();
         b->zeroMeter();
     }
     updateDelays();

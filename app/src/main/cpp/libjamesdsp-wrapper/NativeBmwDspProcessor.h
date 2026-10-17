@@ -392,8 +392,9 @@ private:
     // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
     // and processFrame's tail). delay (in samples) is set by updateDelays().
     NativeBmwDsp::AlignmentDelay<NativeBmwDsp::kStageDelayCapacity> stageDelayL_, stageDelayR_;
-    // Fixed AlignmentDelay latency for a bypassed Low/Mid band: [LowL, LowR, MidL, MidR].
-    std::array<NativeBmwDsp::FixedAlignmentLatency, 6> bypassLatency_{};
+    // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
+    // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
+    std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};
     // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
     // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
     NativeBmwDsp::VirtualSourceStage virtual_;
@@ -402,8 +403,7 @@ private:
     NativeBmwDsp::DetectorTiming detector_;
     NativeBmwDsp::MasterLimiter limiter_;
     NativeBmwDsp::MultibandCompressor mbc_;
-    // Per-bus output limiters (Low, Mid, High). ~1 ms attack shared; release per bus.
-    float busLimAttackMix_ = 1.f;
+    // Per-bus output limiters (Low, Mid, High). Shared lookahead; release per bus.
     BusLimiter busLimLow_, busLimMid_, busLimHigh_;
     // Mirrors of p_.mbcEnabled/busLim{Low,Mid,High}Enabled/limiterEnabled, published by
     // configure() right after p_ = next. The read*Meter() functions are const and take no lock,

@@ -95,7 +95,7 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
     xr *= right.gain;
     // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
     // bounds the actual level reaching the driver regardless of how much gain is dialed in.
-    // No-op while disabled.
+    // Disabled, it still delays the band by its lookahead so every band keeps the same latency.
     BusLimiter& limiter = band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_;
     const bool limiterEnabled = band == Band::Low   ? p_.busLimLowEnabled
                                 : band == Band::Mid ? p_.busLimMidEnabled
@@ -104,9 +104,9 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
                                   : band == Band::Mid ? p_.busLimMidThreshDb
                                                       : p_.busLimHighThreshDb;
     if (limiterEnabled) {
-        limiter.process(xl, xr, limiterThreshDb, busLimAttackMix_);
+        limiter.process(xl, xr, limiterThreshDb);
     } else {
-        limiter.reset();
+        limiter.passThrough(xl, xr, limiterThreshDb);
     }
 }
 void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
@@ -151,8 +151,9 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     float highL = routed[static_cast<std::size_t>(OutputId::HighLeft)],
           highR = routed[static_cast<std::size_t>(OutputId::HighRight)];
 
-    // A bypassed band (lpfPass/hpfPass) skips the band chain and its AlignmentDelay, so it takes
-    // the same fixed latency here to stay aligned with the processed bands. Run every frame,
+    // A bypassed band (lpfPass/hpfPass) skips the band chain -- its AlignmentDelay and its bus
+    // limiter's lookahead -- so it takes the same fixed latency here to stay aligned with the
+    // processed bands. Run every frame,
     // bypassed or not, so a line is never stale the moment its bypass flag flips on.
     const float lowLBypassed = bypassLatency_[0].run(lowL), lowRBypassed = bypassLatency_[1].run(lowR);
     const float midLBypassed = bypassLatency_[2].run(midL), midRBypassed = bypassLatency_[3].run(midR);

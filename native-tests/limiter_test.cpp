@@ -276,3 +276,115 @@ TEST_CASE("Master volume steps are ramped, not instant (no click)") {
     CHECK(firstMs > before * 0.8f);
     CHECK(settled == doctest::Approx(before * 0.01f).epsilon(0.1));
 }
+
+TEST_CASE("per-bus limiter: lookahead holds the ceiling on a sudden bass onset") {
+    // A 60 Hz tone that starts at its crest: the Low band's output rises within a couple of
+    // milliseconds. The old ~1 ms attack (no lookahead) let that first rise through several dB
+    // over the threshold; with the lookahead the band never exceeds it.
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    quietUpstream(c);
+    c[182] = 1.f; c[183] = -6.f; c[184] = 120.f;   // low bus limiter on at -6 dBFS
+    c[nbschema::kMasterLimiterEnabled] = 0.f;      // nothing downstream may help it
+    for (int out = 2; out < 4; ++out) {            // Mid muted: the output is the Low bus alone
+        c[nbschema::kOutputConfigBase + out * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 1.f;
+    }
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+
+    std::vector<float> silence(2 * 4800, 0.f);
+    proc.process(silence.data(), silence.size());
+    constexpr std::size_t kFrames = 9600;
+    std::vector<float> onset(2 * kFrames);
+    for (std::size_t n = 0; n < kFrames; ++n) {
+        const float s = static_cast<float>(0.9 * std::cos(2.0 * kPi * 60.0 * n / kSampleRate));
+        onset[2 * n] = onset[2 * n + 1] = s;
+    }
+    proc.process(onset.data(), onset.size());
+    const float ceiling = std::pow(10.f, -6.f / 20.f);
+    INFO("peak out = ", peakAbs(onset), "  ceiling = ", ceiling);
+    CHECK(peakAbs(onset) <= ceiling * 1.005f);
+}
+
+TEST_CASE("per-bus limiter: bypassed and processed bands stay aligned at a high sample rate") {
+    // At 192 kHz the 1.5 ms lookahead would exceed what the bypass line (alignment latency +
+    // lookahead, in a 256-sample ring) can hold unless it is capped; a wrapped bypass line would
+    // put a bypassed band 256 samples off the processed ones.
+    NativeBmwDsp::BusLimiter limiter;
+    limiter.setLookahead(192000.f);
+    CHECK(limiter.lookahead() + NativeBmwDsp::kAlignmentLatency <= NativeBmwDsp::kDelayLineCapacity - 1);
+}
+
+TEST_CASE("per-bus limiter: enabling it mid-signal never lets the lookahead's audio over") {
+    // While disabled the limiter still delays its band; the audio sitting in that delay when it is
+    // switched on must already have been analysed, or the first 1.5 ms after enabling pass at
+    // full level over the threshold. Whether that audio is near a crest depends on where in the
+    // cycle the switch lands, so enable at eight points across one 60 Hz period.
+    const float ceiling = std::pow(10.f, -12.f / 20.f);
+    const double w = 2.0 * kPi * 60.0 / kSampleRate;
+    auto tone = [&](std::size_t from, std::size_t frames) {
+        std::vector<float> buf(2 * frames);
+        for (std::size_t n = 0; n < frames; ++n) {
+            buf[2 * n] = buf[2 * n + 1] = static_cast<float>(0.9 * std::sin(w * (from + n)));
+        }
+        return buf;
+    };
+    float worst = 0.f;
+    for (std::size_t offset = 0; offset < 800; offset += 100) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        quietUpstream(c);
+        c[nbschema::kMasterLimiterEnabled] = 0.f;
+        for (int out = 2; out < 4; ++out) {
+            c[nbschema::kOutputConfigBase + out * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 1.f;
+        }
+        c[183] = -12.f; c[184] = 120.f;  // threshold/release set, limiter still off
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        const std::size_t warmFrames = 48000 + offset;
+        auto hot = tone(0, warmFrames);
+        proc.process(hot.data(), hot.size());  // runs hot, unlimited
+        c[182] = 1.f;                           // switch the low bus limiter on mid-signal
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto after = tone(warmFrames, 4800);    // the same tone, continuing in phase
+        proc.process(after.data(), after.size());
+        // The first kAlignmentLatency frames out were already past the bus limiter -- in the
+        // stage-alignment delay downstream of it -- when it was switched on: produced while it
+        // was off, so correctly unlimited. Everything after that went through the enabled limiter.
+        after.erase(after.begin(), after.begin() + 2 * NativeBmwDsp::kAlignmentLatency);
+        worst = std::max(worst, peakAbs(after));
+    }
+    INFO("worst peak after enabling = ", worst, "  ceiling = ", ceiling);
+    CHECK(worst <= ceiling * 1.005f);
+}
+
+TEST_CASE("per-bus limiter: a rebuild while a spike is in the lookahead doesn't let it through") {
+    // A release or enable edit rebuilds the bus limiters (setHold/setLookahead/release). If that
+    // empties the hold window while a spike is still inside the lookahead delay, the spike loses
+    // its hold, the ramp fills back up with unity gains and the spike leaves the delay
+    // under-limited. Driven on the limiter directly, so the spike stays a spike.
+    const float thresholdDb = -12.f, ceiling = std::pow(10.f, thresholdDb / 20.f);
+    float worst = 0.f;
+    for (unsigned rebuildAt = 1; rebuildAt < 72; rebuildAt += 4) {
+        NativeBmwDsp::BusLimiter lim;
+        lim.setLookahead(kSampleRate);
+        lim.setHold(NativeBmwDsp::kBusLimLowHoldMs, kSampleRate);
+        lim.releaseMix = NativeBmwDsp::busLimiterReleaseMix(120.f, kSampleRate);
+        for (int n = 0; n < 2000; ++n) {  // quiet lead-in
+            float l = 0.01f, r = 0.01f;
+            lim.process(l, r, thresholdDb);
+        }
+        for (unsigned n = 0; n < 400; ++n) {
+            if (n == rebuildAt) {  // what rebuildBusLimiter() does on a release/enable edit
+                lim.releaseMix = NativeBmwDsp::busLimiterReleaseMix(400.f, kSampleRate);
+                lim.setHold(NativeBmwDsp::kBusLimLowHoldMs, kSampleRate);
+                lim.setLookahead(kSampleRate);
+            }
+            float l = n < 10 ? 0.9f : 0.01f, r = l;  // a 10-sample spike, then quiet
+            lim.process(l, r, thresholdDb);
+            worst = std::max(worst, std::max(std::fabs(l), std::fabs(r)));
+        }
+    }
+    INFO("worst peak with a rebuild mid-spike = ", worst, "  ceiling = ", ceiling);
+    CHECK(worst <= ceiling * 1.005f);
+}

@@ -64,8 +64,8 @@ struct StageDelay {
 //
 // The price is a fixed kAlignmentLatency samples (7, ~0.15 ms at 48 kHz) on top of the requested
 // delay, so the kernel has samples on both sides of the read point. Every output and both stage
-// sides carry it, so relative alignment is unchanged; bypassed bands carry it via
-// FixedAlignmentLatency below. Where an undelayed path is summed back in (the virtual-centre
+// sides carry it, so relative alignment is unchanged; bypassed bands carry it in the processor's
+// bypassLatency_ lines. Where an undelayed path is summed back in (the virtual-centre
 // feeds), setDelayNoLatency() takes the kernel's latency out of the delay itself instead. The
 // master limiter's lookahead keeps Delay: it must stay sample-exact against its gain path.
 constexpr unsigned kAlignmentTaps = 16;
@@ -128,24 +128,6 @@ struct AlignmentDelay {
     void clear() {
         data.fill(0);
         write = 0;
-    }
-};
-
-// A whole-sample delay of exactly kAlignmentLatency, for a band whose crossover is bypassed
-// (lpfPass/hpfPass): it skips the band chain and its AlignmentDelay, so without this it would
-// arrive kAlignmentLatency samples ahead of the bands that are processed.
-struct FixedAlignmentLatency {
-    std::array<float, kAlignmentLatency> data{};
-    unsigned pos = 0;
-    float run(float x) {
-        const float y = data[pos];
-        data[pos] = x;
-        pos = pos + 1 == kAlignmentLatency ? 0 : pos + 1;
-        return y;
-    }
-    void clear() {
-        data.fill(0);
-        pos = 0;
     }
 };
 
