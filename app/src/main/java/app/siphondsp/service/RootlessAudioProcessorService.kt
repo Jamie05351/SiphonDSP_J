@@ -328,7 +328,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         healthHandler.removeCallbacks(idleTimerResetRunnable)
         startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
-        // No config pushes into an engine that is about to close.
+        // No new config pushes into an engine that is about to close. One already running is
+        // safe: engine.close() frees the handle under nativeLock, which configureNativeBmwDsp()
+        // holds for its whole call and re-checks the handle under.
         dspConfigThread.quit()
         val closeEngineNow = synchronized(recorderLifecycleLock) {
             // A stuck native process holds engine.nativeLock. Do not block the main thread
@@ -426,9 +428,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             Timber.e("Failed to apply native BMW DSP configuration")
             return
         }
-        val active = isMeasGenActive(values)
-        // The transition touches the recorder lifecycle, which the main thread owns.
-        healthHandler.post { applyMeasGenTransition(active) }
+        // Applied right here, not posted to the main thread: a posted transition would leave a
+        // window where native already runs the new generator state while the recorder loop
+        // still reads the old mirror, and could run after onDestroy. Everything it touches is
+        // guarded by recorderLifecycleLock, and recreation requests are ignored once the service
+        // is disposing.
+        applyMeasGenTransition(isMeasGenActive(values))
     }
 
     /**
