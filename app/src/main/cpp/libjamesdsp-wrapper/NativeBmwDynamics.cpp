@@ -316,8 +316,15 @@ void BusLimiter::resetGainPath() {
 }
 void BusLimiter::setHold(float holdMs, float sampleRate) {
     // The window holds holdSamples + 1 readings, so the cap leaves room for that extra slot.
-    holdSamples = static_cast<unsigned>(clampf(std::round(holdMs * .001f * sampleRate), 0.f,
-                                               static_cast<float>(kMaxHoldSamples - 1)));
+    const auto samples = static_cast<unsigned>(clampf(std::round(holdMs * .001f * sampleRate),
+                                                      0.f, static_cast<float>(kMaxHoldSamples - 1)));
+    // Keep the window when its length is unchanged: every release or enable edit rebuilds the
+    // limiters, and emptying the window then would drop the hold on peaks still inside the
+    // lookahead delay, letting them out under-limited.
+    if (samples == holdSamples) {
+        return;
+    }
+    holdSamples = samples;
     holdHead_ = holdCount_ = 0;
     sampleIndex_ = 0;
 }

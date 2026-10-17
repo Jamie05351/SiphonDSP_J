@@ -357,3 +357,34 @@ TEST_CASE("per-bus limiter: enabling it mid-signal never lets the lookahead's au
     INFO("worst peak after enabling = ", worst, "  ceiling = ", ceiling);
     CHECK(worst <= ceiling * 1.005f);
 }
+
+TEST_CASE("per-bus limiter: a rebuild while a spike is in the lookahead doesn't let it through") {
+    // A release or enable edit rebuilds the bus limiters (setHold/setLookahead/release). If that
+    // empties the hold window while a spike is still inside the lookahead delay, the spike loses
+    // its hold, the ramp fills back up with unity gains and the spike leaves the delay
+    // under-limited. Driven on the limiter directly, so the spike stays a spike.
+    const float thresholdDb = -12.f, ceiling = std::pow(10.f, thresholdDb / 20.f);
+    float worst = 0.f;
+    for (unsigned rebuildAt = 1; rebuildAt < 72; rebuildAt += 4) {
+        NativeBmwDsp::BusLimiter lim;
+        lim.setLookahead(kSampleRate);
+        lim.setHold(NativeBmwDsp::kBusLimLowHoldMs, kSampleRate);
+        lim.releaseMix = NativeBmwDsp::busLimiterReleaseMix(120.f, kSampleRate);
+        for (int n = 0; n < 2000; ++n) {  // quiet lead-in
+            float l = 0.01f, r = 0.01f;
+            lim.process(l, r, thresholdDb);
+        }
+        for (unsigned n = 0; n < 400; ++n) {
+            if (n == rebuildAt) {  // what rebuildBusLimiter() does on a release/enable edit
+                lim.releaseMix = NativeBmwDsp::busLimiterReleaseMix(400.f, kSampleRate);
+                lim.setHold(NativeBmwDsp::kBusLimLowHoldMs, kSampleRate);
+                lim.setLookahead(kSampleRate);
+            }
+            float l = n < 10 ? 0.9f : 0.01f, r = l;  // a 10-sample spike, then quiet
+            lim.process(l, r, thresholdDb);
+            worst = std::max(worst, std::max(std::fabs(l), std::fabs(r)));
+        }
+    }
+    INFO("worst peak with a rebuild mid-spike = ", worst, "  ceiling = ", ceiling);
+    CHECK(worst <= ceiling * 1.005f);
+}

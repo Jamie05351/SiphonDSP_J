@@ -740,8 +740,9 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimLow_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimLowReleaseMs, sampleRate_);
     busLimMid_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimMidReleaseMs, sampleRate_);
     busLimHigh_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimHighReleaseMs, sampleRate_);
-    // Also empties each hold window; the follower's gain is left alone, so a release/enable edit
-    // mid-limiting just releases from where it is.
+    // Hold windows keep their contents unless their length changes (a sample-rate change), and
+    // the follower's gain is left alone, so a release/enable edit mid-limiting just releases from
+    // where it is -- peaks already in the lookahead delay keep their hold.
     busLimLow_.setHold(NativeBmwDsp::kBusLimLowHoldMs, sampleRate_);
     busLimMid_.setHold(NativeBmwDsp::kBusLimMidHoldMs, sampleRate_);
     busLimHigh_.setHold(NativeBmwDsp::kBusLimHighHoldMs, sampleRate_);

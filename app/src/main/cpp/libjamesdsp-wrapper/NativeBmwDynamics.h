@@ -168,7 +168,7 @@ public:
     // the next time it runs -- which would fade that band back in over the release time.
     // Guarded so the steady skipped state costs nothing per sample.
     void reset();
-    // Sets the hold window (clamped to kMaxHoldSamples) and empties it.
+    // Sets the hold window (clamped to kMaxHoldSamples); empties it only if its length changed.
     void setHold(float holdMs, float sampleRate);
     // Sets the lookahead for this sample rate (kLookaheadMs); resets the gain path if it changed.
     void setLookahead(float sampleRate);
