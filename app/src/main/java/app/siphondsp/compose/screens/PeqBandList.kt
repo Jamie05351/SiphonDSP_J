@@ -49,9 +49,7 @@ import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import kotlin.math.pow
 
-// 1/24-octave multiplicative Hz step -- matches ParametricEqBandAdapter.FREQ_STEP_FACTOR.
 private val IndexColor = Color(0xFF9AA1AB)
 private val AddGlassFill = Color(0xFF14171C)
 private val TapCellFill = Color(0xFF1B1F26)

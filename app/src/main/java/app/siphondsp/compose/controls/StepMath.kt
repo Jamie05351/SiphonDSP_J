@@ -18,8 +18,8 @@ import kotlin.math.ceil
  */
 internal object StepMath {
 
-    /** A frequency control: stepped on the round-number ladder. */
-    fun isMusical(unit: String): Boolean = unit.equals("Hz", ignoreCase = true) || unit.equals("kHz", ignoreCase = true)
+    /** A frequency control in Hz: stepped on the round-number ladder (which is defined in Hz). */
+    fun isMusical(unit: String): Boolean = unit.equals("Hz", ignoreCase = true)
 
     /**
      * The value one press of − ([direction] -1) or + (+1) moves [value] to, [times] steps at once.
