@@ -42,6 +42,18 @@ class StepMathTest {
     }
 
     @Test
+    fun aCoarseFrequencyGridIsRespected() {
+        // A 10 Hz control in the 1 Hz / 5 Hz bands steps by its own 10 Hz.
+        assertEquals(70f, StepMath.next(60f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        assertEquals(110f, StepMath.next(100f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        // Where the ladder is coarser it wins, still on the 10 Hz grid.
+        assertEquals(1050f, StepMath.next(1000f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        // A 50 Hz control.
+        assertEquals(150f, StepMath.next(100f, 100f..10000f, 50f, +1, musical = true), 1e-4f)
+        assertEquals(10250f, StepMath.next(10000f, 10f..24000f, 50f, +1, musical = true), 1e-4f)
+    }
+
+    @Test
     fun frequenciesStayInRange() {
         assertEquals(20f, StepMath.next(20f, 20f..60f, 1f, -1, musical = true), 1e-4f)
         assertEquals(60f, StepMath.next(60f, 20f..60f, 1f, +1, musical = true), 1e-4f)

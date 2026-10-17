@@ -35,7 +35,7 @@ internal object StepMath {
         val current = value.coerceIn(range.start, range.endInclusive)
         if (musical) {
             var f = current.toDouble()
-            repeat(times) { f = nextFrequency(f, direction) }
+            repeat(times) { f = nextFrequency(f, direction, step.toDouble()) }
             return f.toFloat().coerceIn(range.start, range.endInclusive)
         }
         var snapped = snapToStep(current + direction * step * times, range, step)
@@ -57,15 +57,18 @@ internal object StepMath {
     /**
      * One − (-1) or + (+1) step of [hz] on the ladder, landing on the ladder's grid: up uses the step
      * of the band [hz] is in, down the step of the band just below it, so 100 -> 105 going up and
-     * 100 -> 99 going down. An off-grid value (an old 65.7) moves to the next grid point that way.
+     * 100 -> 99 going down. An off-grid value (an old 65.7, or a range bound) moves to the next grid
+     * point that way. [minStep] is the control's own grid: the step used is the coarser of the two,
+     * so a 10 Hz or 50 Hz control never lands between its own steps (every ladder step that is
+     * coarser than 1 Hz is a multiple of 5, 10 or 50, so the result stays on that grid).
      */
-    fun nextFrequency(hz: Double, direction: Int): Double {
+    fun nextFrequency(hz: Double, direction: Int, minStep: Double = 0.0): Double {
         val eps = 1e-6
         return if (direction > 0) {
-            val s = frequencyStep(hz)
+            val s = maxOf(frequencyStep(hz), minStep)
             (kotlin.math.floor(hz / s + eps) + 1) * s
         } else {
-            val s = frequencyStep(hz - eps)
+            val s = maxOf(frequencyStep(hz - eps), minStep)
             (kotlin.math.ceil(hz / s - eps) - 1) * s
         }
     }
