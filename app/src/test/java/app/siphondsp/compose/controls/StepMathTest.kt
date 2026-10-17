@@ -19,28 +19,51 @@ class StepMathTest {
     }
 
     @Test
-    fun frequenciesStepMusically() {
-        // A semitone up from 80 Hz is ~84.8, on a 1 Hz grid 85.
-        assertEquals(85f, StepMath.next(80f, 20f..1000f, 1f, +1, musical = true), 1e-4f)
-        // The same ratio near the top of a range: 8000 -> ~8476, on a 10 Hz grid 8480.
-        assertEquals(8480f, StepMath.next(8000f, 1000f..8000f + 1000f, 10f, +1, musical = true), 1e-4f)
-        assertEquals(76f, StepMath.next(80f, 20f..1000f, 1f, -1, musical = true), 1e-4f)
+    fun frequenciesStepOnRoundNumbers() {
+        // Even 1 Hz steps in the bass, whatever the control's own step.
+        assertEquals(61f, StepMath.next(60f, 20f..1000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(59f, StepMath.next(60f, 20f..1000f, 1f, -1, musical = true), 1e-4f)
+        // Band edges: up from 100 uses the next band's 5 Hz, down from 100 the 1 Hz band below.
+        assertEquals(105f, StepMath.next(100f, 20f..1000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(99f, StepMath.next(100f, 20f..1000f, 1f, -1, musical = true), 1e-4f)
+        assertEquals(310f, StepMath.next(300f, 20f..20000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(1050f, StepMath.next(1000f, 20f..20000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(3100f, StepMath.next(3000f, 20f..20000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(10250f, StepMath.next(10000f, 20f..20000f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(9900f, StepMath.next(10000f, 20f..20000f, 1f, -1, musical = true), 1e-4f)
     }
 
     @Test
-    fun aCoarseGridStillMovesOneStep() {
-        // 50 Hz steps at 100 Hz: a semitone (~106) snaps back to 100, so it takes one grid step.
-        assertEquals(150f, StepMath.next(100f, 50f..2000f, 50f, +1, musical = true), 1e-4f)
-        // 1 Hz grid at 20 Hz: a semitone down (~18.9) is below the range, so it stays at 20.
+    fun anOffGridFrequencySnapsToTheLadder() {
+        assertEquals(66.0, StepMath.nextFrequency(65.7, +1), 1e-9)
+        assertEquals(65.0, StepMath.nextFrequency(65.7, -1), 1e-9)
+        assertEquals(1150.0, StepMath.nextFrequency(1122.5, +1), 1e-9)
+        assertEquals(1100.0, StepMath.nextFrequency(1122.5, -1), 1e-9)
+    }
+
+    @Test
+    fun aCoarseFrequencyGridIsRespected() {
+        // A 10 Hz control in the 1 Hz / 5 Hz bands steps by its own 10 Hz.
+        assertEquals(70f, StepMath.next(60f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        assertEquals(110f, StepMath.next(100f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        // Where the ladder is coarser it wins, still on the 10 Hz grid.
+        assertEquals(1050f, StepMath.next(1000f, 10f..24000f, 10f, +1, musical = true), 1e-4f)
+        // A 50 Hz control.
+        assertEquals(150f, StepMath.next(100f, 100f..10000f, 50f, +1, musical = true), 1e-4f)
+        assertEquals(10250f, StepMath.next(10000f, 10f..24000f, 50f, +1, musical = true), 1e-4f)
+    }
+
+    @Test
+    fun frequenciesStayInRange() {
         assertEquals(20f, StepMath.next(20f, 20f..60f, 1f, -1, musical = true), 1e-4f)
-        assertEquals(21f, StepMath.next(20f, 20f..60f, 1f, +1, musical = true), 1e-4f)
+        assertEquals(60f, StepMath.next(60f, 20f..60f, 1f, +1, musical = true), 1e-4f)
     }
 
     @Test
     fun multipleStepsAtOnce() {
         assertEquals(-4f, StepMath.next(-6f, -12f..0f, 0.5f, +1, musical = false, times = 4), 1e-4f)
-        // Two semitones up from 1000 Hz is ~1122.5, on a 10 Hz grid 1120.
-        assertEquals(1120f, StepMath.next(1000f, 1000f..8000f, 10f, +1, musical = true, times = 2), 1e-4f)
+        // Two ladder steps up from 1000 Hz (50 Hz band).
+        assertEquals(1100f, StepMath.next(1000f, 1000f..8000f, 10f, +1, musical = true, times = 2), 1e-4f)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package app.siphondsp.compose.screens
 
+import app.siphondsp.compose.controls.StepMath
 import android.view.LayoutInflater
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -48,10 +49,7 @@ import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.view.BmwDashboardSkin
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import kotlin.math.pow
 
-// 1/24-octave multiplicative Hz step -- matches ParametricEqBandAdapter.FREQ_STEP_FACTOR.
-private val FreqStepFactor = 2.0.pow(1.0 / 24.0)
 private val IndexColor = Color(0xFF9AA1AB)
 private val AddGlassFill = Color(0xFF14171C)
 private val TapCellFill = Color(0xFF1B1F26)
@@ -146,9 +144,10 @@ fun PeqBandList(
                         }
                     },
                     onFreqStep = { up ->
-                        val factor = if (up) FreqStepFactor else 1.0 / FreqStepFactor
                         holder.commitBandEdit(index, "edit_frequency_step") {
-                            it.withFrequency((it.frequency * factor).coerceIn(20.0, 20000.0))
+                            // Same round-number ladder as every other frequency control.
+                            val next = StepMath.nextFrequency(it.frequency, if (up) +1 else -1)
+                            it.withFrequency(next.coerceIn(20.0, 20000.0))
                         }
                     },
                     onGain = {
