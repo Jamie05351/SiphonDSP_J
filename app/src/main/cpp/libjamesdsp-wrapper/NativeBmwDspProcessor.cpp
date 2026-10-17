@@ -245,6 +245,11 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     if (p_.limiterEnabled) {
         limiter_.process(oL, oR);
     }
+    // The host stage (the convolver) runs after the front of the chain's own clean-up, so a NaN,
+    // infinity or denormal it produces must be caught here -- with the limiter off, nothing else
+    // between it and the output would.
+    oL = NativeBmwDsp::ftz(oL);
+    oR = NativeBmwDsp::ftz(oR);
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
     // ramped toward its target so a steering-wheel step never clicks.
     masterGain_ += (masterGainTarget_ - masterGain_) * masterRampCoef_;
