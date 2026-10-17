@@ -79,6 +79,14 @@ TEST_CASE("Low subsonic HPF matches the theoretical LR4 (24 dB/oct) response") {
         cfgOn[base + nbschema::kOutSubsonicEnabled] = 1.f;
         cfgOn[base + nbschema::kOutSubsonicFreq] = kSubsonicFreq;
     }
+    // Mute Mid in both, so the output is the Low branch alone: the subsonic's phase shift changes
+    // how Low sums with Mid near the crossover, which would otherwise leak into the ratio.
+    for (auto* cfg : {&cfgOn, &cfgOff}) {
+        for (int out = 2; out < 4; ++out) {
+            (*cfg)[nbschema::kOutputConfigBase + out * nbschema::kOutputConfigWidth +
+                   nbschema::kOutMuted] = 1.f;
+        }
+    }
 
     const double freqs[] = {12, 16, 24, 32, 48, 64, 96, 130};
     const double amp = 0.05;
