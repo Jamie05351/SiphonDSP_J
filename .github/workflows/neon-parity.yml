@@ -11,6 +11,7 @@ on:
       - master
     paths:
       - app/src/main/cpp/libjamesdsp-wrapper/**
+      - app/src/main/cpp/libjdspimptoolbox/dr_wav.h
       - native-tests/**
       - scripts/run-neon-parity.sh
       - .github/workflows/neon-parity.yml
@@ -19,6 +20,7 @@ on:
       - master
     paths:
       - app/src/main/cpp/libjamesdsp-wrapper/**
+      - app/src/main/cpp/libjdspimptoolbox/dr_wav.h
       - native-tests/**
       - scripts/run-neon-parity.sh
       - .github/workflows/neon-parity.yml
