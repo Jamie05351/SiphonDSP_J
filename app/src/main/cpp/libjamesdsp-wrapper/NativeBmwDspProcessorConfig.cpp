@@ -51,10 +51,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.midDelayR = clampIn(v[22], 0, 2.8f);
     next.lowDelayL = clampIn(v[23], 0, 2.8f);
     next.lowDelayR = clampIn(v[24], 0, 2.8f);
-    // v[141] / v[142] -- reclaimed from the removed Mid-band LPF -- are the stage-centering L/R
-    // alignment delay (ms). See Params::stageDelay* and processFrame's tail.
-    next.stageDelayL = clampIn(v[141], 0, kStageDelayMaxMs);
-    next.stageDelayR = clampIn(v[142], 0, kStageDelayMaxMs);
+    // v[141] / v[142] (the retired stage-centering delay) are not read: see kConfigSize's comment.
     next.tilt = flagIn(v[25]);
     next.tiltAmount = clampIn(v[26], -6, 6);
     next.tiltFreq = clampIn(v[27], 200, 2000);
@@ -376,8 +373,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
     if (changed(next.lowDelayL, p_.lowDelayL) || changed(next.lowDelayR, p_.lowDelayR) ||
         changed(next.midDelayL, p_.midDelayL) || changed(next.midDelayR, p_.midDelayR) ||
-        changed(next.highDelayL, p_.highDelayL) || changed(next.highDelayR, p_.highDelayR) ||
-        changed(next.stageDelayL, p_.stageDelayL) || changed(next.stageDelayR, p_.stageDelayR)) {
+        changed(next.highDelayL, p_.highDelayL) || changed(next.highDelayR, p_.highDelayR)) {
         dirty |= DirtyDelays;
     }
     if (changed(next.tiltAmount, p_.tiltAmount) || changed(next.tiltFreq, p_.tiltFreq)) {
@@ -696,9 +692,6 @@ void NativeBmwDspProcessor::updateDelays() {
     output(OutputId::MidRight).delay.setDelay(delaySamples(p_.midDelayR, sampleRate_, kDelayLineCapacity));
     output(OutputId::HighLeft).delay.setDelay(delaySamples(p_.highDelayL, sampleRate_, kDelayLineCapacity));
     output(OutputId::HighRight).delay.setDelay(delaySamples(p_.highDelayR, sampleRate_, kDelayLineCapacity));
-    // Stage-centering delay -- its own (larger) ring buffer, so clamp to kStageDelayCapacity.
-    stageDelayL_.setDelay(delaySamples(p_.stageDelayL, sampleRate_, kStageDelayCapacity));
-    stageDelayR_.setDelay(delaySamples(p_.stageDelayR, sampleRate_, kStageDelayCapacity));
 }
 void NativeBmwDspProcessor::rebuildBusLimiter() {
     busLimLow_.zeroMeter();
@@ -836,8 +829,6 @@ void NativeBmwDspProcessor::rebuildAll() {
         out.clearState();
     }
     limiter_.clear();
-    stageDelayL_.clear();
-    stageDelayR_.clear();
     for (auto& line : bypassLatency_) {
         line.clear();
     }

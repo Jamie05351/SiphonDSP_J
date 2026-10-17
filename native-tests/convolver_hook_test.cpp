@@ -137,3 +137,22 @@ TEST_CASE("a capture records the same input and output with a hook as without") 
     CHECK(hookedTake->outL == plainTake->outL);
     CHECK(hookedTake->outR == plainTake->outR);
 }
+
+TEST_CASE("a non-finite sample from the host stage never reaches the output, limiter off") {
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[nbschema::kMasterLimiterEnabled] = 0.f;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto poison = [](void*, float* x, std::size_t frames) {
+        x[0] = std::numeric_limits<float>::quiet_NaN();
+        x[1] = std::numeric_limits<float>::infinity();
+        if (frames > 1) x[2] = 1e-40f;  // denormal
+    };
+    std::vector<float> buf(2 * 256, 0.1f);
+    proc.process(buf.data(), buf.size(), poison, nullptr);
+    for (float v : buf) {
+        CHECK(std::isfinite(v));
+        CHECK((v == 0.f || std::fabs(v) >= 1e-20f));
+    }
+}

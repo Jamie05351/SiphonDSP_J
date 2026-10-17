@@ -47,13 +47,10 @@ public:
     //   140 -> reclaimed: one-time "stopband offset migrated" marker, written by
     //          NativeBmwDspValues.kt so an existing saved config picks up the new default.
     //          Kotlin-only -- never read in configure().
-    //   141, 142 -> reclaimed a second time: briefly held a Mid-band independent LPF
-    //          enable/corner (removed, wrong fix), now the stage-centering L/R alignment delay
-    //          (ms) applied to the summed stereo bus after the master limiter -- see
-    //          Params::stageDelay* and processFrame's tail. Read in configure(). (This comment
-    //          previously said "unused... not read in configure()", which stopped being true
-    //          once that reclaim landed -- don't trust a slot's history here without also
-    //          checking configure()'s actual v[] reads.)
+    //   141, 142 -> reclaimed a second time: briefly a Mid-band independent LPF (removed),
+    //          then the stage-centering L/R alignment delay -- retired too (the virtual centre
+    //          does that job; Kotlin holds both slots at 0) and removed from native. Not read in
+    //          configure(); kept only so no later index moves.
     // 143 (INDEX_DELAY_LINKED) is UI-only -- see NativeBmwDspValues.kt -- and is intentionally
     // never read in configure() either; it only has to be included here so the array length
     // check (NativeBmwDspJni.cpp) accepts the array Kotlin actually sends.
@@ -126,10 +123,7 @@ public:
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
     };
     enum : unsigned { kDelayLineCapacity = NativeBmwDsp::kDelayLineCapacity };
-    // Stage-centering L/R alignment delay on the summed stereo bus (post master limiter). Sized
-    // for a wider range than the sub-millisecond crossover/driver alignment: 10 ms cap -> 480
-    // samples @ 48 kHz, 960 @ 96 kHz. 1024 keeps the full 10 ms available up to ~102 kHz. Kept
-    // separate from kDelayLineCapacity so the per-output / limiter Delay instances stay 256.
+    // Multi-millisecond delay ring size and range, used by the virtual-centre feeds.
     enum : unsigned { kStageDelayCapacity = NativeBmwDsp::kStageDelayCapacity };
     static constexpr float kStageDelayMaxMs = 10.f;
     // kRoutingBase is the one literal anchor here (the first slot after the earlier scalar
@@ -306,7 +300,7 @@ private:
     void processFrame(float& l, float& r);
     // processFrame in two halves, for a host stage in between (see BlockHook): the front runs
     // everything up to the master limiter and leaves logical L / R in l / r; the back runs the
-    // master limiter, stage delay, master volume and the hardware swap.
+    // master limiter, master volume and the hardware swap.
     void processFrameFront(float& l, float& r);
     void processFrameBack(float& l, float& r);
     // The float processing for one buffer, shared by the three sample formats.
@@ -389,9 +383,6 @@ private:
     // Gains, tilt and the summed-bus stages.
     float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
     NativeBmwDsp::Tilt tilt_;
-    // Stage-centering L/R alignment delay lines on the summed stereo bus (see Params::stageDelay*
-    // and processFrame's tail). delay (in samples) is set by updateDelays().
-    NativeBmwDsp::AlignmentDelay<NativeBmwDsp::kStageDelayCapacity> stageDelayL_, stageDelayR_;
     // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
     // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
     std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};

@@ -30,11 +30,6 @@ struct Params {
     float masterVolumeDb = 0.f;
     bool masterMute = false;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
-    // Stage-centering L/R alignment delay (ms), applied to the summed stereo bus after the
-    // master limiter -- the last thing before the deliberate hardware L/R swap. A separate
-    // correction layer from the per-output crossover/driver-alignment delays above (v[141]
-    // / v[142]). Clamped to kStageDelayMaxMs.
-    float stageDelayL = 0, stageDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
     // stopband (v[139]). Default matches NativeBmwDspValues.DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES.
