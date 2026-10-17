@@ -28,7 +28,7 @@ DC -> input PEQ -> headroom -> MBC
 ```
 
 `feedL`/`feedR` are a `VirtualFeed` each: gain, polarity, fractional delay (0-10 ms,
-`StageDelay`), and one optional first/second-order all-pass section
+`AlignmentDelay`), and one optional first/second-order all-pass section
 (`NativeBmwRouting::AllPassSection`, the same design the per-output all-pass uses).
 
 ### Transparency contract

@@ -54,22 +54,42 @@ struct AlignmentDelay {
     unsigned base = 0;
     // Requested delay in samples, excluding kAlignmentLatency (what the truth snapshot reports).
     float delay = 0;
+    // A delay change crossfades from the old read point to the new one over fadeLength samples
+    // (0 = switch at once). Jumping the read point mid-waveform is a step in the output (a click).
+    unsigned fadeLength = 0;
+    unsigned fadeRemaining = 0;
+    unsigned fadeBase = 0;
+    std::array<float, kAlignmentTaps> fadeTaps{};
+    // A setDelay() landing mid-fade is held here and started when the current fade ends, so each
+    // fade begins exactly where the output is (no jump back to a previous target mid-drag).
+    bool pendingSet = false;
+    float pendingDelay = 0;
 
     AlignmentDelay() {
-        setDelay(0);
+        buildAlignmentTaps(0.f, taps);  // a zero delay (setDelay(0) would skip: delay is already 0)
     }
     // Config thread. Total delay = samples + kAlignmentLatency. Clamped so the kernel's oldest
     // tap stays inside the ring.
     void setDelay(float samples) {
-        delay = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
-        base = static_cast<unsigned>(delay);
-        buildAlignmentTaps(delay - static_cast<float>(base), taps);
+        const float next = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
+        if (fadeRemaining > 0) {
+            pendingSet = true;  // started from run() once the current fade lands
+            pendingDelay = next;
+            return;
+        }
+        pendingSet = false;
+        if (next == delay) {
+            return;  // unchanged: no rebuild, no fade
+        }
+        beginFade();
+        retarget(next);
     }
     // Config thread. Total delay = samples exactly, for a line summed with an undelayed path
     // (the virtual-centre feeds). The kernel borrows its latency from the delay itself, so it
     // needs samples >= kAlignmentLatency; shorter delays fall back to linear interpolation
     // (the old behaviour, still exact for whole samples).
     void setDelayNoLatency(float samples) {
+        beginFade();
         delay = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
         const auto whole = static_cast<unsigned>(delay);
         const float fraction = delay - static_cast<float>(whole);
@@ -84,20 +104,66 @@ struct AlignmentDelay {
         }
     }
     float run(float x) {
-        constexpr unsigned mask = Capacity - 1;
         data[write] = x;
-        const unsigned newest = (write + Capacity - base) & mask;
-        float y = 0;
-        for (unsigned k = 0; k < kAlignmentTaps; ++k) {
-            y += taps[k] * data[(newest + Capacity - k) & mask];
+        float y = read(base, taps);
+        if (fadeRemaining > 0) {
+            // Linear crossfade from the old read point (fadeBase/fadeTaps) to the new one.
+            const float oldWeight = std::min(1.f, static_cast<float>(fadeRemaining) /
+                                                      static_cast<float>(std::max(1u, fadeLength)));
+            y += (read(fadeBase, fadeTaps) - y) * oldWeight;
+            if (--fadeRemaining == 0 && pendingSet) {
+                // The fade has landed on the current target: start the held change from there.
+                pendingSet = false;
+                if (pendingDelay != delay) {
+                    beginFade();
+                    retarget(pendingDelay);
+                }
+            }
         }
-        write = (write + 1) & mask;
+        write = (write + 1) & (Capacity - 1);
         return y;
     }
     void clear() {
         data.fill(0);
         write = 0;
+        snap();
     }
+    // Ends any fade in progress and applies any held change at once (start-up, full rebuilds).
+    void snap() {
+        fadeRemaining = 0;
+        if (pendingSet) {
+            pendingSet = false;
+            retarget(pendingDelay);
+        }
+    }
+
+private:
+    float read(unsigned from, const std::array<float, kAlignmentTaps>& kernel) const {
+        constexpr unsigned mask = Capacity - 1;
+        const unsigned newest = (write + Capacity - from) & mask;
+        float y = 0;
+        for (unsigned k = 0; k < kAlignmentTaps; ++k) {
+            y += kernel[k] * data[(newest + Capacity - k) & mask];
+        }
+        return y;
+    }
+    void retarget(float d) {
+        delay = d;
+        base = static_cast<unsigned>(delay);
+        buildAlignmentTaps(delay - static_cast<float>(base), taps);
+    }
+    // Remembers the current read point as the one to fade from (only ever called with no fade in
+    // progress, so it is exactly where the output is).
+    void beginFade() {
+        if (fadeLength == 0) {
+            return;
+        }
+        fadeBase = base;
+        fadeTaps = taps;
+        fadeRemaining = fadeLength;
+    }
+
+public:
 };
 
 // Delay in ms -> fractional samples, clamped to what a ring of `capacity` can hold.
