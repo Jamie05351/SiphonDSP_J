@@ -46,6 +46,23 @@ class CarBaselineTest {
     }
 
     @Test
+    fun `reads a decimal comma in whitespace separated fields`() {
+        assertEquals(listOf("20.5", "74.3", "-12.0"), CarBaselineParser.fields("20,5\t74,3\t-12,0"))
+        assertEquals(listOf("20.5", "74.3"), CarBaselineParser.fields("20,5 74,3"))
+        val tabbed = (0 until 12).joinToString("\n") { "${100 * (it + 1)},5\t${70 + it},3" }
+        val m = parse(tabbed)
+        assertEquals(100.5, m.frequencies.first(), 1e-9)
+        assertEquals(70.3, m.db.first(), 1e-9)
+    }
+
+    @Test
+    fun `comma and space separated fields stay separate`() {
+        assertEquals(listOf("20.000", "75.30", "-12.5"), CarBaselineParser.fields("20.000, 75.30, -12.5"))
+        assertEquals(listOf("20.000", "75.30"), CarBaselineParser.fields("20.000,75.30"))
+        assertEquals(listOf("20.000", "75.30", "-12"), CarBaselineParser.fields("20.000 75.30,-12"))
+    }
+
+    @Test
     fun `sorts and drops duplicate frequencies`() {
         val m = parse("1000 3\n200 1\n500 2\n500 9\n2000 4\n3000 5\n4000 6\n5000 7\n6000 8")
         assertEquals(listOf(200.0, 500.0, 1000.0, 2000.0, 3000.0, 4000.0, 5000.0, 6000.0), m.frequencies.toList())

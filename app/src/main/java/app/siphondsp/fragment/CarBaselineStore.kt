@@ -58,23 +58,48 @@ class CarBaselineStore(context: Context) {
         }
         val name = displayName(uri)
         val targets = if (side == Side.BOTH) listOf(Side.LEFT, Side.RIGHT) else listOf(side)
-        // Every target is written to its own temp file first and only renamed over the live file
-        // once all of them are on disk, so a failed write (disk full) leaves the previous
-        // measurements intact rather than one channel new and the other old, or a truncated file.
-        val temps = targets.map { File(dir, "${fileFor(it).name}.tmp") }
+        // Every target is written to its own temp file first, so a failed write (disk full) never
+        // touches the live files. Only then are the live files moved aside and the temps renamed
+        // in; if any of those renames fails, every target is put back as it was, so the previous
+        // measurements survive rather than one channel new and the other old.
+        val lives = targets.map(::fileFor)
+        val temps = lives.map { File(dir, "${it.name}.tmp") }
+        val backups = lives.map { File(dir, "${it.name}.bak") }
+        val hadLive = lives.map { it.exists() }
+        var installed = false
         return try {
             dir.mkdirs()
             temps.forEach { it.writeText(text) }
-            for ((target, temp) in targets.zip(temps)) {
-                if (!temp.renameTo(fileFor(target))) throw java.io.IOException("rename failed for $target")
+            for (i in lives.indices) {
+                if (hadLive[i] && !lives[i].renameTo(backups[i])) throw java.io.IOException("backup failed for ${targets[i]}")
             }
+            for (i in lives.indices) {
+                if (!temps[i].renameTo(lives[i])) throw java.io.IOException("rename failed for ${targets[i]}")
+            }
+            installed = true
             prefs.edit { targets.forEach { putString(nameKey(it), name) } }
             null
         } catch (error: Exception) {
             Timber.e(error, "Car baseline save failed")
+            if (!installed) restore(lives, backups, hadLive)
             "Couldn't save the measurement"
         } finally {
             temps.forEach { it.delete() }
+            if (installed) backups.forEach { it.delete() }
+        }
+    }
+
+    /** Puts each of [lives] back from its backup (or removes it if there was none before). */
+    private fun restore(lives: List<File>, backups: List<File>, hadLive: List<Boolean>) {
+        for (i in lives.indices) {
+            if (hadLive[i]) {
+                if (backups[i].exists()) {
+                    lives[i].delete()
+                    if (!backups[i].renameTo(lives[i])) Timber.e("Car baseline restore failed for ${lives[i].name}")
+                }
+            } else {
+                lives[i].delete()
+            }
         }
     }
 

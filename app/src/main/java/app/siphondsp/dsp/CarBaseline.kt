@@ -17,7 +17,8 @@ class CarBaselineMeasurement(val frequencies: DoubleArray, val db: DoubleArray) 
 /**
  * Reads a measurement export. Comment lines (`*`, `#`, `;`, `"`) and any line whose first two
  * fields aren't numbers (column headers) are skipped; fields may be separated by whitespace,
- * commas or semicolons. A line using semicolons is read with a decimal comma (`20,5;74,3`).
+ * commas or semicolons. A decimal comma is read wherever it can't be a separator: in a line
+ * using semicolons (`20,5;74,3`), or in a whitespace-separated field like `20,5` (`20,5<tab>74,3`).
  * Only the first two columns are used -- a phase column, if present, is ignored.
  */
 object CarBaselineParser {
@@ -26,7 +27,23 @@ object CarBaselineParser {
     const val MAX_LINES = 200_000
     const val MIN_POINTS = 8
 
-    private val separators = Regex("[\\s,;]+")
+    private val whitespace = Regex("\\s+")
+    private val semicolonFields = Regex("[\\s;]+")
+    private val decimalComma = Regex("-?\\d+,\\d+")
+
+    /** One data line's fields, with any decimal comma read as a point (see the class comment). */
+    internal fun fields(line: String): List<String> = when {
+        ';' in line -> line.replace(',', '.').split(semicolonFields)
+        whitespace.containsMatchIn(line) -> line.split(whitespace).flatMap { raw ->
+            val field = raw.trim(',')
+            when {
+                field.isEmpty() -> emptyList()
+                decimalComma.matches(field) -> listOf(field.replace(',', '.'))
+                else -> field.split(',').filter { it.isNotEmpty() }
+            }
+        }
+        else -> line.split(',')
+    }
 
     fun parse(reader: BufferedReader): CarBaselineMeasurement {
         val points = ArrayList<Pair<Double, Double>>()
@@ -36,8 +53,7 @@ object CarBaselineParser {
             if (++lines > MAX_LINES) throw IllegalArgumentException("File is too long to be a measurement export")
             val line = raw.trim()
             if (line.isEmpty() || line[0] == '*' || line[0] == '#' || line[0] == ';' || line[0] == '"') continue
-            val normalised = if (';' in line) line.replace(',', '.') else line
-            val fields = normalised.split(separators)
+            val fields = fields(line)
             if (fields.size < 2) continue
             val frequency = fields[0].toDoubleOrNull() ?: continue
             val level = fields[1].toDoubleOrNull() ?: continue
