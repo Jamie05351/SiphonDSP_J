@@ -98,4 +98,43 @@ class BmwDspStateTest {
             broadcasts.unregisterReceiver(receiver)
         }
     }
+
+    @Test
+    fun screensShareOneCopyAndCommitsDoNotOverwriteEachOther() {
+        val context = context()
+        val crossover = BmwDspState(context)
+        val gains = BmwDspState(context)
+        assertTrue(crossover.commit(NativeBmwDspValues.INDEX_HEADROOM, -4f))
+        // The other screen sees it at once, and its own later commit keeps it.
+        assertEquals(-4f, gains.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
+        assertTrue(gains.commit(NativeBmwDspValues.INDEX_LOW_DELAY_L, 0.8f))
+        val saved = NativeBmwDspValues.load(context)
+        assertEquals(-4f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
+        assertEquals(0.8f, saved[NativeBmwDspValues.INDEX_LOW_DELAY_L], 0f)
+    }
+
+    @Test
+    fun resumeWithNothingPendingDoesNotRebroadcast() {
+        val context = context()
+        val state = BmwDspState(context)
+        var broadcasts = 0
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                broadcasts++
+            }
+        }
+        val manager = LocalBroadcastManager.getInstance(context)
+        manager.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+        try {
+            state.refreshFromDisk()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(0, broadcasts)
+            state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
+            state.refreshFromDisk()  // the previewed value was never saved: the engine must drop it
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(2, broadcasts)
+        } finally {
+            manager.unregisterReceiver(receiver)
+        }
+    }
 }
