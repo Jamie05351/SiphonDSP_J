@@ -11,8 +11,8 @@ import kotlin.math.roundToLong
 /**
  * Stateful stereo cascade of normalized RBJ biquads.
  *
- * Configuration is replaced atomically while audio processing is serialized by
- * JamesDspLocalEngine.nativeLock. No allocations occur in the sample loops.
+ * Configuration is replaced atomically; the caller serialises it against processing. No
+ * allocations occur in the sample loops.
  */
 internal class ParametricBiquadProcessor {
     private data class Section(
