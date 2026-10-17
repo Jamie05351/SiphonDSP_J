@@ -173,10 +173,15 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
-          if HOST=1 BASELINE_REF=FETCH_HEAD bash scripts/run-neon-parity.sh; then
-            exit 0
+          rc=0
+          HOST=1 BASELINE_REF=FETCH_HEAD bash scripts/run-neon-parity.sh || rc=$?
+          # 3 = output differs from the base branch only; anything else non-zero is a build/run
+          # error or a NEON/scalar divergence, which no label can waive.
+          if [ "$rc" -ne 3 ]; then
+            exit "$rc"
           fi
-          if gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}"               --json labels --jq '.labels[].name' | grep -qx 'intended-sound-change'; then
+          labels="$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name')"
+          if grep -qx 'intended-sound-change' <<<"$labels"; then
             echo "::warning title=DSP output changed::Output differs from the base branch (diff above); accepted because this PR is labelled intended-sound-change."
             exit 0
           fi
