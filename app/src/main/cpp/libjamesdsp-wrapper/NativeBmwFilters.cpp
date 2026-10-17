@@ -54,16 +54,31 @@ void Biquad::clear() {
     op_z1 = 0;
     ic1eq = ic2eq = 0;
 }
+void Biquad::retune(const Biquad& next) {
+    const bool keepState = next.topology == topology && !isIdentity() && !next.isIdentity();
+    topology = next.topology;
+    op_a = next.op_a;
+    a1 = next.a1;
+    a2 = next.a2;
+    a3 = next.a3;
+    m0 = next.m0;
+    m1 = next.m1;
+    m2 = next.m2;
+    if (!keepState) {
+        clear();
+    }
+}
 void Biquad::loadAllPass(const NativeBmwRouting::BiquadCoefficients& c) {
-    topology = c.firstOrder ? Topology::OnePoleAllpass : Topology::Svf2;
-    op_a = c.opA;
-    a1 = c.a1;
-    a2 = c.a2;
-    a3 = c.a3;
-    m0 = c.m0;
-    m1 = c.m1;
-    m2 = c.m2;
-    clear();
+    Biquad n;
+    n.topology = c.firstOrder ? Topology::OnePoleAllpass : Topology::Svf2;
+    n.op_a = c.opA;
+    n.a1 = c.a1;
+    n.a2 = c.a2;
+    n.a3 = c.a3;
+    n.m0 = c.m0;
+    n.m1 = c.m1;
+    n.m2 = c.m2;
+    retune(n);
 }
 void SvfPair::load(std::size_t lane, const Biquad& q) {
     a1[lane] = q.a1;
@@ -75,13 +90,58 @@ void SvfPair::load(std::size_t lane, const Biquad& q) {
     ic1eq[lane] = 0;
     ic2eq[lane] = 0;
 }
+void SvfPair::setCoefficients(std::size_t lane, const Biquad& q) {
+    a1[lane] = q.a1;
+    a2[lane] = q.a2;
+    a3[lane] = q.a3;
+    m0[lane] = q.m0;
+    m1[lane] = q.m1;
+    m2[lane] = q.m2;
+}
 void SvfPair::clear() {
     ic1eq[kLeftLane] = ic1eq[kRightLane] = 0;
     ic2eq[kLeftLane] = ic2eq[kRightLane] = 0;
 }
-void PeqBank::append(std::size_t lane, const Biquad& q) {
+void PeqBank::append(std::size_t lane, const Biquad& q, const BandKey& key) {
     std::size_t& count = lane == kLeftLane ? leftCount : rightCount;
+    source[lane][count] = key;
     sections[count++].load(lane, q);
+}
+void PeqBank::inheritState(const PeqBank& previous) {
+    for (std::size_t lane : {kLeftLane, kRightLane}) {
+        const std::size_t count = lane == kLeftLane ? leftCount : rightCount;
+        const std::size_t previousCount =
+            lane == kLeftLane ? previous.leftCount : previous.rightCount;
+        std::array<bool, kMaxPeqSectionsPerChannel> taken{}, used{};
+        auto inherit = [&](std::size_t j, std::size_t k) {
+            sections[j].ic1eq[lane] = previous.sections[k].ic1eq[lane];
+            sections[j].ic2eq[lane] = previous.sections[k].ic2eq[lane];
+            taken[j] = used[k] = true;
+        };
+        for (std::size_t j = 0; j < count; ++j) {
+            for (std::size_t k = 0; k < previousCount; ++k) {
+                if (!used[k] && previous.source[lane][k].sameFilter(source[lane][j])) {
+                    inherit(j, k);
+                    break;
+                }
+            }
+        }
+        if (rawBandCount != previous.rawBandCount) {
+            continue;
+        }
+        for (std::size_t j = 0; j < count; ++j) {
+            if (taken[j]) {
+                continue;
+            }
+            for (std::size_t k = 0; k < previousCount; ++k) {
+                if (!used[k] && previous.source[lane][k].index == source[lane][j].index &&
+                    previous.source[lane][k].type == source[lane][j].type) {
+                    inherit(j, k);
+                    break;
+                }
+            }
+        }
+    }
 }
 void PeqBank::process(float& left, float& right) {
     std::size_t i = 0;
@@ -119,54 +179,59 @@ void PeqBank::clear() {
 // machine precision across every filter type/fc/Q/gain this engine uses) before this migration --
 // see PR description, not reproduced as a runtime check.
 void makeLowPass(Biquad& q, float fc, float Q, float sr) {
+    Biquad n;
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 0;
-    q.m1 = 0;
-    q.m2 = 1;
-    q.clear();
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = 0;
+    n.m1 = 0;
+    n.m2 = 1;
+    q.retune(n);
 }
 void makeHighPass(Biquad& q, float fc, float Q, float sr) {
+    Biquad n;
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = -k;
-    q.m2 = -1;
-    q.clear();
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = 1;
+    n.m1 = -k;
+    n.m2 = -1;
+    q.retune(n);
 }
 // True 1-pole (6 dB/oct) TPT lowpass/highpass -- BW3's low-order stage (see kButterworth3Q).
 // Same bilinear prewarp as every 2nd-order builder above (g=tan(w/2)); the coefficient is the
 // classic single-integrator one-pole form (Zavalishin 2.2) rather than SVF's two-integrator one.
 void makeLowPass1(Biquad& q, float fc, float sr) {
+    Biquad n;
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
-    q.topology = Biquad::Topology::OnePoleLowpass;
-    q.a1 = g / (1. + g);
-    q.clear();
+    n.topology = Biquad::Topology::OnePoleLowpass;
+    n.a1 = g / (1. + g);
+    q.retune(n);
 }
 void makeHighPass1(Biquad& q, float fc, float sr) {
+    Biquad n;
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5);
-    q.topology = Biquad::Topology::OnePoleHighpass;
-    q.a1 = g / (1. + g);
-    q.clear();
+    n.topology = Biquad::Topology::OnePoleHighpass;
+    n.a1 = g / (1. + g);
+    q.retune(n);
 }
 // Identity pass-through. BW2's crossover only needs one 2nd-order stage; the second Biquad slot
 // (crossover2) is forced inert here rather than skipped per-sample in processLowCrossover/
 // processMidCrossover, so those stay branch-free on the audio-thread hot path.
 void makeIdentity(Biquad& q) {
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = q.a2 = q.a3 = 0;
-    q.m0 = 1;
-    q.m1 = 0;
-    q.m2 = 0;
-    q.clear();
+    Biquad n;
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = n.a2 = n.a3 = 0;
+    n.m0 = 1;
+    n.m1 = 0;
+    n.m2 = 0;
+    q.retune(n);
 }
 // fc clamp matches makeLowPass/makeHighPass/makeAllPass2: every coefficient builder in this file
 // keeps its corner inside [20 Hz, 0.49*sr] so w stays well below pi -- g=tan(w/2) then stays
@@ -174,47 +239,50 @@ void makeIdentity(Biquad& q) {
 // already clamp (tilt freq is [200,2000]); this is belt-and-braces so a future caller can't feed
 // it a near-Nyquist corner and get non-finite coefficients with no identity fallback.
 void makeLowShelf(Biquad& q, float fc, float gainDb, float sr) {
+    Biquad n;
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) / std::sqrt(A),
            k = 1. / BW;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = k * (A - 1);
-    q.m2 = A * A - 1;
-    q.clear();
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = 1;
+    n.m1 = k * (A - 1);
+    n.m2 = A * A - 1;
+    q.retune(n);
 }
 void makeHighShelf(Biquad& q, float fc, float gainDb, float sr) {
+    Biquad n;
     double A = std::pow(10., static_cast<double>(gainDb) / 40.),
            w = 2 * PI * clampf(fc, 20.f, sr * .49f) / sr, g = std::tan(w * .5) * std::sqrt(A),
            k = 1. / BW;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = A * A;
-    q.m1 = k * (1 - A) * A;
-    q.m2 = 1 - A * A;
-    q.clear();
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = A * A;
+    n.m1 = k * (1 - A) * A;
+    n.m2 = 1 - A * A;
+    q.retune(n);
 }
 // SVF all-pass, Q = 1/sqrt(2). Unity magnitude everywhere, -360 deg phase sweep through fc.
 // Matches NativeBmwRouting::AllPassSection::rebuild's second-order branch; used only by the MBC
 // tree.
 void makeAllPass2(Biquad& q, float fc, float sr) {
+    Biquad n;
     double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / BW;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = 1;
-    q.m1 = -2 * k;
-    q.m2 = 0;
-    q.clear();
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = 1;
+    n.m1 = -2 * k;
+    n.m2 = 0;
+    q.retune(n);
 }
 bool makePeq(Biquad& q, double f, double gainDb, double Q, int type, float sr) {
     if (!std::isfinite(f) || !std::isfinite(gainDb) || !std::isfinite(Q) || f < 20 || f >= sr * .5 ||
@@ -269,14 +337,15 @@ bool makePeq(Biquad& q, double f, double gainDb, double Q, int type, float sr) {
         !std::isfinite(m1) || !std::isfinite(m2)) {
         return false;
     }
-    q.topology = Biquad::Topology::Svf2;
-    q.a1 = a1;
-    q.a2 = a2;
-    q.a3 = a3;
-    q.m0 = m0;
-    q.m1 = m1;
-    q.m2 = m2;
-    q.clear();
+    Biquad n;
+    n.topology = Biquad::Topology::Svf2;
+    n.a1 = a1;
+    n.a2 = a2;
+    n.a3 = a3;
+    n.m0 = m0;
+    n.m1 = m1;
+    n.m2 = m2;
+    q.retune(n);
     return true;
 }
 bool peqBandSkipped(int type, double gain) {

@@ -97,7 +97,9 @@ struct OutputRuntime {
     }
 };
 
-// Coefficient (re)builds for one output, from its config. Each clears the stages it writes.
+// Coefficient (re)builds for one output, from its config. A stage whose topology stays the same
+// keeps its state (Biquad::retune), so moving a corner doesn't click; a slope change that swaps a
+// stage's topology starts that stage clean.
 void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
 void buildLowCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
 void buildMidCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
@@ -116,7 +118,9 @@ void processHighCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, 
 // Output-bus tilt EQ: two low shelves (+g) and two high shelves (-g) per channel at one corner.
 class Tilt {
 public:
+    // Retunes the shelves, keeping their state (see Biquad::retune).
     void rebuild(float amountDb, float freqHz, float sampleRate);
+    void clear();
     void process(float& left, float& right);
 
 private:
