@@ -276,3 +276,32 @@ TEST_CASE("Master volume steps are ramped, not instant (no click)") {
     CHECK(firstMs > before * 0.8f);
     CHECK(settled == doctest::Approx(before * 0.01f).epsilon(0.1));
 }
+
+TEST_CASE("per-bus limiter: lookahead holds the ceiling on a sudden bass onset") {
+    // A 60 Hz tone that starts at its crest: the Low band's output rises within a couple of
+    // milliseconds. The old ~1 ms attack (no lookahead) let that first rise through several dB
+    // over the threshold; with the lookahead the band never exceeds it.
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    quietUpstream(c);
+    c[182] = 1.f; c[183] = -6.f; c[184] = 120.f;   // low bus limiter on at -6 dBFS
+    c[nbschema::kMasterLimiterEnabled] = 0.f;      // nothing downstream may help it
+    for (int out = 2; out < 4; ++out) {            // Mid muted: the output is the Low bus alone
+        c[nbschema::kOutputConfigBase + out * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 1.f;
+    }
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+
+    std::vector<float> silence(2 * 4800, 0.f);
+    proc.process(silence.data(), silence.size());
+    constexpr std::size_t kFrames = 9600;
+    std::vector<float> onset(2 * kFrames);
+    for (std::size_t n = 0; n < kFrames; ++n) {
+        const float s = static_cast<float>(0.9 * std::cos(2.0 * kPi * 60.0 * n / kSampleRate));
+        onset[2 * n] = onset[2 * n + 1] = s;
+    }
+    proc.process(onset.data(), onset.size());
+    const float ceiling = std::pow(10.f, -6.f / 20.f);
+    INFO("peak out = ", peakAbs(onset), "  ceiling = ", ceiling);
+    CHECK(peakAbs(onset) <= ceiling * 1.005f);
+}

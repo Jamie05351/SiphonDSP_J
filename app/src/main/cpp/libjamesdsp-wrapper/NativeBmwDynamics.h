@@ -4,6 +4,7 @@
 // Dynamics: the per-output compressor, the master brick-wall limiter, the per-bus brick-wall
 // limiters and the pre-crossover multiband compressor (MBC).
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -117,37 +118,70 @@ private:
 };
 
 // ---- Per-bus brick-wall limiter (Low / Mid / High) ---------------------------------------------
-// Infinite ratio, fixed-fast attack, one stereo-linked gain follower. No lookahead -- the master
-// limiter downstream already carries that. Threshold is read live per sample.
+// Infinite ratio, one stereo-linked gain, with a short lookahead: the band's audio is delayed by
+// lookahead() samples and the gain ramps down over that window, so a transient is already fully
+// turned down when it leaves the delay (same hold + ramp scheme as MasterLimiter, on sample peaks).
+// Without the lookahead, the old ~1 ms attack let a kick through several dB over the threshold for
+// its first milliseconds -- and the master limiter, on the summed bus, can't catch a single band.
+// Threshold is read live per sample.
 //
-// Each sample's required gain (ceiling / peak) goes through a moving minimum over holdSamples
-// before the attack/release follower. Without it the target swung back to 1 at every zero
-// crossing, so on bass the gain dipped at each crest and recovered in between: gain modulation
-// inside the waveform's own cycle, i.e. added harmonics (~2.6% THD on a 40 Hz tone at the 20 ms
-// minimum release). Holding for at least half the bus's lowest period keeps the gain flat across
-// the cycle. Same moving-minimum idea as MasterLimiter's peak hold.
+// Each sample's required gain (ceiling / peak) goes through a moving minimum over the hold window
+// before the ramp. Without it the target swung back to 1 at every zero crossing, so on bass the
+// gain dipped at each crest and recovered in between: gain modulation inside the waveform's own
+// cycle, i.e. added harmonics (~2.6% THD on a 40 Hz tone at the 20 ms minimum release). Holding
+// for at least half the bus's lowest period keeps the gain flat across the cycle.
+//
+// The delay runs whether or not the limiter is enabled (passThrough()), and bypassed bands carry
+// it too, so every band keeps the same latency and the band sum stays aligned.
 struct BusLimiter {
     // Hold window cap, in samples: kBusLimLowHoldMs (the longest) at up to ~160 kHz.
     static constexpr unsigned kMaxHoldSamples = 4096;
+    static constexpr float kLookaheadMs = 1.5f;
+    // Longest lookahead the delay lines hold.
+    static constexpr unsigned kMaxLookahead = kDelayLineCapacity - 1;
     float gain = 1.f;
     float releaseMix = 0.f;
-    // Moving-minimum window length; 0 disables the hold (the old per-sample behaviour).
+    // Moving-minimum window length requested for the bus (its bass hold); the window actually
+    // used is at least lookahead() + 1 so every sample still in the delay is covered.
     unsigned holdSamples = 0;
     // Published gain reduction (dB, >= 0), for readBusLimiterMeter(). Written only through
     // process()/zeroMeter()/reset(), which keep meteredGain_ in step with it.
     std::atomic<float> grDb{0.f};
-    void process(float& left, float& right, float thresholdDb, float attackMix);
+    // Limits, and delays the audio by lookahead().
+    void process(float& left, float& right, float thresholdDb);
+    // Disabled: delays the audio by lookahead() with no gain change, so the band stays aligned
+    // with the others, and keeps the gain path at rest (see reset()).
+    void passThrough(float& left, float& right);
     // Publishes 0 and makes the next process() republish unconditionally.
     void zeroMeter();
     // Called whenever the limiter is skipped (disabled, or its band bypassed/silenced) so it
     // neither leaves the meter stuck on its last reading nor carries stale gain reduction into
     // the next time it runs -- which would fade that band back in over the release time.
-    // Guarded so the steady skipped state costs no atomic store per sample.
+    // Guarded so the steady skipped state costs nothing per sample.
     void reset();
     // Sets the hold window (clamped to kMaxHoldSamples) and empties it.
     void setHold(float holdMs, float sampleRate);
+    // Sets the lookahead for this sample rate (kLookaheadMs); resets the gain path if it changed.
+    void setLookahead(float sampleRate);
+    unsigned lookahead() const {
+        return lookahead_;
+    }
+    // Delay lines and gain path back to rest (a band chain starting again).
+    void clear();
 
 private:
+    void resetGainPath();
+    unsigned holdWindow() const {
+        return std::max(holdSamples, lookahead_ + 1);
+    }
+    Delay delayL_, delayR_;
+    unsigned lookahead_ = 0;
+    // Ramp: a lookahead_-long moving average of the held gain.
+    std::array<float, kMaxLookahead> ramp_{};
+    unsigned rampPos_ = 0;
+    double rampSum_ = 0;
+    // True while the gain path is at rest, so reset() costs nothing per sample when skipped.
+    bool atRest_ = true;
     // Monotonic queue: holdGain_ ascending from the front, so the front is the smallest required
     // gain still inside the window. holdAt_ is each entry's sample index.
     std::array<float, kMaxHoldSamples> holdGain_{};
@@ -165,10 +199,6 @@ private:
 // >= 60 Hz, with margin for the LR slope and for hpfPass running it full-range). High: 200 Hz
 // (its high-pass is >= 300 Hz). Longer than needed only delays the start of release by that much.
 constexpr float kBusLimLowHoldMs = 25.f, kBusLimMidHoldMs = 12.5f, kBusLimHighHoldMs = 2.5f;
-// ~1 ms attack shared by all three bus limiters.
-inline float busLimiterAttackMix(float sampleRate) {
-    return 1 - std::exp(-1 / (.001f * sampleRate));
-}
 inline float busLimiterReleaseMix(float releaseMs, float sampleRate) {
     return 1 - std::exp(-1 / (std::max(20.f, releaseMs) * .001f * sampleRate));
 }

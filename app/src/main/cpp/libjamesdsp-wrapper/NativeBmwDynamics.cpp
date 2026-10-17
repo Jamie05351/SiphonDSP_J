@@ -236,7 +236,8 @@ void MasterLimiter::process(float& l, float& r) {
 }
 
 // ---- Per-bus brick-wall limiter ----------------------------------------------------------------
-void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix) {
+void BusLimiter::process(float& l, float& r, float thresholdDb) {
+    atRest_ = false;
     // The threshold only changes on configure(), so its pow is cached rather than paid every
     // sample. Recomputed from the same input, so the ceiling is the identical value.
     if (thresholdDb != cachedThresholdDb_) {
@@ -245,50 +246,70 @@ void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix)
     }
     const float ceilingLin = cachedCeilingLin_;
     const float pk = std::max(std::fabs(l), std::fabs(r));
-    float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
-    if (holdSamples > 0) {
-        // Moving minimum over the last holdSamples + 1 readings (see MasterLimiter::process):
-        // drop entries that left the window, then any this one undercuts, then append.
-        while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > holdSamples) {
-            holdHead_ = (holdHead_ + 1) % kMaxHoldSamples;
-            --holdCount_;
-        }
-        while (holdCount_ > 0 &&
-               holdGain_[(holdHead_ + holdCount_ - 1) % kMaxHoldSamples] >= target) {
-            --holdCount_;
-        }
-        const unsigned tail = (holdHead_ + holdCount_) % kMaxHoldSamples;
-        holdGain_[tail] = target;
-        holdAt_[tail] = sampleIndex_;
-        ++holdCount_;
-        ++sampleIndex_;
-        target = holdGain_[holdHead_];
+    const float need = pk > ceilingLin ? ceilingLin / pk : 1.f;
+    // Moving minimum over the last holdWindow() + 1 readings (see MasterLimiter::process): drop
+    // entries that left the window, then any this one undercuts, then append.
+    const unsigned window = holdWindow();
+    while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > window) {
+        holdHead_ = (holdHead_ + 1) % kMaxHoldSamples;
+        --holdCount_;
     }
-    const float mix = target < gain ? attackMix : releaseMix;
-    gain = std::min(1.f, ftz(gain + (target - gain) * mix));
+    while (holdCount_ > 0 && holdGain_[(holdHead_ + holdCount_ - 1) % kMaxHoldSamples] >= need) {
+        --holdCount_;
+    }
+    const unsigned tail = (holdHead_ + holdCount_) % kMaxHoldSamples;
+    holdGain_[tail] = need;
+    holdAt_[tail] = sampleIndex_;
+    ++holdCount_;
+    ++sampleIndex_;
+    const float held = holdGain_[holdHead_];
+    // Attack ramp: the average of the last lookahead_ held gains. Each covers every sample still
+    // in the delay, so the average is never above what the sample now leaving it needs.
+    float target = held;
+    if (lookahead_ > 0) {
+        rampSum_ += held - ramp_[rampPos_];
+        ramp_[rampPos_] = held;
+        rampPos_ = rampPos_ + 1 == lookahead_ ? 0 : rampPos_ + 1;
+        target = std::min(1.f, static_cast<float>(rampSum_ / lookahead_));
+    }
+    // Down: straight to the target (already smooth). Up: the release follower.
+    gain = target < gain ? target : std::min(1.f, ftz(gain + (target - gain) * releaseMix));
     // Meter: republish only when the gain moved since the last store. Same gain -> same log10 ->
-    // same stored value, so skipping the repeat is unobservable (it used to log10 every sample,
-    // including the whole time the limiter sits idle at gain 1).
+    // same stored value, so skipping the repeat is unobservable.
     if (!(gain == meteredGain_)) {
         meteredGain_ = gain;
         grDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
     }
-    l = ftz(l * gain);
-    r = ftz(r * gain);
+    l = ftz(delayL_.run(l) * gain);
+    r = ftz(delayR_.run(r) * gain);
+}
+void BusLimiter::passThrough(float& l, float& r) {
+    l = delayL_.run(l);
+    r = delayR_.run(r);
+    reset();
 }
 void BusLimiter::zeroMeter() {
     grDb.store(0.f);
     meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 }
 void BusLimiter::reset() {
-    // The window is emptied too (plain stores, so unguarded): a held reduction left over from
-    // before the skip would otherwise clamp the first holdSamples after it resumes.
-    holdCount_ = 0;
-    if (gain != 1.f) {
-        gain = 1.f;
-        grDb.store(0.f, std::memory_order_relaxed);
-        meteredGain_ = std::numeric_limits<float>::quiet_NaN();
+    if (atRest_) {
+        return;
     }
+    // A held reduction or ramp left over from before the skip would otherwise clamp the first
+    // samples after it resumes.
+    resetGainPath();
+    grDb.store(0.f, std::memory_order_relaxed);
+    meteredGain_ = std::numeric_limits<float>::quiet_NaN();
+}
+void BusLimiter::resetGainPath() {
+    holdHead_ = holdCount_ = 0;
+    sampleIndex_ = 0;
+    ramp_.fill(1.f);
+    rampPos_ = 0;
+    rampSum_ = lookahead_;
+    gain = 1.f;
+    atRest_ = true;
 }
 void BusLimiter::setHold(float holdMs, float sampleRate) {
     // The window holds holdSamples + 1 readings, so the cap leaves room for that extra slot.
@@ -296,6 +317,21 @@ void BusLimiter::setHold(float holdMs, float sampleRate) {
                                                static_cast<float>(kMaxHoldSamples - 1)));
     holdHead_ = holdCount_ = 0;
     sampleIndex_ = 0;
+}
+void BusLimiter::setLookahead(float sampleRate) {
+    const auto lookahead = static_cast<unsigned>(clampf(
+        std::round(kLookaheadMs * .001f * sampleRate), 1.f, static_cast<float>(kMaxLookahead)));
+    delayL_.delay = static_cast<float>(lookahead);
+    delayR_.delay = static_cast<float>(lookahead);
+    if (lookahead != lookahead_) {
+        lookahead_ = lookahead;
+        resetGainPath();
+    }
+}
+void BusLimiter::clear() {
+    delayL_.clear();
+    delayR_.clear();
+    resetGainPath();
 }
 
 // ---- Pre-crossover multiband compressor --------------------------------------------------------
