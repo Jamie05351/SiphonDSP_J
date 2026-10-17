@@ -65,7 +65,7 @@ internal val StepperPillWidth = StepperHalfWidth * 2 + 1.dp
  * read at a glance and two big buttons are easier and safer than dragging a thumb, and they take
  * far less room.
  *
- * - Tap − or + for one step ([StepMath.next]): frequencies move a semitone at a time, everything
+ * - Tap − or + for one step ([StepMath.next]): frequencies move along a round-number ladder, everything
  *   else by [step].
  * - Hold one to repeat, faster the longer it is held ([StepMath.holdInterval] /
  *   [StepMath.holdMultiplier]); the value box glows while it runs.
