@@ -315,7 +315,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
         val closeEngineNow = synchronized(recorderLifecycleLock) {
-            // A stuck native process holds engine.nativeLock. Do not block the main thread
+            // A stuck native process holds the engine's handle lock. Do not block the main thread
             // indefinitely or dispose its engine while it still owns the audio pipeline.
             if (workerAlive) {
                 closeEngineOnWorkerExit = true
