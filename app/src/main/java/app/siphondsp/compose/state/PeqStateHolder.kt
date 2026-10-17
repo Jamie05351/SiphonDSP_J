@@ -25,6 +25,8 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.BmwDashboardSkin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.UUID
 
@@ -55,8 +57,9 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
 
     private val baselineStore = CarBaselineStore(appContext)
 
-    /** The car's measured response downstream of this DSP (see [CarBaseline]), or null if none. */
-    var carBaseline: CarBaseline? by mutableStateOf(baselineStore.load())
+    /** The car's measured response downstream of this DSP (see [CarBaseline]), or null if none.
+     *  Null until [loadCarBaseline] has read the stored files. */
+    var carBaseline: CarBaseline? by mutableStateOf(null)
         private set
 
     var showCarBaseline: Boolean by mutableStateOf(baselineStore.showOnGraph)
@@ -68,13 +71,24 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
 
     fun carBaselineSource(side: CarBaselineStore.Side): String? = baselineStore.sourceName(side)
 
-    fun importCarBaseline(uri: Uri, side: CarBaselineStore.Side) {
-        val error = baselineStore.import(uri, side)
+    // The baseline files can run to megabytes on a head unit's slow storage, so every read,
+    // parse and write below runs on Dispatchers.IO; state is published back on the caller's
+    // (main) dispatcher.
+
+    suspend fun loadCarBaseline() {
+        carBaseline = withContext(Dispatchers.IO) { baselineStore.load() }
+    }
+
+    suspend fun importCarBaseline(uri: Uri, side: CarBaselineStore.Side) {
+        val (error, loaded) = withContext(Dispatchers.IO) {
+            val error = baselineStore.import(uri, side)
+            error to if (error == null) baselineStore.load() else null
+        }
         if (error != null) {
             toast("$error; previous baseline kept")
             return
         }
-        carBaseline = baselineStore.load()
+        carBaseline = loaded
         toast("Car baseline loaded for ${side.label}")
     }
 
@@ -83,8 +97,8 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         showCarBaseline = show
     }
 
-    fun clearCarBaseline() {
-        baselineStore.clear()
+    suspend fun clearCarBaseline() {
+        withContext(Dispatchers.IO) { baselineStore.clear() }
         carBaseline = null
     }
 

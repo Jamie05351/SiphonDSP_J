@@ -108,6 +108,8 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         showOverlays = graphPrefs.showIndividualFilters
     }
 
+    LaunchedEffect(holder) { holder.loadCarBaseline() }
+
     LifecycleResumeEffect(Unit) {
         reloadEverything()
         onPauseOrDispose { }
@@ -532,8 +534,9 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
     var expanded by remember { mutableStateOf(false) }
     var pendingSide by remember { mutableStateOf(CarBaselineStore.Side.BOTH) }
     var showClearConfirm by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { holder.importCarBaseline(it, pendingSide) }
+        uri?.let { scope.launch { holder.importCarBaseline(it, pendingSide) } }
     }
     fun load(side: CarBaselineStore.Side) {
         expanded = false
@@ -578,7 +581,7 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
             title = "Clear car baseline?",
             message = "Remove the stored Left and Right measurements? The graph goes back to assuming a flat car.",
             confirmLabel = "Clear",
-            onConfirm = { showClearConfirm = false; holder.clearCarBaseline() },
+            onConfirm = { showClearConfirm = false; scope.launch { holder.clearCarBaseline() } },
             onDismiss = { showClearConfirm = false },
         )
     }
