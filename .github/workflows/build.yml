@@ -17,6 +17,8 @@ concurrency:
 
 permissions:
   contents: read
+  # Read-only: the parity step checks the PR's labels (see "intended-sound-change" below).
+  pull-requests: read
 
 jobs:
   build:
@@ -158,16 +160,39 @@ jobs:
 
       # Renders fixed DSP scenarios with this PR's native code and with the base branch's, and
       # fails unless the output is bit-identical. Catches an unintended behaviour change from a
-      # refactor or optimisation. A PR that changes the sound on purpose will fail this step --
-      # say so in the PR; the diff it prints shows which scenarios changed. Host (x86) build, so
-      # it exercises the scalar path; the arm64/NEON path needs a device (see the script).
+      # refactor or optimisation. A PR that changes the sound on purpose gets the
+      # "intended-sound-change" label: the step still runs and prints which scenarios changed,
+      # but passes with a warning. The label is read live (not from the event payload), so
+      # adding it and re-running the job is enough. Host (x86) build, so it exercises the scalar
+      # path; the arm64/NEON path needs a device (see the script).
       - name: Native DSP output parity vs base branch
         if: github.event_name == 'pull_request'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
-          HOST=1 BASELINE_REF=FETCH_HEAD bash scripts/run-neon-parity.sh
+          # The checkout is the PR merged into the current base (GITHUB_SHA is that merge commit),
+          # so compare against the merge's own first parent: exactly the base it was merged with.
+          # pull_request.base.sha can be an older base commit, which made a PR that is merely
+          # behind master "differ" by whatever has landed since.
+          git fetch --no-tags --depth=2 origin "$GITHUB_SHA"
+          baseline="$(git rev-parse "$GITHUB_SHA^1")"
+          echo "baseline: $baseline"
+          rc=0
+          HOST=1 BASELINE_REF="$baseline" bash scripts/run-neon-parity.sh || rc=$?
+          # 3 = output differs from the base branch only; anything else non-zero is a build/run
+          # error or a NEON/scalar divergence, which no label can waive.
+          if [ "$rc" -ne 3 ]; then
+            exit "$rc"
+          fi
+          labels="$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name')"
+          if grep -qx 'intended-sound-change' <<<"$labels"; then
+            echo "::warning title=DSP output changed::Output differs from the base branch (diff above); accepted because this PR is labelled intended-sound-change."
+            exit 0
+          fi
+          echo "::error title=DSP output changed::Output differs from the base branch. If the change is intended, label the PR intended-sound-change and re-run this job."
+          exit 1
 
       - name: Verify native libraries are packaged
         shell: bash
