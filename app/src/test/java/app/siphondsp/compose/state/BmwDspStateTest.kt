@@ -137,4 +137,45 @@ class BmwDspStateTest {
             manager.unregisterReceiver(receiver)
         }
     }
+
+    @Test
+    fun aCommitDoesNotPersistAnotherScreensUnsavedPreview() {
+        val context = context()
+        val generator = BmwDspState(context)
+        val gains = BmwDspState(context)
+        val persistedType = NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_MEAS_GEN_TYPE]
+        generator.preview(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE, 1f)  // preview-only on purpose
+        assertTrue(gains.commit(NativeBmwDspValues.INDEX_HEADROOM, -5f))
+        val saved = NativeBmwDspValues.load(context)
+        assertEquals(persistedType, saved[NativeBmwDspValues.INDEX_MEAS_GEN_TYPE], 0f)
+        assertEquals(-5f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
+    }
+
+    @Test
+    fun aLateEchoOfOurOwnPreviewDoesNotRollBackACommit() {
+        val context = context()
+        val state = BmwDspState(context)
+        val sent = mutableListOf<FloatArray>()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let(sent::add)
+            }
+        }
+        val manager = LocalBroadcastManager.getInstance(context)
+        manager.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+        try {
+            state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
+            assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -4f))
+            shadowOf(Looper.getMainLooper()).idle()
+            // The preview's echo arriving after the commit must not win.
+            state.onExternalUpdate(sent.first())
+            assertEquals(-4f, state.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
+            // Someone else's update still applies.
+            val external = state.values.copyOf().also { it[NativeBmwDspValues.INDEX_HEADROOM] = -2f }
+            state.onExternalUpdate(external)
+            assertEquals(-2f, state.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
+        } finally {
+            manager.unregisterReceiver(receiver)
+        }
+    }
 }

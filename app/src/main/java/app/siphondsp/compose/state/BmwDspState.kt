@@ -40,6 +40,16 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
 
     private val lock = Any()
 
+    // The last values known to be on disk. A commit saves this plus its own updates -- never the
+    // shared [values], which can hold another screen's un-persisted preview (e.g. a measurement
+    // generator toggle) that must not be written to disk by an unrelated commit.
+    private var persisted: FloatArray = values
+
+    // Arrays this repository has broadcast itself, most recent last. Local broadcasts hand the
+    // same array object back to every receiver, including ours, and can arrive after a newer
+    // preview/commit -- applying such an echo would roll the shared copy back.
+    private val published = ArrayDeque<FloatArray>()
+
     // True while the engine may be running a previewed value that was never persisted.
     private var previewPending = false
 
@@ -52,20 +62,23 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
         for (m in mirrors) next[m] = value
         values = next
         previewPending = true
-        NativeBmwDspValues.broadcast(appContext, next)
+        publish(next)
     }
 
     fun commit(updates: Map<Int, Float>): Boolean = synchronized(lock) {
-        val next = values.copyOf()
+        val next = persisted.copyOf()
         for ((index, value) in updates) next[index] = value
         if (!NativeBmwDspValues.save(appContext, next)) {
             refreshFromDiskLocked()
             appContext.toast("BMW DSP settings could not be saved; previous settings restored")
             return false
         }
+        // The engine and every screen now follow the saved config; any other screen's unsaved
+        // preview is dropped with it, as a commit from that screen's own copy always did.
+        persisted = next
         values = next
         previewPending = false
-        NativeBmwDspValues.broadcast(appContext, next)
+        publish(next)
         true
     }
 
@@ -76,17 +89,26 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
     // disk copy that changed underneath -- rather than on every screen's every resume.
     private fun refreshFromDiskLocked() {
         val loaded = NativeBmwDspValues.load(appContext)
+        persisted = loaded
         val differs = !loaded.contentEquals(values)
         if (differs) values = loaded
         if (differs || previewPending) {
             previewPending = false
-            NativeBmwDspValues.broadcast(appContext, loaded)
+            publish(loaded)
         }
     }
 
+    private fun publish(array: FloatArray) {
+        published.addLast(array)
+        while (published.size > PUBLISHED_HISTORY) published.removeFirst()
+        NativeBmwDspValues.broadcast(appContext, array)
+    }
+
     fun onExternalUpdate(incoming: FloatArray) = synchronized(lock) {
-        // A drag in flight keeps its own value; the broadcast echo of our own preview is the same
-        // array anyway.
+        // Our own broadcasts come back as the very same array object; whatever we hold is at least
+        // as new, so an echo (possibly a stale one) is never applied. A drag in flight keeps its
+        // own value against anyone else's update too.
+        if (published.any { it === incoming }) return@synchronized
         if (editors == 0) values = incoming
     }
 
@@ -95,6 +117,9 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
     }
 
     companion object {
+        // Comfortably more than can be in flight between a broadcast and its delivery.
+        private const val PUBLISHED_HISTORY = 32
+
         private val instances = HashMap<String, BmwDspRepository>()
 
         /** The repository for [context]'s settings store (keyed by its directory). */
