@@ -601,6 +601,7 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             return false;
         }
         PeqBank x;
+        x.rawBandCount = n / 5;
         for (std::size_t i = 0; i < n; i += 5) {
             // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a value outside int's
             // representable range (including NaN/Infinity, but also a finite-but-huge double from
@@ -625,12 +626,12 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             if (NativeBmwDsp::peqBandSkipped(type, v[i + 1])) {
                 continue;
             }
-            const int band = static_cast<int>(i / 5);
+            const PeqBank::BandKey key{static_cast<int>(i / 5), type, v[i], v[i + 1], v[i + 2]};
             if (ch != 2) {
-                x.append(PeqBank::kLeftLane, q, band, type);
+                x.append(PeqBank::kLeftLane, q, key);
             }
             if (ch != 1) {
-                x.append(PeqBank::kRightLane, q, band, type);
+                x.append(PeqBank::kRightLane, q, key);
             }
         }
         b = x;

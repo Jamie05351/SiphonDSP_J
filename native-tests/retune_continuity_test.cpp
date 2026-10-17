@@ -108,41 +108,95 @@ TEST_CASE("editing a PEQ band mid-stream retunes instead of restarting") {
     CHECK(relativeError(editedOut, referenceOut) < kMaxRelativeError);
 }
 
-TEST_CASE("PEQ state follows its band when an earlier band drops out of the bank") {
-    using NativeBmwDsp::Biquad;
-    using NativeBmwDsp::PeqBank;
-    Biquad a, b;
-    REQUIRE(NativeBmwDsp::makePeq(a, 80.0, 3.0, 1.0, 0, 48000.f));
-    REQUIRE(NativeBmwDsp::makePeq(b, 900.0, -4.0, 2.0, 0, 48000.f));
-    PeqBank running;
-    running.append(PeqBank::kLeftLane, a, 0, 0);
-    running.append(PeqBank::kLeftLane, b, 1, 0);
-    running.append(PeqBank::kRightLane, a, 0, 0);
-    running.append(PeqBank::kRightLane, b, 1, 0);
+namespace {
+using NativeBmwDsp::Biquad;
+using NativeBmwDsp::PeqBank;
+
+PeqBank::BandKey key(int index, double f, double g, double q, int type = 0) {
+    return PeqBank::BandKey{index, type, f, g, q};
+}
+
+// A bank of the given bands on both lanes, run for a while so every section holds state.
+PeqBank runningBank(const std::vector<PeqBank::BandKey>& bands) {
+    PeqBank bank;
+    bank.rawBandCount = bands.size();
+    for (const auto& b : bands) {
+        Biquad q;
+        REQUIRE(NativeBmwDsp::makePeq(q, b.frequency, b.gainDb, b.q, b.type, 48000.f));
+        bank.append(PeqBank::kLeftLane, q, b);
+        bank.append(PeqBank::kRightLane, q, b);
+    }
     auto tone = sineBlock(0, 512);
     for (std::size_t n = 0; n < tone.size(); n += 2) {
-        running.process(tone[n], tone[n + 1]);
+        bank.process(tone[n], tone[n + 1]);
     }
-    REQUIRE(running.sections[1].ic1eq[PeqBank::kLeftLane] != 0.0);
+    return bank;
+}
 
-    // Band 0 dragged to 0 dB is skipped from the rebuilt bank, so band 1 moves to section 0.
-    PeqBank rebuilt;
-    rebuilt.append(PeqBank::kLeftLane, b, 1, 0);
-    rebuilt.append(PeqBank::kRightLane, b, 1, 0);
-    rebuilt.inheritState(running);
+PeqBank freshBank(const std::vector<PeqBank::BandKey>& bands, std::size_t rawCount) {
+    PeqBank bank;
+    bank.rawBandCount = rawCount;
+    for (const auto& b : bands) {
+        Biquad q;
+        REQUIRE(NativeBmwDsp::makePeq(q, b.frequency, b.gainDb, b.q, b.type, 48000.f));
+        bank.append(PeqBank::kLeftLane, q, b);
+        bank.append(PeqBank::kRightLane, q, b);
+    }
+    return bank;
+}
+
+bool sameState(const PeqBank& a, std::size_t i, const PeqBank& b, std::size_t k) {
     for (std::size_t lane : {PeqBank::kLeftLane, PeqBank::kRightLane}) {
-        CHECK(rebuilt.sections[0].ic1eq[lane] == running.sections[1].ic1eq[lane]);
-        CHECK(rebuilt.sections[0].ic2eq[lane] == running.sections[1].ic2eq[lane]);
+        if (a.sections[i].ic1eq[lane] != b.sections[k].ic1eq[lane] ||
+            a.sections[i].ic2eq[lane] != b.sections[k].ic2eq[lane]) {
+            return false;
+        }
     }
+    return true;
+}
+}  // namespace
 
-    // A band that changed type is a different filter: it starts clean.
-    Biquad notch;
-    REQUIRE(NativeBmwDsp::makePeq(notch, 900.0, 0.0, 2.0, 3, 48000.f));
-    PeqBank retyped;
-    retyped.append(PeqBank::kLeftLane, notch, 1, 3);
+TEST_CASE("PEQ state follows an unchanged band when an earlier band is deleted") {
+    const auto running = runningBank({key(0, 80, 3, 1), key(1, 900, -4, 2), key(2, 3000, 2, 1)});
+    REQUIRE(running.sections[1].ic1eq[PeqBank::kLeftLane] != 0.0);
+    // Band 0 deleted: the other two shift down one index but are otherwise unchanged.
+    auto rebuilt = freshBank({key(0, 900, -4, 2), key(1, 3000, 2, 1)}, 2);
+    rebuilt.inheritState(running);
+    CHECK(sameState(rebuilt, 0, running, 1));
+    CHECK(sameState(rebuilt, 1, running, 2));
+}
+
+TEST_CASE("PEQ state follows bands that were reordered") {
+    const auto running = runningBank({key(0, 80, 3, 1), key(1, 900, -4, 2)});
+    auto rebuilt = freshBank({key(0, 900, -4, 2), key(1, 80, 3, 1)}, 2);
+    rebuilt.inheritState(running);
+    CHECK(sameState(rebuilt, 0, running, 1));
+    CHECK(sameState(rebuilt, 1, running, 0));
+}
+
+TEST_CASE("the band being edited keeps its own state") {
+    const auto running = runningBank({key(0, 80, 3, 1), key(1, 900, -4, 2)});
+    auto rebuilt = freshBank({key(0, 80, 3, 1), key(1, 950, -4, 2)}, 2);  // band 1 dragged
+    rebuilt.inheritState(running);
+    CHECK(sameState(rebuilt, 0, running, 0));
+    CHECK(sameState(rebuilt, 1, running, 1));
+}
+
+TEST_CASE("an inserted band, or one whose type changed, starts clean") {
+    const auto running = runningBank({key(0, 80, 3, 1), key(1, 900, -4, 2)});
+    // Inserted at the front: the new band must not take band 0's state by index.
+    auto inserted = freshBank({key(0, 200, 5, 1), key(1, 80, 3, 1), key(2, 900, -4, 2)}, 3);
+    inserted.inheritState(running);
+    CHECK(inserted.sections[0].ic1eq[PeqBank::kLeftLane] == 0.0);
+    CHECK(inserted.sections[0].ic2eq[PeqBank::kLeftLane] == 0.0);
+    CHECK(sameState(inserted, 1, running, 0));
+    CHECK(sameState(inserted, 2, running, 1));
+    // Band 1 switched from bell to notch.
+    auto retyped = freshBank({key(0, 80, 3, 1), key(1, 900, 0, 2, 3)}, 2);
     retyped.inheritState(running);
-    CHECK(retyped.sections[0].ic1eq[PeqBank::kLeftLane] == 0.0);
-    CHECK(retyped.sections[0].ic2eq[PeqBank::kLeftLane] == 0.0);
+    CHECK(sameState(retyped, 0, running, 0));
+    CHECK(retyped.sections[1].ic1eq[PeqBank::kLeftLane] == 0.0);
+    CHECK(retyped.sections[1].ic2eq[PeqBank::kLeftLane] == 0.0);
 }
 
 TEST_CASE("Biquad::retune keeps state only for the same running recursion") {

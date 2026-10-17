@@ -102,10 +102,9 @@ void SvfPair::clear() {
     ic1eq[kLeftLane] = ic1eq[kRightLane] = 0;
     ic2eq[kLeftLane] = ic2eq[kRightLane] = 0;
 }
-void PeqBank::append(std::size_t lane, const Biquad& q, int band, int type) {
+void PeqBank::append(std::size_t lane, const Biquad& q, const BandKey& key) {
     std::size_t& count = lane == kLeftLane ? leftCount : rightCount;
-    sourceBand[lane][count] = static_cast<std::int8_t>(band);
-    bandType[lane][count] = static_cast<std::int8_t>(type);
+    source[lane][count] = key;
     sections[count++].load(lane, q);
 }
 void PeqBank::inheritState(const PeqBank& previous) {
@@ -113,12 +112,31 @@ void PeqBank::inheritState(const PeqBank& previous) {
         const std::size_t count = lane == kLeftLane ? leftCount : rightCount;
         const std::size_t previousCount =
             lane == kLeftLane ? previous.leftCount : previous.rightCount;
+        std::array<bool, kMaxPeqSectionsPerChannel> taken{}, used{};
+        auto inherit = [&](std::size_t j, std::size_t k) {
+            sections[j].ic1eq[lane] = previous.sections[k].ic1eq[lane];
+            sections[j].ic2eq[lane] = previous.sections[k].ic2eq[lane];
+            taken[j] = used[k] = true;
+        };
         for (std::size_t j = 0; j < count; ++j) {
             for (std::size_t k = 0; k < previousCount; ++k) {
-                if (previous.sourceBand[lane][k] == sourceBand[lane][j] &&
-                    previous.bandType[lane][k] == bandType[lane][j]) {
-                    sections[j].ic1eq[lane] = previous.sections[k].ic1eq[lane];
-                    sections[j].ic2eq[lane] = previous.sections[k].ic2eq[lane];
+                if (!used[k] && previous.source[lane][k].sameFilter(source[lane][j])) {
+                    inherit(j, k);
+                    break;
+                }
+            }
+        }
+        if (rawBandCount != previous.rawBandCount) {
+            continue;
+        }
+        for (std::size_t j = 0; j < count; ++j) {
+            if (taken[j]) {
+                continue;
+            }
+            for (std::size_t k = 0; k < previousCount; ++k) {
+                if (!used[k] && previous.source[lane][k].index == source[lane][j].index &&
+                    previous.source[lane][k].type == source[lane][j].type) {
+                    inherit(j, k);
                     break;
                 }
             }

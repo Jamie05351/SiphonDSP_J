@@ -143,18 +143,29 @@ struct PeqBank {
     enum : std::size_t { kLeftLane = SvfPair::kLeftLane, kRightLane = SvfPair::kRightLane };
     std::array<Section, kMaxPeqSectionsPerChannel> sections{};
     std::size_t leftCount = 0, rightCount = 0;
-    // Per lane, per section: which raw band (index into the configured band list) and which PEQ
-    // type it was built from -- what inheritState() matches on.
-    std::array<std::array<std::int8_t, kMaxPeqSectionsPerChannel>, 2> sourceBand{};
-    std::array<std::array<std::int8_t, kMaxPeqSectionsPerChannel>, 2> bandType{};
+    // The raw band a section was built from: its index in the configured band list and its
+    // values -- what inheritState() matches on.
+    struct BandKey {
+        int index = -1;
+        int type = -1;
+        double frequency = 0, gainDb = 0, q = 0;
+        bool sameFilter(const BandKey& o) const {
+            return type == o.type && frequency == o.frequency && gainDb == o.gainDb && q == o.q;
+        }
+    };
+    std::array<std::array<BandKey, kMaxPeqSectionsPerChannel>, 2> source{};
+    // Raw bands configured (including skipped ones); a change means a band was added/removed.
+    std::size_t rawBandCount = 0;
     // Appends an Svf2 section built by makePeq() to one lane (kLeftLane/kRightLane), with
-    // cleared state. band/type identify the raw band it came from.
-    void append(std::size_t lane, const Biquad& q, int band, int type);
-    // Copies each section's state from the section in `previous` built from the same raw band
-    // with the same type, on the same lane. A band whose frequency/gain/Q moved keeps running
-    // from where it was; a band that was added, or changed type, starts clean. Matching by band
-    // rather than by position keeps later bands right when an earlier one drops out (a band
-    // dragged through 0 dB is skipped from the bank).
+    // cleared state. key identifies the raw band it came from.
+    void append(std::size_t lane, const Biquad& q, const BandKey& key);
+    // Carries filter state over from the bank this one replaces, lane by lane:
+    //  1. A section whose band is unchanged (same type/frequency/gain/Q) takes the state of the
+    //     matching previous section, wherever it moved -- so deleting, inserting or reordering
+    //     bands never hands a band another band's history.
+    //  2. A section left over takes the state of the previous section from the same list index
+    //     and type, only when no band was added or removed -- that is the band being edited.
+    //  3. Anything else (a new band, a changed type) starts clean.
     void inheritState(const PeqBank& previous);
     void process(float& left, float& right);
     void clear();
