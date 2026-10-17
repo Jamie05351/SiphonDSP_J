@@ -2,6 +2,7 @@ package app.siphondsp.compose.state
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -10,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import app.siphondsp.dsp.CarBaseline
+import app.siphondsp.fragment.CarBaselineStore
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqScope
@@ -22,6 +25,10 @@ import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.BmwDashboardSkin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.UUID
 
@@ -49,6 +56,68 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
     var selectedUuid: UUID?
         get() = selectedByScope[selectedScope]
         set(value) { selectedByScope[selectedScope] = value }
+
+    private val baselineStore = CarBaselineStore(appContext)
+
+    /** The car's measured response downstream of this DSP (see [CarBaseline]), or null if none.
+     *  Null until [loadCarBaseline] has read the stored files. */
+    var carBaseline: CarBaseline? by mutableStateOf(null)
+        private set
+
+    var showCarBaseline: Boolean by mutableStateOf(baselineStore.showOnGraph)
+        private set
+
+    /** What the graph should add to its curves: the baseline, when there is one and it's shown. */
+    val graphBaseline: CarBaseline?
+        get() = carBaseline?.takeIf { showCarBaseline }
+
+    fun carBaselineSource(side: CarBaselineStore.Side): String? = baselineStore.sourceName(side)
+
+    // The baseline files can run to megabytes on a head unit's slow storage, so every read,
+    // parse and write below runs on Dispatchers.IO; state is published back on the caller's
+    // (main) dispatcher. Import and clear run in the store's process-wide scope and every
+    // operation holds the store's process-wide lock (see CarBaselineStore.operationLock), so
+    // neither a composable nor this Activity's holder being recreated mid-import can race the
+    // files or strand a stale baseline on the graph.
+    private val baselineScope get() = CarBaselineStore.operationScope
+    private val baselineLock get() = CarBaselineStore.operationLock
+
+    suspend fun loadCarBaseline() {
+        baselineLock.withLock {
+            carBaseline = withContext(Dispatchers.IO) { baselineStore.load() }
+        }
+    }
+
+    fun importCarBaseline(uri: Uri, side: CarBaselineStore.Side) {
+        baselineScope.launch {
+            baselineLock.withLock {
+                val (error, loaded) = withContext(Dispatchers.IO) {
+                    val error = baselineStore.import(uri, side)
+                    error to if (error == null) baselineStore.load() else null
+                }
+                if (error != null) {
+                    toast("$error; previous baseline kept")
+                    return@withLock
+                }
+                carBaseline = loaded
+                toast("Car baseline loaded for ${side.label}")
+            }
+        }
+    }
+
+    fun showCarBaselineOnGraph(show: Boolean) {
+        baselineStore.showOnGraph = show
+        showCarBaseline = show
+    }
+
+    fun clearCarBaseline() {
+        baselineScope.launch {
+            baselineLock.withLock {
+                withContext(Dispatchers.IO) { baselineStore.clear() }
+                carBaseline = null
+            }
+        }
+    }
 
     /** Bands for the current scope -- a live view into [peqState], recomputed on read. */
     val visibleBands: ParametricEqBandList

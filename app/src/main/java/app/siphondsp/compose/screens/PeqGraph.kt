@@ -64,6 +64,7 @@ import app.siphondsp.dsp.BiquadCascade
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwResponseCalculator
+import app.siphondsp.dsp.CarBaseline
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.ComplexAcc
@@ -262,6 +263,7 @@ fun PeqGraph(
     sampleRate: Double = 48_000.0,
     onNodeTapped: (ParametricEqBand) -> Unit = {},
     graphOptions: PeqGraphOptions? = null,
+    carBaseline: CarBaseline? = null,
 ) {
     val paints = rememberPeqSurfacePaints()
     val glass = rememberGlassPaints()
@@ -275,8 +277,8 @@ fun PeqGraph(
     // keys it even when the fragment mutates the same FloatArray in place (it does, on the
     // native-DSP broadcast). configureAxis() inside is a no-op when the axis is unchanged.
     val valuesHash = systemValues.contentHashCode()
-    remember(valuesHash, peqState, sampleRate) {
-        model.recompute(systemValues, peqState, sampleRate)
+    remember(valuesHash, peqState, sampleRate, carBaseline) {
+        model.recompute(systemValues, peqState, sampleRate, carBaseline)
     }
 
     // Spectrum + gain-meter poll, scoped to composition. Acquire/release bracket SpectrumEngine;
@@ -403,6 +405,7 @@ fun PeqGraph(
                 highlightId = tappedNodeId,
                 leftMeter = leftMeter,
                 rightMeter = rightMeter,
+                baselineKey = System.identityHashCode(carBaseline),
             )
             drawIntoCanvas { canvas ->
                 renderPeqGraph(
@@ -542,6 +545,7 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + ctx.activeBank.ordinal
     k = 31 * k + ctx.geometry.maxGain.hashCode()
     k = 31 * k + ctx.geometry.minGain.hashCode()
+    k = 31 * k + ctx.baselineKey
     k = 31 * k + (ctx.focus * 12f).roundToInt() // bucketed: ~12 rebuilds across the 400ms fade
     return k
 }
@@ -1385,6 +1389,8 @@ private class PeqDrawContext(
     val highlightId: UUID? = null,
     val leftMeter: PeakHoldMeter? = null,
     val rightMeter: PeakHoldMeter? = null,
+    /** Identity of the car baseline added to the curves (0 = none), for the static-layer key. */
+    val baselineKey: Int = 0,
 ) {
     val curves: BmwResponseCurves get() = model.curves
 
@@ -1453,13 +1459,15 @@ private class PeqResponseModel {
     fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
         PeqPlotGeometry(left, right, top, bottom, maxFrequency, axisBottom, axisTop)
 
-    fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double) {
+    /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]). */
+    fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double, baseline: CarBaseline? = null) {
         if (values.size != BmwSignalChain.VALUE_COUNT) return
         val maxFreq = min(20_000.0, sampleRate * 0.5 * 0.999)
         calculator.configureAxis(sampleRate, 20.0, maxFreq)
         calculator.invalidateAll()
         calculator.compute(values, peq, curves)
-        fitAxis()
+        baseline?.applyTo(curves)
+        fitAxis(measured = baseline != null)
     }
 
     /**
@@ -1468,9 +1476,10 @@ private class PeqResponseModel {
      * highest point of the full curve or any bank's curve (uncapped, so a big stacked boost still
      * shows its real height); the window is 24 dB tall, or 36 dB when
      * the full curve dips further than that (ignoring the rolled-off ends below 40 Hz / above
-     * 16 kHz).
+     * 16 kHz). With a car baseline added ([measured]) the curves carry the cabin's real peaks and
+     * dips, so the window may grow to 48 dB.
      */
-    private fun fitAxis() {
+    private fun fitAxis(measured: Boolean = false) {
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
         val freqs = curves.frequencies
@@ -1486,7 +1495,11 @@ private class PeqResponseModel {
         }
         if (!high.isFinite() || !low.isFinite()) return
         val top = ceil((high + 3.0) / 6.0) * 6.0
-        val span = if (top - low <= 22.0) 24.0 else 36.0
+        val span = when {
+            top - low <= 22.0 -> 24.0
+            top - low <= 34.0 || !measured -> 36.0
+            else -> 48.0
+        }
         axisTop = top
         axisBottom = top - span
     }

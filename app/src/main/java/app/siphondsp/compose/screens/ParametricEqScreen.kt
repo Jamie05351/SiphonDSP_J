@@ -28,6 +28,7 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.state.PeqStateHolder
+import app.siphondsp.fragment.CarBaselineStore
 import app.siphondsp.fragment.PeqApoImport
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqBandEditResult
@@ -105,6 +108,8 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         channelDisplay = graphPrefs.channelDisplay
         showOverlays = graphPrefs.showIndividualFilters
     }
+
+    LaunchedEffect(holder) { holder.loadCarBaseline() }
 
     LifecycleResumeEffect(Unit) {
         reloadEverything()
@@ -205,6 +210,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                         onChannelDisplayChange = { channelDisplay = it; graphPrefs.channelDisplay = it },
                         onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
                     ),
+                    carBaseline = holder.graphBaseline,
                 )
                 else -> PeqBandList(holder, Modifier.fillMaxSize())
             }
@@ -325,6 +331,7 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         Chip("Import") { importLauncher.launch(arrayOf("text/plain", "text/*")) }
         Chip("Export") { exportLauncher.launch(holder.selectedScope.fileName) }
         FilterToolsChip(holder, { copyWholeScopeTarget = it }) { message -> context.toast(message) }
+        CarBaselineChip(holder)
         Chip("Diagnostics") {
             val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
             val graphPrefs = PeqGraphPreferences(context)
@@ -516,6 +523,80 @@ private fun FilterToolsChip(
             )
         }
     }
+}
+
+/**
+ * Load / show / clear the car baseline (see [app.siphondsp.dsp.CarBaseline]): a REW text export of
+ * the car measured with this DSP flat or off, per channel or one file for both, which the graph
+ * then adds to every curve so it shows the response you'll actually hear.
+ */
+@Composable
+private fun CarBaselineChip(holder: PeqStateHolder) {
+    var expanded by remember { mutableStateOf(false) }
+    // Saveable: the activity can be recreated (memory, day/night) while the picker is open, and
+    // a lost side would turn a Left or Right import into one over both channels.
+    var pendingSide by rememberSaveable { mutableStateOf(CarBaselineStore.Side.BOTH) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { holder.importCarBaseline(it, pendingSide) }
+    }
+    fun load(side: CarBaselineStore.Side) {
+        expanded = false
+        pendingSide = side
+        launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
+    }
+
+    Box {
+        val interactionSource = remember { MutableInteractionSource() }
+        AssistChip(
+            onClick = { expanded = true },
+            label = { Text(if (holder.graphBaseline != null) "Car baseline ✓" else "Car baseline") },
+            trailingIcon = { Text("▾") },
+            interactionSource = interactionSource,
+            modifier = Modifier.bmwFocusRing(interactionSource),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            val leftName = holder.carBaselineSource(CarBaselineStore.Side.LEFT)
+            val rightName = holder.carBaselineSource(CarBaselineStore.Side.RIGHT)
+            MenuNote("Left: ${leftName ?: "none"}")
+            MenuNote("Right: ${rightName ?: "none"}")
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("Load for Left + Right…") }, onClick = { load(CarBaselineStore.Side.BOTH) })
+            DropdownMenuItem(text = { Text("Load for Left…") }, onClick = { load(CarBaselineStore.Side.LEFT) })
+            DropdownMenuItem(text = { Text("Load for Right…") }, onClick = { load(CarBaselineStore.Side.RIGHT) })
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Show on graph" + if (holder.showCarBaseline) "  ✓" else "") },
+                enabled = holder.carBaseline != null,
+                onClick = { expanded = false; holder.showCarBaselineOnGraph(!holder.showCarBaseline) },
+            )
+            DropdownMenuItem(
+                text = { Text("Clear baseline…") },
+                enabled = holder.carBaseline != null,
+                onClick = { expanded = false; showClearConfirm = true },
+            )
+        }
+    }
+
+    if (showClearConfirm) {
+        ConfirmDialog(
+            title = "Clear car baseline?",
+            message = "Remove the stored Left and Right measurements? The graph goes back to assuming a flat car.",
+            confirmLabel = "Clear",
+            onConfirm = { showClearConfirm = false; holder.clearCarBaseline() },
+            onDismiss = { showClearConfirm = false },
+        )
+    }
+}
+
+@Composable
+private fun MenuNote(text: String) {
+    Text(
+        text,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
