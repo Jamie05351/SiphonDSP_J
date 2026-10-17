@@ -236,7 +236,7 @@ void MasterLimiter::process(float& l, float& r) {
 }
 
 // ---- Per-bus brick-wall limiter ----------------------------------------------------------------
-void BusLimiter::process(float& l, float& r, float thresholdDb) {
+void BusLimiter::analyse(float l, float r, float thresholdDb) {
     atRest_ = false;
     // The threshold only changes on configure(), so its pow is cached rather than paid every
     // sample. Recomputed from the same input, so the ceiling is the identical value.
@@ -280,13 +280,16 @@ void BusLimiter::process(float& l, float& r, float thresholdDb) {
         meteredGain_ = gain;
         grDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
     }
+}
+void BusLimiter::process(float& l, float& r, float thresholdDb) {
+    analyse(l, r, thresholdDb);
     l = ftz(delayL_.run(l) * gain);
     r = ftz(delayR_.run(r) * gain);
 }
-void BusLimiter::passThrough(float& l, float& r) {
+void BusLimiter::passThrough(float& l, float& r, float thresholdDb) {
+    analyse(l, r, thresholdDb);
     l = delayL_.run(l);
     r = delayR_.run(r);
-    reset();
 }
 void BusLimiter::zeroMeter() {
     grDb.store(0.f);

@@ -314,3 +314,46 @@ TEST_CASE("per-bus limiter: bypassed and processed bands stay aligned at a high 
     limiter.setLookahead(192000.f);
     CHECK(limiter.lookahead() + NativeBmwDsp::kAlignmentLatency <= NativeBmwDsp::kDelayLineCapacity - 1);
 }
+
+TEST_CASE("per-bus limiter: enabling it mid-signal never lets the lookahead's audio over") {
+    // While disabled the limiter still delays its band; the audio sitting in that delay when it is
+    // switched on must already have been analysed, or the first 1.5 ms after enabling pass at
+    // full level over the threshold. Whether that audio is near a crest depends on where in the
+    // cycle the switch lands, so enable at eight points across one 60 Hz period.
+    const float ceiling = std::pow(10.f, -12.f / 20.f);
+    const double w = 2.0 * kPi * 60.0 / kSampleRate;
+    auto tone = [&](std::size_t from, std::size_t frames) {
+        std::vector<float> buf(2 * frames);
+        for (std::size_t n = 0; n < frames; ++n) {
+            buf[2 * n] = buf[2 * n + 1] = static_cast<float>(0.9 * std::sin(w * (from + n)));
+        }
+        return buf;
+    };
+    float worst = 0.f;
+    for (std::size_t offset = 0; offset < 800; offset += 100) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        quietUpstream(c);
+        c[nbschema::kMasterLimiterEnabled] = 0.f;
+        for (int out = 2; out < 4; ++out) {
+            c[nbschema::kOutputConfigBase + out * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 1.f;
+        }
+        c[183] = -12.f; c[184] = 120.f;  // threshold/release set, limiter still off
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        const std::size_t warmFrames = 48000 + offset;
+        auto hot = tone(0, warmFrames);
+        proc.process(hot.data(), hot.size());  // runs hot, unlimited
+        c[182] = 1.f;                           // switch the low bus limiter on mid-signal
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto after = tone(warmFrames, 4800);    // the same tone, continuing in phase
+        proc.process(after.data(), after.size());
+        // The first kAlignmentLatency frames out were already past the bus limiter -- in the
+        // stage-alignment delay downstream of it -- when it was switched on: produced while it
+        // was off, so correctly unlimited. Everything after that went through the enabled limiter.
+        after.erase(after.begin(), after.begin() + 2 * NativeBmwDsp::kAlignmentLatency);
+        worst = std::max(worst, peakAbs(after));
+    }
+    INFO("worst peak after enabling = ", worst, "  ceiling = ", ceiling);
+    CHECK(worst <= ceiling * 1.005f);
+}

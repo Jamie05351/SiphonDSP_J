@@ -120,7 +120,7 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
     if (limiterEnabled) {
         limiter.process(xl, xr, limiterThreshDb);
     } else {
-        limiter.passThrough(xl, xr);
+        limiter.passThrough(xl, xr, limiterThreshDb);
     }
 }
 void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {

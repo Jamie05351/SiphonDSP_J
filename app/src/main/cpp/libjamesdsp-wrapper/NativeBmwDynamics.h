@@ -134,6 +134,11 @@ private:
 // The delay runs whether or not the limiter is enabled (passThrough()), and bypassed bands carry
 // it too, so every band keeps the same latency and the band sum stays aligned.
 struct BusLimiter {
+private:
+    // The hold/ramp/release analysis for one frame (undelayed input); updates gain.
+    void analyse(float left, float right, float thresholdDb);
+
+public:
     // Hold window cap, in samples: kBusLimLowHoldMs (the longest) at up to ~160 kHz.
     static constexpr unsigned kMaxHoldSamples = 4096;
     static constexpr float kLookaheadMs = 1.5f;
@@ -152,8 +157,10 @@ struct BusLimiter {
     // Limits, and delays the audio by lookahead().
     void process(float& left, float& right, float thresholdDb);
     // Disabled: delays the audio by lookahead() with no gain change, so the band stays aligned
-    // with the others, and keeps the gain path at rest (see reset()).
-    void passThrough(float& left, float& right);
+    // with the others -- but keeps analysing it against the threshold. Every sample in the delay
+    // has then already been through the hold/ramp, so enabling the limiter mid-signal can't let
+    // the lookahead's worth of unanalysed audio out over the ceiling.
+    void passThrough(float& left, float& right, float thresholdDb);
     // Publishes 0 and makes the next process() republish unconditionally.
     void zeroMeter();
     // Called whenever the limiter is skipped (disabled, or its band bypassed/silenced) so it
