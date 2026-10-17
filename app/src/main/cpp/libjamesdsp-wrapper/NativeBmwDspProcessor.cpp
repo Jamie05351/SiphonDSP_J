@@ -50,6 +50,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
         sampleRate_ = sr;
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
+        loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
         rebuildAll();
     }
 }
@@ -250,9 +251,22 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     oR = NativeBmwDsp::ftz(oR);
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
     // ramped toward its target so a steering-wheel step never clicks.
-    masterGain_ += (masterGainTarget_ - masterGain_) * masterRampCoef_;
+    masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
     oL *= masterGain_;
     oR *= masterGain_;
+    // Loudness compensation follows the volume, after it: its lift is always less than the cut.
+    // The switch and strength ramp the effective strength (so on/off fades, no thump), and while
+    // that or the volume is moving the lift is retuned every 8 samples (see retuneLoudness()), so
+    // it never runs ahead of the attenuation. Fully off, the stage is skipped.
+    const float strengthTarget = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+    const bool loudnessMoving = loudnessStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
+    loudnessStrength_ = NativeBmwDsp::rampToward(loudnessStrength_, strengthTarget, loudnessRampCoef_);
+    if (loudnessMoving && (++loudnessRetuneCounter_ & 7u) == 0) {
+        retuneLoudness();
+    }
+    if (loudnessStrength_ > 0.f) {
+        loudness_.process(oL, oR);
+    }
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap

@@ -117,7 +117,10 @@ public:
     //
     // 292..293 -- master volume, added in the 292 -> 294 growth:
     //   292      volume dB (-80..0)   293  mute
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 294 };
+    //
+    // 294..295 -- loudness compensation, added in the 294 -> 296 growth:
+    //   294      enabled              295  strength (percent)
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 296 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -285,6 +288,8 @@ private:
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
         DirtyLowResume = 1u << 22,  // Low's chain runs again (lpfPass off): clear its state
         DirtyMidResume = 1u << 23,  // Mid's chain runs again (hpfPass off): clear its state
+        DirtyLoudness = 1u << 24,   // volume or loudness settings changed: retune (keeps state)
+        DirtyLoudnessResume = 1u << 25,  // loudness switched on: clear the state it froze with
         DirtyAll = 0xffffffffu,
     };
 
@@ -394,6 +399,18 @@ private:
     // Gains, tilt and the summed-bus stages.
     float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
     NativeBmwDsp::Tilt tilt_;
+    // Loudness compensation, after the master volume (see Loudness).
+    NativeBmwDsp::Loudness loudness_;
+    // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the
+    // ramping masterGain_ and at its target, so the lift never exceeds the attenuation in effect
+    // while the volume ramps either way.
+    void retuneLoudness();
+    unsigned loudnessRetuneCounter_ = 0;
+    // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
+    // enough that the stepwise retunes are far smaller than the signal's own movement.
+    float loudnessStrength_ = 0.f;
+    static constexpr float kLoudnessRampSeconds = 0.05f;
+    float loudnessRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
     // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
     // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
     std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};

@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (294 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (296 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -385,3 +385,6 @@
 
 0            # 292 masterVolumeDb (0 dB = full)
 0            # 293 masterMute (off)
+
+0            # 294 loudnessEnabled (off)
+100          # 295 loudnessStrength (percent)

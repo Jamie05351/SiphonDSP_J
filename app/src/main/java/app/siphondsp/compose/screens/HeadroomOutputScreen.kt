@@ -61,7 +61,10 @@ private typealias GroupRow = (y: Int, h: Int) -> Modifier
 fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val headroom = stringResource(R.string.bmw_dsp_headroom)
-    val output: @Composable (GroupRow) -> Unit = { row -> OutputGroup(dsp, headroom, row) }
+    val output: @Composable (GroupRow) -> Unit = { row ->
+        OutputGroup(dsp, headroom, row)
+        LoudnessGroup(dsp, row)
+    }
     val limiter: @Composable (GroupRow) -> Unit = { row ->
         LimiterGroup(dsp, row)
         VolumeGroup(dsp, row)
@@ -87,6 +90,26 @@ private fun OutputGroup(dsp: BmwDspState, headroom: String, row: GroupRow) {
     )
     DspArtSlider(
         dsp, "Post gain R", NativeBmwDspValues.INDEX_POST_GAIN_R, -6f..6f, 0.5f, "dB", PostGainAccent, row(172, 48),
+    )
+}
+
+/**
+ * Loudness compensation: as the master volume drops, lifts the bass (and a little treble) the ear
+ * loses first at low level, so quiet listening keeps its body. None at full volume. Header switch
+ * = on/off; Strength scales the whole lift.
+ */
+@Composable
+private fun LoudnessGroup(dsp: BmwDspState, row: GroupRow) {
+    ArtGroupHeader(
+        title = "Loudness",
+        accent = LoudnessAccent,
+        modifier = row(240, HeaderHeight),
+        checked = dsp.isOn(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED),
+        onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED, if (on) 1f else 0f) },
+    )
+    DspArtSlider(
+        dsp, "Strength", NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH, 0f..100f, 5f, "%", LoudnessAccent,
+        row(292, 48),
     )
 }
 
@@ -214,14 +237,15 @@ private val HeadroomAccent = Color(BmwDashboardSkin.SLIDER_HEADROOM_COLOR)
 private val PostGainAccent = Color(BmwDashboardSkin.M_GREEN)
 private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private val VolumeAccent = Color.White
+private val LoudnessAccent = Color(BmwDashboardSkin.SLIDER_TILT_COLOR)
 
 // Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
 // stepper) with 120dp between them, centred across the content area (x 190..1230), and centred
-// vertically on the taller group -- now the Limiter + Volume column (300dp; it was Output's 220dp
-// at GroupTop 150, so the same centre line puts it at 110).
+// vertically on the taller group -- now the Output + Loudness column (340dp; the same centre line
+// as the 300dp Limiter + Volume column at 110 puts it at 90).
 private const val GroupWidth = 333
 private const val OutputX = 317
 private const val LimiterX = 770
-private const val GroupTop = 110
+private const val GroupTop = 90
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp

@@ -46,7 +46,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private val lowAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val highAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
-    private val tiltCascade = BiquadCascade(4)
+    // Tilt (4 shelves) + loudness (2 shelves): the summed-bus EQ.
+    private val tiltCascade = BiquadCascade(6)
 
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
 
@@ -308,6 +309,15 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 tiltCascade.addLowShelf(freq, shelfGainDb, sampleRate)
                 tiltCascade.addHighShelf(freq, -shelfGainDb, sampleRate)
             }
+        }
+        // Loudness compensation (native Loudness, after the master volume): same lift as native.
+        if (values[NativeBmwDspValues.INDEX_LOUDNESS_ENABLED] >= .5f) {
+            val cut = (-values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB].toDouble()).coerceAtLeast(0.0)
+            val strength = (values[NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH].toDouble() / 100.0).coerceIn(0.0, 1.0)
+            val bassDb = minOf(NativeBmwDspValues.LOUDNESS_BASS_MAX_DB, NativeBmwDspValues.LOUDNESS_BASS_PER_DB * cut) * strength
+            val trebleDb = minOf(NativeBmwDspValues.LOUDNESS_TREBLE_MAX_DB, NativeBmwDspValues.LOUDNESS_TREBLE_PER_DB * cut) * strength
+            tiltCascade.addLowShelf(NativeBmwDspValues.LOUDNESS_BASS_HZ, bassDb, sampleRate)
+            tiltCascade.addHighShelf(NativeBmwDspValues.LOUDNESS_TREBLE_HZ, trebleDb, sampleRate)
         }
     }
 

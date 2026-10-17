@@ -123,6 +123,27 @@ void processLowCrossover(OutputRuntime& left, const OutputConfig& leftConfig, Ou
 void processMidCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
 void processHighCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
 
+// Loudness compensation: as the master volume drops below full, a bass shelf and a small treble
+// shelf lift the ends of the spectrum the ear loses first at low level (equal-loudness contours),
+// so quiet listening keeps its body. Zero lift at full volume. Each lift is a fixed fraction of the
+// volume cut, capped, and always smaller than the cut itself -- it runs after the master volume,
+// so it can never push the output above what full volume would produce.
+class Loudness {
+public:
+    static constexpr float kBassHz = 100.f, kTrebleHz = 8000.f;
+    static constexpr float kBassPerDb = 0.3f, kTreblePerDb = 0.1f;  // dB of lift per dB of cut
+    static constexpr float kBassMaxDb = 12.f, kTrebleMaxDb = 4.f;
+    // The lift for a given volume (dB, <= 0) and strength (0..1), as [bass, treble] dB.
+    static void liftDb(float volumeDb, float strength, float& bassDb, float& trebleDb);
+    // Retunes the shelves for this volume/strength, keeping their state.
+    void rebuild(float volumeDb, float strength, float sampleRate);
+    void clear();
+    void process(float& left, float& right);
+
+private:
+    Biquad bassL_, bassR_, trebleL_, trebleR_;
+};
+
 // Output-bus tilt EQ: two low shelves (+g) and two high shelves (-g) per channel at one corner.
 class Tilt {
 public:

@@ -82,6 +82,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.highPass = flagIn(v[nbschema::kHighPass]);
     next.masterVolumeDb = clampIn(v[nbschema::kMasterVolumeDb], -80, 0);
     next.masterMute = flagIn(v[nbschema::kMasterMute]);
+    next.loudnessEnabled = flagIn(v[nbschema::kLoudnessEnabled]);
+    next.loudnessStrength = clampIn(v[nbschema::kLoudnessStrength], 0, 100) * .01f;
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -536,6 +538,16 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
         dirty |= DirtyLimiter;
     }
+    if (changed(next.masterVolumeDb, p_.masterVolumeDb) ||
+        changed(next.loudnessStrength, p_.loudnessStrength) ||
+        next.loudnessEnabled != p_.loudnessEnabled) {
+        dirty |= DirtyLoudness;
+    }
+    // Loudness is skipped once fully faded out; switching it back on then starts its shelves
+    // clean (its lift starts from 0, so the clean state is inaudible while it fades in).
+    if (!p_.loudnessEnabled && next.loudnessEnabled && loudnessStrength_ == 0.f) {
+        dirty |= DirtyLoudnessResume;
+    }
 
     p_ = next;
     masterGainTarget_ = p_.masterMute ? 0.f : std::pow(10.f, p_.masterVolumeDb / 20.f);
@@ -562,6 +574,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         for (auto& out : outputs_) {
             out.delay.snap();  // nor crossfade the delays in from their defaults
         }
+        // ...nor fade loudness in at start-up.
+        loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+        retuneLoudness();
         outputGainsPrimed_ = true;
     }
     return true;
@@ -693,6 +708,11 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
         NativeBmwDsp::buildHighCrossover(output(id), outputConfig(id), sampleRate_);
     }
 }
+void NativeBmwDspProcessor::retuneLoudness() {
+    auto cutDb = [](float gain) { return -20.f * std::log10(std::max(gain, 1e-6f)); };
+    const float cut = std::min(cutDb(masterGain_), cutDb(masterGainTarget_));
+    loudness_.rebuild(-cut, loudnessStrength_, sampleRate_);
+}
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;
     // A delay edit crossfades between the old and new read points instead of jumping.
@@ -821,6 +841,12 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLimiter) {
         limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     }
+    if (d & DirtyLoudness) {
+        retuneLoudness();
+    }
+    if (d & DirtyLoudnessResume) {
+        loudness_.clear();
+    }
     if (d & DirtyVirtual) {
         virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
     }
@@ -837,6 +863,8 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     tilt_.clear();
+    retuneLoudness();
+    loudness_.clear();
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);
