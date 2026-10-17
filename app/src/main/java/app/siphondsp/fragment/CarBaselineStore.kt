@@ -37,6 +37,7 @@ class CarBaselineStore(context: Context) {
         if (fileFor(side).exists()) prefs.getString(nameKey(side), null) ?: "measurement" else null
 
     fun load(): CarBaseline? {
+        recoverInterruptedImport()
         val left = read(Side.LEFT)
         val right = read(Side.RIGHT)
         return if (left == null && right == null) null else CarBaseline(left, right)
@@ -91,6 +92,31 @@ class CarBaselineStore(context: Context) {
             temps.forEach { it.delete() }
             if (installed) backups.forEach { it.delete() }
         }
+    }
+
+    /**
+     * Undoes an [import] the process died in the middle of. A live file is only ever missing
+     * while its backup stands in for it, between the move-aside and the rename-in; if any channel
+     * is in that state the import never finished, so every backup goes back (the other channel may
+     * already hold the new file). Otherwise any backup left over is from an import that did
+     * finish, and is dropped along with stray temp files.
+     */
+    private fun recoverInterruptedImport() {
+        val sides = listOf(Side.LEFT, Side.RIGHT)
+        val lives = sides.map(::fileFor)
+        val backups = lives.map { File(dir, "${it.name}.bak") }
+        val interrupted = lives.indices.any { backups[it].exists() && !lives[it].exists() }
+        for (i in lives.indices) {
+            if (!backups[i].exists()) continue
+            if (interrupted) {
+                lives[i].delete()
+                if (!backups[i].renameTo(lives[i])) Timber.e("Car baseline recovery failed for ${lives[i].name}")
+            } else {
+                backups[i].delete()
+            }
+        }
+        lives.forEach { File(dir, "${it.name}.tmp").delete() }
+        if (interrupted) Timber.w("Recovered car baseline from an interrupted import")
     }
 
     /** Puts each of [lives] back from its backup (or removes it if there was none before). */
