@@ -125,6 +125,11 @@ Java_app_siphondsp_interop_JamesDspWrapper_setNativeBmwDspSampleRate(JNIEnv* env
     }
 }
 
+// Fills [out] with one meter's current values instead of returning a new array, so a UI poll
+// running ~30 times a second allocates nothing. kind (JamesDspWrapper.METER_*): 1 = MBC
+// (12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]), 2 = bus limiters (3 floats:
+// [lowGrDb, midGrDb, highGrDb]). False, with [out] untouched, for an unknown kind, a short
+// array or a gone handle. The readers only load atomics, so no lock is taken.
 extern "C" JNIEXPORT jboolean JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_readNativeBmwMeter(JNIEnv* env, jobject, jlong self,
                                                              jint kind, jfloatArray out) {
