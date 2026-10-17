@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -532,7 +533,9 @@ private fun FilterToolsChip(
 @Composable
 private fun CarBaselineChip(holder: PeqStateHolder) {
     var expanded by remember { mutableStateOf(false) }
-    var pendingSide by remember { mutableStateOf(CarBaselineStore.Side.BOTH) }
+    // Saveable: the activity can be recreated (memory, day/night) while the picker is open, and
+    // a lost side would turn a Left or Right import into one over both channels.
+    var pendingSide by rememberSaveable { mutableStateOf(CarBaselineStore.Side.BOTH) }
     var showClearConfirm by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { holder.importCarBaseline(it, pendingSide) }
