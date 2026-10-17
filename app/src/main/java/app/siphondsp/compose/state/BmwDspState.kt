@@ -17,70 +17,154 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.toast
+import java.util.UUID
 
 /**
- * v1 Compose state layer for the native BMW DSP config (`NativeBmwDspValues`, a `FloatArray`
- * indexed by `INDEX_*`). Composition-scoped -- one instance per [rememberBmwDspState] call site
- * (currently one: [app.siphondsp.compose.screens.CrossoverTiltPage]). Replaces the View
- * system's `Fragment.rebuild()` pattern of loading the array into a local, mutating it in place,
- * and calling `save` + `broadcast` on every change.
+ * The one in-memory copy of the native BMW DSP config (`NativeBmwDspValues`, a `FloatArray`
+ * indexed by `INDEX_*`) for a settings store -- in the app, exactly one. Every [BmwDspState]
+ * (one per [rememberBmwDspState] call site, ~two dozen screens) reads and writes through it, so:
+ * - a preview or commit on one screen is immediately what every other screen shows, without a
+ *   broadcast round trip;
+ * - commits are serialised on the shared array, so two screens committing at once can no longer
+ *   each save their own stale copy over the other's change;
+ * - the store is loaded once, not once per screen and again on every resume.
  *
- * Deliberately NOT an app-wide repository or a ViewModel yet -- see COMPOSE_MIGRATION_ROADMAP.md
- * section 3a / section 13. This establishes the read / preview / commit / observe shape so the
- * next few leaf-screen ports reuse it verbatim; once 2-3 screens are on it, promote to a shared
- * `BmwDspRepository` with a single receiver + writer.
- *
- * Write model, matching the View path's behaviour:
- * - [preview] updates the in-memory snapshot and broadcasts (so the audio engine follows a drag
+ * Write model:
+ * - [preview] updates the shared snapshot and broadcasts (so the audio engine follows a drag
  *   live) but does NOT touch disk.
- * - [commit] does [preview] plus a disk save -- call it on slider release and on a toggle.
+ * - [commit] persists, then publishes and broadcasts -- call it on slider release and on a toggle.
  */
-class BmwDspState internal constructor(private val appContext: Context) {
+internal class BmwDspRepository private constructor(private val appContext: Context) {
 
     var values: FloatArray by mutableStateOf(NativeBmwDspValues.load(appContext))
         private set
 
+    private val lock = Any()
+
+    // Tags this repository's own broadcasts. Local broadcasts come back to our receivers too, and
+    // can arrive after a newer preview/commit -- applying such an echo would roll the shared copy
+    // back -- so anything carrying this tag is ignored, however late it lands.
+    private val origin = UUID.randomUUID().toString()
+
+    // Previewed values not yet persisted (index -> value, mirrors included): what the engine and
+    // the UI are running on top of the saved config. A commit never saves these, but keeps them
+    // applied, so a drag still in flight on one control doesn't snap back when another commits.
+    private val pendingPreviews = HashMap<Int, Float>()
+
+    // How many BmwDspState holders currently have a drag/edit in flight.
+    private var editors = 0
+
+    fun preview(index: Int, value: Float, mirrors: IntArray) = synchronized(lock) {
+        val next = values.copyOf()
+        next[index] = value
+        pendingPreviews[index] = value
+        for (m in mirrors) {
+            next[m] = value
+            pendingPreviews[m] = value
+        }
+        values = next
+        publish(next)
+    }
+
+    fun commit(updates: Map<Int, Float>): Boolean = synchronized(lock) {
+        // Save what is on disk now plus these updates -- never the shared [values], which hold
+        // un-persisted previews (e.g. a measurement-generator toggle) an unrelated commit must not
+        // save, and miss what other writers (master volume, PEQ restore) saved straight to disk.
+        // load() re-reads an already-migrated store unchanged: every migration is marker-gated.
+        val saved = NativeBmwDspValues.load(appContext)
+        for ((index, value) in updates) saved[index] = value
+        if (!NativeBmwDspValues.save(appContext, saved)) {
+            refreshFromDiskLocked()
+            appContext.toast("BMW DSP settings could not be saved; previous settings restored")
+            return false
+        }
+        // Run the saved config with the previews still in flight on top, minus the committed
+        // fields, so the engine and UI don't jump back under a control that is mid-drag.
+        for (index in updates.keys) pendingPreviews.remove(index)
+        val running = saved.copyOf()
+        for ((index, value) in pendingPreviews) running[index] = value
+        values = running
+        publish(running)
+        true
+    }
+
+    fun refreshFromDisk() = synchronized(lock) { refreshFromDiskLocked() }
+
+    // Reloads the persisted values. Re-broadcasts only when the engine may be off them -- an
+    // un-persisted preview still applied (e.g. a measurement generator toggle left running) or a
+    // disk copy that changed underneath -- rather than on every screen's every resume.
+    private fun refreshFromDiskLocked() {
+        val loaded = NativeBmwDspValues.load(appContext)
+        val differs = !loaded.contentEquals(values)
+        if (differs) values = loaded
+        if (differs || pendingPreviews.isNotEmpty()) {
+            pendingPreviews.clear()
+            publish(loaded)
+        }
+    }
+
+    private fun publish(array: FloatArray) = NativeBmwDspValues.broadcast(appContext, array, origin)
+
+    fun onExternalUpdate(incoming: FloatArray, sender: String?) = synchronized(lock) {
+        // Our own echo: whatever we hold is at least as new. A drag in flight keeps its own value
+        // against anyone else's update too.
+        if (sender == origin) return@synchronized
+        if (editors == 0) values = incoming
+    }
+
+    fun setEditing(editing: Boolean) = synchronized(lock) {
+        editors = (editors + if (editing) 1 else -1).coerceAtLeast(0)
+    }
+
+    companion object {
+        private val instances = HashMap<String, BmwDspRepository>()
+
+        /** The repository for [context]'s settings store (keyed by its directory). */
+        fun forContext(context: Context): BmwDspRepository = synchronized(instances) {
+            instances.getOrPut(context.noBackupFilesDir.absolutePath) {
+                BmwDspRepository(context.applicationContext.let { app ->
+                    // Keep the caller's context when it overrides the store directory (tests do),
+                    // otherwise the application context.
+                    if (app.noBackupFilesDir == context.noBackupFilesDir) app else context
+                })
+            }
+        }
+    }
+}
+
+/**
+ * A screen's handle on the shared [BmwDspRepository]: the same read / preview / commit / observe
+ * shape the screens were written against, plus the screen's own "a drag is in flight" flag.
+ */
+class BmwDspState internal constructor(context: Context) {
+
+    private val repository = BmwDspRepository.forContext(context)
+
+    val values: FloatArray get() = repository.values
+
     /** Set while a local drag/edit is in flight so the inbound broadcast (including our own
      *  [preview] echo) doesn't stomp the value the user is actively dragging. */
     internal var editing: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            repository.setEditing(value)
+        }
 
     fun get(index: Int): Float = values.getOrElse(index) { 0f }
 
     fun isOn(index: Int): Boolean = get(index) >= 0.5f
 
     /** Live update: snapshot + broadcast, no disk. Use during a drag. */
-    fun preview(index: Int, value: Float, mirrors: IntArray = EmptyMirrors) {
-        val next = values.copyOf()
-        next[index] = value
-        for (m in mirrors) next[m] = value
-        values = next
-        NativeBmwDspValues.broadcast(appContext, next)
-    }
+    fun preview(index: Int, value: Float, mirrors: IntArray = EmptyMirrors) =
+        repository.preview(index, value, mirrors)
 
-    /**
-     * Commit only after persistence succeeds; undo any live preview on failure.
-     *
-     * Builds the saved array from this composition's own [values] directly rather than a fresh
-     * disk read: [NativeBmwDspValues.load] re-runs every one-time migration on each call, and
-     * doing that on every single commit (confirmed by bisecting PR #387, which introduced a
-     * disk-reload here) made committed crossover type/frequency changes unreliable -- a later
-     * commit's fresh reload could re-derive a value that didn't match what was just set. This
-     * reintroduces the narrower, pre-existing risk #387 was trying to close (two separate
-     * BmwDspState instances committing at the same moment can race), which is a real but rare
-     * edge case, unlike this bug, which broke ordinary single-screen editing outright.
-     */
+    /** Commit only after persistence succeeds; undo any live preview on failure. */
     fun commit(index: Int, value: Float, mirrors: IntArray = EmptyMirrors): Boolean {
-        val next = values.copyOf()
-        next[index] = value
-        for (m in mirrors) next[m] = value
-        if (!NativeBmwDspValues.save(appContext, next)) {
-            refreshFromDisk()
-            appContext.toast("BMW DSP settings could not be saved; previous settings restored")
-            return false
-        }
-        values = next
-        NativeBmwDspValues.broadcast(appContext, next)
-        return true
+        val updates = HashMap<Int, Float>(1 + mirrors.size)
+        updates[index] = value
+        for (m in mirrors) updates[m] = value
+        return repository.commit(updates)
     }
 
     /**
@@ -88,32 +172,15 @@ class BmwDspState internal constructor(private val appContext: Context) {
      * -- for switches that must flip a group of fields together (e.g. the Crossovers page's 3-way
      * toggle) without the engine ever seeing a half-applied intermediate state.
      */
-    fun commitAll(updates: Map<Int, Float>): Boolean {
-        val next = values.copyOf()
-        for ((index, value) in updates) next[index] = value
-        if (!NativeBmwDspValues.save(appContext, next)) {
-            refreshFromDisk()
-            appContext.toast("BMW DSP settings could not be saved; previous settings restored")
-            return false
-        }
-        values = next
-        NativeBmwDspValues.broadcast(appContext, next)
-        return true
-    }
+    fun commitAll(updates: Map<Int, Float>): Boolean = repository.commit(updates)
 
-    /** Reloads the persisted values and re-broadcasts them so the native engine drops any
-     *  un-persisted [preview] it applied before this composition was paused (e.g. a measurement
-     *  generator type/timing-ref toggle left running) -- otherwise the UI would resync to disk
-     *  while the engine kept running the previewed value. */
-    internal fun refreshFromDisk() {
-        val loaded = NativeBmwDspValues.load(appContext)
-        values = loaded
-        NativeBmwDspValues.broadcast(appContext, loaded)
-    }
+    /** Reloads the persisted values, re-broadcasting when the engine may be running a value that
+     *  was never persisted (see [BmwDspRepository.refreshFromDisk]). */
+    internal fun refreshFromDisk() = repository.refreshFromDisk()
 
-    internal fun onExternalUpdate(incoming: FloatArray) {
+    internal fun onExternalUpdate(incoming: FloatArray, sender: String? = null) {
         if (editing) return
-        values = incoming
+        repository.onExternalUpdate(incoming, sender)
     }
 
     private companion object {
@@ -135,12 +202,17 @@ fun rememberBmwDspState(): BmwDspState {
     DisposableEffect(state) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
-                    ?.let(state::onExternalUpdate)
+                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
+                    state.onExternalUpdate(it, intent.getStringExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN))
+                }
             }
         }
         context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        onDispose { context.unregisterLocalReceiver(receiver) }
+        onDispose {
+            context.unregisterLocalReceiver(receiver)
+            // A screen leaving mid-drag must not leave the shared repository ignoring updates.
+            state.editing = false
+        }
     }
 
     LifecycleResumeEffect(state) {

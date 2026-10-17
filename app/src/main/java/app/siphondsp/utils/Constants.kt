@@ -35,6 +35,8 @@ object Constants {
     const val ACTION_BACKUP_RESTORED = BuildConfig.APPLICATION_ID + ".action.backup.RESTORED"
     const val ACTION_NATIVE_BMW_DSP_UPDATED = BuildConfig.APPLICATION_ID + ".action.native_bmw_dsp.UPDATED"
     const val EXTRA_NATIVE_BMW_DSP_VALUES = "native_bmw_dsp_values"
+    // Optional: who sent an ACTION_NATIVE_BMW_DSP_UPDATED (lets a sender skip its own echoes).
+    const val EXTRA_NATIVE_BMW_DSP_ORIGIN = "native_bmw_dsp_origin"
 
     // Intent extras
     const val EXTRA_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".extra.service.SAMPLE_RATE"
