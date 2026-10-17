@@ -219,7 +219,14 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             // active all-pass section here creates a phase discontinuity even though its
             // coefficients did not change.
             if (sectionChanged) {
-                nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
+                // loadAllPass() keeps the running state across a retune (no click while a
+                // frequency/Q is dragged). A section that is only now switching on hasn't run
+                // since it was last on, so its state is stale -- that one starts clean.
+                auto& state = nextOutputs[out].allPassState[section];
+                state.loadAllPass(candidate.coefficients);
+                if (!current.enabled && candidate.enabled) {
+                    state.clear();
+                }
             }
         }
     }
@@ -333,7 +340,14 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
                                         changed(current.q, candidate.q);
             nextOutputs[out].allPass[section] = candidate;
             if (sectionChanged) {
-                nextOutputs[out].allPassState[section].loadAllPass(candidate.coefficients);
+                // loadAllPass() keeps the running state across a retune (no click while a
+                // frequency/Q is dragged). A section that is only now switching on hasn't run
+                // since it was last on, so its state is stale -- that one starts clean.
+                auto& state = nextOutputs[out].allPassState[section];
+                state.loadAllPass(candidate.coefficients);
+                if (!current.enabled && candidate.enabled) {
+                    state.clear();
+                }
             }
         }
 
@@ -377,6 +391,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (changed(next.tiltAmount, p_.tiltAmount) || changed(next.tiltFreq, p_.tiltFreq)) {
         dirty |= DirtyTilt;
     }
+    // Tilt doesn't run while off, so its filters still hold whatever played when it was switched
+    // off; clear them when it comes back on, or that stale audio replays as a short burst.
+    if (!p_.tilt && next.tilt) {
+        dirty |= DirtyTiltResume;
+    }
 
     for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
         const auto& old = outputConfigs_[out];
@@ -409,6 +428,11 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         if (low && (old.subsonicEnabled != now.subsonicEnabled ||
                     changed(old.subsonicFreq, now.subsonicFreq))) {
             dirty |= DirtySubsonic;
+            // The subsonic stage doesn't run while off; one switching back on starts clean
+            // rather than replaying the state it froze with (the rebuild keeps state).
+            if (!old.subsonicEnabled && now.subsonicEnabled) {
+                nextOutputs[out].subsonic1.clear();
+            }
         }
         if (old.muted != now.muted || old.polarityInverted != now.polarityInverted) {
             dirty |= DirtyPolarity;
@@ -464,7 +488,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         dirty |= DirtyMeasGen;
     }
 
-    // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, clears tree state, same cost as
+    // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, keeps tree state, same cost as
     // the band crossovers). mix/makeup/attack/release -> DirtyMbcTiming (scalars only, no click).
     // threshold/ratio/knee are read live in MultibandCompressor::bandGain() and need no rebuild. enable or
     // stereo-link flips -> DirtyMbcState (reset cells + tree so a re-enabled band starts clean
@@ -601,11 +625,12 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             if (NativeBmwDsp::peqBandSkipped(type, v[i + 1])) {
                 continue;
             }
+            const int band = static_cast<int>(i / 5);
             if (ch != 2) {
-                x.append(PeqBank::kLeftLane, q);
+                x.append(PeqBank::kLeftLane, q, band, type);
             }
             if (ch != 1) {
-                x.append(PeqBank::kRightLane, q);
+                x.append(PeqBank::kRightLane, q, band, type);
             }
         }
         b = x;
@@ -615,6 +640,15 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
     if (!build(full, fullCount, f) || !build(low, lowCount, l) || !build(mid, midCount, m) ||
         !build(high, highCount, h)) {
         return false;
+    }
+    // An edit retunes the running banks: each surviving band carries its filter state over, so
+    // dragging a band doesn't drop every band's memory at once (a click per drag event, worst on
+    // bass). The banks don't run while the PEQ is off, so switching it back on starts clean.
+    if (enabled && peqEnabled_) {
+        f.inheritState(inputPeq_);
+        l.inheritState(lowPeq_);
+        m.inheritState(midPeq_);
+        h.inheritState(highPeq_);
     }
     auto save = [](auto& target, std::size_t& count, const double* source,
                    std::size_t sourceCount) {
@@ -765,6 +799,9 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyTilt) {
         tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     }
+    if (d & DirtyTiltResume) {
+        tilt_.clear();
+    }
     if (d & DirtyCompTiming) {
         rebuildCompressorTiming();
     }
@@ -810,6 +847,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildMidCrossover();
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
+    tilt_.clear();
     rebuildCompressorTiming();
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);
@@ -837,6 +875,12 @@ void NativeBmwDspProcessor::rebuildAll() {
     }
     updateDelays();
     resetDynamics();
+    // A full rebuild starts every filter clean; the PEQ rebuild below would otherwise carry the
+    // banks' state over (see configurePeqLocked).
+    inputPeq_.clear();
+    lowPeq_.clear();
+    midPeq_.clear();
+    highPeq_.clear();
     // Locked variant: rebuildAll() runs either from the constructor (no lock needed, object not
     // yet published) or from setSampleRate() (already holding stateMutex_) -- never call
     // configurePeq() itself here, it would deadlock re-taking the same non-recursive mutex.

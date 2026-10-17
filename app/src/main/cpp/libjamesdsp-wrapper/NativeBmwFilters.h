@@ -60,6 +60,17 @@ struct Biquad {
     // each); any other topology mix falls back to the two scalar run() calls.
     static void runPair(Biquad& l, Biquad& r, float& xl, float& xr);
     void clear();
+    // Installs next's topology + coefficients. The integrator state is kept when the recursion
+    // is the same one (same topology, neither side an identity pass-through), so a parameter edit
+    // retunes a running filter instead of dropping its memory mid-waveform -- the trapezoidal
+    // SVF is stable under coefficient changes. Anything else clears the state: a different
+    // topology reads its state differently, and an identity stage's state means nothing.
+    void retune(const Biquad& next);
+    // True for the identity pass-through makeIdentity() installs (and the default-constructed one).
+    bool isIdentity() const {
+        return topology == Topology::Svf2 && a1 == 0 && a2 == 0 && a3 == 0;
+    }
+    // Same state rule as retune().
     void loadAllPass(const NativeBmwRouting::BiquadCoefficients& c);
 };
 
@@ -75,6 +86,12 @@ struct alignas(16) SvfPair {
     double ic1eq[2] = {0, 0}, ic2eq[2] = {0, 0};
     // Copies an Svf2 Biquad's coefficients (from a make*() builder) into one lane, state cleared.
     void load(std::size_t lane, const Biquad& q);
+    // Same, but keeps the lane's state (a retune of a running section).
+    void setCoefficients(std::size_t lane, const Biquad& q);
+    void setCoefficientsBoth(const Biquad& q) {
+        setCoefficients(kLeftLane, q);
+        setCoefficients(kRightLane, q);
+    }
     // Both lanes from the same Biquad (same filter on L and R), state cleared.
     void loadBoth(const Biquad& q) {
         load(kLeftLane, q);
@@ -126,14 +143,25 @@ struct PeqBank {
     enum : std::size_t { kLeftLane = SvfPair::kLeftLane, kRightLane = SvfPair::kRightLane };
     std::array<Section, kMaxPeqSectionsPerChannel> sections{};
     std::size_t leftCount = 0, rightCount = 0;
+    // Per lane, per section: which raw band (index into the configured band list) and which PEQ
+    // type it was built from -- what inheritState() matches on.
+    std::array<std::array<std::int8_t, kMaxPeqSectionsPerChannel>, 2> sourceBand{};
+    std::array<std::array<std::int8_t, kMaxPeqSectionsPerChannel>, 2> bandType{};
     // Appends an Svf2 section built by makePeq() to one lane (kLeftLane/kRightLane), with
-    // cleared state.
-    void append(std::size_t lane, const Biquad& q);
+    // cleared state. band/type identify the raw band it came from.
+    void append(std::size_t lane, const Biquad& q, int band, int type);
+    // Copies each section's state from the section in `previous` built from the same raw band
+    // with the same type, on the same lane. A band whose frequency/gain/Q moved keeps running
+    // from where it was; a band that was added, or changed type, starts clean. Matching by band
+    // rather than by position keeps later bands right when an earlier one drops out (a band
+    // dragged through 0 dB is skipped from the bank).
+    void inheritState(const PeqBank& previous);
     void process(float& left, float& right);
     void clear();
 };
 
-// Coefficient builders. Each (re)writes q's topology + coefficients and clears its state.
+// Coefficient builders. Each (re)writes q's topology + coefficients through Biquad::retune(), so
+// a running filter keeps its state across an edit; callers that need a clean start clear().
 void makeLowPass(Biquad& q, float fc, float Q, float sr);
 void makeHighPass(Biquad& q, float fc, float Q, float sr);
 void makeLowPass1(Biquad& q, float fc, float sr);
