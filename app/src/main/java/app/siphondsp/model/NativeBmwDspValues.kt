@@ -561,7 +561,7 @@ object NativeBmwDspValues {
         check(DEFAULTS.size == SIZE) { "BMW DSP defaults size=${DEFAULTS.size}, expected=$SIZE" }
     }
 
-    fun load(context: Context): FloatArray {
+    fun load(context: Context): FloatArray = synchronized(storeLock) {
         val store = store(context)
         val stored = store.load()
         val values = stored ?: migrateLegacy(context, store) ?: DEFAULTS.copyOf()
@@ -575,13 +575,19 @@ object NativeBmwDspValues {
         // DEFAULTS), and that copy must be migrated before anything uses it.
         runMigrations(values)
         retireStageDelay(values)
-        // One checked save for the whole pass, rather than one per migration.
+        // One checked save for the whole pass, rather than one per migration. Under storeLock with
+        // the read above, so a save() from another thread can't land in between and be overwritten
+        // by this (older) migrated snapshot.
         if (!values.contentEquals(before)) {
             val saved = store.save(values)
             Timber.i("BMW DSP migrated stored config success=$saved")
         }
-        return values
+        values
     }
+
+    // Serialises load()'s read -> migrate -> save against save(). Always taken before the store's
+    // own write lock.
+    private val storeLock = Any()
 
     /** Every one-time migration, in order. Each is gated by its own marker slot. */
     private fun runMigrations(values: FloatArray) {
@@ -736,7 +742,7 @@ object NativeBmwDspValues {
     fun save(context: Context, values: FloatArray): Boolean {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
         retireStageDelay(values)
-        return store(context).save(values)
+        return synchronized(storeLock) { store(context).save(values) }
     }
 
     /** Oldest [nativeDspValues] array length a [PrivatePeqBackup] restore will still accept. */
