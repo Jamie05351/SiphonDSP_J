@@ -182,6 +182,25 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun loadSavesAStaleConfigOnceAndThenLeavesTheFileAlone() {
+        // An old save: every migration still has to run. The pass ends in one save, and a second
+        // load in the same process reads it back without migrating or writing again.
+        val stale = NativeBmwDspValues.DEFAULTS.copyOf()
+        NativeBmwDspStore(context.noBackupFilesDir).save(stale)
+        val primary = NativeBmwDspStore(context.noBackupFilesDir).primaryPath()
+
+        val first = NativeBmwDspValues.load(context)
+        assertArrayEquals(migratedDefaults(), first, 0f)
+        val afterFirst = primary.readText()
+        primary.setLastModified(0L)
+
+        val second = NativeBmwDspValues.load(context)
+        assertArrayEquals(first, second, 0f)
+        assertEquals(afterFirst, primary.readText())
+        assertEquals(0L, primary.lastModified())
+    }
+
+    @Test
     fun saveLoadRoundTripsCurrentSchema() {
         val values = migratedDefaults().also {
             it[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f
