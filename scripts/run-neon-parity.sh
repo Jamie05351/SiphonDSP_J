@@ -10,8 +10,9 @@
 #   default  arm64 build via the Android NDK, run on the one connected adb device (head unit,
 #            arm64 phone, or an x86_64 emulator image with ARM translation). Covers NEON.
 #   HOST=1   build + run on this machine with the host compiler (HOST_CXX, default c++). No
-#            device needed, but the host isn't arm64, so only the scalar path is exercised --
-#            this is what CI runs to prove a change doesn't alter the output.
+#            device needed. On an x86 host only the scalar path is exercised -- what the main CI
+#            build runs to prove a change doesn't alter the output. On an arm64 host "current" is
+#            the NEON build, so this is the NEON check (.github/workflows/neon-parity.yml).
 #
 #   scripts/run-neon-parity.sh
 #   BASELINE_REF=origin/master scripts/run-neon-parity.sh

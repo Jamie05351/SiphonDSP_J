@@ -1,0 +1,65 @@
+name: NEON parity (arm64)
+
+# The app ships arm64 only, where the DSP's filter and true-peak hot paths run NEON code. The main
+# build runs on x86, so it only ever exercises the scalar path. This runs on a native arm64 runner:
+#  - NEON vs scalar: scripts/run-neon-parity.sh builds the parity harness as shipped (NEON) and with
+#    -DSIPHON_DISABLE_NEON, and fails unless every scenario is bit-identical.
+#  - the native unit tests, built for arm64, so they run against the NEON path.
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - app/src/main/cpp/libjamesdsp-wrapper/**
+      - native-tests/**
+      - scripts/run-neon-parity.sh
+      - .github/workflows/neon-parity.yml
+  push:
+    branches:
+      - master
+    paths:
+      - app/src/main/cpp/libjamesdsp-wrapper/**
+      - native-tests/**
+      - scripts/run-neon-parity.sh
+      - .github/workflows/neon-parity.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  neon:
+    name: NEON vs scalar (arm64)
+    runs-on: ubuntu-24.04-arm
+    env:
+      # Clang, like the NDK the app ships with, so floating-point contraction matches the device.
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      # Without these the "NEON" build would silently be the scalar path, and the parity check
+      # would compare scalar with scalar.
+      - name: Confirm an arm64 compiler with NEON
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ --version
+          macros="$(echo | clang++ -dM -E -x c++ -)"
+          grep -q '__aarch64__' <<<"$macros"
+          grep -q '__ARM_NEON' <<<"$macros"
+
+      - name: NEON vs scalar output parity
+        shell: bash
+        run: HOST=1 HOST_CXX=clang++ bash scripts/run-neon-parity.sh
+
+      - name: Native DSP unit tests (NEON path)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build/native-tests --parallel
+          ctest --test-dir build/native-tests --output-on-failure
