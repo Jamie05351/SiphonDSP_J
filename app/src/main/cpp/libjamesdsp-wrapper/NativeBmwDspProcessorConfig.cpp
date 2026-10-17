@@ -432,6 +432,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             // rather than replaying the state it froze with (the rebuild keeps state).
             if (!old.subsonicEnabled && now.subsonicEnabled) {
                 nextOutputs[out].subsonic1.clear();
+                nextOutputs[out].subsonic2.clear();
             }
         }
         if (old.muted != now.muted || old.polarityInverted != now.polarityInverted) {

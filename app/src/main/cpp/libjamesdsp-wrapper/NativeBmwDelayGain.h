@@ -136,11 +136,14 @@ inline float delaySamples(float ms, float sampleRate, unsigned capacity) {
     return clampf(ms * sampleRate * .001f, 0, capacity - 1.f);
 }
 
-// One-pole DC blocker on each input channel (~10 Hz, see DcBlocker::coefficient).
+// One-pole DC blocker on each input channel (3 Hz, see DcBlocker::coefficient). Only there to
+// strip DC: at the old 10 Hz it already cost -1 dB at 20 Hz and -0.5 dB at 30 Hz, stacked on the
+// subsonic filter; at 3 Hz it is -0.1 dB at 20 Hz.
 struct DcBlocker {
+    static constexpr float kCornerHz = 3.f;
     float x = 0, y = 0;
     static float coefficient(float sampleRate) {
-        return std::exp(-2 * PI * 10 / sampleRate);
+        return std::exp(-2 * PI * kCornerHz / sampleRate);
     }
     float run(float in, float r) {
         float out = in - x + r * y;

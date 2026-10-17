@@ -119,6 +119,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val subsonicEnabled = outputValue(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED) >= .5f
             val subsonicFreq = outputValue(values, output, NativeBmwDspValues.FIELD_SUBSONIC_FREQ).toDouble()
             if (subsonicEnabled) {
+                // LR4: two cascaded Butterworth sections, as native's buildSubsonic().
+                cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
             }
 
@@ -483,6 +485,6 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // kButterworth4QLow/kButterworth4QHigh (1/(2cos(pi/8)) and 1/(2cos(3pi/8))).
         private const val BUTTERWORTH4_Q_LOW = 0.5411961
         private const val BUTTERWORTH4_Q_HIGH = 1.3065630
-        private const val DC_BLOCKER_HZ = 10.0
+        private const val DC_BLOCKER_HZ = 3.0  // native DcBlocker::kCornerHz
     }
 }
