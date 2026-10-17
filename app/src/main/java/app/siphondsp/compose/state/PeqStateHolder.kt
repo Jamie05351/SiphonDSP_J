@@ -2,6 +2,7 @@ package app.siphondsp.compose.state
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -10,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import app.siphondsp.dsp.CarBaseline
+import app.siphondsp.fragment.CarBaselineStore
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqScope
@@ -49,6 +52,41 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
     var selectedUuid: UUID?
         get() = selectedByScope[selectedScope]
         set(value) { selectedByScope[selectedScope] = value }
+
+    private val baselineStore = CarBaselineStore(appContext)
+
+    /** The car's measured response downstream of this DSP (see [CarBaseline]), or null if none. */
+    var carBaseline: CarBaseline? by mutableStateOf(baselineStore.load())
+        private set
+
+    var showCarBaseline: Boolean by mutableStateOf(baselineStore.showOnGraph)
+        private set
+
+    /** What the graph should add to its curves: the baseline, when there is one and it's shown. */
+    val graphBaseline: CarBaseline?
+        get() = carBaseline?.takeIf { showCarBaseline }
+
+    fun carBaselineSource(side: CarBaselineStore.Side): String? = baselineStore.sourceName(side)
+
+    fun importCarBaseline(uri: Uri, side: CarBaselineStore.Side) {
+        val error = baselineStore.import(uri, side)
+        if (error != null) {
+            toast("$error; previous baseline kept")
+            return
+        }
+        carBaseline = baselineStore.load()
+        toast("Car baseline loaded for ${side.label}")
+    }
+
+    fun showCarBaselineOnGraph(show: Boolean) {
+        baselineStore.showOnGraph = show
+        showCarBaseline = show
+    }
+
+    fun clearCarBaseline() {
+        baselineStore.clear()
+        carBaseline = null
+    }
 
     /** Bands for the current scope -- a live view into [peqState], recomputed on read. */
     val visibleBands: ParametricEqBandList
