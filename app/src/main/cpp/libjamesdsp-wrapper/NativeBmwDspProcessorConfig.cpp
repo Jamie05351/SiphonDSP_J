@@ -543,8 +543,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         next.loudnessEnabled != p_.loudnessEnabled) {
         dirty |= DirtyLoudness;
     }
-    // Loudness doesn't run while off; switching it back on starts its shelves clean.
-    if (!p_.loudnessEnabled && next.loudnessEnabled) {
+    // Loudness is skipped once fully faded out; switching it back on then starts its shelves
+    // clean (its lift starts from 0, so the clean state is inaudible while it fades in).
+    if (!p_.loudnessEnabled && next.loudnessEnabled && loudnessStrength_ == 0.f) {
         dirty |= DirtyLoudnessResume;
     }
 
@@ -573,6 +574,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         for (auto& out : outputs_) {
             out.delay.snap();  // nor crossfade the delays in from their defaults
         }
+        // ...nor fade loudness in at start-up.
+        loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+        retuneLoudness();
         outputGainsPrimed_ = true;
     }
     return true;
@@ -707,7 +711,7 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
 void NativeBmwDspProcessor::retuneLoudness() {
     auto cutDb = [](float gain) { return -20.f * std::log10(std::max(gain, 1e-6f)); };
     const float cut = std::min(cutDb(masterGain_), cutDb(masterGainTarget_));
-    loudness_.rebuild(-cut, p_.loudnessStrength, sampleRate_);
+    loudness_.rebuild(-cut, loudnessStrength_, sampleRate_);
 }
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;

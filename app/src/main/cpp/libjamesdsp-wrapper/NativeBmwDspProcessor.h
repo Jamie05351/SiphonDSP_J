@@ -406,6 +406,11 @@ private:
     // while the volume ramps either way.
     void retuneLoudness();
     unsigned loudnessRetuneCounter_ = 0;
+    // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
+    // enough that the stepwise retunes are far smaller than the signal's own movement.
+    float loudnessStrength_ = 0.f;
+    static constexpr float kLoudnessRampSeconds = 0.05f;
+    float loudnessRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
     // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
     // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
     std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};

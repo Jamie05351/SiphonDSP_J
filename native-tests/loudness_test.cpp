@@ -97,3 +97,45 @@ TEST_CASE("a volume step down with loudness on never spikes above full-volume le
     INFO("full-volume peak ", fullVolumePeak, "  peak across the step ", duringStep);
     CHECK(duringStep <= fullVolumePeak * 1.01f);
 }
+
+TEST_CASE("switching loudness on or off at low volume fades instead of stepping") {
+    const double w = 2.0 * kPi * 50.0 / kSampleRate;
+    auto block = [&](std::size_t pos, std::size_t frames) {
+        std::vector<float> buf(2 * frames);
+        for (std::size_t n = 0; n < frames; ++n) {
+            buf[2 * n] = buf[2 * n + 1] = static_cast<float>(0.8 * std::sin(w * (pos + n)));
+        }
+        return buf;
+    };
+    auto maxStep = [](const std::vector<float>& b, float& last) {
+        float worst = 0.f;
+        for (std::size_t n = 0; n < b.size(); n += 2) {
+            worst = std::max(worst, std::fabs(b[n] - last));
+            last = b[n];
+        }
+        return worst;
+    };
+    for (bool turnOn : {true, false}) {
+        NativeBmwDspProcessor proc;
+        auto c = config(-30.f, !turnOn);
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        std::size_t pos = 0;
+        float last = 0.f;
+        auto warm = block(pos, 48000);
+        pos += 48000;
+        proc.process(warm.data(), warm.size());
+        last = warm[warm.size() - 2];
+        auto steady = block(pos, 4096);
+        pos += 4096;
+        proc.process(steady.data(), steady.size());
+        const float steadyStep = maxStep(steady, last);
+        c[sch::kLoudnessEnabled] = turnOn ? 1.f : 0.f;
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto after = block(pos, 4096);
+        proc.process(after.data(), after.size());
+        const float edit = maxStep(after, last);
+        INFO((turnOn ? "on" : "off"), ": steady step ", steadyStep, "  step after ", edit);
+        CHECK(edit < steadyStep * 3.f);
+    }
+}

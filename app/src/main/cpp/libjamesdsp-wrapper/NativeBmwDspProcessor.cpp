@@ -50,6 +50,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
         sampleRate_ = sr;
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
+        loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
         rebuildAll();
     }
 }
@@ -254,12 +255,16 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     oL *= masterGain_;
     oR *= masterGain_;
     // Loudness compensation follows the volume, after it: its lift is always less than the cut.
-    // While the volume ramps, the lift is retuned every 16 samples from the ramping gain (see
-    // retuneLoudness()), so it never runs ahead of the attenuation.
-    if (p_.loudnessEnabled) {
-        if (masterGain_ != masterGainTarget_ && (++loudnessRetuneCounter_ & 15u) == 0) {
-            retuneLoudness();
-        }
+    // The switch and strength ramp the effective strength (so on/off fades, no thump), and while
+    // that or the volume is moving the lift is retuned every 8 samples (see retuneLoudness()), so
+    // it never runs ahead of the attenuation. Fully off, the stage is skipped.
+    const float strengthTarget = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+    const bool loudnessMoving = loudnessStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
+    loudnessStrength_ = NativeBmwDsp::rampToward(loudnessStrength_, strengthTarget, loudnessRampCoef_);
+    if (loudnessMoving && (++loudnessRetuneCounter_ & 7u) == 0) {
+        retuneLoudness();
+    }
+    if (loudnessStrength_ > 0.f) {
         loudness_.process(oL, oR);
     }
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
