@@ -172,9 +172,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          # The checkout is the PR merged into the current base (GITHUB_SHA is that merge commit),
+          # so compare against the merge's own first parent: exactly the base it was merged with.
+          # pull_request.base.sha can be an older base commit, which made a PR that is merely
+          # behind master "differ" by whatever has landed since.
+          git fetch --no-tags --depth=2 origin "$GITHUB_SHA"
+          baseline="$(git rev-parse "$GITHUB_SHA^1")"
+          echo "baseline: $baseline"
           rc=0
-          HOST=1 BASELINE_REF=FETCH_HEAD bash scripts/run-neon-parity.sh || rc=$?
+          HOST=1 BASELINE_REF="$baseline" bash scripts/run-neon-parity.sh || rc=$?
           # 3 = output differs from the base branch only; anything else non-zero is a build/run
           # error or a NEON/scalar divergence, which no label can waive.
           if [ "$rc" -ne 3 ]; then
