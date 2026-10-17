@@ -19,6 +19,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
@@ -105,6 +106,19 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         get() = recorderThread?.isAlive == true
 
     private val healthHandler = Handler(Looper.getMainLooper())
+
+    // Native DSP config pushes run here, coalesced to the latest array at ~30 Hz (see
+    // CoalescingPusher): a slider drag broadcasts the whole config on every touch event, and
+    // applying each one on the main thread meant a JNI call, a full native re-parse and a wait
+    // on the engine lock the audio thread holds for a whole buffer.
+    private val dspConfigThread = HandlerThread("NativeDspConfig").apply { start() }
+    private val dspConfigHandler = Handler(dspConfigThread.looper)
+    private val dspConfigPusher = CoalescingPusher<FloatArray>(
+        minIntervalMs = CoalescingPusher.DSP_CONFIG_INTERVAL_MS,
+        now = SystemClock::uptimeMillis,
+        schedule = { delayMs, task -> dspConfigHandler.postDelayed(task, delayMs) },
+        apply = ::applyNativeBmwDspValues,
+    )
     // Lifecycle metadata is protected by recorderLifecycleLock. Per-buffer telemetry has one
     // writer (the recorder worker) and volatile readers; no lock or allocation on the hot path.
     private var pipelineStartedAt = 0L
@@ -314,6 +328,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         healthHandler.removeCallbacks(idleTimerResetRunnable)
         startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
+        // No new config pushes into an engine that is about to close. One already running is
+        // safe: engine.close() frees the handle under nativeLock, which configureNativeBmwDsp()
+        // holds for its whole call and re-checks the handle under.
+        dspConfigThread.quit()
         val closeEngineNow = synchronized(recorderLifecycleLock) {
             // A stuck native process holds engine.nativeLock. Do not block the main thread
             // indefinitely or dispose its engine while it still owns the audio pipeline.
@@ -375,17 +393,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 ACTION_NATIVE_BMW_DSP_UPDATED -> {
                     intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                        // measGenActive must only reflect state the native engine actually
-                        // adopted -- flipping it from the raw array regardless of whether
-                        // configureNativeBmwDsp() accepted it would desync the Kotlin mirror from
-                        // native's real config (e.g. on a size/validation rejection), sending the
-                        // recorder loop down the wrong branch (zero-fill vs real capture) for
-                        // whatever native is actually doing.
-                        if (engine.configureNativeBmwDsp(it)) {
-                            applyMeasGenTransition(isMeasGenActive(it))
-                        } else {
-                            Timber.e("Failed to apply native BMW DSP configuration from broadcast")
-                        }
+                        dspConfigPusher.submit(it)
                     }
                 }
                 ACTION_PRESET_LOADED -> resyncNativeBmwStateFromDisk()
@@ -401,19 +409,31 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // about the legacy dsp_*.xml namespaces). Re-read both stores from disk and push them to
     // the running engine so a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
-        val values = NativeBmwDspValues.load(this)
-        // Same success-gating as the broadcast handler above: only mirror measGenActive (and act
-        // on its transition) when native actually adopted these values.
-        val dspApplied = engine.configureNativeBmwDsp(values)
-        if (!dspApplied) {
-            Timber.e("Failed to apply native BMW DSP configuration after preset/profile load")
-        }
+        // Through the same pusher as the broadcasts, so a drag preview still queued there can't
+        // land after (and overwrite) the restored config.
+        dspConfigPusher.submit(NativeBmwDspValues.load(this))
         if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
-        if (dspApplied) {
-            applyMeasGenTransition(isMeasGenActive(values))
+    }
+
+    /** Runs on [dspConfigThread]. */
+    private fun applyNativeBmwDspValues(values: FloatArray) {
+        // measGenActive must only reflect state the native engine actually adopted -- flipping
+        // it from the raw array regardless of whether configureNativeBmwDsp() accepted it would
+        // desync the Kotlin mirror from native's real config (e.g. on a size/validation
+        // rejection), sending the recorder loop down the wrong branch (zero-fill vs real
+        // capture) for whatever native is actually doing.
+        if (!engine.configureNativeBmwDsp(values)) {
+            Timber.e("Failed to apply native BMW DSP configuration")
+            return
         }
+        // Applied right here, not posted to the main thread: a posted transition would leave a
+        // window where native already runs the new generator state while the recorder loop
+        // still reads the old mirror, and could run after onDestroy. Everything it touches is
+        // guarded by recorderLifecycleLock, and recreation requests are ignored once the service
+        // is disposing.
+        applyMeasGenTransition(isMeasGenActive(values))
     }
 
     /**

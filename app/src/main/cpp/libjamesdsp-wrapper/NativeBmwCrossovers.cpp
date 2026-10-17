@@ -170,6 +170,11 @@ void Tilt::rebuild(float amountDb, float freqHz, float sampleRate) {
     makeHighShelf(hiR1_, freqHz, -g, sampleRate);
     makeHighShelf(hiR2_, freqHz, -g, sampleRate);
 }
+void Tilt::clear() {
+    for (Biquad* b : {&loL1_, &loL2_, &hiL1_, &hiL2_, &loR1_, &loR2_, &hiR1_, &hiR2_}) {
+        b->clear();
+    }
+}
 void Tilt::process(float& l, float& r) {
     // Same Lo1 -> Lo2 -> Hi1 -> Hi2 order per channel, L/R as NEON pairs.
     Biquad::runPair(loL1_, loR1_, l, r);
