@@ -137,8 +137,10 @@ struct BusLimiter {
     // Hold window cap, in samples: kBusLimLowHoldMs (the longest) at up to ~160 kHz.
     static constexpr unsigned kMaxHoldSamples = 4096;
     static constexpr float kLookaheadMs = 1.5f;
-    // Longest lookahead the delay lines hold.
-    static constexpr unsigned kMaxLookahead = kDelayLineCapacity - 1;
+    // Longest lookahead: what a Delay holds, less the alignment-kernel latency a bypassed band's
+    // line carries on top of it (bypassLatency_ is a Delay of the same capacity), so a bypassed
+    // band can always match a processed one at any sample rate.
+    static constexpr unsigned kMaxLookahead = kDelayLineCapacity - 1 - kAlignmentLatency;
     float gain = 1.f;
     float releaseMix = 0.f;
     // Moving-minimum window length requested for the bus (its bass hold); the window actually

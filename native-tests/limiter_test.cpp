@@ -305,3 +305,12 @@ TEST_CASE("per-bus limiter: lookahead holds the ceiling on a sudden bass onset")
     INFO("peak out = ", peakAbs(onset), "  ceiling = ", ceiling);
     CHECK(peakAbs(onset) <= ceiling * 1.005f);
 }
+
+TEST_CASE("per-bus limiter: bypassed and processed bands stay aligned at a high sample rate") {
+    // At 192 kHz the 1.5 ms lookahead would exceed what the bypass line (alignment latency +
+    // lookahead, in a 256-sample ring) can hold unless it is capped; a wrapped bypass line would
+    // put a bypassed band 256 samples off the processed ones.
+    NativeBmwDsp::BusLimiter limiter;
+    limiter.setLookahead(192000.f);
+    CHECK(limiter.lookahead() + NativeBmwDsp::kAlignmentLatency <= NativeBmwDsp::kDelayLineCapacity - 1);
+}
