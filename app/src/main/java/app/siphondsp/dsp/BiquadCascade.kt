@@ -156,7 +156,7 @@ internal class BiquadCascade(maxSections: Int) {
     }
 
     /**
-     * NativeBmwDspProcessor::processChannelInput's 10Hz DC blocker:
+     * Native's input DC blocker (DcBlocker, 3 Hz):
      * H(z) = (1 - z^-1) / (1 - dcR*z^-1), dcR = exp(-2*pi*cutoffHz/sampleRate).
      */
     fun addDcBlocker(cutoffHz: Double, sampleRate: Double) {
