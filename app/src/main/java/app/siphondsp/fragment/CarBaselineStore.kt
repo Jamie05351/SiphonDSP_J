@@ -37,6 +37,7 @@ class CarBaselineStore(context: Context) {
         if (fileFor(side).exists()) prefs.getString(nameKey(side), null) ?: "measurement" else null
 
     fun load(): CarBaseline? {
+        recoverInterruptedImport()
         val left = read(Side.LEFT)
         val right = read(Side.RIGHT)
         return if (left == null && right == null) null else CarBaseline(left, right)
@@ -67,15 +68,22 @@ class CarBaselineStore(context: Context) {
         // in; if any of those renames fails, every target is put back as it was, so the previous
         // measurements survive rather than one channel new and the other old.
         val lives = targets.map(::fileFor)
-        val temps = lives.map { File(dir, "${it.name}.tmp") }
-        val backups = lives.map { File(dir, "${it.name}.bak") }
+        val temps = lives.map(::tempFor)
+        val backups = lives.map(::backupFor)
+        // A target with no previous file gets an empty marker instead of a backup, so a process
+        // death mid-install still tells recoverInterruptedImport() to remove its new file.
+        val markers = lives.map(::markerFor)
         val hadLive = lives.map { it.exists() }
         var installed = false
         return try {
             dir.mkdirs()
             temps.forEach { it.writeText(text) }
             for (i in lives.indices) {
-                if (hadLive[i] && !lives[i].renameTo(backups[i])) throw java.io.IOException("backup failed for ${targets[i]}")
+                if (hadLive[i]) {
+                    if (!lives[i].renameTo(backups[i])) throw java.io.IOException("backup failed for ${targets[i]}")
+                } else if (!markers[i].createNewFile() && !markers[i].exists()) {
+                    throw java.io.IOException("marker failed for ${targets[i]}")
+                }
             }
             for (i in lives.indices) {
                 if (!temps[i].renameTo(lives[i])) throw java.io.IOException("rename failed for ${targets[i]}")
@@ -89,9 +97,44 @@ class CarBaselineStore(context: Context) {
             "Couldn't save the measurement"
         } finally {
             temps.forEach { it.delete() }
+            markers.forEach { it.delete() }
             if (installed) backups.forEach { it.delete() }
         }
     }
+
+    /**
+     * Undoes an [import] the process died in the middle of. Each target of an import in progress
+     * has a backup (it had a file) or a marker (it didn't); its live file is missing only between
+     * that step and its rename-in. If any target is in that state the import never finished, so
+     * every target goes back: backups are restored and marked targets lose their new file (the
+     * other channel may already hold it). Otherwise any backup or marker left over is from an
+     * import that did finish, and is dropped along with stray temp files.
+     */
+    private fun recoverInterruptedImport() {
+        val lives = listOf(Side.LEFT, Side.RIGHT).map(::fileFor)
+        val backups = lives.map(::backupFor)
+        val markers = lives.map(::markerFor)
+        val interrupted = lives.indices.any { (backups[it].exists() || markers[it].exists()) && !lives[it].exists() }
+        for (i in lives.indices) {
+            if (interrupted) {
+                if (backups[i].exists()) {
+                    lives[i].delete()
+                    if (!backups[i].renameTo(lives[i])) Timber.e("Car baseline recovery failed for ${lives[i].name}")
+                } else if (markers[i].exists()) {
+                    lives[i].delete()
+                }
+            } else {
+                backups[i].delete()
+            }
+            markers[i].delete()
+            tempFor(lives[i]).delete()
+        }
+        if (interrupted) Timber.w("Recovered car baseline from an interrupted import")
+    }
+
+    private fun tempFor(live: File) = File(dir, "${live.name}.tmp")
+    private fun backupFor(live: File) = File(dir, "${live.name}.bak")
+    private fun markerFor(live: File) = File(dir, "${live.name}.none")
 
     /** Puts each of [lives] back from its backup (or removes it if there was none before). */
     private fun restore(lives: List<File>, backups: List<File>, hadLive: List<Boolean>) {
@@ -109,7 +152,13 @@ class CarBaselineStore(context: Context) {
 
     fun clear() {
         for (side in listOf(Side.LEFT, Side.RIGHT)) {
-            fileFor(side).delete()
+            val live = fileFor(side)
+            // An interrupted import's leftovers too, or the next load() would restore a backup
+            // over the cleared baseline.
+            backupFor(live).delete()
+            markerFor(live).delete()
+            tempFor(live).delete()
+            live.delete()
             prefs.edit { remove(nameKey(side)) }
         }
     }
