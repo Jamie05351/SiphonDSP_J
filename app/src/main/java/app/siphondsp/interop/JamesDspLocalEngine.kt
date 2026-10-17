@@ -526,9 +526,6 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return result
     }
 
-    fun nativeBmwCompressorMeter(): FloatArray? =
-        withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwCompressorMeter(it) }
-
     /** See [JamesDspWrapper.readNativeBmwMeter]. */
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { JamesDspWrapper.readNativeBmwMeter(it, kind, out) }

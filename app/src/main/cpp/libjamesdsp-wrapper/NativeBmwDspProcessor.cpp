@@ -23,13 +23,11 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
     outputs_[static_cast<std::size_t>(OutputId::MidRight)].id = OutputId::MidRight;
     outputs_[static_cast<std::size_t>(OutputId::MidRight)].isLeftSide = false;
     outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)] = {
-        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, true, 32.f, false, false,
-        {true, -12.f, 2.f, 8.f, 40.f, 250.f, 1.5f}};
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, true, 32.f, false, false};
     outputConfigs_[static_cast<std::size_t>(OutputId::LowRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft)];
     outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)] = {
-        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, false, false,
-        {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, false, false};
     outputConfigs_[static_cast<std::size_t>(OutputId::MidRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)];
     // High's real config comes from configure() (v[210..260]) once the app calls it; these are
@@ -40,8 +38,7 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
     outputs_[static_cast<std::size_t>(OutputId::HighRight)].id = OutputId::HighRight;
     outputs_[static_cast<std::size_t>(OutputId::HighRight)].isLeftSide = false;
     outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)] = {
-        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, true, false,
-        {false, -10.f, 1.5f, 6.f, 10.f, 180.f, 0.f}};
+        150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, true, false};
     outputConfigs_[static_cast<std::size_t>(OutputId::HighRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)];
     rebuildAll();
@@ -79,11 +76,10 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
     const BandOutputs ids = bandOutputs(band);
     auto& left = output(ids.left);
     auto& right = output(ids.right);
-    const auto& leftCfg = outputConfig(ids.left);
-    const auto& rightCfg = outputConfig(ids.right);
     // Filter stages run L and R together (NEON pairs on arm64); see NativeBmwCrossovers.h.
     if (band == Band::Low) {
-        NativeBmwDsp::processLowCrossover(left, leftCfg, right, rightCfg, xl, xr);
+        NativeBmwDsp::processLowCrossover(left, outputConfig(ids.left), right,
+                                          outputConfig(ids.right), xl, xr);
     } else if (band == Band::Mid) {
         NativeBmwDsp::processMidCrossover(left, right, xl, xr);
     } else {
@@ -95,21 +91,11 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
     OutputRuntime::processAllPassPair(left, right, xl, xr);
     xl = left.delay.run(xl);
     xr = right.delay.run(xr);
-    if (!left.muted) {
-        NativeBmwDsp::processCompressor(xl, leftCfg.compressor, dynamics(ids.left), detector_);
-    } else {
-        NativeBmwDsp::publishIdleMeter(dynamics(ids.left));
-    }
-    if (!right.muted) {
-        NativeBmwDsp::processCompressor(xr, rightCfg.compressor, dynamics(ids.right), detector_);
-    } else {
-        NativeBmwDsp::publishIdleMeter(dynamics(ids.right));
-    }
     xl *= left.gain;
     xr *= right.gain;
     // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
     // bounds the actual level reaching the driver regardless of how much gain is dialed in.
-    // No-op while disabled; independent of the per-output compressor path above.
+    // Disabled, it still delays the band by its lookahead so every band keeps the same latency.
     BusLimiter& limiter = band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_;
     const bool limiterEnabled = band == Band::Low   ? p_.busLimLowEnabled
                                 : band == Band::Mid ? p_.busLimMidEnabled
@@ -118,17 +104,14 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
                                   : band == Band::Mid ? p_.busLimMidThreshDb
                                                       : p_.busLimHighThreshDb;
     if (limiterEnabled) {
-        limiter.process(xl, xr, limiterThreshDb, busLimAttackMix_);
+        limiter.process(xl, xr, limiterThreshDb);
     } else {
-        limiter.reset();
+        limiter.passThrough(xl, xr, limiterThreshDb);
     }
 }
 void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
     using Band = NativeBmwRouting::Band;
-    const BandOutputs ids = bandOutputs(band);
     (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).reset();
-    NativeBmwDsp::publishIdleMeter(dynamics(ids.left));
-    NativeBmwDsp::publishIdleMeter(dynamics(ids.right));
 }
 
 void NativeBmwDspProcessor::processFrame(float& l, float& r) {
@@ -168,8 +151,9 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     float highL = routed[static_cast<std::size_t>(OutputId::HighLeft)],
           highR = routed[static_cast<std::size_t>(OutputId::HighRight)];
 
-    // A bypassed band (lpfPass/hpfPass) skips the band chain and its AlignmentDelay, so it takes
-    // the same fixed latency here to stay aligned with the processed bands. Run every frame,
+    // A bypassed band (lpfPass/hpfPass) skips the band chain -- its AlignmentDelay and its bus
+    // limiter's lookahead -- so it takes the same fixed latency here to stay aligned with the
+    // processed bands. Run every frame,
     // bypassed or not, so a line is never stale the moment its bypass flag flips on.
     const float lowLBypassed = bypassLatency_[0].run(lowL), lowRBypassed = bypassLatency_[1].run(lowR);
     const float midLBypassed = bypassLatency_[2].run(midL), midRBypassed = bypassLatency_[3].run(midR);
@@ -397,21 +381,6 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n, B
         w[i + 1] = NativeBmwDsp::clampInt<int32_t>(r * scale);
     }
     return s;
-}
-void NativeBmwDspProcessor::readCompressorMeter(float* v, std::size_t n) const {
-    if (!v || n < 6) {
-        return;
-    }
-    const auto& ll = dynamics(OutputId::LowLeft);
-    const auto& lr = dynamics(OutputId::LowRight);
-    const auto& ml = dynamics(OutputId::MidLeft);
-    const auto& mr = dynamics(OutputId::MidRight);
-    v[0] = std::max(ll.inputDb.load(), lr.inputDb.load());
-    v[1] = std::max(ll.outputDb.load(), lr.outputDb.load());
-    v[2] = std::max(ll.gainReductionDb.load(), lr.gainReductionDb.load());
-    v[3] = std::max(ml.inputDb.load(), mr.inputDb.load());
-    v[4] = std::max(ml.outputDb.load(), mr.outputDb.load());
-    v[5] = std::max(ml.gainReductionDb.load(), mr.gainReductionDb.load());
 }
 void NativeBmwDspProcessor::readMbcMeter(float* v, std::size_t n) const {
     if (!v || n < 12) {

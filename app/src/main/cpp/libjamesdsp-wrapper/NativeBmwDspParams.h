@@ -59,8 +59,7 @@ struct Params {
     float mbcMix = 1.f;  // 0..1 dry/wet (v[145] is percent)
     float mbcXo[3] = {80.f, 500.f, 4000.f};
     MbcBands mbcBand;
-    // Per-bus output limiter (Low/Mid v[182..187], High v[262..264]). Additive to -- not
-    // a replacement for -- the per-output processCompressor path. Ships disabled.
+    // Per-bus output limiter (Low/Mid v[182..187], High v[262..264]). Ships disabled.
     bool busLimLowEnabled = false, busLimMidEnabled = false, busLimHighEnabled = false;
     float busLimLowThreshDb = -3.f, busLimLowReleaseMs = 120.f;
     float busLimMidThreshDb = -3.f, busLimMidReleaseMs = 120.f;

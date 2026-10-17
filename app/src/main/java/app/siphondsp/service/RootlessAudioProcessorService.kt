@@ -1353,9 +1353,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeTruthSnapshot(): NativeDspTruthSnapshot? =
             activeInstance?.engine?.nativeTruthSnapshot()
 
-        fun nativeBmwCompressorMeter(): FloatArray? =
-            activeInstance?.engine?.nativeBmwCompressorMeter()
-
         /** Fills [out] from one native meter (see [JamesDspWrapper.readNativeBmwMeter]); false
          *  while no service or engine is running. */
         fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =

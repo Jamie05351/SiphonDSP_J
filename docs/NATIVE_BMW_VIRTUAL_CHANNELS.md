@@ -110,7 +110,7 @@ per-output all-pass already does.
 ## Live meter
 
 `readVirtualMeter()` -> 2 floats: `[centreWeight (0..1), centreRmsDb]`, lock-free (atomics
-published from the audio thread), same discipline as `readCompressorMeter()`. Idle `[0, -60]`
+published from the audio thread), same discipline as `readMbcMeter()`. Idle `[0, -60]`
 while disabled.
 
 The CENTRE page shows both: **Centre found** (the weight, 0..1: how much is being treated as

@@ -232,15 +232,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     }
 
     auto nextOutputConfigs = outputConfigs_;
-    auto readComp = [&](CompressorParams& c, std::size_t base) {
-        c.enabled = flagIn(v[base]);
-        c.threshold = clampIn(v[base + 1], -24, 0);
-        c.ratio = clampIn(v[base + 2], 1, 10);
-        c.knee = clampIn(v[base + 3], 0, 12);
-        c.attack = clampIn(v[base + 4], 1, 100);
-        c.release = clampIn(v[base + 5], 20, 800);
-        c.makeup = clampIn(v[base + 6], 0, 6);
-    };
+    // Fields 6..12 of each output-config block were the per-output compressor, removed from
+    // native (force-disabled by a Kotlin migration long before). The slots stay in the schema so
+    // no later index moves, and are not read.
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const std::size_t base = kOutputConfigBase + out * kOutputConfigWidth;
         auto& cfg = nextOutputConfigs[out];
@@ -258,7 +252,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         cfg.subsonicFreq = clampIn(v[base + 3], 20, 60);
         cfg.muted = flagIn(v[base + 4]);
         cfg.polarityInverted = flagIn(v[base + 5]);
-        readComp(cfg.compressor, base + 6);
     }
 
     // Mid's optional upper (Mid/High) bandpass corner -- tail block v[205..208], added in the
@@ -367,7 +360,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         cfg.subsonicFreq = clampIn(v[cfgBase + 3], 20, 60);
         cfg.muted = flagIn(v[cfgBase + 4]);
         cfg.polarityInverted = flagIn(v[cfgBase + 5]);
-        readComp(cfg.compressor, cfgBase + 6);
     }
 
     if (!allFinite) {
@@ -437,16 +429,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         }
         if (old.muted != now.muted || old.polarityInverted != now.polarityInverted) {
             dirty |= DirtyPolarity;
-        }
-        if (changed(old.compressor.attack, now.compressor.attack) ||
-            changed(old.compressor.release, now.compressor.release)) {
-            dirty |= DirtyCompTiming;
-        }
-        if (old.compressor.enabled != now.compressor.enabled) {
-            dirty |= DirtyCompState;
-        }
-        if (changed(old.compressor.makeup, now.compressor.makeup)) {
-            dirty |= DirtyGains;
         }
     }
     // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it or highPass
@@ -675,11 +657,6 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
 }
 
 // ---- Rebuilds: derived state from p_ / outputConfigs_ / sampleRate_ ----------------------------
-void NativeBmwDspProcessor::resetDynamics() {
-    for (auto& s : outputDynamics_) {
-        NativeBmwDsp::resetCompressorState(s);
-    }
-}
 void NativeBmwDspProcessor::rebuildGains() {
     headroom_ = dbToLin(p_.headroom);
     postGainL_ = dbToLin(p_.postGainL);
@@ -690,9 +667,6 @@ void NativeBmwDspProcessor::rebuildGains() {
     output(OutputId::MidRight).gain = dbToLin(p_.midGainR);
     output(OutputId::HighLeft).gain = dbToLin(p_.highGainL);
     output(OutputId::HighRight).gain = dbToLin(p_.highGainR);
-    for (std::size_t i = 0; i < outputDynamics_.size(); ++i) {
-        outputDynamics_[i].makeupLin = dbToLin(outputConfigs_[i].compressor.makeup);
-    }
 }
 void NativeBmwDspProcessor::rebuildSubsonic() {
     for (OutputId id : {OutputId::LowLeft, OutputId::LowRight}) {
@@ -726,26 +700,26 @@ void NativeBmwDspProcessor::updateDelays() {
     stageDelayL_.setDelay(delaySamples(p_.stageDelayL, sampleRate_, kStageDelayCapacity));
     stageDelayR_.setDelay(delaySamples(p_.stageDelayR, sampleRate_, kStageDelayCapacity));
 }
-void NativeBmwDspProcessor::rebuildCompressorTiming() {
-    detector_.rebuild(sampleRate_);
-    for (std::size_t i = 0; i < outputDynamics_.size(); ++i) {
-        NativeBmwDsp::rebuildCompressorTiming(outputConfigs_[i].compressor, outputDynamics_[i],
-                                              sampleRate_);
-    }
-}
 void NativeBmwDspProcessor::rebuildBusLimiter() {
-    busLimAttackMix_ = NativeBmwDsp::busLimiterAttackMix(sampleRate_);
     busLimLow_.zeroMeter();
     busLimMid_.zeroMeter();
     busLimHigh_.zeroMeter();
     busLimLow_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimLowReleaseMs, sampleRate_);
     busLimMid_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimMidReleaseMs, sampleRate_);
     busLimHigh_.releaseMix = NativeBmwDsp::busLimiterReleaseMix(p_.busLimHighReleaseMs, sampleRate_);
-    // Also empties each hold window; the follower's gain is left alone, so a release/enable edit
-    // mid-limiting just releases from where it is.
+    // Hold windows keep their contents unless their length changes (a sample-rate change), and
+    // the follower's gain is left alone, so a release/enable edit mid-limiting just releases from
+    // where it is -- peaks already in the lookahead delay keep their hold.
     busLimLow_.setHold(NativeBmwDsp::kBusLimLowHoldMs, sampleRate_);
     busLimMid_.setHold(NativeBmwDsp::kBusLimMidHoldMs, sampleRate_);
     busLimHigh_.setHold(NativeBmwDsp::kBusLimHighHoldMs, sampleRate_);
+    for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
+        b->setLookahead(sampleRate_);
+    }
+    // Bypassed bands skip both the alignment kernel and the bus limiter, so they carry both.
+    for (auto& line : bypassLatency_) {
+        line.delay = static_cast<float>(NativeBmwDsp::kAlignmentLatency + busLimLow_.lookahead());
+    }
 }
 void NativeBmwDspProcessor::rebuildPolarityAndMute() {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
@@ -784,16 +758,19 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         output(OutputId::HighLeft).clearState();
         output(OutputId::HighRight).clearState();
         highPeq_.clear();
+        busLimHigh_.clear();
     }
     if (d & DirtyLowResume) {
         output(OutputId::LowLeft).clearState();
         output(OutputId::LowRight).clearState();
         lowPeq_.clear();
+        busLimLow_.clear();
     }
     if (d & DirtyMidResume) {
         output(OutputId::MidLeft).clearState();
         output(OutputId::MidRight).clearState();
         midPeq_.clear();
+        busLimMid_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();
@@ -803,12 +780,6 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     }
     if (d & DirtyTiltResume) {
         tilt_.clear();
-    }
-    if (d & DirtyCompTiming) {
-        rebuildCompressorTiming();
-    }
-    if (d & DirtyCompState) {
-        resetDynamics();
     }
     if (d & DirtyPolarity) {
         rebuildPolarityAndMute();
@@ -850,7 +821,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     tilt_.clear();
-    rebuildCompressorTiming();
+    detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);
     rebuildBusLimiter();
@@ -872,11 +843,10 @@ void NativeBmwDspProcessor::rebuildAll() {
     }
     mbc_.resetState();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
-        b->gain = 1.f;
+        b->clear();
         b->zeroMeter();
     }
     updateDelays();
-    resetDynamics();
     // A full rebuild starts every filter clean; the PEQ rebuild below would otherwise carry the
     // banks' state over (see configurePeqLocked).
     inputPeq_.clear();
