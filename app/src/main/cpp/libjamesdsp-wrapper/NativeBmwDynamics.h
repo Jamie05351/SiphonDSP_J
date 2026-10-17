@@ -218,7 +218,8 @@ using MbcBands = MbcBandParams[kMbcBandCount];
 
 class MultibandCompressor {
 public:
-    // Split-frequency filter coefficients (clears tree state), then rebuildTiming().
+    // Split-frequency filter coefficients (keeps tree state; resetState() clears it), then
+    // rebuildTiming().
     void rebuild(const float (&splitsHz)[3], float mix, const MbcBands& bands, float sampleRate);
     // Dry/wet mix, per-band makeup + attack/release smoothing -- scalars only, no filter touch.
     void rebuildTiming(float mix, const MbcBands& bands, float sampleRate);

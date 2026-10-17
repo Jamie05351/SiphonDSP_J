@@ -29,6 +29,9 @@ void rebuildKeepingState(Biquad& b, bool keepState, Build build) {
         b.ic1eq = ic1;
         b.ic2eq = ic2;
         b.op_z1 = z1;
+    } else {
+        // The builders keep state across a retune; a rebuild that isn't keeping it starts clean.
+        b.clear();
     }
 }
 

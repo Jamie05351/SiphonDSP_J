@@ -369,27 +369,26 @@ void MultibandCompressor::rebuild(const float (&splitsHz)[3], float mix, const M
     const float f0 = clampf(splitsHz[0], 20.f, f0Ceiling);
     const float f1 = clampf(splitsHz[1], std::min(f0 * 1.05f, f1Ceiling), f1Ceiling);
     const float f2 = clampf(splitsHz[2], std::min(f1 * 1.05f, ceiling), ceiling);
-    // Both channels get the same filters: build each one as a Biquad, then load it into both
-    // lanes of its SvfPair (loadBoth also clears that section's state).
+    // Both channels get the same filters: build each one as a Biquad, then install it in both
+    // lanes of its SvfPair. The tree's state is kept, so moving a split while the MBC runs
+    // retunes the running filters instead of dropping their memory (a click); resetState()
+    // is what clears it.
     auto lowPass = [sampleRate](SvfPair& s, float fc) {
         Biquad q;
         makeLowPass(q, fc, BW, sampleRate);
-        s.loadBoth(q);
+        s.setCoefficientsBoth(q);
     };
     auto highPass = [sampleRate](SvfPair& s, float fc) {
         Biquad q;
         makeHighPass(q, fc, BW, sampleRate);
-        s.loadBoth(q);
+        s.setCoefficientsBoth(q);
     };
     auto allPass = [sampleRate](SvfPair& s, float fc) {
         Biquad q;
         makeAllPass2(q, fc, sampleRate);
-        s.loadBoth(q);
+        s.setCoefficientsBoth(q);
     };
     auto& t = tree_;
-    t.clear();  // explicit -- loadBoth below also clears each section it touches, so this is
-                // belt-and-braces, but it makes the state-reset intent visible here rather than
-                // relying on a side effect three lines down.
     lowPass(t.lp0a, f0);
     lowPass(t.lp0b, f0);
     highPass(t.hp0a, f0);

@@ -277,9 +277,10 @@ private:
         DirtyTilt = 1u << 5,
         DirtyCompTiming = 1u << 6,
         DirtyCompState = 1u << 7,
+        DirtyTiltResume = 1u << 8,  // tilt switched on: clear the state it froze with when off
         DirtyPolarity = 1u << 9,
         DirtyMeasBus = 1u << 10,
-        DirtyMbc = 1u << 11,  // crossover-tree coefficients (split freqs) -- clears filter state
+        DirtyMbc = 1u << 11,  // crossover-tree coefficients (split freqs) -- keeps filter state
         DirtyMbcTiming = 1u << 12,  // attack/release/makeup/mix scalars only -- no filter touch
         DirtyMbcState = 1u << 13,   // reset detector cells + tree state (enable / stereo-link flip)
         DirtyBusLimiter = 1u << 14,
