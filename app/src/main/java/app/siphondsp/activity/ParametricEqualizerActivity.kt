@@ -20,7 +20,13 @@ class ParametricEqualizerActivity : DspWorkspaceActivity() {
      * there, in the fragment) stay in sync. `PeqStateHolder`'s properties are `mutableStateOf`,
      * so Compose observes changes across both composition roots as long as it's the same object.
      */
-    val peqStateHolder: PeqStateHolder by lazy { PeqStateHolder(applicationContext) }
+    private val peqStateHolderLazy = lazy { PeqStateHolder(applicationContext) }
+    val peqStateHolder: PeqStateHolder by peqStateHolderLazy
+
+    override fun onDestroy() {
+        if (peqStateHolderLazy.isInitialized()) peqStateHolder.close()
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
