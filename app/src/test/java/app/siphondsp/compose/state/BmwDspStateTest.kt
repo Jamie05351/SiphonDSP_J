@@ -193,4 +193,32 @@ class BmwDspStateTest {
         assertEquals(-20f, saved[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB], 0f)
         assertEquals(-3f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
     }
+
+    @Test
+    fun committedCrossoverTypeAndFrequencyReadBackExactly() {
+        // The fields whose commits a per-commit disk reload once made unreliable (#387).
+        val context = context()
+        val state = BmwDspState(context)
+        val type = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
+        val freq = NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)
+        assertTrue(state.commit(type, NativeBmwDspValues.CROSSOVER_TYPE_BW2))
+        assertTrue(state.commit(freq, 95f))
+        assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -2f))  // a later, unrelated commit
+        val saved = NativeBmwDspValues.load(context)
+        assertEquals(NativeBmwDspValues.CROSSOVER_TYPE_BW2, saved[type], 0f)
+        assertEquals(95f, saved[freq], 0f)
+        assertEquals(NativeBmwDspValues.CROSSOVER_TYPE_BW2, state.get(type), 0f)
+        assertEquals(95f, state.get(freq), 0f)
+    }
+
+    @Test
+    fun aCommitKeepsAnotherControlsDragRunningWithoutSavingIt() {
+        val context = context()
+        val state = BmwDspState(context)
+        val persistedDelay = NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_LOW_DELAY_L]
+        state.preview(NativeBmwDspValues.INDEX_LOW_DELAY_L, 1.7f)  // finger still on this slider
+        assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -6f))  // another control commits
+        assertEquals(1.7f, state.get(NativeBmwDspValues.INDEX_LOW_DELAY_L), 0f)  // no snap-back
+        assertEquals(persistedDelay, NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_LOW_DELAY_L], 0f)
+    }
 }

@@ -46,8 +46,10 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
     // back -- so anything carrying this tag is ignored, however late it lands.
     private val origin = UUID.randomUUID().toString()
 
-    // True while the engine may be running a previewed value that was never persisted.
-    private var previewPending = false
+    // Previewed values not yet persisted (index -> value, mirrors included): what the engine and
+    // the UI are running on top of the saved config. A commit never saves these, but keeps them
+    // applied, so a drag still in flight on one control doesn't snap back when another commits.
+    private val pendingPreviews = HashMap<Int, Float>()
 
     // How many BmwDspState holders currently have a drag/edit in flight.
     private var editors = 0
@@ -55,28 +57,34 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
     fun preview(index: Int, value: Float, mirrors: IntArray) = synchronized(lock) {
         val next = values.copyOf()
         next[index] = value
-        for (m in mirrors) next[m] = value
+        pendingPreviews[index] = value
+        for (m in mirrors) {
+            next[m] = value
+            pendingPreviews[m] = value
+        }
         values = next
-        previewPending = true
         publish(next)
     }
 
     fun commit(updates: Map<Int, Float>): Boolean = synchronized(lock) {
-        // Start from what is on disk now, not the shared [values]: those can hold another screen's
-        // un-persisted preview (e.g. a measurement-generator toggle) that an unrelated commit must
-        // not save, and other writers (master volume, PEQ restore) save straight to disk.
-        val next = NativeBmwDspValues.load(appContext)
-        for ((index, value) in updates) next[index] = value
-        if (!NativeBmwDspValues.save(appContext, next)) {
+        // Save what is on disk now plus these updates -- never the shared [values], which hold
+        // un-persisted previews (e.g. a measurement-generator toggle) an unrelated commit must not
+        // save, and miss what other writers (master volume, PEQ restore) saved straight to disk.
+        // load() re-reads an already-migrated store unchanged: every migration is marker-gated.
+        val saved = NativeBmwDspValues.load(appContext)
+        for ((index, value) in updates) saved[index] = value
+        if (!NativeBmwDspValues.save(appContext, saved)) {
             refreshFromDiskLocked()
             appContext.toast("BMW DSP settings could not be saved; previous settings restored")
             return false
         }
-        // The engine and every screen now follow the saved config; any other screen's unsaved
-        // preview is dropped with it, as a commit from that screen's own copy always did.
-        values = next
-        previewPending = false
-        publish(next)
+        // Run the saved config with the previews still in flight on top, minus the committed
+        // fields, so the engine and UI don't jump back under a control that is mid-drag.
+        for (index in updates.keys) pendingPreviews.remove(index)
+        val running = saved.copyOf()
+        for ((index, value) in pendingPreviews) running[index] = value
+        values = running
+        publish(running)
         true
     }
 
@@ -89,8 +97,8 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
         val loaded = NativeBmwDspValues.load(appContext)
         val differs = !loaded.contentEquals(values)
         if (differs) values = loaded
-        if (differs || previewPending) {
-            previewPending = false
+        if (differs || pendingPreviews.isNotEmpty()) {
+            pendingPreviews.clear()
             publish(loaded)
         }
     }
