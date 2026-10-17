@@ -14,29 +14,12 @@
 
 namespace NativeBmwDsp {
 
-// ---- Per-output compressor ---------------------------------------------------------------------
-struct CompressorParams {
-    bool enabled = false;
-    float threshold = -12, ratio = 2, knee = 8, attack = 40, release = 250, makeup = 0;
-};
-struct CompressorState {
-    float gain = 1, rmsPower = 0, peakEnv = 0, attackMix = 0, releaseMix = 0, makeupLin = 1;
-    std::atomic<float> inputDb{-60.0f};
-    std::atomic<float> outputDb{-60.0f};
-    std::atomic<float> gainReductionDb{0.0f};
-    uint32_t meterCounter = 0;
-};
-// RMS/peak detector smoothing shared by every per-output compressor and every MBC band.
+// ---- Detector timing ---------------------------------------------------------------------------
+// RMS/peak detector smoothing shared by every MBC band.
 struct DetectorTiming {
     float rmsMix = 0, peakRelease = 0;
     void rebuild(float sampleRate);
 };
-void rebuildCompressorTiming(const CompressorParams& params, CompressorState& state,
-                             float sampleRate);
-void resetCompressorState(CompressorState& state);
-void publishIdleMeter(CompressorState& state);
-void processCompressor(float& sample, const CompressorParams& params, CompressorState& state,
-                       const DetectorTiming& detector);
 
 // ---- True-peak detector (8x oversampled) --------------------------------------------------------
 // Estimates the reconstructed waveform's peak between samples -- what a DAC will actually output
@@ -254,15 +237,14 @@ private:
         float rms = 0, peak = 0, gain = 1, lastDetectorDb = -60.f;
     };
     // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMeter() can
-    // be polled from the UI thread -- mirrors CompressorState's meter atomics.
+    // be polled from the UI thread.
     struct BandMeter {
         std::atomic<float> inputDb{-60.f};
         std::atomic<float> outputDb{-60.f};
         std::atomic<float> gainReductionDb{0.f};
     };
-    // RMS+peak detector and soft-knee gain computer -- shares softKneeGainReductionDb with
-    // processCompressor's per-output path (the DetectorTiming is shared too), just factored out
-    // so a stereo-linked band can feed it one combined level. Returns the smoothed gain (<=1).
+    // RMS+peak detector and soft-knee gain computer, factored out so a stereo-linked band can
+    // feed it one combined level. Returns the smoothed gain (<=1).
     float bandGain(float peakAbs, const MbcBandParams& p, Cell& cell, int band,
                    const DetectorTiming& detector);
 

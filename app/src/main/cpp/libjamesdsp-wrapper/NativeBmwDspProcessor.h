@@ -66,7 +66,9 @@ public:
     //   181      Kotlin-only migration marker -- never read here
     //   182..184 Low-bus limiter  (enable, threshold dBFS, release ms)
     //   185..187 Mid-bus limiter  (enable, threshold dBFS, release ms)
-    //   188      Kotlin-only "legacy per-output compressor force-disabled" marker -- not read here
+    //   188      Kotlin-only "legacy per-output compressor force-disabled" marker -- not read here.
+    //            The per-output compressor itself is gone from native: its 7-wide tuple in each
+    //            output-config block (fields 6..12) is still carried in the schema but never read.
     //   189..190 master brick-wall limiter (enable, threshold dBFS) -- both read in configure()
     //   191      Kotlin-only "master limiter migrated" marker -- never read here
     //   192      measurement generator type (0 off, 1 sweep, 2 pink periodic noise)
@@ -203,10 +205,9 @@ public:
                            BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
     const float* process(const float* samples, std::size_t sampleCount,
                          BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
-    void readCompressorMeter(float* values, std::size_t count) const;
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. All-idle (-60/-60/0)
-    // while the multiband compressor is disabled. Lock-free, same discipline as
-    // readCompressorMeter -- reads atomics published by MultibandCompressor::process().
+    // while the multiband compressor is disabled. Lock-free: reads atomics published by
+    // MultibandCompressor::process().
     void readMbcMeter(float* values, std::size_t count) const;
     // 3 floats: [lowBusGrDb, midBusGrDb, highBusGrDb] -- gain reduction of the per-bus
     // brick-wall limiters.
@@ -275,8 +276,6 @@ private:
         DirtyMidXo = 1u << 3,
         DirtyDelays = 1u << 4,
         DirtyTilt = 1u << 5,
-        DirtyCompTiming = 1u << 6,
-        DirtyCompState = 1u << 7,
         DirtyTiltResume = 1u << 8,  // tilt switched on: clear the state it froze with when off
         DirtyPolarity = 1u << 9,
         DirtyMeasBus = 1u << 10,
@@ -299,8 +298,6 @@ private:
     using PeqBank = NativeBmwDsp::PeqBank;
     using OutputConfig = NativeBmwDsp::OutputConfig;
     using OutputRuntime = NativeBmwDsp::OutputRuntime;
-    using CompressorParams = NativeBmwDsp::CompressorParams;
-    using CompressorState = NativeBmwDsp::CompressorState;
     using BusLimiter = NativeBmwDsp::BusLimiter;
     using Params = NativeBmwDsp::Params;
 
@@ -319,12 +316,11 @@ private:
     // Each buffer's raw input while a hook runs, so the measurement capture still records input
     // and output in pairs (CaptureRecorder advances only on tapOut); grows only.
     std::vector<float> rawInWork_;
-    // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay,
-    // per-output compressor (idle meter while muted), driver gain, then the band's
-    // stereo-linked bus limiter.
+    // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
+    // gain, then the band's stereo-linked bus limiter.
     void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);
     // Bookkeeping for a band whose chain is skipped (lpfPass/hpfPass/highXoPass): resets its bus
-    // limiter and keeps its compressor meters publishing idle.
+    // limiter.
     void idleBandChain(NativeBmwRouting::Band band);
     // configurePeq()'s body, assuming stateMutex_ is already held by the caller. Exists so
     // rebuildAll() -- itself called from setSampleRate() while already holding the lock -- can
@@ -343,11 +339,9 @@ private:
     void rebuildMidCrossover();
     void rebuildHighCrossover();
     void updateDelays();
-    void rebuildCompressorTiming();
     void rebuildBusLimiter();
     void rebuildPolarityAndMute();
     void rebuildAllPass();
-    void resetDynamics();
     OutputRuntime& output(NativeBmwRouting::OutputId id) {
         return outputs_[static_cast<std::size_t>(id)];
     }
@@ -360,17 +354,10 @@ private:
     const OutputConfig& outputConfig(NativeBmwRouting::OutputId id) const {
         return outputConfigs_[static_cast<std::size_t>(id)];
     }
-    CompressorState& dynamics(NativeBmwRouting::OutputId id) {
-        return outputDynamics_[static_cast<std::size_t>(id)];
-    }
-    const CompressorState& dynamics(NativeBmwRouting::OutputId id) const {
-        return outputDynamics_[static_cast<std::size_t>(id)];
-    }
 
     // Per-output state, indexed by OutputId.
     std::array<OutputRuntime, NativeBmwRouting::kOutputCount> outputs_{};
     std::array<OutputConfig, NativeBmwRouting::kOutputCount> outputConfigs_{};
-    std::array<CompressorState, NativeBmwRouting::kOutputCount> outputDynamics_{};
     NativeBmwRouting::RoutingMatrix routing_{};
     float sampleRate_ = 48000.0f;
 

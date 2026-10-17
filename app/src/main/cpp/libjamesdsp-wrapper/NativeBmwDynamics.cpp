@@ -5,60 +5,10 @@
 
 namespace NativeBmwDsp {
 
-// ---- Per-output compressor ---------------------------------------------------------------------
+// ---- Detector timing ---------------------------------------------------------------------------
 void DetectorTiming::rebuild(float sampleRate) {
     rmsMix = 1 - std::exp(-1 / (.050f * sampleRate));
     peakRelease = std::exp(-1 / (.080f * sampleRate));
-}
-void rebuildCompressorTiming(const CompressorParams& p, CompressorState& s, float sampleRate) {
-    s.attackMix = 1 - std::exp(-1 / (p.attack * .001f * sampleRate));
-    s.releaseMix = 1 - std::exp(-1 / (p.release * .001f * sampleRate));
-}
-void resetCompressorState(CompressorState& s) {
-    s.gain = 1;
-    s.rmsPower = s.peakEnv = 0;
-    s.meterCounter = 0;
-    s.inputDb.store(-60);
-    s.outputDb.store(-60);
-    s.gainReductionDb.store(0);
-}
-void publishIdleMeter(CompressorState& s) {
-    if ((++s.meterCounter & 255u) == 0) {
-        s.inputDb.store(-60);
-        s.outputDb.store(-60);
-        s.gainReductionDb.store(0);
-    }
-}
-void processCompressor(float& sample, const CompressorParams& p, CompressorState& s,
-                       const DetectorTiming& detector) {
-    float pk = std::fabs(sample);
-    bool pub = (++s.meterCounter & 255u) == 0;
-    // Detector level in dB. Enabled: the smoothed detector, which the gain computer needs every
-    // sample. Disabled: the raw peak, which only the meter publish below reads -- so it's only
-    // computed on publish frames (1 in 256) instead of paying a log10 every sample.
-    float db = 0;
-    if (p.enabled) {
-        s.rmsPower = ftz(s.rmsPower + (pk * pk - s.rmsPower) * detector.rmsMix);
-        s.peakEnv = pk > s.peakEnv ? pk : ftz(s.peakEnv * detector.peakRelease);
-        float det = std::max(std::sqrt(std::max(0.f, s.rmsPower)), s.peakEnv * .5f);
-        db = 20 * std::log10(std::max(det, 1e-12f));
-        float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-        // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
-        float target = gr == 0 ? 1.f : dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
-        s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
-        sample *= s.gain * s.makeupLin;
-    } else {
-        s.gain = 1;
-        if (pub) {
-            db = 20 * std::log10(std::max(pk, 1e-12f));
-        }
-    }
-    if (pub) {
-        float red = -20 * std::log10(std::max(s.gain, 1e-12f));
-        s.inputDb.store(clampf(db, -60, 6));
-        s.outputDb.store(clampf(db - red + (p.enabled ? p.makeup : 0), -60, 6));
-        s.gainReductionDb.store(clampf(red, 0, 60));
-    }
 }
 
 // ---- True-peak detector ------------------------------------------------------------------------
@@ -530,8 +480,8 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                               : std::max(cell_[0][b].lastDetectorDb, cell_[1][b].lastDetectorDb);
                 reductionDb = -20.f * std::log10(std::max(gWorst, 1e-12f));
             } else {
-                // Disabled band: meter still shows the band's input level (no reduction), same
-                // spirit as processCompressor's idle publish. sL/sR are untouched while disabled.
+                // Disabled band: meter still shows the band's input level (no reduction).
+                // sL/sR are untouched while disabled.
                 meterDb =
                     20.f * std::log10(std::max(std::max(std::fabs(sL), std::fabs(sR)), 1e-12f));
                 reductionDb = 0.f;

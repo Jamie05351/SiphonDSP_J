@@ -254,11 +254,8 @@ object NativeBmwDspValues {
     // build flips a default on. Kotlin-only -- native never reads index 181.
     const val INDEX_MBC_MIGRATED = 181
 
-    // Per-bus output limiter (Low bus, Mid bus) -- indices 182..187. A brand-new native stage,
-    // distinct from and additive to the legacy per-output processCompressor path, which is left
-    // untouched. Ships DISABLED; the "Driver protection" UI card wires it up in a later PR.
-    // threshold in dBFS, release in ms; native uses a fixed-fast attack and an infinite
-    // (brick-wall) ratio.
+    // Per-bus output limiter (Low bus, Mid bus) -- indices 182..187. Ships DISABLED. Threshold in
+    // dBFS, release in ms; native uses a short lookahead and an infinite (brick-wall) ratio.
     const val INDEX_BUS_LIMITER_LOW_ENABLED = 182
     const val INDEX_BUS_LIMITER_LOW_THRESHOLD = 183
     const val INDEX_BUS_LIMITER_LOW_RELEASE = 184
@@ -267,11 +264,10 @@ object NativeBmwDspValues {
     const val INDEX_BUS_LIMITER_MID_RELEASE = 187
 
     // One-time marker: 1 once the legacy per-output compressor (INDEX_LOW/MID_COMPRESSOR_* and
-    // the per-output FIELD_COMPRESSOR_ENABLED slots, still run by NativeBmwDspProcessor's
-    // processCompressor) has been force-disabled. The multiband compressor + per-bus limiters
-    // replace it, and its editing UI was retired, so leaving it enabled-by-default would be a
-    // hidden, uncontrollable dynamics stage. Kotlin-only -- native still reads the enable slots
-    // themselves, this marker just gates the one-time flip. See migrateDisableLegacyCompressorIfNeeded.
+    // the per-output FIELD_COMPRESSOR_* slots) has been force-disabled. The multiband compressor +
+    // per-bus limiters replaced it and its editing UI was retired. Native no longer has the stage
+    // at all and ignores those slots; they stay in the schema so no later index moves. Kotlin-only
+    // -- this marker just gates the one-time flip. See migrateDisableLegacyCompressorIfNeeded.
     const val INDEX_LEGACY_COMP_DISABLED_MIGRATED = 188
 
     // Master brick-wall limiter on the summed output (indices 189..191). Was a fixed -1 dBFS
