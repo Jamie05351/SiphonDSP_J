@@ -87,13 +87,20 @@ else
     done
 fi
 
+# Exit codes: 0 all bit-identical; 1 current != scalar (a NEON/scalar divergence -- always a
+# bug); 3 current != baseline only (the PR changed the sound, which CI accepts when the PR is
+# labelled intended-sound-change). Anything else is a build/run error (set -e).
 status=0
 for v in "${VARIANTS[@]:1}"; do
     if diff -u "$OUT/current.txt" "$OUT/$v.txt"; then
         echo "current == $v: bit-identical ($(wc -l < "$OUT/current.txt") scenarios)"
     else
         echo "current != $v: OUTPUT DIFFERS"
-        status=1
+        if [ "$v" = baseline ]; then
+            [ "$status" -eq 0 ] && status=3
+        else
+            status=1
+        fi
     fi
 done
 cat "$OUT/current.txt"

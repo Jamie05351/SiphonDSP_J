@@ -5,60 +5,10 @@
 
 namespace NativeBmwDsp {
 
-// ---- Per-output compressor ---------------------------------------------------------------------
+// ---- Detector timing ---------------------------------------------------------------------------
 void DetectorTiming::rebuild(float sampleRate) {
     rmsMix = 1 - std::exp(-1 / (.050f * sampleRate));
     peakRelease = std::exp(-1 / (.080f * sampleRate));
-}
-void rebuildCompressorTiming(const CompressorParams& p, CompressorState& s, float sampleRate) {
-    s.attackMix = 1 - std::exp(-1 / (p.attack * .001f * sampleRate));
-    s.releaseMix = 1 - std::exp(-1 / (p.release * .001f * sampleRate));
-}
-void resetCompressorState(CompressorState& s) {
-    s.gain = 1;
-    s.rmsPower = s.peakEnv = 0;
-    s.meterCounter = 0;
-    s.inputDb.store(-60);
-    s.outputDb.store(-60);
-    s.gainReductionDb.store(0);
-}
-void publishIdleMeter(CompressorState& s) {
-    if ((++s.meterCounter & 255u) == 0) {
-        s.inputDb.store(-60);
-        s.outputDb.store(-60);
-        s.gainReductionDb.store(0);
-    }
-}
-void processCompressor(float& sample, const CompressorParams& p, CompressorState& s,
-                       const DetectorTiming& detector) {
-    float pk = std::fabs(sample);
-    bool pub = (++s.meterCounter & 255u) == 0;
-    // Detector level in dB. Enabled: the smoothed detector, which the gain computer needs every
-    // sample. Disabled: the raw peak, which only the meter publish below reads -- so it's only
-    // computed on publish frames (1 in 256) instead of paying a log10 every sample.
-    float db = 0;
-    if (p.enabled) {
-        s.rmsPower = ftz(s.rmsPower + (pk * pk - s.rmsPower) * detector.rmsMix);
-        s.peakEnv = pk > s.peakEnv ? pk : ftz(s.peakEnv * detector.peakRelease);
-        float det = std::max(std::sqrt(std::max(0.f, s.rmsPower)), s.peakEnv * .5f);
-        db = 20 * std::log10(std::max(det, 1e-12f));
-        float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-        // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
-        float target = gr == 0 ? 1.f : dbToLin(gr), mix = target < s.gain ? s.attackMix : s.releaseMix;
-        s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
-        sample *= s.gain * s.makeupLin;
-    } else {
-        s.gain = 1;
-        if (pub) {
-            db = 20 * std::log10(std::max(pk, 1e-12f));
-        }
-    }
-    if (pub) {
-        float red = -20 * std::log10(std::max(s.gain, 1e-12f));
-        s.inputDb.store(clampf(db, -60, 6));
-        s.outputDb.store(clampf(db - red + (p.enabled ? p.makeup : 0), -60, 6));
-        s.gainReductionDb.store(clampf(red, 0, 60));
-    }
 }
 
 // ---- True-peak detector ------------------------------------------------------------------------
@@ -236,7 +186,8 @@ void MasterLimiter::process(float& l, float& r) {
 }
 
 // ---- Per-bus brick-wall limiter ----------------------------------------------------------------
-void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix) {
+void BusLimiter::analyse(float l, float r, float thresholdDb) {
+    atRest_ = false;
     // The threshold only changes on configure(), so its pow is cached rather than paid every
     // sample. Recomputed from the same input, so the ceiling is the identical value.
     if (thresholdDb != cachedThresholdDb_) {
@@ -245,57 +196,102 @@ void BusLimiter::process(float& l, float& r, float thresholdDb, float attackMix)
     }
     const float ceilingLin = cachedCeilingLin_;
     const float pk = std::max(std::fabs(l), std::fabs(r));
-    float target = pk > ceilingLin ? ceilingLin / pk : 1.f;
-    if (holdSamples > 0) {
-        // Moving minimum over the last holdSamples + 1 readings (see MasterLimiter::process):
-        // drop entries that left the window, then any this one undercuts, then append.
-        while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > holdSamples) {
-            holdHead_ = (holdHead_ + 1) % kMaxHoldSamples;
-            --holdCount_;
-        }
-        while (holdCount_ > 0 &&
-               holdGain_[(holdHead_ + holdCount_ - 1) % kMaxHoldSamples] >= target) {
-            --holdCount_;
-        }
-        const unsigned tail = (holdHead_ + holdCount_) % kMaxHoldSamples;
-        holdGain_[tail] = target;
-        holdAt_[tail] = sampleIndex_;
-        ++holdCount_;
-        ++sampleIndex_;
-        target = holdGain_[holdHead_];
+    const float need = pk > ceilingLin ? ceilingLin / pk : 1.f;
+    // Moving minimum over the last holdWindow() + 1 readings (see MasterLimiter::process): drop
+    // entries that left the window, then any this one undercuts, then append.
+    const unsigned window = holdWindow();
+    while (holdCount_ > 0 && sampleIndex_ - holdAt_[holdHead_] > window) {
+        holdHead_ = (holdHead_ + 1) % kMaxHoldSamples;
+        --holdCount_;
     }
-    const float mix = target < gain ? attackMix : releaseMix;
-    gain = std::min(1.f, ftz(gain + (target - gain) * mix));
+    while (holdCount_ > 0 && holdGain_[(holdHead_ + holdCount_ - 1) % kMaxHoldSamples] >= need) {
+        --holdCount_;
+    }
+    const unsigned tail = (holdHead_ + holdCount_) % kMaxHoldSamples;
+    holdGain_[tail] = need;
+    holdAt_[tail] = sampleIndex_;
+    ++holdCount_;
+    ++sampleIndex_;
+    const float held = holdGain_[holdHead_];
+    // Attack ramp: the average of the last lookahead_ held gains. Each covers every sample still
+    // in the delay, so the average is never above what the sample now leaving it needs.
+    float target = held;
+    if (lookahead_ > 0) {
+        rampSum_ += held - ramp_[rampPos_];
+        ramp_[rampPos_] = held;
+        rampPos_ = rampPos_ + 1 == lookahead_ ? 0 : rampPos_ + 1;
+        target = std::min(1.f, static_cast<float>(rampSum_ / lookahead_));
+    }
+    // Down: straight to the target (already smooth). Up: the release follower.
+    gain = target < gain ? target : std::min(1.f, ftz(gain + (target - gain) * releaseMix));
     // Meter: republish only when the gain moved since the last store. Same gain -> same log10 ->
-    // same stored value, so skipping the repeat is unobservable (it used to log10 every sample,
-    // including the whole time the limiter sits idle at gain 1).
+    // same stored value, so skipping the repeat is unobservable.
     if (!(gain == meteredGain_)) {
         meteredGain_ = gain;
         grDb.store(-20.f * std::log10(std::max(gain, 1e-12f)), std::memory_order_relaxed);
     }
-    l = ftz(l * gain);
-    r = ftz(r * gain);
+}
+void BusLimiter::process(float& l, float& r, float thresholdDb) {
+    analyse(l, r, thresholdDb);
+    l = ftz(delayL_.run(l) * gain);
+    r = ftz(delayR_.run(r) * gain);
+}
+void BusLimiter::passThrough(float& l, float& r, float thresholdDb) {
+    analyse(l, r, thresholdDb);
+    l = delayL_.run(l);
+    r = delayR_.run(r);
 }
 void BusLimiter::zeroMeter() {
     grDb.store(0.f);
     meteredGain_ = std::numeric_limits<float>::quiet_NaN();
 }
 void BusLimiter::reset() {
-    // The window is emptied too (plain stores, so unguarded): a held reduction left over from
-    // before the skip would otherwise clamp the first holdSamples after it resumes.
-    holdCount_ = 0;
-    if (gain != 1.f) {
-        gain = 1.f;
-        grDb.store(0.f, std::memory_order_relaxed);
-        meteredGain_ = std::numeric_limits<float>::quiet_NaN();
+    if (atRest_) {
+        return;
     }
+    // A held reduction or ramp left over from before the skip would otherwise clamp the first
+    // samples after it resumes.
+    resetGainPath();
+    grDb.store(0.f, std::memory_order_relaxed);
+    meteredGain_ = std::numeric_limits<float>::quiet_NaN();
+}
+void BusLimiter::resetGainPath() {
+    holdHead_ = holdCount_ = 0;
+    sampleIndex_ = 0;
+    ramp_.fill(1.f);
+    rampPos_ = 0;
+    rampSum_ = lookahead_;
+    gain = 1.f;
+    atRest_ = true;
 }
 void BusLimiter::setHold(float holdMs, float sampleRate) {
     // The window holds holdSamples + 1 readings, so the cap leaves room for that extra slot.
-    holdSamples = static_cast<unsigned>(clampf(std::round(holdMs * .001f * sampleRate), 0.f,
-                                               static_cast<float>(kMaxHoldSamples - 1)));
+    const auto samples = static_cast<unsigned>(clampf(std::round(holdMs * .001f * sampleRate),
+                                                      0.f, static_cast<float>(kMaxHoldSamples - 1)));
+    // Keep the window when its length is unchanged: every release or enable edit rebuilds the
+    // limiters, and emptying the window then would drop the hold on peaks still inside the
+    // lookahead delay, letting them out under-limited.
+    if (samples == holdSamples) {
+        return;
+    }
+    holdSamples = samples;
     holdHead_ = holdCount_ = 0;
     sampleIndex_ = 0;
+}
+void BusLimiter::setLookahead(float sampleRate) {
+    const auto lookahead = static_cast<unsigned>(clampf(
+        std::round(kLookaheadMs * .001f * sampleRate), 1.f, static_cast<float>(kMaxLookahead)));
+    delayL_.delay = static_cast<float>(lookahead);
+    delayR_.delay = static_cast<float>(lookahead);
+    if (lookahead != lookahead_) {
+        lookahead_ = lookahead;
+        resetGainPath();
+    }
+}
+void BusLimiter::clear() {
+    delayL_.clear();
+    delayR_.clear();
+    resetGainPath();
 }
 
 // ---- Pre-crossover multiband compressor --------------------------------------------------------
@@ -484,8 +480,8 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                               : std::max(cell_[0][b].lastDetectorDb, cell_[1][b].lastDetectorDb);
                 reductionDb = -20.f * std::log10(std::max(gWorst, 1e-12f));
             } else {
-                // Disabled band: meter still shows the band's input level (no reduction), same
-                // spirit as processCompressor's idle publish. sL/sR are untouched while disabled.
+                // Disabled band: meter still shows the band's input level (no reduction).
+                // sL/sR are untouched while disabled.
                 meterDb =
                     20.f * std::log10(std::max(std::max(std::fabs(sL), std::fabs(sR)), 1e-12f));
                 reductionDb = 0.f;

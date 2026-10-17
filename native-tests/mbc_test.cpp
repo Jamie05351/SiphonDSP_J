@@ -4,7 +4,7 @@
 
 using namespace nbtest;
 
-// Soft-knee downward-compression gain computer, transcribed from mbcBandGain / processCompressor
+// Soft-knee downward-compression gain computer, transcribed from MultibandCompressor::bandGain
 // (mirrored in Kotlin MultibandCompressorTree.targetGainReductionDb): slope = 1 - 1/max(1.001,
 // ratio); quadratic blend across the +/- knee/2 window around threshold. The native detector adds
 // RMS/peak smoothing, so the meter's reported GR tracks this to within ~1.5 dB, not exactly.

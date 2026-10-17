@@ -36,7 +36,6 @@ object JamesDspWrapper {
     ): Long
     external fun getNativeBmwPeqActiveRevision(self: JamesDspHandle): Long
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
-    external fun getNativeBmwCompressorMeter(self: JamesDspHandle): FloatArray?
     // Fills [out] with one meter's values (no allocation, for ~30 Hz UI polls); false and [out]
     // untouched when the handle is gone or [out] is too short. [kind]:
     //   METER_MBC          12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb];
