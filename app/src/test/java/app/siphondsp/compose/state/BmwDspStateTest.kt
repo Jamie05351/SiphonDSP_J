@@ -155,10 +155,12 @@ class BmwDspStateTest {
     fun aLateEchoOfOurOwnPreviewDoesNotRollBackACommit() {
         val context = context()
         val state = BmwDspState(context)
-        val sent = mutableListOf<FloatArray>()
+        val sent = mutableListOf<Pair<FloatArray, String?>>()
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let(sent::add)
+                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
+                    sent += it to intent.getStringExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN)
+                }
             }
         }
         val manager = LocalBroadcastManager.getInstance(context)
@@ -168,7 +170,7 @@ class BmwDspStateTest {
             assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -4f))
             shadowOf(Looper.getMainLooper()).idle()
             // The preview's echo arriving after the commit must not win.
-            state.onExternalUpdate(sent.first())
+            state.onExternalUpdate(sent.first().first, sent.first().second)
             assertEquals(-4f, state.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
             // Someone else's update still applies.
             val external = state.values.copyOf().also { it[NativeBmwDspValues.INDEX_HEADROOM] = -2f }
@@ -177,5 +179,18 @@ class BmwDspStateTest {
         } finally {
             manager.unregisterReceiver(receiver)
         }
+    }
+
+    @Test
+    fun aCommitKeepsAChangeAnotherWriterSavedStraightToDisk() {
+        // e.g. MasterVolume: saves to disk itself, then broadcasts.
+        val context = context()
+        val state = BmwDspState(context)
+        val external = NativeBmwDspValues.load(context).also { it[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = -20f }
+        assertTrue(NativeBmwDspValues.save(context, external))
+        assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -3f))
+        val saved = NativeBmwDspValues.load(context)
+        assertEquals(-20f, saved[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB], 0f)
+        assertEquals(-3f, saved[NativeBmwDspValues.INDEX_HEADROOM], 0f)
     }
 }

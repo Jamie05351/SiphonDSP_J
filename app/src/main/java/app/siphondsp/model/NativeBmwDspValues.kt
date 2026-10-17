@@ -904,9 +904,11 @@ object NativeBmwDspValues {
         DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
 
-    fun broadcast(context: Context, values: FloatArray) {
-        context.sendLocalBroadcast(
-            Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED).putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
-        )
+    /** [origin], when given, tags the broadcast so its sender can recognise its own echo. */
+    fun broadcast(context: Context, values: FloatArray, origin: String? = null) {
+        val intent = Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
+            .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
+        if (origin != null) intent.putExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN, origin)
+        context.sendLocalBroadcast(intent)
     }
 }
