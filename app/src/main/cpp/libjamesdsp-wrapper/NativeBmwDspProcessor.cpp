@@ -253,6 +253,10 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     masterGain_ += (masterGainTarget_ - masterGain_) * masterRampCoef_;
     oL *= masterGain_;
     oR *= masterGain_;
+    // Loudness compensation follows the volume, after it: its lift is always less than the cut.
+    if (p_.loudnessEnabled) {
+        loudness_.process(oL, oR);
+    }
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
     // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
     // at the amp/speaker connectors, not something this DSP can see or control). This swap

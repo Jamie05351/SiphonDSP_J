@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 294;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 296;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -215,6 +215,11 @@ inline constexpr int kHighPass = 291;
 // level. Driven by the steering-wheel +/- through KSW Toolkit -> Tasker -> a broadcast.
 inline constexpr int kMasterVolumeDb = 292;  // -80..0 dB
 inline constexpr int kMasterMute = 293;
+
+// --- Loudness compensation (294..295), added in the 294 -> 296 growth. Bass/treble lift that
+// follows the master volume (none at full volume). Ships off; older saves backfill it off.
+inline constexpr int kLoudnessEnabled = 294;
+inline constexpr int kLoudnessStrength = 295;  // percent, 0..100
 
 }  // namespace nbschema
 

@@ -29,6 +29,9 @@ struct Params {
     // the limiter, ramped so a step never clicks.
     float masterVolumeDb = 0.f;
     bool masterMute = false;
+    // Loudness compensation (v[294..295]): on/off and strength 0..1 (v[295] is percent).
+    bool loudnessEnabled = false;
+    float loudnessStrength = 1.f;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the

@@ -1,4 +1,5 @@
 #include "NativeBmwCrossovers.h"
+#include <algorithm>
 #include "NativeBmwDspMath.h"
 
 namespace NativeBmwDsp {
@@ -169,6 +170,29 @@ void Tilt::rebuild(float amountDb, float freqHz, float sampleRate) {
     makeLowShelf(loR2_, freqHz, g, sampleRate);
     makeHighShelf(hiR1_, freqHz, -g, sampleRate);
     makeHighShelf(hiR2_, freqHz, -g, sampleRate);
+}
+void Loudness::liftDb(float volumeDb, float strength, float& bassDb, float& trebleDb) {
+    const float cut = std::max(0.f, -volumeDb);
+    const float s = clampf(strength, 0.f, 1.f);
+    bassDb = std::min(kBassMaxDb, kBassPerDb * cut) * s;
+    trebleDb = std::min(kTrebleMaxDb, kTreblePerDb * cut) * s;
+}
+void Loudness::rebuild(float volumeDb, float strength, float sampleRate) {
+    float bassDb, trebleDb;
+    liftDb(volumeDb, strength, bassDb, trebleDb);
+    makeLowShelf(bassL_, kBassHz, bassDb, sampleRate);
+    makeLowShelf(bassR_, kBassHz, bassDb, sampleRate);
+    makeHighShelf(trebleL_, kTrebleHz, trebleDb, sampleRate);
+    makeHighShelf(trebleR_, kTrebleHz, trebleDb, sampleRate);
+}
+void Loudness::clear() {
+    for (Biquad* b : {&bassL_, &bassR_, &trebleL_, &trebleR_}) {
+        b->clear();
+    }
+}
+void Loudness::process(float& l, float& r) {
+    Biquad::runPair(bassL_, bassR_, l, r);
+    Biquad::runPair(trebleL_, trebleR_, l, r);
 }
 void Tilt::clear() {
     for (Biquad* b : {&loL1_, &loL2_, &hiL1_, &hiL2_, &loR1_, &loR2_, &hiR1_, &hiR2_}) {

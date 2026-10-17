@@ -66,7 +66,10 @@ object NativeBmwDspValues {
     //
     // 292..293 are the master volume (dB, mute), added in the 292 -> 294 growth. Default 0 dB /
     // unmuted, so older saves are unchanged; see MasterVolume.
-    const val SIZE = 294
+    //
+    // 294..295 are loudness compensation (enabled, strength %), added in the 294 -> 296 growth.
+    // Default off, so older saves -- backfilled from DEFAULTS by index -- are unchanged.
+    const val SIZE = 296
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -363,6 +366,17 @@ object NativeBmwDspValues {
     const val INDEX_MASTER_MUTE = 293
     const val MASTER_VOLUME_MIN_DB = -80f
     const val MASTER_VOLUME_MAX_DB = 0f
+
+    // Loudness compensation: bass/treble lift that follows the master volume (none at full volume).
+    const val INDEX_LOUDNESS_ENABLED = 294
+    const val INDEX_LOUDNESS_STRENGTH = 295 // percent, 0..100
+    // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
+    const val LOUDNESS_BASS_HZ = 100.0
+    const val LOUDNESS_TREBLE_HZ = 8000.0
+    const val LOUDNESS_BASS_PER_DB = 0.3
+    const val LOUDNESS_TREBLE_PER_DB = 0.1
+    const val LOUDNESS_BASS_MAX_DB = 12.0
+    const val LOUDNESS_TREBLE_MAX_DB = 4.0
     const val INDEX_HIGH_GAIN_L = 211
     const val INDEX_HIGH_GAIN_R = 212
     const val INDEX_HIGH_DELAY_L = 213
@@ -551,6 +565,9 @@ object NativeBmwDspValues {
         // --- Master volume (292..293) ---
         0f, // 292 master volume dB (0 = full)
         0f, // 293 master mute (off)
+        // --- Loudness compensation (294..295), ships off ---
+        0f, // 294 loudness enabled (off)
+        100f, // 295 loudness strength %
     )
 
     init {

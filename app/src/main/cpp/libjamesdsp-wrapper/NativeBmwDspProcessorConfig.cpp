@@ -82,6 +82,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     next.highPass = flagIn(v[nbschema::kHighPass]);
     next.masterVolumeDb = clampIn(v[nbschema::kMasterVolumeDb], -80, 0);
     next.masterMute = flagIn(v[nbschema::kMasterMute]);
+    next.loudnessEnabled = flagIn(v[nbschema::kLoudnessEnabled]);
+    next.loudnessStrength = clampIn(v[nbschema::kLoudnessStrength], 0, 100) * .01f;
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -536,6 +538,15 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (changed(next.limiterThreshDb, p_.limiterThreshDb)) {
         dirty |= DirtyLimiter;
     }
+    if (changed(next.masterVolumeDb, p_.masterVolumeDb) ||
+        changed(next.loudnessStrength, p_.loudnessStrength) ||
+        next.loudnessEnabled != p_.loudnessEnabled) {
+        dirty |= DirtyLoudness;
+    }
+    // Loudness doesn't run while off; switching it back on starts its shelves clean.
+    if (!p_.loudnessEnabled && next.loudnessEnabled) {
+        dirty |= DirtyLoudnessResume;
+    }
 
     p_ = next;
     masterGainTarget_ = p_.masterMute ? 0.f : std::pow(10.f, p_.masterVolumeDb / 20.f);
@@ -821,6 +832,12 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLimiter) {
         limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     }
+    if (d & DirtyLoudness) {
+        loudness_.rebuild(p_.masterVolumeDb, p_.loudnessStrength, sampleRate_);
+    }
+    if (d & DirtyLoudnessResume) {
+        loudness_.clear();
+    }
     if (d & DirtyVirtual) {
         virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
     }
@@ -837,6 +854,8 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     tilt_.clear();
+    loudness_.rebuild(p_.masterVolumeDb, p_.loudnessStrength, sampleRate_);
+    loudness_.clear();
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);

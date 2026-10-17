@@ -162,6 +162,8 @@ class NativeBmwSchemaAgreementTest {
         "kHighPass" to NativeBmwDspValues.INDEX_HIGH_PASS,
         "kMasterVolumeDb" to NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
         "kMasterMute" to NativeBmwDspValues.INDEX_MASTER_MUTE,
+        "kLoudnessEnabled" to NativeBmwDspValues.INDEX_LOUDNESS_ENABLED,
+        "kLoudnessStrength" to NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH,
     )
 
     @Test
