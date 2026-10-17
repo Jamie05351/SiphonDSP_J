@@ -6,7 +6,6 @@ import androidx.core.content.edit
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
-import java.util.concurrent.ConcurrentHashMap
 
 object NativeBmwDspValues {
     // No longer written to -- kept so load() can migrate anyone still on the old
@@ -565,31 +564,24 @@ object NativeBmwDspValues {
     fun load(context: Context): FloatArray {
         val store = store(context)
         val stored = store.load()
-        val storeKey = store.primaryPath().absolutePath
+        val values = stored ?: migrateLegacy(context, store) ?: DEFAULTS.copyOf()
         // App-level power owns the master enable. Force the native path enabled so a stale
         // historical value cannot strand the user in silence with no corresponding control.
-        if (stored != null && storeKey in migratedStores) {
-            stored[INDEX_ENABLED] = 1f
-            return stored
-        }
-        val values = stored ?: migrateLegacy(context, store) ?: DEFAULTS.copyOf()
         values[INDEX_ENABLED] = 1f
         val before = values.copyOf()
+        // Every migration is marker-gated, so on an already-migrated config this pass changes
+        // nothing and writes nothing. It still runs on every load rather than being cached per
+        // process: the file can be replaced underneath (a whole-app backup restore, a raw save of
+        // DEFAULTS), and that copy must be migrated before anything uses it.
         runMigrations(values)
         retireStageDelay(values)
-        // One checked save for the whole pass, rather than one per migration. Once the store holds
-        // a fully migrated config, later loads in this process skip the pass: each migration is
-        // marker-gated, but re-deriving values from disk on every load (every screen, every
-        // resume) is how a fresh reload once overwrote a value the user had just committed.
-        val changed = !values.contentEquals(before)
-        val persisted = if (changed) store.save(values) else stored != null
-        if (changed) Timber.i("BMW DSP migrated stored config success=$persisted")
-        if (persisted) migratedStores += storeKey
+        // One checked save for the whole pass, rather than one per migration.
+        if (!values.contentEquals(before)) {
+            val saved = store.save(values)
+            Timber.i("BMW DSP migrated stored config success=$saved")
+        }
         return values
     }
-
-    // Store files whose config this process has already migrated and saved (see load()).
-    private val migratedStores: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /** Every one-time migration, in order. Each is gated by its own marker slot. */
     private fun runMigrations(values: FloatArray) {
