@@ -559,6 +559,9 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // than fading from the constructor's defaults at start-up.
     if (!outputGainsPrimed_) {
         rebuildPolarityAndMute(/*snap=*/true);
+        for (auto& out : outputs_) {
+            out.delay.snap();  // nor crossfade the delays in from their defaults
+        }
         outputGainsPrimed_ = true;
     }
     return true;
@@ -696,6 +699,7 @@ void NativeBmwDspProcessor::updateDelays() {
     const auto fade = static_cast<unsigned>(std::lround(kDelayFadeSeconds * sampleRate_));
     for (auto& out : outputs_) {
         out.delay.fadeLength = fade;
+        out.delay.fadeRemaining = std::min(out.delay.fadeRemaining, fade);
     }
     output(OutputId::LowLeft).delay.setDelay(delaySamples(p_.lowDelayL, sampleRate_, kDelayLineCapacity));
     output(OutputId::LowRight).delay.setDelay(delaySamples(p_.lowDelayR, sampleRate_, kDelayLineCapacity));
@@ -857,6 +861,9 @@ void NativeBmwDspProcessor::rebuildAll() {
         b->zeroMeter();
     }
     updateDelays();
+    for (auto& out : outputs_) {
+        out.delay.snap();  // a full rebuild applies delays at once, no crossfade
+    }
     // A full rebuild starts every filter clean; the PEQ rebuild below would otherwise carry the
     // banks' state over (see configurePeqLocked).
     inputPeq_.clear();

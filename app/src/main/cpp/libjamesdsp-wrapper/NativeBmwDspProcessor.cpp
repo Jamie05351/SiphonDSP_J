@@ -201,7 +201,7 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
         {lowL, lowR, midL, midR, highL, highR}};
     for (std::size_t i = 0; i < logical.size(); ++i) {
         auto& out = outputs_[i];
-        out.outputGain += (out.outputGainTarget - out.outputGain) * outputRampCoef_;
+        out.outputGain = NativeBmwDsp::rampToward(out.outputGain, out.outputGainTarget, outputRampCoef_);
         logical[i] *= out.outputGain;
     }
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
@@ -219,8 +219,8 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     oL *= postGainL_;
     oR *= postGainR_;
     // Channel mute, ramped like the per-output mute above.
-    channelGainL_ += ((p_.channelMute == 1 ? 0.f : 1.f) - channelGainL_) * outputRampCoef_;
-    channelGainR_ += ((p_.channelMute == 2 ? 0.f : 1.f) - channelGainR_) * outputRampCoef_;
+    channelGainL_ = NativeBmwDsp::rampToward(channelGainL_, p_.channelMute == 1 ? 0.f : 1.f, outputRampCoef_);
+    channelGainR_ = NativeBmwDsp::rampToward(channelGainR_, p_.channelMute == 2 ? 0.f : 1.f, outputRampCoef_);
     oL *= channelGainL_;
     oR *= channelGainR_;
     oL = NativeBmwDsp::ftz(oL);

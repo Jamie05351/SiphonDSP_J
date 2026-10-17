@@ -107,6 +107,13 @@ T clampInt(float x) {
                  hi = static_cast<double>(std::numeric_limits<T>::max());
     return static_cast<T>(std::llrint(std::max(lo, std::min(hi, static_cast<double>(x)))));
 }
+// One step of a one-pole ramp, landing exactly on the target once within 1e-5 -- a one-pole never
+// gets there on its own, which would leave a muted gain decaying into denormals and an un-muted one
+// stalled just short of 1.
+inline float rampToward(float current, float target, float coef) {
+    const float next = current + (target - current) * coef;
+    return std::fabs(target - next) < 1e-5f ? target : next;
+}
 inline float clampf(float x, float lo, float hi) {
     return std::max(lo, std::min(hi, x));
 }

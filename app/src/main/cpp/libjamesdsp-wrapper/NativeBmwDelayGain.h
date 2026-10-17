@@ -62,13 +62,17 @@ struct AlignmentDelay {
     std::array<float, kAlignmentTaps> fadeTaps{};
 
     AlignmentDelay() {
-        setDelay(0);
+        buildAlignmentTaps(0.f, taps);  // a zero delay (setDelay(0) would skip: delay is already 0)
     }
     // Config thread. Total delay = samples + kAlignmentLatency. Clamped so the kernel's oldest
     // tap stays inside the ring.
     void setDelay(float samples) {
+        const float next = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
+        if (next == delay) {
+            return;  // unchanged: no rebuild, no fade
+        }
         beginFade();
-        delay = clampf(samples, 0.f, static_cast<float>(Capacity - kAlignmentTaps));
+        delay = next;
         base = static_cast<unsigned>(delay);
         buildAlignmentTaps(delay - static_cast<float>(base), taps);
     }
@@ -96,7 +100,8 @@ struct AlignmentDelay {
         float y = read(base, taps);
         if (fadeRemaining > 0) {
             // Linear crossfade from the old read point (fadeBase/fadeTaps) to the new one.
-            const float oldWeight = static_cast<float>(fadeRemaining) / static_cast<float>(fadeLength);
+            const float oldWeight = std::min(1.f, static_cast<float>(fadeRemaining) /
+                                                      static_cast<float>(std::max(1u, fadeLength)));
             y += (read(fadeBase, fadeTaps) - y) * oldWeight;
             --fadeRemaining;
         }
@@ -106,6 +111,10 @@ struct AlignmentDelay {
     void clear() {
         data.fill(0);
         write = 0;
+        fadeRemaining = 0;
+    }
+    // Ends any fade in progress: the new read point applies at once (start-up, full rebuilds).
+    void snap() {
         fadeRemaining = 0;
     }
 
@@ -119,8 +128,9 @@ private:
         }
         return y;
     }
-    // Remembers the current read point as the one to fade from. A change landing mid-fade fades
-    // from the (new) point reached so far, which is close to where the output already is.
+    // Remembers the current read point as the one to fade from. A change landing mid-fade restarts
+    // from the latest target -- config pushes arrive at most every ~33 ms, longer than the fade, so
+    // that is rare -- and is still far smaller than the jump this replaces.
     void beginFade() {
         if (fadeLength == 0) {
             return;
