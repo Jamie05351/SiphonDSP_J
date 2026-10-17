@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * Mirrors NativeBmwDspProcessor's multiband compressor: the crossover tree must reconstruct
- * flat, and the gain computer must match processCompressor's soft-knee curve. See
+ * flat, and the gain computer must match the native MBC's soft-knee curve. See
  * [MultibandCompressorTree]'s KDoc for the flat-reconstruction identity.
  */
 class MultibandCompressorTreeTest {

@@ -29,7 +29,7 @@ is not acceptable.
 **Fix:** `kLegacyOutputCount = 4` is a separate constant. `kRoutingBase`, `kAllPassBase`,
 `kOutputConfigBase`, `kOutputConfigWidth` are derived from `kLegacyOutputCount`, not from
 `kOutputCount`, and stay pinned at 46/54/87/13 forever. `kOutputCount` becomes 6 for in-memory
-runtime array sizing only (`outputs_`, `outputConfigs_`, `outputDynamics_`, `RoutingMatrix`) —
+runtime array sizing only (`outputs_`, `outputConfigs_`, `RoutingMatrix`) —
 none of that is persisted directly; it's rebuilt from the flat float array on every `configure()`
 call. Every new persisted byte goes at the **tail**, starting at index 205, exactly like every
 prior growth (46→86→139→205).
