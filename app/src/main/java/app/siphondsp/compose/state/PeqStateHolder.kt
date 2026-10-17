@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,10 +26,7 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.BmwDashboardSkin
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -79,13 +75,12 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
 
     // The baseline files can run to megabytes on a head unit's slow storage, so every read,
     // parse and write below runs on Dispatchers.IO; state is published back on the caller's
-    // (main) dispatcher. Import and clear change the files on disk, so they run in this holder's
-    // own scope rather than a composable's: the toolbar chip leaving composition mid-import must
-    // not leave the files replaced and the graph still showing the old baseline. One lock covers
-    // each operation's file work and its publish, so a slow load can't land after a newer
-    // import or clear, and two store operations never share the .tmp/.bak files at once.
-    private val baselineScope = MainScope()
-    private val baselineLock = Mutex()
+    // (main) dispatcher. Import and clear run in the store's process-wide scope and every
+    // operation holds the store's process-wide lock (see CarBaselineStore.operationLock), so
+    // neither a composable nor this Activity's holder being recreated mid-import can race the
+    // files or strand a stale baseline on the graph.
+    private val baselineScope get() = CarBaselineStore.operationScope
+    private val baselineLock get() = CarBaselineStore.operationLock
 
     suspend fun loadCarBaseline() {
         baselineLock.withLock {
@@ -108,11 +103,6 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
                 toast("Car baseline loaded for ${side.label}")
             }
         }
-    }
-
-    /** Cancels any baseline publish still pending; the owner calls it once it's done with this holder. */
-    fun close() {
-        baselineScope.cancel()
     }
 
     fun showCarBaselineOnGraph(show: Boolean) {
@@ -267,7 +257,5 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
 @Composable
 fun rememberPeqState(): PeqStateHolder {
     val context = LocalContext.current
-    val holder = remember(context) { PeqStateHolder(context.applicationContext) }
-    DisposableEffect(holder) { onDispose { holder.close() } }
-    return holder
+    return remember(context) { PeqStateHolder(context.applicationContext) }
 }

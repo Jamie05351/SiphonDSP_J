@@ -7,6 +7,10 @@ import androidx.core.content.edit
 import app.siphondsp.dsp.CarBaseline
 import app.siphondsp.dsp.CarBaselineMeasurement
 import app.siphondsp.dsp.CarBaselineParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
 import timber.log.Timber
 import java.io.File
 
@@ -145,6 +149,17 @@ class CarBaselineStore(context: Context) {
     private fun nameKey(side: Side) = if (side == Side.RIGHT) KEY_NAME_RIGHT else KEY_NAME_LEFT
 
     companion object {
+        /**
+         * Held by every load, import and clear, file work and publish together, for the whole
+         * process: an Activity recreated mid-import gets a new holder, and a per-holder lock
+         * would let its load read the files mid-swap and publish a stale (or no) baseline.
+         */
+        val operationLock = Mutex()
+
+        /** Where imports and clears run: outlives any composable or Activity, so a recreate
+         *  never strands one half done with the graph out of step with the files. */
+        val operationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
         private const val DIR = "car_baseline"
         // REW's full-resolution text export of one measurement is ~1.5 MB.
         private const val MAX_CHARS = 8_000_000
