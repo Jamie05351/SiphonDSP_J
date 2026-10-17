@@ -45,9 +45,7 @@ class CarBaselineStore(context: Context) {
     fun import(uri: Uri, side: Side): String? {
         val text = try {
             appContext.contentResolver.openInputStream(uri)?.use { stream ->
-                stream.bufferedReader().readText().also {
-                    if (it.length > MAX_CHARS) throw IllegalArgumentException("File is too large to be a measurement export")
-                }
+                readBounded(stream.bufferedReader())
             } ?: return "Couldn't open that file"
         } catch (error: Exception) {
             Timber.w(error, "Car baseline read failed")
@@ -95,6 +93,19 @@ class CarBaselineStore(context: Context) {
         } catch (error: Exception) {
             Timber.w(error, "Stored car baseline for $side unreadable")
             null
+        }
+    }
+
+    /** The whole of [reader], refused as soon as it passes [MAX_CHARS] -- checked as it streams,
+     *  so an oversized or endless document is never held in memory whole. */
+    private fun readBounded(reader: java.io.Reader): String {
+        val text = StringBuilder()
+        val buffer = CharArray(64 * 1024)
+        while (true) {
+            val read = reader.read(buffer)
+            if (read < 0) return text.toString()
+            if (text.length + read > MAX_CHARS) throw IllegalArgumentException("File is too large to be a measurement export")
+            text.appendRange(buffer, 0, read)
         }
     }
 
