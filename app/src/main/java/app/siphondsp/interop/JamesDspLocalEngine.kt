@@ -11,6 +11,9 @@ import app.siphondsp.model.debug.parseNativeTruthSnapshot
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import timber.log.Timber
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.math.max
 import kotlin.math.min
 
@@ -61,14 +64,23 @@ data class NativeConfigRevisionStatus(
 }
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
-    private val nativeLock = Any()
+    // Guards the native handle. process*() hold it shared for a whole audio buffer, and so do the
+    // BMW config/PEQ pushes, the truth snapshot and the capture calls: NativeBmwDspProcessor
+    // synchronises those against the audio thread itself (its own short critical sections), so
+    // all they need here is a handle close() can't free mid-call. A single exclusive lock used to
+    // make the URGENT_AUDIO loop wait behind whichever default-priority thread was pushing a
+    // config (and that thread wait out a whole buffer) -- a priority inversion on every slider
+    // drag. Exclusive holders: close(), and the calls that mutate the JamesDSP core's own state
+    // (sample rate, output control, convolver), which its process path does not lock against.
+    private val handleLock = ReentrantReadWriteLock()
+    // Serialises the BMW config/PEQ pushes among themselves (revision counters, last-applied
+    // state, PEQ persistence rollback) now that they no longer exclude each other through the
+    // handle lock. Always taken before handleLock, never inside it.
+    private val configLock = Any()
     // Guards only the handle's lifetime for the UI-polled meter getters. The native meter readers
-    // are lock-free atomics, so all they need is a handle close() can't free mid-call -- not
-    // nativeLock, which processFloat()/processInt16() hold for the whole audio buffer. Sharing
-    // nativeLock made every UI meter poll (plus its JNI NewFloatArray) a point where the
-    // URGENT_AUDIO loop could block behind a default-priority thread. close() takes meterLock
-    // then nativeLock; meter getters take meterLock only, process*() nativeLock only -- one
-    // fixed order, so no deadlock.
+    // are lock-free atomics, so all they need is a handle close() can't free mid-call. close()
+    // takes meterLock then handleLock (exclusive); meter getters take meterLock only, process*()
+    // handleLock only -- one fixed order, so no deadlock.
     private val meterLock = Any()
     @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.loadPersisted(context)
     @Volatile private var peqRestorePending = true
@@ -92,7 +104,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     override var sampleRate: Float
         set(value) {
-            synchronized(nativeLock) {
+            handleLock.write {
                 super.sampleRate = value
                 val current = handle
                 if (current != 0L) {
@@ -105,8 +117,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                 restoreNativeBmwPeq()
             }
             if (!attemptingColdStartRestore) {
-                synchronized(nativeLock) {
-                    if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
+                synchronized(configLock) {
+                    handleLock.read {
+                        if (handle != 0L && !peqRestorePending) refreshEqualizersLocked()
+                    }
                 }
             }
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
@@ -171,13 +185,20 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         )
     }
 
-    private inline fun <T> withHandle(default: T, block: (JamesDspHandle) -> T): T = synchronized(nativeLock) {
+    // Exclusive: for calls that change the JamesDSP core's own state (see handleLock).
+    private inline fun <T> withExclusiveHandle(default: T, block: (JamesDspHandle) -> T): T = handleLock.write {
         val current = handle
         if(current == 0L) default else block(current)
     }
 
-    private inline fun withHandle(block: (JamesDspHandle) -> Unit) {
-        synchronized(nativeLock) {
+    // Shared: for NativeBmwDspProcessor calls, which synchronise with the audio thread natively.
+    private inline fun <T> withSharedHandle(default: T, block: (JamesDspHandle) -> T): T = handleLock.read {
+        val current = handle
+        if(current == 0L) default else block(current)
+    }
+
+    private inline fun withSharedHandle(block: (JamesDspHandle) -> Unit) {
+        handleLock.read {
             val current = handle
             if(current != 0L)
                 block(current)
@@ -191,11 +212,15 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         if(current == 0L) default else block(current)
     }
 
-    fun isNativeHandleReady(): Boolean = synchronized(nativeLock) { handle != 0L }
+    fun isNativeHandleReady(): Boolean = handleLock.read { handle != 0L }
 
-    fun nativeConfigRevisionStatus(): NativeConfigRevisionStatus = synchronized(nativeLock) {
+    fun nativeConfigRevisionStatus(): NativeConfigRevisionStatus = synchronized(configLock) {
+        handleLock.read { revisionStatusLocked() }
+    }
+
+    private fun revisionStatusLocked(): NativeConfigRevisionStatus {
         val current = handle
-        NativeConfigRevisionStatus(
+        return NativeConfigRevisionStatus(
             requestedDspRevision = requestedDspRevision,
             nativeActiveDspRevision = if (current == 0L) 0L
                 else JamesDspWrapper.getNativeBmwDspActiveRevision(current),
@@ -219,7 +244,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
      * is only ever called from a debug-screen read, never the audio loop.
      */
     fun nativeTruthSnapshot(): NativeDspTruthSnapshot? {
-        val raw = withHandle(null) { JamesDspWrapper.getNativeTruthSnapshot(it) }
+        val raw = withSharedHandle(null) { JamesDspWrapper.getNativeTruthSnapshot(it) }
         val snapshot = parseNativeTruthSnapshot(raw)
         if (raw != null && snapshot == null) {
             Timber.e(
@@ -239,9 +264,9 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun requestedNativeBmwDspRevision(): Long = requestedDspRevision
     fun requestedNativeBmwPeqRevision(): Long = requestedPeqRevision
     fun nativeActiveBmwDspRevision(): Long =
-        withHandle(0L) { JamesDspWrapper.getNativeBmwDspActiveRevision(it) }
+        withSharedHandle(0L) { JamesDspWrapper.getNativeBmwDspActiveRevision(it) }
     fun nativeActiveBmwPeqRevision(): Long =
-        withHandle(0L) { JamesDspWrapper.getNativeBmwPeqActiveRevision(it) }
+        withSharedHandle(0L) { JamesDspWrapper.getNativeBmwPeqActiveRevision(it) }
 
     private fun nextDspRevisionLocked(): Long? {
         if (requestedDspRevision == Long.MAX_VALUE) {
@@ -273,7 +298,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         // meterLock first (see its declaration): a meter read already in flight finishes before
         // the handle is freed, and any later one sees handle == 0.
         synchronized(meterLock) {
-            synchronized(nativeLock) {
+            handleLock.write {
                 val oldHandle = handle
                 handle = 0L
                 if(oldHandle != 0L) {
@@ -314,7 +339,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
-        synchronized(nativeLock) {
+        handleLock.read {
             val current = handle
             if(!enabled || current == 0L)
             {
@@ -328,7 +353,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun processInt32(input: IntArray, output: IntArray, offset: Int = -1, length: Int = -1)
     {
-        synchronized(nativeLock) {
+        handleLock.read {
             val current = handle
             if(!enabled || current == 0L)
             {
@@ -342,7 +367,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun processFloat(input: FloatArray, output: FloatArray, offset: Int = -1, length: Int = -1)
     {
-        synchronized(nativeLock) {
+        handleLock.read {
             val current = handle
             if(!enabled || current == 0L)
             {
@@ -355,7 +380,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     }
 
     override fun setOutputControl(threshold: Float, release: Float, postGain: Float): Boolean =
-        withHandle(false) {
+        withExclusiveHandle(false) {
             JamesDspWrapper.setLimiter(it, threshold, release) and
                 JamesDspWrapper.setPostGain(it, postGain)
         }
@@ -366,7 +391,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         irChannels: Int,
         irFrames: Int,
         irCrc: Int,
-    ): Boolean = withHandle(false) {
+    ): Boolean = withExclusiveHandle(false) {
         // The local JNI convolver does not currently use the IR CRC; it is part of the shared
         // engine contract for parity with the remote AudioEffect implementation.
         JamesDspWrapper.setConvolver(it, enable, impulseResponse, irChannels, irFrames)
@@ -427,15 +452,17 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     ): Boolean {
         val previous: BmwPeqState
         val applied: Boolean
-        synchronized(nativeLock) {
-            previous = bmwPeqState
-            applied = configureNativeBmwPeqLocked(state, source)
+        synchronized(configLock) {
+            handleLock.read {
+                previous = bmwPeqState
+                applied = configureNativeBmwPeqLocked(state, source)
+            }
         }
         if (!applied) return false
         var result = true
         if (persistOnSuccess && !state.persist(context)) {
             Timber.e("$source native BMW PEQ applied but persistence commit failed")
-            synchronized(nativeLock) {
+            synchronized(configLock) { handleLock.read {
                 // Only this call's own status is stale here: if a newer configureNativeBmwPeq
                 // call has already applied a different state (and possibly already reported its
                 // own success) while this write was unlocked on disk I/O, that newer call's
@@ -457,7 +484,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
                             "was applied while this write was in flight"
                     )
                 }
-            }
+            } }
             result = false
         }
         context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
@@ -473,28 +500,30 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             Timber.e(lastDspFailure)
             return false
         }
-        return synchronized(nativeLock) {
-            val current = handle
-            if (current == 0L) {
-                lastDspApplySuccess = false
-                lastDspFailure = "Native BMW DSP handle unavailable"
-                return@synchronized false
-            }
-            val revision = nextDspRevisionLocked() ?: return@synchronized false
-            val acknowledged = JamesDspWrapper.configureNativeBmwDsp(current, values, revision)
-            val active = JamesDspWrapper.getNativeBmwDspActiveRevision(current)
-            val result = acknowledged == revision && active == revision
-            if (result) {
-                lastDspApplySuccess = true
-                lastDspFailure = null
-            } else {
-                lastDspApplySuccess = false
-                lastDspFailure =
-                    "Native BMW DSP rejected/stale requested=$revision acknowledged=$acknowledged active=$active"
-                Timber.e(lastDspFailure)
-            }
-            result
+        return synchronized(configLock) { handleLock.read { configureNativeBmwDspLocked(values) } }
+    }
+
+    private fun configureNativeBmwDspLocked(values: FloatArray): Boolean {
+        val current = handle
+        if (current == 0L) {
+            lastDspApplySuccess = false
+            lastDspFailure = "Native BMW DSP handle unavailable"
+            return false
         }
+        val revision = nextDspRevisionLocked() ?: return false
+        val acknowledged = JamesDspWrapper.configureNativeBmwDsp(current, values, revision)
+        val active = JamesDspWrapper.getNativeBmwDspActiveRevision(current)
+        val result = acknowledged == revision && active == revision
+        if (result) {
+            lastDspApplySuccess = true
+            lastDspFailure = null
+        } else {
+            lastDspApplySuccess = false
+            lastDspFailure =
+                "Native BMW DSP rejected/stale requested=$revision acknowledged=$acknowledged active=$active"
+            Timber.e(lastDspFailure)
+        }
+        return result
     }
 
     /** See [JamesDspWrapper.readNativeBmwMeter]. */
@@ -509,13 +538,13 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun startNativeBmwCapture() {
         freePendingCaptureSnapshot()
-        withHandle { JamesDspWrapper.startNativeBmwCapture(it) }
+        withSharedHandle { JamesDspWrapper.startNativeBmwCapture(it) }
     }
 
-    fun stopNativeBmwCapture() = withHandle { JamesDspWrapper.stopNativeBmwCapture(it) }
+    fun stopNativeBmwCapture() = withSharedHandle { JamesDspWrapper.stopNativeBmwCapture(it) }
 
     fun nativeBmwCaptureFrameCount(): Long =
-        withHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
+        withSharedHandle<Long>(0L) { JamesDspWrapper.getNativeBmwCaptureFrameCount(it) }
 
     private val captureSnapshotLock = Any()
 
@@ -540,7 +569,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun exportNativeBmwCaptureWav(rawInPath: String, outPath: String): FloatArray? {
         val snapshot = takePendingCaptureSnapshot().takeIf { it != 0L }
-            ?: withHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
+            ?: withSharedHandle(0L) { JamesDspWrapper.takeNativeBmwCaptureSnapshot(it) }
         if (snapshot == 0L) return null
         val result = JamesDspWrapper.exportNativeBmwCaptureWav(snapshot, rawInPath, outPath)
         if (result != null) {

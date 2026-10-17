@@ -298,7 +298,10 @@ float peakAfterPassthroughResume(std::array<float, kConfigSize> processing, int 
     auto tone = stereoSine(toneHz, 0.5, 8192, kSampleRate);
     proc.process(tone.data(), tone.size());
     REQUIRE(proc.configure(passthrough.data(), passthrough.size()));
-    std::vector<float> silence(8192 * 2, 0.f);
+    // 1 s of silence: long enough for the input DC blocker's own decay (3 Hz corner, ~53 ms time
+    // constant) to die away through the bypass path, so whatever is left after resuming can only
+    // be the frozen chain's state.
+    std::vector<float> silence(48000 * 2, 0.f);
     proc.process(silence.data(), silence.size());
     REQUIRE(proc.configure(processing.data(), processing.size()));
     std::vector<float> after(4096 * 2, 0.f);

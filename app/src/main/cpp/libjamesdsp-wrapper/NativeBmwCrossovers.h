@@ -56,7 +56,9 @@ struct OutputRuntime {
     bool muted = false;
     bool polarityInverted = false;
     float gain = 1.0f;
-    Biquad subsonic1;
+    // Subsonic HPF: two cascaded Butterworth sections = LR4, 24 dB/oct, -6 dB at the corner.
+    // (One section's 12 dB/oct let too much below-corner excursion through to small woofers.)
+    Biquad subsonic1, subsonic2;
     Biquad crossover1, crossover2;
     // Second filter-pair slot, only consumed by Mid's bandpass (an LPF cascade at a second
     // corner, cascaded after crossover1/2's HPF) -- unused by Low/High, which only ever need
@@ -86,6 +88,7 @@ struct OutputRuntime {
     }
     void clearState() {
         subsonic1.clear();
+        subsonic2.clear();
         crossover1.clear();
         crossover2.clear();
         crossover3.clear();
