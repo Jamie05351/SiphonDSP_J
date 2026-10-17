@@ -54,6 +54,7 @@ add_executable(native_tests
     virtual_test.cpp
     alignment_delay_test.cpp
     retune_continuity_test.cpp
+    ramps_test.cpp
 )
 
 target_include_directories(native_tests PRIVATE

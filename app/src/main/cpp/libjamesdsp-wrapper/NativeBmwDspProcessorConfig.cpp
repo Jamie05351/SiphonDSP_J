@@ -555,6 +555,12 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     masterLimiterEnabledMeterFlag_.store(p_.limiterEnabled, std::memory_order_relaxed);
     virtualEnabledMeterFlag_.store(p_.virtualStage.enabled, std::memory_order_relaxed);
     applyDirty(dirty);
+    // The first configure() lands the real settings: snap the polarity/mute ramps to them rather
+    // than fading from the constructor's defaults at start-up.
+    if (!outputGainsPrimed_) {
+        rebuildPolarityAndMute(/*snap=*/true);
+        outputGainsPrimed_ = true;
+    }
     return true;
 }
 
@@ -686,6 +692,11 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
 }
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;
+    // A delay edit crossfades between the old and new read points instead of jumping.
+    const auto fade = static_cast<unsigned>(std::lround(kDelayFadeSeconds * sampleRate_));
+    for (auto& out : outputs_) {
+        out.delay.fadeLength = fade;
+    }
     output(OutputId::LowLeft).delay.setDelay(delaySamples(p_.lowDelayL, sampleRate_, kDelayLineCapacity));
     output(OutputId::LowRight).delay.setDelay(delaySamples(p_.lowDelayR, sampleRate_, kDelayLineCapacity));
     output(OutputId::MidLeft).delay.setDelay(delaySamples(p_.midDelayL, sampleRate_, kDelayLineCapacity));
@@ -714,7 +725,7 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
         line.delay = static_cast<float>(NativeBmwDsp::kAlignmentLatency + busLimLow_.lookahead());
     }
 }
-void NativeBmwDspProcessor::rebuildPolarityAndMute() {
+void NativeBmwDspProcessor::rebuildPolarityAndMute(bool snap) {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
         auto& out = outputs_[i];
         const auto& cfg = outputConfigs_[i];
@@ -724,6 +735,14 @@ void NativeBmwDspProcessor::rebuildPolarityAndMute() {
             !measurementMuteIsolates(p_.measurementMute, NativeBmwRouting::band(i));
         out.muted = cfg.muted || measurementMuted;
         out.polarityInverted = cfg.polarityInverted;
+        out.outputGainTarget = out.muted ? 0.f : out.polarityInverted ? -1.f : 1.f;
+        if (snap) {
+            out.outputGain = out.outputGainTarget;
+        }
+    }
+    if (snap) {
+        channelGainL_ = p_.channelMute == 1 ? 0.f : 1.f;
+        channelGainR_ = p_.channelMute == 2 ? 0.f : 1.f;
     }
 }
 void NativeBmwDspProcessor::rebuildAllPass() {
@@ -818,7 +837,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);
     rebuildBusLimiter();
-    rebuildPolarityAndMute();
+    rebuildPolarityAndMute(/*snap=*/true);
     measBus_.rebuild(p_.measurementMute, p_.measBusStopbandOctaves, outputConfigs_, sampleRate_);
     NativeBmwDsp::configureMeasurementGenerator(measGen_, p_, sampleRate_);
     rebuildAllPass();

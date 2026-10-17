@@ -49,6 +49,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
     if (sr >= 8000 && std::fabs(sr - sampleRate_) > .5f) {
         sampleRate_ = sr;
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
+        outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         rebuildAll();
     }
 }
@@ -194,16 +195,14 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
         idleBandChain(Band::High);
     }
 
-    // Per-output polarity, then mute. Indexed in OutputId order.
+    // Per-output polarity and mute, as one ramped multiplier (see OutputRuntime::outputGain).
+    // Indexed in OutputId order.
     std::array<float, NativeBmwRouting::kOutputCount> logical{
         {lowL, lowR, midL, midR, highL, highR}};
     for (std::size_t i = 0; i < logical.size(); ++i) {
-        if (outputs_[i].polarityInverted) {
-            logical[i] = -logical[i];
-        }
-        if (outputs_[i].muted) {
-            logical[i] = 0;
-        }
+        auto& out = outputs_[i];
+        out.outputGain += (out.outputGainTarget - out.outputGain) * outputRampCoef_;
+        logical[i] *= out.outputGain;
     }
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
     // Always use the routed sum here, even with both lpfPass and hpfPass set (crossover filtering
@@ -219,12 +218,11 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     }
     oL *= postGainL_;
     oR *= postGainR_;
-    if (p_.channelMute == 1) {
-        oL = 0;
-    }
-    if (p_.channelMute == 2) {
-        oR = 0;
-    }
+    // Channel mute, ramped like the per-output mute above.
+    channelGainL_ += ((p_.channelMute == 1 ? 0.f : 1.f) - channelGainL_) * outputRampCoef_;
+    channelGainR_ += ((p_.channelMute == 2 ? 0.f : 1.f) - channelGainR_) * outputRampCoef_;
+    oL *= channelGainL_;
+    oR *= channelGainR_;
     oL = NativeBmwDsp::ftz(oL);
     oR = NativeBmwDsp::ftz(oR);
     // Option A measurement-mute bus brick-wall. Operates on logical L/R, AFTER the band sum,

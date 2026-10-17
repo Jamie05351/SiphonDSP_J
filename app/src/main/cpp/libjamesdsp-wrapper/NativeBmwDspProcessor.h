@@ -334,7 +334,8 @@ private:
     void rebuildHighCrossover();
     void updateDelays();
     void rebuildBusLimiter();
-    void rebuildPolarityAndMute();
+    // snap: jump outputGain straight to its target (start-up / full rebuild) instead of ramping.
+    void rebuildPolarityAndMute(bool snap = false);
     void rebuildAllPass();
     OutputRuntime& output(NativeBmwRouting::OutputId id) {
         return outputs_[static_cast<std::size_t>(id)];
@@ -363,6 +364,16 @@ private:
     float masterGain_ = 1.f;
     float masterRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
     bool masterGainPrimed_ = false;
+
+    // Per-output polarity/mute and channel-mute ramps: a ~5 ms one-pole (outputRampCoef_, rebuilt
+    // with the sample rate), so toggles fade instead of clicking. Snapped to their targets on a
+    // full rebuild and on the first configure(), so start-up never fades in or out.
+    static constexpr float kOutputRampSeconds = 0.005f;
+    float outputRampCoef_ = 0.0041580101f;  // 1 - exp(-1 / (5 ms * 48 kHz))
+    float channelGainL_ = 1.f, channelGainR_ = 1.f;
+    bool outputGainsPrimed_ = false;
+    // Delay-change crossfade length, seconds (AlignmentDelay::fadeLength).
+    static constexpr float kDelayFadeSeconds = 0.01f;
 
     // Input stage.
     NativeBmwDsp::DcBlocker inputDcL_, inputDcR_;

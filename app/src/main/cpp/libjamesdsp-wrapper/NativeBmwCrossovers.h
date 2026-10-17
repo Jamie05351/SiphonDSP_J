@@ -56,6 +56,11 @@ struct OutputRuntime {
     bool muted = false;
     bool polarityInverted = false;
     float gain = 1.0f;
+    // Polarity and mute as one multiplier: +1 normal, -1 inverted, 0 muted. outputGain ramps to
+    // outputGainTarget over a few ms (the processor's outputRampCoef_), so a mute or polarity
+    // toggle fades -- through zero, for a flip -- instead of stepping the waveform (a click).
+    float outputGainTarget = 1.0f;
+    float outputGain = 1.0f;
     // Subsonic HPF: two cascaded Butterworth sections = LR4, 24 dB/oct, -6 dB at the corner.
     // (One section's 12 dB/oct let too much below-corner excursion through to small woofers.)
     Biquad subsonic1, subsonic2;
