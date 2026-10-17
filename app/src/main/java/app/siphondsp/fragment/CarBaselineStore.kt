@@ -152,7 +152,13 @@ class CarBaselineStore(context: Context) {
 
     fun clear() {
         for (side in listOf(Side.LEFT, Side.RIGHT)) {
-            fileFor(side).delete()
+            val live = fileFor(side)
+            // An interrupted import's leftovers too, or the next load() would restore a backup
+            // over the cleared baseline.
+            backupFor(live).delete()
+            markerFor(live).delete()
+            tempFor(live).delete()
+            live.delete()
             prefs.edit { remove(nameKey(side)) }
         }
     }
