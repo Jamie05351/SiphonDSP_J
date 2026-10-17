@@ -97,8 +97,7 @@ TEST_CASE("alignment delay: no-latency mode delays by exactly the requested amou
 
 TEST_CASE("bypassed bands carry the alignment latency, so they stay aligned") {
     // Both crossovers bypassed, every delay 0, master limiter off: the only latency left is the
-    // per-band alignment latency and bus-limiter lookahead (both carried by the bypass path) plus
-    // the stage delay's own alignment latency.
+    // per-band alignment latency and bus-limiter lookahead, both carried by the bypass path.
     NativeBmwDspProcessor proc;
     auto c = defaultConfig();
     c[nbschema::kLpfPass] = 1.f;
@@ -127,5 +126,5 @@ TEST_CASE("bypassed bands carry the alignment latency, so they stay aligned") {
     INFO("impulse in at frame 32, peak out at frame ", peakFrame);
     const std::size_t busLookahead = static_cast<std::size_t>(
         std::lround(NativeBmwDsp::BusLimiter::kLookaheadMs * .001f * kSampleRate));
-    CHECK(peakFrame == 32 + 2 * kAlignmentLatency + busLookahead);
+    CHECK(peakFrame == 32 + kAlignmentLatency + busLookahead);
 }
