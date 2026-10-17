@@ -62,3 +62,38 @@ TEST_CASE("loudness never lifts anything above its full-volume level") {
         }
     }
 }
+
+TEST_CASE("a volume step down with loudness on never spikes above full-volume level") {
+    // The master volume ramps over ~10 ms; the loudness lift must follow that ramp, not jump to
+    // the new volume's lift while the gain is still near full -- that would boost bass above
+    // full-volume level, after the limiter.
+    auto peakOf = [](NativeBmwDspProcessor& proc, std::size_t frames, std::size_t& pos) {
+        const double w = 2.0 * kPi * 40.0 / kSampleRate;
+        std::vector<float> buf(2 * frames);
+        for (std::size_t n = 0; n < frames; ++n) {
+            buf[2 * n] = buf[2 * n + 1] = static_cast<float>(0.5 * std::sin(w * (pos + n)));
+        }
+        pos += frames;
+        proc.process(buf.data(), buf.size());
+        return peakAbs(buf);
+    };
+    std::size_t pos = 0;
+    NativeBmwDspProcessor ref;
+    auto c0 = config(0.f, false);
+    ref.setSampleRate(kSampleRate);
+    REQUIRE(ref.configure(c0.data(), c0.size()));
+    peakOf(ref, 48000, pos);
+    const float fullVolumePeak = peakOf(ref, 9600, pos);
+
+    pos = 0;
+    NativeBmwDspProcessor proc;
+    auto c = config(0.f, true);
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    peakOf(proc, 48000, pos);
+    c[sch::kMasterVolumeDb] = -30.f;  // a big step down mid-signal
+    REQUIRE(proc.configure(c.data(), c.size()));
+    const float duringStep = peakOf(proc, 9600, pos);
+    INFO("full-volume peak ", fullVolumePeak, "  peak across the step ", duringStep);
+    CHECK(duringStep <= fullVolumePeak * 1.01f);
+}

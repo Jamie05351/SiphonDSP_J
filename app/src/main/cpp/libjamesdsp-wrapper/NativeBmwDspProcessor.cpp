@@ -250,11 +250,16 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     oR = NativeBmwDsp::ftz(oR);
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
     // ramped toward its target so a steering-wheel step never clicks.
-    masterGain_ += (masterGainTarget_ - masterGain_) * masterRampCoef_;
+    masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
     oL *= masterGain_;
     oR *= masterGain_;
     // Loudness compensation follows the volume, after it: its lift is always less than the cut.
+    // While the volume ramps, the lift is retuned every 16 samples from the ramping gain (see
+    // retuneLoudness()), so it never runs ahead of the attenuation.
     if (p_.loudnessEnabled) {
+        if (masterGain_ != masterGainTarget_ && (++loudnessRetuneCounter_ & 15u) == 0) {
+            retuneLoudness();
+        }
         loudness_.process(oL, oR);
     }
     // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.

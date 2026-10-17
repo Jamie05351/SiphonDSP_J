@@ -704,6 +704,11 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
         NativeBmwDsp::buildHighCrossover(output(id), outputConfig(id), sampleRate_);
     }
 }
+void NativeBmwDspProcessor::retuneLoudness() {
+    auto cutDb = [](float gain) { return -20.f * std::log10(std::max(gain, 1e-6f)); };
+    const float cut = std::min(cutDb(masterGain_), cutDb(masterGainTarget_));
+    loudness_.rebuild(-cut, p_.loudnessStrength, sampleRate_);
+}
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;
     // A delay edit crossfades between the old and new read points instead of jumping.
@@ -833,7 +838,7 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     }
     if (d & DirtyLoudness) {
-        loudness_.rebuild(p_.masterVolumeDb, p_.loudnessStrength, sampleRate_);
+        retuneLoudness();
     }
     if (d & DirtyLoudnessResume) {
         loudness_.clear();
@@ -854,7 +859,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     tilt_.clear();
-    loudness_.rebuild(p_.masterVolumeDb, p_.loudnessStrength, sampleRate_);
+    retuneLoudness();
     loudness_.clear();
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);

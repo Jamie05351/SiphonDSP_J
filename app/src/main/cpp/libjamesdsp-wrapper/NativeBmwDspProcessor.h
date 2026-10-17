@@ -401,6 +401,11 @@ private:
     NativeBmwDsp::Tilt tilt_;
     // Loudness compensation, after the master volume (see Loudness).
     NativeBmwDsp::Loudness loudness_;
+    // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the
+    // ramping masterGain_ and at its target, so the lift never exceeds the attenuation in effect
+    // while the volume ramps either way.
+    void retuneLoudness();
+    unsigned loudnessRetuneCounter_ = 0;
     // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
     // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
     std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};
