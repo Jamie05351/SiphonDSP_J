@@ -311,6 +311,9 @@ void MultibandCompressor::Tree::clear() {
     apB0X1.clear();
     apB0X2.clear();
     apB1X2.clear();
+    apDry0.clear();
+    apDry1.clear();
+    apDry2.clear();
 }
 void MultibandCompressor::rebuild(const float (&splitsHz)[3], float mix, const MbcBands& bands,
                                   float sampleRate) {
@@ -365,6 +368,9 @@ void MultibandCompressor::rebuild(const float (&splitsHz)[3], float mix, const M
     allPass(t.apB0X1, f1);
     allPass(t.apB0X2, f2);
     allPass(t.apB1X2, f2);
+    allPass(t.apDry0, f0);
+    allPass(t.apDry1, f1);
+    allPass(t.apDry2, f2);
     rebuildTiming(mix, bands, sampleRate);
 }
 void MultibandCompressor::rebuildTiming(float mix, const MbcBands& bands, float sampleRate) {
@@ -411,7 +417,7 @@ float MultibandCompressor::bandGain(float peakAbs, const MbcBandParams& p, Cell&
 }
 void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                                   const DetectorTiming& detector) {
-    const float dryL = l, dryR = r;
+    float dryL = l, dryR = r;
     float band[2][4];
     {
         // Split tree, L and R together: each SvfPair::run is one NEON pass on arm64. Each
@@ -438,6 +444,10 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         t.apB0X1.run(low0L, low0R);
         t.apB0X2.run(low0L, low0R);
         t.apB1X2.run(low1L, low1R);
+        // Run every sample, mix or not, so the dry path is never stale when Mix moves.
+        t.apDry0.run(dryL, dryR);
+        t.apDry1.run(dryL, dryR);
+        t.apDry2.run(dryL, dryR);
         band[0][0] = low0L;
         band[1][0] = low0R;
         band[0][1] = low1L;
@@ -494,6 +504,11 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         }
         wetL += sL;
         wetR += sR;
+    }
+    // Mix at 0% is a true bypass: the input untouched, not its phase-shifted copy. (The dry
+    // all-passes above still ran, so they're current the moment Mix moves off 0.)
+    if (mix_ == 0.f) {
+        return;
     }
     l = ftz(dryL * (1.f - mix_) + wetL * mix_);
     r = ftz(dryR * (1.f - mix_) + wetR * mix_);

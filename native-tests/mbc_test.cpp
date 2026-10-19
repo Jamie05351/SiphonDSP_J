@@ -94,3 +94,57 @@ TEST_CASE("MBC meter is idle while the compressor is globally disabled") {
         CHECK(m[b * 3 + 2] == doctest::Approx(0.0f));
     }
 }
+
+// Review item C1: the wet path's split tree sums to an all-pass, so mixing it with an unshifted
+// dry signal at a partial Mix cancelled near every split (-14 to -23 dB at 50%), even with no
+// band compressing. The dry path now takes the same all-pass. Measured against the MBC switched
+// off, so everything else in the chain divides out.
+TEST_CASE("MBC partial mix has no notches at the splits") {
+    auto levelDb = [](bool mbcOn, float mixPercent, double freq) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[5] = 0.f;                                              // headroom 0 dB
+        c[25] = 0.f;                                             // tilt off
+        c[28] = c[35] = c[93] = c[106] = c[119] = c[132] = 0.f;  // no other dynamics
+        c[144] = mbcOn ? 1.f : 0.f;
+        c[145] = mixPercent;
+        c[146] = 120.f;
+        c[147] = 1000.f;
+        c[148] = 6000.f;
+        for (int b = 0; b < 4; ++b) {
+            c[149 + b * 8] = 0.f;  // every band off: nothing compresses
+        }
+        const double amp = 0.05;
+        const auto window = renderSteadyState(proc, c, freq, amp);
+        return linToDb(channelMagnitudeAt(window, 0, freq, kSampleRate) / amp);
+    };
+    for (const float mix : {25.f, 50.f, 75.f}) {
+        for (const double freq : {120.0, 1000.0, 6000.0, 400.0, 3000.0}) {
+            const double deltaDb = levelDb(true, mix, freq) - levelDb(false, mix, freq);
+            INFO("Mix ", mix, "% at ", freq, " Hz: ", deltaDb, " dB vs MBC off");
+            CHECK(std::fabs(deltaDb) < 0.1);
+        }
+    }
+}
+
+TEST_CASE("MBC at 0% mix passes the input through unchanged") {
+    // Same input through the processor with the MBC on at 0% mix and with it off: identical.
+    auto render = [](bool mbcOn) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[144] = mbcOn ? 1.f : 0.f;
+        c[145] = 0.f;  // mix 0%
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        std::vector<float> x(2 * 4096, 0.f);
+        x[2 * 100] = x[2 * 100 + 1] = 0.5f;  // an impulse
+        proc.process(x.data(), x.size());
+        return x;
+    };
+    const auto on = render(true), off = render(false);
+    double maxDiff = 0;
+    for (std::size_t i = 0; i < on.size(); ++i) {
+        maxDiff = std::max(maxDiff, static_cast<double>(std::fabs(on[i] - off[i])));
+    }
+    CHECK(maxDiff < 1e-7);
+}
