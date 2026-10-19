@@ -109,7 +109,7 @@ import kotlin.math.sin
  * The magnitude view no longer matches the View (2026-10-01 redesign, Figma "PEQ graph —
  * redesign"): band areas instead of branch lines and crossover shading, one bank in focus at a
  * time with its filters as translucent per-filter shapes and its nodes on its own curve, a
- * 10 s idle that hands focus back to the full curve, a cool-white sum, per-filter colours clear of
+ * 5 s idle that hands focus back to the full curve, a cool-white sum, per-filter colours clear of
  * the bank colours, and a gain axis fitted to the curves. The phase view is unchanged.
  */
 
@@ -131,7 +131,7 @@ private const val SPECTRUM_STEPS = 240
 // its filters' shapes and its nodes -- with the full EQ'd curve dropped back to a faint line. After
 // FOCUS_IDLE_MS untouched that fades and the full curve takes focus again, whichever bank is
 // selected; the next tap brings the bank back. The band areas stay throughout.
-private const val FOCUS_IDLE_MS = 10_000L
+private const val FOCUS_IDLE_MS = 5_000L
 private const val FOCUS_FADE_MS = 400
 
 // Per-filter colours (node, shape and callout), by global filter number. Chosen to stay clear of
