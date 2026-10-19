@@ -19,16 +19,24 @@ internal object DspHealthBadge {
         if (snapshot == null) {
             return Badge(Level.WARN, "DSP off", "The audio engine is not running, so audio is not being processed.")
         }
-        // Checked first: with only an excluded app playing, the pipeline itself reads as idle (no
-        // session to process), which looked like "nothing is playing" while music played.
-        if (snapshot.excludedPlaying.isNotEmpty()) {
-            val apps = snapshot.excludedPlaying.joinToString()
-            return Badge(
-                Level.WARN, "Excluded app",
-                "$apps is playing but is excluded, so J_DSP isn't processing it. " +
-                    "Remove it from ⋮ → Excluded apps to process it.",
-            )
+        val excludedNote = if (snapshot.excludedPlaying.isEmpty()) null else
+            "${snapshot.excludedPlaying.joinToString()} is playing but is excluded, so J_DSP isn't " +
+                "processing it. Remove it from ⋮ → Excluded apps to process it."
+        // With only an excluded app playing there is no session to process, so the pipeline reads
+        // as idle (or healthy) while music plays -- the case that looked like "nothing is playing".
+        // Then the exclusion is the headline. A real fault, or other audio being processed, keeps
+        // its own badge, with the exclusion added to the detail.
+        val state = snapshot.pipelineHealthState
+        val quiet = state == AudioPipelineHealth.State.IDLE_EXPECTED.name ||
+            state == AudioPipelineHealth.State.HEALTHY.name
+        if (excludedNote != null && snapshot.playbackSessions == 0 && quiet) {
+            return Badge(Level.WARN, "Excluded app", excludedNote)
         }
+        val badge = health(snapshot)
+        return if (excludedNote == null) badge else badge.copy(detail = "${badge.detail} $excludedNote")
+    }
+
+    private fun health(snapshot: RootlessPipelineRuntimeSnapshot): Badge {
         val reason = snapshot.pipelineHealthReason.orEmpty()
         return when (snapshot.pipelineHealthState) {
             AudioPipelineHealth.State.HEALTHY.name ->

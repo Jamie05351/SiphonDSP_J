@@ -74,4 +74,18 @@ class DspHealthBadgeTest {
         val badge = DspHealthBadge.evaluate(snapshot("HEALTHY").copy(excludedApps = listOf("com.example.player")))
         assertEquals(DspHealthBadge.Level.OK, badge.level)
     }
+
+    @Test
+    fun aRealFaultOrProcessedAudioKeepsItsOwnBadgeWithTheExclusionNoted() {
+        val stalled = DspHealthBadge.evaluate(
+            snapshot("STALLED").copy(excludedPlaying = listOf("com.spotify.music"), playbackSessions = 1),
+        )
+        assertEquals(DspHealthBadge.Level.BAD, stalled.level)
+        assertTrue(stalled.detail.contains("com.spotify.music"))
+        val processing = DspHealthBadge.evaluate(
+            snapshot("HEALTHY").copy(excludedPlaying = listOf("com.spotify.music"), playbackSessions = 1),
+        )
+        assertEquals("DSP ok", processing.label)
+        assertTrue(processing.detail.contains("Excluded apps"))
+    }
 }

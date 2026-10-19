@@ -14,7 +14,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     val sessionList = hashMapOf<Int, IEffectSession>()
     private var isDisposing = false
     private val changeCallbacks = mutableListOf<OnSessionChangeListener>()
-    private var excludedUids = arrayOf<Int>()
+    @Volatile private var excludedUids = arrayOf<Int>()
     private val removalHandler = Handler(Looper.getMainLooper())
     // A session id absent from the latest dump is not removed immediately: some apps (Spotify
     // observed) briefly tear down and recreate their AudioPlaybackConfiguration/session on their
@@ -32,6 +32,17 @@ abstract class BaseSessionDatabase(protected val context: Context) {
      */
     @Volatile var excludedPlayingPackages: List<String> = emptyList()
         private set
+    // The latest dump's entries, so a change to the exclusions updates the list above at once.
+    private var lastDumpEntries: Collection<AudioSessionDumpEntry> = emptyList()
+
+    private fun recomputeExcludedPlaying() {
+        val excluded = excludedUids
+        excludedPlayingPackages = lastDumpEntries
+            .filter { excluded.contains(it.uid) && it.uid != myUid() && it.isUsageRecordable() }
+            .map { it.packageName }
+            .filter { it.isNotEmpty() && it != context.packageName }
+            .distinct()
+    }
 
     protected open val excludedPackages = arrayOf(
         context.packageName
@@ -88,11 +99,8 @@ abstract class BaseSessionDatabase(protected val context: Context) {
             }
         }
 
-        excludedPlayingPackages = dump.sessions.values
-            .filter { excludedUids.contains(it.uid) && it.uid != myUid() && it.isUsageRecordable() }
-            .map { it.packageName }
-            .filter { it.isNotEmpty() && it != context.packageName }
-            .distinct()
+        lastDumpEntries = dump.sessions.values.toList()
+        recomputeExcludedPlaying()
 
         val removedSessions = sessionList.filter {
             !dump.sessions.contains(it.key) && !pendingRemovals.contains(it.key)
@@ -169,6 +177,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
 
     fun setExcludedUids(uids: Array<Int>) {
         excludedUids = uids
+        recomputeExcludedPlaying()
 
         val excludedSessions = sessionList.filter {
             excludedUids.contains(it.value.uid)
