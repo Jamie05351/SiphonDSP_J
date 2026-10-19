@@ -505,6 +505,11 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         wetL += sL;
         wetR += sR;
     }
+    // Mix at 0% is a true bypass: the input untouched, not its phase-shifted copy. (The dry
+    // all-passes above still ran, so they're current the moment Mix moves off 0.)
+    if (mix_ == 0.f) {
+        return;
+    }
     l = ftz(dryL * (1.f - mix_) + wetL * mix_);
     r = ftz(dryR * (1.f - mix_) + wetR * mix_);
 }

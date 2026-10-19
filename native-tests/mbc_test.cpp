@@ -126,3 +126,25 @@ TEST_CASE("MBC partial mix has no notches at the splits") {
         }
     }
 }
+
+TEST_CASE("MBC at 0% mix passes the input through unchanged") {
+    // Same input through the processor with the MBC on at 0% mix and with it off: identical.
+    auto render = [](bool mbcOn) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[144] = mbcOn ? 1.f : 0.f;
+        c[145] = 0.f;  // mix 0%
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        std::vector<float> x(2 * 4096, 0.f);
+        x[2 * 100] = x[2 * 100 + 1] = 0.5f;  // an impulse
+        proc.process(x.data(), x.size());
+        return x;
+    };
+    const auto on = render(true), off = render(false);
+    double maxDiff = 0;
+    for (std::size_t i = 0; i < on.size(); ++i) {
+        maxDiff = std::max(maxDiff, static_cast<double>(std::fabs(on[i] - off[i])));
+    }
+    CHECK(maxDiff < 1e-7);
+}
