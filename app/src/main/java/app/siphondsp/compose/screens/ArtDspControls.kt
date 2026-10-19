@@ -29,16 +29,18 @@ internal fun DspArtSlider(
     sliderMinTouchHeight: Dp = 48.dp,
     labelWidth: Dp = 150.dp,
     enabled: Boolean = true,
+    // Shown value = stored value x displayScale; range and step are in shown units.
+    displayScale: Float = 1f,
 ) {
     ArtSlider(
         label = label,
-        value = dsp.get(index),
+        value = dsp.get(index) * displayScale,
         valueRange = range,
         step = step,
         unit = unit,
         accentColor = accent,
-        onPreview = { dsp.preview(index, it, mirrors) },
-        onCommit = { dsp.commit(index, it, mirrors) },
+        onPreview = { dsp.preview(index, it / displayScale, mirrors) },
+        onCommit = { dsp.commit(index, it / displayScale, mirrors) },
         labelAbove = labelAbove,
         labelWidth = labelWidth,
         valueWidth = valueWidth,

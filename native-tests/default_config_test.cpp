@@ -353,3 +353,25 @@ TEST_CASE("Tilt shelf lands at +/-2x its per-stage gain at the low/high asymptot
         CHECK(std::fabs(delta - p.expectedDb) < 0.5);
     }
 }
+
+// The UI shows the tilt as the real gain at each end of the response, 1.5 x the stored amount
+// (NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT): two shelves per end, each at 0.75 x amount.
+// If Tilt::rebuild's shelf gains change, that constant has to change with them.
+TEST_CASE("Tilt moves each end by 1.5 x the stored amount") {
+    constexpr float kAmount = 4.f;
+    auto levelDb = [](bool tiltOn, double freq) {
+        NativeBmwDspProcessor proc;
+        auto cfg = flatConfig();
+        cfg[25] = tiltOn ? 1.f : 0.f;
+        cfg[26] = kAmount;
+        cfg[27] = 550.f;
+        const double amp = 0.02;
+        const auto window = renderSteadyState(proc, cfg, freq, amp, 48000, 32768);
+        return linToDb(channelMagnitudeAt(window, 0, freq, kSampleRate) / amp);
+    };
+    const double bassDb = levelDb(true, 30.0) - levelDb(false, 30.0);
+    const double trebleDb = levelDb(true, 16000.0) - levelDb(false, 16000.0);
+    INFO("Tilt ", kAmount, " stored: bass ", bassDb, " dB, treble ", trebleDb, " dB (want +/-6)");
+    CHECK(std::fabs(bassDb - 1.5 * kAmount) < 0.3);
+    CHECK(std::fabs(trebleDb + 1.5 * kAmount) < 0.3);
+}

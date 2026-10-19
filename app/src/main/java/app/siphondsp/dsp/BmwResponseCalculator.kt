@@ -303,7 +303,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private fun rebuildTiltCascade(values: FloatArray) {
         tiltCascade.clear()
         if (values[NativeBmwDspValues.INDEX_TILT_ENABLED] >= .5f) {
-            val shelfGainDb = values[NativeBmwDspValues.INDEX_TILT_AMOUNT].toDouble() * .75
+            // Two shelves per end, so each gets half the end gain.
+            val shelfGainDb = values[NativeBmwDspValues.INDEX_TILT_AMOUNT].toDouble() *
+                NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT / 2
             val freq = values[NativeBmwDspValues.INDEX_TILT_FREQ].toDouble()
             repeat(2) {
                 tiltCascade.addLowShelf(freq, shelfGainDb, sampleRate)

@@ -248,7 +248,13 @@ fun CrossoverTiltPage(
             checked = dsp.isOn(NativeBmwDspValues.INDEX_TILT_ENABLED),
             onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_TILT_ENABLED, if (on) 1f else 0f) },
         )
-        DspArtSlider(dsp, amount, NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f..6f, 0.1f, "dB", tiltColor, row(132, 48))
+        // Shown as the real gain at each end (see TILT_END_GAIN_PER_AMOUNT): +x is x dB more bass
+        // and x dB less treble. Stored range -6..6 -> shown -9..9.
+        val endGain = NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT
+        DspArtSlider(
+            dsp, amount, NativeBmwDspValues.INDEX_TILT_AMOUNT, -6f * endGain..6f * endGain, 0.1f, "dB",
+            tiltColor, row(132, 48), displayScale = endGain,
+        )
         DspArtSlider(dsp, pivot, NativeBmwDspValues.INDEX_TILT_FREQ, 200f..2000f, 1f, "Hz", tiltColor, row(192, 48))
     }
 

@@ -1158,7 +1158,10 @@ private fun drawTiltHandles(nc: Canvas, ctx: PeqDrawContext) {
     val pivotX = g.xForFrequency(values[NativeBmwDspValues.INDEX_TILT_FREQ].toDouble())
     val pivotY = g.yForGain(0.0)
     val amountX = pivotX + 22f * d
-    val amountY = g.yForGain(values[NativeBmwDspValues.INDEX_TILT_AMOUNT].toDouble())
+    // At the real low-end gain, so the marker sits where the curve's bass shelf levels out.
+    val amountY = g.yForGain(
+        values[NativeBmwDspValues.INDEX_TILT_AMOUNT].toDouble() * NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT,
+    )
     val paint = if (enabled) p.tiltHandlePaint else p.tiltHandleDimPaint
 
     nc.drawLine(pivotX, amountY, amountX, amountY, paint)

@@ -61,7 +61,7 @@ class HomeEngineStateTest {
         v[NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED] = 1f
         v[NativeBmwDspValues.INDEX_MBC_ENABLED] = 1f
         val on = HomeEngineState.from(v)
-        assertEquals(1.5f, on.tiltDb)
+        assertEquals(2.25f, on.tiltDb)  // the real end gain: 1.5 x the stored 1.5
         assertEquals(-1f, on.limiterDb)
         assertEquals(2, on.mbcBands)
         assertEquals(-1f, on.ceilingDb)

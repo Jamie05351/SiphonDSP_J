@@ -47,7 +47,7 @@ data class HomeEngineState(
             val stages = HomeStageStatus.from(values)
             return HomeEngineState(
                 allPassOutputs = stages.allPass.count { it.on },
-                tiltDb = values[NativeBmwDspValues.INDEX_TILT_AMOUNT]
+                tiltDb = (values[NativeBmwDspValues.INDEX_TILT_AMOUNT] * NativeBmwDspValues.TILT_END_GAIN_PER_AMOUNT)
                     .takeIf { on(NativeBmwDspValues.INDEX_TILT_ENABLED) },
                 mbcBands = stages.mbcBands.count { it },
                 limiterDb = values[NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD]
