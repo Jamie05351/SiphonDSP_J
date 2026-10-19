@@ -437,13 +437,19 @@ class BmwSignalChainModelTest {
             setOutput(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
         }
         val result = compute(values)
+        // Low and Mid both BW4 is a pair the engine auto-corrects (CrossoverPairing): the lowpass
+        // sits at 200 / k and the highpass at 200 * k (in the prewarped domain).
+        val lowCorner = CrossoverPairing.corner(200.0, (1f / CrossoverPairing.BW4_SPREAD).toDouble(), SAMPLE_RATE)
+        val highCorner = CrossoverPairing.corner(200.0, CrossoverPairing.BW4_SPREAD.toDouble(), SAMPLE_RATE)
         for (channel in 0..1) {
             for (i in curves.frequencies.indices) {
                 // |H_LP|^2 = 1 / (1 + (w/wc)^8); the digital bilinear warp uses tan(pi f / fs).
-                val ratio = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE) /
-                    kotlin.math.tan(Math.PI * 200.0 / SAMPLE_RATE)
-                val low = -10.0 * kotlin.math.log10(1.0 + Math.pow(ratio, 8.0))
-                val high = 20.0 * kotlin.math.log10(Math.pow(ratio, 4.0)) + low
+                val warped = kotlin.math.tan(Math.PI * curves.frequencies[i] / SAMPLE_RATE)
+                val lowRatio = warped / kotlin.math.tan(Math.PI * lowCorner / SAMPLE_RATE)
+                val highRatio = warped / kotlin.math.tan(Math.PI * highCorner / SAMPLE_RATE)
+                val low = -10.0 * kotlin.math.log10(1.0 + Math.pow(lowRatio, 8.0))
+                val high = 20.0 * kotlin.math.log10(Math.pow(highRatio, 4.0)) -
+                    10.0 * kotlin.math.log10(1.0 + Math.pow(highRatio, 8.0))
                 // Float biquads bottom out around -110 dB, so only compare above -90 dB.
                 if (low > -90.0) {
                     assertEquals(low, result.lowBranchDb[channel][i] - result.preSplitDb[channel][i], 1e-4)
