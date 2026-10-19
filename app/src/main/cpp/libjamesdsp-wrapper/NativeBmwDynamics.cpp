@@ -385,11 +385,12 @@ void MultibandCompressor::rebuildTiming(float mix, const MbcBands& bands, float 
             1 - std::exp(-1 / (std::max(1.f, bands[b].release) * .001f * sampleRate));
     }
 }
-void MultibandCompressor::resetState() {
-    tree_.clear();
-    // (Re)enabled: start where Mix is set, no fade.
+void MultibandCompressor::snapMix() {
     mix_ = mixTarget_;
     dryMatched_ = mixTarget_ == 0.f ? 0.f : 1.f;
+}
+void MultibandCompressor::resetState() {
+    tree_.clear();
     for (auto& row : cell_) {
         for (auto& c : row) {
             c.rms = 0;

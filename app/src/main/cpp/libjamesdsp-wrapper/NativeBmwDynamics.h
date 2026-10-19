@@ -213,8 +213,12 @@ public:
     void rebuild(const float (&splitsHz)[3], float mix, const MbcBands& bands, float sampleRate);
     // Dry/wet mix, per-band makeup + attack/release smoothing -- scalars only, no filter touch.
     void rebuildTiming(float mix, const MbcBands& bands, float sampleRate);
-    // Detector cells + tree state + meters back to rest.
+    // Detector cells + tree state + meters back to rest. Leaves the Mix ramp alone: a band reset
+    // landing with a Mix change still fades it.
     void resetState();
+    // Jump the Mix ramp and dry crossfade to where Mix is set -- for the MBC switching on (it
+    // didn't run while off) or a full rebuild, not for per-band resets.
+    void snapMix();
     // Splits the stereo bus into 4 bands, compresses each, sums flat, blends dry/wet.
     void process(float& left, float& right, const MbcBands& bands, const DetectorTiming& detector);
     // 12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]; idle values when !active.
