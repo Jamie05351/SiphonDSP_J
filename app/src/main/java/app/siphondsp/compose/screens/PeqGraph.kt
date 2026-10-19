@@ -1464,11 +1464,11 @@ private class PeqResponseModel {
     fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
         PeqPlotGeometry(left, right, top, bottom, maxFrequency, axisBottom, axisTop)
 
-    /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]). */
     /** Bumped by every [recompute]: the static layers' cache key for "the curves changed". */
     var version = 0
         private set
 
+    /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]). */
     fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double, baseline: CarBaseline? = null) {
         version++
         if (values.size != BmwSignalChain.VALUE_COUNT) return
