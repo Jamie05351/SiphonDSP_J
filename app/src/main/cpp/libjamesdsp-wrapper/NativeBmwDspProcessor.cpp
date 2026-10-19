@@ -41,13 +41,18 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
         150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, true, false};
     outputConfigs_[static_cast<std::size_t>(OutputId::HighRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)];
+    // The first configure() parses from here, as it would have from p_ / outputConfigs_.
+    configShadow_.params = p_;
+    configShadow_.outputConfigs = outputConfigs_;
     rebuildAll();
 }
 NativeBmwDspProcessor::~NativeBmwDspProcessor() = default;
 void NativeBmwDspProcessor::setSampleRate(float sr) {
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (sr >= 8000 && std::fabs(sr - sampleRate_) > .5f) {
         sampleRate_ = sr;
+        configSampleRate_.store(sr, std::memory_order_relaxed);
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
@@ -316,6 +321,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n, Block
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -328,6 +334,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n, B
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -363,6 +370,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n, B
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -437,6 +445,7 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
 
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     std::vector<double> out;
     out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 4 * (3 + 16 * 6));
     out.push_back(static_cast<double>(sampleRate_));

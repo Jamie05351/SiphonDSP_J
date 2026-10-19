@@ -31,9 +31,10 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwDsp(JNIEnv* env, jo
     if (!result) {
         return kRevisionRejected;
     }
-    // configure() is synchronous and returns true only after the processor has installed the
-    // complete logical state and rebuilt all dirty sections. Publish the acknowledgement only
-    // after that commit point; a rejected request can therefore never advance native-active.
+    // configure() returns true only once the whole update is validated and handed to the audio
+    // thread, which installs it at the start of its next buffer (and anything that reads the
+    // running state installs it first). Publish the acknowledgement only after that commit
+    // point; a rejected request can therefore never advance native-active.
     wrapper->nativeBmwDspRevision.store(static_cast<std::int64_t>(revision),
                                         std::memory_order_release);
     return revision;

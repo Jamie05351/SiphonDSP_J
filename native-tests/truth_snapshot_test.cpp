@@ -208,7 +208,7 @@ TEST_CASE("Truth snapshot reports a near-zero-gain non-notch band as inactive") 
     proc.setSampleRate(kSampleRate);
     auto cfg = defaultConfig();
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
-    double band[5] = {1000.0, 0.0, 0.7, 0.0, 0.0};  // bell, ~0 dB -> configurePeqLocked drops it
+    double band[5] = {1000.0, 0.0, 0.7, 0.0, 0.0};  // bell, ~0 dB -> parsePeq drops it
     REQUIRE(proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
 
     auto snap = proc.captureTruthSnapshot();
@@ -227,7 +227,7 @@ TEST_CASE("Truth snapshot never adopts a rejected PEQ configuration") {
     REQUIRE(proc.configurePeq(true, 0.f, good, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     auto before = proc.captureTruthSnapshot();
 
-    // preampDb outside [-30, 12] -> configurePeqLocked rejects before touching any state.
+    // preampDb outside [-30, 12] -> parsePeq rejects before touching any state.
     double rejected[5] = {2000.0, 6.0, 1.0, 0.0, 0.0};
     CHECK_FALSE(proc.configurePeq(false, 999.f, rejected, 5, nullptr, 0, nullptr, 0, nullptr, 0));
     auto after = proc.captureTruthSnapshot();

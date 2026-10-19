@@ -14,6 +14,7 @@
 #include "NativeBmwDspParams.h"
 #include "NativeBmwDynamics.h"
 #include "NativeBmwFilters.h"
+#include "NativeBmwHandoff.h"
 #include "NativeBmwMeasurement.h"
 #include "NativeBmwMeasurementGenerator.h"
 #include "NativeBmwRouting.h"
@@ -176,12 +177,15 @@ public:
                        CaptureExportResult& result) const;
     };
 
-    // setSampleRate()/configure()/configurePeq() (UI/config thread) and process() (audio thread)
-    // both touch p_/routing_/outputs_/outputConfigs_/PEQ state, so each takes stateMutex_ --
-    // configure family for its whole write, process() once per call (not per sample) around the
-    // whole buffer -- to avoid a torn read/write of that state. The audio-thread side is a brief,
-    // uncontended lock/unlock in the common case, since config changes are rare relative to how
-    // often process() runs.
+    // Threading. process() (audio thread) holds stateMutex_ for its whole buffer. configure() and
+    // configurePeq() (config thread) never take it, so the audio thread never waits behind a
+    // config push and a push never waits out a buffer: they validate and build the update on the
+    // calling thread, then hand it over through a lock-free triple buffer (configHandoff_ /
+    // peqHandoff_). Whoever next holds stateMutex_ installs it -- normally process(), at the
+    // start of its next buffer, which is exactly when the old blocking push would have taken
+    // effect too. The rare calls that still take stateMutex_ (setSampleRate, the truth
+    // snapshot, capture start/stop/take) install any pending update first, so they always see
+    // every accepted push.
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -219,11 +223,9 @@ public:
 
     // Read-only whole-state snapshot for the native-truth debug screen (proves what this
     // processor is actually running, as opposed to what Kotlin/UI last requested). Takes
-    // stateMutex_ once -- the same brief, uncontended-in-practice lock configure()/configurePeq()
-    // already use -- so the crossover and PEQ data returned together represent one consistent
-    // instant: a config change landing mid-read can only be entirely before or entirely after
-    // this call, never torn across it. Not const (stateMutex_ isn't mutable, matching every other
-    // lock-taking method here).
+    // stateMutex_ once and installs any pending update first, so it reports every accepted
+    // configure()/configurePeq() and the crossover and PEQ data returned together represent one
+    // consistent instant. Not const (it installs, and stateMutex_ isn't mutable).
     //
     // Every value is a double. Layout:
     //   [0] sampleRate
@@ -245,14 +247,14 @@ public:
     //     rawBandCount, leftActiveCount, rightActiveCount (the last two are PeqBank::leftCount/
     //     rightCount -- the actual number of Biquads process() runs for that bank/channel),
     //     then rawBandCount * [freqHz, gainDb, q, type, channel, active (0/1)]. "active" mirrors
-    //     configurePeqLocked's build() skip (peqBandSkipped()) -- a band this processor discarded
+    //     parsePeq()'s build() skip (peqBandSkipped()) -- a band this processor discarded
     //     as a no-op is reported as inactive even though its raw values are still shown.
     enum : std::size_t { kTruthOutputWidth = 40 };
     std::vector<double> captureTruthSnapshot();
 
     // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
     // buffers at the current sample rate, so it's a control-thread call, never made from
-    // process() itself -- same "brief, uncontended lock" discipline as configure().
+    // process() itself. Each takes stateMutex_ briefly (the allocation happens outside it).
     void startCapture();
     void stopCapture();
     // Acquire-paired with CaptureRecorder::tapOut()'s release store: any caller that reads this (UI-thread
@@ -321,15 +323,44 @@ private:
     // Bookkeeping for a band whose chain is skipped (lpfPass/hpfPass/highXoPass): resets its bus
     // limiter.
     void idleBandChain(NativeBmwRouting::Band band);
-    // configurePeq()'s body, assuming stateMutex_ is already held by the caller. Exists so
-    // rebuildAll() -- itself called from setSampleRate() while already holding the lock -- can
-    // reapply the PEQ banks without taking stateMutex_ a second time; std::mutex is
-    // non-recursive, so configurePeq() (which takes the lock itself) would deadlock there.
-    bool configurePeqLocked(bool enabled, float preampDb, const double* fullBands,
-                            std::size_t fullValueCount, const double* lowBands,
-                            std::size_t lowValueCount, const double* midBands,
-                            std::size_t midValueCount, const double* highBands,
-                            std::size_t highValueCount);
+    // A validated configure() update, built on the config thread: everything configure() reads
+    // from v[], with the all-pass coefficients built at sampleRate.
+    struct ParsedConfig {
+        Params params;
+        NativeBmwRouting::RoutingMatrix routing{};
+        std::array<OutputConfig, NativeBmwRouting::kOutputCount> outputConfigs{};
+        std::array<std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>,
+                   NativeBmwRouting::kOutputCount>
+            allPass{};
+        float sampleRate = 0.f;
+    };
+    // A validated configurePeq() update: the four banks built at sampleRate (clean state) and
+    // the raw band values they came from. Bank order: Full, Low, Mid, High.
+    struct ParsedPeq {
+        bool enabled = false;
+        float preampDb = 0.f;
+        std::array<PeqBank, 4> banks{};
+        std::array<std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>, 4> values{};
+        std::array<std::size_t, 4> counts{};
+        float sampleRate = 0.f;
+    };
+    // Config thread (configMutex_): parses and validates v[] into out, starting from the last
+    // accepted update (configShadow_). Touches no audio state. False rejects the whole update.
+    bool parseConfig(const float* v, ParsedConfig& out) const;
+    // Pure: validates and builds a PEQ update at sampleRate. False rejects it.
+    static bool parsePeq(bool enabled, float preampDb, const double* fullBands,
+                         std::size_t fullValueCount, const double* lowBands,
+                         std::size_t lowValueCount, const double* midBands,
+                         std::size_t midValueCount, const double* highBands,
+                         std::size_t highValueCount, float sampleRate, ParsedPeq& out);
+    // Under stateMutex_: install an update, diffing it against the running state.
+    void installConfig(const ParsedConfig& config);
+    void installPeq(ParsedPeq& peq);
+    // Under stateMutex_: install whatever configure()/configurePeq() handed over since last time.
+    void installPending();
+    // Under stateMutex_: rebuild the PEQ banks from their saved raw values at sampleRate_ (a
+    // sample-rate change, or an update built at a rate that has since changed).
+    void rebuildPeqLocked();
     void rebuildAll();
     void applyDirty(uint32_t dirty);
     void rebuildGains();
@@ -448,6 +479,20 @@ private:
     NativeBmwDsp::CaptureRecorder capture_;
 
     std::mutex stateMutex_;
+
+    // Config-thread side of the handoff (see the threading comment above the constructor).
+    // configMutex_ serialises configure()/configurePeq() callers among themselves; the audio
+    // thread never takes it. configShadow_ is the last accepted update, so the next parse starts
+    // from it exactly as configure() used to start from p_. configSampleRate_ is the rate new
+    // updates are built at; an update built at a rate that changed before it was installed is
+    // rebuilt at install.
+    std::mutex configMutex_;
+    ParsedConfig configShadow_;
+    std::atomic<float> configSampleRate_{48000.0f};
+    NativeBmwDsp::TripleBuffer<ParsedConfig> configHandoff_;
+    NativeBmwDsp::TripleBuffer<ParsedPeq> peqHandoff_;
+    // rebuildPeqLocked()'s workspace (too big for the stack), under stateMutex_.
+    ParsedPeq peqScratch_;
 };
 
 #endif

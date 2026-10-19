@@ -1,4 +1,8 @@
 #include "test_support.h"
+#include <atomic>
+#include <chrono>
+#include <limits>
+#include <thread>
 
 using namespace nbtest;
 
@@ -68,4 +72,119 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
     const double measuredDb = linToDb(channelMagnitudeAt(window, 0, kFreq, kSampleRate) / amp);
     INFO("Post-setSampleRate PEQ gain at fc=", kFreq, " Hz: ", measuredDb, " dB (want ~", kGainDb, ")");
     CHECK(std::fabs(measuredDb - kGainDb) < 0.5);
+}
+
+namespace {
+// A host stage that parks the audio thread inside process() -- while it holds the audio lock --
+// until the test releases it, or gives up after a few seconds.
+struct ParkedBuffer {
+    std::atomic<bool> entered{false}, released{false}, timedOut{false};
+    static void hook(void* context, float*, std::size_t) {
+        auto* self = static_cast<ParkedBuffer*>(context);
+        self->entered.store(true);
+        const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (!self->released.load()) {
+            if (std::chrono::steady_clock::now() > giveUp) {
+                self->timedOut.store(true);
+                return;
+            }
+            std::this_thread::yield();
+        }
+    }
+};
+
+std::array<float, kConfigSize> flatConfig() {
+    auto c = defaultConfig();
+    c[5] = 0.f;
+    c[8] = c[9] = 0.f;
+    c[12] = 0.f;
+    c[25] = 0.f;
+    c[28] = c[35] = 0.f;
+    c[89] = c[102] = 0.f;
+    c[93] = c[106] = 0.f;
+    c[119] = c[132] = 0.f;
+    return c;
+}
+
+double levelDbAt(NativeBmwDspProcessor& proc, double freq, double amp) {
+    auto warm = stereoSine(freq, amp, 24000, kSampleRate);
+    proc.process(warm.data(), warm.size());
+    auto window = stereoSine(freq, amp, 16384, kSampleRate);
+    proc.process(window.data(), window.size());
+    return linToDb(channelMagnitudeAt(window, 0, freq, kSampleRate) / amp);
+}
+}  // namespace
+
+// The C++ half of review item C4: configure()/configurePeq() used to take the same lock process()
+// holds for its whole buffer, so a config push waited out the buffer and the audio thread could
+// wait behind a push. Now a push never touches that lock. Before the fix this test hung in
+// configure() until the parked buffer gave up, and failed on timedOut.
+TEST_CASE("Config pushes return while the audio thread is mid-buffer") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+
+    ParkedBuffer parked;
+    std::vector<float> buffer = stereoSine(1000.0, 0.05, 256, kSampleRate);
+    std::thread audio([&] { proc.process(buffer.data(), buffer.size(), &ParkedBuffer::hook, &parked); });
+    while (!parked.entered.load()) {
+        std::this_thread::yield();
+    }
+
+    cfg[5] = -6.f;  // headroom
+    const bool configured = proc.configure(cfg.data(), cfg.size());
+    const double band[5] = {1000.0, 6.0, 2.0, 0.0, 0.0};
+    const bool peqConfigured = proc.configurePeq(true, 0.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0);
+    const bool returnedWhileParked = !parked.timedOut.load();
+    parked.released.store(true);
+    audio.join();
+
+    CHECK(configured);
+    CHECK(peqConfigured);
+    CHECK(returnedWhileParked);
+    CHECK_FALSE(parked.timedOut.load());
+
+    // Both pushes are in effect from the next buffer: -6 dB headroom, +6 dB bell at 1 kHz.
+    const double measuredDb = levelDbAt(proc, 1000.0, 0.05);
+    INFO("Level at 1 kHz after both pushes: ", measuredDb, " dB (want ~0)");
+    CHECK(std::fabs(measuredDb) < 0.5);
+}
+
+TEST_CASE("Only the latest of several pushes is installed, and a rejected push changes nothing") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    cfg[5] = -6.f;
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    cfg[5] = -3.f;
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    double measuredDb = levelDbAt(proc, 1000.0, 0.05);
+    INFO("After -6 then -3 dB headroom: ", measuredDb, " dB");
+    CHECK(std::fabs(measuredDb + 3.0) < 0.2);
+
+    auto bad = cfg;
+    bad[5] = -12.f;
+    bad[6] = std::numeric_limits<float>::quiet_NaN();
+    CHECK_FALSE(proc.configure(bad.data(), bad.size()));
+    measuredDb = levelDbAt(proc, 1000.0, 0.05);
+    INFO("After a rejected push: ", measuredDb, " dB");
+    CHECK(std::fabs(measuredDb + 3.0) < 0.2);
+
+    // A rejected push doesn't become the base of the next one either.
+    cfg[5] = 0.f;
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    measuredDb = levelDbAt(proc, 1000.0, 0.05);
+    CHECK(std::fabs(measuredDb) < 0.2);
+}
+
+TEST_CASE("The truth snapshot reports a push before any audio has run") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    const double band[5] = {1000.0, 6.0, 2.0, 0.0, 0.0};
+    REQUIRE(proc.configurePeq(true, -2.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
+    const auto snapshot = proc.captureTruthSnapshot();
+    REQUIRE(snapshot.size() > 3);
+    CHECK(snapshot[1] == 1.0);
+    CHECK(snapshot[2] == doctest::Approx(-2.0));
 }
