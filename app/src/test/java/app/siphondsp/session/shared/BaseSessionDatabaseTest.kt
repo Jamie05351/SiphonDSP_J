@@ -146,4 +146,32 @@ class BaseSessionDatabaseTest {
         assertFalse(db.sessionList.containsKey(1))
         assertEquals(listOf(1000), removedCallbacks)
     }
+
+    @Test fun anExcludedPlayerIsReportedAsPlayingButNotProcessed() {
+        db.setExcludedUids(arrayOf(1000))
+        db.update(FakeDump(mapOf(
+            1 to entry(uid = 1000, pkg = "com.spotify.music"),
+            2 to entry(uid = 2000, pkg = "com.example.player"),
+            3 to AudioSessionDumpEntry(1000, "com.spotify.music", "USAGE_NOTIFICATION", "CONTENT_TYPE_SONIFICATION"),
+        )))
+        assertEquals(listOf("com.spotify.music"), db.excludedPlayingPackages)
+        assertFalse(db.sessionList.containsKey(1))
+        assertTrue(db.sessionList.containsKey(2))
+
+        // Taken off the list: no longer reported, without waiting for the next dump.
+        db.setExcludedUids(arrayOf())
+        assertTrue(db.excludedPlayingPackages.isEmpty())
+        db.setExcludedUids(arrayOf(1000))
+        assertEquals(listOf("com.spotify.music"), db.excludedPlayingPackages)
+
+        // A session reset (capture restart) forgets it too.
+        db.clearSessions()
+        assertTrue(db.excludedPlayingPackages.isEmpty())
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000, pkg = "com.spotify.music"))))
+        assertEquals(listOf("com.spotify.music"), db.excludedPlayingPackages)
+
+        // Stops playing: no longer reported.
+        db.update(FakeDump(mapOf(2 to entry(uid = 2000, pkg = "com.example.player"))))
+        assertTrue(db.excludedPlayingPackages.isEmpty())
+    }
 }

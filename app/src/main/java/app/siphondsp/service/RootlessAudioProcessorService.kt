@@ -168,6 +168,19 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     private lateinit var sessionManager: RootlessSessionManager
+    // For the diagnostics snapshot, which can run before onCreate() has set sessionManager up.
+    private fun sessionDatabaseOrNull() =
+        if (::sessionManager.isInitialized) sessionManager.sessionDatabase else null
+
+    // Apps excluded for blocking capture, by package, when that setting is on.
+    private fun autoExcludedPackages(): List<String> {
+        if (!excludeRestrictedSessions || !::sessionManager.isInitialized) return emptyList()
+        // getPackagesForUid, not getNameForUid: a shared uid names its group
+        // ("android.uid.system:1000"), not the packages that would match excludedPlaying.
+        return sessionManager.sessionPolicyDatabase.getRestrictedUids()
+            .flatMap { packageManager.getPackagesForUid(it)?.toList().orEmpty() }
+            .distinct()
+    }
     private var sessionLossRetryCount = 0
 
     @Volatile
@@ -1414,6 +1427,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     },
                     pcmFloat = service.activePcmFloat,
                     bufferSamples = service.activeBufferSamples,
+                    playbackSessions = service.sessionDatabaseOrNull()?.sessionList?.size ?: 0,
+                    excludedApps = service.blockedApps.value?.map { it.packageName }.orEmpty(),
+                    autoExcludedApps = service.autoExcludedPackages(),
+                    excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )
             }
         }

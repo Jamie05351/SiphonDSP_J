@@ -216,6 +216,20 @@ private fun PipelineSection(pipeline: RootlessPipelineRuntimeSnapshot?) {
                 if (pipeline.measurementGeneratorActive) "active" else "inactive",
             )
             KeyValueRow(
+                "Playback sessions processed",
+                pipeline.playbackSessions.toString(),
+                if (pipeline.playbackSessions > 0) BmwGreen else BmwYellow,
+            )
+            KeyValueRow("Excluded apps", pipeline.excludedApps.ifEmpty { listOf("none") }.joinToString())
+            KeyValueRow(
+                "Auto-excluded (block capture)",
+                pipeline.autoExcludedApps.ifEmpty { listOf("none") }.joinToString(),
+            )
+            if (pipeline.excludedPlaying.isNotEmpty()) {
+                // Playing but never processed: the case that otherwise reads as "nothing playing".
+                KeyValueRow("Excluded and playing now", pipeline.excludedPlaying.joinToString(), BmwRed)
+            }
+            KeyValueRow(
                 "Processor disposing",
                 pipeline.processorDisposing.toString(),
                 if (pipeline.processorDisposing) BmwYellow else Color.White,

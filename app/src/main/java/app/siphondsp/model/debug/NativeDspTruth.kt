@@ -174,6 +174,14 @@ data class RootlessPipelineRuntimeSnapshot(
     val pcmFloat: Boolean? = null,
     /** Buffer the running pipeline actually uses, in samples (the setting raised to Android's minimum); 0 before it starts. */
     val bufferSamples: Int = 0,
+    /** Playback sessions currently being processed. */
+    val playbackSessions: Int = 0,
+    /** Packages on the Excluded apps list. */
+    val excludedApps: List<String> = emptyList(),
+    /** Packages excluded automatically because they block audio capture ("Exclude unsupported apps"). */
+    val autoExcludedApps: List<String> = emptyList(),
+    /** Packages playing right now that are excluded either way, so not processed (see BaseSessionDatabase). */
+    val excludedPlaying: List<String> = emptyList(),
 )
 
 private const val HEADER_WIDTH = 3

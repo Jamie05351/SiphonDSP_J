@@ -21,6 +21,8 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         sessionPolicyDatabase.destroy()
     }
 
+    private var failedDumps = 0
+
     override fun handleSessionDump(sessionDump: ISessionInfoDump?) {
         if(sessionDump is ISessionPolicyInfoDump) {
             sessionPolicyDatabase.update(sessionDump)
@@ -30,11 +32,23 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         }
 
         sessionDump?.let { sessionDatabase.update(it) }
+        // Nothing playing anywhere: an excluded player that stopped isn't playing any more either.
+        // A failed dump says nothing either way, but a few in a row mean the list can't be trusted.
+        failedDumps = when {
+            sessionDump != null -> 0
+            dumpManager.lastDumpFoundNothing -> 0.also { sessionDatabase.clearExcludedPlaying() }
+            else -> failedDumps + 1
+        }
+        if (failedDumps >= FAILED_DUMPS_BEFORE_CLEARING) sessionDatabase.clearExcludedPlaying()
     }
 
     override fun onDumpMethodChange(method: DumpManager.Method) {
         sessionDatabase.clearSessions()
         sessionPolicyDatabase.clearSessions()
         super.onDumpMethodChange(method)
+    }
+
+    private companion object {
+        const val FAILED_DUMPS_BEFORE_CLEARING = 3
     }
 }

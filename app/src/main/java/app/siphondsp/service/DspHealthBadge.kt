@@ -19,6 +19,39 @@ internal object DspHealthBadge {
         if (snapshot == null) {
             return Badge(Level.WARN, "DSP off", "The audio engine is not running, so audio is not being processed.")
         }
+        val excludedNote = excludedNote(snapshot)
+        // With only an excluded app playing there is no session to process, so the pipeline reads
+        // as idle (or healthy) while music plays -- the case that looked like "nothing is playing".
+        // Then the exclusion is the headline. A real fault, or other audio being processed, keeps
+        // its own badge, with the exclusion added to the detail.
+        val state = snapshot.pipelineHealthState
+        val quiet = state == AudioPipelineHealth.State.IDLE_EXPECTED.name ||
+            state == AudioPipelineHealth.State.HEALTHY.name
+        if (excludedNote != null && snapshot.playbackSessions == 0 && quiet) {
+            return Badge(Level.WARN, "Excluded app", excludedNote)
+        }
+        val badge = health(snapshot)
+        return if (excludedNote == null) badge else badge.copy(detail = "${badge.detail} $excludedNote")
+    }
+
+    // What to do depends on why it's excluded: an app the user listed can be removed from the
+    // list; one excluded for blocking audio capture can't be processed at all.
+    private fun excludedNote(snapshot: RootlessPipelineRuntimeSnapshot): String? {
+        if (snapshot.excludedPlaying.isEmpty()) return null
+        val (listed, auto) = snapshot.excludedPlaying.partition { it in snapshot.excludedApps }
+        return buildList {
+            if (listed.isNotEmpty()) {
+                add("${listed.joinToString()} is playing but is on Excluded apps, so J_DSP isn't processing it. " +
+                    "Remove it from ⋮ → Excluded apps to process it.")
+            }
+            if (auto.isNotEmpty()) {
+                add("${auto.joinToString()} is playing but blocks audio capture, so Android won't let J_DSP " +
+                    "process it (it's left unprocessed by \"Exclude unsupported apps\").")
+            }
+        }.joinToString(" ")
+    }
+
+    private fun health(snapshot: RootlessPipelineRuntimeSnapshot): Badge {
         val reason = snapshot.pipelineHealthReason.orEmpty()
         return when (snapshot.pipelineHealthState) {
             AudioPipelineHealth.State.HEALTHY.name ->
