@@ -109,6 +109,34 @@ struct OutputRuntime {
 // keeps its state (Biquad::retune), so moving a corner doesn't click; a slope change that swaps a
 // stage's topology starts that stage clean.
 void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
+// Auto-correction for the crossover types that can't sum flat as a plain pair. Bands are summed
+// back together, so each boundary's lowpass + highpass must add up flat. LR4, BW3 and BW1 do;
+// a BW2 pair nulls at the corner (or +3 dB with one side inverted) and a BW4 pair peaks +3 dB.
+// When both sides of a boundary use the same BW2 or BW4 type, the two corners are spread
+// apart around the set frequency (lowpass at f / k, highpass at f * k) and, for BW2, the band
+// above is inverted: within about +/-0.5 dB, and the set frequency stays the crossover point.
+// The factors minimise the pair's worst deviation (BW2 inverted: 1.304 -> 0.47 dB; BW4:
+// 1.128 -> 0.49 dB). Mirrored by Kotlin's CrossoverPairing.
+constexpr float kBw2PairSpread = 1.304f;
+constexpr float kBw4PairSpread = 1.128f;
+struct CrossoverPairing {
+    // Frequency multipliers applied to each corner at build time.
+    float lowLowpass = 1.f, midHighpass = 1.f, midLowpass = 1.f, highHighpass = 1.f;
+    // Polarity flips added to the user's own (XOR) by rebuildPolarityAndMute().
+    bool midInverted = false, highInverted = false;
+    bool operator==(const CrossoverPairing& o) const {
+        return lowLowpass == o.lowLowpass && midHighpass == o.midHighpass &&
+               midLowpass == o.midLowpass && highHighpass == o.highHighpass &&
+               midInverted == o.midInverted && highInverted == o.highInverted;
+    }
+    bool operator!=(const CrossoverPairing& o) const { return !(*this == o); }
+};
+// One side's pairing. lowMidRuns: both the Low lowpass and the Mid highpass run (no lpfPass /
+// hpfPass); midHighRuns: Mid's highpass runs and High's chain runs (no hpfPass / highXoPass /
+// highPass) -- Mid's upper corner must also be enabled.
+CrossoverPairing pairCrossovers(const OutputConfig& low, const OutputConfig& mid,
+                                const OutputConfig& high, bool lowMidRuns, bool midHighRuns);
+
 void buildLowCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
 void buildMidCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);
 void buildHighCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate);

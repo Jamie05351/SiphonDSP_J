@@ -327,3 +327,81 @@ TEST_CASE("Mid: turning kHpfPass back off clears the chain's frozen state (no st
     INFO("peak after resuming Mid's chain with silence in = ", pk);
     CHECK(pk < 1e-4f);
 }
+
+// BW2 and BW4 can't sum flat as a plain pair (BW2 nulls at the corner, BW4 peaks +3 dB). When
+// both sides of a boundary use the same one, the engine spreads the corners and, for BW2, inverts
+// the band above (pairCrossovers): the summed response stays within about +/-0.5 dB.
+namespace {
+std::array<float, kConfigSize> pairedConfig(float lowMidType, bool threeWay, float midHighType) {
+    auto c = defaultConfig();
+    c[sch::kTiltEnabled] = 0.f;
+    c[sch::kHeadroom] = 0.f;
+    c[sch::kMidGainL] = c[sch::kMidGainR] = 0.f;
+    for (int out = 0; out < 4; ++out) {
+        const std::size_t base = sch::kOutputConfigBase + out * sch::kOutputConfigWidth;
+        c[base + sch::kOutCrossoverFreq] = 150.f;
+        c[base + sch::kOutCrossoverType] = lowMidType;
+        c[base + sch::kOutSubsonicEnabled] = 0.f;
+    }
+    if (threeWay) {
+        c[sch::kHighXoPass] = 0.f;
+        c[sch::kHighPass] = 0.f;
+        for (int slot = 0; slot < 2; ++slot) {
+            c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 2500.f;
+            c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;
+            const std::size_t base = sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth;
+            c[base + sch::kOutMuted] = 0.f;
+            c[base + sch::kOutCrossoverFreq] = 2500.f;
+            c[base + sch::kOutCrossoverType] = midHighType;
+        }
+        c[sch::kMidUpperXoTypeLeft] = c[sch::kMidUpperXoTypeRight] = midHighType;
+    }
+    return c;
+}
+
+double worstSumDeviationDb(const std::array<float, kConfigSize>& cfg, std::initializer_list<double> freqs) {
+    double worst = 0;
+    for (double f : freqs) {
+        NativeBmwDspProcessor proc;
+        worst = std::max(worst, std::fabs(static_cast<double>(outLevelDbAt(proc, cfg, f, 0.02))));
+    }
+    return worst;
+}
+}  // namespace
+
+TEST_CASE("A BW2 or BW4 Low/Mid pair is auto-corrected to sum flat") {
+    const auto freqs = {40.0, 80.0, 110.0, 130.0, 150.0, 175.0, 200.0, 280.0, 600.0};
+    for (const float type : {kBw2, kBw4}) {
+        const double worst = worstSumDeviationDb(pairedConfig(type, false, kLr4), freqs);
+        INFO("Type ", type, " Low/Mid pair at 150 Hz: worst deviation ", worst, " dB");
+        CHECK(worst < 0.6);
+    }
+    // LR4 was already flat and is untouched.
+    CHECK(worstSumDeviationDb(pairedConfig(kLr4, false, kLr4), freqs) < 0.1);
+}
+
+TEST_CASE("A 3-way BW2 build is auto-corrected at both boundaries") {
+    const auto freqs = {60.0, 150.0, 400.0, 1200.0, 2000.0, 2500.0, 3200.0, 6000.0};
+    const double worst = worstSumDeviationDb(pairedConfig(kBw2, true, kBw2), freqs);
+    INFO("BW2 at 150 Hz and 2.5 kHz: worst deviation ", worst, " dB");
+    CHECK(worst < 0.6);
+    // BW2 low, LR4 high: Mid is inverted for its BW2 pair, so High is inverted too to stay in
+    // phase with Mid across the LR4 boundary.
+    const double mixed = worstSumDeviationDb(pairedConfig(kBw2, true, kLr4), freqs);
+    INFO("BW2 at 150 Hz, LR4 at 2.5 kHz: worst deviation ", mixed, " dB");
+    CHECK(mixed < 0.6);
+}
+
+TEST_CASE("Auto-correction reports the polarity it adds in the truth snapshot") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = pairedConfig(kBw2, false, kLr4);
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    const auto snap = proc.captureTruthSnapshot();
+    auto inverted = [&](int out) { return snap[3 + out * NativeBmwDspProcessor::kTruthOutputWidth + 5]; };
+    CHECK(inverted(0) == 0.0);  // Low L
+    CHECK(inverted(2) == 1.0);  // Mid L, flipped for the BW2 pair
+    cfg = pairedConfig(kLr4, false, kLr4);
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    CHECK(proc.captureTruthSnapshot()[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);
+}

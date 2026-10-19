@@ -386,6 +386,11 @@ private:
     void rebuildLowCrossover();
     void rebuildMidCrossover();
     void rebuildHighCrossover();
+    // BW2/BW4 pair auto-correction per side, [left, right] (see NativeBmwDsp::pairCrossovers):
+    // recomputed from p_ / outputConfigs_; true when it changed, so the crossovers and polarity
+    // it feeds need rebuilding.
+    std::array<NativeBmwDsp::CrossoverPairing, 2> pairing_{};
+    bool updatePairing();
     void updateDelays();
     void rebuildBusLimiter();
     // snap: jump outputGain straight to its target (start-up / full rebuild) instead of ramping.

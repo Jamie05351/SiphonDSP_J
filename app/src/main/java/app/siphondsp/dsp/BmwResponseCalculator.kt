@@ -125,7 +125,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
             }
 
-            val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
+            // The set corner, moved by the BW2/BW4 pair auto-correction (CrossoverPairing).
+            val pairing = CrossoverPairing.of(values, BmwSignalChain.internalIsLeftChainFor(channel))
+            val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble() *
+                pairing.lowLowpass
             val crossoverType = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
             // Mirrors NativeBmwDspProcessor::rebuildLowCrossover's switch exactly (same threshold
             // read as configure() -- see that function's comment).
@@ -158,7 +161,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         cascade.clear()
         val output = outputOrdinal(BmwSignalChain.internalIsLeftChainFor(channel), isLow = false)
         if (values[NativeBmwDspValues.INDEX_HPF_PASS] < .5f) {
-            val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
+            val pairing = CrossoverPairing.of(values, BmwSignalChain.internalIsLeftChainFor(channel))
+            val crossoverFreq = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble() *
+                pairing.midHighpass
             val crossoverType = outputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
             // Mirrors NativeBmwDspProcessor::rebuildMidCrossover's switch exactly.
             when {
@@ -187,7 +192,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             if (upperEnabled) {
                 val upperFreq = values[NativeBmwDspValues.midUpperXoIndex(
                     output, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ,
-                )].toDouble()
+                )].toDouble() * pairing.midLowpass
                 // The upper lowpass has its own slope (288/289), not Mid's crossoverType.
                 val upperType = values[NativeBmwDspValues.midUpperXoTypeIndex(output)]
                 when {
@@ -229,7 +234,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             rebuildHighAllPassCascade(highAllPass[channel.ordinal], values, output)
             return
         }
-        val crossoverFreq = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble()
+        val crossoverFreq = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ).toDouble() *
+            CrossoverPairing.of(values, BmwSignalChain.internalIsLeftChainFor(channel)).highHighpass
         val crossoverType = highOutputValue(values, output, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)
         // Mirrors NativeBmwDspProcessor::rebuildHighCrossover's switch exactly -- HPF-only, the
         // same shape Mid had before Phase 2 added its optional lowpass pair. Built unconditionally
@@ -381,9 +387,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 measurementMute == 2 || measurementMute == 3
             val highMuted = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_MUTE) >= .5f || highXoPass ||
                 measurementMute == 1 || measurementMute == 2
+            // The user's polarity, flipped once more where a BW2 pair is auto-corrected.
+            val pairing = CrossoverPairing.of(values, internalLeft)
             val lowInvert = outputValue(values, lowOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
-            val midInvert = outputValue(values, midOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
-            val highInvert = highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f
+            val midInvert =
+                (outputValue(values, midOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f) != pairing.midInverted
+            val highInvert =
+                (highOutputValue(values, highOutput, NativeBmwDspValues.FIELD_INVERT) >= .5f) != pairing.highInverted
             anyLowActive = anyLowActive || !lowMuted
             anyMidActive = anyMidActive || !midMuted
             anyHighActive = anyHighActive || !highMuted

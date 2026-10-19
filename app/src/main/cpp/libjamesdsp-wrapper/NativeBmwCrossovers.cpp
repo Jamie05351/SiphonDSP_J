@@ -8,6 +8,35 @@ void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate
     makeHighPass(out.subsonic1, cfg.subsonicFreq, BW, sampleRate);
     makeHighPass(out.subsonic2, cfg.subsonicFreq, BW, sampleRate);
 }
+CrossoverPairing pairCrossovers(const OutputConfig& low, const OutputConfig& mid,
+                                const OutputConfig& high, bool lowMidRuns, bool midHighRuns) {
+    using CrossoverType = OutputConfig::CrossoverType;
+    CrossoverPairing p;
+    auto spread = [](CrossoverType a, CrossoverType b) {
+        if (a != b) {
+            return 1.f;
+        }
+        return a == CrossoverType::Butterworth2 ? kBw2PairSpread
+               : a == CrossoverType::Butterworth4 ? kBw4PairSpread
+                                                  : 1.f;
+    };
+    if (lowMidRuns) {
+        const float k = spread(low.crossoverType, mid.crossoverType);
+        p.lowLowpass = 1.f / k;
+        p.midHighpass = k;
+        p.midInverted = k == kBw2PairSpread;
+    }
+    bool midHighInverts = false;
+    if (midHighRuns && mid.upperCrossoverEnabled) {
+        const float k = spread(mid.upperCrossoverType, high.crossoverType);
+        p.midLowpass = 1.f / k;
+        p.highHighpass = k;
+        midHighInverts = k == kBw2PairSpread;
+    }
+    // High's polarity relative to Mid: inverted across a BW2 pair, the same otherwise.
+    p.highInverted = p.midInverted != midHighInverts;
+    return p;
+}
 void buildLowCrossover(OutputRuntime& out, const OutputConfig& cfg, float sampleRate) {
     using CrossoverType = OutputConfig::CrossoverType;
     switch (cfg.crossoverType) {
