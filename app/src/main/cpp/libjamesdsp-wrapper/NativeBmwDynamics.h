@@ -228,9 +228,13 @@ private:
     // already-separated lower bands through the same phase the later crossovers impart, so the
     // four bands sum back to flat magnitude (an all-pass overall) -- same fix pattern as Mono
     // Bass's Mid-side compensation.
+    // That sum is the all-pass of all three splits, so the dry signal runs through apDry0/1/2
+    // (one per split) before the dry/wet mix: unshifted, it cancels the wet signal near each
+    // split at a partial mix (-14 to -23 dB notches at 50%).
     struct Tree {
         SvfPair lp0a, lp0b, hp0a, hp0b, lp1a, lp1b, hp1a, hp1b, lp2a, lp2b, hp2a, hp2b;
         SvfPair apB0X1, apB0X2, apB1X2;
+        SvfPair apDry0, apDry1, apDry2;
         void clear();
     };
     struct Cell {

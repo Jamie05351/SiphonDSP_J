@@ -94,3 +94,35 @@ TEST_CASE("MBC meter is idle while the compressor is globally disabled") {
         CHECK(m[b * 3 + 2] == doctest::Approx(0.0f));
     }
 }
+
+// Review item C1: the wet path's split tree sums to an all-pass, so mixing it with an unshifted
+// dry signal at a partial Mix cancelled near every split (-14 to -23 dB at 50%), even with no
+// band compressing. The dry path now takes the same all-pass. Measured against the MBC switched
+// off, so everything else in the chain divides out.
+TEST_CASE("MBC partial mix has no notches at the splits") {
+    auto levelDb = [](bool mbcOn, float mixPercent, double freq) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[5] = 0.f;                                              // headroom 0 dB
+        c[25] = 0.f;                                             // tilt off
+        c[28] = c[35] = c[93] = c[106] = c[119] = c[132] = 0.f;  // no other dynamics
+        c[144] = mbcOn ? 1.f : 0.f;
+        c[145] = mixPercent;
+        c[146] = 120.f;
+        c[147] = 1000.f;
+        c[148] = 6000.f;
+        for (int b = 0; b < 4; ++b) {
+            c[149 + b * 8] = 0.f;  // every band off: nothing compresses
+        }
+        const double amp = 0.05;
+        const auto window = renderSteadyState(proc, c, freq, amp);
+        return linToDb(channelMagnitudeAt(window, 0, freq, kSampleRate) / amp);
+    };
+    for (const float mix : {25.f, 50.f, 75.f}) {
+        for (const double freq : {120.0, 1000.0, 6000.0, 400.0, 3000.0}) {
+            const double deltaDb = levelDb(true, mix, freq) - levelDb(false, mix, freq);
+            INFO("Mix ", mix, "% at ", freq, " Hz: ", deltaDb, " dB vs MBC off");
+            CHECK(std::fabs(deltaDb) < 0.1);
+        }
+    }
+}
