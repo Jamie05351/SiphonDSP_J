@@ -376,13 +376,18 @@ void MultibandCompressor::rebuild(const float (&splitsHz)[3], float mix, const M
 void MultibandCompressor::rebuildTiming(float mix, const MbcBands& bands, float sampleRate) {
     // threshold/ratio/knee are read live in bandGain() -- only these smoothing scalars are
     // precomputed, and none of it touches the crossover filter state.
-    mix_ = clampf(mix, 0.f, 1.f);
+    mixTarget_ = clampf(mix, 0.f, 1.f);
+    mixRampCoef_ = 1 - std::exp(-1 / (.010f * sampleRate));
     for (int b = 0; b < kMbcBandCount; ++b) {
         makeupLin_[b] = dbToLin(bands[b].makeup);
         attackMix_[b] = 1 - std::exp(-1 / (std::max(1.f, bands[b].attack) * .001f * sampleRate));
         releaseMix_[b] =
             1 - std::exp(-1 / (std::max(1.f, bands[b].release) * .001f * sampleRate));
     }
+}
+void MultibandCompressor::snapMix() {
+    mix_ = mixTarget_;
+    dryMatched_ = mixTarget_ == 0.f ? 0.f : 1.f;
 }
 void MultibandCompressor::resetState() {
     tree_.clear();
@@ -417,6 +422,7 @@ float MultibandCompressor::bandGain(float peakAbs, const MbcBandParams& p, Cell&
 }
 void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                                   const DetectorTiming& detector) {
+    const float rawL = l, rawR = r;
     float dryL = l, dryR = r;
     float band[2][4];
     {
@@ -505,11 +511,16 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         wetL += sL;
         wetR += sR;
     }
-    // Mix at 0% is a true bypass: the input untouched, not its phase-shifted copy. (The dry
-    // all-passes above still ran, so they're current the moment Mix moves off 0.)
-    if (mix_ == 0.f) {
+    // Mix at 0% is a true bypass -- the input untouched, not its phase-shifted copy -- and the
+    // dry signal crossfades between the two as Mix leaves or reaches 0 (see dryMatched_).
+    mix_ = rampToward(mix_, mixTarget_, mixRampCoef_);
+    dryMatched_ = rampToward(dryMatched_, mixTarget_ == 0.f ? 0.f : 1.f, mixRampCoef_);
+    // Settled at 0%: the input exactly, untouched by anything the wet or dry paths hold.
+    if (mix_ == 0.f && dryMatched_ == 0.f) {
         return;
     }
+    dryL = rawL + (dryL - rawL) * dryMatched_;
+    dryR = rawR + (dryR - rawR) * dryMatched_;
     l = ftz(dryL * (1.f - mix_) + wetL * mix_);
     r = ftz(dryR * (1.f - mix_) + wetR * mix_);
 }

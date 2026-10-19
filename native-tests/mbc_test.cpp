@@ -148,3 +148,71 @@ TEST_CASE("MBC at 0% mix passes the input through unchanged") {
     }
     CHECK(maxDiff < 1e-7);
 }
+
+// Mix leaving 0% swaps the dry signal from the raw input (the 0% bypass) to its phase-matched
+// copy. Stepping between them is a waveform jump; they crossfade over ~10 ms instead.
+TEST_CASE("MBC Mix moving off 0% doesn't step the waveform") {
+    for (const float toMix : {1.f, 50.f}) {
+        NativeBmwDspProcessor proc;
+        auto c = defaultConfig();
+        c[5] = 0.f;
+        c[25] = 0.f;
+        c[144] = 1.f;  // MBC on, every band off: nothing compresses
+        c[145] = 0.f;
+        for (int b = 0; b < 4; ++b) c[149 + b * 8] = 0.f;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        // 1 kHz is near a split (the default 500 / 4000 Hz splits are close enough to shift its
+        // phase a lot), so a step would be large next to the sine's own sample-to-sample motion.
+        const double amp = 0.1;
+        auto before = stereoSine(1000.0, amp, 24000);
+        proc.process(before.data(), before.size());
+        c[145] = toMix;
+        REQUIRE(proc.configure(c.data(), c.size()));
+        std::vector<float> after(before.end() - 2 * 24000, before.end());  // phase-continuous next block
+        {
+            auto next = stereoSine(1000.0, amp, 48000);
+            after.assign(next.begin() + 2 * 24000, next.end());
+        }
+        proc.process(after.data(), after.size());
+        double worst = std::fabs(after[0] - before[before.size() - 2]);
+        for (std::size_t i = 2; i < 2 * 4800; i += 2) {
+            worst = std::max(worst, static_cast<double>(std::fabs(after[i] - after[i - 2])));
+        }
+        // The sine alone moves at most 2*pi*1000/48000*0.1 = 0.0131 per sample.
+        INFO("Mix 0 -> ", toMix, "%: worst sample-to-sample change ", worst);
+        CHECK(worst < 0.016);
+    }
+}
+
+// A preset can change Mix and a band's enable in one update. The band reset that comes with it
+// no longer snaps the Mix fade (only the MBC switching on does). The old snap didn't step here
+// either -- the reset also clears the split tree, and cleared filters start from the input -- so
+// this guards the combined update rather than reproducing a failure.
+TEST_CASE("A Mix change landing with a band reset still fades") {
+    NativeBmwDspProcessor proc;
+    auto c = defaultConfig();
+    c[5] = 0.f;
+    c[25] = 0.f;
+    c[144] = 1.f;
+    c[145] = 0.f;
+    for (int b = 0; b < 4; ++b) c[149 + b * 8] = 0.f;
+    proc.setSampleRate(kSampleRate);
+    REQUIRE(proc.configure(c.data(), c.size()));
+    const double amp = 0.1;
+    auto signal = stereoSine(1000.0, amp, 48000);
+    std::vector<float> before(signal.begin(), signal.begin() + 2 * 24000);
+    std::vector<float> after(signal.begin() + 2 * 24000, signal.end());
+    proc.process(before.data(), before.size());
+    c[145] = 50.f;
+    c[149 + 3 * 8] = 1.f;  // band 3 switched on in the same update (threshold 0 dB: no compression)
+    c[149 + 3 * 8 + 1] = 0.f;
+    REQUIRE(proc.configure(c.data(), c.size()));
+    proc.process(after.data(), after.size());
+    double worst = std::fabs(after[0] - before[before.size() - 2]);
+    for (std::size_t i = 2; i < 2 * 4800; i += 2) {
+        worst = std::max(worst, static_cast<double>(std::fabs(after[i] - after[i - 2])));
+    }
+    INFO("Worst sample-to-sample change: ", worst);
+    CHECK(worst < 0.016);
+}

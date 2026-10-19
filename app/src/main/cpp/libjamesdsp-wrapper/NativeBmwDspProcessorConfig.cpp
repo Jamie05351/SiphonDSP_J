@@ -532,7 +532,7 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         }
     }
     if (next.mbcEnabled != p_.mbcEnabled) {
-        dirty |= DirtyMbcState;
+        dirty |= DirtyMbcState | DirtyMbcEnable;
     }
     for (int b = 0; b < 4; ++b) {
         const auto& cur = p_.mbcBand[b];
@@ -928,6 +928,9 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyMbcState) {
         mbc_.resetState();
     }
+    if (d & DirtyMbcEnable) {
+        mbc_.snapMix();  // after rebuildTiming(), so it snaps to the new Mix
+    }
     if (d & DirtyBusLimiter) {
         rebuildBusLimiter();
     }
@@ -977,6 +980,7 @@ void NativeBmwDspProcessor::rebuildAll() {
         line.clear();
     }
     mbc_.resetState();
+    mbc_.snapMix();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
         b->clear();
         b->zeroMeter();

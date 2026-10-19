@@ -213,8 +213,12 @@ public:
     void rebuild(const float (&splitsHz)[3], float mix, const MbcBands& bands, float sampleRate);
     // Dry/wet mix, per-band makeup + attack/release smoothing -- scalars only, no filter touch.
     void rebuildTiming(float mix, const MbcBands& bands, float sampleRate);
-    // Detector cells + tree state + meters back to rest.
+    // Detector cells + tree state + meters back to rest. Leaves the Mix ramp alone: a band reset
+    // landing with a Mix change still fades it.
     void resetState();
+    // Jump the Mix ramp and dry crossfade to where Mix is set -- for the MBC switching on (it
+    // didn't run while off) or a full rebuild, not for per-band resets.
+    void snapMix();
     // Splits the stereo bus into 4 bands, compresses each, sums flat, blends dry/wet.
     void process(float& left, float& right, const MbcBands& bands, const DetectorTiming& detector);
     // 12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]; idle values when !active.
@@ -258,7 +262,13 @@ private:
     Cell cell_[2][kMbcBandCount]{};
     std::array<BandMeter, kMbcBandCount> meter_{};
     uint32_t meterCounter_ = 0;
-    float mix_ = 1.f;  // 0..1
+    // Dry/wet mix 0..1: mix_ ramps toward mixTarget_ over ~10 ms, so a Mix change fades.
+    float mix_ = 1.f, mixTarget_ = 1.f;
+    // How much of the dry signal is the phase-matched copy (1) rather than the raw input (0):
+    // ramps toward 0 while Mix is set to 0% (a true bypass) and toward 1 otherwise, so Mix
+    // leaving or reaching 0 crossfades instead of stepping the phase of the dry signal.
+    float dryMatched_ = 1.f;
+    float mixRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
     float makeupLin_[kMbcBandCount] = {1.f, 1.f, 1.f, 1.f};
     float attackMix_[kMbcBandCount] = {0.f, 0.f, 0.f, 0.f};
     float releaseMix_[kMbcBandCount] = {0.f, 0.f, 0.f, 0.f};

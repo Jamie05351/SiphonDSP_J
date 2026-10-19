@@ -294,6 +294,7 @@ private:
         DirtyMidResume = 1u << 23,  // Mid's chain runs again (hpfPass off): clear its state
         DirtyLoudness = 1u << 24,   // volume or loudness settings changed: retune (keeps state)
         DirtyLoudnessResume = 1u << 25,  // loudness switched on: clear the state it froze with
+        DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
         DirtyAll = 0xffffffffu,
     };
 
