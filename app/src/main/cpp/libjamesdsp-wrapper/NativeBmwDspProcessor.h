@@ -348,11 +348,16 @@ private:
     // accepted update (configShadow_). Touches no audio state. False rejects the whole update.
     bool parseConfig(const float* v, ParsedConfig& out) const;
     // Pure: validates and builds a PEQ update at sampleRate. False rejects it.
+    // dropUnbuildable is for values already accepted at another rate (a sample-rate change):
+    // a band that can't be built at the new one -- its frequency at or above the new Nyquist --
+    // is left out instead of rejecting the whole update, as an invalid all-pass section degrades
+    // to identity rather than failing configure().
     static bool parsePeq(bool enabled, float preampDb, const double* fullBands,
                          std::size_t fullValueCount, const double* lowBands,
                          std::size_t lowValueCount, const double* midBands,
                          std::size_t midValueCount, const double* highBands,
-                         std::size_t highValueCount, float sampleRate, ParsedPeq& out);
+                         std::size_t highValueCount, float sampleRate, ParsedPeq& out,
+                         bool dropUnbuildable = false);
     // Under stateMutex_: install an update, diffing it against the running state.
     void installConfig(const ParsedConfig& config);
     void installPeq(ParsedPeq& peq);

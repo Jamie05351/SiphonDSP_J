@@ -617,11 +617,12 @@ bool NativeBmwDspProcessor::parsePeq(bool enabled, float preampDb, const double*
                                      std::size_t fullCount, const double* low,
                                      std::size_t lowCount, const double* mid,
                                      std::size_t midCount, const double* high,
-                                     std::size_t highCount, float sampleRate, ParsedPeq& out) {
+                                     std::size_t highCount, float sampleRate, ParsedPeq& out,
+                                     bool dropUnbuildable) {
     if (!std::isfinite(preampDb) || preampDb < -30 || preampDb > 12) {
         return false;
     }
-    auto build = [sampleRate](const double* v, std::size_t n, PeqBank& b) {
+    auto build = [sampleRate, dropUnbuildable](const double* v, std::size_t n, PeqBank& b) {
         if (n % 5 || n / 5 > 16 || (n && v == nullptr)) {
             return false;
         }
@@ -640,12 +641,15 @@ bool NativeBmwDspProcessor::parsePeq(bool enabled, float preampDb, const double*
                 return false;
             }
             int type = static_cast<int>(v[i + 3]);
-            Biquad q;
-            if (!NativeBmwDsp::makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate)) {
-                return false;
-            }
             int ch = static_cast<int>(v[i + 4]);
             if (ch < 0 || ch > 2) {
+                return false;
+            }
+            Biquad q;
+            if (!NativeBmwDsp::makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate)) {
+                if (dropUnbuildable) {
+                    continue;
+                }
                 return false;
             }
             if (NativeBmwDsp::peqBandSkipped(type, v[i + 1])) {
@@ -683,12 +687,14 @@ bool NativeBmwDspProcessor::parsePeq(bool enabled, float preampDb, const double*
 void NativeBmwDspProcessor::installPeq(ParsedPeq& peq) {
     ParsedPeq* update = &peq;
     if (peq.sampleRate != sampleRate_) {
-        // Built at a rate that has changed since: rebuild it at the one now running. A band that
-        // can't be built at the new rate leaves the PEQ as it is.
+        // Built at a rate that has changed since: rebuild it at the one now running. It was
+        // accepted (and acknowledged) already, so a band the new rate can't hold is left out
+        // rather than dropping the whole update. Can't fail: everything else was validated.
         if (&peq == &peqScratch_ ||
             !parsePeq(peq.enabled, peq.preampDb, peq.values[0].data(), peq.counts[0],
                       peq.values[1].data(), peq.counts[1], peq.values[2].data(), peq.counts[2],
-                      peq.values[3].data(), peq.counts[3], sampleRate_, peqScratch_)) {
+                      peq.values[3].data(), peq.counts[3], sampleRate_, peqScratch_,
+                      /*dropUnbuildable=*/true)) {
             return;
         }
         update = &peqScratch_;
@@ -715,11 +721,11 @@ void NativeBmwDspProcessor::installPeq(ParsedPeq& peq) {
 }
 void NativeBmwDspProcessor::rebuildPeqLocked() {
     // The saved values were accepted once already; a band that can't be built at the new rate
-    // keeps the banks as they were rather than dropping the whole PEQ.
+    // is left out rather than dropping the whole PEQ.
     if (parsePeq(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
                  lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
                  midPeqValueCount_, highPeqValues_.data(), highPeqValueCount_, sampleRate_,
-                 peqScratch_)) {
+                 peqScratch_, /*dropUnbuildable=*/true)) {
         installPeq(peqScratch_);
     }
 }

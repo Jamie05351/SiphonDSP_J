@@ -492,7 +492,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
         appendStage(rt.crossover4);
     }
 
-    auto appendBank = [&out](const std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>& values,
+    auto appendBank = [&out, this](const std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>& values,
                              std::size_t valueCount, const PeqBank& bank) {
         const std::size_t bandCount = valueCount / kPeqBandWidth;
         out.push_back(static_cast<double>(bandCount));
@@ -506,7 +506,11 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
             out.push_back(v[2]);  // Q
             out.push_back(v[3]);  // type
             out.push_back(v[4]);  // channel (0 both, 1 left, 2 right)
-            out.push_back(NativeBmwDsp::peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
+            // Inactive too: a band left out because it can't be built at the running rate (see
+            // parsePeq's dropUnbuildable).
+            NativeBmwDsp::Biquad probe;
+            const bool built = NativeBmwDsp::makePeq(probe, v[0], v[1], v[2], type, sampleRate_);
+            out.push_back(!built || NativeBmwDsp::peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
         }
     };
     appendBank(inputPeqValues_, inputPeqValueCount_, inputPeq_);

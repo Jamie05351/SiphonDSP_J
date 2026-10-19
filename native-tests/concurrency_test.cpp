@@ -188,3 +188,34 @@ TEST_CASE("The truth snapshot reports a push before any audio has run") {
     CHECK(snapshot[1] == 1.0);
     CHECK(snapshot[2] == doctest::Approx(-2.0));
 }
+
+TEST_CASE("A rate change drops only the PEQ bands the new rate can't hold") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    // 23 kHz is valid at 48 kHz but above the 22.05 kHz Nyquist of 44.1 kHz.
+    const double bands[10] = {1000.0, 6.0, 2.0, 0.0, 0.0, 23000.0, 3.0, 1.0, 0.0, 0.0};
+    REQUIRE(proc.configurePeq(true, 0.f, bands, 10, nullptr, 0, nullptr, 0, nullptr, 0));
+
+    constexpr float kNewRate = 44100.f;
+    proc.setSampleRate(kNewRate);
+
+    const auto snapshot = proc.captureTruthSnapshot();
+    const std::size_t fullBank = 3 + NativeBmwRouting::kOutputCount * NativeBmwDspProcessor::kTruthOutputWidth;
+    REQUIRE(snapshot.size() > fullBank + 3 + 12);
+    CHECK(snapshot[fullBank] == 2.0);           // both raw bands kept
+    CHECK(snapshot[fullBank + 1] == 1.0);       // one section running per lane
+    CHECK(snapshot[fullBank + 3 + 5] == 1.0);   // 1 kHz active
+    CHECK(snapshot[fullBank + 3 + 11] == 0.0);  // 23 kHz left out
+
+    // The 1 kHz band is still in effect at the new rate.
+    const double amp = 0.05;
+    auto warm = stereoSine(1000.0, amp, 24000, kNewRate);
+    proc.process(warm.data(), warm.size());
+    auto window = stereoSine(1000.0, amp, 16384, kNewRate);
+    proc.process(window.data(), window.size());
+    const double measuredDb = linToDb(channelMagnitudeAt(window, 0, 1000.0, kNewRate) / amp);
+    INFO("1 kHz after the rate change: ", measuredDb, " dB (want ~6)");
+    CHECK(std::fabs(measuredDb - 6.0) < 0.5);
+}
