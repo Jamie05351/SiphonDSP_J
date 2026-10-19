@@ -258,7 +258,13 @@ private:
     Cell cell_[2][kMbcBandCount]{};
     std::array<BandMeter, kMbcBandCount> meter_{};
     uint32_t meterCounter_ = 0;
-    float mix_ = 1.f;  // 0..1
+    // Dry/wet mix 0..1: mix_ ramps toward mixTarget_ over ~10 ms, so a Mix change fades.
+    float mix_ = 1.f, mixTarget_ = 1.f;
+    // How much of the dry signal is the phase-matched copy (1) rather than the raw input (0):
+    // ramps toward 0 while Mix is set to 0% (a true bypass) and toward 1 otherwise, so Mix
+    // leaving or reaching 0 crossfades instead of stepping the phase of the dry signal.
+    float dryMatched_ = 1.f;
+    float mixRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
     float makeupLin_[kMbcBandCount] = {1.f, 1.f, 1.f, 1.f};
     float attackMix_[kMbcBandCount] = {0.f, 0.f, 0.f, 0.f};
     float releaseMix_[kMbcBandCount] = {0.f, 0.f, 0.f, 0.f};
