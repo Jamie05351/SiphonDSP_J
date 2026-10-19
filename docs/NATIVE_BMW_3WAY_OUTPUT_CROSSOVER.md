@@ -115,7 +115,7 @@ frequency and slope (High's were already separate fields natively, just mirrored
 PEQ bands are a separate ABI (`configurePeq(enabled, preampDb, fullBands, lowBands, midBands, ...)`
 over `double[]`, not the flat `float[205..262]` config array). High-band PEQ adds a 4th
 `(const double*, size_t)` pair all the way through: `NativeBmwDspProcessor::configurePeq`/
-`configurePeqLocked` → `NativeBmwDspJni.cpp`'s JNI bridge → `JamesDspWrapper.configureNativeBmwPeq`
+`parsePeq` / `installPeq` → `NativeBmwDspJni.cpp`'s JNI bridge → `JamesDspWrapper.configureNativeBmwPeq`
 → `JamesDspLocalEngine`. `highPeq_` (a `PeqBank`, same as `inputPeq_`/`lowPeq_`/`midPeq_`) runs in
 `processFrame()`'s High branch, and `captureTruthSnapshot()` grows from 3 PEQ bank blocks
 (Full/Low/Mid) to 4.

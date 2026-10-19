@@ -58,6 +58,10 @@ add_executable(native_tests
     ramps_test.cpp
 )
 
+# concurrency_test.cpp runs process() on a second thread.
+find_package(Threads REQUIRED)
+target_link_libraries(native_tests PRIVATE Threads::Threads)
+
 target_include_directories(native_tests PRIVATE
     ${WRAPPER_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/third_party

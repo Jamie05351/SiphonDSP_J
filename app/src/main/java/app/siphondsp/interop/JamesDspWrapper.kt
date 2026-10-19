@@ -22,6 +22,8 @@ object JamesDspWrapper {
     external fun setSamplingRate(self: JamesDspHandle, sampleRate: Float, forceRefresh: Boolean)
     // Returns the exact revision native acknowledged, or -1 when the configuration was rejected.
     external fun configureNativeBmwDsp(self: JamesDspHandle, values: FloatArray, revision: Long): Long
+    // The last revision native accepted. It is installed at the start of the next audio buffer
+    // (the moment it becomes audible), and the truth snapshot installs it before reading.
     external fun getNativeBmwDspActiveRevision(self: JamesDspHandle): Long
     // Returns the exact revision native acknowledged, or -1 when the configuration was rejected.
     external fun configureNativeBmwPeq(
@@ -34,6 +36,7 @@ object JamesDspWrapper {
         highBandBands: DoubleArray,
         revision: Long,
     ): Long
+    // Same contract as getNativeBmwDspActiveRevision.
     external fun getNativeBmwPeqActiveRevision(self: JamesDspHandle): Long
     external fun setNativeBmwDspSampleRate(self: JamesDspHandle, sampleRate: Float)
     // Fills [out] with one meter's values (no allocation, for ~30 Hz UI polls); false and [out]

@@ -41,13 +41,18 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
         150.f, OutputConfig::CrossoverType::LinkwitzRiley4, false, 32.f, true, false};
     outputConfigs_[static_cast<std::size_t>(OutputId::HighRight)] =
         outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft)];
+    // The first configure() parses from here, as it would have from p_ / outputConfigs_.
+    configShadow_.params = p_;
+    configShadow_.outputConfigs = outputConfigs_;
     rebuildAll();
 }
 NativeBmwDspProcessor::~NativeBmwDspProcessor() = default;
 void NativeBmwDspProcessor::setSampleRate(float sr) {
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (sr >= 8000 && std::fabs(sr - sampleRate_) > .5f) {
         sampleRate_ = sr;
+        configSampleRate_.store(sr, std::memory_order_relaxed);
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
@@ -316,6 +321,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n, Block
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -328,6 +334,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n, B
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -363,6 +370,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n, B
         return s;
     }
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     if (!p_.enabled) {
         return s;
     }
@@ -437,6 +445,7 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
 
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     std::lock_guard<std::mutex> lock(stateMutex_);
+    installPending();
     std::vector<double> out;
     out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 4 * (3 + 16 * 6));
     out.push_back(static_cast<double>(sampleRate_));
@@ -483,7 +492,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
         appendStage(rt.crossover4);
     }
 
-    auto appendBank = [&out](const std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>& values,
+    auto appendBank = [&out, this](const std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>& values,
                              std::size_t valueCount, const PeqBank& bank) {
         const std::size_t bandCount = valueCount / kPeqBandWidth;
         out.push_back(static_cast<double>(bandCount));
@@ -497,7 +506,11 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
             out.push_back(v[2]);  // Q
             out.push_back(v[3]);  // type
             out.push_back(v[4]);  // channel (0 both, 1 left, 2 right)
-            out.push_back(NativeBmwDsp::peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
+            // Inactive too: a band left out because it can't be built at the running rate (see
+            // parsePeq's dropUnbuildable).
+            NativeBmwDsp::Biquad probe;
+            const bool built = NativeBmwDsp::makePeq(probe, v[0], v[1], v[2], type, sampleRate_);
+            out.push_back(!built || NativeBmwDsp::peqBandSkipped(type, v[1]) ? 0.0 : 1.0);
         }
     };
     appendBank(inputPeqValues_, inputPeqValueCount_, inputPeq_);

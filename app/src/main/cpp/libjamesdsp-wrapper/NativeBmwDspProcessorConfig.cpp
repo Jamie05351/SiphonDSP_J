@@ -11,14 +11,47 @@ using NativeBmwDsp::changed;
 using NativeBmwDsp::dbToLin;
 using NativeBmwDsp::measurementMuteIsolates;
 using OutputId = NativeBmwRouting::OutputId;
+
+// Any generator param change restarts the run, not just a type flip -- editing the sweep
+// range/duration/level while it's already playing is expected to retrigger it.
+bool measGenChanged(const NativeBmwDsp::Params& a, const NativeBmwDsp::Params& b) {
+    return a.measGenType != b.measGenType ||
+           changed(a.measGenSweepStartHz, b.measGenSweepStartHz) ||
+           changed(a.measGenSweepEndHz, b.measGenSweepEndHz) ||
+           changed(a.measGenSweepDurationS, b.measGenSweepDurationS) ||
+           changed(a.measGenSweepLevelDb, b.measGenSweepLevelDb) ||
+           changed(a.measGenPinkPeriodS, b.measGenPinkPeriodS) ||
+           changed(a.measGenPinkLevelDb, b.measGenPinkLevelDb) ||
+           a.measGenTimingRefEnabled != b.measGenTimingRefEnabled ||
+           a.measGenTimingRefSplitChannels != b.measGenTimingRefSplitChannels ||
+           changed(a.measGenTimingRefMidStartHz, b.measGenTimingRefMidStartHz) ||
+           changed(a.measGenTimingRefMidEndHz, b.measGenTimingRefMidEndHz) ||
+           changed(a.measGenTimingRefLowStartHz, b.measGenTimingRefLowStartHz) ||
+           changed(a.measGenTimingRefLowEndHz, b.measGenTimingRefLowEndHz);
+}
 }  // namespace
 
 bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (!v || n != kConfigSize) {
         return false;
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    Params next = p_;
+    // Never stateMutex_: see the threading comment in NativeBmwDspProcessor.h.
+    std::lock_guard<std::mutex> lock(configMutex_);
+    ParsedConfig& update = configHandoff_.back();
+    if (!parseConfig(v, update)) {
+        return false;
+    }
+    configShadow_.params = update.params;
+    configShadow_.outputConfigs = update.outputConfigs;
+    configHandoff_.publish();
+    return true;
+}
+
+bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) const {
+    const float sampleRate = configSampleRate_.load(std::memory_order_relaxed);
+    parsed.sampleRate = sampleRate;
+    Params& next = parsed.params;
+    next = configShadow_.params;
     // clampf() maps NaN to its upper bound (std::min(hi, NaN) == hi), and `NaN >= .5f` is
     // false, so a non-finite slot would silently land on max gain/delay or switch a control
     // off (e.g. un-silence High via highXoPass, or drop the master limiter). Every clamped slot
@@ -175,7 +208,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     // High's runtime entries (outputs_[4]/[5], outputConfigs_[4]/[5]) are left at their
     // constructor defaults -- muted, identity routing -- untouched by configure() until a later
     // phase adds its own tail block. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
-    NativeBmwRouting::RoutingMatrix nextRouting;
+    NativeBmwRouting::RoutingMatrix& nextRouting = parsed.routing;
+    nextRouting = {};
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         const float fromLeft = v[kRoutingBase + out * 2], fromRight = v[kRoutingBase + out * 2 + 1];
         if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
@@ -185,7 +219,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         nextRouting.outputs[out] = {fromLeft, fromRight};
     }
 
-    auto nextOutputs = outputs_;
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
              ++section) {
@@ -207,30 +240,13 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             // section (eg. a frequency at/above this output's current Nyquist limit).
             // rebuild() already degrades an invalid section to an identity
             // pass-through on its own and leaves every other pending change intact.
-            (void)candidate.rebuild(sampleRate_);
-            const auto& current = outputs_[out].allPass[section];
-            const bool sectionChanged = current.enabled != candidate.enabled ||
-                                        current.secondOrder != candidate.secondOrder ||
-                                        changed(current.frequencyHz, candidate.frequencyHz) ||
-                                        changed(current.q, candidate.q);
-            nextOutputs[out].allPass[section] = candidate;
-            // Keep the delay history when an unrelated setting is configured. Clearing an
-            // active all-pass section here creates a phase discontinuity even though its
-            // coefficients did not change.
-            if (sectionChanged) {
-                // loadAllPass() keeps the running state across a retune (no click while a
-                // frequency/Q is dragged). A section that is only now switching on hasn't run
-                // since it was last on, so its state is stale -- that one starts clean.
-                auto& state = nextOutputs[out].allPassState[section];
-                state.loadAllPass(candidate.coefficients);
-                if (!current.enabled && candidate.enabled) {
-                    state.clear();
-                }
-            }
+            (void)candidate.rebuild(sampleRate);
+            parsed.allPass[out][section] = candidate;
         }
     }
 
-    auto nextOutputConfigs = outputConfigs_;
+    auto& nextOutputConfigs = parsed.outputConfigs;
+    nextOutputConfigs = configShadow_.outputConfigs;
     // Fields 6..12 of each output-config block were the per-output compressor, removed from
     // native (force-disabled by a Kotlin migration long before). The slots stay in the schema so
     // no later index moves, and are not read.
@@ -295,7 +311,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 
     // High band: routing/all-pass/output-config, v[215..260] (added in the 210 -> 262 growth).
     // A genuinely new third output -- unlike Mid's tail block above, this populates real
-    // nextRouting/nextOutputs/nextOutputConfigs entries for OutputId::HighLeft/HighRight, the
+    // nextRouting/allPass/nextOutputConfigs entries for OutputId::HighLeft/HighRight, the
     // same shape as the Low/Mid loops earlier in this function, just at the schema's tail
     // instead of the legacy per-output block (kOutputConfigBase etc are frozen at their
     // kLegacyOutputCount-derived offsets -- see NativeBmwDspProcessor.h's kRoutingBase comment).
@@ -324,23 +340,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             candidate.secondOrder = orderValue >= 1.5f;
             candidate.frequencyHz = freqValue;
             candidate.q = qValue;
-            (void)candidate.rebuild(sampleRate_);
-            const auto& current = outputs_[out].allPass[section];
-            const bool sectionChanged = current.enabled != candidate.enabled ||
-                                        current.secondOrder != candidate.secondOrder ||
-                                        changed(current.frequencyHz, candidate.frequencyHz) ||
-                                        changed(current.q, candidate.q);
-            nextOutputs[out].allPass[section] = candidate;
-            if (sectionChanged) {
-                // loadAllPass() keeps the running state across a retune (no click while a
-                // frequency/Q is dragged). A section that is only now switching on hasn't run
-                // since it was last on, so its state is stale -- that one starts clean.
-                auto& state = nextOutputs[out].allPassState[section];
-                state.loadAllPass(candidate.coefficients);
-                if (!current.enabled && candidate.enabled) {
-                    state.clear();
-                }
-            }
+            (void)candidate.rebuild(sampleRate);
+            parsed.allPass[out][section] = candidate;
         }
 
         const std::size_t cfgBase = 235 + slot * kOutputConfigWidth;
@@ -363,6 +364,59 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
 
     if (!allFinite) {
         return false;
+    }
+    // Make this slot's generator a fresh one for exactly these settings (see
+    // ParsedConfig::generator). Kept as it is only if it is unused and was built for the same
+    // settings at the same rate; otherwise rebuilt here, on this thread. Only reached on
+    // success: a rejected update leaves the slot as it was.
+    const bool reusable = parsed.generator && !parsed.generatorInstalled &&
+                          parsed.generatorSampleRate == sampleRate &&
+                          !measGenChanged(parsed.generatorParams, next);
+    if (!reusable) {
+        auto fresh = std::make_unique<NativeBmwMeasurementGenerator>();
+        NativeBmwDsp::configureMeasurementGenerator(*fresh, next, sampleRate);
+        parsed.generator = std::move(fresh);  // frees a retired or stale one, on this thread
+        parsed.generatorParams = next;
+        parsed.generatorSampleRate = sampleRate;
+        parsed.generatorInstalled = false;
+    }
+    return true;
+}
+
+void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
+    const Params& next = parsed.params;
+    const auto& nextOutputConfigs = parsed.outputConfigs;
+    // All-pass sections, retuned in place. Built at the config thread's rate; a rate change
+    // since then means rebuilding them here at the one now running.
+    const bool rateMatches = parsed.sampleRate == sampleRate_;
+    for (std::size_t out = 0; out < NativeBmwRouting::kOutputCount; ++out) {
+        for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
+             ++section) {
+            auto candidate = parsed.allPass[out][section];
+            if (!rateMatches) {
+                (void)candidate.rebuild(sampleRate_);
+            }
+            auto& current = outputs_[out].allPass[section];
+            const bool sectionChanged = current.enabled != candidate.enabled ||
+                                        current.secondOrder != candidate.secondOrder ||
+                                        changed(current.frequencyHz, candidate.frequencyHz) ||
+                                        changed(current.q, candidate.q) || !rateMatches;
+            const bool switchedOn = !current.enabled && candidate.enabled;
+            current = candidate;
+            // Keep the delay history when an unrelated setting is configured. Clearing an
+            // active all-pass section here creates a phase discontinuity even though its
+            // coefficients did not change.
+            if (sectionChanged) {
+                // loadAllPass() keeps the running state across a retune (no click while a
+                // frequency/Q is dragged). A section that is only now switching on hasn't run
+                // since it was last on, so its state is stale -- that one starts clean.
+                auto& state = outputs_[out].allPassState[section];
+                state.loadAllPass(candidate.coefficients);
+                if (switchedOn) {
+                    state.clear();
+                }
+            }
+        }
     }
 
     uint32_t dirty = DirtyNone;
@@ -421,8 +475,8 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
             // The subsonic stage doesn't run while off; one switching back on starts clean
             // rather than replaying the state it froze with (the rebuild keeps state).
             if (!old.subsonicEnabled && now.subsonicEnabled) {
-                nextOutputs[out].subsonic1.clear();
-                nextOutputs[out].subsonic2.clear();
+                outputs_[out].subsonic1.clear();
+                outputs_[out].subsonic2.clear();
             }
         }
         if (old.muted != now.muted || old.polarityInverted != now.polarityInverted) {
@@ -451,22 +505,17 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (changed(next.measBusStopbandOctaves, p_.measBusStopbandOctaves)) {
         dirty |= DirtyMeasBus;
     }
-    // Any generator param change restarts the run, not just a type flip -- editing the sweep
-    // range/duration/level while it's already playing is expected to retrigger it.
-    if (next.measGenType != p_.measGenType ||
-        changed(next.measGenSweepStartHz, p_.measGenSweepStartHz) ||
-        changed(next.measGenSweepEndHz, p_.measGenSweepEndHz) ||
-        changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
-        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
-        changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
-        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb) ||
-        next.measGenTimingRefEnabled != p_.measGenTimingRefEnabled ||
-        next.measGenTimingRefSplitChannels != p_.measGenTimingRefSplitChannels ||
-        changed(next.measGenTimingRefMidStartHz, p_.measGenTimingRefMidStartHz) ||
-        changed(next.measGenTimingRefMidEndHz, p_.measGenTimingRefMidEndHz) ||
-        changed(next.measGenTimingRefLowStartHz, p_.measGenTimingRefLowStartHz) ||
-        changed(next.measGenTimingRefLowEndHz, p_.measGenTimingRefLowEndHz)) {
-        dirty |= DirtyMeasGen;
+    if (measGenChanged(next, p_)) {
+        // Swap in the fresh generator the config thread built for these settings. The fallback
+        // (configuring it in place, in applyDirty()) is only for one built at a sample rate
+        // that has changed since -- the same rare race the all-pass and PEQ paths rebuild for.
+        if (parsed.generator && !parsed.generatorInstalled &&
+            parsed.generatorSampleRate == sampleRate_) {
+            std::swap(measGen_, *parsed.generator);
+            parsed.generatorInstalled = true;
+        } else {
+            dirty |= DirtyMeasGen;
+        }
     }
 
     // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, keeps tree state, same cost as
@@ -555,8 +604,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         masterGain_ = masterGainTarget_;
         masterGainPrimed_ = true;
     }
-    routing_ = nextRouting;
-    outputs_ = nextOutputs;
+    routing_ = parsed.routing;
     outputConfigs_ = nextOutputConfigs;
     // See mbcEnabledMeterFlag_ etc's declaration: the read*Meter() functions are lock-free and
     // read these atomics instead of the plain bools inside p_ to avoid racing this assignment.
@@ -579,7 +627,6 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
         retuneLoudness();
         outputGainsPrimed_ = true;
     }
-    return true;
 }
 
 bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const double* full,
@@ -587,24 +634,31 @@ bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const dou
                                          std::size_t lowCount, const double* mid,
                                          std::size_t midCount, const double* high,
                                          std::size_t highCount) {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    return configurePeqLocked(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount,
-                              high, highCount);
+    // Never stateMutex_: see the threading comment in NativeBmwDspProcessor.h.
+    std::lock_guard<std::mutex> lock(configMutex_);
+    if (!parsePeq(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount, high,
+                  highCount, configSampleRate_.load(std::memory_order_relaxed),
+                  peqHandoff_.back())) {
+        return false;
+    }
+    peqHandoff_.publish();
+    return true;
 }
-bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, const double* full,
-                                               std::size_t fullCount, const double* low,
-                                               std::size_t lowCount, const double* mid,
-                                               std::size_t midCount, const double* high,
-                                               std::size_t highCount) {
+bool NativeBmwDspProcessor::parsePeq(bool enabled, float preampDb, const double* full,
+                                     std::size_t fullCount, const double* low,
+                                     std::size_t lowCount, const double* mid,
+                                     std::size_t midCount, const double* high,
+                                     std::size_t highCount, float sampleRate, ParsedPeq& out,
+                                     bool dropUnbuildable) {
     if (!std::isfinite(preampDb) || preampDb < -30 || preampDb > 12) {
         return false;
     }
-    auto build = [this](const double* v, std::size_t n, PeqBank& b) {
+    auto build = [sampleRate, dropUnbuildable](const double* v, std::size_t n, PeqBank& b) {
         if (n % 5 || n / 5 > 16 || (n && v == nullptr)) {
             return false;
         }
-        PeqBank x;
-        x.rawBandCount = n / 5;
+        b = PeqBank{};
+        b.rawBandCount = n / 5;
         for (std::size_t i = 0; i < n; i += 5) {
             // v[i+3]/v[i+4] (type, channel) are cast to int below; casting a value outside int's
             // representable range (including NaN/Infinity, but also a finite-but-huge double from
@@ -618,12 +672,15 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
                 return false;
             }
             int type = static_cast<int>(v[i + 3]);
-            Biquad q;
-            if (!NativeBmwDsp::makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate_)) {
-                return false;
-            }
             int ch = static_cast<int>(v[i + 4]);
             if (ch < 0 || ch > 2) {
+                return false;
+            }
+            Biquad q;
+            if (!NativeBmwDsp::makePeq(q, v[i], v[i + 1], v[i + 2], type, sampleRate)) {
+                if (dropUnbuildable) {
+                    continue;
+                }
                 return false;
             }
             if (NativeBmwDsp::peqBandSkipped(type, v[i + 1])) {
@@ -631,49 +688,85 @@ bool NativeBmwDspProcessor::configurePeqLocked(bool enabled, float preampDb, con
             }
             const PeqBank::BandKey key{static_cast<int>(i / 5), type, v[i], v[i + 1], v[i + 2]};
             if (ch != 2) {
-                x.append(PeqBank::kLeftLane, q, key);
+                b.append(PeqBank::kLeftLane, q, key);
             }
             if (ch != 1) {
-                x.append(PeqBank::kRightLane, q, key);
+                b.append(PeqBank::kRightLane, q, key);
             }
         }
-        b = x;
         return true;
     };
-    PeqBank f, l, m, h;
-    if (!build(full, fullCount, f) || !build(low, lowCount, l) || !build(mid, midCount, m) ||
-        !build(high, highCount, h)) {
-        return false;
+    const double* sources[4] = {full, low, mid, high};
+    const std::size_t counts[4] = {fullCount, lowCount, midCount, highCount};
+    for (std::size_t bank = 0; bank < 4; ++bank) {
+        if (!build(sources[bank], counts[bank], out.banks[bank])) {
+            return false;
+        }
+    }
+    for (std::size_t bank = 0; bank < 4; ++bank) {
+        out.values[bank].fill(0);
+        if (counts[bank] > 0) {
+            std::copy_n(sources[bank], counts[bank], out.values[bank].begin());
+        }
+        out.counts[bank] = counts[bank];
+    }
+    out.enabled = enabled;
+    out.preampDb = preampDb;
+    out.sampleRate = sampleRate;
+    return true;
+}
+void NativeBmwDspProcessor::installPeq(ParsedPeq& peq) {
+    ParsedPeq* update = &peq;
+    if (peq.sampleRate != sampleRate_) {
+        // Built at a rate that has changed since: rebuild it at the one now running. It was
+        // accepted (and acknowledged) already, so a band the new rate can't hold is left out
+        // rather than dropping the whole update. Can't fail: everything else was validated.
+        if (&peq == &peqScratch_ ||
+            !parsePeq(peq.enabled, peq.preampDb, peq.values[0].data(), peq.counts[0],
+                      peq.values[1].data(), peq.counts[1], peq.values[2].data(), peq.counts[2],
+                      peq.values[3].data(), peq.counts[3], sampleRate_, peqScratch_,
+                      /*dropUnbuildable=*/true)) {
+            return;
+        }
+        update = &peqScratch_;
     }
     // An edit retunes the running banks: each surviving band carries its filter state over, so
     // dragging a band doesn't drop every band's memory at once (a click per drag event, worst on
     // bass). The banks don't run while the PEQ is off, so switching it back on starts clean.
-    if (enabled && peqEnabled_) {
-        f.inheritState(inputPeq_);
-        l.inheritState(lowPeq_);
-        m.inheritState(midPeq_);
-        h.inheritState(highPeq_);
-    }
-    auto save = [](auto& target, std::size_t& count, const double* source,
-                   std::size_t sourceCount) {
-        target.fill(0);
-        if (sourceCount > 0) {
-            std::copy_n(source, sourceCount, target.begin());
+    PeqBank* running[4] = {&inputPeq_, &lowPeq_, &midPeq_, &highPeq_};
+    std::array<double, kMaxPeqSectionsPerChannel * kPeqBandWidth>* values[4] = {
+        &inputPeqValues_, &lowPeqValues_, &midPeqValues_, &highPeqValues_};
+    std::size_t* counts[4] = {&inputPeqValueCount_, &lowPeqValueCount_, &midPeqValueCount_,
+                              &highPeqValueCount_};
+    for (std::size_t bank = 0; bank < 4; ++bank) {
+        if (update->enabled && peqEnabled_) {
+            update->banks[bank].inheritState(*running[bank]);
         }
-        count = sourceCount;
-    };
-    save(inputPeqValues_, inputPeqValueCount_, full, fullCount);
-    save(lowPeqValues_, lowPeqValueCount_, low, lowCount);
-    save(midPeqValues_, midPeqValueCount_, mid, midCount);
-    save(highPeqValues_, highPeqValueCount_, high, highCount);
-    inputPeq_ = f;
-    lowPeq_ = l;
-    midPeq_ = m;
-    highPeq_ = h;
-    peqEnabled_ = enabled;
-    peqPreampDb_ = preampDb;
-    peqPreamp_ = dbToLin(preampDb);
-    return true;
+        *running[bank] = update->banks[bank];
+        *values[bank] = update->values[bank];
+        *counts[bank] = update->counts[bank];
+    }
+    peqEnabled_ = update->enabled;
+    peqPreampDb_ = update->preampDb;
+    peqPreamp_ = dbToLin(update->preampDb);
+}
+void NativeBmwDspProcessor::rebuildPeqLocked() {
+    // The saved values were accepted once already; a band that can't be built at the new rate
+    // is left out rather than dropping the whole PEQ.
+    if (parsePeq(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
+                 lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
+                 midPeqValueCount_, highPeqValues_.data(), highPeqValueCount_, sampleRate_,
+                 peqScratch_, /*dropUnbuildable=*/true)) {
+        installPeq(peqScratch_);
+    }
+}
+void NativeBmwDspProcessor::installPending() {
+    if (ParsedConfig* config = configHandoff_.take()) {
+        installConfig(*config);
+    }
+    if (ParsedPeq* peq = peqHandoff_.take()) {
+        installPeq(*peq);
+    }
 }
 
 // ---- Rebuilds: derived state from p_ / outputConfigs_ / sampleRate_ ----------------------------
@@ -893,15 +986,11 @@ void NativeBmwDspProcessor::rebuildAll() {
         out.delay.snap();  // a full rebuild applies delays at once, no crossfade
     }
     // A full rebuild starts every filter clean; the PEQ rebuild below would otherwise carry the
-    // banks' state over (see configurePeqLocked).
+    // banks' state over (see installPeq).
     inputPeq_.clear();
     lowPeq_.clear();
     midPeq_.clear();
     highPeq_.clear();
-    // Locked variant: rebuildAll() runs either from the constructor (no lock needed, object not
-    // yet published) or from setSampleRate() (already holding stateMutex_) -- never call
-    // configurePeq() itself here, it would deadlock re-taking the same non-recursive mutex.
-    configurePeqLocked(peqEnabled_, peqPreampDb_, inputPeqValues_.data(), inputPeqValueCount_,
-                       lowPeqValues_.data(), lowPeqValueCount_, midPeqValues_.data(),
-                       midPeqValueCount_, highPeqValues_.data(), highPeqValueCount_);
+    // Runs from the constructor or from setSampleRate() (already holding stateMutex_).
+    rebuildPeqLocked();
 }
