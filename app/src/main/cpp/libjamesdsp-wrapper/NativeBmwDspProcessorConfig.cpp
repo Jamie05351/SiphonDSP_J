@@ -11,6 +11,24 @@ using NativeBmwDsp::changed;
 using NativeBmwDsp::dbToLin;
 using NativeBmwDsp::measurementMuteIsolates;
 using OutputId = NativeBmwRouting::OutputId;
+
+// Any generator param change restarts the run, not just a type flip -- editing the sweep
+// range/duration/level while it's already playing is expected to retrigger it.
+bool measGenChanged(const NativeBmwDsp::Params& a, const NativeBmwDsp::Params& b) {
+    return a.measGenType != b.measGenType ||
+           changed(a.measGenSweepStartHz, b.measGenSweepStartHz) ||
+           changed(a.measGenSweepEndHz, b.measGenSweepEndHz) ||
+           changed(a.measGenSweepDurationS, b.measGenSweepDurationS) ||
+           changed(a.measGenSweepLevelDb, b.measGenSweepLevelDb) ||
+           changed(a.measGenPinkPeriodS, b.measGenPinkPeriodS) ||
+           changed(a.measGenPinkLevelDb, b.measGenPinkLevelDb) ||
+           a.measGenTimingRefEnabled != b.measGenTimingRefEnabled ||
+           a.measGenTimingRefSplitChannels != b.measGenTimingRefSplitChannels ||
+           changed(a.measGenTimingRefMidStartHz, b.measGenTimingRefMidStartHz) ||
+           changed(a.measGenTimingRefMidEndHz, b.measGenTimingRefMidEndHz) ||
+           changed(a.measGenTimingRefLowStartHz, b.measGenTimingRefLowStartHz) ||
+           changed(a.measGenTimingRefLowEndHz, b.measGenTimingRefLowEndHz);
+}
 }  // namespace
 
 bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
@@ -344,10 +362,26 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
         cfg.polarityInverted = flagIn(v[cfgBase + 5]);
     }
 
-    return allFinite;
+    if (!allFinite) {
+        return false;
+    }
+    // This slot's generator. One an install consumed is freed here, on this thread. One from an
+    // update superseded before install was built for the settings
+    // configShadow_ now holds, so it is handed on unless these settings change them again.
+    // (Only reached on success: a rejected update leaves the slot as it was.)
+    if (parsed.generatorInstalled) {
+        parsed.generator.reset();
+        parsed.generatorInstalled = false;
+    }
+    if (measGenChanged(next, configShadow_.params)) {
+        parsed.generator = std::make_unique<NativeBmwMeasurementGenerator>();
+        NativeBmwDsp::configureMeasurementGenerator(*parsed.generator, next, sampleRate);
+        parsed.generatorSampleRate = sampleRate;
+    }
+    return true;
 }
 
-void NativeBmwDspProcessor::installConfig(const ParsedConfig& parsed) {
+void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     const Params& next = parsed.params;
     const auto& nextOutputConfigs = parsed.outputConfigs;
     // All-pass sections, retuned in place. Built at the config thread's rate; a rate change
@@ -469,23 +503,20 @@ void NativeBmwDspProcessor::installConfig(const ParsedConfig& parsed) {
     if (changed(next.measBusStopbandOctaves, p_.measBusStopbandOctaves)) {
         dirty |= DirtyMeasBus;
     }
-    // Any generator param change restarts the run, not just a type flip -- editing the sweep
-    // range/duration/level while it's already playing is expected to retrigger it.
-    if (next.measGenType != p_.measGenType ||
-        changed(next.measGenSweepStartHz, p_.measGenSweepStartHz) ||
-        changed(next.measGenSweepEndHz, p_.measGenSweepEndHz) ||
-        changed(next.measGenSweepDurationS, p_.measGenSweepDurationS) ||
-        changed(next.measGenSweepLevelDb, p_.measGenSweepLevelDb) ||
-        changed(next.measGenPinkPeriodS, p_.measGenPinkPeriodS) ||
-        changed(next.measGenPinkLevelDb, p_.measGenPinkLevelDb) ||
-        next.measGenTimingRefEnabled != p_.measGenTimingRefEnabled ||
-        next.measGenTimingRefSplitChannels != p_.measGenTimingRefSplitChannels ||
-        changed(next.measGenTimingRefMidStartHz, p_.measGenTimingRefMidStartHz) ||
-        changed(next.measGenTimingRefMidEndHz, p_.measGenTimingRefMidEndHz) ||
-        changed(next.measGenTimingRefLowStartHz, p_.measGenTimingRefLowStartHz) ||
-        changed(next.measGenTimingRefLowEndHz, p_.measGenTimingRefLowEndHz)) {
-        dirty |= DirtyMeasGen;
+    if (measGenChanged(next, p_)) {
+        // Swap in the generator the config thread built for these settings. The fallback
+        // (configuring it in place, in applyDirty()) is only for one built at a sample rate
+        // that has changed since.
+        if (parsed.generator && !parsed.generatorInstalled &&
+            parsed.generatorSampleRate == sampleRate_) {
+            std::swap(measGen_, *parsed.generator);
+        } else {
+            dirty |= DirtyMeasGen;
+        }
     }
+    // Consumed either way: the slot now holds the retired generator, or one these settings
+    // didn't need. The next parse into the slot frees it.
+    parsed.generatorInstalled = true;
 
     // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, keeps tree state, same cost as
     // the band crossovers). mix/makeup/attack/release -> DirtyMbcTiming (scalars only, no click).
@@ -730,7 +761,7 @@ void NativeBmwDspProcessor::rebuildPeqLocked() {
     }
 }
 void NativeBmwDspProcessor::installPending() {
-    if (const ParsedConfig* config = configHandoff_.take()) {
+    if (ParsedConfig* config = configHandoff_.take()) {
         installConfig(*config);
     }
     if (ParsedPeq* peq = peqHandoff_.take()) {

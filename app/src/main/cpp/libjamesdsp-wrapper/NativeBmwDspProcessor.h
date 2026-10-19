@@ -183,9 +183,11 @@ public:
     // calling thread, then hand it over through a lock-free triple buffer (configHandoff_ /
     // peqHandoff_). Whoever next holds stateMutex_ installs it -- normally process(), at the
     // start of its next buffer, which is exactly when the old blocking push would have taken
-    // effect too. The rare calls that still take stateMutex_ (setSampleRate, the truth
-    // snapshot, capture start/stop/take) install any pending update first, so they always see
-    // every accepted push.
+    // effect too. setSampleRate() and the truth snapshot install any pending update first, so
+    // they always see every accepted push. The capture calls also take stateMutex_ briefly but
+    // read no config state, so they leave pending updates to process(). Nothing installed runs
+    // allocating work on the audio thread: the measurement generator, the one stage whose
+    // rebuild allocates, is built with the update and swapped in (see ParsedConfig::generator).
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -333,6 +335,15 @@ private:
                    NativeBmwRouting::kOutputCount>
             allPass{};
         float sampleRate = 0.f;
+        // The measurement generator for these settings, built on the config thread when they
+        // differ from the previous update's: (re)building it allocates and, for pink noise,
+        // synthesises up to 10 s of samples -- never audio-thread work. installConfig() swaps it
+        // in and marks the slot consumed (generatorInstalled), and the next parse into this slot
+        // frees what it then holds, on the config thread. An update superseded before it was
+        // installed hands its generator on to the next parse.
+        std::unique_ptr<NativeBmwMeasurementGenerator> generator;
+        float generatorSampleRate = 0.f;
+        bool generatorInstalled = false;
     };
     // A validated configurePeq() update: the four banks built at sampleRate (clean state) and
     // the raw band values they came from. Bank order: Full, Low, Mid, High.
@@ -359,7 +370,7 @@ private:
                          std::size_t highValueCount, float sampleRate, ParsedPeq& out,
                          bool dropUnbuildable = false);
     // Under stateMutex_: install an update, diffing it against the running state.
-    void installConfig(const ParsedConfig& config);
+    void installConfig(ParsedConfig& config);
     void installPeq(ParsedPeq& peq);
     // Under stateMutex_: install whatever configure()/configurePeq() handed over since last time.
     void installPending();

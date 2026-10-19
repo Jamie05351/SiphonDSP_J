@@ -219,3 +219,36 @@ TEST_CASE("A rate change drops only the PEQ bands the new rate can't hold") {
     INFO("1 kHz after the rate change: ", measuredDb, " dB (want ~6)");
     CHECK(std::fabs(measuredDb - 6.0) < 0.5);
 }
+
+// The measurement generator is built on the config thread (pink noise synthesises seconds of
+// samples) and swapped in at install. An update that changes it and is superseded before install
+// must hand its generator on, or the generator would never start.
+TEST_CASE("A generator change superseded before install still starts the generator") {
+    auto rms = [](const std::vector<float>& x) {
+        double sum = 0;
+        for (float s : x) sum += static_cast<double>(s) * s;
+        return std::sqrt(sum / static_cast<double>(x.size()));
+    };
+    for (const float type : {1.f, 2.f}) {  // sweep, pink
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        auto cfg = flatConfig();
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+        cfg[192] = type;  // generator on
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+        cfg[5] = -1.f;  // an unrelated edit lands before any audio runs
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+
+        std::vector<float> silence(2 * 48000, 0.f);
+        proc.process(silence.data(), silence.size());
+        INFO("Generator type ", type, " output RMS: ", rms(silence));
+        CHECK(rms(silence) > 1e-3);
+
+        cfg[192] = 0.f;  // and off again
+        REQUIRE(proc.configure(cfg.data(), cfg.size()));
+        std::vector<float> quiet(2 * 48000, 0.f);
+        proc.process(quiet.data(), quiet.size());
+        std::vector<float> tail(quiet.end() - 2 * 4800, quiet.end());
+        CHECK(rms(tail) < 1e-4);
+    }
+}
