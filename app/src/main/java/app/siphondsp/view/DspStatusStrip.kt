@@ -230,6 +230,14 @@ class DspStatusStrip @JvmOverloads constructor(
                     "Last audio out: " +
                         if (snapshot.lastFlowAgeMs < 0) "none yet" else "${snapshot.lastFlowAgeMs / 1000} s ago",
                 )
+                appendLine("Playback sessions processed: ${snapshot.playbackSessions}")
+                appendLine(
+                    "Excluded apps: " +
+                        snapshot.excludedApps.ifEmpty { listOf("none") }.joinToString(),
+                )
+                if (snapshot.excludedPlaying.isNotEmpty()) {
+                    appendLine("Excluded and playing now: ${snapshot.excludedPlaying.joinToString()}")
+                }
                 appendLine("Underruns: ${snapshot.underrunCount}")
                 appendLine("Recoveries this session: ${snapshot.recoveriesThisSession}")
                 appendLine(

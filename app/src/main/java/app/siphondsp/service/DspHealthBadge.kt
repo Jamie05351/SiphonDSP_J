@@ -19,6 +19,16 @@ internal object DspHealthBadge {
         if (snapshot == null) {
             return Badge(Level.WARN, "DSP off", "The audio engine is not running, so audio is not being processed.")
         }
+        // Checked first: with only an excluded app playing, the pipeline itself reads as idle (no
+        // session to process), which looked like "nothing is playing" while music played.
+        if (snapshot.excludedPlaying.isNotEmpty()) {
+            val apps = snapshot.excludedPlaying.joinToString()
+            return Badge(
+                Level.WARN, "Excluded app",
+                "$apps is playing but is excluded, so J_DSP isn't processing it. " +
+                    "Remove it from ⋮ → Excluded apps to process it.",
+            )
+        }
         val reason = snapshot.pipelineHealthReason.orEmpty()
         return when (snapshot.pipelineHealthState) {
             AudioPipelineHealth.State.HEALTHY.name ->

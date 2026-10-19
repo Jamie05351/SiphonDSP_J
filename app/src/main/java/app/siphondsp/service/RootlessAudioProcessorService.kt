@@ -168,6 +168,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     private lateinit var sessionManager: RootlessSessionManager
+    // For the diagnostics snapshot, which can run before onCreate() has set sessionManager up.
+    private fun sessionDatabaseOrNull() =
+        if (::sessionManager.isInitialized) sessionManager.sessionDatabase else null
     private var sessionLossRetryCount = 0
 
     @Volatile
@@ -1414,6 +1417,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     },
                     pcmFloat = service.activePcmFloat,
                     bufferSamples = service.activeBufferSamples,
+                    playbackSessions = service.sessionDatabaseOrNull()?.sessionList?.size ?: 0,
+                    excludedApps = service.blockedApps.value?.map { it.packageName }.orEmpty(),
+                    excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )
             }
         }

@@ -55,4 +55,23 @@ class DspHealthBadgeTest {
             assertTrue(badge.detail.contains("read flow stale"))
         }
     }
+
+    @Test
+    fun anExcludedAppPlayingWarnsEvenWhenThePipelineLooksIdle() {
+        // The case that read as "nothing playing": the only player is excluded, so there is no
+        // session to process and the pipeline itself is idle.
+        val badge = DspHealthBadge.evaluate(
+            snapshot("IDLE_EXPECTED", "no capture session").copy(excludedPlaying = listOf("com.spotify.music")),
+        )
+        assertEquals(DspHealthBadge.Level.WARN, badge.level)
+        assertEquals("Excluded app", badge.label)
+        assertTrue(badge.detail.contains("com.spotify.music"))
+        assertTrue(badge.detail.contains("Excluded apps"))
+    }
+
+    @Test
+    fun anExcludedAppThatIsNotPlayingChangesNothing() {
+        val badge = DspHealthBadge.evaluate(snapshot("HEALTHY").copy(excludedApps = listOf("com.example.player")))
+        assertEquals(DspHealthBadge.Level.OK, badge.level)
+    }
 }

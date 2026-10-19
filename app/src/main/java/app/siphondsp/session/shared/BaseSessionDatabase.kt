@@ -25,6 +25,14 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     // session databases get it for free.
     private val pendingRemovals = mutableMapOf<Int, Runnable>()
 
+    /**
+     * Packages playing media in the latest dump that are excluded from processing (the Excluded
+     * apps list, or auto-excluded for blocking capture) -- playing, but deliberately never added
+     * to [sessionList], so nothing else shows them. For the diagnostics and the status badge.
+     */
+    @Volatile var excludedPlayingPackages: List<String> = emptyList()
+        private set
+
     protected open val excludedPackages = arrayOf(
         context.packageName
     )
@@ -79,6 +87,12 @@ abstract class BaseSessionDatabase(protected val context: Context) {
                 removeSession(sid)
             }
         }
+
+        excludedPlayingPackages = dump.sessions.values
+            .filter { excludedUids.contains(it.uid) && it.uid != myUid() && it.isUsageRecordable() }
+            .map { it.packageName }
+            .filter { it.isNotEmpty() && it != context.packageName }
+            .distinct()
 
         val removedSessions = sessionList.filter {
             !dump.sessions.contains(it.key) && !pendingRemovals.contains(it.key)
