@@ -264,9 +264,9 @@ fun CrossoverResponseGraph(
     // only when the DSP values / PEQ snapshot change (not per spectrum frame).
     val calculator = remember { BmwResponseCalculator(pointCount = POINT_COUNT) }
     val curves = remember { BmwResponseCurves(POINT_COUNT) }
-    val valuesHash = systemValues.contentHashCode()
+    val valuesKey = ValuesKey(systemValues)
     val morph = remember { MagnitudeMorph(POINT_COUNT) }
-    val generation = remember(valuesHash, peqState) {
+    val generation = remember(valuesKey, peqState) {
         if (systemValues.size == BmwSignalChain.VALUE_COUNT) {
             morph.freeze()
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)

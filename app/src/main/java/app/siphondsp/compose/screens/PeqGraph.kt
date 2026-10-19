@@ -273,11 +273,11 @@ fun PeqGraph(
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
     }
 
-    // Synchronous recompute of the modelled curves on any real input change. contentHashCode()
-    // keys it even when the fragment mutates the same FloatArray in place (it does, on the
-    // native-DSP broadcast). configureAxis() inside is a no-op when the axis is unchanged.
-    val valuesHash = systemValues.contentHashCode()
-    remember(valuesHash, peqState, sampleRate, carBaseline) {
+    // Synchronous recompute of the modelled curves on any real input change. ValuesKey keys it on
+    // the contents (a copy), so it works even when the fragment mutates the same FloatArray in
+    // place (it does, on the native-DSP broadcast). configureAxis() inside is a no-op when the
+    // axis is unchanged.
+    remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline) {
         model.recompute(systemValues, peqState, sampleRate, carBaseline)
     }
 
@@ -528,7 +528,9 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     var k = 17
     k = 31 * k + w
     k = 31 * k + h
-    k = 31 * k + ctx.systemValues.contentHashCode()
+    // The model's recompute count, not the values' hash (see ValuesKey): it moves on every real
+    // change to the values, and only then.
+    k = 31 * k + ctx.model.version
     // Bands are not a data class — hashCode is identity — but the same instances are re-listed
     // each frame from the same peqState, so this stays stable between commits and flips on any
     // commit (applyCandidate always deep-copies).
@@ -1462,8 +1464,13 @@ private class PeqResponseModel {
     fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
         PeqPlotGeometry(left, right, top, bottom, maxFrequency, axisBottom, axisTop)
 
+    /** Bumped by every [recompute]: the static layers' cache key for "the curves changed". */
+    var version = 0
+        private set
+
     /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]). */
     fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double, baseline: CarBaseline? = null) {
+        version++
         if (values.size != BmwSignalChain.VALUE_COUNT) return
         val maxFreq = min(20_000.0, sampleRate * 0.5 * 0.999)
         calculator.configureAxis(sampleRate, 20.0, maxFreq)
