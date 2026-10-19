@@ -38,11 +38,23 @@ internal object StepMath {
             repeat(times) { f = nextFrequency(f, direction, step.toDouble()) }
             return f.toFloat().coerceIn(range.start, range.endInclusive)
         }
-        var snapped = snapToStep(current + direction * step * times, range, step)
-        // A step smaller than the grid snaps back to where it started: take one grid step instead.
-        if (snapped == current && step > 0f) snapped = snapToStep(current + direction * step, range, step)
-        return snapped
+        if (step <= 0f) return current
+        // On the grid, move [times] grid steps. Off it (an old saved value, or a scaled display such
+        // as the tilt's 1.5x), the first step goes to the next grid point in that direction, so +
+        // and - stay symmetric: 0.15 on a 0.1 grid goes to 0.2 or 0.1, never skipping one.
+        val position = (current - range.start).toDouble() / step
+        val nearest = kotlin.math.round(position)
+        val first = when {
+            kotlin.math.abs(position - nearest) < GRID_EPSILON -> nearest + direction
+            direction > 0 -> kotlin.math.ceil(position)
+            else -> kotlin.math.floor(position)
+        }
+        val target = first + direction * (times - 1)
+        return (range.start + target * step).toFloat().coerceIn(range.start, range.endInclusive)
     }
+
+    /** How close to a grid point (in steps) still counts as on it, for float rounding. */
+    private const val GRID_EPSILON = 1e-3
 
     /** The ladder's step size for frequencies at or above [hz] (the band [hz] sits in). */
     fun frequencyStep(hz: Double): Double = when {

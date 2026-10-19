@@ -102,6 +102,11 @@ object NativeBmwDspValues {
     const val INDEX_LOW_DELAY_R = 24
     const val INDEX_TILT_ENABLED = 25
     const val INDEX_TILT_AMOUNT = 26
+    // The tilt runs two low shelves and two high shelves at the pivot, each at 0.75 x the stored
+    // amount (Tilt::rebuild), so each end of the response moves 1.5 x the stored amount: a saved
+    // 3 dB is +4.5 dB of bass and -4.5 dB of treble. The stored value keeps that meaning (every
+    // saved tune sounds the same); the UI shows and edits the real end gain.
+    const val TILT_END_GAIN_PER_AMOUNT = 1.5f
     const val INDEX_TILT_FREQ = 27
 
     // Legacy band-linked compressor settings, used as migration seeds.

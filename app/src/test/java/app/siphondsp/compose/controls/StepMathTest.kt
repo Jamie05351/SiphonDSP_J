@@ -85,4 +85,15 @@ class StepMathTest {
         assertTrue(!StepMath.isMusical("ms"))
         assertTrue(!StepMath.isMusical(""))
     }
+
+    @Test
+    fun anOffGridValueStepsToTheNextGridPointEachWay() {
+        // A stored tilt of 0.1 shows as 0.15 on the 0.1 dB display grid: + goes to 0.2, - to 0.1.
+        assertEquals(0.2f, StepMath.next(0.15f, -9f..9f, 0.1f, +1, musical = false), 1e-4f)
+        assertEquals(0.1f, StepMath.next(0.15f, -9f..9f, 0.1f, -1, musical = false), 1e-4f)
+        assertEquals(-0.1f, StepMath.next(-0.15f, -9f..9f, 0.1f, +1, musical = false), 1e-4f)
+        assertEquals(-0.2f, StepMath.next(-0.15f, -9f..9f, 0.1f, -1, musical = false), 1e-4f)
+        // Further steps then move whole grid steps from there.
+        assertEquals(0.4f, StepMath.next(0.15f, -9f..9f, 0.1f, +1, musical = false, times = 3), 1e-4f)
+    }
 }
