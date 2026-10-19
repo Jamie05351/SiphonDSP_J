@@ -809,7 +809,7 @@ void NativeBmwDspProcessor::rebuildLowCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::LowLeft) + side);
         auto cfg = outputConfig(id);
-        cfg.crossoverFreq *= pairing_[side].lowLowpass;
+        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].lowLowpass, sampleRate_);
         NativeBmwDsp::buildLowCrossover(output(id), cfg, sampleRate_);
     }
 }
@@ -817,8 +817,9 @@ void NativeBmwDspProcessor::rebuildMidCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::MidLeft) + side);
         auto cfg = outputConfig(id);
-        cfg.crossoverFreq *= pairing_[side].midHighpass;
-        cfg.upperCrossoverFreq *= pairing_[side].midLowpass;
+        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].midHighpass, sampleRate_);
+        cfg.upperCrossoverFreq =
+            NativeBmwDsp::spreadCorner(cfg.upperCrossoverFreq, pairing_[side].midLowpass, sampleRate_);
         NativeBmwDsp::buildMidCrossover(output(id), cfg, sampleRate_);
     }
 }
@@ -826,7 +827,7 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
     for (std::size_t side = 0; side < 2; ++side) {
         const auto id = static_cast<OutputId>(static_cast<std::size_t>(OutputId::HighLeft) + side);
         auto cfg = outputConfig(id);
-        cfg.crossoverFreq *= pairing_[side].highHighpass;
+        cfg.crossoverFreq = NativeBmwDsp::spreadCorner(cfg.crossoverFreq, pairing_[side].highHighpass, sampleRate_);
         NativeBmwDsp::buildHighCrossover(output(id), cfg, sampleRate_);
     }
 }

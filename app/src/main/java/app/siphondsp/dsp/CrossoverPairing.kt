@@ -5,12 +5,13 @@ import app.siphondsp.model.NativeBmwDspValues
 /**
  * Mirror of native `NativeBmwDsp::pairCrossovers` (NativeBmwCrossovers.h): the auto-correction
  * for crossover types that can't sum flat as a plain pair. When both sides of a boundary use the
- * same BW2 or BW4 type, the corners spread apart around the set frequency (lowpass at f / k,
- * highpass at f * k) and, for BW2, the band above is inverted -- within about +/-0.5 dB. The set
- * frequency stays the crossover point.
+ * same BW2 or BW4 type at the same corner (within [CORNER_TOLERANCE]), the corners spread apart
+ * around it (lowpass at f / k, highpass at f * k, in the prewarped domain -- see [corner]) and,
+ * for BW2, the band above is inverted -- within about +/-0.5 dB. The set frequency stays the
+ * crossover point.
  *
- * [lowLowpass] .. [highHighpass] multiply each corner; [midInverted] / [highInverted] flip that
- * band's polarity on top of the user's own.
+ * [lowLowpass] .. [highHighpass] are each corner's spread factor; [midInverted] / [highInverted]
+ * flip that band's polarity on top of the user's own.
  */
 data class CrossoverPairing(
     val lowLowpass: Double = 1.0,
@@ -31,6 +32,20 @@ data class CrossoverPairing(
         const val BW2_SPREAD = 1.304f
         const val BW4_SPREAD = 1.128f
 
+        /** Native kPairCornerTolerance: how far apart the two corners can be and still pair. */
+        const val CORNER_TOLERANCE = 1.02f
+
+        /**
+         * Native spreadCorner(): [fc] moved by [factor] in the prewarped domain the filters are
+         * designed in, tan(pi f' / fs) = factor * tan(pi fc / fs). Factor 1 returns [fc] exactly.
+         */
+        fun corner(fc: Double, factor: Double, sampleRate: Double): Double {
+            if (factor == 1.0 || sampleRate <= 0.0) return fc
+            // Float in native: factor and fc are floats there, so round the same way.
+            val warped = kotlin.math.tan(Math.PI * fc.toFloat() / sampleRate.toFloat()) * factor.toFloat()
+            return (kotlin.math.atan(warped) * sampleRate.toFloat() / Math.PI).toFloat().toDouble()
+        }
+
         /** Decoded the way native configure() decodes a crossover-type slot. */
         private fun kind(type: Float): Float = when {
             type == NativeBmwDspValues.CROSSOVER_TYPE_BW1 -> NativeBmwDspValues.CROSSOVER_TYPE_BW1
@@ -40,9 +55,10 @@ data class CrossoverPairing(
             else -> NativeBmwDspValues.CROSSOVER_TYPE_LR4
         }
 
-        private fun spread(a: Float, b: Float): Float {
+        private fun spread(a: Float, b: Float, fa: Float, fb: Float): Float {
             val ka = kind(a)
-            if (ka != kind(b)) return 1f
+            val ratio = if (fa > fb) fa / fb else fb / fa
+            if (ka != kind(b) || !(ratio <= CORNER_TOLERANCE)) return 1f
             return when (ka) {
                 NativeBmwDspValues.CROSSOVER_TYPE_BW2 -> BW2_SPREAD
                 NativeBmwDspValues.CROSSOVER_TYPE_BW4 -> BW4_SPREAD
@@ -60,6 +76,7 @@ data class CrossoverPairing(
             val highXoPass = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f
             val highPass = values[NativeBmwDspValues.INDEX_HIGH_PASS] >= .5f
             val type = NativeBmwDspValues.FIELD_CROSSOVER_TYPE
+            val freq = NativeBmwDspValues.FIELD_CROSSOVER_FREQ
 
             var lowLowpass = 1f
             var midHighpass = 1f
@@ -68,6 +85,8 @@ data class CrossoverPairing(
                 val k = spread(
                     values[NativeBmwDspValues.outputIndex(low, type)],
                     values[NativeBmwDspValues.outputIndex(mid, type)],
+                    values[NativeBmwDspValues.outputIndex(low, freq)],
+                    values[NativeBmwDspValues.outputIndex(mid, freq)],
                 )
                 lowLowpass = 1f / k
                 midHighpass = k
@@ -83,6 +102,8 @@ data class CrossoverPairing(
                 val k = spread(
                     values[NativeBmwDspValues.midUpperXoTypeIndex(mid)],
                     values[NativeBmwDspValues.highOutputIndex(high, type)],
+                    values[NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ)],
+                    values[NativeBmwDspValues.highOutputIndex(high, freq)],
                 )
                 midLowpass = 1f / k
                 highHighpass = k

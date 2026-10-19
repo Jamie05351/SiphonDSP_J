@@ -112,15 +112,22 @@ void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate
 // Auto-correction for the crossover types that can't sum flat as a plain pair. Bands are summed
 // back together, so each boundary's lowpass + highpass must add up flat. LR4, BW3 and BW1 do;
 // a BW2 pair nulls at the corner (or +3 dB with one side inverted) and a BW4 pair peaks +3 dB.
-// When both sides of a boundary use the same BW2 or BW4 type, the two corners are spread
-// apart around the set frequency (lowpass at f / k, highpass at f * k) and, for BW2, the band
-// above is inverted: within about +/-0.5 dB, and the set frequency stays the crossover point.
+// When both sides of a boundary use the same BW2 or BW4 type at the same corner (within
+// kPairCornerTolerance -- a deliberate gap or overlap is left alone), the two corners are spread
+// apart around it (lowpass at f / k, highpass at f * k, in the bilinear-prewarped domain the
+// filters are designed in -- see spreadCorner) and, for BW2, the band above is inverted: within
+// about +/-0.5 dB at any corner and sample rate, and the set frequency stays the crossover point.
 // The factors minimise the pair's worst deviation (BW2 inverted: 1.304 -> 0.47 dB; BW4:
 // 1.128 -> 0.49 dB). Mirrored by Kotlin's CrossoverPairing.
 constexpr float kBw2PairSpread = 1.304f;
 constexpr float kBw4PairSpread = 1.128f;
+// How far apart (as a ratio) the two corners can be and still count as one boundary.
+constexpr float kPairCornerTolerance = 1.02f;
+// fc moved by factor k in the prewarped domain: tan(pi f' / fs) = k tan(pi fc / fs). The filters
+// are designed there, so the spread holds right up to Nyquist; k == 1 returns fc exactly.
+float spreadCorner(float fc, float k, float sampleRate);
 struct CrossoverPairing {
-    // Frequency multipliers applied to each corner at build time.
+    // Each corner's spread factor, applied at build time by spreadCorner().
     float lowLowpass = 1.f, midHighpass = 1.f, midLowpass = 1.f, highHighpass = 1.f;
     // Polarity flips added to the user's own (XOR) by rebuildPolarityAndMute().
     bool midInverted = false, highInverted = false;

@@ -405,3 +405,28 @@ TEST_CASE("Auto-correction reports the polarity it adds in the truth snapshot") 
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
     CHECK(proc.captureTruthSnapshot()[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);
 }
+
+// Review regressions: the spread is applied in the prewarped domain, so it holds near Nyquist (a
+// plain Hz multiply dipped ~1.5 dB at an 8 kHz Mid/High corner), and only coincident corners pair
+// (a deliberate Low 80 / Mid 200 Hz gap is left exactly as set).
+TEST_CASE("Auto-correction holds at an 8 kHz corner and skips a deliberate gap") {
+    for (const float type : {kBw2, kBw4}) {
+        auto cfg = pairedConfig(kLr4, true, type);
+        for (int slot = 0; slot < 2; ++slot) {
+            cfg[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 8000.f;
+            cfg[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = 8000.f;
+        }
+        const double worst = worstSumDeviationDb(cfg, {3000.0, 5000.0, 6500.0, 8000.0, 9500.0, 12000.0, 16000.0});
+        INFO("Type ", type, " Mid/High pair at 8 kHz: worst deviation ", worst, " dB");
+        CHECK(worst < 0.6);
+    }
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto gap = pairedConfig(kBw2, false, kLr4);
+    for (int out = 0; out < 4; ++out) {
+        gap[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutCrossoverFreq] = out < 2 ? 80.f : 200.f;
+    }
+    REQUIRE(proc.configure(gap.data(), gap.size()));
+    const auto snap = proc.captureTruthSnapshot();
+    CHECK(snap[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);  // Mid L not inverted
+}

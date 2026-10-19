@@ -71,6 +71,13 @@ class CrossoverPairingTest {
             it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
         }
         assertFalse(CrossoverPairing.of(bypassed, left = true).lowMidCorrected)
+        // A deliberate gap (Low 80 Hz, Mid 200 Hz) isn't one boundary: left alone.
+        val gap = twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW2).also {
+            for (output in 0 until 2) it[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 80f
+            for (output in 2 until 4) it[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 200f
+        }
+        assertFalse(CrossoverPairing.of(gap, left = true).lowMidCorrected)
+        assertFalse(CrossoverPairing.of(gap, left = true).midInverted)
         assertFalse(CrossoverPairing.of(twoWay(NativeBmwDspValues.CROSSOVER_TYPE_LR4), left = true).lowMidCorrected)
     }
 }
