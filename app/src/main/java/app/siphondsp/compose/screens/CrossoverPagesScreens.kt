@@ -105,7 +105,7 @@ fun CrossoverLowMidPage(
             midPair(NativeBmwDspValues.FIELD_CROSSOVER_TYPE),
         )
     }
-    val pairing = CrossoverPairing.of(dsp.values, left = true)
+    val (pairL, pairR) = pairings(dsp.values)
     val subsonicFreqMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_FREQ)
     val subsonicEnMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED)
 
@@ -114,14 +114,17 @@ fun CrossoverLowMidPage(
             dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
             row(80, 48), mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
-        SlopeRow(lowCrossoverType, onLowType, row(136, 40), slopeLabel(pairing.lowMidCorrected))
+        SlopeRow(lowCrossoverType, onLowType, row(136, 40), slopeLabel(pairL.lowMidCorrected || pairR.lowMidCorrected))
         DspArtSlider(
             dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 60f..320f, 1f, "Hz", midSlider,
             row(196, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
         SlopeRow(
             midCrossoverType, onMidType, row(252, 40),
-            slopeLabel(pairing.lowMidCorrected, flipped = pairing.midInverted),
+            slopeLabel(
+                pairL.lowMidCorrected || pairR.lowMidCorrected,
+                inverted = pairL.midInverted || pairR.midInverted,
+            ),
         )
         DspArtSlider(
             dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
@@ -169,7 +172,7 @@ fun CrossoverMidHighPage(
         dsp.commit(ThreeWayCrossover.midLowpassTypeIndex, it.toFloat(), ThreeWayCrossover.midLowpassTypeMirrors)
     }
     val highCrossoverType = dsp.get(ThreeWayCrossover.highTypeIndex).toInt().coerceIn(0, 4)
-    val pairing = CrossoverPairing.of(dsp.values, left = true)
+    val (pairL, pairR) = pairings(dsp.values)
     val onHighType: (Int) -> Unit = {
         dsp.commit(ThreeWayCrossover.highTypeIndex, it.toFloat(), ThreeWayCrossover.highTypeMirrors)
     }
@@ -188,14 +191,17 @@ fun CrossoverMidHighPage(
             dsp, MidLowpassLabel, ThreeWayCrossover.midLowpassIndex, 300f..8000f, 10f, "Hz", midSlider,
             row(120, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
         )
-        SlopeRow(midLowpassType, onMidLowpassType, row(172, 40), slopeLabel(pairing.midHighCorrected))
+        SlopeRow(midLowpassType, onMidLowpassType, row(172, 40), slopeLabel(pairL.midHighCorrected || pairR.midHighCorrected))
         DspArtSlider(
             dsp, HighHighpassLabel, ThreeWayCrossover.highHighpassIndex, 1000f..8000f, 10f, "Hz", highSlider,
             row(220, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
         )
         SlopeRow(
             highCrossoverType, onHighType, row(272, 40),
-            slopeLabel(pairing.midHighCorrected, flipped = pairing.highInverted),
+            slopeLabel(
+                pairL.midHighCorrected || pairR.midHighCorrected,
+                inverted = pairL.highInverted || pairR.highInverted,
+            ),
         )
         ArtSwitchRow(
             label = "Mid align",
@@ -400,14 +406,19 @@ private val ControlLabelWidth = 150.dp
 
 /**
  * A slope row's label: "Slope (auto)" while its boundary's BW2/BW4 pair is auto-corrected (the
- * corners spread around the set frequency), "Slope (auto, flipped)" on the band whose polarity
- * the correction also inverts. Left side shown; Right is linked to it on these pages.
+ * corners spread around the set frequency), "Auto, inverted" on the band whose polarity the
+ * correction also inverts. Short enough for the 150dp label column. Shown when either side is
+ * corrected (these pages link L and R, but a side can differ if set elsewhere).
  */
-private fun slopeLabel(corrected: Boolean, flipped: Boolean = false) = when {
+private fun slopeLabel(corrected: Boolean, inverted: Boolean = false) = when {
     !corrected -> "Slope"
-    flipped -> "Slope (auto, flipped)"
+    inverted -> "Auto, inverted"
     else -> "Slope (auto)"
 }
+
+/** Both sides' pairings, so a label covers a Right side that differs from Left. */
+private fun pairings(values: FloatArray) =
+    CrossoverPairing.of(values, left = true) to CrossoverPairing.of(values, left = false)
 
 private fun lowPair(field: Int) = intArrayOf(
     NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, field),
