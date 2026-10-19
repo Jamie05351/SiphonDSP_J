@@ -514,6 +514,10 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
     // dry signal crossfades between the two as Mix leaves or reaches 0 (see dryMatched_).
     mix_ = rampToward(mix_, mixTarget_, mixRampCoef_);
     dryMatched_ = rampToward(dryMatched_, mixTarget_ == 0.f ? 0.f : 1.f, mixRampCoef_);
+    // Settled at 0%: the input exactly, untouched by anything the wet or dry paths hold.
+    if (mix_ == 0.f && dryMatched_ == 0.f) {
+        return;
+    }
     dryL = rawL + (dryL - rawL) * dryMatched_;
     dryR = rawR + (dryR - rawR) * dryMatched_;
     l = ftz(dryL * (1.f - mix_) + wetL * mix_);
