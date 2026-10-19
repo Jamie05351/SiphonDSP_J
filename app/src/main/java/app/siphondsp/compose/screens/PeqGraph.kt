@@ -240,7 +240,7 @@ class PeqGraphOptions(
  *
  * Magnitude view (2026-10-01 redesign): the band areas (Low / Mid / High) are always there. A tap
  * focuses [activeBank]: its own curve, each of its filters as a shape in that filter's colour, and
- * its numbered nodes on that curve, with the full EQ'd curve faint behind. After 10 s untouched the
+ * its numbered nodes on that curve, with the full EQ'd curve faint behind. After 5 s untouched the
  * filters fade and the full curve takes focus again, whichever bank is selected.
  *
  * Stateless: the caller passes the current native config, PEQ state, active bank and selection,
