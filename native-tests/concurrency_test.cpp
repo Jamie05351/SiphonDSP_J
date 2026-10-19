@@ -252,3 +252,28 @@ TEST_CASE("A generator change superseded before install still starts the generat
         CHECK(rms(tail) < 1e-4);
     }
 }
+
+// Review regression: push X (sweep at -40 dBFS), push Y (sweep at -6 dBFS), then push Z (Y plus
+// an unrelated edit), all before any audio. The slot Z parses into still held X's unused
+// generator; it must not be swapped in for Y's settings.
+TEST_CASE("Superseded generator pushes never install a stale generator") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    cfg[192] = 1.f;    // sweep
+    cfg[196] = -40.f;  // X: -40 dBFS
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    cfg[196] = -6.f;   // Y: -6 dBFS
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    cfg[139] = 2.f;    // Z: an unrelated edit (meas-mute stopband offset; meas mute is off)
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+
+    std::vector<float> out(2 * 48000, 0.f);
+    proc.process(out.data(), out.size());
+    double sum = 0;
+    for (float s : out) sum += static_cast<double>(s) * s;
+    const double rmsDb = linToDb(std::sqrt(sum / static_cast<double>(out.size())));
+    INFO("Sweep RMS: ", rmsDb, " dBFS (want about -9, not about -43)");
+    CHECK(rmsDb > -15.0);
+}

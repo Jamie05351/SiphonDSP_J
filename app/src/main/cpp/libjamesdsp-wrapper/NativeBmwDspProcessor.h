@@ -335,13 +335,14 @@ private:
                    NativeBmwRouting::kOutputCount>
             allPass{};
         float sampleRate = 0.f;
-        // The measurement generator for these settings, built on the config thread when they
-        // differ from the previous update's: (re)building it allocates and, for pink noise,
-        // synthesises up to 10 s of samples -- never audio-thread work. installConfig() swaps it
-        // in and marks the slot consumed (generatorInstalled), and the next parse into this slot
-        // frees what it then holds, on the config thread. An update superseded before it was
-        // installed hands its generator on to the next parse.
+        // A fresh measurement generator for exactly these settings, built on the config thread:
+        // (re)building one allocates and, for pink noise, synthesises up to 10 s of samples --
+        // never audio-thread work. Every published update carries one. generatorParams /
+        // generatorSampleRate record what it was built for, so a parse into this slot reuses it
+        // only when those match. installConfig() swaps it in when the settings changed
+        // (generatorInstalled: the slot then holds the retired one, rebuilt on the next parse).
         std::unique_ptr<NativeBmwMeasurementGenerator> generator;
+        Params generatorParams;
         float generatorSampleRate = 0.f;
         bool generatorInstalled = false;
     };

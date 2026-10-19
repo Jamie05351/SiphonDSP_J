@@ -365,18 +365,20 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     if (!allFinite) {
         return false;
     }
-    // This slot's generator. One an install consumed is freed here, on this thread. One from an
-    // update superseded before install was built for the settings
-    // configShadow_ now holds, so it is handed on unless these settings change them again.
-    // (Only reached on success: a rejected update leaves the slot as it was.)
-    if (parsed.generatorInstalled) {
-        parsed.generator.reset();
-        parsed.generatorInstalled = false;
-    }
-    if (measGenChanged(next, configShadow_.params)) {
-        parsed.generator = std::make_unique<NativeBmwMeasurementGenerator>();
-        NativeBmwDsp::configureMeasurementGenerator(*parsed.generator, next, sampleRate);
+    // Make this slot's generator a fresh one for exactly these settings (see
+    // ParsedConfig::generator). Kept as it is only if it is unused and was built for the same
+    // settings at the same rate; otherwise rebuilt here, on this thread. Only reached on
+    // success: a rejected update leaves the slot as it was.
+    const bool reusable = parsed.generator && !parsed.generatorInstalled &&
+                          parsed.generatorSampleRate == sampleRate &&
+                          !measGenChanged(parsed.generatorParams, next);
+    if (!reusable) {
+        auto fresh = std::make_unique<NativeBmwMeasurementGenerator>();
+        NativeBmwDsp::configureMeasurementGenerator(*fresh, next, sampleRate);
+        parsed.generator = std::move(fresh);  // frees a retired or stale one, on this thread
+        parsed.generatorParams = next;
         parsed.generatorSampleRate = sampleRate;
+        parsed.generatorInstalled = false;
     }
     return true;
 }
@@ -504,19 +506,17 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         dirty |= DirtyMeasBus;
     }
     if (measGenChanged(next, p_)) {
-        // Swap in the generator the config thread built for these settings. The fallback
+        // Swap in the fresh generator the config thread built for these settings. The fallback
         // (configuring it in place, in applyDirty()) is only for one built at a sample rate
-        // that has changed since.
+        // that has changed since -- the same rare race the all-pass and PEQ paths rebuild for.
         if (parsed.generator && !parsed.generatorInstalled &&
             parsed.generatorSampleRate == sampleRate_) {
             std::swap(measGen_, *parsed.generator);
+            parsed.generatorInstalled = true;
         } else {
             dirty |= DirtyMeasGen;
         }
     }
-    // Consumed either way: the slot now holds the retired generator, or one these settings
-    // didn't need. The next parse into the slot frees it.
-    parsed.generatorInstalled = true;
 
     // MBC: split-freq changes -> DirtyMbc (rebuild filter coeffs, keeps tree state, same cost as
     // the band crossovers). mix/makeup/attack/release -> DirtyMbcTiming (scalars only, no click).
