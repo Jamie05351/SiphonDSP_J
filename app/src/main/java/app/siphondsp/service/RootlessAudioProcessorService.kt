@@ -175,8 +175,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // Apps excluded for blocking capture, by package, when that setting is on.
     private fun autoExcludedPackages(): List<String> {
         if (!excludeRestrictedSessions || !::sessionManager.isInitialized) return emptyList()
+        // getPackagesForUid, not getNameForUid: a shared uid names its group
+        // ("android.uid.system:1000"), not the packages that would match excludedPlaying.
         return sessionManager.sessionPolicyDatabase.getRestrictedUids()
-            .mapNotNull { packageManager.getNameForUid(it) }
+            .flatMap { packageManager.getPackagesForUid(it)?.toList().orEmpty() }
             .distinct()
     }
     private var sessionLossRetryCount = 0
