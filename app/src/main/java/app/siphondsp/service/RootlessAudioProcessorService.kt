@@ -171,6 +171,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // For the diagnostics snapshot, which can run before onCreate() has set sessionManager up.
     private fun sessionDatabaseOrNull() =
         if (::sessionManager.isInitialized) sessionManager.sessionDatabase else null
+
+    // Apps excluded for blocking capture, by package, when that setting is on.
+    private fun autoExcludedPackages(): List<String> {
+        if (!excludeRestrictedSessions || !::sessionManager.isInitialized) return emptyList()
+        return sessionManager.sessionPolicyDatabase.getRestrictedUids()
+            .mapNotNull { packageManager.getNameForUid(it) }
+            .distinct()
+    }
     private var sessionLossRetryCount = 0
 
     @Volatile
@@ -1419,6 +1427,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     bufferSamples = service.activeBufferSamples,
                     playbackSessions = service.sessionDatabaseOrNull()?.sessionList?.size ?: 0,
                     excludedApps = service.blockedApps.value?.map { it.packageName }.orEmpty(),
+                    autoExcludedApps = service.autoExcludedPackages(),
                     excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )
             }

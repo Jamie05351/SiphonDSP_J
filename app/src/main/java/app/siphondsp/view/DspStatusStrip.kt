@@ -235,6 +235,9 @@ class DspStatusStrip @JvmOverloads constructor(
                     "Excluded apps: " +
                         snapshot.excludedApps.ifEmpty { listOf("none") }.joinToString(),
                 )
+                if (snapshot.autoExcludedApps.isNotEmpty()) {
+                    appendLine("Auto-excluded (block capture): ${snapshot.autoExcludedApps.joinToString()}")
+                }
                 if (snapshot.excludedPlaying.isNotEmpty()) {
                     appendLine("Excluded and playing now: ${snapshot.excludedPlaying.joinToString()}")
                 }

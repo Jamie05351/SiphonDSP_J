@@ -178,7 +178,9 @@ data class RootlessPipelineRuntimeSnapshot(
     val playbackSessions: Int = 0,
     /** Packages on the Excluded apps list. */
     val excludedApps: List<String> = emptyList(),
-    /** Packages playing right now that are excluded, so not processed (see BaseSessionDatabase). */
+    /** Packages excluded automatically because they block audio capture ("Exclude unsupported apps"). */
+    val autoExcludedApps: List<String> = emptyList(),
+    /** Packages playing right now that are excluded either way, so not processed (see BaseSessionDatabase). */
     val excludedPlaying: List<String> = emptyList(),
 )
 

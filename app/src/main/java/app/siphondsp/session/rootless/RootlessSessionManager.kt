@@ -30,6 +30,9 @@ class RootlessSessionManager(context: Context) : BaseSessionManager(context)
         }
 
         sessionDump?.let { sessionDatabase.update(it) }
+        // Nothing playing anywhere (not a failed dump): an excluded player that stopped isn't
+        // playing any more either.
+        if (sessionDump == null && dumpManager.lastDumpFoundNothing) sessionDatabase.clearExcludedPlaying()
     }
 
     override fun onDumpMethodChange(method: DumpManager.Method) {

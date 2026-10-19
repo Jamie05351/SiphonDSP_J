@@ -51,11 +51,21 @@ class DumpManager constructor(val context: Context): KoinComponent {
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
     }
 
+    /**
+     * Whether the last [dumpSessions] returned null because every method that worked found no
+     * sessions -- nothing playing -- rather than because they all failed.
+     */
+    @Volatile var lastDumpFoundNothing = false
+        private set
+
     fun dumpSessions(): ISessionInfoDump? {
         val preferred = availableDumpMethods[activeDumpMethod]
         var dump: ISessionInfoDump? = null
+        var sawEmpty = false
+        lastDumpFoundNothing = false
         try {
             dump = preferred?.dump(context)
+            sawEmpty = dump != null && dump.sessions.isEmpty()
         } catch (ex: Exception) {
             Timber.e("Exception raised while dumping session info using method ${activeDumpMethod.name} (id ${activeDumpMethod})")
             Timber.e(ex)
@@ -73,6 +83,7 @@ class DumpManager constructor(val context: Context): KoinComponent {
                 {
                     try {
                         dump = it.value.dump(context)
+                        if (dump?.sessions?.isEmpty() == true) sawEmpty = true
                     } catch (ex: Exception) {
                         Timber.e("Exception raised while dumping session info using fallback method ${it.key.name} (id ${it.key})")
                         Timber.e(ex)
@@ -85,7 +96,8 @@ class DumpManager constructor(val context: Context): KoinComponent {
                 }
         }
 
-        Timber.e("Failed to find session info using any method")
+        lastDumpFoundNothing = sawEmpty
+        if (!sawEmpty) Timber.e("Failed to find session info using any method")
         return null
     }
 

@@ -33,7 +33,13 @@ abstract class BaseSessionDatabase(protected val context: Context) {
     @Volatile var excludedPlayingPackages: List<String> = emptyList()
         private set
     // The latest dump's entries, so a change to the exclusions updates the list above at once.
-    private var lastDumpEntries: Collection<AudioSessionDumpEntry> = emptyList()
+    @Volatile private var lastDumpEntries: Collection<AudioSessionDumpEntry> = emptyList()
+
+    /** Nothing is playing: forget the last dump's excluded players. */
+    fun clearExcludedPlaying() {
+        lastDumpEntries = emptyList()
+        excludedPlayingPackages = emptyList()
+    }
 
     private fun recomputeExcludedPlaying() {
         val excluded = excludedUids
@@ -61,6 +67,7 @@ abstract class BaseSessionDatabase(protected val context: Context) {
 
     fun clearSessions(){
         cancelPendingRemovals()
+        clearExcludedPlaying()
         sessionList.forEach { (_, session) -> onSessionRemoved(session) }
         sessionList.clear()
     }

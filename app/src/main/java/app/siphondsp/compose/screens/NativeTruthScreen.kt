@@ -221,6 +221,10 @@ private fun PipelineSection(pipeline: RootlessPipelineRuntimeSnapshot?) {
                 if (pipeline.playbackSessions > 0) BmwGreen else BmwYellow,
             )
             KeyValueRow("Excluded apps", pipeline.excludedApps.ifEmpty { listOf("none") }.joinToString())
+            KeyValueRow(
+                "Auto-excluded (block capture)",
+                pipeline.autoExcludedApps.ifEmpty { listOf("none") }.joinToString(),
+            )
             if (pipeline.excludedPlaying.isNotEmpty()) {
                 // Playing but never processed: the case that otherwise reads as "nothing playing".
                 KeyValueRow("Excluded and playing now", pipeline.excludedPlaying.joinToString(), BmwRed)

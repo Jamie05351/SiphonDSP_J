@@ -164,6 +164,12 @@ class BaseSessionDatabaseTest {
         db.setExcludedUids(arrayOf(1000))
         assertEquals(listOf("com.spotify.music"), db.excludedPlayingPackages)
 
+        // A session reset (capture restart) forgets it too.
+        db.clearSessions()
+        assertTrue(db.excludedPlayingPackages.isEmpty())
+        db.update(FakeDump(mapOf(1 to entry(uid = 1000, pkg = "com.spotify.music"))))
+        assertEquals(listOf("com.spotify.music"), db.excludedPlayingPackages)
+
         // Stops playing: no longer reported.
         db.update(FakeDump(mapOf(2 to entry(uid = 2000, pkg = "com.example.player"))))
         assertTrue(db.excludedPlayingPackages.isEmpty())
