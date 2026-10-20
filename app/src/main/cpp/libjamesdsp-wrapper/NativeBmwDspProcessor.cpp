@@ -286,6 +286,18 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     r = oL;
 }
 
+void NativeBmwDspProcessor::reserveBlock(std::size_t sampleCount) {
+    sampleCount = std::max<std::size_t>(sampleCount & ~std::size_t{1}, 2);
+    // Allocated here and swapped in under the lock; the old buffers are freed after it.
+    std::vector<float> intWork(sampleCount), rawInWork(sampleCount);
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!workReserved_ || intWork_.size() != sampleCount || rawInWork_.size() != sampleCount) {
+        intWork_.swap(intWork);
+        rawInWork_.swap(rawInWork);
+        workReserved_ = true;
+    }
+}
+
 void NativeBmwDspProcessor::processBlock(float* w, std::size_t n, BlockHook hook, void* ctx) {
     if (!hook) {
         for (std::size_t i = 0; i + 1 < n; i += 2) {
@@ -296,12 +308,22 @@ void NativeBmwDspProcessor::processBlock(float* w, std::size_t n, BlockHook hook
         }
         return;
     }
-    // With a host stage before the master limiter: the front of the chain over the whole buffer,
+    if (!workReserved_ && rawInWork_.size() < n) {
+        rawInWork_.resize(n);  // never reserved: grow on the audio thread, as before
+    }
+    const std::size_t piece = std::min(n, rawInWork_.size()) & ~std::size_t{1};
+    if (piece == 0) {
+        return;
+    }
+    for (std::size_t offset = 0; offset < n; offset += piece) {
+        processHookedBlock(w + offset, std::min(piece, n - offset), hook, ctx);
+    }
+}
+
+void NativeBmwDspProcessor::processHookedBlock(float* w, std::size_t n, BlockHook hook, void* ctx) {
+    // With a host stage before the master limiter: the front of the chain over the whole piece,
     // the host stage on the block, then the back. The raw input is kept so the capture can still
     // take each frame's input and output together, after the back.
-    if (rawInWork_.size() < n) {
-        rawInWork_.resize(n);
-    }
     for (std::size_t i = 0; i + 1 < n; i += 2) {
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
         rawInWork_[i] = w[i];
@@ -313,6 +335,31 @@ void NativeBmwDspProcessor::processBlock(float* w, std::size_t n, BlockHook hook
         processFrameBack(w[i], w[i + 1]);
         capture_.tapIn(rawInWork_[i], rawInWork_[i + 1]);
         capture_.tapOut(w[i], w[i + 1]);
+    }
+}
+
+// The host stage works on a float block, so a hooked integer buffer goes through intWork_, in
+// pieces of its reserved size.
+template <class Sample>
+void NativeBmwDspProcessor::processIntHooked(Sample* w, std::size_t n, float scale, BlockHook hook,
+                                             void* ctx) {
+    if (!workReserved_ && intWork_.size() < n) {
+        intWork_.resize(n);  // never reserved: grow on the audio thread, as before
+    }
+    const std::size_t piece = std::min(n, intWork_.size()) & ~std::size_t{1};
+    if (piece == 0) {
+        return;
+    }
+    const float invScale = 1.f / scale;
+    for (std::size_t offset = 0; offset < n; offset += piece) {
+        const std::size_t count = std::min(piece, n - offset);
+        for (std::size_t i = 0; i < count; ++i) {
+            intWork_[i] = static_cast<float>(w[offset + i]) * invScale;
+        }
+        processBlock(intWork_.data(), count, hook, ctx);
+        for (std::size_t i = 0; i < count; ++i) {
+            w[offset + i] = NativeBmwDsp::clampInt<Sample>(intWork_[i] * scale);
+        }
     }
 }
 
@@ -341,17 +388,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n, B
     constexpr float scale = 32768.f, invScale = 1.f / scale;
     auto* w = const_cast<int16_t*>(s);
     if (hook) {
-        // The host stage works on a float block, so the whole buffer goes through intWork_.
-        if (intWork_.size() < n) {
-            intWork_.resize(n);
-        }
-        for (std::size_t i = 0; i < n; ++i) {
-            intWork_[i] = static_cast<float>(w[i]) * invScale;
-        }
-        processBlock(intWork_.data(), n, hook, ctx);
-        for (std::size_t i = 0; i < n; ++i) {
-            w[i] = NativeBmwDsp::clampInt<int16_t>(intWork_[i] * scale);
-        }
+        processIntHooked(w, n, scale, hook, ctx);
         return s;
     }
     for (std::size_t i = 0; i + 1 < n; i += 2) {
@@ -377,17 +414,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n, B
     constexpr float scale = 2147483648.f, invScale = 1.f / scale;
     auto* w = const_cast<int32_t*>(s);
     if (hook) {
-        // The host stage works on a float block, so the whole buffer goes through intWork_.
-        if (intWork_.size() < n) {
-            intWork_.resize(n);
-        }
-        for (std::size_t i = 0; i < n; ++i) {
-            intWork_[i] = static_cast<float>(w[i]) * invScale;
-        }
-        processBlock(intWork_.data(), n, hook, ctx);
-        for (std::size_t i = 0; i < n; ++i) {
-            w[i] = NativeBmwDsp::clampInt<int32_t>(intWork_[i] * scale);
-        }
+        processIntHooked(w, n, scale, hook, ctx);
         return s;
     }
     for (std::size_t i = 0; i + 1 < n; i += 2) {

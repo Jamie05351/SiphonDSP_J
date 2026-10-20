@@ -31,6 +31,7 @@ import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.interop.JamesDspWrapper
 import app.siphondsp.interop.JamesDspLocalEngine
 import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.interop.ProcessorMessageHandler
@@ -38,6 +39,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
+import app.siphondsp.model.debug.RealtimeDiagnostics
 import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
 import app.siphondsp.model.preference.AudioEncoding
 import app.siphondsp.model.room.AppBlocklistDatabase
@@ -140,6 +142,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // What the current pipeline really runs at, for the home screen's Settings cell.
     @Volatile private var activePcmFloat: Boolean? = null
     @Volatile private var activeBufferSamples = 0
+    // Per-buffer timing and read sizes from the worker, for the Native truth screen.
+    private val audioStats = AudioThreadStats()
 
     private val startupDiagnosticsFinisher = Runnable {
         startupDiagnostics?.finishIfDue()
@@ -671,6 +675,32 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         return probe
     }
 
+    private fun realtimeDiagnostics(): RealtimeDiagnostics? {
+        val stats = audioStats
+        if (!::engine.isInitialized || (stats.processCallCount == 0L && stats.readCallCount == 0L)) return null
+        val counters = LongArray(JamesDspWrapper.REALTIME_COUNT)
+        val countersRead = engine.readRealtimeCounters(counters)
+        val (underrunsTotal, underrunsLastMinute) = stats.underruns(SystemClock.elapsedRealtime())
+        return RealtimeDiagnostics(
+            processCalls = stats.processCallCount,
+            processMeanMicros = stats.processMeanMicros,
+            processRecentMaxMicros = stats.processRecentMaxMicros,
+            processMaxMicros = stats.processMaxMicros,
+            budgetMicros = stats.budgetMicros,
+            budgetBuckets = stats.budgetBucketCounts,
+            readCalls = stats.readCallCount,
+            readRequested = stats.readRequestedSamples,
+            readMean = stats.readMean,
+            readStdDev = stats.readStdDev,
+            readMin = stats.readMinSamples,
+            readMax = stats.readMaxSamples,
+            shortReads = stats.shortReadCount,
+            underrunsTotal = underrunsTotal,
+            underrunsLastMinute = underrunsLastMinute,
+            nativeCounters = if (countersRead) counters.toList() else null,
+        )
+    }
+
     // Called under the existing lifecycle lock so state getters cannot race release().
     private fun checkPipelineHealthLocked() {
         val now = SystemClock.elapsedRealtime()
@@ -690,6 +720,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             recreateRecorderRequested, recreationInProgress, recreationSince,
         )
         val health = AudioPipelineHealth.evaluate(snapshot)
+        activeTrack?.let { track ->
+            try { audioStats.sampleUnderruns(track.underrunCount, now) } catch (_: Exception) {}
+        }
         if (health != lastHealth) {
             fun age(time: Long) = if (time < 0) -1 else now - time
             Timber.i(
@@ -836,6 +869,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         } catch (e: SecurityException) {
             Timber.w(e, "runRecorderLoop: platform refused THREAD_PRIORITY_URGENT_AUDIO, continuing at default priority")
         }
+        audioStats.reset()
+        // Size the native work buffers and convolvers for this pipeline's buffer now, before any
+        // audio flows, so no buffer ever reallocates or rebuilds them on this thread.
+        if (!engine.prepareBlockSize(bufferSamples / CHANNEL_COUNT))
+            Timber.w("runRecorderLoop: native engine not prepared for %d-frame blocks", bufferSamples / CHANNEL_COUNT)
 
         var recorder: AudioRecord? = null
         var track: AudioTrack? = null
@@ -875,6 +913,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
+                        retireTrackUnderruns(track)
                         safeRelease(recorder)
                         safeRelease(track)
                         activeRecorder = null
@@ -1007,6 +1046,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 if (!generatedInput) {
                     lastSuccessfulRead = SystemClock.elapsedRealtime()
                     consecutiveReadFailures = 0
+                    audioStats.recordRead(readCount, bufferSamples)
                 }
                 if (recreateRecorderRequested || isProcessorDisposing || isServiceDisposing) continue
 
@@ -1015,12 +1055,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 if(encoding == AudioEncoding.PcmShort) {
                     diagnostics?.recordShortInput(shortBuffer, processCount)
+                    val processStart = System.nanoTime()
                     try {
                         engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
                     } catch (e: Throwable) {
                         diagnostics?.recordDspFailure(e)
                         throw e
                     }
+                    audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
                     lastSuccessfulProcess = SystemClock.elapsedRealtime()
                     diagnostics?.recordDspSuccess(processCount)
                     diagnostics?.recordShortOutput(shortOutBuffer, processCount)
@@ -1035,12 +1077,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 }
                 else {
                     diagnostics?.recordFloatInput(floatBuffer, processCount)
+                    val processStart = System.nanoTime()
                     try {
                         engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
                     } catch (e: Throwable) {
                         diagnostics?.recordDspFailure(e)
                         throw e
                     }
+                    audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
                     lastSuccessfulProcess = SystemClock.elapsedRealtime()
                     diagnostics?.recordDspSuccess(processCount)
                     diagnostics?.recordFloatOutput(floatOutBuffer, processCount)
@@ -1077,6 +1121,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             safeStop(recorder)
             safeStop(track)
+            retireTrackUnderruns(track)
             safeRelease(recorder)
             safeRelease(track)
 
@@ -1312,6 +1357,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
+    // Counts the track's last underruns before it's released (see AudioThreadStats.retireTrack).
+    private fun retireTrackUnderruns(track: AudioTrack?) {
+        val underruns = try { track?.underrunCount } catch (_: Exception) { null } ?: return
+        audioStats.retireTrack(underruns)
+    }
+
     private fun safeRelease(track: AudioTrack?) {
         try {
             track?.release()
@@ -1405,7 +1456,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // state/recordingState/playState getters running on them -- querying a retired
             // AudioRecord/AudioTrack from a since-superseded pipeline generation, the same hazard
             // checkPipelineHealthLocked() takes this lock to avoid.
-            return synchronized(service.recorderLifecycleLock) {
+            val snapshot = synchronized(service.recorderLifecycleLock) {
                 val recorder = service.activeRecorder
                 val track = service.activeTrack
                 RootlessPipelineRuntimeSnapshot(
@@ -1433,6 +1484,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )
             }
+            // Outside the lifecycle lock: the native counters are read under the engine's meter
+            // lock, which is never taken inside it anywhere else.
+            return snapshot.copy(realtime = service.realtimeDiagnostics())
         }
 
         /**

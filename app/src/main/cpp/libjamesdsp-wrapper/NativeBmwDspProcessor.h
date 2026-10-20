@@ -202,6 +202,11 @@ public:
     // still caught by the limiter and its channels are the logical, unswapped L / R. Only called
     // while this processor is enabled.
     using BlockHook = void (*)(void* context, float* interleaved, std::size_t frames);
+    // Sizes the workspaces a buffer with a hook goes through for up to `sampleCount` interleaved
+    // samples (control thread; allocates outside stateMutex_). Once reserved, process() never
+    // allocates: a longer buffer goes through in reserved-size pieces, each with its own hook
+    // call. Unreserved, the workspaces grow on the audio thread as before.
+    void reserveBlock(std::size_t sampleCount);
     const int16_t* process(const int16_t* samples, std::size_t sampleCount,
                            BlockHook beforeMasterLimiter = nullptr, void* hookContext = nullptr);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount,
@@ -315,11 +320,20 @@ private:
     void processFrameBack(float& l, float& r);
     // The float processing for one buffer, shared by the three sample formats.
     void processBlock(float* interleaved, std::size_t sampleCount, BlockHook hook, void* hookContext);
-    // Float workspace for the integer formats while a hook runs; grows only.
+    // Float workspace for the integer formats while a hook runs; sized by reserveBlock() (or
+    // grown on first use if it never ran).
     std::vector<float> intWork_;
     // Each buffer's raw input while a hook runs, so the measurement capture still records input
-    // and output in pairs (CaptureRecorder advances only on tapOut); grows only.
+    // and output in pairs (CaptureRecorder advances only on tapOut); sized like intWork_.
     std::vector<float> rawInWork_;
+    // Set by reserveBlock(): the workspaces keep their size and process() works in pieces.
+    bool workReserved_ = false;
+    // The hooked path for one piece that fits rawInWork_.
+    void processHookedBlock(float* interleaved, std::size_t sampleCount, BlockHook hook, void* hookContext);
+    // Converts one integer buffer through intWork_ and processBlock(), piece by piece.
+    template <class Sample>
+    void processIntHooked(Sample* samples, std::size_t sampleCount, float scale, BlockHook hook,
+                          void* hookContext);
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
     // gain, then the band's stereo-linked bus limiter.
     void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);

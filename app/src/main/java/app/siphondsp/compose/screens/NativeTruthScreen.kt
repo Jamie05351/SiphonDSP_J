@@ -27,16 +27,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
+import app.siphondsp.interop.JamesDspWrapper
 import app.siphondsp.interop.NativeConfigRevisionStatus
+import app.siphondsp.model.debug.CpuFrequencies
 import app.siphondsp.model.debug.NativeBiquadStage
 import app.siphondsp.model.debug.NativeCrossoverSnapshot
 import app.siphondsp.model.debug.NativeDspOutput
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
 import app.siphondsp.model.debug.NativePeqBand
 import app.siphondsp.model.debug.NativePeqBank
+import app.siphondsp.model.debug.RealtimeDiagnostics
 import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
 import app.siphondsp.service.RootlessAudioProcessorService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val REFRESH_INTERVAL_MS = 500L
@@ -63,6 +68,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
     var pipeline by remember { mutableStateOf<RootlessPipelineRuntimeSnapshot?>(null) }
     var handleReady by remember { mutableStateOf<Boolean?>(null) }
     var engineSampleRate by remember { mutableStateOf<Float?>(null) }
+    var cpu by remember { mutableStateOf<List<CpuFrequencies.Policy>>(emptyList()) }
     var lastRefreshedAtMs by remember { mutableLongStateOf(0L) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -73,6 +79,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             pipeline = RootlessAudioProcessorService.pipelineRuntimeSnapshot()
             handleReady = RootlessAudioProcessorService.nativeBmwPeqHandleReady()
             engineSampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
+            cpu = withContext(Dispatchers.IO) { CpuFrequencies.read() }
             lastRefreshedAtMs = System.currentTimeMillis()
             nowMs = lastRefreshedAtMs
             delay(REFRESH_INTERVAL_MS)
@@ -95,6 +102,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
         }
         item { EngineSection(handleReady, engineSampleRate, truth) }
         item { PipelineSection(pipeline) }
+        item { RealtimeSection(pipeline?.realtime, cpu) }
         item { RevisionSection("DSP REVISION", revision?.let { RevisionRow.dsp(it) }) }
         item { RevisionSection("PEQ REVISION", revision?.let { RevisionRow.peq(it) }) }
         truth?.crossovers?.let { crossovers ->
@@ -250,6 +258,89 @@ private fun PipelineSection(pipeline: RootlessPipelineRuntimeSnapshot?) {
                 },
             )
             pipeline.pipelineHealthReason?.let { KeyValueRow("Health reason", it) }
+        }
+    }
+}
+
+@Composable
+private fun RealtimeSection(realtime: RealtimeDiagnostics?, cpu: List<CpuFrequencies.Policy>) {
+    Column {
+        SectionHeader("REAL-TIME")
+        DebugCard {
+            if (realtime == null) {
+                KeyValueRow("Audio thread", "no buffers yet", BmwYellow)
+            } else {
+                val budget = realtime.budgetMicros
+                fun shareColor(micros: Double) = when {
+                    budget <= 0.0 -> Color.White
+                    micros >= budget -> BmwRed
+                    micros >= budget * 0.75 -> BmwYellow
+                    else -> Color.White
+                }
+                KeyValueRow("Buffers processed", realtime.processCalls.toString())
+                KeyValueRow("Budget per buffer", "${fmt(budget / 1000.0)} ms")
+                KeyValueRow("Process time, mean", "${fmt(realtime.processMeanMicros / 1000.0)} ms")
+                KeyValueRow(
+                    "Process time, max (last 10-20 s)",
+                    "${fmt(realtime.processRecentMaxMicros / 1000.0)} ms",
+                    shareColor(realtime.processRecentMaxMicros),
+                )
+                KeyValueRow(
+                    "Process time, max (session)",
+                    "${fmt(realtime.processMaxMicros / 1000.0)} ms",
+                    shareColor(realtime.processMaxMicros),
+                )
+                val b = realtime.budgetBuckets
+                if (b.size == 5) {
+                    KeyValueRow("Budget used <25% / <50% / <75%", "${b[0]} / ${b[1]} / ${b[2]}")
+                    KeyValueRow("Budget used 75-100%", b[3].toString(), if (b[3] > 0) BmwYellow else Color.White)
+                }
+                KeyValueRow("Over budget", realtime.overruns.toString(), if (realtime.overruns > 0) BmwRed else BmwGreen)
+                KeyValueRow(
+                    "Underruns, total / last minute",
+                    "${realtime.underrunsTotal} / ${realtime.underrunsLastMinute}",
+                    if (realtime.underrunsLastMinute > 0) BmwRed else Color.White,
+                )
+                KeyValueRow("Reads", realtime.readCalls.toString())
+                KeyValueRow(
+                    "Read size, mean ± sd",
+                    "${fmt(realtime.readMean, 1)} ± ${fmt(realtime.readStdDev, 1)} of ${realtime.readRequested}",
+                    if (realtime.readStdDev > 0.0) BmwYellow else Color.White,
+                )
+                KeyValueRow("Read size, min - max", "${realtime.readMin} - ${realtime.readMax}")
+                KeyValueRow("Short reads", realtime.shortReads.toString(), if (realtime.shortReads > 0) BmwYellow else Color.White)
+                val n = realtime.nativeCounters
+                if (n == null || n.size < JamesDspWrapper.REALTIME_COUNT) {
+                    KeyValueRow("Native counters", "unavailable", Color.Gray)
+                } else {
+                    KeyValueRow("Convolver IR loads", n[JamesDspWrapper.REALTIME_IR_LOADS].toString())
+                    val changes = n[JamesDspWrapper.REALTIME_BLOCK_SIZE_CHANGES]
+                    KeyValueRow("Blocks off the prepared size", changes.toString(), if (changes > 0) BmwYellow else Color.White)
+                    val rebuilds = n[JamesDspWrapper.REALTIME_CONVOLVER_REBUILDS]
+                    KeyValueRow("Convolver rebuilds (audio thread)", rebuilds.toString(), if (rebuilds > 0) BmwRed else BmwGreen)
+                    val reallocs = n[JamesDspWrapper.REALTIME_WORK_BUFFER_REALLOCS]
+                    KeyValueRow("Work-buffer reallocs (audio thread)", reallocs.toString(), if (reallocs > 0) BmwRed else BmwGreen)
+                    KeyValueRow("Last block", "${n[JamesDspWrapper.REALTIME_LAST_BLOCK_FRAMES]} frames")
+                    val prepared = n[JamesDspWrapper.REALTIME_PREPARED_FRAMES]
+                    KeyValueRow(
+                        "Prepared block",
+                        if (prepared > 0) "$prepared frames" else "not prepared",
+                        if (prepared > 0) BmwGreen else BmwRed,
+                    )
+                }
+            }
+            if (cpu.isEmpty()) {
+                KeyValueRow("CPU clocks", "unreadable", Color.Gray)
+            }
+            cpu.forEach { policy ->
+                fun mhz(khz: Long?) = khz?.let { "${it / 1000}" } ?: "?"
+                val capped = policy.capKhz != null && policy.hardwareMaxKhz != null && policy.capKhz < policy.hardwareMaxKhz
+                KeyValueRow(
+                    "CPU ${policy.cpus}",
+                    "${mhz(policy.currentKhz)} MHz (cap ${mhz(policy.capKhz)} / ${mhz(policy.hardwareMaxKhz)})",
+                    if (capped) BmwYellow else Color.White,
+                )
+            }
         }
     }
 }
