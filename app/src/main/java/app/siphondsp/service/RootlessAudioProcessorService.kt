@@ -913,6 +913,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
+                        retireTrackUnderruns(track)
                         safeRelease(recorder)
                         safeRelease(track)
                         activeRecorder = null
@@ -1120,6 +1121,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             safeStop(recorder)
             safeStop(track)
+            retireTrackUnderruns(track)
             safeRelease(recorder)
             safeRelease(track)
 
@@ -1353,6 +1355,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
         catch(_: Exception) {
         }
+    }
+
+    // Counts the track's last underruns before it's released (see AudioThreadStats.retireTrack).
+    private fun retireTrackUnderruns(track: AudioTrack?) {
+        val underruns = try { track?.underrunCount } catch (_: Exception) { null } ?: return
+        audioStats.retireTrack(underruns)
     }
 
     private fun safeRelease(track: AudioTrack?) {

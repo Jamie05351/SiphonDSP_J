@@ -102,21 +102,35 @@ internal class AudioThreadStats {
     private var underrunSamples = 0
 
     /**
-     * Watchdog: the current AudioTrack reports [trackUnderruns] since it was created. A smaller
-     * number than last time means the track was recreated, so its whole count is new.
+     * Watchdog: the current AudioTrack reports [trackUnderruns] since it was created. The worker
+     * calls [retireTrack] before replacing a track; a smaller number than last time is the
+     * fallback for one replaced without it, and counts as a new track's whole count.
      */
     fun sampleUnderruns(trackUnderruns: Int, nowMs: Long) = synchronized(underrunLock) {
-        val delta = when {
+        addTrackUnderruns(trackUnderruns)
+        val slot = underrunSamples % UNDERRUN_HISTORY
+        underrunSampleTimes[slot] = nowMs
+        underrunSampleTotals[slot] = underrunTotal
+        underrunSamples++
+    }
+
+    /**
+     * Worker: the current AudioTrack, with [finalTrackUnderruns] since it was created, is about to
+     * be released. Its underruns since the last sample are counted now -- they can't be read
+     * after release -- and the next sample is taken as a new track's whole count, whatever it is.
+     */
+    fun retireTrack(finalTrackUnderruns: Int) = synchronized(underrunLock) {
+        addTrackUnderruns(finalTrackUnderruns)
+        lastTrackUnderruns = -1
+    }
+
+    private fun addTrackUnderruns(trackUnderruns: Int) {
+        underrunTotal += when {
             lastTrackUnderruns < 0 -> trackUnderruns
             trackUnderruns >= lastTrackUnderruns -> trackUnderruns - lastTrackUnderruns
             else -> trackUnderruns
         }
         lastTrackUnderruns = trackUnderruns
-        underrunTotal += delta
-        val slot = underrunSamples % UNDERRUN_HISTORY
-        underrunSampleTimes[slot] = nowMs
-        underrunSampleTotals[slot] = underrunTotal
-        underrunSamples++
     }
 
     /** Underruns since the worker started, and within the last minute of watchdog samples. */

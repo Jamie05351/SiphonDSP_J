@@ -51,6 +51,19 @@ class AudioThreadStatsTest {
     }
 
     @Test
+    fun aRetiredTrackKeepsItsLastUnderrunsAndTheNextTrackCountsInFull() {
+        val stats = stats()
+        stats.sampleUnderruns(2, 0)
+        // The old track gains 1 more before it's replaced, and the new one reaches 3 before the
+        // next sample -- more than the old track's last count, so only retireTrack() can tell.
+        stats.retireTrack(3)
+        stats.sampleUnderruns(3, 2000)
+        assertEquals(6L to 6L, stats.underruns(2000))
+        stats.sampleUnderruns(4, 4000)
+        assertEquals(7L to 7L, stats.underruns(4000))
+    }
+
+    @Test
     fun resetStartsOver() {
         val stats = stats()
         stats.recordProcess(5_000_000, 960, 48000)
