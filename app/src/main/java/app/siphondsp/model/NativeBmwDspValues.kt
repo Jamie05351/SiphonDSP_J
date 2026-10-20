@@ -73,7 +73,11 @@ object NativeBmwDspValues {
     // 296 is the automatic-headroom switch, added in the 296 -> 297 growth. Kotlin-only (native
     // never reads it): with it on, the service sends a computed headroom in place of index 5's
     // manual one (see AutoHeadroom). Default off, so older saves keep their manual headroom.
-    const val SIZE = 297
+    //
+    // 297..298 are Mono Bass (enabled, split Hz), added in the 297 -> 299 growth -- new slots,
+    // not the reclaimed 42..45 an earlier mono bass used. Default off, so older saves are
+    // unchanged.
+    const val SIZE = 299
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -385,6 +389,21 @@ object NativeBmwDspValues {
     // Headroom's range, here and in native configure().
     const val HEADROOM_MIN_DB = -30f
     const val HEADROOM_MAX_DB = 0f
+    // Mono Bass: both channels carry (L+R)/2 below the split, stereo above it (complementary
+    // LR4, right after the input DC blocker). Range mirrors native MonoBass.
+    const val INDEX_MONO_BASS_ENABLED = 297
+    const val INDEX_MONO_BASS_FREQ = 298 // Hz
+    const val MONO_BASS_MIN_HZ = 60f
+    const val MONO_BASS_MAX_HZ = 120f
+    const val MONO_BASS_DEFAULT_HZ = 90f
+    const val MONO_BASS_STEP_HZ = 5f
+
+    /** Mono Bass's split frequency in Hz as native runs it, or 0 while it's off. */
+    fun monoBassSplitHz(values: FloatArray): Double {
+        if (values.getOrElse(INDEX_MONO_BASS_ENABLED) { 0f } < .5f) return 0.0
+        val hz = values.getOrElse(INDEX_MONO_BASS_FREQ) { MONO_BASS_DEFAULT_HZ }
+        return (if (hz.isFinite()) hz else MONO_BASS_DEFAULT_HZ).coerceIn(MONO_BASS_MIN_HZ, MONO_BASS_MAX_HZ).toDouble()
+    }
     // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
     const val LOUDNESS_BASS_HZ = 100.0
     const val LOUDNESS_TREBLE_HZ = 8000.0
@@ -585,6 +604,9 @@ object NativeBmwDspValues {
         100f, // 295 loudness strength %
         // --- Automatic headroom (296), ships off ---
         0f, // 296 headroom auto (off = manual)
+        // --- Mono Bass (297..298), ships off ---
+        0f, // 297 mono bass enabled (off)
+        MONO_BASS_DEFAULT_HZ, // 298 mono bass split Hz
     )
 
     init {

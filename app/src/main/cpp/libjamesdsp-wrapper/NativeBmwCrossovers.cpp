@@ -247,4 +247,34 @@ void Tilt::process(float& l, float& r) {
     Biquad::runPair(hiL2_, hiR2_, l, r);
 }
 
+void MonoBass::rebuild(float freqHz, float sampleRate) {
+    const float fc = clampf(freqHz, kMinHz, kMaxHz);
+    constexpr float kButterworthQ = 0.70710678f;
+    makeLowPass(lp1_, fc, kButterworthQ, sampleRate);
+    makeLowPass(lp2_, fc, kButterworthQ, sampleRate);
+    makeHighPass(hpL1_, fc, kButterworthQ, sampleRate);
+    makeHighPass(hpL2_, fc, kButterworthQ, sampleRate);
+    makeHighPass(hpR1_, fc, kButterworthQ, sampleRate);
+    makeHighPass(hpR2_, fc, kButterworthQ, sampleRate);
+}
+void MonoBass::clear() {
+    for (Biquad* b : {&lp1_, &lp2_, &hpL1_, &hpL2_, &hpR1_, &hpR2_}) {
+        b->clear();
+    }
+}
+void MonoBass::process(float& l, float& r, float mix) {
+    const float low = lp2_.run(lp1_.run((l + r) * .5f));
+    float hl = l, hr = r;
+    Biquad::runPair(hpL1_, hpR1_, hl, hr);
+    Biquad::runPair(hpL2_, hpR2_, hl, hr);
+    const float splitL = low + hl, splitR = low + hr;
+    if (mix >= 1.f) {
+        l = splitL;
+        r = splitR;
+    } else {
+        l += (splitL - l) * mix;
+        r += (splitR - r) * mix;
+    }
+}
+
 }  // namespace NativeBmwDsp

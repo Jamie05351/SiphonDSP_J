@@ -165,6 +165,8 @@ class NativeBmwSchemaAgreementTest {
         "kLoudnessEnabled" to NativeBmwDspValues.INDEX_LOUDNESS_ENABLED,
         "kLoudnessStrength" to NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH,
         "kHeadroomAuto" to NativeBmwDspValues.INDEX_HEADROOM_AUTO,
+        "kMonoBassEnabled" to NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
+        "kMonoBassFreq" to NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
     )
 
     @Test

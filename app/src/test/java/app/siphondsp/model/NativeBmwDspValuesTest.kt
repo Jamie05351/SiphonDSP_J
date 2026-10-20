@@ -864,4 +864,20 @@ class NativeBmwDspValuesTest {
         assertEquals(80f, padded[NativeBmwDspValues.INDEX_MBC_XO_0], 0f)
         assertEquals(100f, padded[NativeBmwDspValues.INDEX_MBC_MIX], 0f)
     }
+
+    @Test
+    fun monoBassShipsOffAndItsSplitStaysInRange() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED], 0f)
+        assertEquals(90f, values[NativeBmwDspValues.INDEX_MONO_BASS_FREQ], 0f)
+        assertEquals(0.0, NativeBmwDspValues.monoBassSplitHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
+        assertEquals(90.0, NativeBmwDspValues.monoBassSplitHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = 400f
+        assertEquals(120.0, NativeBmwDspValues.monoBassSplitHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = Float.NaN
+        assertEquals(90.0, NativeBmwDspValues.monoBassSplitHz(values), 0.0)
+        // A save from before the 297 -> 299 growth has neither slot: off.
+        assertEquals(0.0, NativeBmwDspValues.monoBassSplitHz(values.copyOf(297)), 0.0)
+    }
 }

@@ -609,6 +609,33 @@ class BmwSignalChainModelTest {
         assertEquals(lr4.midBranchDb[0][i], bw2.midBranchDb[0][i], 0.01)
     }
 
+    @Test
+    fun monoBassChangesThePhaseButNotTheMagnitude() {
+        val off = NativeBmwDspValues.DEFAULTS.copyOf()
+        val on = off.copyOf().also {
+            it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_MONO_BASS_FREQ] = 90f
+        }
+        // Without invalidateAll() between them: switching it must rebuild the pre-split stage.
+        calculator.invalidateAll()
+        calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
+        calculator.compute(off, BmwPeqState.empty(), curves)
+        val offSum = curves.sumDb[0].copyOf()
+        val offPhase = curves.sumPhase[0].copyOf()
+        calculator.compute(on, BmwPeqState.empty(), curves)
+        for (i in offSum.indices) {
+            assertEquals("sum at point $i", offSum[i], curves.sumDb[0][i], 1e-6)
+        }
+        // The LR4 sum is a 2nd-order all-pass: -180 degrees at the split, so the phase moves there.
+        val i = nearestIndex(90.0)
+        val moved = abs(Math.toDegrees(curves.sumPhase[0][i] - offPhase[i]))
+        val wrapped = minOf(moved % 360.0, 360.0 - moved % 360.0)
+        assertTrue("phase change at the split: $wrapped degrees", wrapped > 90.0)
+        // And back off restores the original curve exactly.
+        calculator.compute(off, BmwPeqState.empty(), curves)
+        for (k in offPhase.indices) assertEquals("phase at point $k", offPhase[k], curves.sumPhase[0][k], 1e-9)
+    }
+
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0

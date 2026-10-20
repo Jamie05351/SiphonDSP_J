@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 297;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 299;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -224,6 +224,13 @@ inline constexpr int kLoudnessStrength = 295;  // percent, 0..100
 // --- Automatic headroom (296), added in the 296 -> 297 growth. Kotlin-only: Kotlin computes the
 // headroom from the PEQ / band response and sends it in kHeadroom. Ships off (manual).
 inline constexpr int kHeadroomAuto = 296;
+
+// --- Mono Bass (297..298), added in the 297 -> 299 growth. Right after the input DC blocker: a
+// complementary LR4 split folds both channels to (L+R)/2 below the split frequency and leaves
+// stereo untouched above it. Ships off; older saves backfill it off. (Not the 42..45 slots an
+// earlier mono bass used -- those stay reclaimed.)
+inline constexpr int kMonoBassEnabled = 297;
+inline constexpr int kMonoBassFreq = 298;  // Hz, 60..120
 
 }  // namespace nbschema
 
