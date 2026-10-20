@@ -150,3 +150,32 @@ TEST_CASE("two delay changes in quick succession don't jump mid-fade") {
     INFO("steady step ", steadyStep, "  worst step across the burst ", worst);
     CHECK(worst < steadyStep * kAllowed);
 }
+
+TEST_CASE("changing the headroom mid-signal ramps instead of stepping") {
+    // A 12 dB cut, the size of jump the automatic headroom can make after a PEQ edit.
+    const auto [steady, edit] = stepsAcrossEdit(baseConfig(), [](auto& c) { c[sch::kHeadroom] = -18.f; });
+    INFO("steady step ", steady, "  step after the headroom change ", edit);
+    CHECK(edit <= kAllowed * steady);
+}
+
+TEST_CASE("the headroom reaches -30 dB, and a ramped change settles exactly on it") {
+    auto c = baseConfig();
+    c[sch::kHeadroom] = -24.f;
+    NativeBmwDspProcessor at24, at30;
+    const float level24 = peakAbs(renderSteadyState(at24, c, 1000.0, 0.05));
+    c[sch::kHeadroom] = -30.f;
+    const float level30 = peakAbs(renderSteadyState(at30, c, 1000.0, 0.05));
+    const double differenceDb = linToDb(level24) - linToDb(level30);
+    INFO("-24 dB vs -30 dB headroom: ", differenceDb, " dB apart");
+    CHECK(std::fabs(differenceDb - 6.0) < 0.05);
+
+    // at24 moves to -30 by a ramp; once settled it must match at30 exactly, not be one ramp
+    // step short of it.
+    REQUIRE(at24.configure(c.data(), c.size()));
+    auto a = stereoSine(1000.0, 0.05, 48000);
+    auto b = a;
+    at24.process(a.data(), a.size());
+    at30.process(b.data(), b.size());
+    const std::size_t tail = 2 * 4096;
+    CHECK(std::equal(a.end() - tail, a.end(), b.end() - tail));
+}

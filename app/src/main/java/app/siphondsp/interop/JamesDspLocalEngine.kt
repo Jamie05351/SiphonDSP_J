@@ -83,6 +83,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     // handleLock only -- one fixed order, so no deadlock.
     private val meterLock = Any()
     @Volatile private var bmwPeqState: BmwPeqState = BmwPeqState.loadPersisted(context)
+    /** The PEQ the native engine last accepted (what the automatic headroom is computed from). */
+    val appliedPeqState: BmwPeqState get() = bmwPeqState
+    /**
+     * Called after every PEQ the native engine accepts, on the applying thread and under the
+     * config lock -- so it must only hand work off (the service queues an automatic-headroom
+     * recompute on its config thread).
+     */
+    @Volatile var onPeqApplied: (() -> Unit)? = null
     @Volatile private var peqRestorePending = true
 
     @Volatile private var requestedDspRevision = 0L
@@ -436,6 +444,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             BmwPeqState.publishActiveSession(context, this, state)
             lastPeqApplySuccess = true
             lastPeqFailure = null
+            onPeqApplied?.invoke()
         } else {
             lastPeqApplySuccess = false
             lastPeqFailure =

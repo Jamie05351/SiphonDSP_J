@@ -60,6 +60,7 @@ import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.theme.BmwDspTheme
+import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.dsp.BiquadCascade
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwPeqBank
@@ -1427,6 +1428,9 @@ private class PeqDrawContext(
  */
 private class PeqResponseModel {
     private val calculator = BmwResponseCalculator(SYSTEM_POINT_COUNT)
+    // With automatic headroom on, the curves are drawn at the computed headroom, as the engine
+    // runs them, not at the saved manual one.
+    private val autoHeadroom = AutoHeadroomCalculator()
     val curves = BmwResponseCurves(SYSTEM_POINT_COUNT)
 
     val bandCascade = BiquadCascade(1)
@@ -1475,7 +1479,7 @@ private class PeqResponseModel {
         val maxFreq = min(20_000.0, sampleRate * 0.5 * 0.999)
         calculator.configureAxis(sampleRate, 20.0, maxFreq)
         calculator.invalidateAll()
-        calculator.compute(values, peq, curves)
+        calculator.compute(autoHeadroom.effectiveValues(values, peq, sampleRate), peq, curves)
         baseline?.applyTo(curves)
         fitAxis(measured = baseline != null)
     }

@@ -121,7 +121,10 @@ public:
     //
     // 294..295 -- loudness compensation, added in the 294 -> 296 growth:
     //   294      enabled              295  strength (percent)
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 296 };
+    //
+    // 296 -- automatic headroom, added in the 296 -> 297 growth. Kotlin-only -- never read here:
+    //   Kotlin computes the headroom itself and sends it in v[5] like a manual one.
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 297 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -466,6 +469,13 @@ private:
 
     // Gains, tilt and the summed-bus stages.
     float headroom_ = 1, postGainL_ = 1, postGainR_ = 1;
+    // headroom_ ramps toward headroomTarget_ with a ~10 ms one-pole (headroomRampCoef_, rebuilt
+    // with the sample rate), like the master volume, so a change -- the automatic headroom
+    // following a PEQ edit included -- never steps. Snapped on a full rebuild and on the first
+    // configure(), so start-up doesn't fade in.
+    float headroomTarget_ = 1;
+    static constexpr float kHeadroomRampSeconds = 0.01f;
+    float headroomRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
     NativeBmwDsp::Tilt tilt_;
     // Loudness compensation, after the master volume (see Loudness).
     NativeBmwDsp::Loudness loudness_;

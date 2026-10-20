@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.theme.BmwTheme
+import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.BmwResponseCurves
@@ -263,6 +264,8 @@ fun CrossoverResponseGraph(
     // Response curves -- same shared engine the View and the full PEQ visualiser use. Recomputed
     // only when the DSP values / PEQ snapshot change (not per spectrum frame).
     val calculator = remember { BmwResponseCalculator(pointCount = POINT_COUNT) }
+    // With automatic headroom on, drawn at the computed headroom, as the engine runs it.
+    val autoHeadroom = remember { AutoHeadroomCalculator() }
     val curves = remember { BmwResponseCurves(POINT_COUNT) }
     val valuesKey = ValuesKey(systemValues)
     val morph = remember { MagnitudeMorph(POINT_COUNT) }
@@ -271,7 +274,7 @@ fun CrossoverResponseGraph(
             morph.freeze()
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
             calculator.invalidateAll()
-            calculator.compute(systemValues, peqState, curves)
+            calculator.compute(autoHeadroom.effectiveValues(systemValues, peqState, SAMPLE_RATE), peqState, curves)
             // Only new curves start a morph. (Like the compute itself, this runs while composing; a
             // discarded composition just freezes the same on-screen shape again.)
             morph.generation++

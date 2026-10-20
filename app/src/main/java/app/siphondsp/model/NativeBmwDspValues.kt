@@ -69,7 +69,11 @@ object NativeBmwDspValues {
     //
     // 294..295 are loudness compensation (enabled, strength %), added in the 294 -> 296 growth.
     // Default off, so older saves -- backfilled from DEFAULTS by index -- are unchanged.
-    const val SIZE = 296
+    //
+    // 296 is the automatic-headroom switch, added in the 296 -> 297 growth. Kotlin-only (native
+    // never reads it): with it on, the service sends a computed headroom in place of index 5's
+    // manual one (see AutoHeadroom). Default off, so older saves keep their manual headroom.
+    const val SIZE = 297
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -375,6 +379,12 @@ object NativeBmwDspValues {
     // Loudness compensation: bass/treble lift that follows the master volume (none at full volume).
     const val INDEX_LOUDNESS_ENABLED = 294
     const val INDEX_LOUDNESS_STRENGTH = 295 // percent, 0..100
+    // Automatic headroom on (1) or manual (0). Kotlin-only -- native never reads this index; the
+    // manual value stays in INDEX_HEADROOM either way, so switching back to manual restores it.
+    const val INDEX_HEADROOM_AUTO = 296
+    // Headroom's range, here and in native configure().
+    const val HEADROOM_MIN_DB = -30f
+    const val HEADROOM_MAX_DB = 0f
     // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
     const val LOUDNESS_BASS_HZ = 100.0
     const val LOUDNESS_TREBLE_HZ = 8000.0
@@ -573,6 +583,8 @@ object NativeBmwDspValues {
         // --- Loudness compensation (294..295), ships off ---
         0f, // 294 loudness enabled (off)
         100f, // 295 loudness strength %
+        // --- Automatic headroom (296), ships off ---
+        0f, // 296 headroom auto (off = manual)
     )
 
     init {

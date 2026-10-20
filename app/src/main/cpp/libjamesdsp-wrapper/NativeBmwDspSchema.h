@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 296;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 297;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -220,6 +220,10 @@ inline constexpr int kMasterMute = 293;
 // follows the master volume (none at full volume). Ships off; older saves backfill it off.
 inline constexpr int kLoudnessEnabled = 294;
 inline constexpr int kLoudnessStrength = 295;  // percent, 0..100
+
+// --- Automatic headroom (296), added in the 296 -> 297 growth. Kotlin-only: Kotlin computes the
+// headroom from the PEQ / band response and sends it in kHeadroom. Ships off (manual).
+inline constexpr int kHeadroomAuto = 296;
 
 }  // namespace nbschema
 
