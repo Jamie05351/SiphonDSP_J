@@ -58,6 +58,10 @@ struct RealtimeCounters
     std::atomic<std::int64_t> workBufferReallocs{0};
     // Frames in the last processed buffer.
     std::atomic<std::int64_t> lastBlockFrames{0};
+    // Block size JamesDSP's work buffers and FFT convolvers were prepared for (prepareBlockSize,
+    // under the engine's exclusive lock); 0 until then. Once set, the audio thread never
+    // reallocates or rebuilds them.
+    std::atomic<std::int64_t> preparedFrames{0};
 };
 
 typedef struct

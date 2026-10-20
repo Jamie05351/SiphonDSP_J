@@ -156,3 +156,71 @@ TEST_CASE("a non-finite sample from the host stage never reaches the output, lim
         CHECK((v == 0.f || std::fabs(v) >= 1e-20f));
     }
 }
+
+namespace {
+// A hook with memory across calls (a one-pole low-pass), so splitting a buffer between calls only
+// gives the same output if every sample still goes through it once, in order.
+struct OnePoleHook {
+    float l = 0.f, r = 0.f;
+    std::size_t calls = 0, maxFrames = 0;
+};
+
+void onePoleHook(void* context, float* x, std::size_t frames) {
+    auto& h = *static_cast<OnePoleHook*>(context);
+    ++h.calls;
+    h.maxFrames = std::max(h.maxFrames, frames);
+    for (std::size_t i = 0; i < frames; ++i) {
+        h.l += 0.1f * (x[2 * i] - h.l);
+        h.r += 0.1f * (x[2 * i + 1] - h.r);
+        x[2 * i] = h.l;
+        x[2 * i + 1] = h.r;
+    }
+}
+} // namespace
+
+TEST_CASE("a buffer larger than the reserved block goes through in pieces, bit-identically") {
+    auto c = defaultConfig();
+    NativeBmwDspProcessor whole, pieces;
+    whole.setSampleRate(kSampleRate);
+    pieces.setSampleRate(kSampleRate);
+    REQUIRE(whole.configure(c.data(), c.size()));
+    REQUIRE(pieces.configure(c.data(), c.size()));
+    whole.reserveBlock(2 * 960);
+    pieces.reserveBlock(2 * 256);  // 960-frame buffers -> 256 + 256 + 256 + 192
+
+    auto a = stereoSine(330.0, 0.5, 9600);
+    auto b = a;
+    OnePoleHook wholeHook, piecesHook;
+    for (std::size_t off = 0; off < a.size(); off += 2 * 960) {
+        whole.process(a.data() + off, 2 * 960, &onePoleHook, &wholeHook);
+        pieces.process(b.data() + off, 2 * 960, &onePoleHook, &piecesHook);
+    }
+    CHECK(wholeHook.maxFrames == 960);
+    CHECK(piecesHook.maxFrames == 256);
+    CHECK(piecesHook.calls == 4 * wholeHook.calls);
+    CHECK(a == b);
+}
+
+TEST_CASE("int16 buffers larger than the reserved block go through in pieces, bit-identically") {
+    auto c = defaultConfig();
+    NativeBmwDspProcessor whole, pieces;
+    whole.setSampleRate(kSampleRate);
+    pieces.setSampleRate(kSampleRate);
+    REQUIRE(whole.configure(c.data(), c.size()));
+    REQUIRE(pieces.configure(c.data(), c.size()));
+    pieces.reserveBlock(2 * 300);  // not a divisor of 960, and not a power of two
+
+    const auto sine = stereoSine(330.0, 0.5, 9600);
+    std::vector<int16_t> a(sine.size());
+    for (std::size_t i = 0; i < sine.size(); ++i) {
+        a[i] = static_cast<int16_t>(std::lround(sine[i] * 32767.f));
+    }
+    auto b = a;
+    OnePoleHook wholeHook, piecesHook;
+    for (std::size_t off = 0; off < a.size(); off += 2 * 960) {
+        whole.process(a.data() + off, 2 * 960, &onePoleHook, &wholeHook);
+        pieces.process(b.data() + off, 2 * 960, &onePoleHook, &piecesHook);
+    }
+    CHECK(piecesHook.maxFrames == 300);
+    CHECK(a == b);
+}

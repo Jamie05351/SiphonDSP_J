@@ -870,6 +870,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             Timber.w(e, "runRecorderLoop: platform refused THREAD_PRIORITY_URGENT_AUDIO, continuing at default priority")
         }
         audioStats.reset()
+        // Size the native work buffers and convolvers for this pipeline's buffer now, before any
+        // audio flows, so no buffer ever reallocates or rebuilds them on this thread.
+        if (!engine.prepareBlockSize(bufferSamples / CHANNEL_COUNT))
+            Timber.w("runRecorderLoop: native engine not prepared for %d-frame blocks", bufferSamples / CHANNEL_COUNT)
 
         var recorder: AudioRecord? = null
         var track: AudioTrack? = null

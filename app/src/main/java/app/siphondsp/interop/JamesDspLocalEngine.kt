@@ -530,6 +530,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { JamesDspWrapper.readNativeBmwMeter(it, kind, out) }
 
+    /**
+     * Sizes the native audio path for buffers of up to [frames] frames (see
+     * [JamesDspWrapper.prepareBlockSize]). Exclusive: it rebuilds JamesDSP's own state, which
+     * its process path doesn't lock against. Call before the buffers start flowing.
+     */
+    fun prepareBlockSize(frames: Int): Boolean =
+        withExclusiveHandle(false) { JamesDspWrapper.prepareBlockSize(it, frames) }
+
     /** See [JamesDspWrapper.getRealtimeCounters]. Atomics only, so the meter lock suffices. */
     fun readRealtimeCounters(out: LongArray): Boolean =
         withMeterHandle(false) { JamesDspWrapper.getRealtimeCounters(it, out) }

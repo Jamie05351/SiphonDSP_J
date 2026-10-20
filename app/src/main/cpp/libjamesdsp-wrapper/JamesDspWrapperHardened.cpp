@@ -42,8 +42,12 @@ static const char* safeNseelCodeError(void* vm)
 extern "C" {
 // Defined in JamesDSP's jdspController.c but not declared in its header.
 void JamesDSPRefreshConvolutions(JamesDSPLib* jdsp, char refreshAll);
+void JamesDSPProcess(JamesDSPLib* jdsp, size_t n);
 // Set once cached benchmarks are loaded; JamesDSPRefreshConvolutions() is a no-op without it.
 extern char benchmarkEnable;
+// Set when benchmarks load; JamesDSP's first-stage process function then refreshes every
+// convolver on the audio thread and swaps itself for JamesDSPProcess.
+extern char benchmarkCompletionFlag;
 }
 
 namespace {
@@ -53,12 +57,16 @@ struct ConvolverPass
     JamesDSPLib* dsp;
     bool wanted;
     bool ran;
+    // JamesDSP's prepared block size (prepareBlockSize), or 0 if it was never prepared.
+    std::size_t preparedFrames;
 };
 
 // The convolver's place in the BMW chain: run by NativeBmwDspProcessor::process() just before its
 // master limiter (see BlockHook), so the limiter catches whatever the impulse response adds and
-// its channels are the logical L / R. The same block-size bookkeeping as JamesDSP's own entry
-// points, then its convolver on JamesDSP's work buffers, under its lock as in its own pass.
+// its channels are the logical L / R. Runs JamesDSP's convolver on its work buffers, under its
+// lock as in its own pass. Once prepared, it never reallocates or rebuilds anything here: the
+// convolver takes any block length, so a block larger than the work buffers goes through in
+// pieces. Unprepared, it falls back to JamesDSP's own grow-and-refresh bookkeeping.
 void convolveBeforeMasterLimiter(void* context, float* x, std::size_t frames)
 {
     auto& pass = *static_cast<ConvolverPass*>(context);
@@ -66,26 +74,36 @@ void convolveBeforeMasterLimiter(void* context, float* x, std::size_t frames)
     if(!pass.wanted)
         return;
     JamesDSPLib* jdsp = pass.dsp;
-    if(jdsp->blockSizeMax < frames)
-        JamesDSPReallocateBlock(jdsp, frames);
-    if(jdsp->blockSize != frames)
+    if(pass.preparedFrames == 0)
     {
-        jdsp->blockSize = frames;
-        JamesDSPRefreshConvolutions(jdsp, 1);
+        if(jdsp->blockSizeMax < frames)
+            JamesDSPReallocateBlock(jdsp, frames);
+        if(jdsp->blockSize != frames)
+        {
+            jdsp->blockSize = frames;
+            JamesDSPRefreshConvolutions(jdsp, 1);
+        }
     }
+    const std::size_t capacity = std::max<std::size_t>(jdsp->blockSizeMax, 1);
     jdsp_lock(jdsp);
     if(jdsp->conv.process)
     {
-        for(std::size_t i = 0; i < frames; ++i)
+        for(std::size_t done = 0; done < frames;)
         {
-            jdsp->tmpBuffer[0][i] = x[i << 1];
-            jdsp->tmpBuffer[1][i] = x[(i << 1) + 1];
-        }
-        jdsp->conv.process(jdsp, frames);
-        for(std::size_t i = 0; i < frames; ++i)
-        {
-            x[i << 1] = jdsp->tmpBuffer[0][i];
-            x[(i << 1) + 1] = jdsp->tmpBuffer[1][i];
+            const std::size_t n = (std::min)(frames - done, capacity);
+            float* chunk = x + (done << 1);
+            for(std::size_t i = 0; i < n; ++i)
+            {
+                jdsp->tmpBuffer[0][i] = chunk[i << 1];
+                jdsp->tmpBuffer[1][i] = chunk[(i << 1) + 1];
+            }
+            jdsp->conv.process(jdsp, n);
+            for(std::size_t i = 0; i < n; ++i)
+            {
+                chunk[i << 1] = jdsp->tmpBuffer[0][i];
+                chunk[(i << 1) + 1] = jdsp->tmpBuffer[1][i];
+            }
+            done += n;
         }
     }
     jdsp_unlock(jdsp);
@@ -98,13 +116,21 @@ NativeBmwDspProcessor::BlockHook convolverHook(const JamesDSPLib* dsp)
     return dsp->enableASRC ? nullptr : &convolveBeforeMasterLimiter;
 }
 
-// Counts what the buffer about to run will make JamesDSP do on the audio thread: the hook and
-// JamesDSP's own entry points both grow the work buffers for a larger block, and refresh every
-// FFT convolver for a block size different from the last one. Called before either runs.
+// Counts the buffer about to run. Prepared, a block size other than the prepared one only means
+// the passes go in pieces (nothing is rebuilt). Unprepared, it counts what JamesDSP is about to
+// do on the audio thread: grow the work buffers for a larger block, and refresh every FFT
+// convolver for a block size different from the last one. Called before either pass runs.
 void noteBlockSize(JamesDspWrapper* wrapper, const JamesDSPLib* dsp, std::size_t frames)
 {
     auto& counters = wrapper->realtime;
     counters.lastBlockFrames.store(static_cast<std::int64_t>(frames), std::memory_order_relaxed);
+    const auto prepared = static_cast<std::size_t>(counters.preparedFrames.load(std::memory_order_relaxed));
+    if(prepared != 0)
+    {
+        if(frames != prepared)
+            counters.blockSizeChanges.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
     if(dsp->blockSizeMax < frames)
         counters.workBufferReallocs.fetch_add(1, std::memory_order_relaxed);
     if(dsp->blockSize != frames)
@@ -113,6 +139,40 @@ void noteBlockSize(JamesDspWrapper* wrapper, const JamesDSPLib* dsp, std::size_t
         if(benchmarkEnable)
             counters.convolverRebuilds.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+std::size_t preparedFrames(const JamesDspWrapper* wrapper)
+{
+    return static_cast<std::size_t>(wrapper->realtime.preparedFrames.load(std::memory_order_relaxed));
+}
+
+// Runs one of JamesDSP's interleaved entry points over `frames` frames (`stride` elements each).
+// Each entry point grows its work buffers for a larger block and rebuilds every FFT convolver
+// when the block size differs from the last call -- on the audio thread. Once prepared, neither
+// may happen: the block goes in pieces no larger than the work buffers, with blockSize set to
+// each piece's length for the call (so the size check passes) and put back to the prepared size
+// after, so impulse-response loads keep building for it. Only the audio thread changes it, and
+// loads run under the engine's exclusive lock, never during a pass.
+template <class In, class Out>
+void runCorePass(const JamesDspWrapper* wrapper, JamesDSPLib* dsp,
+                 void (*pass)(JamesDSPLib*, In*, Out*, size_t), In* x, Out* y,
+                 std::size_t frames, std::size_t stride)
+{
+    const std::size_t prepared = preparedFrames(wrapper);
+    if(prepared == 0)
+    {
+        pass(dsp, x, y, frames);
+        return;
+    }
+    const std::size_t capacity = std::max<std::size_t>(dsp->blockSizeMax, 1);
+    for(std::size_t done = 0; done < frames;)
+    {
+        const std::size_t n = (std::min)(frames - done, capacity);
+        dsp->blockSize = n;
+        pass(dsp, x + done * stride, y + done * stride, n);
+        done += n;
+    }
+    dsp->blockSize = prepared;
 }
 
 // Sets JamesDSP's own convolver switch for the pass about to run: on only when the convolver is
@@ -281,13 +341,14 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     const jint safeOffset = std::max(offset, 0);
     noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
     const int16_t* processed = bmw != nullptr
         ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples),
                        convolverHook(dsp), &pass)
         : reinterpret_cast<int16_t*>(input + safeOffset);
     syncCoreConvolver(wrapper, dsp, pass.ran);
-    dsp->processInt16Multiplexd(dsp, const_cast<int16_t*>(processed), output, samples / 2);
+    runCorePass(wrapper, dsp, dsp->processInt16Multiplexd, const_cast<int16_t*>(processed),
+                reinterpret_cast<int16_t*>(output), static_cast<std::size_t>(samples / 2), 2);
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -318,13 +379,14 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     const jint safeOffset = std::max(offset, 0);
     noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
     const int32_t* processed = bmw != nullptr
         ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples),
                        convolverHook(dsp), &pass)
         : reinterpret_cast<int32_t*>(input + safeOffset);
     syncCoreConvolver(wrapper, dsp, pass.ran);
-    dsp->processInt32Multiplexd(dsp, const_cast<int32_t*>(processed), output, samples / 2);
+    runCorePass(wrapper, dsp, dsp->processInt32Multiplexd, const_cast<int32_t*>(processed),
+                reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(samples / 2), 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -355,12 +417,13 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     const jint safeOffset = std::max(offset, 0);
     noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
+    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
     const float* processed = bmw != nullptr
         ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples), convolverHook(dsp), &pass)
         : input + safeOffset;
     syncCoreConvolver(wrapper, dsp, pass.ran);
-    dsp->processFloatMultiplexd(dsp, const_cast<float*>(processed), output, samples / 2);
+    runCorePass(wrapper, dsp, dsp->processFloatMultiplexd, const_cast<float*>(processed),
+                static_cast<float*>(output), static_cast<std::size_t>(samples / 2), 2);
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
@@ -394,7 +457,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
     noteBlockSize(wrapper, dsp, static_cast<std::size_t>(byteCount / 6));
     syncCoreConvolver(wrapper, dsp, false);
-    dsp->processInt24PackedMultiplexd(dsp, input, output, byteCount / 6);
+    runCorePass(wrapper, dsp, dsp->processInt24PackedMultiplexd, reinterpret_cast<uint8_t*>(input),
+                reinterpret_cast<uint8_t*>(output), static_cast<std::size_t>(byteCount / 6), 6);
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
     return outputObj;
@@ -429,7 +493,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv* env, jobject, 
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
     noteBlockSize(wrapper, dsp, static_cast<std::size_t>(sampleCount / 2));
     syncCoreConvolver(wrapper, dsp, false);
-    dsp->processInt8_24Multiplexd(dsp, input, output, sampleCount / 2);
+    runCorePass(wrapper, dsp, dsp->processInt8_24Multiplexd, reinterpret_cast<int32_t*>(input),
+                reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(sampleCount / 2), 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
     return outputObj;
@@ -437,7 +502,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv* env, jobject, 
 
 // Fills [out] with the audio-path counters (see RealtimeCounters), in this order -- matching
 // JamesDspWrapper.REALTIME_*: irLoads, blockSizeChanges, convolverRebuilds, workBufferReallocs,
-// lastBlockFrames. Atomics only, so it takes no lock. False for a gone handle or a short array.
+// lastBlockFrames, preparedFrames. Atomics only, so it takes no lock. False for a gone handle or
+// a short array.
 extern "C" JNIEXPORT jboolean JNICALL
 Java_app_siphondsp_interop_JamesDspWrapper_getRealtimeCounters(JNIEnv* env, jobject, jlong self,
                                                                 jlongArray out)
@@ -452,10 +518,50 @@ Java_app_siphondsp_interop_JamesDspWrapper_getRealtimeCounters(JNIEnv* env, jobj
         counters.convolverRebuilds.load(std::memory_order_relaxed),
         counters.workBufferReallocs.load(std::memory_order_relaxed),
         counters.lastBlockFrames.load(std::memory_order_relaxed),
+        counters.preparedFrames.load(std::memory_order_relaxed),
     };
     constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
     if(env->GetArrayLength(out) < count)
         return JNI_FALSE;
     env->SetLongArrayRegion(out, 0, count, values);
+    return JNI_TRUE;
+}
+
+// Sizes everything the audio path works in for blocks of up to `frames` frames, so process*()
+// never reallocates or rebuilds on the audio thread: JamesDSP's work buffers, every FFT convolver
+// (partitioned for this block size), and the BMW chain's own workspaces. Also retires JamesDSP's
+// benchmark-ready first-stage process function, which would otherwise refresh every convolver
+// on the first buffer after benchmarks load. Rebuilding allocates -- the engine calls this under
+// its exclusive lock, when the pipeline starts, never mid-stream.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_prepareBlockSize(JNIEnv*, jobject, jlong self, jint frames)
+{
+    DECLARE_DSP_B
+    if(frames <= 0)
+        return JNI_FALSE;
+    const auto n = static_cast<std::size_t>(frames);
+    if(dsp->blockSizeMax < n)
+        JamesDSPReallocateBlock(dsp, n);
+    const bool sizeChanged = dsp->blockSize != n;
+    const bool benchmarkRefreshPending = benchmarkCompletionFlag == 1 && dsp->processInternal != JamesDSPProcess;
+    dsp->blockSize = n;
+    if(sizeChanged || benchmarkRefreshPending)
+    {
+        if(benchmarkEnable)
+            JamesDSPRefreshConvolutions(dsp, 1);
+        else if(dsp->impulseResponseStorage.impulseResponse)
+            // Without benchmarks JamesDSP's refresh does nothing, which would leave an impulse
+            // response loaded before this partitioned for the old block size (128 frames at
+            // start-up: many times the work per sample). Rebuild that one convolver here.
+            Convolver1DLoadImpulseResponse(dsp, dsp->impulseResponseStorage.impulseResponse,
+                                           dsp->impulseResponseStorage.impChannels,
+                                           dsp->impulseResponseStorage.impulseLengthActual, 0);
+    }
+    // The first-stage function only adds that refresh check; benchmarks loaded later take effect
+    // at the next prepare or impulse-response load instead of on the audio thread.
+    dsp->processInternal = JamesDSPProcess;
+    if(auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp))
+        bmw->reserveBlock(n * 2);
+    wrapper->realtime.preparedFrames.store(static_cast<std::int64_t>(n), std::memory_order_relaxed);
     return JNI_TRUE;
 }

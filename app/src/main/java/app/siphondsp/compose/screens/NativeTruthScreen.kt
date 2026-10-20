@@ -315,12 +315,18 @@ private fun RealtimeSection(realtime: RealtimeDiagnostics?, cpu: List<CpuFrequen
                 } else {
                     KeyValueRow("Convolver IR loads", n[JamesDspWrapper.REALTIME_IR_LOADS].toString())
                     val changes = n[JamesDspWrapper.REALTIME_BLOCK_SIZE_CHANGES]
-                    KeyValueRow("Block-size changes (audio thread)", changes.toString(), if (changes > 0) BmwYellow else Color.White)
+                    KeyValueRow("Blocks off the prepared size", changes.toString(), if (changes > 0) BmwYellow else Color.White)
                     val rebuilds = n[JamesDspWrapper.REALTIME_CONVOLVER_REBUILDS]
                     KeyValueRow("Convolver rebuilds (audio thread)", rebuilds.toString(), if (rebuilds > 0) BmwRed else BmwGreen)
                     val reallocs = n[JamesDspWrapper.REALTIME_WORK_BUFFER_REALLOCS]
                     KeyValueRow("Work-buffer reallocs (audio thread)", reallocs.toString(), if (reallocs > 0) BmwRed else BmwGreen)
                     KeyValueRow("Last block", "${n[JamesDspWrapper.REALTIME_LAST_BLOCK_FRAMES]} frames")
+                    val prepared = n[JamesDspWrapper.REALTIME_PREPARED_FRAMES]
+                    KeyValueRow(
+                        "Prepared block",
+                        if (prepared > 0) "$prepared frames" else "not prepared",
+                        if (prepared > 0) BmwGreen else BmwRed,
+                    )
                 }
             }
             if (cpu.isEmpty()) {
