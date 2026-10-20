@@ -73,7 +73,7 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.channelMute = static_cast<int>(clampIn(v[3], 0, 2));
     // 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High -- see MeasurementBus::rebuild().
     next.measurementMute = static_cast<int>(clampIn(v[4], 0, 3));
-    next.headroom = clampIn(v[5], -12, 0);
+    next.headroom = clampIn(v[5], -30, 0);
     next.lowGainL = clampIn(v[6], -6, 6);
     next.lowGainR = clampIn(v[7], -6, 6);
     next.midGainL = clampIn(v[8], -6, 6);
@@ -621,6 +621,7 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     // The first configure() lands the real settings: snap the polarity/mute ramps to them rather
     // than fading from the constructor's defaults at start-up.
     if (!outputGainsPrimed_) {
+        headroom_ = headroomTarget_;
         rebuildPolarityAndMute(/*snap=*/true);
         for (auto& out : outputs_) {
             out.delay.snap();  // nor crossfade the delays in from their defaults
@@ -774,7 +775,7 @@ void NativeBmwDspProcessor::installPending() {
 
 // ---- Rebuilds: derived state from p_ / outputConfigs_ / sampleRate_ ----------------------------
 void NativeBmwDspProcessor::rebuildGains() {
-    headroom_ = dbToLin(p_.headroom);
+    headroomTarget_ = dbToLin(p_.headroom);
     postGainL_ = dbToLin(p_.postGainL);
     postGainR_ = dbToLin(p_.postGainR);
     output(OutputId::LowLeft).gain = dbToLin(p_.lowGainL);
@@ -990,6 +991,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = NativeBmwDsp::DcBlocker::coefficient(sampleRate_);
     updatePairing();
     rebuildGains();
+    headroom_ = headroomTarget_;  // a full rebuild applies it at once, no ramp
     rebuildSubsonic();
     rebuildLowCrossover();
     rebuildMidCrossover();

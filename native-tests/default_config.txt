@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (296 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (297 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -388,3 +388,5 @@
 
 0            # 294 loudnessEnabled (off)
 100          # 295 loudnessStrength (percent)
+
+0            # 296 headroomAuto (0 = manual; Kotlin-only)

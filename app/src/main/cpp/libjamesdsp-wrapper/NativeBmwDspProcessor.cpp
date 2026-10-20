@@ -54,6 +54,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
         sampleRate_ = sr;
         configSampleRate_.store(sr, std::memory_order_relaxed);
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
+        headroomRampCoef_ = 1.f - std::exp(-1.f / (kHeadroomRampSeconds * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
         rebuildAll();
@@ -137,6 +138,7 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
         sR *= peqPreamp_;
         inputPeq_.process(sL, sR);
     }
+    headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
     sL *= headroom_;
     sR *= headroom_;
     // Pre-crossover multiband compressor: full-range stereo, before any band split. Skipped

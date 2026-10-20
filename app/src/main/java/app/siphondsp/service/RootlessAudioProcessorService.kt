@@ -31,6 +31,8 @@ import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.dsp.AutoHeadroom
+import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.interop.JamesDspWrapper
 import app.siphondsp.interop.JamesDspLocalEngine
 import app.siphondsp.interop.NativeConfigRevisionStatus
@@ -121,6 +123,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         schedule = { delayMs, task -> dspConfigHandler.postDelayed(task, delayMs) },
         apply = ::applyNativeBmwDspValues,
     )
+    // The last DSP values handed to the pusher -- not the last applied, so re-submitting them
+    // (to recompute the automatic headroom after a PEQ change) can't replace a newer one still
+    // queued with an older one.
+    @Volatile private var latestDspValues: FloatArray? = null
+    // Automatic headroom, computed on dspConfigThread only (see applyNativeBmwDspValues).
+    private val autoHeadroom = AutoHeadroomCalculator()
+    // The automatic headroom last sent to the engine, for the Output page; null in manual mode.
+    @Volatile private var appliedAutoHeadroomDb: Float? = null
     // Lifecycle metadata is protected by recorderLifecycleLock. Per-buffer telemetry has one
     // writer (the recorder worker) and volatile readers; no lock or allocation on the hot path.
     private var pipelineStartedAt = 0L
@@ -258,7 +268,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         engine = JamesDspLocalEngine(this, ProcessorMessageHandler())
         engine.syncWithPreferences()
-        measGenActive = isMeasGenActive(NativeBmwDspValues.load(this))
+        val savedDspValues = NativeBmwDspValues.load(this)
+        measGenActive = isMeasGenActive(savedDspValues)
+        latestDspValues = savedDspValues
+        // A PEQ change (an edit, the preamp, an import, a sample-rate rebuild) moves the response
+        // the automatic headroom follows: queue a recompute on the config thread.
+        engine.onPeqApplied = {
+            latestDspValues?.takeIf(AutoHeadroom::isAuto)?.let(dspConfigPusher::submit)
+        }
+        // The engine pushed its saved config itself, with the manual headroom; in auto mode,
+        // replace it with the computed one.
+        if (AutoHeadroom.isAuto(savedDspValues)) submitNativeBmwDspValues(savedDspValues)
 
         val filter = IntentFilter()
         filter.addAction(ACTION_PREFERENCES_UPDATED)
@@ -410,7 +430,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 ACTION_NATIVE_BMW_DSP_UPDATED -> {
                     intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                        dspConfigPusher.submit(it)
+                        submitNativeBmwDspValues(it)
                     }
                 }
                 ACTION_PRESET_LOADED -> resyncNativeBmwStateFromDisk()
@@ -428,23 +448,36 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private fun resyncNativeBmwStateFromDisk() {
         // Through the same pusher as the broadcasts, so a drag preview still queued there can't
         // land after (and overwrite) the restored config.
-        dspConfigPusher.submit(NativeBmwDspValues.load(this))
+        submitNativeBmwDspValues(NativeBmwDspValues.load(this))
         if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
         }
     }
 
+    private fun submitNativeBmwDspValues(values: FloatArray) {
+        latestDspValues = values
+        dspConfigPusher.submit(values)
+    }
+
     /** Runs on [dspConfigThread]. */
     private fun applyNativeBmwDspValues(values: FloatArray) {
+        // With automatic headroom on, the engine gets the computed headroom in place of the
+        // manual one -- worked out here, never on the audio thread, from these values and the PEQ
+        // the engine is running. The saved values keep the manual headroom.
+        // 0 until the recorder first opens; the native processor itself starts at 48 kHz.
+        val sampleRate = engine.sampleRate.takeIf { it >= 8000f } ?: 48_000f
+        val pushed = autoHeadroom.effectiveValues(values, engine.appliedPeqState, sampleRate.toDouble())
+        val autoDb = if (pushed !== values) pushed[NativeBmwDspValues.INDEX_HEADROOM] else null
         // measGenActive must only reflect state the native engine actually adopted -- flipping
         // it from the raw array regardless of whether configureNativeBmwDsp() accepted it would
         // desync the Kotlin mirror from native's real config (e.g. on a size/validation
         // rejection), sending the recorder loop down the wrong branch (zero-fill vs real
         // capture) for whatever native is actually doing.
-        if (!engine.configureNativeBmwDsp(values)) {
+        if (!engine.configureNativeBmwDsp(pushed)) {
             Timber.e("Failed to apply native BMW DSP configuration")
             return
         }
+        appliedAutoHeadroomDb = autoDb
         // Applied right here, not posted to the main thread: a posted transition would leave a
         // window where native already runs the new generator state while the recorder loop
         // still reads the old mirror, and could run after onDestroy. Everything it touches is
@@ -1408,6 +1441,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
 
         fun nativeBmwPeqSampleRate(): Float? = activeInstance?.engine?.sampleRate
+
+        /** The automatic headroom the engine is running, or null in manual mode / with no service. */
+        fun appliedAutoHeadroomDb(): Float? = activeInstance?.appliedAutoHeadroomDb
 
         fun nativeBmwPeqHandleReady(): Boolean? = activeInstance?.engine?.isNativeHandleReady()
 

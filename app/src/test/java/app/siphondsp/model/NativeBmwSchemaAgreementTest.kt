@@ -164,6 +164,7 @@ class NativeBmwSchemaAgreementTest {
         "kMasterMute" to NativeBmwDspValues.INDEX_MASTER_MUTE,
         "kLoudnessEnabled" to NativeBmwDspValues.INDEX_LOUDNESS_ENABLED,
         "kLoudnessStrength" to NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH,
+        "kHeadroomAuto" to NativeBmwDspValues.INDEX_HEADROOM_AUTO,
     )
 
     @Test

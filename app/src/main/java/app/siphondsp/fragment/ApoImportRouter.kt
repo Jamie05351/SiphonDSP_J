@@ -3,6 +3,7 @@ package app.siphondsp.fragment
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import java.io.InputStream
+import java.util.Locale
 
 /**
  * One REW/APO file that [ApoImportRouter.routeApoFileName] mapped onto a (bank, channel), carried
@@ -16,6 +17,8 @@ data class RoutedApoImport(
     val bands: ParametricEqBandList,
     val preampDb: Double,
     val skipped: Int,
+    /** The file's Preamp before the -30..+12 dB limit; null if it had none (see ApoImportResult). */
+    val preampInFileDb: Double? = null,
 )
 
 /**
@@ -26,6 +29,28 @@ data class RoutedApoImport(
  * can be unit-tested without a fragment or the Android framework.
  */
 object ApoImportRouter {
+
+    /**
+     * What an import does to the Pre EQ preamp, for its dialog and toast: "Preamp +12.0 dB",
+     * with "(file says +14.5 dB, limited to +12 dB)" when the file's value was out of range.
+     * Null when the file had no Preamp line -- the preamp is then left as it is on Append and
+     * reset to 0 dB on Replace, which [NO_PREAMP_ON_REPLACE] describes.
+     */
+    fun preampSummary(appliedDb: Double, inFileDb: Double?): String? {
+        if (inFileDb == null) return null
+        val applied = "Preamp ${formatDb(appliedDb)}"
+        return if (inFileDb == appliedDb) applied
+        else "$applied (file says ${formatDb(inFileDb)}, limited to ${formatDb(appliedDb)})"
+    }
+
+    const val NO_PREAMP_ON_REPLACE = "No Preamp line: Replace sets the preamp to 0.0 dB"
+
+    /** "+12.0 dB" / "-6.5 dB" / "0.0 dB". */
+    fun formatDb(db: Double): String {
+        val rounded = Math.round(db * 10.0) / 10.0
+        val sign = if (rounded > 0.0) "+" else ""
+        return sign + String.format(Locale.US, "%.1f dB", if (rounded == 0.0) 0.0 else rounded)
+    }
 
     /** Hard ceiling on a single import file, matched to the user-facing "1 MB safety limit". */
     const val MAX_IMPORT_CHARS = 1_000_000

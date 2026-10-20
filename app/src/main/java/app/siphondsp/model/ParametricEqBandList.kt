@@ -12,11 +12,15 @@ import java.util.*
 /**
  * Result of parsing an EqualizerAPO format string.
  * @param skippedFilters number of malformed or unsupported filter lines that were skipped
- * @param preampDb the parsed Preamp value in dB (0.0 if not present)
+ * @param preampDb the parsed Preamp value in dB, limited to the -30..+12 dB the PEQ accepts
+ *   (0.0 if not present)
+ * @param preampInFileDb the Preamp value exactly as the file wrote it, before that limit; null if
+ *   the file had no readable Preamp line
  */
 data class ApoImportResult(
     val skippedFilters: Int,
-    val preampDb: Double
+    val preampDb: Double,
+    val preampInFileDb: Double? = null,
 )
 
 class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
@@ -119,6 +123,7 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
         clear()
         var skipped = 0
         var preampDb = 0.0
+        var preampInFileDb: Double? = null
         var activeChannel = ParametricEqChannel.LEFT_RIGHT
 
         val filterRegex = Regex(
@@ -144,7 +149,10 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
                     if (parsed == null || !parsed.isFinite()) skipped++
                     // Match BmwPeqState.validate()'s actual allowed range, not just the AutoEq
                     // convention's typical negative-only preamp values.
-                    else preampDb = parsed.coerceIn(-30.0, 12.0)
+                    else {
+                        preampInFileDb = parsed
+                        preampDb = parsed.coerceIn(-30.0, 12.0)
+                    }
                 }
                 continue
             }
@@ -185,7 +193,7 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
             add(ParametricEqBand(freq, gain, q, filterType, activeChannel))
         }
 
-        return ApoImportResult(skippedFilters = skipped, preampDb = preampDb)
+        return ApoImportResult(skippedFilters = skipped, preampDb = preampDb, preampInFileDb = preampInFileDb)
     }
 
     fun fromBundle(bundle: Bundle) {
