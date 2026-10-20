@@ -182,7 +182,43 @@ data class RootlessPipelineRuntimeSnapshot(
     val autoExcludedApps: List<String> = emptyList(),
     /** Packages playing right now that are excluded either way, so not processed (see BaseSessionDatabase). */
     val excludedPlaying: List<String> = emptyList(),
+    /** Audio-thread timing, read sizes and native audio-path counters; null before the worker runs. */
+    val realtime: RealtimeDiagnostics? = null,
 )
+
+/**
+ * What the audio thread has been doing since the recorder worker started (see AudioThreadStats
+ * and the native RealtimeCounters), for finding where dropouts come from.
+ */
+data class RealtimeDiagnostics(
+    /** Buffers processed. */
+    val processCalls: Long,
+    /** Mean, recent (last 10-20 s) maximum and session maximum time in engine.process*(), in µs. */
+    val processMeanMicros: Double,
+    val processRecentMaxMicros: Double,
+    val processMaxMicros: Double,
+    /** Real-time budget of the last buffer: its own duration, in µs. */
+    val budgetMicros: Double,
+    /** Buffers by process time as a share of their budget: <25%, 25-50%, 50-75%, 75-100%, over. */
+    val budgetBuckets: List<Long>,
+    /** Successful AudioRecord reads (generated measurement input excluded). */
+    val readCalls: Long,
+    /** Samples per read: requested, mean, standard deviation, min, max. */
+    val readRequested: Int,
+    val readMean: Double,
+    val readStdDev: Double,
+    val readMin: Int,
+    val readMax: Int,
+    /** Reads that returned fewer samples than requested. */
+    val shortReads: Long,
+    /** AudioTrack underruns since the worker started (across recreated tracks), and in the last minute. */
+    val underrunsTotal: Long,
+    val underrunsLastMinute: Long,
+    /** Native counters, indexed by JamesDspWrapper.REALTIME_*; null when the handle is gone. */
+    val nativeCounters: List<Long>?,
+) {
+    val overruns: Long get() = budgetBuckets.lastOrNull() ?: 0L
+}
 
 private const val HEADER_WIDTH = 3
 private const val OUTPUT_BLOCK_WIDTH = 40

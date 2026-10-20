@@ -498,6 +498,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_setConvolver(JNIEnv *env, jobject obj
         auto* nativeImpulse = (env->GetFloatArrayElements(impulseResponse, nullptr));
         success = Convolver1DLoadImpulseResponse(dsp, nativeImpulse, irChannels, irFrames, 1);
         env->ReleaseFloatArrayElements(impulseResponse, nativeImpulse, JNI_ABORT);
+        wrapper->realtime.irLoads.fetch_add(1, std::memory_order_relaxed);
     }
 
     // JamesDSP's own convolver switch is left to the process paths, which turn it on only for a

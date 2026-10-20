@@ -530,6 +530,10 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { JamesDspWrapper.readNativeBmwMeter(it, kind, out) }
 
+    /** See [JamesDspWrapper.getRealtimeCounters]. Atomics only, so the meter lock suffices. */
+    fun readRealtimeCounters(out: LongArray): Boolean =
+        withMeterHandle(false) { JamesDspWrapper.getRealtimeCounters(it, out) }
+
     fun nativeBmwMasterLimiterMeter(): FloatArray? =
         withMeterHandle<FloatArray?>(null) { JamesDspWrapper.getNativeBmwMasterLimiterMeter(it) }
 

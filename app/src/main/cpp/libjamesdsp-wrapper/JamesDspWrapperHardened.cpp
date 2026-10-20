@@ -42,6 +42,8 @@ static const char* safeNseelCodeError(void* vm)
 extern "C" {
 // Defined in JamesDSP's jdspController.c but not declared in its header.
 void JamesDSPRefreshConvolutions(JamesDSPLib* jdsp, char refreshAll);
+// Set once cached benchmarks are loaded; JamesDSPRefreshConvolutions() is a no-op without it.
+extern char benchmarkEnable;
 }
 
 namespace {
@@ -94,6 +96,23 @@ void convolveBeforeMasterLimiter(void* context, float* x, std::size_t frames)
 NativeBmwDspProcessor::BlockHook convolverHook(const JamesDSPLib* dsp)
 {
     return dsp->enableASRC ? nullptr : &convolveBeforeMasterLimiter;
+}
+
+// Counts what the buffer about to run will make JamesDSP do on the audio thread: the hook and
+// JamesDSP's own entry points both grow the work buffers for a larger block, and refresh every
+// FFT convolver for a block size different from the last one. Called before either runs.
+void noteBlockSize(JamesDspWrapper* wrapper, const JamesDSPLib* dsp, std::size_t frames)
+{
+    auto& counters = wrapper->realtime;
+    counters.lastBlockFrames.store(static_cast<std::int64_t>(frames), std::memory_order_relaxed);
+    if(dsp->blockSizeMax < frames)
+        counters.workBufferReallocs.fetch_add(1, std::memory_order_relaxed);
+    if(dsp->blockSize != frames)
+    {
+        counters.blockSizeChanges.fetch_add(1, std::memory_order_relaxed);
+        if(benchmarkEnable)
+            counters.convolverRebuilds.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 // Sets JamesDSP's own convolver switch for the pass about to run: on only when the convolver is
@@ -260,6 +279,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
+    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const int16_t* processed = bmw != nullptr
@@ -296,6 +316,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
+    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const int32_t* processed = bmw != nullptr
@@ -332,6 +353,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
+    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
     auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
     ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false};
     const float* processed = bmw != nullptr
@@ -370,6 +392,7 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
     }
 
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
+    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(byteCount / 6));
     syncCoreConvolver(wrapper, dsp, false);
     dsp->processInt24PackedMultiplexd(dsp, input, output, byteCount / 6);
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
@@ -404,9 +427,35 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv* env, jobject, 
     }
 
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
+    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(sampleCount / 2));
     syncCoreConvolver(wrapper, dsp, false);
     dsp->processInt8_24Multiplexd(dsp, input, output, sampleCount / 2);
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
     return outputObj;
+}
+
+// Fills [out] with the audio-path counters (see RealtimeCounters), in this order -- matching
+// JamesDspWrapper.REALTIME_*: irLoads, blockSizeChanges, convolverRebuilds, workBufferReallocs,
+// lastBlockFrames. Atomics only, so it takes no lock. False for a gone handle or a short array.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_JamesDspWrapper_getRealtimeCounters(JNIEnv* env, jobject, jlong self,
+                                                                jlongArray out)
+{
+    DECLARE_WRAPPER_B
+    if(env == nullptr || out == nullptr)
+        return JNI_FALSE;
+    const auto& counters = wrapper->realtime;
+    const jlong values[] = {
+        counters.irLoads.load(std::memory_order_relaxed),
+        counters.blockSizeChanges.load(std::memory_order_relaxed),
+        counters.convolverRebuilds.load(std::memory_order_relaxed),
+        counters.workBufferReallocs.load(std::memory_order_relaxed),
+        counters.lastBlockFrames.load(std::memory_order_relaxed),
+    };
+    constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+    if(env->GetArrayLength(out) < count)
+        return JNI_FALSE;
+    env->SetLongArrayRegion(out, 0, count, values);
+    return JNI_TRUE;
 }

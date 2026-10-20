@@ -47,6 +47,17 @@ object JamesDspWrapper {
     external fun readNativeBmwMeter(self: JamesDspHandle, kind: Int, out: FloatArray): Boolean
     const val METER_MBC = 1
     const val METER_BUS_LIMITER = 2
+
+    // Fills [out] (at least REALTIME_COUNT longs) with the audio-path counters, indexed by
+    // REALTIME_*. Lock-free atomics; false for a gone handle or a short array.
+    external fun getRealtimeCounters(self: JamesDspHandle, out: LongArray): Boolean
+    const val REALTIME_IR_LOADS = 0
+    const val REALTIME_BLOCK_SIZE_CHANGES = 1
+    const val REALTIME_CONVOLVER_REBUILDS = 2
+    const val REALTIME_WORK_BUFFER_REALLOCS = 3
+    const val REALTIME_LAST_BLOCK_FRAMES = 4
+    const val REALTIME_COUNT = 5
+
     // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
     external fun getNativeBmwMasterLimiterMeter(self: JamesDspHandle): FloatArray?
     // 2 floats: [centreWeight 0..1, centreRmsDb] of the virtual centre; [0, -60] while the

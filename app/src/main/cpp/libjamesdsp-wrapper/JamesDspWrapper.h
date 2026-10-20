@@ -42,6 +42,24 @@ struct JniEnvironmentHandle
     }
 };
 
+// Audio-path counters for the diagnostics screen (JamesDspWrapper.getRealtimeCounters, which
+// lists the layout). Bumped with relaxed increments by whichever thread does the work and read
+// lock-free, so counting costs the audio thread one atomic add per event.
+struct RealtimeCounters
+{
+    // setConvolver() impulse-response loads (control thread).
+    std::atomic<std::int64_t> irLoads{0};
+    // Buffers whose block size differed from the one JamesDSP last ran at (audio thread).
+    std::atomic<std::int64_t> blockSizeChanges{0};
+    // Of those, the ones that rebuilt JamesDSP's FFT convolvers on the audio thread: the
+    // impulse response's, and the crossfeed / EQ ones a refresh rebuilds with it.
+    std::atomic<std::int64_t> convolverRebuilds{0};
+    // Buffers larger than JamesDSP's work buffers, which reallocated them (audio thread).
+    std::atomic<std::int64_t> workBufferReallocs{0};
+    // Frames in the last processed buffer.
+    std::atomic<std::int64_t> lastBlockFrames{0};
+};
+
 typedef struct
 {
     void* dsp;
@@ -55,6 +73,7 @@ typedef struct
     // it runs is decided per buffer by the process paths: inside the BMW chain before its master
     // limiter, or JamesDSP's own pass, whose switch only they set.
     std::atomic<bool> convolverWanted{false};
+    RealtimeCounters realtime;
     JniEnvironmentHandle env;
     jobject callbackInterface;
     jmethodID callbackOnLiveprogOutput;
