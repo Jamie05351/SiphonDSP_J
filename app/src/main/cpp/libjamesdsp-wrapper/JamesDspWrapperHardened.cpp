@@ -5,6 +5,7 @@
 #include <string>
 
 #include "NativeBmwDspProcessor.h"
+#include "ScopedFlushToZero.h"
 
 extern "C" {
 #include <jdsp_header.h>
@@ -339,16 +340,20 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt16(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
-    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
-    const int16_t* processed = bmw != nullptr
-        ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples),
-                       convolverHook(dsp), &pass)
-        : reinterpret_cast<int16_t*>(input + safeOffset);
-    syncCoreConvolver(wrapper, dsp, pass.ran);
-    runCorePass(wrapper, dsp, dsp->processInt16Multiplexd, const_cast<int16_t*>(processed),
-                reinterpret_cast<int16_t*>(output), static_cast<std::size_t>(samples / 2), 2);
+    {
+        // Denormals flushed for the processing only, not the JNI calls around it.
+        const ScopedFlushToZero flushToZero;
+        noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
+        auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+        ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
+        const int16_t* processed = bmw != nullptr
+            ? bmw->process(reinterpret_cast<int16_t*>(input + safeOffset), static_cast<std::size_t>(samples),
+                           convolverHook(dsp), &pass)
+            : reinterpret_cast<int16_t*>(input + safeOffset);
+        syncCoreConvolver(wrapper, dsp, pass.ran);
+        runCorePass(wrapper, dsp, dsp->processInt16Multiplexd, const_cast<int16_t*>(processed),
+                    reinterpret_cast<int16_t*>(output), static_cast<std::size_t>(samples / 2), 2);
+    }
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -377,16 +382,20 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt32(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
-    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
-    const int32_t* processed = bmw != nullptr
-        ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples),
-                       convolverHook(dsp), &pass)
-        : reinterpret_cast<int32_t*>(input + safeOffset);
-    syncCoreConvolver(wrapper, dsp, pass.ran);
-    runCorePass(wrapper, dsp, dsp->processInt32Multiplexd, const_cast<int32_t*>(processed),
-                reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(samples / 2), 2);
+    {
+        // Denormals flushed for the processing only, not the JNI calls around it.
+        const ScopedFlushToZero flushToZero;
+        noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
+        auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+        ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
+        const int32_t* processed = bmw != nullptr
+            ? bmw->process(reinterpret_cast<int32_t*>(input + safeOffset), static_cast<std::size_t>(samples),
+                           convolverHook(dsp), &pass)
+            : reinterpret_cast<int32_t*>(input + safeOffset);
+        syncCoreConvolver(wrapper, dsp, pass.ran);
+        runCorePass(wrapper, dsp, dsp->processInt32Multiplexd, const_cast<int32_t*>(processed),
+                    reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(samples / 2), 2);
+    }
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -415,15 +424,19 @@ Java_app_siphondsp_interop_JamesDspWrapper_processFloat(JNIEnv* env, jobject, jl
     }
 
     const jint safeOffset = std::max(offset, 0);
-    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
-    auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
-    const float* processed = bmw != nullptr
-        ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples), convolverHook(dsp), &pass)
-        : input + safeOffset;
-    syncCoreConvolver(wrapper, dsp, pass.ran);
-    runCorePass(wrapper, dsp, dsp->processFloatMultiplexd, const_cast<float*>(processed),
-                static_cast<float*>(output), static_cast<std::size_t>(samples / 2), 2);
+    {
+        // Denormals flushed for the processing only, not the JNI calls around it.
+        const ScopedFlushToZero flushToZero;
+        noteBlockSize(wrapper, dsp, static_cast<std::size_t>(samples / 2));
+        auto* bmw = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
+        ConvolverPass pass{dsp, wrapper->convolverWanted.load(), false, preparedFrames(wrapper)};
+        const float* processed = bmw != nullptr
+            ? bmw->process(input + safeOffset, static_cast<std::size_t>(samples), convolverHook(dsp), &pass)
+            : input + safeOffset;
+        syncCoreConvolver(wrapper, dsp, pass.ran);
+        runCorePass(wrapper, dsp, dsp->processFloatMultiplexd, const_cast<float*>(processed),
+                    static_cast<float*>(output), static_cast<std::size_t>(samples / 2), 2);
+    }
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
 }
@@ -455,10 +468,14 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt24Packed(JNIEnv* env, jobje
     }
 
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
-    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(byteCount / 6));
-    syncCoreConvolver(wrapper, dsp, false);
-    runCorePass(wrapper, dsp, dsp->processInt24PackedMultiplexd, reinterpret_cast<uint8_t*>(input),
-                reinterpret_cast<uint8_t*>(output), static_cast<std::size_t>(byteCount / 6), 6);
+    {
+        // Denormals flushed for the processing only, not the JNI calls around it.
+        const ScopedFlushToZero flushToZero;
+        noteBlockSize(wrapper, dsp, static_cast<std::size_t>(byteCount / 6));
+        syncCoreConvolver(wrapper, dsp, false);
+        runCorePass(wrapper, dsp, dsp->processInt24PackedMultiplexd, reinterpret_cast<uint8_t*>(input),
+                    reinterpret_cast<uint8_t*>(output), static_cast<std::size_t>(byteCount / 6), 6);
+    }
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
     return outputObj;
@@ -491,10 +508,14 @@ Java_app_siphondsp_interop_JamesDspWrapper_processInt8U24(JNIEnv* env, jobject, 
     }
 
     // Not through the BMW chain, so JamesDSP's own pass runs the convolver.
-    noteBlockSize(wrapper, dsp, static_cast<std::size_t>(sampleCount / 2));
-    syncCoreConvolver(wrapper, dsp, false);
-    runCorePass(wrapper, dsp, dsp->processInt8_24Multiplexd, reinterpret_cast<int32_t*>(input),
-                reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(sampleCount / 2), 2);
+    {
+        // Denormals flushed for the processing only, not the JNI calls around it.
+        const ScopedFlushToZero flushToZero;
+        noteBlockSize(wrapper, dsp, static_cast<std::size_t>(sampleCount / 2));
+        syncCoreConvolver(wrapper, dsp, false);
+        runCorePass(wrapper, dsp, dsp->processInt8_24Multiplexd, reinterpret_cast<int32_t*>(input),
+                    reinterpret_cast<int32_t*>(output), static_cast<std::size_t>(sampleCount / 2), 2);
+    }
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
     return outputObj;
