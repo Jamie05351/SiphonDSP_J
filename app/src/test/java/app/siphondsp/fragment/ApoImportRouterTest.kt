@@ -69,4 +69,26 @@ class ApoImportRouterTest {
             ApoImportRouter.readImportText(ByteArrayInputStream(tooBig))
         }
     }
+
+    @Test
+    fun preampSummaryShowsTheAppliedValueAndAnyLimit() {
+        assertEquals("Preamp -6.5 dB", ApoImportRouter.preampSummary(-6.5, -6.5))
+        assertEquals(
+            "Preamp +12.0 dB (file says +14.5 dB, limited to +12.0 dB)",
+            ApoImportRouter.preampSummary(12.0, 14.5),
+        )
+        assertEquals(
+            "Preamp -30.0 dB (file says -42.0 dB, limited to -30.0 dB)",
+            ApoImportRouter.preampSummary(-30.0, -42.0),
+        )
+        assertNull(ApoImportRouter.preampSummary(0.0, null))
+    }
+
+    @Test
+    fun formatDbSignsAndRoundsToOneDecimal() {
+        assertEquals("+3.0 dB", ApoImportRouter.formatDb(3.0))
+        assertEquals("-0.4 dB", ApoImportRouter.formatDb(-0.44))
+        assertEquals("0.0 dB", ApoImportRouter.formatDb(-0.01))
+        assertEquals("0.0 dB", ApoImportRouter.formatDb(0.0))
+    }
 }

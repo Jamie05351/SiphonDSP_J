@@ -61,7 +61,7 @@ class PeqApoImport(private val host: Host) {
                 // last file wins if two map to the same bank+channel
                 routed[route] = RoutedApoImport(
                     file.name, route.first, route.second, file.bands,
-                    file.result.preampDb, file.result.skippedFilters,
+                    file.result.preampDb, file.result.skippedFilters, file.result.preampInFileDb,
                 )
             }
         }
@@ -89,10 +89,16 @@ class PeqApoImport(private val host: Host) {
         }
         val skippedNote = if (unmatched.isEmpty()) "" else
             "\n\nNot recognised, ignored: ${unmatched.joinToString(", ")}"
+        // Only the Input Correction file's preamp is used (PeqBandEditor.importRoutedApo).
+        val preampNote = routed.values.firstOrNull { it.scope == PeqScope.FULL }?.let {
+            val summary = ApoImportRouter.preampSummary(it.preampDb, it.preampInFileDb)
+            "\n\n" + if (summary != null) "$summary, applied on Replace, ignored on Append." else
+                "${ApoImportRouter.NO_PREAMP_ON_REPLACE}."
+        } ?: ""
 
         AlertDialog.Builder(host.context)
             .setTitle("Import REW filter set")
-            .setMessage("$lines$skippedNote\n\nReplace clears each affected bank first; Append adds to it.")
+            .setMessage("$lines$skippedNote$preampNote\n\nReplace clears each affected bank first; Append adds to it.")
             .setPositiveButton("Replace") { _, _ -> applyApoImport(routed.values.toList(), append = false) }
             .setNeutralButton("Append") { _, _ -> applyApoImport(routed.values.toList(), append = true) }
             .setNegativeButton(android.R.string.cancel, null)
@@ -105,9 +111,15 @@ class PeqApoImport(private val host: Host) {
         } else {
             "All ${imported.size} parsed filters are supported."
         }
+        // The preamp belongs to Pre EQ, so only a Full-bank import touches it.
+        val preampNote = if (host.activeScope != PeqScope.FULL) "" else {
+            val summary = ApoImportRouter.preampSummary(result.preampDb, result.preampInFileDb)
+            "\n\n" + if (summary != null) "$summary, applied on Replace, ignored on Append." else
+                "${ApoImportRouter.NO_PREAMP_ON_REPLACE}."
+        }
         AlertDialog.Builder(host.context)
             .setTitle("Import into ${host.activeScope.label}")
-            .setMessage("$detail Choose how to apply the previewed filters.")
+            .setMessage("$detail Choose how to apply the previewed filters.$preampNote")
             .setPositiveButton("Replace") { _, _ ->
                 applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
             }
@@ -127,7 +139,11 @@ class PeqApoImport(private val host: Host) {
                     val skipped = routed.sumOf { it.skipped }
                     val bankCount = routed.map { it.scope }.distinct().size
                     val base = "Imported $total filters into $bankCount bank(s)"
-                    host.context.toast(if (skipped > 0) "$base ($skipped lines skipped)" else base)
+                    val withSkipped = if (skipped > 0) "$base ($skipped lines skipped)" else base
+                    host.context.toast(
+                        if (routed.any { it.scope == PeqScope.FULL }) withPreamp(withSkipped, result.candidate, append)
+                        else withSkipped
+                    )
                 }
             else -> Unit
         }
@@ -148,14 +164,21 @@ class PeqApoImport(private val host: Host) {
             is PeqBandEditResult.Changed ->
                 if (host.applyCandidate(result.candidate, result.undoSource)) {
                     val message = host.context.getString(R.string.peq_import_success, imported.size)
-                    host.context.toast(
+                    val withSkipped =
                         if (skippedFilters > 0) "$message ($skippedFilters malformed or unsupported lines skipped)"
                         else message
+                    host.context.toast(
+                        if (host.activeScope == PeqScope.FULL) withPreamp(withSkipped, result.candidate, append)
+                        else withSkipped
                     )
                 }
             else -> Unit
         }
     }
+
+    /** [message] plus the preamp now running, when a Full-bank Replace may have changed it. */
+    private fun withPreamp(message: String, applied: BmwPeqState, append: Boolean): String =
+        if (append) message else "$message. Preamp now ${ApoImportRouter.formatDb(applied.preampDb.toDouble())}"
 
     /** Body of the fragment's single-bank text-export launcher. */
     fun exportTo(uri: Uri) {
