@@ -233,7 +233,25 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val blockedAppObserver = Observer<List<BlockedApp>?> {
         Timber.d("blockedAppObserver: Database changed; ignored=${!workerAlive}")
         if(workerAlive)
-            requestAudioRecordRecreation("blocklist changed")
+            exclusionRecheckGate.request("Excluded apps list changed")
+    }
+
+    // The exclusions the live AudioRecord was built with (null before the first build). Written
+    // by buildAudioRecord() on the worker, read by recheckExclusions() on the main thread.
+    @Volatile
+    private var builtExclusions: ExclusionSet? = null
+
+    // App-session churn, Excluded-apps edits and the "exclude restricted" setting come here
+    // rather than straight to requestAudioRecordRecreation(): a burst is checked once, and the
+    // pipeline is only rebuilt when what it excludes really has to change.
+    private val exclusionRecheckGate by lazy {
+        ExclusionRecheckGate(
+            debounceMs = EXCLUSION_RECHECK_DEBOUNCE_MS,
+            maxWaitMs = EXCLUSION_RECHECK_MAX_WAIT_MS,
+            now = SystemClock::elapsedRealtime,
+            schedule = { delay, task -> healthHandler.postDelayed(task, delay) },
+            check = ::recheckExclusions,
+        )
     }
 
     override fun onCreate() {
@@ -363,6 +381,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         healthHandler.removeCallbacks(healthWatchdog)
         healthHandler.removeCallbacks(startupDiagnosticsFinisher)
         healthHandler.removeCallbacks(idleTimerResetRunnable)
+        exclusionRecheckGate.cancel()
         startupDiagnostics?.finishIfDue(force = true)
         stopRecording()
         // No new config pushes into an engine that is about to close. One already running is
@@ -622,7 +641,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val onSessionPolicyChangeListener = object : SessionRecordingPolicyManager.OnSessionRecordingPolicyChangeListener {
         override fun onSessionRecordingPolicyChanged(
             sessionList: HashMap<String, SessionRecordingPolicyEntry>,
-            isMinorUpdate: Boolean
+            isMinorUpdate: Boolean,
+            changedPackages: Set<String>,
         ) {
             if(!excludeRestrictedSessions) {
                 Timber.d("onRestrictedSessionChanged: blocked; excludeRestrictedSessions disabled")
@@ -630,8 +650,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
 
             if(!isMinorUpdate) {
-                Timber.d("onRestrictedSessionChanged: major update detected; requesting soft-reboot")
-                requestAudioRecordRecreation()
+                Timber.d("onRestrictedSessionChanged: major update (%s); re-checking exclusions",
+                    changedPackages.joinToString())
+                // Called on the session-polling thread; the gate lives on the main thread.
+                healthHandler.post {
+                    if (workerAlive) exclusionRecheckGate.request("app capture policy changed", changedPackages)
+                }
             }
             else {
                 Timber.d("onRestrictedSessionChanged: minor update detected")
@@ -648,9 +672,34 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             getString(R.string.key_session_exclude_restricted) -> {
                 excludeRestrictedSessions = preferences.get<Boolean>(R.string.key_session_exclude_restricted)
                 Timber.d("Exclude restricted set to $excludeRestrictedSessions")
-                requestAudioRecordRecreation()
+                if (workerAlive) exclusionRecheckGate.request("exclude-restricted setting changed")
             }
         }
+    }
+
+    // What the next AudioRecord should exclude, from the current settings and capture-policy log.
+    private fun computeExclusions(): ExclusionSet = ExclusionSet(
+        restricted = if (excludeRestrictedSessions) sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet() else emptySet(),
+        blocked = blockedApps.value?.map { it.uid }?.toSet().orEmpty(),
+        self = Process.myUid(),
+        excludeRestricted = excludeRestrictedSessions,
+    )
+
+    // Main thread, from exclusionRecheckGate: rebuilds only if the exclusions must change.
+    private fun recheckExclusions(reasons: Set<String>, packages: Set<String>) {
+        if (!workerAlive || isProcessorDisposing || isServiceDisposing) return
+        val why = reasons.joinToString(", ") + if (packages.isEmpty()) "" else " (${packages.joinToString()})"
+        // No AudioRecord built yet: the first build computes the exclusions itself.
+        val built = builtExclusions ?: return
+        val now = computeExclusions()
+        val comparison = ExclusionSet.compare(built, now, sessionManager.sessionPolicyDatabase.getPolicyUids())
+        if (!comparison.needsRebuild) {
+            Timber.i("Exclusions unchanged (%d UIDs%s), keeping the pipeline: %s", built.all.size,
+                if (comparison.stopped.isEmpty()) "" else "; ${comparison.stopped.size} stopped, still excluded", why)
+            return
+        }
+        Timber.i("Exclusions changed (added %s, released %s): %s", comparison.added, comparison.released, why)
+        requestAudioRecordRecreation("exclusions changed: $why")
     }
 
     fun requestAudioRecordRecreation(reason: String = "configuration/session policy changed") {
@@ -1329,21 +1378,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             .addMatchingUsage(AudioAttributes.USAGE_GAME)
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
 
-        val excluded = (if(excludeRestrictedSessions)
-            sessionManager.sessionPolicyDatabase.getRestrictedUids().toList()
-        else {
-            sessionManager.pollOnce(false)
-            emptyList()
-        }).toMutableList()
+        if (!excludeRestrictedSessions) sessionManager.pollOnce(false)
+        val exclusions = computeExclusions()
+        val excluded = exclusions.all.toList()
 
-        blockedApps.value?.map { it.uid }?.let { excluded += it }
-        excluded += Process.myUid()
-
-        excluded.distinct().forEach { configBuilder.excludeUid(it) }
-        sessionManager.sessionDatabase.setExcludedUids(excluded.distinct().toTypedArray())
+        excluded.forEach { configBuilder.excludeUid(it) }
+        sessionManager.sessionDatabase.setExcludedUids(excluded.toTypedArray())
         sessionManager.pollOnce(false)
+        builtExclusions = exclusions
 
-        Timber.d("buildAudioRecord: Excluded UIDs: ${excluded.distinct().joinToString("; ")}")
+        Timber.d("buildAudioRecord: Excluded UIDs: ${excluded.joinToString("; ")}")
 
         return AudioRecord.Builder()
             .setAudioFormat(format)
@@ -1427,6 +1471,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val CHANNEL_COUNT = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
+        // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
+        private const val EXCLUSION_RECHECK_DEBOUNCE_MS = 2_000L
+        private const val EXCLUSION_RECHECK_MAX_WAIT_MS = 10_000L
         const val SESSION_LOSS_MAX_RETRIES = 1
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
