@@ -668,6 +668,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             else {
                 Timber.d("onRestrictedSessionChanged: minor update detected")
+                // An app the live AudioRecord still excludes for blocking capture (kept after it
+                // stopped) is back, now allowing it: a minor update to the log, but it must be
+                // released or its audio stays unprocessed.
+                val allowed = sessionList.values.filter { !it.isRestricted && it.uid > 0 }
+                val returned = allowed.filter { builtExclusions?.excludesAnyOf(listOf(it.uid)) == true }
+                if (returned.isNotEmpty()) {
+                    val packages = returned.map { it.packageName }
+                    healthHandler.post {
+                        if (workerAlive) exclusionRecheckGate.request("excluded app now allows capture", packages)
+                    }
+                }
             }
         }
     }

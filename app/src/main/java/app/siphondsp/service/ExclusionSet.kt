@@ -13,6 +13,14 @@ data class ExclusionSet(
 ) {
     val all: Set<Int> = restricted + blocked + self
 
+    /**
+     * Whether any of [allowedUids] -- apps the capture-permission log now lists as allowing
+     * capture -- is one this set excluded for blocking it. A "stopped" app kept excluded (see
+     * [compare]) can come back allowing capture; the log reports that as a minor update, so the
+     * caller has to ask for a re-check itself, or the app's audio stays unprocessed.
+     */
+    fun excludesAnyOf(allowedUids: Collection<Int>): Boolean = allowedUids.any { it in restricted }
+
     /** How a freshly computed set compares with the one the live AudioRecord was built with. */
     data class Comparison(
         /** Excluded now but not by the live AudioRecord: their audio is being processed. */

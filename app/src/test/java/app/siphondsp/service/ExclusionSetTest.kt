@@ -84,4 +84,16 @@ class ExclusionSetTest {
         assertTrue(self in set().all)
         assertTrue(self in set(excludeRestricted = false).all)
     }
+
+    @Test
+    fun aStoppedAppReturningWithCaptureAllowedIsNoticedAndReleased() {
+        val built = set(restricted = setOf(dabble))
+        // Back in the log, allowing capture: the caller sees it among the allowed entries...
+        assertTrue(built.excludesAnyOf(listOf(other, dabble)))
+        assertFalse(built.excludesAnyOf(listOf(other)))
+        // ...and the re-check releases it.
+        val c = ExclusionSet.compare(built, set(), policyUids = setOf(dabble))
+        assertTrue(c.needsRebuild)
+        assertEquals(setOf(dabble), c.released)
+    }
 }
