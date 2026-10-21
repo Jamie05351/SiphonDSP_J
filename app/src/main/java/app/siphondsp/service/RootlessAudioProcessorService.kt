@@ -149,6 +149,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile private var recorderSuspended = false
     @Volatile private var startupDiagnostics: StartupAudioDiagnostics? = null
     @Volatile private var totalRecoveries = 0
+    // Pipeline rebuilds actually performed (every cause), for the Native DSP Truth screen.
+    @Volatile private var pipelineRecreations = 0
+    @Volatile private var lastRecreationReason: String? = null
+    @Volatile private var lastRecreationPackages: Set<String> = emptySet()
+    @Volatile private var lastRecreationAt = -1L
+    // Exclusion re-checks that found nothing that had to change, so rebuilt nothing.
+    @Volatile private var exclusionRechecksSkipped = 0
+    // The packages behind the pending recreation, when an app change asked for it.
+    private var recreationPackages: Set<String> = emptySet()
     // What the current pipeline really runs at, for the home screen's Settings cell.
     @Volatile private var activePcmFloat: Boolean? = null
     @Volatile private var activeBufferSamples = 0
@@ -694,26 +703,33 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         val now = computeExclusions()
         val comparison = ExclusionSet.compare(built, now, sessionManager.sessionPolicyDatabase.getPolicyUids())
         if (!comparison.needsRebuild) {
+            exclusionRechecksSkipped++
             Timber.i("Exclusions unchanged (%d UIDs%s), keeping the pipeline: %s", built.all.size,
                 if (comparison.stopped.isEmpty()) "" else "; ${comparison.stopped.size} stopped, still excluded", why)
             return
         }
         Timber.i("Exclusions changed (added %s, released %s): %s", comparison.added, comparison.released, why)
-        requestAudioRecordRecreation("exclusions changed: $why")
+        requestAudioRecordRecreation("exclusions changed: ${reasons.joinToString(", ")}", packages)
     }
 
-    fun requestAudioRecordRecreation(reason: String = "configuration/session policy changed") {
+    fun requestAudioRecordRecreation(
+        reason: String = "configuration/session policy changed",
+        packages: Set<String> = emptySet(),
+    ) {
         // Even configuration changes must unblock an idle read; otherwise the pending request
         // can never reach the worker's recreation branch while no media is being captured.
-        synchronized(recorderLifecycleLock) { requestRecreationLocked(reason, unblock = true) }
+        synchronized(recorderLifecycleLock) { requestRecreationLocked(reason, unblock = true, packages) }
     }
 
-    private fun requestRecreationLocked(reason: String, unblock: Boolean) {
+    private fun requestRecreationLocked(reason: String, unblock: Boolean, packages: Set<String> = emptySet()) {
         if (isProcessorDisposing || isServiceDisposing || !workerAlive) return
         if (!recreateRecorderRequested && !recreationInProgress) {
             recreationSince = SystemClock.elapsedRealtime()
             recreationReason = reason
+            recreationPackages = packages
             Timber.i("Audio pipeline recreation requested: %s", reason)
+        } else {
+            recreationPackages = recreationPackages + packages
         }
         recreateRecorderRequested = true
         if (unblock) {
@@ -992,6 +1008,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         recreateRecorderRequested = false
                         recreationInProgress = true
                         Timber.i("Recreating audio pipeline on existing worker: %s", recreationReason)
+                        pipelineRecreations++
+                        lastRecreationReason = recreationReason
+                        lastRecreationPackages = recreationPackages
+                        lastRecreationAt = SystemClock.elapsedRealtime()
+                        recreationPackages = emptySet()
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
@@ -1556,6 +1577,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     pipelineHealthReason = service.lastHealth?.reason,
                     underrunCount = try { track?.underrunCount ?: 0 } catch (_: Exception) { 0 },
                     recoveriesThisSession = service.totalRecoveries,
+                    pipelineRecreations = service.pipelineRecreations,
+                    lastRecreationReason = service.lastRecreationReason,
+                    lastRecreationPackages = service.lastRecreationPackages.toList(),
+                    lastRecreationAgeMs = service.lastRecreationAt.let {
+                        if (it < 0) -1L else SystemClock.elapsedRealtime() - it
+                    },
+                    exclusionRechecksSkipped = service.exclusionRechecksSkipped,
                     lastFlowAgeMs = service.lastSuccessfulWrite.let {
                         if (it < 0) -1L else SystemClock.elapsedRealtime() - it
                     },

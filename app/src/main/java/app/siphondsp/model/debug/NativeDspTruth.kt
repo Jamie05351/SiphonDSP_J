@@ -168,6 +168,16 @@ data class RootlessPipelineRuntimeSnapshot(
     val underrunCount: Int = 0,
     /** Watchdog-triggered pipeline recreations since this service instance started. */
     val recoveriesThisSession: Int = 0,
+    /** Recorder/track rebuilds actually performed since this service instance started, any cause. */
+    val pipelineRecreations: Int = 0,
+    /** Why the latest rebuild happened; null if none yet. */
+    val lastRecreationReason: String? = null,
+    /** The app(s) whose capture-policy change caused the latest rebuild, if one did. */
+    val lastRecreationPackages: List<String> = emptyList(),
+    /** Milliseconds since the latest rebuild; -1 if none yet. */
+    val lastRecreationAgeMs: Long = -1,
+    /** Exclusion re-checks (app sessions, Excluded-apps edits) that kept the pipeline as it was. */
+    val exclusionRechecksSkipped: Int = 0,
     /** Milliseconds since audio was last written out; -1 if none yet. */
     val lastFlowAgeMs: Long = -1,
     /** Whether the running pipeline uses 32-bit float samples (false = 16-bit PCM); null before it starts. */
