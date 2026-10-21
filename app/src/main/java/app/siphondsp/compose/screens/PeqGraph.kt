@@ -186,7 +186,7 @@ private val FreqScale = doubleArrayOf(
 // --- public composables ----------------------------------------------------------------------
 
 /**
- * The static plot frame only — grid + axis labels + crossover / mono-bass shading + legend.
+ * The static plot frame only — grid + axis labels + crossover / Mono Bass shading + legend.
  * No modelled curves, no nodes, no interaction. Kept as a standalone for previews and any
  * future static-preview use; [PeqGraph] draws the same frame plus the response.
  *
@@ -219,6 +219,7 @@ fun PeqGraphFrame(
             val nc = canvas.nativeCanvas
             drawGrid(nc, geometry, paints, density, gridLines, toY)
             drawCrossoverShading(nc, geometry, paints, systemValues, maxFrequency)
+            drawMonoBassShading(nc, geometry, paints, systemValues, density)
             drawLegend(nc, geometry, paints, density, mode)
         }
     }
@@ -558,6 +559,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
     when (ctx.mode) {
         PeqGraphMode.MAGNITUDE -> {
             drawGrid(bg, g, ctx.paints, ctx.density, gainGridLines(g), { g.yForGain(it) }, ctx.glass.octaveGridPaint)
+            drawMonoBassShading(bg, g, ctx.paints, ctx.systemValues, ctx.density)
 
             // Back to front: band areas (context), the focused bank's filter shapes, the full
             // curve (bright when it has focus, faint behind a focused bank), the focused bank's own
@@ -572,6 +574,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
         PeqGraphMode.PHASE -> {
             drawGrid(bg, g, ctx.paints, ctx.density, PhaseGridLines, { g.yForPhaseDeg(it) }, ctx.glass.octaveGridPaint)
             drawCrossoverShading(bg, g, ctx.paints, ctx.systemValues, ctx.maxFrequency)
+            drawMonoBassShading(bg, g, ctx.paints, ctx.systemValues, ctx.density)
             drawPhaseCurves(fg, ctx)
         }
     }
@@ -657,6 +660,26 @@ private fun drawCrossoverShading(
         g.bottom,
         p.crossoverShadePaint,
     )
+}
+
+/** Shades the plot from its left edge up to Mono Bass's split, labelled, while it's on. */
+private fun drawMonoBassShading(
+    nc: Canvas,
+    g: PeqPlotGeometry,
+    p: PeqSurfacePaints,
+    values: FloatArray,
+    density: Float,
+) {
+    if (values.size != BmwSignalChain.VALUE_COUNT) return
+    val splitHz = NativeBmwDspValues.monoBassSplitHz(values)
+    if (splitHz <= 0.0) return
+    val right = g.xForFrequency(splitHz).coerceIn(g.left, g.right)
+    if (right <= g.left) return
+    nc.drawRect(g.left, g.top, right, g.bottom, p.monoBassShadePaint)
+    val label = "MONO"
+    if (p.monoBassLabelPaint.measureText(label) <= right - g.left - 8f * density) {
+        nc.drawText(label, g.left + 4f * density, g.bottom - 6f * density, p.monoBassLabelPaint)
+    }
 }
 
 private fun drawLegend(

@@ -125,6 +125,8 @@ enum class GainsBand(
  * - **Backdrop** (head unit): the car with the band's drivers picked out, a static picture of what
  *   the cards control (the tappable map is on ALIGN).
  * - **Stereo link** stays global.
+ * - **Mono Bass** (global too, either side of Stereo Link on the head unit): below the split both
+ *   channels carry (L+R)/2, above it stereo is untouched; the split is 60-120 Hz in 5 Hz steps.
  *
  * Stage alignment is no longer shown (the virtual centre does that job); a stored stage delay
  * still applies in the engine.
@@ -175,6 +177,8 @@ private fun HeadUnitDelayPage(
         DriverCard(dsp, band, left = true, mirrored = false, linked, inactive, LargeSizing, fill = true, Modifier.artRect(LeftCardRect))
         DriverCard(dsp, band, left = false, mirrored = true, linked, inactive, LargeSizing, fill = true, Modifier.artRect(RightCardRect))
         StereoLinkRow(dsp, linked, true, Modifier.artRect(LinkRect))
+        MonoBassSwitchRow(dsp, true, Modifier.artRect(MonoBassSwitchRect))
+        MonoBassFreqRow(dsp, HeadUnitSizing, true, Modifier.artRect(MonoBassFreqRect))
     }
 }
 
@@ -207,6 +211,8 @@ private fun PhoneDelayPage(
                 DriverCard(dsp, band, false, mirrored = false, linked, inactive, PhoneSizing, fill = false, Modifier.fillMaxWidth())
             }
             StereoLinkRow(dsp, linked, false, Modifier.fillMaxWidth())
+            MonoBassSwitchRow(dsp, false, Modifier.fillMaxWidth())
+            MonoBassFreqRow(dsp, PhoneSizing, false, Modifier.fillMaxWidth())
         }
     }
 }
@@ -256,6 +262,79 @@ private fun StereoLinkRow(dsp: BmwDspState, linked: Boolean, headUnit: Boolean, 
             contentDescription = "Link left and right speaker delay",
         )
     }
+}
+
+@Composable
+private fun MonoBassSwitchRow(dsp: BmwDspState, headUnit: Boolean, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+        Text(
+            text = "MONO BASS",
+            color = LabelColor,
+            fontSize = if (headUnit) 18.sp else 14.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.03.em,
+            modifier = Modifier.padding(end = 12.dp),
+        )
+        BmwSwitch(
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED),
+            onCheckedChange = { dsp.commit(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED, if (it) 1f else 0f) },
+            contentDescription = "Mono bass",
+        )
+    }
+}
+
+/** Mono Bass's split frequency: a value box (numeric entry) and −/+, dimmed and inert while off. */
+@Composable
+private fun MonoBassFreqRow(dsp: BmwDspState, sizing: DelaySizing, headUnit: Boolean, modifier: Modifier) {
+    val context = LocalContext.current
+    val enabled = dsp.isOn(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED)
+    val hz = snapMonoBassHz(dsp.get(NativeBmwDspValues.INDEX_MONO_BASS_FREQ))
+    val commit: (Float) -> Unit = { dsp.commit(NativeBmwDspValues.INDEX_MONO_BASS_FREQ, snapMonoBassHz(it)) }
+    Box(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (enabled) Modifier else Modifier.alpha(InactiveAlpha))
+                // D-pad / rotary can't enter it while off either; the overlay below only stops taps.
+                .focusProperties { onEnter = { if (!enabled) cancelFocusChange() } }
+                .focusGroup(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "MONO BELOW",
+                color = LabelColor,
+                fontSize = if (headUnit) 18.sp else 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.03.em,
+                maxLines = 1,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            ValueBox(hz.roundToInt().toString(), "Hz", Color(GainsBand.LOW.accent), sizing) {
+                context.showBmwNumberInput(
+                    "MONO BELOW", NativeBmwDspValues.MONO_BASS_MIN_HZ, NativeBmwDspValues.MONO_BASS_MAX_HZ,
+                    hz, NativeBmwDspValues.MONO_BASS_STEP_HZ, "Hz", commit,
+                )
+            }
+            Stepper("Mono bass frequency", sizing) { dir -> commit(hz + dir * NativeBmwDspValues.MONO_BASS_STEP_HZ) }
+        }
+        if (!enabled) {
+            // Swallow taps while Mono Bass is off.
+            Box(
+                Modifier.matchParentSize().clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {},
+            )
+        }
+    }
+}
+
+/** [hz] on the 5 Hz grid, within Mono Bass's range. */
+internal fun snapMonoBassHz(hz: Float): Float {
+    val step = NativeBmwDspValues.MONO_BASS_STEP_HZ
+    val v = if (hz.isFinite()) hz else NativeBmwDspValues.MONO_BASS_DEFAULT_HZ
+    return ((v / step).roundToInt() * step).coerceIn(NativeBmwDspValues.MONO_BASS_MIN_HZ, NativeBmwDspValues.MONO_BASS_MAX_HZ)
 }
 
 /**
@@ -485,6 +564,9 @@ private val CarRect = artDp(447, 140, 500, 251)
 private val LeftCardRect = artDp(152, 150, 320, 240)
 private val RightCardRect = artDp(922, 150, 320, 240)
 private val LinkRect = artDp(560, 400, 280, 48)
+// Under the Left and Right cards, either side of Stereo Link.
+private val MonoBassSwitchRect = artDp(152, 400, 320, 48)
+private val MonoBassFreqRect = artDp(882, 400, 360, 48)
 
 /** The backdrop car photo's opacity, so the cards read over it. */
 private const val CarAlpha = 0.5f

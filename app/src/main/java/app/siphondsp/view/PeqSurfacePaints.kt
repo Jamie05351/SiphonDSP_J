@@ -93,6 +93,18 @@ class PeqSurfacePaints(
         color = unifiedTextColor
         alpha = 18
     }
+    // Mono Bass: the region below its split, where both channels carry (L+R)/2.
+    val monoBassShadePaint = Paint().apply {
+        style = Paint.Style.FILL
+        color = bankColorLow
+        alpha = 22
+    }
+    val monoBassLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = bankColorLow
+        alpha = 170
+        textSize = 11f * density
+        letterSpacing = .12f
+    }
     // Per-band filled region + its outline (see drawPerBandFills) -- color AND alpha are both
     // set per band on every draw call (setColor() overwrites alpha too), so nothing meaningful
     // is configured here beyond style/stroke width.

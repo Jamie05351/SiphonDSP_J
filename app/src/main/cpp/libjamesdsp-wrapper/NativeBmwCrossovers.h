@@ -192,6 +192,26 @@ private:
     Biquad loR1_, loR2_, hiR1_, hiR2_;
 };
 
+// Mono Bass: a complementary Linkwitz-Riley 4th-order split at one frequency. Below it both
+// channels carry the mid signal (L+R)/2; above it each keeps its own:
+//   L' = LP4((L+R)/2) + HP4(L)    R' = LP4((L+R)/2) + HP4(R)
+// LP4 + HP4 is a 2nd-order all-pass, so a centred signal (L == R) comes through at exactly its
+// own magnitude -- only the all-pass phase around the split. Side content below the split is
+// folded to mono. Every filter is a fixed member: nothing allocates.
+class MonoBass {
+public:
+    static constexpr float kMinHz = 60.f, kMaxHz = 120.f, kDefaultHz = 90.f;
+    // Retunes the split, keeping the filter state (see Biquad::retune).
+    void rebuild(float freqHz, float sampleRate);
+    void clear();
+    // mix crossfades from the input (0) to the split (1): the on/off transition.
+    void process(float& left, float& right, float mix);
+
+private:
+    Biquad lp1_, lp2_;  // on (L+R)/2
+    Biquad hpL1_, hpL2_, hpR1_, hpR2_;
+};
+
 }  // namespace NativeBmwDsp
 
 #endif

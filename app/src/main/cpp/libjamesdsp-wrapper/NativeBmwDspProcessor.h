@@ -124,7 +124,10 @@ public:
     //
     // 296 -- automatic headroom, added in the 296 -> 297 growth. Kotlin-only -- never read here:
     //   Kotlin computes the headroom itself and sends it in v[5] like a manual one.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 297 };
+    //
+    // 297..298 -- Mono Bass, added in the 297 -> 299 growth:
+    //   297      enabled              298  split frequency Hz (60..120)
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 299 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -303,6 +306,8 @@ private:
         DirtyLoudness = 1u << 24,   // volume or loudness settings changed: retune (keeps state)
         DirtyLoudnessResume = 1u << 25,  // loudness switched on: clear the state it froze with
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
+        DirtyMonoBass = 1u << 27,        // Mono Bass split frequency: retune (keeps state)
+        DirtyMonoBassResume = 1u << 28,  // Mono Bass switched on from silent: clear its state
         DirtyAll = 0xffffffffu,
     };
 
@@ -477,6 +482,14 @@ private:
     static constexpr float kHeadroomRampSeconds = 0.01f;
     float headroomRampCoef_ = 0.0020811617f;  // 1 - exp(-1 / (10 ms * 48 kHz))
     NativeBmwDsp::Tilt tilt_;
+    // Mono Bass, right after the input DC blocker. monoBassMix_ is the crossfade from the input
+    // (0) to the split (1), a linear ramp over kMonoBassFadeSeconds toward p_.monoBassEnabled;
+    // at 0 the stage is skipped, so with Mono Bass off the signal is untouched. Snapped on a full
+    // rebuild and on the first configure().
+    NativeBmwDsp::MonoBass monoBass_;
+    float monoBassMix_ = 0.f;
+    static constexpr float kMonoBassFadeSeconds = 0.02f;
+    float monoBassFadeStep_ = 1.f / (0.02f * 48000.f);
     // Loudness compensation, after the master volume (see Loudness).
     NativeBmwDsp::Loudness loudness_;
     // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the

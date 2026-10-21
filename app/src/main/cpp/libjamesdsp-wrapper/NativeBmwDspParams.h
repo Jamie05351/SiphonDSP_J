@@ -32,6 +32,9 @@ struct Params {
     // Loudness compensation (v[294..295]): on/off and strength 0..1 (v[295] is percent).
     bool loudnessEnabled = false;
     float loudnessStrength = 1.f;
+    // Mono Bass (v[297..298]): on/off and the split frequency, Hz.
+    bool monoBassEnabled = false;
+    float monoBassFreq = 90.f;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the

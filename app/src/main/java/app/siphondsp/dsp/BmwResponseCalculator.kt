@@ -50,6 +50,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private val tiltCascade = BiquadCascade(6)
 
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
+    // Mono Bass split built into fullCascade (0 = off), so a change rebuilds it.
+    private var builtMonoBassHz = 0.0
 
     private val preSplitAcc = arrayOf(ComplexAcc(), ComplexAcc())
     private val branchAcc = ComplexAcc()
@@ -101,10 +103,14 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         axisDirty = false
     }
 
-    private fun rebuildFullCascade(peq: BmwPeqState, channel: BmwOutputChannel) {
+    private fun rebuildFullCascade(peq: BmwPeqState, channel: BmwOutputChannel, monoBassHz: Double) {
         val cascade = fullCascade[channel.ordinal]
         cascade.clear()
         if (includeDcBlocker) cascade.addDcBlocker(DC_BLOCKER_HZ, sampleRate)
+        // Native MonoBass: LP4((L+R)/2) + HP4(own channel). For the centred signal this graph
+        // describes that sums to a 2nd-order Butterworth-Q all-pass at the split -- flat, only
+        // phase. (Side content folded to mono isn't something a single-channel curve can show.)
+        if (monoBassHz > 0.0) cascade.addAllPass(true, true, monoBassHz, BUTTERWORTH_Q, sampleRate)
         if (peq.enabled) {
             for (band in peq.fullRangeBands) {
                 if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
@@ -358,8 +364,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         val headroomLinear = dbToLinear(values[NativeBmwDspValues.INDEX_HEADROOM].toDouble())
         val preampLinear = if (peq.enabled) dbToLinear(peq.preampDb.toDouble()) else 1.0
 
+        val monoBassHz = NativeBmwDspValues.monoBassSplitHz(values)
+        if (monoBassHz != builtMonoBassHz) {
+            dirty.add(Stage.FULL_BANK)
+            builtMonoBassHz = monoBassHz
+        }
         for (channel in BmwOutputChannel.entries) {
-            if (Stage.FULL_BANK in dirty) rebuildFullCascade(peq, channel)
+            if (Stage.FULL_BANK in dirty) rebuildFullCascade(peq, channel, monoBassHz)
             if (Stage.LOW_BRANCH in dirty) rebuildLowCascade(values, peq, channel)
             if (Stage.MID_BRANCH in dirty) rebuildMidCascade(values, peq, channel)
             if (Stage.HIGH_BRANCH in dirty) rebuildHighCascade(values, peq, channel)

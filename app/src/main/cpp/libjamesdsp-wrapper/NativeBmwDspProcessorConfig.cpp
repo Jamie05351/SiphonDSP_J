@@ -117,6 +117,9 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.masterMute = flagIn(v[nbschema::kMasterMute]);
     next.loudnessEnabled = flagIn(v[nbschema::kLoudnessEnabled]);
     next.loudnessStrength = clampIn(v[nbschema::kLoudnessStrength], 0, 100) * .01f;
+    next.monoBassEnabled = flagIn(v[nbschema::kMonoBassEnabled]);
+    next.monoBassFreq = clampIn(v[nbschema::kMonoBassFreq], NativeBmwDsp::MonoBass::kMinHz,
+                                NativeBmwDsp::MonoBass::kMaxHz);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -597,6 +600,14 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     if (!p_.loudnessEnabled && next.loudnessEnabled && loudnessStrength_ == 0.f) {
         dirty |= DirtyLoudnessResume;
     }
+    if (changed(next.monoBassFreq, p_.monoBassFreq)) {
+        dirty |= DirtyMonoBass;
+    }
+    // Mono Bass is skipped once fully faded out, so its filters hold whatever played then:
+    // switching it back on starts them clean.
+    if (!p_.monoBassEnabled && next.monoBassEnabled && monoBassMix_ == 0.f) {
+        dirty |= DirtyMonoBassResume;
+    }
 
     p_ = next;
     masterGainTarget_ = p_.masterMute ? 0.f : std::pow(10.f, p_.masterVolumeDb / 20.f);
@@ -629,6 +640,8 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         // ...nor fade loudness in at start-up.
         loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
         retuneLoudness();
+        // ...nor crossfade Mono Bass in.
+        monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
         outputGainsPrimed_ = true;
     }
 }
@@ -980,6 +993,12 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLoudnessResume) {
         loudness_.clear();
     }
+    if (d & DirtyMonoBass) {
+        monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
+    }
+    if (d & DirtyMonoBassResume) {
+        monoBass_.clear();
+    }
     if (d & DirtyVirtual) {
         virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
     }
@@ -1000,6 +1019,9 @@ void NativeBmwDspProcessor::rebuildAll() {
     tilt_.clear();
     retuneLoudness();
     loudness_.clear();
+    monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
+    monoBass_.clear();
+    monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);

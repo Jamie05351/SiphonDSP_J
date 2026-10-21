@@ -57,6 +57,7 @@ void NativeBmwDspProcessor::setSampleRate(float sr) {
         headroomRampCoef_ = 1.f - std::exp(-1.f / (kHeadroomRampSeconds * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
+        monoBassFadeStep_ = 1.f / (kMonoBassFadeSeconds * sr);
         rebuildAll();
     }
 }
@@ -133,6 +134,14 @@ void NativeBmwDspProcessor::processFrame(float& l, float& r) {
 void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     using Band = NativeBmwRouting::Band;
     float sL = inputDcL_.run(l, dcR_), sR = inputDcR_.run(r, dcR_);
+    if (p_.monoBassEnabled) {
+        monoBassMix_ = std::min(1.f, monoBassMix_ + monoBassFadeStep_);
+    } else if (monoBassMix_ > 0.f) {
+        monoBassMix_ = std::max(0.f, monoBassMix_ - monoBassFadeStep_);
+    }
+    if (monoBassMix_ > 0.f) {
+        monoBass_.process(sL, sR, monoBassMix_);
+    }
     if (peqEnabled_) {
         sL *= peqPreamp_;
         sR *= peqPreamp_;
