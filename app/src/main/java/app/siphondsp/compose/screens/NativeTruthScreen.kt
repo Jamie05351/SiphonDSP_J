@@ -191,6 +191,16 @@ private fun EngineSection(
     }
 }
 
+/** "12 s ago" / "4 min ago" / "2 h ago" for an age in milliseconds. */
+private fun formatAgo(ageMs: Long): String {
+    val s = ageMs.coerceAtLeast(0) / 1000
+    return when {
+        s < 60 -> "$s s ago"
+        s < 3600 -> "${s / 60} min ago"
+        else -> "${s / 3600} h ago"
+    }
+}
+
 @Composable
 private fun PipelineSection(pipeline: RootlessPipelineRuntimeSnapshot?) {
     Column {
@@ -218,6 +228,21 @@ private fun PipelineSection(pipeline: RootlessPipelineRuntimeSnapshot?) {
                     else -> "none"
                 },
                 if (pipeline.recreateRequested || pipeline.recreationInProgress) BmwYellow else Color.White,
+            )
+            KeyValueRow(
+                "Pipeline recreations",
+                pipeline.pipelineRecreations.toString(),
+                if (pipeline.pipelineRecreations > 0) BmwYellow else Color.White,
+            )
+            pipeline.lastRecreationReason?.let { reason ->
+                val packages = if (pipeline.lastRecreationPackages.isEmpty()) "" else
+                    " · ${pipeline.lastRecreationPackages.joinToString()}"
+                KeyValueRow("Last recreation", "$reason$packages · ${formatAgo(pipeline.lastRecreationAgeMs)}")
+            }
+            KeyValueRow(
+                "Exclusion checks kept pipeline",
+                pipeline.exclusionRechecksSkipped.toString(),
+                if (pipeline.exclusionRechecksSkipped > 0) BmwGreen else Color.White,
             )
             KeyValueRow(
                 "Measurement generator",

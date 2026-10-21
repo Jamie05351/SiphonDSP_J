@@ -45,12 +45,15 @@ class SessionRecordingPolicyManager(private val context: Context) {
         }
 
         var isMinorUpdate = true
+        // The packages behind a major update: restricted entries added or removed, and flips.
+        val majorPackages = linkedSetOf<String>()
         synchronized(sessionPolicyList) {
             removedPolicies.forEach {
                 Timber.d("Removed session policy: ${it.value}")
                 sessionPolicyList.remove(it.key)
                 if (it.value.isRestricted) {
                     isMinorUpdate = false
+                    majorPackages += it.key
                 }
             }
         }
@@ -60,17 +63,19 @@ class SessionRecordingPolicyManager(private val context: Context) {
             addSessionPolicy(it.key, isRestricted)
             if(isRestricted) {
                 isMinorUpdate = false
+                majorPackages += it.key
             }
         }
 
         updatedPolicies.forEach next@ {
             addSessionPolicy(it.key, /* !isAllowed */ !it.value)
             isMinorUpdate = false
+            majorPackages += it.key
         }
 
         if(addedPolicies.isNotEmpty() || removedPolicies.isNotEmpty() || updatedPolicies.isNotEmpty())
         {
-            changeCallbacks.forEach { it.onSessionRecordingPolicyChanged(sessionPolicyList, isMinorUpdate) }
+            changeCallbacks.forEach { it.onSessionRecordingPolicyChanged(sessionPolicyList, isMinorUpdate, majorPackages) }
         }
     }
 
@@ -106,6 +111,13 @@ class SessionRecordingPolicyManager(private val context: Context) {
         }
     }
 
+    /** Every app the capture-permission log lists, restricted or not. */
+    fun getPolicyUids(): Set<Int> {
+        return synchronized(sessionPolicyList) {
+            sessionPolicyList.values.map { it.uid }.filter { it > 0 }.toSet()
+        }
+    }
+
     fun registerOnRestrictedSessionChangeListener(changeListener: OnSessionRecordingPolicyChangeListener) {
         changeCallbacks.add(changeListener)
     }
@@ -115,6 +127,12 @@ class SessionRecordingPolicyManager(private val context: Context) {
     }
 
     interface OnSessionRecordingPolicyChangeListener {
-        fun onSessionRecordingPolicyChanged(sessionList: HashMap<String, SessionRecordingPolicyEntry>, isMinorUpdate: Boolean)
+        /** [changedPackages]: on a major update, the packages whose restricted entry was added,
+         *  removed or flipped. */
+        fun onSessionRecordingPolicyChanged(
+            sessionList: HashMap<String, SessionRecordingPolicyEntry>,
+            isMinorUpdate: Boolean,
+            changedPackages: Set<String>,
+        )
     }
 }
