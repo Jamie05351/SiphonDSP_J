@@ -709,7 +709,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private fun recheckExclusions(reasons: Set<String>, packages: Set<String>) {
         if (!workerAlive || isProcessorDisposing || isServiceDisposing) return
         val why = reasons.joinToString(", ") + if (packages.isEmpty()) "" else " (${packages.joinToString()})"
-        // No AudioRecord built yet: the first build computes the exclusions itself.
+        // Not read yet: the first build hasn't reached its read, and will see this change.
         val built = builtExclusions ?: return
         val now = computeExclusions()
         val comparison = ExclusionSet.compare(built, now, sessionManager.sessionPolicyDatabase.getPolicyUids())
@@ -1412,12 +1412,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         if (!excludeRestrictedSessions) sessionManager.pollOnce(false)
         val exclusions = computeExclusions()
+        // Published the moment it's read: a re-check finding null means this read hasn't happened
+        // yet and will see the change itself, so nothing can fall between the two.
+        builtExclusions = exclusions
         val excluded = exclusions.all.toList()
 
         excluded.forEach { configBuilder.excludeUid(it) }
         sessionManager.sessionDatabase.setExcludedUids(excluded.toTypedArray())
         sessionManager.pollOnce(false)
-        builtExclusions = exclusions
 
         Timber.d("buildAudioRecord: Excluded UIDs: ${excluded.joinToString("; ")}")
 
