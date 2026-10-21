@@ -723,10 +723,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         requestAudioRecordRecreation("exclusions changed: ${reasons.joinToString(", ")}", packages)
     }
 
-    fun requestAudioRecordRecreation(
-        reason: String = "configuration/session policy changed",
-        packages: Set<String> = emptySet(),
-    ) {
+    fun requestAudioRecordRecreation(reason: String = "configuration/session policy changed") {
+        requestAudioRecordRecreation(reason, emptySet())
+    }
+
+    // As above, naming the app(s) whose change asked for it (for the diagnostics).
+    private fun requestAudioRecordRecreation(reason: String, packages: Set<String>) {
         // Even configuration changes must unblock an idle read; otherwise the pending request
         // can never reach the worker's recreation branch while no media is being captured.
         synchronized(recorderLifecycleLock) { requestRecreationLocked(reason, unblock = true, packages) }
