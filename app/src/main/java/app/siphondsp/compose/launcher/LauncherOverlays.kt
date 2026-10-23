@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -76,7 +76,7 @@ internal fun AppDrawer(
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
                 placeholder = { Text(stringResource(R.string.launcher_search)) },
-                modifier = Modifier.width(360.dp),
+                modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(),
             )
         },
     ) {
@@ -207,11 +207,12 @@ private fun OverlayFrame(
             .clickable(remember { MutableInteractionSource() }, null) {}
             .padding(end = 32.dp, top = 20.dp, bottom = 20.dp),
     ) {
+        // The header (search) takes whatever width is left between the title and Close, so the row
+        // fits a narrow screen too.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            header()
-            MenuTile(stringResource(R.string.launcher_close), Modifier.width(140.dp), onClick = onClose)
+            Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { header() }
+            MenuTile(stringResource(R.string.launcher_close), Modifier.widthIn(min = 96.dp), onClick = onClose)
         }
         Spacer(Modifier.height(16.dp))
         Box(Modifier.weight(1f)) { content() }
