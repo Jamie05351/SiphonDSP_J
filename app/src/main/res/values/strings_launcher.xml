@@ -27,6 +27,8 @@
     <string name="launcher_home_app">Default home app</string>
     <string name="launcher_dsp_settings">J_DSP settings</string>
     <string name="launcher_more">More</string>
+    <string name="launcher_in">IN</string>
+    <string name="launcher_from_apps">from apps</string>
     <string name="launcher_change_icon">Change icon…</string>
     <string name="launcher_reset_icon">Use the app\'s own icon</string>
     <string name="launcher_icon_failed">That image couldn\'t be used as an icon</string>

@@ -95,7 +95,10 @@ import app.siphondsp.compose.home.LocalHomeScale
 import app.siphondsp.compose.home.OutColumnWidth
 import app.siphondsp.compose.home.OutputMeter
 import app.siphondsp.compose.home.OutputNode
-import app.siphondsp.compose.home.PowerNode
+import app.siphondsp.compose.home.drawNodeGlow
+import app.siphondsp.compose.home.OutSize
+import app.siphondsp.compose.home.NodeSize
+import app.siphondsp.compose.home.NodeGlow
 import app.siphondsp.compose.home.SignalPath
 import app.siphondsp.compose.home.StageCard
 import app.siphondsp.compose.home.VolumeColumn
@@ -212,6 +215,9 @@ fun LauncherHome(
         }
         val dim by animateFloatAsState(dimTo, tween(PanelMs), label = "home dim")
         val homeAlpha by animateFloatAsState(if (covered) 0f else 1f, tween(PanelMs / 2), label = "home fade")
+        // 0 home, 1 raised: the bar's move to the top, the volume column's growth and the chain
+        // screen's rise all follow it together.
+        val raise by animateFloatAsState(if (expanded) 1f else 0f, tween(PanelMs), label = "raise")
 
         CompositionLocalProvider(LocalHomeScale provides scale) {
             // The home screen itself, blurred while something is over it.
@@ -253,35 +259,35 @@ fun LauncherHome(
                 )
             }
             Design(Modifier.align(Alignment.Center)) {
-                // The chain rises out of the bar, so it's clipped at the bar's top edge.
-                Box(Modifier.size(scale.dp(DesignW), scale.dp(BarTop)).clipToBounds()) {
-                    AnimatedVisibility(
-                        visible = expanded,
-                        enter = slideInVertically(tween(PanelMs)) { it } + fadeIn(tween(PanelMs / 2)),
-                        exit = slideOutVertically(tween(PanelMs)) { it } + fadeOut(tween(PanelMs)),
-                    ) {
-                        FloatingChain(engine, powered, g, openingStage, animateTiles, actions)
-                    }
+                // Raised, the front page's old layout comes back: the bar moves up to where the top
+                // screen was and the chain screen rises into its old place under it.
+                if (raise > 0f) {
+                    ChainScreen(engine, powered, g, raise, openingStage, animateTiles, actions)
                 }
-                DspBar(engine, powered, g, readout, meterLevels, expanded, onExpandedChange, actions)
-                // The master volume stays put and in focus whatever is open; the chain and drawers
-                // leave its column clear.
+                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions)
+                // The master volume stays in focus whatever is open; raised, it runs down beside the
+                // chain screen as on the old front page. The chain and drawers leave its column clear.
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
                     VolumeColumn(
                         engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
-                        Modifier.offset(scale.dp(Margin), scale.dp(Margin)).height(scale.dp(GridBottom - Margin)),
+                        Modifier
+                            .offset(scale.dp(Margin), scale.dp(TopMargin))
+                            .height(scale.dp(lerp(GridBottom, ChainBottom, raise) - TopMargin)),
                     )
                 }
             }
         }
-        // Drawers stop above the DSP bar, which stays usable under them.
-        val overlayBottom = scale.dp(DesignH - BarTop + 12f) + ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
+        // Drawers start under the head unit's top banner and stop above the DSP bar, which stays
+        // usable under them.
+        val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
+        val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
+        val overlayTop = scale.dp(TopMargin) + letterbox
         when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions)
+            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
             is LauncherOverlay.CarMenu -> CarMenu(
-                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions,
+                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions,
             )
-            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions)
+            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
             LauncherOverlay.None -> {}
         }
     }
@@ -312,11 +318,13 @@ private fun AppGrid(
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
-    val cellW = (GridRight - GridLeft) / GridCols
-    val cellH = (GridBottom - Margin) / GridRows
+    // The same pitch across as down, so the gaps between icons are even both ways; the grid is
+    // centred in the space between the volume column and the car.
+    val pitch = (GridBottom - TopMargin) / GridRows
+    val left = (GridLeft + GridRight) / 2 - (pitch * (GridCols - 1) + IconSize) / 2
     for (i in 0 until HomeSlots.SLOTS) {
-        val x = GridLeft + (i % GridCols) * cellW + (cellW - IconSize) / 2
-        val y = Margin + (i / GridCols) * cellH + (cellH - IconSize) / 2
+        val x = left + (i % GridCols) * pitch
+        val y = TopMargin + (i / GridCols) * pitch + (pitch - IconSize) / 2
         var menu by remember { mutableStateOf(false) }
         val target = slots.getOrElse(i) { SlotTarget.Empty }
         Box(Modifier.at(x, y, IconSize, IconSize)) {
@@ -428,7 +436,7 @@ private fun CornerButton(x: Float, label: String, onClick: () -> Unit, glyph: Dr
     val shape = RoundedCornerShape(s.dp(14f))
     Box(
         Modifier
-            .at(x, Margin, CornerSize, CornerSize)
+            .at(x, TopMargin, CornerSize, CornerSize)
             .knobFocusRing(s.dp(14f))
             .clip(shape)
             .background(HomePalette.Panel)
@@ -462,6 +470,7 @@ private fun DspBar(
     engine: HomeEngineState,
     powered: Boolean,
     g: Float,
+    raise: Float,
     readout: () -> LevelReadout,
     meterLevels: () -> LevelReadout,
     expanded: Boolean,
@@ -483,9 +492,15 @@ private fun DspBar(
     /** How lit the part spanning [from]..[to] of the bar is: lit as the sweep crosses it. */
     fun reached(from: Float, to: Float) = minOf(g, ((sweep - from) / (to - from)).coerceIn(0f, 1f))
     val px = s.k * LocalDensity.current.density
+    var moreBounds by remember { mutableStateOf(Rect.Zero) }
     Row(
         Modifier
-            .at(BarSide, BarTop, DesignW - 2 * BarSide, BarHeight)
+            // Along the bottom at home; raised, at the top right of the volume column, where the
+            // front page's top screen used to be.
+            .at(
+                lerp(BarSide, RaisedLeft, raise), lerp(BarTop, TopMargin, raise),
+                lerp(DesignW - 2 * BarSide, DesignW - RaisedLeft - BarSide, raise), BarHeight,
+            )
             .drawBehind {
                 // A soft purple halo round the bar, growing along it behind the sweep.
                 val spread = s.dp(10f).toPx()
@@ -546,6 +561,11 @@ private fun DspBar(
         Box(Modifier.padding(horizontal = s.dp(14f)).width(s.dp(2f)).fillMaxHeight().background(HomePalette.PanelEdge))
         CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * MeterScale)) {
             OutputMeter(readout, meterLevels, engine.ceilingDb, reached(SweepMeter, SweepEnd), Modifier.weight(1f).fillMaxHeight())
+        }
+        if (expanded) {
+            // More and Settings sit at the bar's end while raised, as on the old top screen.
+            BarButton(stringResource(R.string.launcher_more), Modifier.onGloballyPositioned { moreBounds = it.boundsInRoot() }, { actions.more(moreBounds) }) { drawMoreDots() }
+            BarButton(stringResource(R.string.launcher_dsp_settings), Modifier, actions::dspSettings) { drawSettingsGlyph() }
         }
         val chevron = reached(SweepEnd, 1f)
         Canvas(Modifier.padding(start = s.dp(10f)).size(s.dp(28f)).rotate(turn)) { drawChevronUp(lerp(HomePalette.Button, signal, chevron)) }
@@ -623,83 +643,126 @@ private fun DrawScope.drawChevronUp(colour: Color) {
 // --- The raised chain ---
 
 /**
- * What rises out of the bar: a row of floating screens (More, Settings), then the chain,
- * centred between the volume column and the right edge — power, the five tiles and OUT on the signal line, each its own screen with nothing
- * behind it. Fills the area above the bar.
+ * The chain screen, in the front page's old place under the raised bar: a dark screen with the
+ * grey hairline edge and, while the DSP is on, a purple edge. Inside, IN, the five DSP tiles and
+ * OUT on the signal line. Power lives on the bar, so the chain starts at IN, a mirror of OUT.
+ * It rises into place with [raise].
  */
 @Composable
-private fun FloatingChain(
+private fun ChainScreen(
     engine: HomeEngineState,
     powered: Boolean,
     g: Float,
+    raise: Float,
     openingStage: HomeStage?,
     animateTiles: Boolean,
     actions: LauncherActions,
 ) {
     val s = LocalHomeScale.current
+    val signal = BmwTheme.colors.sliderHeadroom
     val sweep = animateFloatAsState(
         if (powered) 1f else 0f,
         tween(if (powered) SweepOnMs else SweepOffMs, easing = LinearEasing),
         label = "launcher chain sweep",
     )
-    var moreBounds by remember { mutableStateOf(Rect.Zero) }
-    Box(Modifier.size(s.dp(DesignW), s.dp(BarTop))) {
-        FloatButton(
-            Modifier.at(DesignW - ChainSide - 2 * PanelButton - 12f, PanelTop, PanelButton, PanelRow).onGloballyPositioned { moreBounds = it.boundsInRoot() },
-            stringResource(R.string.launcher_more), null,
-        ) { actions.more(moreBounds) }
-        FloatButton(Modifier.at(DesignW - ChainSide - PanelButton, PanelTop, PanelButton, PanelRow), stringResource(R.string.launcher_dsp_settings), null, actions::dspSettings)
-
-        val chainW = DesignW - ChainLeft - ChainSide
-        val layout = ChainLayout(chainW)
-        Box(Modifier.at(ChainLeft, ChainTop, chainW, BarTop - ChainTop - ChainBottomGap)) {
-            SignalPath(g, { sweep.value }, spark = powered, layout = layout)
-            PowerNode(powered, g, actions::togglePower, Modifier.offset(x = s.dp(layout.powerX - ColumnWidth / 2)))
-            Row(
-                Modifier.offset(x = s.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = s.dp(TileInset)),
-                horizontalArrangement = Arrangement.spacedBy(s.dp(layout.gap)),
-            ) {
-                for (stage in HomeStage.entries) {
-                    val tile = stage.tile()
-                    StageCard(
-                        title = stringResource(tile.title),
-                        subtitle = stringResource(tile.subtitle),
-                        accent = tile.accent,
-                        art = tile.art,
-                        borderLit = { ChainSweep.tiles(sweep.value) },
-                        spark = powered,
-                        selected = openingStage == stage,
-                        onClick = { actions.openStage(stage) },
-                        modifier = Modifier.knobFocusRing(s.dp(16f)),
-                        width = layout.cardWidth,
-                        animateArt = animateTiles,
-                    )
-                }
-            }
-            OutputNode({ ChainSweep.arrived(sweep.value) }, Modifier.offset(x = s.dp(layout.outX - OutColumnWidth / 2)))
-        }
-    }
-}
-
-/** A floating screen used as a button: a title and, optionally, a hint under it. */
-@Composable
-private fun FloatButton(modifier: Modifier, title: String, hint: String?, onClick: () -> Unit) {
-    val s = LocalHomeScale.current
-    val shape = RoundedCornerShape(s.dp(12f))
-    Column(
-        modifier
-            .knobFocusRing(s.dp(12f))
+    val shape = RoundedCornerShape(s.dp(16f))
+    val width = DesignW - RaisedLeft - BarSide
+    val height = ChainBottom - ChainScreenTop
+    val layout = ChainLayout(width)
+    Box(
+        Modifier
+            .at(RaisedLeft, ChainScreenTop + (1 - raise) * ChainRise, width, height)
+            .graphicsLayer { alpha = raise }
             .clip(shape)
             .background(HomePalette.Panel)
-            .border(s.dp(1.5f), HomePalette.ButtonEdge, shape)
-            .clickable(role = Role.Button, onClick = onClick),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .border(s.dp(2f), lerp(HomePalette.PanelEdge, signal, 0.7f * g), shape),
     ) {
-        Text(title, color = Color.White, fontSize = s.sp(17f), fontWeight = FontWeight.SemiBold, maxLines = 1)
-        if (hint != null) Text(hint, color = HomePalette.Muted, fontSize = s.sp(12f), maxLines = 1)
+        SignalPath(g, { sweep.value }, spark = powered, layout = layout)
+        InputNode(g, Modifier.offset(x = s.dp(layout.powerX - ColumnWidth / 2)))
+        Row(
+            Modifier.offset(x = s.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = s.dp(TileInset)),
+            horizontalArrangement = Arrangement.spacedBy(s.dp(layout.gap)),
+        ) {
+            for (stage in HomeStage.entries) {
+                val tile = stage.tile()
+                StageCard(
+                    title = stringResource(tile.title),
+                    subtitle = stringResource(tile.subtitle),
+                    accent = tile.accent,
+                    art = tile.art,
+                    borderLit = { ChainSweep.tiles(sweep.value) },
+                    spark = powered,
+                    selected = openingStage == stage,
+                    onClick = { actions.openStage(stage) },
+                    modifier = Modifier.knobFocusRing(s.dp(16f)),
+                    width = layout.cardWidth,
+                    animateArt = animateTiles,
+                )
+            }
+        }
+        OutputNode({ ChainSweep.arrived(sweep.value) }, Modifier.offset(x = s.dp(layout.outX - OutColumnWidth / 2)))
     }
 }
+
+/**
+ * Where the signal comes in: OUT's mirror at the start of the chain, "IN / from apps", ringed
+ * purple while the DSP is on and white while it's bypassed. Not a control; power is on the bar.
+ * It sits in the power button's old column, so a short stretch of line joins it to the chain's.
+ */
+@Composable
+private fun InputNode(g: Float, modifier: Modifier) {
+    val s = LocalHomeScale.current
+    val signal = BmwTheme.colors.sliderHeadroom
+    Box(modifier.width(s.dp(ColumnWidth)).fillMaxHeight()) {
+        Canvas(Modifier.align(Alignment.Center).size(s.dp(ColumnWidth), s.dp(OutSize))) {
+            val r = s.dp(OutSize / 2).toPx()
+            val c = center
+            // From the circle's edge to where the chain's own line starts (the old button's edge).
+            drawLine(
+                lerp(HomePalette.Idle, signal, g), Offset(c.x + r, c.y), Offset(c.x + s.dp(NodeSize / 2).toPx(), c.y),
+                s.dp(2.5f).toPx(),
+            )
+            drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
+            drawCircle(HomePalette.OutFill, r, c)
+            val rim = s.dp(3f + g).toPx()
+            drawCircle(lerp(Color.White.copy(alpha = 0.85f), signal, g), r - rim / 2, c, style = Stroke(rim))
+        }
+        Text(
+            stringResource(R.string.launcher_in), color = Color.White, fontSize = s.sp(20f), fontWeight = FontWeight.Bold,
+            maxLines = 1, modifier = Modifier.align(Alignment.Center),
+        )
+        Text(
+            stringResource(R.string.launcher_from_apps), color = HomePalette.Muted, fontSize = s.sp(14f), maxLines = 1,
+            modifier = Modifier.align(Alignment.Center).offset(y = s.dp(OutSize / 2 + 20f)),
+        )
+    }
+}
+
+/** A glyph button on the raised bar (More, Settings). */
+@Composable
+private fun BarButton(label: String, modifier: Modifier, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
+    val s = LocalHomeScale.current
+    Box(
+        modifier
+            .padding(start = s.dp(8f))
+            .size(s.dp(BarHeight - 22f))
+            .knobFocusRing(s.dp(10f))
+            .clip(RoundedCornerShape(s.dp(10f)))
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(s.dp(30f)), onDraw = glyph)
+    }
+}
+
+/** Three dots across the middle: More. */
+private fun DrawScope.drawMoreDots() {
+    val r = size.width * 0.085f
+    for (fx in listOf(0.2f, 0.5f, 0.8f)) drawCircle(HomePalette.Button, r, Offset(size.width * fx, size.height / 2))
+}
+
+private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
 // --- Now playing ---
 
@@ -713,7 +776,7 @@ private fun NowPlayingCard(track: Track, actions: LauncherActions) {
     val shape = RoundedCornerShape(s.dp(14f))
     Row(
         Modifier
-            .at(NowX, Margin, DrawerX - 14f - NowX, NowHeight)
+            .at(NowX, TopMargin, DrawerX - 14f - NowX, NowHeight)
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(1.5f), HomePalette.PanelEdge, shape)
@@ -801,6 +864,9 @@ private fun DrawScope.drawSkip(forward: Boolean) {
 internal const val DesignW = 1280f
 internal const val DesignH = 480f
 private const val Margin = 14f
+// Clear of the head unit's own top banner (back, recents, screen off...), which draws over apps;
+// the old front page left the same room.
+private const val TopMargin = 48f
 private const val VolumeScale = 0.75f
 private const val GridLeft = 112f
 private const val GridRight = 676f
@@ -811,7 +877,7 @@ private const val IconSize = 86f
 private const val CornerSize = 58f
 // The now-playing card: from just right of the grid to the corner buttons, above the car.
 private const val NowX = 690f
-private const val NowHeight = 72f
+private const val NowHeight = 56f
 private const val CarX = DesignW - Margin - CornerSize
 private const val DrawerX = CarX - 12f - CornerSize
 private const val BarSide = 10f
@@ -821,15 +887,13 @@ private const val BarNode = 58f
 private const val ChipScale = 0.82f
 private const val ChipWidth = 150f
 private const val MeterScale = 0.56f
-private const val ChainSide = 30f
-// Right of the volume column, which stays on screen.
-private const val ChainLeft = GridLeft
-private const val PanelTop = 20f
-private const val PanelRow = 56f
-private const val PanelButton = 200f
-private const val ChainTop = 92f
-private const val ChainBottomGap = 10f
-private const val TileInset = 24f
+// Raised: the bar and the chain screen start right of the volume column, the bar at the top and the
+// chain screen under it down to the bar's home bottom edge; the screen rises [ChainRise] into place.
+private const val RaisedLeft = GridLeft
+private const val ChainScreenTop = TopMargin + BarHeight + 16f
+private const val ChainBottom = BarTop + BarHeight
+private const val ChainRise = 60f
+private const val TileInset = 34f
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900

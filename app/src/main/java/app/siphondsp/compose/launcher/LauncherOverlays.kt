@@ -68,6 +68,7 @@ internal fun AppDrawer(
     look: LauncherCustomisation.Look,
     pickFor: Int?,
     start: Dp,
+    top: Dp,
     bottom: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
@@ -77,6 +78,7 @@ internal fun AppDrawer(
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_app else R.string.launcher_drawer),
         start = start,
+        top = top,
         bottom = bottom,
         onClose = close,
         header = {
@@ -179,6 +181,7 @@ internal fun CarMenu(
     customWallpaper: Boolean,
     nowPlayingAllowed: Boolean,
     start: Dp,
+    top: Dp,
     bottom: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
@@ -187,6 +190,7 @@ internal fun CarMenu(
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_car else R.string.launcher_car_menu),
         start = start,
+        top = top,
         bottom = bottom,
         onClose = close,
     ) {
@@ -235,6 +239,7 @@ internal fun HiddenApps(
     apps: List<AppEntry>?,
     look: LauncherCustomisation.Look,
     start: Dp,
+    top: Dp,
     bottom: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
@@ -242,6 +247,7 @@ internal fun HiddenApps(
     OverlayFrame(
         title = stringResource(R.string.launcher_hidden_apps),
         start = start,
+        top = top,
         bottom = bottom,
         onClose = { onOverlayChange(LauncherOverlay.CarMenu()) },
     ) {
@@ -284,13 +290,14 @@ internal fun HiddenApps(
 
 /**
  * A full-screen panel over the blurred home screen: a title row with Close, then [content]. It
- * starts [start] in from the left, clear of the volume column, and stops [bottom] above the
- * bottom edge, clear of the DSP bar.
+ * starts [start] in from the left, clear of the volume column, [top] down, clear of the head unit's
+ * top banner, and stops [bottom] above the bottom edge, clear of the DSP bar.
  */
 @Composable
 private fun OverlayFrame(
     title: String,
     start: Dp,
+    top: Dp,
     bottom: Dp,
     onClose: () -> Unit,
     header: @Composable () -> Unit = {},
@@ -303,7 +310,7 @@ private fun OverlayFrame(
             .padding(start = start)
             // Swallows the rest of the taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}
-            .padding(end = 32.dp, top = 20.dp, bottom = bottom),
+            .padding(end = 32.dp, top = top, bottom = bottom),
     ) {
         // The header (search) takes whatever width is left between the title and Close, so the row
         // fits a narrow screen too.
