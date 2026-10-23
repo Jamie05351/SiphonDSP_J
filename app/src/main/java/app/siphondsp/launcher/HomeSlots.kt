@@ -68,8 +68,9 @@ class HomeSlots private constructor(context: Context) {
     }
 
     /**
-     * Once, the first time the app list is known: fills empty slots from [Defaults] by unique name
-     * match. After the user changes any slot, or once this has run, it never runs again.
+     * Fills still-empty slots from [Defaults] by unique name match, each time the app list changes:
+     * at boot the list can start partial, so apps that turn up later still land in their slot. It
+     * stops for good once the user changes any slot, or once every default slot is filled.
      */
     fun fillDefaults(apps: List<AppEntry>) {
         if (prefs.getBoolean(KEY_DEFAULTS_DONE, false)) return
@@ -82,10 +83,11 @@ class HomeSlots private constructor(context: Context) {
                     ?.let { SlotTarget.App(it.component) } ?: SlotTarget.Empty
             }
         }
+        if (next == _slots.value) return
         _slots.value = next
         prefs.edit {
             next.forEachIndexed { i, t -> putString(key(i), t.encode()) }
-            putBoolean(KEY_DEFAULTS_DONE, true)
+            if (next.none { it == SlotTarget.Empty }) putBoolean(KEY_DEFAULTS_DONE, true)
         }
     }
 

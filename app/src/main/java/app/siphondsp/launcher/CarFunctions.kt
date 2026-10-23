@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import timber.log.Timber
 
 /**
@@ -121,9 +122,20 @@ object WitsPms {
     fun send(context: Context, command: Int, subCommand: Int, arg: String = "") {
         val app = context.applicationContext
         scope.launch {
+            val binder = binder()
+            if (binder == null) {
+                // A slot pinned on a firmware that has the service, or before it has started.
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(app, R.string.launcher_open_missing, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             val ok = try {
-                val binder = binder() ?: error("$SERVICE not running")
-                val json = """{"command":$command,"subCommand":$subCommand,"jsonArg":"$arg"}"""
+                val json = JSONObject()
+                    .put("command", command)
+                    .put("subCommand", subCommand)
+                    .put("jsonArg", arg)
+                    .toString()
                 val data = Parcel.obtain()
                 val reply = Parcel.obtain()
                 try {

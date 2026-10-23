@@ -278,8 +278,10 @@ private fun AppGrid(apps: List<AppEntry>?, slots: List<SlotTarget>, onOverlayCha
                     when (target) {
                         SlotTarget.Empty -> onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
                         is SlotTarget.Car -> actions.runCar(target.function)
-                        is SlotTarget.App -> apps?.firstOrNull { it.component == target.component }
-                            ?.let(actions::launchApp) ?: onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
+                        is SlotTarget.App -> if (apps != null) {
+                            apps.firstOrNull { it.component == target.component }
+                                ?.let(actions::launchApp) ?: onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
+                        }
                     }
                 },
                 onLongClick = { menu = true },

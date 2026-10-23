@@ -325,8 +325,8 @@ class DspFragment : Fragment() {
 
     /**
      * Back closes whatever is raised, then returns from the settings page. On the plain home screen
-     * it does nothing while J_DSP is the default home app (there is nowhere to go back to); opened
-     * from another launcher, it leaves as before.
+     * it does nothing while J_DSP is the home screen (see [isHome]: there is nowhere to go back to);
+     * opened from another launcher, it closes as before.
      */
     private val backCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -334,19 +334,20 @@ class DspFragment : Fragment() {
                 overlay != LauncherOverlay.None -> showOverlay(LauncherOverlay.None)
                 chainRaised -> raiseChain(false)
                 binding.dspPager.currentItem != 0 -> binding.dspPager.currentItem = 0
-                !isDefaultHome() -> {
-                    isEnabled = false
-                    requireActivity().onBackPressedDispatcher.onBackPressed()
-                    isEnabled = true
-                }
+                !isHome() -> requireActivity().finish()
             }
         }
     }
 
-    private fun isDefaultHome(): Boolean {
+    /**
+     * Whether this is the home screen: J_DSP is the default home app, or no default is chosen yet
+     * (Android's chooser resolves, from the "android" package), when J_DSP may be what Home opens.
+     */
+    private fun isHome(): Boolean {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val current = requireContext().packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
-        return current?.activityInfo?.packageName == requireContext().packageName
+            ?.activityInfo?.packageName
+        return current == null || current == requireContext().packageName || current == "android"
     }
 
     private val launcherActions = object : LauncherActions {
