@@ -1,0 +1,44 @@
+name: Sync head-unit with master
+
+# head-unit is master plus the head-unit-only home launcher. Whenever master moves, this opens (or
+# leaves open) a pull request merging master into head-unit, so head-unit never falls behind.
+# Nothing ever flows from head-unit back to master.
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: sync-head-unit
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    name: Open master -> head-unit PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open the sync pull request if head-unit is behind
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          behind="$(gh api "repos/$REPO/compare/head-unit...master" --jq '.ahead_by')"
+          if [ "$behind" = "0" ]; then
+            echo "head-unit already has everything from master."
+            exit 0
+          fi
+          open="$(gh pr list --repo "$REPO" --base head-unit --head master --state open --json number --jq 'length')"
+          if [ "$open" != "0" ]; then
+            echo "A master -> head-unit pull request is already open."
+            exit 0
+          fi
+          gh pr create --repo "$REPO" --base head-unit --head master \
+            --title "Sync head-unit with master" \
+            --body "Brings head-unit up to date with master ($behind new commit(s)). Merge with a merge commit, not squash, so later syncs stay clean."
