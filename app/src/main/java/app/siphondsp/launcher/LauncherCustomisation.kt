@@ -15,6 +15,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -57,9 +59,9 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     }
 
     fun setHidden(key: String, hidden: Boolean) {
-        val next = if (hidden) _look.value.hidden + key else _look.value.hidden - key
-        _look.value = _look.value.copy(hidden = next)
-        prefs.edit { putStringSet(KEY_HIDDEN, next) }
+        // Atomic: a reload decoding images on another thread can't write back an older hidden set.
+        val next = _look.updateAndGet { it.copy(hidden = if (hidden) it.hidden + key else it.hidden - key) }
+        prefs.edit { putStringSet(KEY_HIDDEN, next.hidden) }
     }
 
     /** Crops the image at [uri] to a square icon for [key]. [onDone] gets false if it couldn't be read. */
@@ -177,7 +179,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
                 // The icon index now lists exactly the restored icons.
                 index(icons.keys)
                 prefs.edit { putStringSet(KEY_HIDDEN, hidden) }
-                _look.value = _look.value.copy(hidden = hidden)
+                _look.update { it.copy(hidden = hidden) }
                 reload()
             }
             slots
@@ -200,7 +202,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             decodeFile(iconFile(key), ICON_PX, ICON_PX)?.let { key to it.asImageBitmap() }
         }.toMap()
         val wallpaper = decodeFile(wallpaperFile(), WALL_W, WALL_H)?.asImageBitmap()
-        _look.value = _look.value.copy(icons = icons, wallpaper = wallpaper)
+        _look.update { it.copy(icons = icons, wallpaper = wallpaper) }
     }
 
     /** Decodes [file] sampled down to about [w] x [h]; null if it is missing, unreadable or too big. */
