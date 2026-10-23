@@ -33,13 +33,16 @@ enum class CarFunction(
     @StringRes val short: Int,
     val component: ComponentName? = null,
     val command: Int? = null,
+    /** Shown greyed out and never run: it would fight J_DSP. */
+    val blocked: Boolean = false,
 ) {
     /** KSW settings. It forwards to the right settings for the unit's UI theme; Factory is inside. */
     SETTINGS("ksw_settings", R.string.car_settings, R.string.car_settings_short, ComponentName(KSW, "$KSW.settings.SettingsActivity")),
     /** Switches the screen to the car's own iDrive (the same as holding MENU). */
     ORIGINAL_CAR("original_car", R.string.car_original, R.string.car_original_short, command = 601),
     DASHBOARD("ksw_dashboard", R.string.car_dashboard, R.string.car_dashboard_short, ComponentName(KSW, "$KSW.launcher.view.DashboardActivity")),
-    EQ("ksw_eq", R.string.car_eq, R.string.car_eq_short, ComponentName("com.wits.csp.eq", "com.wits.csp.eq.view.StartActivity")),
+    /** The head unit's own EQ: listed so it's clearly accounted for, but J_DSP does the EQ. */
+    EQ("ksw_eq", R.string.car_eq, R.string.car_eq_short, ComponentName("com.wits.csp.eq", "com.wits.csp.eq.view.StartActivity"), blocked = true),
     PHONE("ksw_bt", R.string.car_phone, R.string.car_phone_short, ComponentName("com.wits.ksw.bt", "com.wits.ksw.bt.StartActivity")),
     AUX("aux", R.string.car_aux, R.string.car_aux_short, command = 605),
     DVR("dvr", R.string.car_dvr, R.string.car_dvr_short, command = 609),
@@ -58,6 +61,7 @@ enum class CarFunction(
 
     fun run(context: Context) {
         when {
+            blocked -> return
             component != null -> Launch.component(context, component)
             command != null -> WitsPms.send(context, WitsPms.SYSTEM, command)
         }

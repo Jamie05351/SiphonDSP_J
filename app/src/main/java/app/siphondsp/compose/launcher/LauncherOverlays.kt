@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.siphondsp.R
@@ -61,6 +62,7 @@ internal fun AppDrawer(
     apps: List<AppEntry>?,
     slots: List<SlotTarget>,
     pickFor: Int?,
+    start: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -68,6 +70,7 @@ internal fun AppDrawer(
     val close = { onOverlayChange(LauncherOverlay.None) }
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_app else R.string.launcher_drawer),
+        start = start,
         onClose = close,
         header = {
             OutlinedTextField(
@@ -148,12 +151,14 @@ internal fun AppDrawer(
 internal fun CarMenu(
     functions: List<CarFunction>,
     pickFor: Int?,
+    start: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
     val close = { onOverlayChange(LauncherOverlay.None) }
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_car else R.string.launcher_car_menu),
+        start = start,
         onClose = close,
     ) {
         LazyVerticalGrid(
@@ -162,7 +167,11 @@ internal fun CarMenu(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            items(functions, key = { it.id }) { function ->
+            items(functions.filter { pickFor == null || !it.blocked }, key = { it.id }) { function ->
+                if (function.blocked) {
+                    MenuTile(stringResource(function.label), Modifier.fillMaxWidth(), stringResource(R.string.car_blocked_hint), onClick = null)
+                    return@items
+                }
                 MenuTile(stringResource(function.label), Modifier.fillMaxWidth()) {
                     if (pickFor != null) actions.assignSlot(pickFor, SlotTarget.Car(function)) else actions.runCar(function)
                     close()
@@ -177,10 +186,14 @@ internal fun CarMenu(
     }
 }
 
-/** A full-screen panel over the blurred home screen: a title row with Close, then [content]. */
+/**
+ * A full-screen panel over the blurred home screen: a title row with Close, then [content]. It
+ * starts [start] in from the left, clear of the volume column.
+ */
 @Composable
 private fun OverlayFrame(
     title: String,
+    start: Dp,
     onClose: () -> Unit,
     header: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
@@ -190,34 +203,40 @@ private fun OverlayFrame(
             .fillMaxSize()
             // Swallows taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}
-            .padding(horizontal = 32.dp, vertical = 20.dp),
+            .padding(start = start, end = 32.dp, top = 20.dp, bottom = 20.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
             header()
-            MenuTile(stringResource(R.string.launcher_close), Modifier.width(140.dp), onClose)
+            MenuTile(stringResource(R.string.launcher_close), Modifier.width(140.dp), onClick = onClose)
         }
         Spacer(Modifier.height(16.dp))
         Box(Modifier.weight(1f)) { content() }
     }
 }
 
-/** A floating screen with one line of text, used for menu entries and Close. */
+/**
+ * A floating screen with one line of text, used for menu entries and Close. With no [onClick] it
+ * is disabled: grey, with [hint] under the label saying why.
+ */
 @Composable
-private fun MenuTile(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun MenuTile(label: String, modifier: Modifier = Modifier, hint: String? = null, onClick: (() -> Unit)?) {
     val shape = RoundedCornerShape(12.dp)
-    Box(
+    val enabled = onClick != null
+    Column(
         modifier
             .height(56.dp)
             .clip(shape)
             .background(HomePalette.Panel)
-            .border(1.5.dp, BmwTheme.colors.sliderHeadroom.copy(alpha = 0.55f), shape)
-            .clickable(role = Role.Button, onClick = onClick)
+            .border(1.5.dp, if (enabled) BmwTheme.colors.sliderHeadroom.copy(alpha = 0.55f) else HomePalette.IdleEdge, shape)
+            .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick!!) else Modifier)
             .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.Center,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(label, color = if (enabled) Color.White else HomePalette.Dim, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        if (hint != null) Text(hint, color = HomePalette.Dim, fontSize = 12.sp, maxLines = 1)
     }
 }
 

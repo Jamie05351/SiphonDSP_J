@@ -23,9 +23,6 @@
     <string name="launcher_car_command_failed">The head unit didn\'t accept that command</string>
     <string name="launcher_dsp_bar">DSP: tap to show the signal chain</string>
     <string name="launcher_dsp_bar_close">Tap to hide the signal chain</string>
-    <string name="launcher_volume_value">Volume %1$s dB</string>
-    <string name="launcher_volume_muted">Volume muted</string>
-    <string name="launcher_volume_hint">tap to mute</string>
     <string name="launcher_android_settings">Android settings</string>
     <string name="launcher_home_app">Default home app</string>
     <string name="launcher_dsp_settings">J_DSP settings</string>
@@ -39,6 +36,7 @@
     <string name="car_dashboard_short">Dash</string>
     <string name="car_eq">KSW equaliser</string>
     <string name="car_eq_short">KSW EQ</string>
+    <string name="car_blocked_hint">Disabled: J_DSP does the EQ</string>
     <string name="car_phone">Bluetooth phone</string>
     <string name="car_phone_short">Phone</string>
     <string name="car_aux">AUX input</string>

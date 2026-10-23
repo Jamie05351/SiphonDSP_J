@@ -142,8 +142,8 @@ interface LauncherActions {
  * along the bottom: power, the four global stages and the output meters.
  *
  * Tapping the bar ([expanded]) raises the signal chain out of it as floating screens over the
- * blurred, dimmed home screen: volume, More and Settings, then power, the five DSP tiles and OUT,
- * centred. There is no facia; each piece is its own opaque screen.
+ * blurred, dimmed home screen: More and Settings, then power, the five DSP tiles and OUT,
+ * centred. The master volume stays in place and in focus throughout. There is no facia; each piece is its own opaque screen.
  *
  * [apps] is null until the installed apps first load. [carFunctions] are the car functions this head
  * unit has. [overlay] is the drawer or car menu when one is open.
@@ -190,16 +190,10 @@ fun LauncherHome(
                     contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
                     modifier = Modifier.fillMaxSize(),
                 )
-                // The home screen's controls fade away while the chain or a drawer is up, so what's
-                // over the blurred background isn't competing with them.
+                // The app grid and corner buttons fade away while the chain or a drawer is up, so
+                // what's over the blurred background isn't competing with them.
                 if (homeAlpha > 0f) {
                     Design(Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
-                        CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
-                            VolumeColumn(
-                                engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
-                                Modifier.offset(scale.dp(Margin), scale.dp(Margin)).height(scale.dp(GridBottom - Margin)),
-                            )
-                        }
                         AppGrid(apps, slots, onOverlayChange, actions)
                         CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
                         CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
@@ -229,11 +223,19 @@ fun LauncherHome(
                     }
                 }
                 DspBar(engine, powered, g, readout, meterLevels, expanded, onExpandedChange, actions)
+                // The master volume stays put and in focus whatever is open; the chain and drawers
+                // leave its column clear.
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
+                    VolumeColumn(
+                        engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
+                        Modifier.offset(scale.dp(Margin), scale.dp(Margin)).height(scale.dp(GridBottom - Margin)),
+                    )
+                }
             }
         }
         when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, overlay.pickFor, onOverlayChange, actions)
-            is LauncherOverlay.CarMenu -> CarMenu(carFunctions, overlay.pickFor, onOverlayChange, actions)
+            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, overlay.pickFor, scale.dp(GridLeft), onOverlayChange, actions)
+            is LauncherOverlay.CarMenu -> CarMenu(carFunctions, overlay.pickFor, scale.dp(GridLeft), onOverlayChange, actions)
             LauncherOverlay.None -> {}
         }
     }
@@ -520,8 +522,8 @@ private fun DrawScope.drawChevronUp(colour: Color) {
 // --- The raised chain ---
 
 /**
- * What rises out of the bar: a row of floating screens (volume, More, Settings), then the chain,
- * centred — power, the five tiles and OUT on the signal line, each its own screen with nothing
+ * What rises out of the bar: a row of floating screens (More, Settings), then the chain,
+ * centred between the volume column and the right edge — power, the five tiles and OUT on the signal line, each its own screen with nothing
  * behind it. Fills the area above the bar.
  */
 @Composable
@@ -541,21 +543,15 @@ private fun FloatingChain(
     )
     var moreBounds by remember { mutableStateOf(Rect.Zero) }
     Box(Modifier.size(s.dp(DesignW), s.dp(BarTop))) {
-        val volume = if (engine.masterMuted) {
-            stringResource(R.string.launcher_volume_muted)
-        } else {
-            stringResource(R.string.launcher_volume_value, formatDb(engine.masterVolumeDb))
-        }
-        FloatButton(Modifier.at(ChainSide, PanelTop, 240f, PanelRow), volume, stringResource(R.string.launcher_volume_hint), actions::toggleMute)
         FloatButton(
             Modifier.at(DesignW - ChainSide - 2 * PanelButton - 12f, PanelTop, PanelButton, PanelRow).onGloballyPositioned { moreBounds = it.boundsInRoot() },
             stringResource(R.string.launcher_more), null,
         ) { actions.more(moreBounds) }
         FloatButton(Modifier.at(DesignW - ChainSide - PanelButton, PanelTop, PanelButton, PanelRow), stringResource(R.string.launcher_dsp_settings), null, actions::dspSettings)
 
-        val chainW = DesignW - 2 * ChainSide
+        val chainW = DesignW - ChainLeft - ChainSide
         val layout = ChainLayout(chainW)
-        Box(Modifier.at(ChainSide, ChainTop, chainW, BarTop - ChainTop - ChainBottomGap)) {
+        Box(Modifier.at(ChainLeft, ChainTop, chainW, BarTop - ChainTop - ChainBottomGap)) {
             SignalPath(g, { sweep.value }, spark = powered, layout = layout)
             PowerNode(powered, g, actions::togglePower, Modifier.offset(x = s.dp(layout.powerX - ColumnWidth / 2)))
             Row(
@@ -624,6 +620,8 @@ private const val ChipScale = 0.82f
 private const val ChipWidth = 150f
 private const val MeterScale = 0.56f
 private const val ChainSide = 30f
+// Right of the volume column, which stays on screen.
+private const val ChainLeft = GridLeft
 private const val PanelTop = 20f
 private const val PanelRow = 56f
 private const val PanelButton = 200f
