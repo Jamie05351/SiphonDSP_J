@@ -54,6 +54,16 @@ class HomeSlots private constructor(private val context: Context) {
         }
     }
 
+    /** Replaces every slot at once (restoring a backup); missing slots are left empty. */
+    fun setAll(targets: List<SlotTarget>) {
+        val next = List(SLOTS) { targets.getOrElse(it) { SlotTarget.Empty } }
+        _slots.value = next
+        prefs.edit {
+            next.forEachIndexed { i, target -> putString(key(i), target.encode()) }
+            putBoolean(KEY_DEFAULTS_DONE, true)
+        }
+    }
+
     /** Swaps two slots (moving an icon onto another one). */
     fun swap(a: Int, b: Int) {
         if (a !in 0 until SLOTS || b !in 0 until SLOTS || a == b) return

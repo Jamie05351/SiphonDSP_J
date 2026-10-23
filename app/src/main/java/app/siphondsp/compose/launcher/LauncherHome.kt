@@ -62,6 +62,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -80,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspColors
+import app.siphondsp.compose.controls.knobFocusRing
 import app.siphondsp.compose.home.ChainLayout
 import app.siphondsp.compose.home.ChainSweep
 import app.siphondsp.compose.home.ColumnWidth
@@ -106,6 +108,8 @@ import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.HomeSlots
+import app.siphondsp.launcher.LauncherCustomisation
+import app.siphondsp.launcher.Track
 import app.siphondsp.launcher.SlotTarget
 import app.siphondsp.view.LevelReadout
 
@@ -116,6 +120,8 @@ sealed interface LauncherOverlay {
     data class Drawer(val pickFor: Int? = null) : LauncherOverlay
     /** The head unit's own screens and switches; with [pickFor], tapping one fills that slot. */
     data class CarMenu(val pickFor: Int? = null) : LauncherOverlay
+    /** The apps hidden from the drawer; tapping one shows it again. */
+    data object HiddenApps : LauncherOverlay
 }
 
 /** Everything the home screen can ask its host to do. */
@@ -136,6 +142,20 @@ interface LauncherActions {
     fun homeAppSettings()
     /** Add to home found no empty slot. */
     fun homeFull()
+    /** Pick an image for the icon of [key] (a [SlotTarget.encode] string). */
+    fun pickIcon(key: String)
+    fun resetIcon(key: String)
+    fun setHidden(app: AppEntry, hidden: Boolean)
+    fun pickWallpaper()
+    fun resetWallpaper()
+    fun backUpLayout()
+    fun restoreLayout()
+    /** Opens Android's notification-access settings so now playing can see media sessions. */
+    fun allowNowPlaying()
+    fun mediaPlayPause()
+    fun mediaNext()
+    fun mediaPrevious()
+    fun openTrackApp(track: Track)
 }
 
 /**
@@ -150,7 +170,11 @@ interface LauncherActions {
  * centred. The master volume stays in place and in focus throughout. There is no facia; each piece is its own opaque screen.
  *
  * [apps] is null until the installed apps first load. [carFunctions] are the car functions this head
- * unit has. [overlay] is the drawer or car menu when one is open.
+ * unit has. [overlay] is the drawer or car menu when one is open. [look] is the user's wallpaper,
+ * custom icons and hidden apps; [track] is what's playing, shown on a card above the car.
+ *
+ * Everything that can be tapped can also be reached with the iDrive knob (a D-pad), with the
+ * DSP pages' focus ring on whatever it's on.
  */
 @Composable
 fun LauncherHome(
@@ -169,6 +193,9 @@ fun LauncherHome(
     animateTiles: Boolean,
     actions: LauncherActions,
     modifier: Modifier = Modifier,
+    look: LauncherCustomisation.Look = LauncherCustomisation.Look(),
+    track: Track? = null,
+    nowPlayingAllowed: Boolean = true,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
@@ -189,16 +216,26 @@ fun LauncherHome(
         CompositionLocalProvider(LocalHomeScale provides scale) {
             // The home screen itself, blurred while something is over it.
             Box(Modifier.fillMaxSize().blur(blur)) {
-                Image(
-                    painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
-                    contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                val wallpaper = look.wallpaper
+                if (wallpaper != null) {
+                    Image(
+                        wallpaper, contentDescription = null,
+                        contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Image(
+                        painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
+                        contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 // The app grid and corner buttons fade away while the chain or a drawer is up, so
                 // what's over the blurred background isn't competing with them.
                 if (homeAlpha > 0f) {
                     Design(Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
-                        AppGrid(apps, slots, onOverlayChange, actions)
+                        AppGrid(apps, slots, look.icons, onOverlayChange, actions)
+                        if (track != null) NowPlayingCard(track, actions)
                         CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
                         CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
                     }
@@ -237,9 +274,14 @@ fun LauncherHome(
                 }
             }
         }
+        // Drawers stop above the DSP bar, which stays usable under them.
+        val overlayBottom = scale.dp(DesignH - BarTop + 12f) + ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
         when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, overlay.pickFor, scale.dp(GridLeft), onOverlayChange, actions)
-            is LauncherOverlay.CarMenu -> CarMenu(carFunctions, overlay.pickFor, scale.dp(GridLeft), onOverlayChange, actions)
+            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions)
+            is LauncherOverlay.CarMenu -> CarMenu(
+                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions,
+            )
+            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayBottom, onOverlayChange, actions)
             LauncherOverlay.None -> {}
         }
     }
@@ -263,7 +305,13 @@ private fun Modifier.at(x: Float, y: Float, w: Float, h: Float): Modifier {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppGrid(apps: List<AppEntry>?, slots: List<SlotTarget>, onOverlayChange: (LauncherOverlay) -> Unit, actions: LauncherActions) {
+private fun AppGrid(
+    apps: List<AppEntry>?,
+    slots: List<SlotTarget>,
+    icons: Map<String, ImageBitmap>,
+    onOverlayChange: (LauncherOverlay) -> Unit,
+    actions: LauncherActions,
+) {
     val cellW = (GridRight - GridLeft) / GridCols
     val cellH = (GridBottom - Margin) / GridRows
     for (i in 0 until HomeSlots.SLOTS) {
@@ -273,7 +321,7 @@ private fun AppGrid(apps: List<AppEntry>?, slots: List<SlotTarget>, onOverlayCha
         val target = slots.getOrElse(i) { SlotTarget.Empty }
         Box(Modifier.at(x, y, IconSize, IconSize)) {
             SlotIcon(
-                target, apps,
+                target, apps, icons[target.encode()],
                 onClick = {
                     when (target) {
                         SlotTarget.Empty -> onOverlayChange(LauncherOverlay.Drawer(pickFor = i))
@@ -291,7 +339,11 @@ private fun AppGrid(apps: List<AppEntry>?, slots: List<SlotTarget>, onOverlayCha
                 MenuItem(R.string.launcher_slot_choose_car) { menu = false; onOverlayChange(LauncherOverlay.CarMenu(pickFor = i)) }
                 if (i > 0) MenuItem(R.string.launcher_slot_move_earlier) { menu = false; actions.swapSlots(i, i - 1) }
                 if (i < HomeSlots.SLOTS - 1) MenuItem(R.string.launcher_slot_move_later) { menu = false; actions.swapSlots(i, i + 1) }
-                if (target != SlotTarget.Empty) MenuItem(R.string.launcher_slot_clear) { menu = false; actions.assignSlot(i, SlotTarget.Empty) }
+                if (target != SlotTarget.Empty) {
+                    MenuItem(R.string.launcher_change_icon) { menu = false; actions.pickIcon(target.encode()) }
+                    if (target.encode() in icons) MenuItem(R.string.launcher_reset_icon) { menu = false; actions.resetIcon(target.encode()) }
+                    MenuItem(R.string.launcher_slot_clear) { menu = false; actions.assignSlot(i, SlotTarget.Empty) }
+                }
             }
         }
     }
@@ -302,14 +354,17 @@ private fun MenuItem(label: Int, onClick: () -> Unit) {
     DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = onClick)
 }
 
-/** One slot: the app's own icon, a car function's tile, or an empty "+" to fill. No label under it. */
+/**
+ * One slot: the user's custom icon ([custom]) or the app's own icon, a car function's tile, or an
+ * empty "+" to fill. No label under it.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SlotIcon(target: SlotTarget, apps: List<AppEntry>?, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun SlotIcon(target: SlotTarget, apps: List<AppEntry>?, custom: ImageBitmap?, onClick: () -> Unit, onLongClick: () -> Unit) {
     val s = LocalHomeScale.current
     val shape = RoundedCornerShape(s.dp(IconSize * 0.24f))
     val app = (target as? SlotTarget.App)?.let { t -> apps?.firstOrNull { it.component == t.component } }
-    val icon = app?.icon
+    val icon = custom ?: app?.icon
     val description = when (target) {
         SlotTarget.Empty -> stringResource(R.string.launcher_empty_slot)
         is SlotTarget.Car -> stringResource(target.function.label)
@@ -318,6 +373,7 @@ private fun SlotIcon(target: SlotTarget, apps: List<AppEntry>?, onClick: () -> U
     Box(
         Modifier
             .fillMaxSize()
+            .knobFocusRing(s.dp(IconSize * 0.24f))
             .clip(shape)
             .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongClick)
             .semantics { contentDescription = description },
@@ -373,6 +429,7 @@ private fun CornerButton(x: Float, label: String, onClick: () -> Unit, glyph: Dr
     Box(
         Modifier
             .at(x, Margin, CornerSize, CornerSize)
+            .knobFocusRing(s.dp(14f))
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
@@ -447,6 +504,7 @@ private fun DspBar(
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
+            .knobFocusRing(s.dp(16f))
             .drawWithContent {
                 drawContent()
                 // The lit edge: purple up to the sweep's front, along the top and bottom at once,
@@ -503,6 +561,7 @@ private fun BarPower(powered: Boolean, g: Float, onToggle: () -> Unit) {
     Canvas(
         Modifier
             .size(s.dp(BarNode))
+            .knobFocusRing(s.dp(BarNode / 2))
             .clip(CircleShape)
             .toggleable(value = powered, role = Role.Switch, onValueChange = { onToggle() })
             .semantics { contentDescription = description },
@@ -531,7 +590,7 @@ private fun BarPower(powered: Boolean, g: Float, onToggle: () -> Unit) {
 private fun GlobalChips(engine: HomeEngineState, g: (Int) -> Float, actions: LauncherActions, modifier: Modifier) {
     val s = LocalHomeScale.current
     val off = stringResource(R.string.home_chip_off)
-    val chip = Modifier.width(s.dp(ChipWidth)).fillMaxHeight()
+    val chip = Modifier.width(s.dp(ChipWidth)).fillMaxHeight().knobFocusRing(s.dp(10f))
     Row(modifier.fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(s.dp(10f))) {
         GlobalChip(
             stringResource(R.string.home_chip_tilt), engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off,
@@ -611,6 +670,7 @@ private fun FloatingChain(
                         spark = powered,
                         selected = openingStage == stage,
                         onClick = { actions.openStage(stage) },
+                        modifier = Modifier.knobFocusRing(s.dp(16f)),
                         width = layout.cardWidth,
                         animateArt = animateTiles,
                     )
@@ -628,6 +688,7 @@ private fun FloatButton(modifier: Modifier, title: String, hint: String?, onClic
     val shape = RoundedCornerShape(s.dp(12f))
     Column(
         modifier
+            .knobFocusRing(s.dp(12f))
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(1.5f), HomePalette.ButtonEdge, shape)
@@ -638,6 +699,102 @@ private fun FloatButton(modifier: Modifier, title: String, hint: String?, onClic
         Text(title, color = Color.White, fontSize = s.sp(17f), fontWeight = FontWeight.SemiBold, maxLines = 1)
         if (hint != null) Text(hint, color = HomePalette.Muted, fontSize = s.sp(12f), maxLines = 1)
     }
+}
+
+// --- Now playing ---
+
+/**
+ * What's playing, on a small screen above the car between the grid and the corner buttons: the
+ * album art, title and artist (tap to open the playing app), and previous / play-pause / next.
+ */
+@Composable
+private fun NowPlayingCard(track: Track, actions: LauncherActions) {
+    val s = LocalHomeScale.current
+    val shape = RoundedCornerShape(s.dp(14f))
+    Row(
+        Modifier
+            .at(NowX, Margin, DrawerX - 14f - NowX, NowHeight)
+            .clip(shape)
+            .background(HomePalette.Panel)
+            .border(s.dp(1.5f), HomePalette.PanelEdge, shape)
+            .padding(s.dp(7f)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier
+                .weight(1f)
+                .knobFocusRing(s.dp(10f))
+                .clip(RoundedCornerShape(s.dp(10f)))
+                .clickable(role = Role.Button) { actions.openTrackApp(track) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val art = track.art
+            val artSize = Modifier.size(s.dp(NowHeight - 14f)).clip(RoundedCornerShape(s.dp(8f)))
+            if (art != null) {
+                Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = artSize)
+            } else {
+                Box(artSize.background(HomePalette.IdleFill))
+            }
+            Column(Modifier.padding(horizontal = s.dp(12f)).weight(1f)) {
+                Text(track.title, color = Color.White, fontSize = s.sp(17f), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (track.artist.isNotEmpty()) {
+                    Text(track.artist, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
+        MediaButton(
+            stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
+        ) { if (track.playing) drawPause() else drawPlay() }
+        MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
+    }
+}
+
+@Composable
+private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
+    val s = LocalHomeScale.current
+    Box(
+        Modifier
+            .size(s.dp(NowHeight - 14f))
+            .knobFocusRing(s.dp(10f))
+            .clip(RoundedCornerShape(s.dp(10f)))
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(s.dp(22f)), onDraw = glyph)
+    }
+}
+
+private fun DrawScope.drawPlay() {
+    val p = androidx.compose.ui.graphics.Path().apply {
+        moveTo(size.width * 0.2f, 0f)
+        lineTo(size.width, size.height / 2)
+        lineTo(size.width * 0.2f, size.height)
+        close()
+    }
+    drawPath(p, HomePalette.Button)
+}
+
+private fun DrawScope.drawPause() {
+    val w = size.width * 0.28f
+    drawRect(HomePalette.Button, Offset(size.width * 0.12f, 0f), Size(w, size.height))
+    drawRect(HomePalette.Button, Offset(size.width * 0.6f, 0f), Size(w, size.height))
+}
+
+/** A triangle and a bar: skip forward, or mirrored, back. */
+private fun DrawScope.drawSkip(forward: Boolean) {
+    val bar = size.width * 0.14f
+    val p = androidx.compose.ui.graphics.Path().apply {
+        if (forward) {
+            moveTo(0f, 0f); lineTo(size.width - bar, size.height / 2); lineTo(0f, size.height)
+        } else {
+            moveTo(size.width, 0f); lineTo(bar, size.height / 2); lineTo(size.width, size.height)
+        }
+        close()
+    }
+    drawPath(p, HomePalette.Button)
+    drawRect(HomePalette.Button, Offset(if (forward) size.width - bar else 0f, 0f), Size(bar, size.height))
 }
 
 // The layout, in design dp at 1280 x 480.
@@ -652,6 +809,9 @@ private const val GridCols = 3
 private const val GridRows = 3
 private const val IconSize = 86f
 private const val CornerSize = 58f
+// The now-playing card: from just right of the grid to the corner buttons, above the car.
+private const val NowX = 690f
+private const val NowHeight = 72f
 private const val CarX = DesignW - Margin - CornerSize
 private const val DrawerX = CarX - 12f - CornerSize
 private const val BarSide = 10f

@@ -47,7 +47,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import app.siphondsp.R
+import app.siphondsp.compose.controls.knobFocusRing
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.model.NativeBmwDspValues
 import kotlinx.coroutines.delay
@@ -127,6 +134,14 @@ private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> U
                 drawLine(glyph, center - Offset(arm, 0f), center + Offset(arm, 0f), stroke, StrokeCap.Round)
                 if (plus) drawLine(glyph, center - Offset(0f, arm), center + Offset(0f, arm), stroke, StrokeCap.Round)
             }
+            // The iDrive knob (a D-pad) can reach it too: a press is one step.
+            .knobFocusRing(s.dp(VolumeCorner))
+            .focusable()
+            .onKeyEvent { event ->
+                val press = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                if (press && event.type == KeyEventType.KeyDown) step()
+                press
+            }
             .clip(shape)
             .semantics {
                 role = Role.Button
@@ -169,6 +184,7 @@ private fun VolumeReadout(volumeDb: Float, muted: Boolean, g: Float, onToggleMut
         Modifier
             .fillMaxWidth()
             .height(s.dp(VolumeScreen))
+            .knobFocusRing(s.dp(14f))
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)

@@ -44,6 +44,10 @@ import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.HomeSlots
 import app.siphondsp.launcher.InstalledApps
+import app.siphondsp.launcher.LauncherCustomisation
+import app.siphondsp.launcher.NowPlaying
+import app.siphondsp.launcher.Track
+import androidx.activity.result.contract.ActivityResultContracts
 import app.siphondsp.launcher.Launch
 import app.siphondsp.launcher.SlotTarget
 import app.siphondsp.compose.home.HomeStage
@@ -92,6 +96,48 @@ class DspFragment : Fragment() {
 
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
+
+    /** The icon key ([SlotTarget.encode]) whose image is being picked; kept across recreation. */
+    private var iconKeyPicking: String? = null
+
+    /** What's playing, for the home screen's card; listened to only while the page is resumed. */
+    private val nowPlaying by lazy { NowPlaying(requireContext()) }
+
+    private val pickIconImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val key = iconKeyPicking
+        iconKeyPicking = null
+        if (uri != null && key != null) {
+            LauncherCustomisation.get(requireContext()).setIcon(key, uri) { ok -> if (!ok) toast(R.string.launcher_icon_failed) }
+        }
+    }
+
+    private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            LauncherCustomisation.get(requireContext()).setWallpaper(uri) { ok -> if (!ok) toast(R.string.launcher_wallpaper_failed) }
+        }
+    }
+
+    private val saveLayout = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            val context = requireContext().applicationContext
+            LauncherCustomisation.get(context).export(HomeSlots.get(context).slots.value, uri) { ok ->
+                Toast.makeText(context, if (ok) R.string.launcher_backup_done else R.string.launcher_backup_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val openLayout = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val context = requireContext().applicationContext
+            LauncherCustomisation.get(context).import(uri, HomeSlots.get(context)::setAll) { ok ->
+                Toast.makeText(context, if (ok) R.string.launcher_restore_done else R.string.launcher_restore_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun toast(text: Int) {
+        context?.let { Toast.makeText(it, text, Toast.LENGTH_SHORT).show() }
+    }
 
     /** The held output levels, about 5 a second, for the numbers: headroom and held peaks. */
     private var levelReadout by mutableStateOf(LevelReadout.SILENT)
@@ -172,9 +218,20 @@ class DspFragment : Fragment() {
         return binding.root
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        iconKeyPicking = savedInstanceState?.getString(STATE_ICON_KEY)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_ICON_KEY, iconKeyPicking)
+    }
+
     override fun onResume() {
         super.onResume()
         resumed = true
+        nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
@@ -190,6 +247,7 @@ class DspFragment : Fragment() {
         // tile launch still waiting out its flash must not open over it.
         cancelPendingOpen()
         resumed = false
+        nowPlaying.stop()
         updateLevelFeed()
     }
 
@@ -235,9 +293,13 @@ class DspFragment : Fragment() {
     private fun setUpShortcutsPage() {
         val slots = HomeSlots.get(requireContext())
         val installed = InstalledApps.get(requireContext())
+        val customisation = LauncherCustomisation.get(requireContext())
         shortcutsBinding.homeScreen.setHomeContent {
             val apps by installed.apps.collectAsState()
             val slotList by slots.slots.collectAsState()
+            val look by customisation.look.collectAsState()
+            val track by nowPlaying.track.collectAsState()
+            val nowPlayingAllowed by nowPlaying.allowed.collectAsState()
             LaunchedEffect(apps) { apps?.let(slots::fillDefaults) }
             val carFunctions by produceState(emptyList<CarFunction>(), apps) {
                 val context = requireContext().applicationContext
@@ -263,6 +325,9 @@ class DspFragment : Fragment() {
                 openingStage = openingTile,
                 animateTiles = homeLive && chainRaised,
                 actions = launcherActions,
+                look = look,
+                track = track,
+                nowPlayingAllowed = nowPlayingAllowed,
             )
         }
         levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
@@ -376,6 +441,35 @@ class DspFragment : Fragment() {
         override fun androidSettings() { Launch.start(requireContext(), Intent(Settings.ACTION_SETTINGS)) }
         override fun homeAppSettings() { Launch.start(requireContext(), Intent(Settings.ACTION_HOME_SETTINGS)) }
         override fun homeFull() { Toast.makeText(requireContext(), R.string.launcher_home_full, Toast.LENGTH_LONG).show() }
+        override fun pickIcon(key: String) {
+            iconKeyPicking = key
+            launchPicker { pickIconImage.launch(arrayOf("image/*")) }
+        }
+        override fun resetIcon(key: String) { LauncherCustomisation.get(requireContext()).clearIcon(key) }
+        override fun setHidden(app: AppEntry, hidden: Boolean) {
+            LauncherCustomisation.get(requireContext()).setHidden(SlotTarget.App(app.component).encode(), hidden)
+        }
+        override fun pickWallpaper() = launchPicker { pickWallpaperImage.launch(arrayOf("image/*")) }
+        override fun resetWallpaper() { LauncherCustomisation.get(requireContext()).clearWallpaper() }
+        override fun backUpLayout() = launchPicker { saveLayout.launch("j_dsp-home-layout.json") }
+        override fun restoreLayout() = launchPicker { openLayout.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+        override fun allowNowPlaying() { Launch.start(requireContext(), Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        override fun mediaPlayPause() = nowPlaying.playPause()
+        override fun mediaNext() = nowPlaying.next()
+        override fun mediaPrevious() = nowPlaying.previous()
+        override fun openTrackApp(track: Track) {
+            requireContext().packageManager.getLaunchIntentForPackage(track.packageName)?.let { Launch.start(requireContext(), it) }
+        }
+    }
+
+    /** Opens a system file picker; a unit without one gets a message instead of a crash. */
+    private fun launchPicker(launch: () -> Unit) {
+        try {
+            launch()
+        } catch (e: android.content.ActivityNotFoundException) {
+            Timber.w(e, "No document picker")
+            toast(R.string.launcher_open_missing)
+        }
     }
 
     /**
@@ -517,6 +611,7 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 80L
+        private const val STATE_ICON_KEY = "launcher_icon_key"
         private const val CAR_CHECK_TRIES = 6
         private const val CAR_CHECK_RETRY_MS = 5_000L
         fun newInstance(): DspFragment {

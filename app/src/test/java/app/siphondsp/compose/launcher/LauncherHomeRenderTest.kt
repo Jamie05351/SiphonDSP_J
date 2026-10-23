@@ -18,6 +18,7 @@ import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.SlotTarget
+import app.siphondsp.launcher.Track
 import app.siphondsp.view.LevelReadout
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -75,6 +76,8 @@ class LauncherHomeRenderTest {
                     apps = apps, slots = slots, carFunctions = CarFunction.entries,
                     expanded = expanded, onExpandedChange = {}, overlay = overlay, onOverlayChange = {},
                     openingStage = null, animateTiles = false, actions = NoActions,
+                    track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.music"),
+                    nowPlayingAllowed = false,
                 )
             }
         }
@@ -109,5 +112,17 @@ class LauncherHomeRenderTest {
         override fun androidSettings() {}
         override fun homeAppSettings() {}
         override fun homeFull() {}
+        override fun pickIcon(key: String) {}
+        override fun resetIcon(key: String) {}
+        override fun setHidden(app: AppEntry, hidden: Boolean) {}
+        override fun pickWallpaper() {}
+        override fun resetWallpaper() {}
+        override fun backUpLayout() {}
+        override fun restoreLayout() {}
+        override fun allowNowPlaying() {}
+        override fun mediaPlayPause() {}
+        override fun mediaNext() {}
+        override fun mediaPrevious() {}
+        override fun openTrackApp(track: Track) {}
     }
 }

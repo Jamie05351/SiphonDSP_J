@@ -44,7 +44,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.alpha
 import app.siphondsp.R
+import app.siphondsp.compose.controls.knobFocusRing
+import app.siphondsp.launcher.LauncherCustomisation
 import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.launcher.AppEntry
@@ -53,16 +56,19 @@ import app.siphondsp.launcher.SlotTarget
 import java.util.Locale
 
 /**
- * Every installed app, with a search box, over the blurred home screen. Tapping an app opens it, or
- * with [pickFor] puts it in that home slot. Long-press offers Add to home and App info.
+ * Every installed app not hidden in [look], with a search box, over the blurred home screen.
+ * Tapping an app opens it, or with [pickFor] puts it in that home slot. Long-press offers Add to
+ * home, Change icon, Hide and App info.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AppDrawer(
     apps: List<AppEntry>?,
     slots: List<SlotTarget>,
+    look: LauncherCustomisation.Look,
     pickFor: Int?,
     start: Dp,
+    bottom: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -71,6 +77,7 @@ internal fun AppDrawer(
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_app else R.string.launcher_drawer),
         start = start,
+        bottom = bottom,
         onClose = close,
         header = {
             OutlinedTextField(
@@ -82,7 +89,8 @@ internal fun AppDrawer(
     ) {
         val shown = apps?.let { list ->
             val q = query.trim().lowercase(Locale.ROOT)
-            if (q.isEmpty()) list else list.filter { it.label.lowercase(Locale.ROOT).contains(q) }
+            list.filter { SlotTarget.App(it.component).encode() !in look.hidden }
+                .filter { q.isEmpty() || it.label.lowercase(Locale.ROOT).contains(q) }
         }
         when {
             shown == null -> Message(stringResource(R.string.launcher_loading))
@@ -94,10 +102,12 @@ internal fun AppDrawer(
             ) {
                 items(shown, key = { it.key }) { app ->
                     var menu by remember { mutableStateOf(false) }
+                    val key = SlotTarget.App(app.component).encode()
                     Box {
                         Column(
                             Modifier
                                 .fillMaxWidth()
+                                .knobFocusRing(12.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
                                     role = Role.Button,
@@ -111,8 +121,8 @@ internal fun AppDrawer(
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            val icon = app.icon
-                            if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(64.dp))
+                            val icon = look.icons[key] ?: app.icon
+                            if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)))
                             else Spacer(Modifier.size(64.dp))
                             Text(
                                 app.label, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -130,6 +140,20 @@ internal fun AppDrawer(
                                     actions.homeFull()
                                 }
                             })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.launcher_change_icon)) }, onClick = {
+                                menu = false
+                                actions.pickIcon(key)
+                            })
+                            if (key in look.icons) {
+                                DropdownMenuItem(text = { Text(stringResource(R.string.launcher_reset_icon)) }, onClick = {
+                                    menu = false
+                                    actions.resetIcon(key)
+                                })
+                            }
+                            DropdownMenuItem(text = { Text(stringResource(R.string.launcher_hide)) }, onClick = {
+                                menu = false
+                                actions.setHidden(app, true)
+                            })
                             DropdownMenuItem(text = { Text(stringResource(R.string.launcher_app_info)) }, onClick = {
                                 menu = false
                                 actions.appInfo(app)
@@ -144,14 +168,18 @@ internal fun AppDrawer(
 
 /**
  * The head unit's own screens and switches (Factory and KSW settings, original car, dashboard and
- * so on), plus Android's settings and the default-home chooser. With [pickFor], only the car
+ * so on), then the home screen's own settings (wallpaper, hidden apps, now playing, layout backup),
+ * J_DSP's and Android's settings and the default-home chooser. With [pickFor], only the car
  * functions are listed and tapping one fills that home slot.
  */
 @Composable
 internal fun CarMenu(
     functions: List<CarFunction>,
     pickFor: Int?,
+    customWallpaper: Boolean,
+    nowPlayingAllowed: Boolean,
     start: Dp,
+    bottom: Dp,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -159,10 +187,11 @@ internal fun CarMenu(
     OverlayFrame(
         title = stringResource(if (pickFor != null) R.string.launcher_pick_car else R.string.launcher_car_menu),
         start = start,
+        bottom = bottom,
         onClose = close,
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(280.dp),
+            columns = GridCells.Adaptive(240.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize(),
@@ -178,6 +207,20 @@ internal fun CarMenu(
                 }
             }
             if (pickFor == null) {
+                item(key = "wallpaper") { MenuTile(stringResource(R.string.launcher_wallpaper), Modifier.fillMaxWidth()) { close(); actions.pickWallpaper() } }
+                if (customWallpaper) {
+                    item(key = "wallpaper_reset") { MenuTile(stringResource(R.string.launcher_wallpaper_reset), Modifier.fillMaxWidth()) { actions.resetWallpaper() } }
+                }
+                item(key = "hidden") { MenuTile(stringResource(R.string.launcher_hidden_apps), Modifier.fillMaxWidth()) { onOverlayChange(LauncherOverlay.HiddenApps) } }
+                if (!nowPlayingAllowed) {
+                    item(key = "now_playing") {
+                        MenuTile(stringResource(R.string.launcher_allow_now_playing), Modifier.fillMaxWidth(), stringResource(R.string.launcher_allow_now_playing_hint)) {
+                            close(); actions.allowNowPlaying()
+                        }
+                    }
+                }
+                item(key = "backup") { MenuTile(stringResource(R.string.launcher_backup_layout), Modifier.fillMaxWidth()) { close(); actions.backUpLayout() } }
+                item(key = "restore") { MenuTile(stringResource(R.string.launcher_restore_layout), Modifier.fillMaxWidth()) { close(); actions.restoreLayout() } }
                 item(key = "dsp") { MenuTile(stringResource(R.string.launcher_dsp_settings), Modifier.fillMaxWidth()) { close(); actions.dspSettings() } }
                 item(key = "android") { MenuTile(stringResource(R.string.launcher_android_settings), Modifier.fillMaxWidth()) { close(); actions.androidSettings() } }
                 item(key = "home") { MenuTile(stringResource(R.string.launcher_home_app), Modifier.fillMaxWidth()) { close(); actions.homeAppSettings() } }
@@ -186,14 +229,69 @@ internal fun CarMenu(
     }
 }
 
+/** The apps hidden from the drawer; tapping one puts it back. They can still be on the home grid. */
+@Composable
+internal fun HiddenApps(
+    apps: List<AppEntry>?,
+    look: LauncherCustomisation.Look,
+    start: Dp,
+    bottom: Dp,
+    onOverlayChange: (LauncherOverlay) -> Unit,
+    actions: LauncherActions,
+) {
+    OverlayFrame(
+        title = stringResource(R.string.launcher_hidden_apps),
+        start = start,
+        bottom = bottom,
+        onClose = { onOverlayChange(LauncherOverlay.CarMenu()) },
+    ) {
+        val hidden = apps?.filter { SlotTarget.App(it.component).encode() in look.hidden }
+        when {
+            hidden == null -> Message(stringResource(R.string.launcher_loading))
+            hidden.isEmpty() -> Message(stringResource(R.string.launcher_no_hidden))
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(132.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(hidden, key = { it.key }) { app ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .knobFocusRing(12.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.launcher_unhide)) { actions.setHidden(app, false) }
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        val icon = look.icons[SlotTarget.App(app.component).encode()] ?: app.icon
+                        if (icon != null) {
+                            Image(icon, contentDescription = null, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(15.dp)).alpha(0.6f))
+                        } else {
+                            Spacer(Modifier.size(64.dp))
+                        }
+                        Text(
+                            app.label, color = HomePalette.Caption, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp),
+                        )
+                        Text(stringResource(R.string.launcher_unhide), color = HomePalette.Muted, fontSize = 12.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * A full-screen panel over the blurred home screen: a title row with Close, then [content]. It
- * starts [start] in from the left, clear of the volume column.
+ * starts [start] in from the left, clear of the volume column, and stops [bottom] above the
+ * bottom edge, clear of the DSP bar.
  */
 @Composable
 private fun OverlayFrame(
     title: String,
     start: Dp,
+    bottom: Dp,
     onClose: () -> Unit,
     header: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
@@ -205,7 +303,7 @@ private fun OverlayFrame(
             .padding(start = start)
             // Swallows the rest of the taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}
-            .padding(end = 32.dp, top = 20.dp, bottom = 20.dp),
+            .padding(end = 32.dp, top = 20.dp, bottom = bottom),
     ) {
         // The header (search) takes whatever width is left between the title and Close, so the row
         // fits a narrow screen too.
@@ -230,10 +328,11 @@ private fun MenuTile(label: String, modifier: Modifier = Modifier, hint: String?
     Column(
         modifier
             .height(56.dp)
+            .knobFocusRing(12.dp)
             .clip(shape)
             .background(HomePalette.Panel)
             .border(1.5.dp, if (enabled) BmwTheme.colors.sliderHeadroom.copy(alpha = 0.55f) else HomePalette.IdleEdge, shape)
-            .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick!!) else Modifier)
+            .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
