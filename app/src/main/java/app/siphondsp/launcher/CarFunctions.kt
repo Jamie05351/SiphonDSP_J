@@ -81,7 +81,7 @@ object Launch {
         start(context, Intent.makeMainActivity(component).addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
     }
 
-    /** Starts [intent] in its own task; a missing, disabled or restricted target shows a message. */
+    /** Starts [intent] in its own task; a missing, disabled, restricted or broken target shows a message. */
     fun start(context: Context, intent: Intent): Boolean = try {
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
@@ -92,6 +92,12 @@ object Launch {
     } catch (e: SecurityException) {
         Timber.w(e, "Launch target restricted")
         Toast.makeText(context, R.string.launcher_open_restricted, Toast.LENGTH_SHORT).show()
+        false
+    } catch (e: RuntimeException) {
+        // Anything else startActivity can throw (a stale or malformed target, a binder failure):
+        // on the home screen an uncaught one would also stop the audio engine.
+        Timber.w(e, "Launch failed")
+        Toast.makeText(context, R.string.launcher_open_missing, Toast.LENGTH_SHORT).show()
         false
     }
 }

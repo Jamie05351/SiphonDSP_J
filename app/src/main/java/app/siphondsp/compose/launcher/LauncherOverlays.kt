@@ -201,9 +201,11 @@ private fun OverlayFrame(
     Column(
         Modifier
             .fillMaxSize()
-            // Swallows taps so nothing reaches the home screen underneath.
+            // Clear of the volume column, which stays in use underneath.
+            .padding(start = start)
+            // Swallows the rest of the taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}
-            .padding(start = start, end = 32.dp, top = 20.dp, bottom = 20.dp),
+            .padding(end = 32.dp, top = 20.dp, bottom = 20.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)

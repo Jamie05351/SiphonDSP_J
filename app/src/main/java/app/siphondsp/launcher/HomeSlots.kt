@@ -63,6 +63,7 @@ class HomeSlots private constructor(context: Context) {
         prefs.edit {
             putString(key(a), next[a].encode())
             putString(key(b), next[b].encode())
+            putBoolean(KEY_DEFAULTS_DONE, true)
         }
     }
 

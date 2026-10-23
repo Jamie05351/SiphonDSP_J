@@ -34,7 +34,9 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
 import app.siphondsp.compose.launcher.LauncherOverlay
@@ -235,7 +237,15 @@ class DspFragment : Fragment() {
             val apps by installed.apps.collectAsState()
             val slotList by slots.slots.collectAsState()
             LaunchedEffect(apps) { apps?.let(slots::fillDefaults) }
-            val carFunctions = remember { CarFunction.entries.filter { it.isAvailable(requireContext()) } }
+            val carFunctions by produceState(emptyList<CarFunction>(), apps) {
+                val context = requireContext().applicationContext
+                repeat(CAR_CHECK_TRIES) { attempt ->
+                    value = withContext(Dispatchers.IO) { CarFunction.entries.filter { it.isAvailable(context) } }
+                    // The commands need wits_pms, which can start after the home screen at boot.
+                    if (value.any { it.command != null } || attempt == CAR_CHECK_TRIES - 1) return@produceState
+                    delay(CAR_CHECK_RETRY_MS)
+                }
+            }
             LauncherHome(
                 engine = engineState,
                 powered = powerOn,
@@ -501,6 +511,8 @@ class DspFragment : Fragment() {
 
     companion object {
         private const val TILE_FLASH_MS = 80L
+        private const val CAR_CHECK_TRIES = 6
+        private const val CAR_CHECK_RETRY_MS = 5_000L
         fun newInstance(): DspFragment {
             return DspFragment()
         }
