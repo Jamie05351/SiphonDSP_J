@@ -68,6 +68,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             safely("Icon") {
                 val bitmap = decode(uri, ICON_PX, ICON_PX) ?: return@safely false
                 write(iconFile(key), centreCrop(bitmap, ICON_PX, ICON_PX), Bitmap.CompressFormat.PNG)
+                index(iconKeys() + key)
                 reload()
                 true
             }
@@ -153,16 +154,28 @@ class LauncherCustomisation internal constructor(private val context: Context) {
                 val staged = icons.mapKeys { (key, _) -> iconFile(key) } + listOfNotNull(wallpaper?.let { wallpaperFile() to it })
                 val temps = staged.map { (file, bytes) -> File(file.path + ".import").also { it.writeBytes(bytes) } to file }
                 val current = iconKeys().map { iconFile(it) } + listOfNotNull(wallpaperFile().takeIf { it.exists() })
-                val aside = current.map { file -> File(file.path + ".old").also { check(file.renameTo(it)) { "Could not move ${file.name}" } } to file }
+                // Only what was actually moved or placed is undone, whichever step fails.
+                val aside = mutableListOf<Pair<File, File>>()
+                val placed = mutableListOf<File>()
                 try {
-                    temps.forEach { (temp, file) -> check(temp.renameTo(file)) { "Could not place ${file.name}" } }
+                    for (file in current) {
+                        val old = File(file.path + ".old")
+                        check(file.renameTo(old)) { "Could not move ${file.name}" }
+                        aside += old to file
+                    }
+                    for ((temp, file) in temps) {
+                        check(temp.renameTo(file)) { "Could not place ${file.name}" }
+                        placed += file
+                    }
                 } catch (e: Exception) {
-                    temps.forEach { (_, file) -> file.delete() }
+                    placed.forEach { it.delete() }
                     aside.forEach { (old, file) -> old.renameTo(file) }
                     reload()
                     throw e
                 }
                 aside.forEach { (old, _) -> old.delete() }
+                // The icon index now lists exactly the restored icons.
+                index(icons.keys)
                 prefs.edit { putStringSet(KEY_HIDDEN, hidden) }
                 _look.value = _look.value.copy(hidden = hidden)
                 reload()
@@ -217,12 +230,13 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         return sample
     }
 
-    // Icon files are named by a hash of their key; the key itself is kept in the index pref.
+    // Icon files are named by a hash of their key; the keys themselves are kept in the index pref,
+    // which only changes once an icon is really saved (see [index]).
     private fun iconKeys(): Set<String> = prefs.getStringSet(KEY_ICONS, emptySet())!!.filter { iconFile(it).exists() }.toSet()
 
+    private fun index(keys: Set<String>) = prefs.edit { putStringSet(KEY_ICONS, keys) }
+
     private fun iconFile(key: String): File {
-        val known = prefs.getStringSet(KEY_ICONS, emptySet())!!
-        if (key !in known) prefs.edit { putStringSet(KEY_ICONS, known + key) }
         val hash = MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
         return File(dir, "icon_$hash.png")
     }
