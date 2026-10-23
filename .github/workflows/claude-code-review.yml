@@ -13,8 +13,12 @@ jobs:
   review:
     name: Claude review
     runs-on: ubuntu-latest
-    # Fork PRs can't read the token secret; skip rather than fail.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs can't read the token secret; skip rather than fail. The automatic master -> head-unit
+    # sync PRs (opened by github-actions[bot], which the review action refuses to run for) only carry
+    # commits already reviewed on master, so they are skipped too.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'github-actions[bot]'
 
     permissions:
       contents: read
