@@ -65,11 +65,12 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     /** Crops the image at [uri] to a square icon for [key]. [onDone] gets false if it couldn't be read. */
     fun setIcon(key: String, uri: Uri, onDone: (Boolean) -> Unit) = scope.launch {
         val ok = lock.withLock {
-            val bitmap = decode(uri, ICON_PX, ICON_PX) ?: return@withLock false
-            val square = centreCrop(bitmap, ICON_PX, ICON_PX)
-            write(iconFile(key), square, Bitmap.CompressFormat.PNG)
-            reload()
-            true
+            safely("Icon") {
+                val bitmap = decode(uri, ICON_PX, ICON_PX) ?: return@safely false
+                write(iconFile(key), centreCrop(bitmap, ICON_PX, ICON_PX), Bitmap.CompressFormat.PNG)
+                reload()
+                true
+            }
         }
         withContext(Dispatchers.Main) { onDone(ok) }
     }
@@ -84,10 +85,12 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     /** Uses the image at [uri] as the wallpaper, sized for the 1280 x 480 screen. */
     fun setWallpaper(uri: Uri, onDone: (Boolean) -> Unit) = scope.launch {
         val ok = lock.withLock {
-            val bitmap = decode(uri, WALL_W, WALL_H) ?: return@withLock false
-            write(wallpaperFile(), centreCrop(bitmap, WALL_W, WALL_H), Bitmap.CompressFormat.JPEG)
-            reload()
-            true
+            safely("Wallpaper") {
+                val bitmap = decode(uri, WALL_W, WALL_H) ?: return@safely false
+                write(wallpaperFile(), centreCrop(bitmap, WALL_W, WALL_H), Bitmap.CompressFormat.JPEG)
+                reload()
+                true
+            }
         }
         withContext(Dispatchers.Main) { onDone(ok) }
     }
@@ -243,10 +246,29 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         return Bitmap.createScaledBitmap(Bitmap.createBitmap(source, x, y, cropW, cropH), w, h, true)
     }
 
+    /** Writes through a temporary file, so a failed write (a full disk) leaves the old image. */
     private fun write(file: File, bitmap: Bitmap, format: Bitmap.CompressFormat) {
         val tmp = File(file.path + ".tmp")
-        tmp.outputStream().use { bitmap.compress(format, 92, it) }
-        tmp.renameTo(file)
+        try {
+            tmp.outputStream().use { check(bitmap.compress(format, 92, it)) { "Could not encode ${file.name}" } }
+            check(tmp.renameTo(file)) { "Could not place ${file.name}" }
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /**
+     * Runs [block]; any failure (a full disk, an image too big for memory) is logged and reads as
+     * false instead of escaping the coroutine, which would take down the home screen and the audio.
+     */
+    private inline fun safely(what: String, block: () -> Boolean): Boolean = try {
+        block()
+    } catch (e: Exception) {
+        Timber.w(e, "$what could not be saved")
+        false
+    } catch (e: OutOfMemoryError) {
+        Timber.w(e, "$what too large")
+        false
     }
 
     private fun base64(file: File): String = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
