@@ -51,6 +51,9 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
@@ -96,6 +99,7 @@ import app.siphondsp.compose.home.StageCard
 import app.siphondsp.compose.home.VolumeColumn
 import app.siphondsp.compose.home.animateActive
 import app.siphondsp.compose.home.drawSettingsGlyph
+import app.siphondsp.compose.home.drawSpark
 import app.siphondsp.compose.home.formatDb
 import app.siphondsp.compose.home.tile
 import app.siphondsp.compose.theme.BmwTheme
@@ -410,24 +414,56 @@ private fun DspBar(
     val shape = RoundedCornerShape(s.dp(16f))
     val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(PanelMs), label = "bar chevron")
     val description = stringResource(if (expanded) R.string.launcher_dsp_bar_close else R.string.launcher_dsp_bar)
+    // The power-on sweep, as in the chain: the signal leaves the power button and runs along the
+    // bar, lighting its edge and each part in turn as it passes; it runs back, faster, on power off.
+    val sweep by animateFloatAsState(
+        if (powered) 1f else 0f,
+        tween(if (powered) SweepOnMs else SweepOffMs, easing = LinearEasing),
+        label = "bar sweep",
+    )
+    /** How lit the part spanning [from]..[to] of the bar is: lit as the sweep crosses it. */
+    fun reached(from: Float, to: Float) = minOf(g, ((sweep - from) / (to - from)).coerceIn(0f, 1f))
+    val px = s.k * LocalDensity.current.density
     Row(
         Modifier
             .at(BarSide, BarTop, DesignW - 2 * BarSide, BarHeight)
             .drawBehind {
-                // A soft purple halo round the bar while the DSP is on.
+                // A soft purple halo round the bar, growing along it behind the sweep.
                 val spread = s.dp(10f).toPx()
-                for (step in 1..3) {
-                    val o = spread * step / 3f
-                    drawRoundRect(
-                        signal.copy(alpha = 0.10f * g / step),
-                        topLeft = Offset(-o, -o), size = Size(size.width + 2 * o, size.height + 2 * o),
-                        cornerRadius = CornerRadius(s.dp(16f).toPx() + o),
-                    )
+                val lit = size.width * sweep
+                clipRect(left = -spread, top = -spread, right = lit + spread, bottom = size.height + spread) {
+                    for (step in 1..3) {
+                        val o = spread * step / 3f
+                        drawRoundRect(
+                            signal.copy(alpha = 0.10f * g / step),
+                            topLeft = Offset(-o, -o), size = Size(size.width + 2 * o, size.height + 2 * o),
+                            cornerRadius = CornerRadius(s.dp(16f).toPx() + o),
+                        )
+                    }
                 }
             }
             .clip(shape)
             .background(HomePalette.Panel)
-            .border(s.dp(2f), lerp(HomePalette.PanelEdge, signal, 0.6f * g), shape)
+            .border(s.dp(2f), HomePalette.PanelEdge, shape)
+            .drawWithContent {
+                drawContent()
+                // The lit edge: purple up to the sweep's front, along the top and bottom at once,
+                // with a spark at the front of each while powering on.
+                val edge = s.dp(2f).toPx()
+                val lit = size.width * sweep
+                if (lit <= 0f) return@drawWithContent
+                clipRect(right = lit) {
+                    drawRoundRect(
+                        signal.copy(alpha = 0.8f * g),
+                        topLeft = Offset(edge / 2, edge / 2), size = Size(size.width - edge, size.height - edge),
+                        cornerRadius = CornerRadius(s.dp(16f).toPx() - edge / 2), style = Stroke(edge),
+                    )
+                }
+                if (powered && sweep < 1f) {
+                    drawSpark(Offset(lit, edge), signal, px)
+                    drawSpark(Offset(lit, size.height - edge), signal, px)
+                }
+            }
             .clickable(role = Role.Button, onClickLabel = description) { onExpandedChange(!expanded) }
             .semantics { contentDescription = description }
             .padding(horizontal = s.dp(12f), vertical = s.dp(8f)),
@@ -437,7 +473,7 @@ private fun DspBar(
         Column(Modifier.padding(start = s.dp(12f)).width(s.dp(104f))) {
             Text(
                 stringResource(if (powered) R.string.home_power_on else R.string.home_power_off),
-                color = lerp(HomePalette.Caption, Color(0xFFC084FC), g), fontSize = s.sp(17f), fontWeight = FontWeight.Bold, maxLines = 1,
+                color = lerp(HomePalette.Caption, Color(0xFFC084FC), reached(0.02f, SweepChips)), fontSize = s.sp(17f), fontWeight = FontWeight.Bold, maxLines = 1,
             )
             Text(
                 stringResource(if (powered) R.string.home_power_on_hint else R.string.home_power_off_hint),
@@ -445,13 +481,14 @@ private fun DspBar(
             )
         }
         CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * ChipScale)) {
-            GlobalChips(engine, g, actions, Modifier.padding(start = s.dp(8f)))
+            GlobalChips(engine, { i -> reached(SweepChips + i * SweepChip, SweepChips + (i + 1) * SweepChip) }, actions, Modifier.padding(start = s.dp(8f)))
         }
         Box(Modifier.padding(horizontal = s.dp(14f)).width(s.dp(2f)).fillMaxHeight().background(HomePalette.PanelEdge))
         CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * MeterScale)) {
-            OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(1f).fillMaxHeight())
+            OutputMeter(readout, meterLevels, engine.ceilingDb, reached(SweepMeter, SweepEnd), Modifier.weight(1f).fillMaxHeight())
         }
-        Canvas(Modifier.padding(start = s.dp(10f)).size(s.dp(28f)).rotate(turn)) { drawChevronUp(lerp(HomePalette.Button, signal, g)) }
+        val chevron = reached(SweepEnd, 1f)
+        Canvas(Modifier.padding(start = s.dp(10f)).size(s.dp(28f)).rotate(turn)) { drawChevronUp(lerp(HomePalette.Button, signal, chevron)) }
     }
 }
 
@@ -484,30 +521,33 @@ private fun BarPower(powered: Boolean, g: Float, onToggle: () -> Unit) {
     }
 }
 
-/** TILT, MBC, LIMITER and ALLPASS in a row, as on the old top screen; each opens its stage. */
+/**
+ * TILT, MBC, LIMITER and ALLPASS in a row, as on the old top screen; each opens its stage. [g] is
+ * how lit chip 0..3 is, so the power-on sweep can light them one after another.
+ */
 @Composable
-private fun GlobalChips(engine: HomeEngineState, g: Float, actions: LauncherActions, modifier: Modifier) {
+private fun GlobalChips(engine: HomeEngineState, g: (Int) -> Float, actions: LauncherActions, modifier: Modifier) {
     val s = LocalHomeScale.current
     val off = stringResource(R.string.home_chip_off)
     val chip = Modifier.width(s.dp(ChipWidth)).fillMaxHeight()
     Row(modifier.fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(s.dp(10f))) {
         GlobalChip(
             stringResource(R.string.home_chip_tilt), engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off,
-            BmwTheme.colors.sliderTilt, engine.tiltDb != null, g, { actions.openGlobal(GlobalStage.TILT) }, chip,
+            BmwTheme.colors.sliderTilt, engine.tiltDb != null, g(0), { actions.openGlobal(GlobalStage.TILT) }, chip,
         )
         GlobalChip(
             stringResource(R.string.home_chip_mbc),
             if (engine.mbcBands > 0) stringResource(R.string.home_chip_bands, engine.mbcBands) else off,
-            DspColors.Comp, engine.mbcBands > 0, g, { actions.openGlobal(GlobalStage.MBC) }, chip,
+            DspColors.Comp, engine.mbcBands > 0, g(1), { actions.openGlobal(GlobalStage.MBC) }, chip,
         )
         GlobalChip(
             stringResource(R.string.home_chip_limiter), engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off,
-            DspColors.Output, engine.limiterDb != null, g, { actions.openGlobal(GlobalStage.LIMITER) }, chip,
+            DspColors.Output, engine.limiterDb != null, g(2), { actions.openGlobal(GlobalStage.LIMITER) }, chip,
         )
         GlobalChip(
             stringResource(R.string.home_chip_allpass),
             if (engine.allPassOn) pluralStringResource(R.plurals.home_chip_allpass_outputs, engine.allPassOutputs, engine.allPassOutputs) else off,
-            DspColors.Allpass, engine.allPassOn, g, { actions.openGlobal(GlobalStage.ALLPASS) }, chip,
+            DspColors.Allpass, engine.allPassOn, g(3), { actions.openGlobal(GlobalStage.ALLPASS) }, chip,
         )
     }
 }
@@ -631,3 +671,9 @@ private const val TileInset = 24f
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900
+// Where along the bar's sweep (0..1) each part lights: the chips one after another, then the
+// meters, then the chevron at the far end.
+private const val SweepChips = 0.12f
+private const val SweepChip = 0.11f
+private const val SweepMeter = 0.62f
+private const val SweepEnd = 0.92f
