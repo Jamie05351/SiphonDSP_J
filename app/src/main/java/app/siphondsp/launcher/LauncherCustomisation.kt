@@ -139,13 +139,17 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             val hidden = doc.optJSONArray("hidden")?.let { a -> List(a.length()) { a.getString(it) }.toSet() } ?: emptySet()
             val icons = doc.optJSONObject("icons")?.let { o -> o.keys().asSequence().associateWith { Base64.decode(o.getString(it), Base64.NO_WRAP) } } ?: emptyMap()
             val wallpaper = doc.optString("wallpaper").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.NO_WRAP) }
-            // Every image must decode before anything is replaced.
-            (icons.values + listOfNotNull(wallpaper)).forEach { requireNotNull(BitmapFactory.decodeByteArray(it, 0, it.size)) }
+            // Every image must be a real image of a sane size before anything is replaced; only the
+            // header is read here, so a huge image can't run the app out of memory.
+            icons.values.forEach { requireImage(it, MAX_ICON_PX, MAX_ICON_PX) }
+            wallpaper?.let { requireImage(it, MAX_WALL_W, MAX_WALL_H) }
             lock.withLock {
+                // Written to temporary files first: if any write fails, the current look is untouched.
+                val staged = icons.mapKeys { (key, _) -> iconFile(key) } + listOfNotNull(wallpaper?.let { wallpaperFile() to it })
+                val temps = staged.map { (file, bytes) -> File(file.path + ".import").also { it.writeBytes(bytes) } to file }
                 iconKeys().forEach { iconFile(it).delete() }
-                icons.forEach { (key, png) -> iconFile(key).writeBytes(png) }
                 wallpaperFile().delete()
-                wallpaper?.let { wallpaperFile().writeBytes(it) }
+                temps.forEach { (temp, file) -> check(temp.renameTo(file)) { "Could not place ${file.name}" } }
                 prefs.edit { putStringSet(KEY_HIDDEN, hidden) }
                 _look.value = _look.value.copy(hidden = hidden)
                 reload()
@@ -153,6 +157,10 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             slots
         } catch (e: Exception) {
             Timber.w(e, "Home layout import failed")
+            File(dir.path).listFiles { f -> f.name.endsWith(".import") }?.forEach { it.delete() }
+            null
+        } catch (e: OutOfMemoryError) {
+            Timber.w(e, "Home layout import too large")
             null
         }
         withContext(Dispatchers.Main) {
@@ -163,10 +171,37 @@ class LauncherCustomisation internal constructor(private val context: Context) {
 
     private fun reload() {
         val icons = iconKeys().mapNotNull { key ->
-            BitmapFactory.decodeFile(iconFile(key).path)?.let { key to it.asImageBitmap() }
+            decodeFile(iconFile(key), ICON_PX, ICON_PX)?.let { key to it.asImageBitmap() }
         }.toMap()
-        val wallpaper = BitmapFactory.decodeFile(wallpaperFile().path)?.asImageBitmap()
+        val wallpaper = decodeFile(wallpaperFile(), WALL_W, WALL_H)?.asImageBitmap()
         _look.value = _look.value.copy(icons = icons, wallpaper = wallpaper)
+    }
+
+    /** Decodes [file] sampled down to about [w] x [h]; null if it is missing, unreadable or too big. */
+    private fun decodeFile(file: File, w: Int, h: Int): Bitmap? = try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            null
+        } else {
+            BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds, w, h) })
+        }
+    } catch (e: OutOfMemoryError) {
+        Timber.w(e, "Image too large: ${file.name}")
+        null
+    }
+
+    /** Throws unless [bytes] is an image no bigger than [maxW] x [maxH]; reads only its header. */
+    private fun requireImage(bytes: ByteArray, maxW: Int, maxH: Int) {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth in 1..maxW && bounds.outHeight in 1..maxH) { "Not an image of a usable size" }
+    }
+
+    private fun sampleFor(bounds: BitmapFactory.Options, w: Int, h: Int): Int {
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
+        return sample
     }
 
     // Icon files are named by a hash of their key; the key itself is kept in the index pref.
@@ -188,13 +223,14 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             null
         } else {
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
-            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            val options = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds, w, h) }
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
         }
     } catch (e: Exception) {
         Timber.w(e, "Image could not be read")
+        null
+    } catch (e: OutOfMemoryError) {
+        Timber.w(e, "Image too large to read")
         null
     }
 
@@ -223,6 +259,11 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         private const val WALL_W = 1920
         private const val WALL_H = 720
         private const val MAX_BACKUP_BYTES = 20 * 1024 * 1024
+        // What a backup may carry: this app only ever writes icons of ICON_PX and wallpapers of
+        // WALL_W x WALL_H, so anything far bigger isn't one of its backups.
+        private const val MAX_ICON_PX = 1024
+        private const val MAX_WALL_W = 4096
+        private const val MAX_WALL_H = 4096
 
         @Volatile private var instance: LauncherCustomisation? = null
 
