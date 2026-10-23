@@ -342,14 +342,14 @@ class DspFragment : Fragment() {
     }
 
     /**
-     * Whether this is the home screen: J_DSP is the default home app, or no default is chosen yet
-     * (Android's chooser resolves, from the "android" package), when J_DSP may be what Home opens.
+     * Whether this is the home screen: Android opened J_DSP as Home (the latest intent is a HOME one;
+     * MainActivity keeps it current through onNewIntent), or J_DSP is the default home app.
      */
     private fun isHome(): Boolean {
+        if (requireActivity().intent?.hasCategory(Intent.CATEGORY_HOME) == true) return true
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val current = requireContext().packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
-            ?.activityInfo?.packageName
-        return current == null || current == requireContext().packageName || current == "android"
+        return current?.activityInfo?.packageName == requireContext().packageName
     }
 
     private val launcherActions = object : LauncherActions {

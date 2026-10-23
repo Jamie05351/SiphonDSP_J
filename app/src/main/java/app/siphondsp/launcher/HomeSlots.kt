@@ -40,7 +40,7 @@ sealed interface SlotTarget {
  * when exactly one installed app has that name ([fillDefaults]); anything ambiguous or missing
  * stays an empty slot to pick by hand.
  */
-class HomeSlots private constructor(context: Context) {
+class HomeSlots private constructor(private val context: Context) {
     private val prefs = context.getSharedPreferences("launcher_home", Context.MODE_PRIVATE)
     private val _slots = MutableStateFlow(List(SLOTS) { SlotTarget.decode(prefs.getString(key(it), null)) })
     val slots: StateFlow<List<SlotTarget>> = _slots.asStateFlow()
@@ -78,7 +78,8 @@ class HomeSlots private constructor(context: Context) {
         Defaults.forEachIndexed { i, name ->
             if (next[i] != SlotTarget.Empty) return@forEachIndexed
             next[i] = when (name) {
-                FACTORY -> SlotTarget.Car(CarFunction.SETTINGS)
+                // Only on a head unit that has the KSW settings; elsewhere the slot stays free.
+                FACTORY -> if (CarFunction.SETTINGS.isAvailable(context)) SlotTarget.Car(CarFunction.SETTINGS) else SlotTarget.Empty
                 else -> apps.filter { normalise(it.label) == normalise(name) }.singleOrNull()
                     ?.let { SlotTarget.App(it.component) } ?: SlotTarget.Empty
             }

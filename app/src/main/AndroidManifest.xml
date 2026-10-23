@@ -61,6 +61,7 @@
             android:icon="@mipmap/ic_dsp_launcher"
             android:label="${label}"
             android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.SiphonDSP"
             android:windowSoftInputMode="adjustPan">
 
