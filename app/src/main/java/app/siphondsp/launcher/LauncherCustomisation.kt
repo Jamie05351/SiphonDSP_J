@@ -147,12 +147,22 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             icons.values.forEach { requireImage(it, MAX_ICON_PX, MAX_ICON_PX) }
             wallpaper?.let { requireImage(it, MAX_WALL_W, MAX_WALL_H) }
             lock.withLock {
-                // Written to temporary files first: if any write fails, the current look is untouched.
+                // New images are written to temporary files and the current ones moved aside; only
+                // when every new file is in place are the old ones dropped. Any failure puts the old
+                // ones back, so the look is either all old or all new.
                 val staged = icons.mapKeys { (key, _) -> iconFile(key) } + listOfNotNull(wallpaper?.let { wallpaperFile() to it })
                 val temps = staged.map { (file, bytes) -> File(file.path + ".import").also { it.writeBytes(bytes) } to file }
-                iconKeys().forEach { iconFile(it).delete() }
-                wallpaperFile().delete()
-                temps.forEach { (temp, file) -> check(temp.renameTo(file)) { "Could not place ${file.name}" } }
+                val current = iconKeys().map { iconFile(it) } + listOfNotNull(wallpaperFile().takeIf { it.exists() })
+                val aside = current.map { file -> File(file.path + ".old").also { check(file.renameTo(it)) { "Could not move ${file.name}" } } to file }
+                try {
+                    temps.forEach { (temp, file) -> check(temp.renameTo(file)) { "Could not place ${file.name}" } }
+                } catch (e: Exception) {
+                    temps.forEach { (_, file) -> file.delete() }
+                    aside.forEach { (old, file) -> old.renameTo(file) }
+                    reload()
+                    throw e
+                }
+                aside.forEach { (old, _) -> old.delete() }
                 prefs.edit { putStringSet(KEY_HIDDEN, hidden) }
                 _look.value = _look.value.copy(hidden = hidden)
                 reload()
@@ -160,7 +170,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             slots
         } catch (e: Exception) {
             Timber.w(e, "Home layout import failed")
-            File(dir.path).listFiles { f -> f.name.endsWith(".import") }?.forEach { it.delete() }
+            dir.listFiles { f -> f.name.endsWith(".import") }?.forEach { it.delete() }
             null
         } catch (e: OutOfMemoryError) {
             Timber.w(e, "Home layout import too large")

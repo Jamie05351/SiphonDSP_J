@@ -26,7 +26,8 @@ sealed interface SlotTarget {
         fun decode(value: String?): SlotTarget = when {
             value == null -> Empty
             value.startsWith("app:") -> ComponentName.unflattenFromString(value.removePrefix("app:"))?.let(::App) ?: Empty
-            value.startsWith("car:") -> CarFunction.byId(value.removePrefix("car:"))?.let(::Car) ?: Empty
+            // A blocked function (the KSW EQ) is never a slot, even from a restored backup.
+            value.startsWith("car:") -> CarFunction.byId(value.removePrefix("car:"))?.takeUnless { it.blocked }?.let(::Car) ?: Empty
             else -> Empty
         }
     }
