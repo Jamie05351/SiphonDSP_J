@@ -166,7 +166,7 @@ class DspFragment : Fragment() {
                 reportHomePageOffset(position * binding.dspPager.width + positionOffsetPixels)
             }
         })
-        // chainRaised and overlay outlive a view recreation; the new pager starts swipeable.
+        // chainRaised and overlay outlive a view recreation; the new pager needs its swipe set again.
         updatePagerInput()
 
         return binding.root
@@ -309,9 +309,12 @@ class DspFragment : Fragment() {
         updatePagerInput()
     }
 
-    /** The pager's swipe to the settings page is off while anything is raised over the home screen. */
+    /**
+     * The settings page (output control, convolver) is part of the DSP, so it can only be swiped to
+     * while the signal chain is raised, never from the plain home screen or with a drawer open.
+     */
     private fun updatePagerInput() {
-        if (::binding.isInitialized) binding.dspPager.isUserInputEnabled = !chainRaised && overlay == LauncherOverlay.None
+        if (::binding.isInitialized) binding.dspPager.isUserInputEnabled = chainRaised && overlay == LauncherOverlay.None
     }
 
     /**
