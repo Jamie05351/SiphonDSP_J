@@ -444,7 +444,7 @@ private fun DrawScope.drawMoreGlyph() {
 }
 
 /** A gear: [GearTeeth] square-ish teeth round a ring with a hole through the middle. */
-private fun DrawScope.drawSettingsGlyph() {
+internal fun DrawScope.drawSettingsGlyph() {
     val outer = size.minDimension / 2
     val root = outer * 0.79f
     val tooth = (PI / GearTeeth).toFloat()
@@ -470,10 +470,10 @@ private fun DrawScope.drawSettingsGlyph() {
 }
 
 /** A tile's fixed content: its name, what it does, its colour and its artwork. */
-private class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: TileArt)
+internal class TileSpec(val title: Int, val subtitle: Int, val accent: Color, val art: TileArt)
 
 /** Each front-page tile's title, subtitle, colour and artwork. */
-private fun HomeStage.tile(): TileSpec = when (this) {
+internal fun HomeStage.tile(): TileSpec = when (this) {
     HomeStage.PEQ -> TileSpec(R.string.home_card_peq, R.string.home_card_peq_sub, DspColors.Peq, TileArt.PEQ)
     HomeStage.ALIGNMENT -> TileSpec(R.string.home_card_gains, R.string.home_card_gains_sub, DspColors.Delay, TileArt.DELAY)
     HomeStage.XOVERS -> TileSpec(R.string.home_card_xovers, R.string.home_card_xovers_sub, DspColors.Xover, TileArt.XOVERS)

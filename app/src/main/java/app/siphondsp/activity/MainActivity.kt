@@ -321,6 +321,15 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    /** The Home button (MENU, short press) while J_DSP is the home app: back to the plain home screen. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.hasCategory(Intent.CATEGORY_HOME) && ::dspFragment.isInitialized) {
+            dspFragment.onHomePressed()
+        }
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
             setPowerUi(prefsApp.get(R.string.key_powered_on))
