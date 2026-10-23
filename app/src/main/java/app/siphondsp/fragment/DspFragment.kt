@@ -166,6 +166,8 @@ class DspFragment : Fragment() {
                 reportHomePageOffset(position * binding.dspPager.width + positionOffsetPixels)
             }
         })
+        // chainRaised and overlay outlive a view recreation; the new pager starts swipeable.
+        updatePagerInput()
 
         return binding.root
     }
