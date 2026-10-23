@@ -306,11 +306,12 @@ private fun OverlayFrame(
     Column(
         Modifier
             .fillMaxSize()
-            // Clear of the volume column, which stays in use underneath.
-            .padding(start = start)
+            // Clear of the volume column on the left and the DSP bar along the bottom, which both
+            // stay in use underneath.
+            .padding(start = start, top = top, bottom = bottom)
             // Swallows the rest of the taps so nothing reaches the home screen underneath.
             .clickable(remember { MutableInteractionSource() }, null) {}
-            .padding(end = 32.dp, top = top, bottom = bottom),
+            .padding(end = 32.dp),
     ) {
         // The header (search) takes whatever width is left between the title and Close, so the row
         // fits a narrow screen too.
