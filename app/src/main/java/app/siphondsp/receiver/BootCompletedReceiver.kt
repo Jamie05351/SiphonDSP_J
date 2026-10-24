@@ -3,9 +3,12 @@ package app.siphondsp.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import app.siphondsp.R
 import app.siphondsp.activity.EngineLauncherActivity
+import app.siphondsp.service.AudioHealthLog
 import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.isRoot
@@ -30,13 +33,30 @@ class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
 
             if(Settings.canDrawOverlays(context) && context.hasProjectMediaAppOp()) {
                 Timber.i("Preconditions for a silent auto-start met")
-                context.startActivity(Intent(context, EngineLauncherActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
-                            Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
-                            Intent.FLAG_ACTIVITY_NO_ANIMATION
-                })
+                // On the head unit, with J_DSP as the home screen, an engine started straight at
+                // boot ran (the meters moved) but nothing came out until the unit was reset. The
+                // start waits [BOOT_START_DELAY_MS] so the car's audio is up first; the receiver is
+                // kept alive meanwhile (goAsync allows about 10 seconds).
+                val app = context.applicationContext
+                val pending = goAsync()
+                AudioHealthLog.record(app, "BOOT: engine start in ${BOOT_START_DELAY_MS / 1000} s")
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        AudioHealthLog.record(app, "BOOT: starting engine")
+                        app.startActivity(Intent(app, EngineLauncherActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                                    Intent.FLAG_ACTIVITY_NO_USER_ACTION or
+                                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        })
+                    } catch (e: Exception) {
+                        Timber.e(e, "Delayed boot start failed")
+                        AudioHealthLog.record(app, "BOOT: engine start failed: ${e.javaClass.simpleName}")
+                    } finally {
+                        pending.finish()
+                    }
+                }, BOOT_START_DELAY_MS)
                 return
             }
 
@@ -63,5 +83,9 @@ class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
             else if(preferences.get<Boolean>(R.string.key_audioformat_processing))
                 RootAudioProcessorService.updateLegacyMode(context, true)
         }
+    }
+
+    private companion object {
+        const val BOOT_START_DELAY_MS = 4_000L
     }
 }
