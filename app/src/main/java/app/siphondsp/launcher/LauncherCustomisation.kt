@@ -3,6 +3,7 @@ package app.siphondsp.launcher
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.util.Base64
 import androidx.compose.runtime.Immutable
@@ -51,6 +52,8 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     private val dir = File(context.filesDir, "launcher").apply { mkdirs() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
+    /** Why the last image couldn't be used, for the message; only touched under [lock]. */
+    private var lastFailure = ""
     private val _look = MutableStateFlow(Look(hidden = prefs.getStringSet(KEY_HIDDEN, emptySet())!!.toSet()))
     val look: StateFlow<Look> = _look.asStateFlow()
 
@@ -64,18 +67,23 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         prefs.edit { putStringSet(KEY_HIDDEN, next.hidden) }
     }
 
-    /** Crops the image at [uri] to a square icon for [key]. [onDone] gets false if it couldn't be read. */
-    fun setIcon(key: String, uri: Uri, onDone: (Boolean) -> Unit) = scope.launch {
-        val ok = lock.withLock {
-            safely("Icon") {
+    /**
+     * Crops the image at [uri] to a square icon for [key]. [onDone] gets null when it worked, else
+     * why it didn't, for the message.
+     */
+    fun setIcon(key: String, uri: Uri, onDone: (String?) -> Unit) = scope.launch {
+        val failure = lock.withLock {
+            lastFailure = "not an image this unit can read"
+            val ok = safely("Icon") {
                 val bitmap = decode(uri, ICON_PX, ICON_PX) ?: return@safely false
                 write(iconFile(key), centreCrop(bitmap, ICON_PX, ICON_PX), Bitmap.CompressFormat.PNG)
                 index(iconKeys() + key)
                 reload()
                 true
             }
+            if (ok) null else lastFailure
         }
-        withContext(Dispatchers.Main) { onDone(ok) }
+        withContext(Dispatchers.Main) { onDone(failure) }
     }
 
     fun clearIcon(key: String) = scope.launch {
@@ -85,17 +93,22 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         }
     }
 
-    /** Uses the image at [uri] as the wallpaper, sized for the 1280 x 480 screen. */
-    fun setWallpaper(uri: Uri, onDone: (Boolean) -> Unit) = scope.launch {
-        val ok = lock.withLock {
-            safely("Wallpaper") {
+    /**
+     * Uses the image at [uri] as the wallpaper, sized for the 1280 x 480 screen. [onDone] gets null
+     * when it worked, else why it didn't, for the message.
+     */
+    fun setWallpaper(uri: Uri, onDone: (String?) -> Unit) = scope.launch {
+        val failure = lock.withLock {
+            lastFailure = "not an image this unit can read"
+            val ok = safely("Wallpaper") {
                 val bitmap = decode(uri, WALL_W, WALL_H) ?: return@safely false
                 write(wallpaperFile(), centreCrop(bitmap, WALL_W, WALL_H), Bitmap.CompressFormat.JPEG)
                 reload()
                 true
             }
+            if (ok) null else lastFailure
         }
-        withContext(Dispatchers.Main) { onDone(ok) }
+        withContext(Dispatchers.Main) { onDone(failure) }
     }
 
     fun clearWallpaper() = scope.launch {
@@ -226,9 +239,11 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         require(bounds.outWidth in 1..maxW && bounds.outHeight in 1..maxH) { "Not an image of a usable size" }
     }
 
-    private fun sampleFor(bounds: BitmapFactory.Options, w: Int, h: Int): Int {
+    private fun sampleFor(bounds: BitmapFactory.Options, w: Int, h: Int): Int = sampleFor(bounds.outWidth, bounds.outHeight, w, h)
+
+    private fun sampleFor(width: Int, height: Int, w: Int, h: Int): Int {
         var sample = 1
-        while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
+        while (width / (sample * 2) >= w && height / (sample * 2) >= h) sample *= 2
         return sample
     }
 
@@ -245,23 +260,48 @@ class LauncherCustomisation internal constructor(private val context: Context) {
 
     private fun wallpaperFile() = File(dir, "wallpaper.jpg")
 
-    /** Decodes [uri], sampled down to about [w] x [h] or a little more. Null if it isn't an image. */
-    private fun decode(uri: Uri, w: Int, h: Int): Bitmap? = try {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+    /**
+     * Decodes [uri], sampled down to about [w] x [h] or a little more. Null if it isn't an image,
+     * with the reason in [lastFailure]. ImageDecoder first (it reads more formats, and always into
+     * a software bitmap that can be cropped and saved), then BitmapFactory as before.
+     */
+    private fun decode(uri: Uri, w: Int, h: Int): Bitmap? {
+        val viaDecoder = try {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.setTargetSampleSize(sampleFor(info.size.width, info.size.height, w, h))
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "ImageDecoder could not read the image")
+            lastFailure = describe(e)
             null
-        } else {
-            val options = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds, w, h) }
-            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        } catch (e: OutOfMemoryError) {
+            Timber.w(e, "Image too large to read")
+            lastFailure = "too large"
+            return null
         }
-    } catch (e: Exception) {
-        Timber.w(e, "Image could not be read")
-        null
-    } catch (e: OutOfMemoryError) {
-        Timber.w(e, "Image too large to read")
-        null
+        if (viaDecoder != null) return viaDecoder
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                null
+            } else {
+                val options = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds, w, h) }
+                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Image could not be read")
+            lastFailure = describe(e)
+            null
+        } catch (e: OutOfMemoryError) {
+            Timber.w(e, "Image too large to read")
+            lastFailure = "too large"
+            null
+        }
     }
+
+    private fun describe(e: Throwable) = listOfNotNull(e.javaClass.simpleName, e.message).joinToString(": ").take(120)
 
     private fun centreCrop(source: Bitmap, w: Int, h: Int): Bitmap {
         val scale = max(w.toFloat() / source.width, h.toFloat() / source.height)
@@ -291,9 +331,11 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         block()
     } catch (e: Exception) {
         Timber.w(e, "$what could not be saved")
+        lastFailure = describe(e)
         false
     } catch (e: OutOfMemoryError) {
         Timber.w(e, "$what too large")
+        lastFailure = "too large"
         false
     }
 

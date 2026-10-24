@@ -456,7 +456,7 @@ private fun SlotIcon(target: SlotTarget, apps: List<AppEntry>?, custom: ImageBit
     Box(
         Modifier
             .fillMaxSize()
-            .knobFocusRing(s.dp(IconSize * 0.24f))
+            .knobFocusRing(s.dp(IconSize * 0.24f), grow = true)
             .clip(shape)
             .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongClick)
             .semantics { contentDescription = description },
@@ -512,7 +512,7 @@ private fun CornerButton(x: Float, label: String, onClick: () -> Unit, glyph: Dr
     Box(
         Modifier
             .at(x, TopMargin, CornerSize, CornerSize)
-            .knobFocusRing(s.dp(14f))
+            .knobFocusRing(s.dp(14f), grow = true)
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
@@ -775,7 +775,7 @@ private fun ChainScreen(
                     spark = powered,
                     selected = openingStage == stage,
                     onClick = { actions.openStage(stage) },
-                    modifier = Modifier.knobFocusRing(c.dp(16f)),
+                    modifier = Modifier.knobFocusRing(c.dp(16f), grow = true),
                     width = layout.cardWidth,
                     animateArt = animateTiles,
                 )
