@@ -595,7 +595,7 @@ private fun DspBar(
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), HomePalette.PanelEdge, shape)
-            .knobFocusRing(s.dp(16f))
+            .knobFocusRing(s.dp(16f), grow = false)
             .drawWithContent {
                 drawContent()
                 // The lit edge: purple up to the sweep's front, along the top and bottom at once,

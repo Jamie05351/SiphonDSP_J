@@ -568,6 +568,16 @@ class DspFragment : Fragment() {
 
     /** Fragment-hosted ComposeViews are disposed with the fragment view, not the window. */
     private fun ComposeView.setHomeContent(content: @Composable () -> Unit) {
+        // A knob (D-pad) key takes the device out of touch mode, and Android then draws its default
+        // focus highlight over whichever view holds focus: here the whole home screen, which washed
+        // the screen white. The controls draw their own rings, so the highlight is turned off on
+        // this view and on the Compose view it adds inside itself.
+        defaultFocusHighlightEnabled = false
+        setOnHierarchyChangeListener(object : ViewGroup.OnHierarchyChangeListener {
+            override fun onChildViewAdded(parent: View, child: View) { child.defaultFocusHighlightEnabled = false }
+            override fun onChildViewRemoved(parent: View, child: View) = Unit
+        })
+        for (i in 0 until childCount) getChildAt(i).defaultFocusHighlightEnabled = false
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent { BmwDspTheme { content() } }
     }
