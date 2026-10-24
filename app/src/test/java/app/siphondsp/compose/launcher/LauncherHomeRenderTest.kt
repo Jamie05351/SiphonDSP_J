@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.view.drawToBitmap
@@ -67,8 +68,16 @@ class LauncherHomeRenderTest {
     @Test
     fun carMenu() = render("car-menu", expanded = false, overlay = LauncherOverlay.CarMenu())
 
-    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay) {
-        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+    /** The iDrive knob's first press: focus enters the home screen and its ring shows. */
+    @Test
+    fun knobFocus() = render("knob-focus", expanded = false, overlay = LauncherOverlay.None, knob = 1)
+
+    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0) {
+        // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
+        // knob (D-pad) focus can be taken and drawn.
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(knob == 0)
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true).get()
+        val knobRequests = mutableStateOf(0)
         activity.setContent {
             BmwDspTheme {
                 LauncherHome(
@@ -78,6 +87,7 @@ class LauncherHomeRenderTest {
                     openingStage = null, animateTiles = false, actions = NoActions,
                     track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.music"),
                     nowPlayingAllowed = false,
+                    knobFocusRequests = knobRequests.value,
                 )
             }
         }
@@ -86,6 +96,16 @@ class LauncherHomeRenderTest {
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
         }
         val root = activity.window.decorView.findViewById<View>(android.R.id.content)
+        if (knob > 0) {
+            // As in the car: the first knob press brings focus in, then two turns move it on.
+            knobRequests.value = 1
+            repeat(5) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+            repeat(2) {
+                activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                repeat(5) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+            }
+        }
         val bitmap = root.drawToBitmap()
         val out = File("build/launcher-renders").apply { mkdirs() }
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

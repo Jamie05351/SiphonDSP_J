@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -96,6 +97,9 @@ class DspFragment : Fragment() {
 
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
+
+    /** Bumped to move iDrive knob focus into the home screen; see [enterKnobFocus]. */
+    private var knobFocusRequests by mutableIntStateOf(0)
 
     /** The icon key ([SlotTarget.encode]) whose image is being picked; kept across recreation. */
     private var iconKeyPicking: String? = null
@@ -328,6 +332,7 @@ class DspFragment : Fragment() {
                 look = look,
                 track = track,
                 nowPlayingAllowed = nowPlayingAllowed,
+                knobFocusRequests = knobFocusRequests,
             )
         }
         levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
@@ -380,6 +385,18 @@ class DspFragment : Fragment() {
      */
     private fun updatePagerInput() {
         if (::binding.isInitialized) binding.dspPager.isUserInputEnabled = chainRaised && overlay == LauncherOverlay.None
+    }
+
+    /**
+     * The iDrive knob (a D-pad) was used while nothing on the home screen has focus, as on first
+     * use or after the focused control went away: puts focus on the home screen instead. True when
+     * that is what the key press did, so it isn't also used for anything else.
+     */
+    fun enterKnobFocus(): Boolean {
+        if (!::binding.isInitialized || binding.dspPager.currentItem != 0) return false
+        if (shortcutsBinding.homeScreen.hasFocus()) return false
+        knobFocusRequests++
+        return true
     }
 
     /**

@@ -55,6 +55,18 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.focusGroup
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -199,8 +211,39 @@ fun LauncherHome(
     look: LauncherCustomisation.Look = LauncherCustomisation.Look(),
     track: Track? = null,
     nowPlayingAllowed: Boolean = true,
+    knobFocusRequests: Int = 0,
 ) {
-    BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
+    val focusManager = LocalFocusManager.current
+    val view = LocalView.current
+    val knobEntry = remember { FocusRequester() }
+    // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
+    // focus then lands on the DSP bar, which is on screen in every state, and moves on from there.
+    LaunchedEffect(knobFocusRequests) {
+        if (knobFocusRequests > 0) knobEntry.requestFocus()
+    }
+    BoxWithConstraints(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusGroup()
+            // The knob moves focus in the direction it's pushed or turned. Where there is nothing
+            // that way (a knob that only turns sends one axis), it steps to the next or previous
+            // control instead, so every control is reachable either way. Past the last control it
+            // wraps round to the DSP bar rather than leaving the screen with nothing focused.
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val (direction, step) = when (event.key) {
+                    Key.DirectionLeft -> FocusDirection.Left to FocusDirection.Previous
+                    Key.DirectionRight -> FocusDirection.Right to FocusDirection.Next
+                    Key.DirectionUp -> FocusDirection.Up to FocusDirection.Previous
+                    Key.DirectionDown -> FocusDirection.Down to FocusDirection.Next
+                    else -> return@onPreviewKeyEvent false
+                }
+                val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
+                if (!moved || !view.hasFocus()) knobEntry.requestFocus()
+                true
+            },
+    ) {
         val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
         val scale = HomeScale(k)
         val g = animateActive(powered, "launcher power")
@@ -264,7 +307,7 @@ fun LauncherHome(
                 if (raise > 0f) {
                     ChainScreen(engine, powered, g, raise, openingStage, animateTiles, actions)
                 }
-                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions)
+                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions, knobEntry)
                 // The master volume stays in focus whatever is open; raised, it runs down beside the
                 // chain screen as on the old front page. The chain and drawers leave its column clear.
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
@@ -476,6 +519,7 @@ private fun DspBar(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     actions: LauncherActions,
+    knobEntry: FocusRequester,
 ) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
@@ -539,6 +583,8 @@ private fun DspBar(
                     drawSpark(Offset(lit, size.height - edge), signal, px)
                 }
             }
+            // Where the iDrive knob's focus enters the home screen.
+            .focusRequester(knobEntry)
             .clickable(role = Role.Button, onClickLabel = description) { onExpandedChange(!expanded) }
             .semantics { contentDescription = description }
             .padding(horizontal = s.dp(12f), vertical = s.dp(8f)),

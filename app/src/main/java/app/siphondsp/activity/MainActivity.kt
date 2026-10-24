@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PersistableBundle
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
@@ -326,6 +327,18 @@ class MainActivity : BaseActivity() {
      * button (MENU, short press) goes back to the plain home screen, and a file opened from a file
      * manager is imported as it would be on a fresh start.
      */
+    /**
+     * The iDrive knob arrives as D-pad keys. Until something on the home screen has focus they
+     * would go to the views around it, so the first one brings focus into the home screen.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val knob = event.keyCode in KNOB_KEYS
+        if (knob && event.action == KeyEvent.ACTION_DOWN && ::dspFragment.isInitialized && dspFragment.enterKnobFocus()) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -786,5 +799,11 @@ class MainActivity : BaseActivity() {
 
         private val DEBUG_IGNORE_MISSING_LIBRARY = BuildConfig.DEBUG
         private const val STATE_LOAD_FAILED = "LoadFailed"
+
+        /** The keys the iDrive knob sends: the D-pad directions and press, and Tab. */
+        private val KNOB_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_TAB,
+        )
     }
 }
