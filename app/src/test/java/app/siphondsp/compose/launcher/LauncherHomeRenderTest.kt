@@ -8,6 +8,12 @@ import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.view.drawToBitmap
@@ -67,9 +73,34 @@ class LauncherHomeRenderTest {
     @Test
     fun carMenu() = render("car-menu", expanded = false, overlay = LauncherOverlay.CarMenu())
 
-    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay) {
-        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+    /**
+     * The iDrive knob's first press and two turns, saved for a visual check of the focus ring. Not
+     * asserted: in Robolectric's shared environment, focus requested after the first frame isn't
+     * reliably delivered once other render tests have run, so an assertion here is flaky.
+     */
+    @Test
+    fun knobFocus() = render("knob-focus", expanded = false, overlay = LauncherOverlay.None, knob = 1)
+
+    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0) {
+        // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
+        // knob (D-pad) focus can be taken and drawn.
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        instrumentation.setInTouchMode(knob == 0)
+        try {
+            renderIn(name, expanded, overlay, knob)
+        } finally {
+            // Touch mode is global to the instrumentation; put it back for the next test.
+            instrumentation.setInTouchMode(true)
+        }
+    }
+
+    private fun renderIn(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int) {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
+        val activity = controller.get()
         activity.setContent {
+            // As in the car: the knob's first press arrives after the home screen is up.
+            var knobRequests by remember { mutableIntStateOf(0) }
+            if (knob > 0) LaunchedEffect(Unit) { delay(500); knobRequests = 1 }
             BmwDspTheme {
                 LauncherHome(
                     engine = engine, powered = true, readout = { levels }, meterLevels = { levels },
@@ -78,6 +109,7 @@ class LauncherHomeRenderTest {
                     openingStage = null, animateTiles = false, actions = NoActions,
                     track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.music"),
                     nowPlayingAllowed = false,
+                    knobFocusRequests = knobRequests,
                 )
             }
         }
@@ -86,10 +118,20 @@ class LauncherHomeRenderTest {
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
         }
         val root = activity.window.decorView.findViewById<View>(android.R.id.content)
+        if (knob > 0) {
+            // The first press came in above; now two knob turns move focus on.
+            repeat(2) {
+                activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                repeat(5) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+            }
+        }
         val bitmap = root.drawToBitmap()
         val out = File("build/launcher-renders").apply { mkdirs() }
         File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         assertTrue(bitmap.width >= 1280 && bitmap.height >= 480)
+        // Closed, so nothing from this screen (its window focus) carries into the next test.
+        controller.pause().stop().destroy()
     }
 
     private fun icon(colour: Int) = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also {

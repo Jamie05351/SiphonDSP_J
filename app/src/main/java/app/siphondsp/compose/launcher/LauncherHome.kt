@@ -55,6 +55,20 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.focusGroup
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -199,8 +213,67 @@ fun LauncherHome(
     look: LauncherCustomisation.Look = LauncherCustomisation.Look(),
     track: Track? = null,
     nowPlayingAllowed: Boolean = true,
+    knobFocusRequests: Int = 0,
+    onKnobFocusResult: (Boolean) -> Unit = {},
+    onHasFocusChanged: (Boolean) -> Unit = {},
 ) {
-    BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
+    val focusManager = LocalFocusManager.current
+    val view = LocalView.current
+    val knobEntry = remember { FocusRequester() }
+    val overlayEntry = remember { FocusRequester() }
+    // Whether knob focus is inside the open drawer or car menu; see the key handler below.
+    var overlayHasFocus by remember { mutableStateOf(false) }
+    // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
+    // focus then lands on the open drawer or car menu, else on the DSP bar (on screen in every
+    // other state), and moves on from there. Each request is handled once: entering composition
+    // again (a rebuilt view) starts from the current count, so focus is never taken without a
+    // knob press.
+    var handledKnobRequests by remember { mutableIntStateOf(knobFocusRequests) }
+    LaunchedEffect(knobFocusRequests) {
+        if (knobFocusRequests > handledKnobRequests) {
+            handledKnobRequests = knobFocusRequests
+            val taken = runCatching {
+                if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus()
+            }.getOrDefault(false)
+            onKnobFocusResult(taken)
+        }
+    }
+    BoxWithConstraints(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            // Whether any control here has focus, for the host: the view can keep Android focus
+            // after the focused control goes away, which wouldn't say whether the knob has a target.
+            .onFocusChanged { onHasFocusChanged(it.hasFocus) }
+            .focusGroup()
+            // The knob moves focus in the direction it's pushed or turned. Where there is nothing
+            // that way (a knob that only turns sends one axis), it steps to the next or previous
+            // control instead, which wraps round from the last control to the first, so every
+            // control is reachable either way. If focus would otherwise leave the screen it goes
+            // back to the DSP bar. The focused control sees the key first, so one that uses arrows
+            // itself (the search box's cursor) keeps them.
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val (direction, step) = when (event.key) {
+                    Key.DirectionLeft -> FocusDirection.Left to FocusDirection.Previous
+                    Key.DirectionRight -> FocusDirection.Right to FocusDirection.Next
+                    Key.DirectionUp -> FocusDirection.Up to FocusDirection.Previous
+                    Key.DirectionDown -> FocusDirection.Down to FocusDirection.Next
+                    else -> return@onKeyEvent false
+                }
+                val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
+                // With a drawer or menu open, focus stays in it: a move that would land on the bar or
+                // volume behind it, or off the end, wraps to the panel's Close button instead.
+                val inOverlay = overlay != LauncherOverlay.None
+                // Guarded: the target can be between compositions (an overlay switching) as a key
+                // arrives, and a failed request must never take the home screen down.
+                when {
+                    inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> runCatching { overlayEntry.requestFocus() }
+                    !inOverlay && (!moved || !view.hasFocus()) -> runCatching { knobEntry.requestFocus() }
+                }
+                true
+            },
+    ) {
         val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
         val scale = HomeScale(k)
         val g = animateActive(powered, "launcher power")
@@ -264,7 +337,7 @@ fun LauncherHome(
                 if (raise > 0f) {
                     ChainScreen(engine, powered, g, raise, openingStage, animateTiles, actions)
                 }
-                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions)
+                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions, knobEntry)
                 // The master volume stays in focus whatever is open; raised, it runs down beside the
                 // chain screen as on the old front page. The chain and drawers leave its column clear.
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
@@ -282,13 +355,15 @@ fun LauncherHome(
         val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
         val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
         val overlayTop = scale.dp(TopMargin) + letterbox
+        Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
         when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
+            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             is LauncherOverlay.CarMenu -> CarMenu(
-                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions,
+                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
             )
-            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
+            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             LauncherOverlay.None -> {}
+        }
         }
     }
 }
@@ -476,6 +551,7 @@ private fun DspBar(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     actions: LauncherActions,
+    knobEntry: FocusRequester,
 ) {
     val s = LocalHomeScale.current
     val signal = BmwTheme.colors.sliderHeadroom
@@ -539,6 +615,8 @@ private fun DspBar(
                     drawSpark(Offset(lit, size.height - edge), signal, px)
                 }
             }
+            // Where the iDrive knob's focus enters the home screen.
+            .focusRequester(knobEntry)
             .clickable(role = Role.Button, onClickLabel = description) { onExpandedChange(!expanded) }
             .semantics { contentDescription = description }
             .padding(horizontal = s.dp(12f), vertical = s.dp(8f)),

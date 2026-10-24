@@ -22,6 +22,9 @@ import app.siphondsp.view.BmwDashboardSkin
 private val RingColor = Color(BmwDashboardSkin.SLIDER_DEFAULT_COLOR)
 private val StrokeWidth = 2.dp
 private val GlowWidth = 5.dp
+private val KnobRingColor = Color.White
+private val KnobStrokeWidth = 3.dp
+private val KnobGlowWidth = 7.dp
 
 /**
  * The hardware D-pad/rotary "you are here" indicator -- visually the same cyan glow + stroke
@@ -40,10 +43,11 @@ fun Modifier.bmwFocusRing(interactionSource: InteractionSource, cornerRadius: Dp
     }
 
 /**
- * The same ring as [bmwFocusRing], for a control whose interaction source isn't at hand: it follows
- * the focus of the next focusable modifier in the chain, so put it before the clickable. With
+ * A ring like [bmwFocusRing], for a control whose interaction source isn't at hand: it follows the
+ * focus of the next focusable modifier in the chain, so put it before the clickable. With
  * [withinChildren] it lights while anything inside has focus instead (for a wrapper whose
- * focusable part is a child).
+ * focusable part is a child). It is white, not the DSP pages' purple: the home screen is lit in
+ * that purple all over, where a purple ring couldn't be seen.
  */
 fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = false): Modifier =
     composed {
@@ -51,26 +55,31 @@ fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = fa
         onFocusChanged { focused = if (withinChildren) it.hasFocus else it.isFocused }
             .drawWithContent {
                 drawContent()
-                if (focused) drawFocusRing(cornerRadius)
+                if (focused) drawFocusRing(cornerRadius, KnobRingColor, KnobStrokeWidth, KnobGlowWidth)
             }
     }
 
-private fun DrawScope.drawFocusRing(cornerRadius: Dp) {
-    val strokePx = StrokeWidth.toPx()
+private fun DrawScope.drawFocusRing(
+    cornerRadius: Dp,
+    color: Color = RingColor,
+    width: Dp = StrokeWidth,
+    glow: Dp = GlowWidth,
+) {
+    val strokePx = width.toPx()
     val inset = strokePx / 2f
     val corner = CornerRadius(cornerRadius.toPx())
     val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
     val ringSize = Size(size.width - strokePx, size.height - strokePx)
     drawRoundRect(
-        color = RingColor,
+        color = color,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
-        style = Stroke(GlowWidth.toPx()),
+        style = Stroke(glow.toPx()),
         alpha = 0.35f,
     )
     drawRoundRect(
-        color = RingColor,
+        color = color,
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
