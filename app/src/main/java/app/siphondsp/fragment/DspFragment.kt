@@ -104,6 +104,9 @@ class DspFragment : Fragment() {
     /** The last knob focus request couldn't land; the next knob key goes to Android as usual. */
     private var knobFocusFailed = false
 
+    /** Whether a control on the home screen (not just its view) has focus; reported by it. */
+    private var homeHasFocus = false
+
     /** The icon key ([SlotTarget.encode]) whose image is being picked; kept across recreation. */
     private var iconKeyPicking: String? = null
 
@@ -337,6 +340,7 @@ class DspFragment : Fragment() {
                 nowPlayingAllowed = nowPlayingAllowed,
                 knobFocusRequests = knobFocusRequests,
                 onKnobFocusResult = { taken -> knobFocusFailed = !taken },
+                onHasFocusChanged = { homeHasFocus = it },
             )
         }
         levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
@@ -401,7 +405,7 @@ class DspFragment : Fragment() {
         // Only while this home screen is really what's showing: not after its view was replaced
         // (an error screen) or with the settings page or another screen in front.
         if (!isResumed || view == null || !::binding.isInitialized || binding.dspPager.currentItem != 0) return false
-        if (shortcutsBinding.homeScreen.hasFocus()) return false
+        if (homeHasFocus) return false
         // If the last request couldn't land, don't keep swallowing keys: this one goes through
         // normally and the one after tries again.
         if (knobFocusFailed) {

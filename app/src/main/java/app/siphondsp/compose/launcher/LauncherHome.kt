@@ -215,6 +215,7 @@ fun LauncherHome(
     nowPlayingAllowed: Boolean = true,
     knobFocusRequests: Int = 0,
     onKnobFocusResult: (Boolean) -> Unit = {},
+    onHasFocusChanged: (Boolean) -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
@@ -241,6 +242,9 @@ fun LauncherHome(
         modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Whether any control here has focus, for the host: the view can keep Android focus
+            // after the focused control goes away, which wouldn't say whether the knob has a target.
+            .onFocusChanged { onHasFocusChanged(it.hasFocus) }
             .focusGroup()
             // The knob moves focus in the direction it's pushed or turned. Where there is nothing
             // that way (a knob that only turns sends one axis), it steps to the next or previous
