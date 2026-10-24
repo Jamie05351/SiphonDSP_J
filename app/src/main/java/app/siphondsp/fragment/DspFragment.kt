@@ -41,6 +41,7 @@ import kotlinx.coroutines.withContext
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
 import app.siphondsp.compose.launcher.LauncherOverlay
+import app.siphondsp.launcher.AppDock
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.HomeSlots
@@ -252,6 +253,8 @@ class DspFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // Home again: the app sidebar is only for moving between apps.
+        AppDock.hide(requireContext())
         nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
@@ -475,8 +478,14 @@ class DspFragment : Fragment() {
         // level is on screen); the saved value comes back through settingsReceiver.
         override fun volumeStep(steps: Int) { MasterVolume.step(requireContext(), steps) }
         override fun toggleMute() { MasterVolume.setMuted(requireContext(), null) }
-        override fun launchApp(app: AppEntry) = Launch.component(requireContext(), app.component)
-        override fun runCar(function: CarFunction) = function.run(requireContext())
+        // Opening an app (or a KSW screen) from here brings up the app sidebar over it.
+        override fun launchApp(app: AppEntry) {
+            if (Launch.component(requireContext(), app.component)) AppDock.show(requireContext())
+        }
+        override fun runCar(function: CarFunction) {
+            function.run(requireContext())
+            if (function.component != null && !function.blocked) AppDock.show(requireContext())
+        }
         override fun assignSlot(index: Int, target: SlotTarget) = HomeSlots.get(requireContext()).set(index, target)
         override fun swapSlots(a: Int, b: Int) = HomeSlots.get(requireContext()).swap(a, b)
         override fun appInfo(app: AppEntry) {
