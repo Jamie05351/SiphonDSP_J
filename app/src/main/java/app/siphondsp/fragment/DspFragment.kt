@@ -389,11 +389,14 @@ class DspFragment : Fragment() {
 
     /**
      * The iDrive knob (a D-pad) was used while nothing on the home screen has focus, as on first
-     * use or after the focused control went away: puts focus on the home screen instead. True when
-     * that is what the key press did, so it isn't also used for anything else.
+     * use or after the focused control went away: puts focus on the home screen instead (on the
+     * drawer or car menu when one is open). True when that is what the key press did, so it isn't
+     * also used for anything else.
      */
     fun enterKnobFocus(): Boolean {
-        if (!::binding.isInitialized || binding.dspPager.currentItem != 0) return false
+        // Only while this home screen is really what's showing: not after its view was replaced
+        // (an error screen) or with the settings page or another screen in front.
+        if (!isResumed || view == null || !::binding.isInitialized || binding.dspPager.currentItem != 0) return false
         if (shortcutsBinding.homeScreen.hasFocus()) return false
         knobFocusRequests++
         return true

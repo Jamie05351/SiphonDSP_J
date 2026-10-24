@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import app.siphondsp.R
 import app.siphondsp.compose.controls.knobFocusRing
 import app.siphondsp.launcher.LauncherCustomisation
@@ -70,6 +72,7 @@ internal fun AppDrawer(
     start: Dp,
     top: Dp,
     bottom: Dp,
+    knobEntry: FocusRequester,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -80,6 +83,7 @@ internal fun AppDrawer(
         start = start,
         top = top,
         bottom = bottom,
+        knobEntry = knobEntry,
         onClose = close,
         header = {
             OutlinedTextField(
@@ -183,6 +187,7 @@ internal fun CarMenu(
     start: Dp,
     top: Dp,
     bottom: Dp,
+    knobEntry: FocusRequester,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -192,6 +197,7 @@ internal fun CarMenu(
         start = start,
         top = top,
         bottom = bottom,
+        knobEntry = knobEntry,
         onClose = close,
     ) {
         LazyVerticalGrid(
@@ -241,6 +247,7 @@ internal fun HiddenApps(
     start: Dp,
     top: Dp,
     bottom: Dp,
+    knobEntry: FocusRequester,
     onOverlayChange: (LauncherOverlay) -> Unit,
     actions: LauncherActions,
 ) {
@@ -249,6 +256,7 @@ internal fun HiddenApps(
         start = start,
         top = top,
         bottom = bottom,
+        knobEntry = knobEntry,
         onClose = { onOverlayChange(LauncherOverlay.CarMenu()) },
     ) {
         val hidden = apps?.filter { SlotTarget.App(it.component).encode() in look.hidden }
@@ -291,7 +299,8 @@ internal fun HiddenApps(
 /**
  * A full-screen panel over the blurred home screen: a title row with Close, then [content]. It
  * starts [start] in from the left, clear of the volume column, [top] down, clear of the head unit's
- * top banner, and stops [bottom] above the bottom edge, clear of the DSP bar.
+ * top banner, and stops [bottom] above the bottom edge, clear of the DSP bar. The iDrive knob's
+ * focus enters at its Close button ([knobEntry]).
  */
 @Composable
 private fun OverlayFrame(
@@ -299,6 +308,7 @@ private fun OverlayFrame(
     start: Dp,
     top: Dp,
     bottom: Dp,
+    knobEntry: FocusRequester,
     onClose: () -> Unit,
     header: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
@@ -318,7 +328,8 @@ private fun OverlayFrame(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { header() }
-            MenuTile(stringResource(R.string.launcher_close), Modifier.widthIn(min = 96.dp), onClick = onClose)
+            // Where the iDrive knob's focus enters an open drawer or menu.
+            MenuTile(stringResource(R.string.launcher_close), Modifier.widthIn(min = 96.dp).focusRequester(knobEntry), onClick = onClose)
         }
         Spacer(Modifier.height(16.dp))
         Box(Modifier.weight(1f)) { content() }

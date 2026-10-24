@@ -63,7 +63,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
@@ -216,10 +216,14 @@ fun LauncherHome(
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
     val knobEntry = remember { FocusRequester() }
+    val overlayEntry = remember { FocusRequester() }
     // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
-    // focus then lands on the DSP bar, which is on screen in every state, and moves on from there.
+    // focus then lands on the open drawer or car menu, else on the DSP bar (on screen in every
+    // other state), and moves on from there.
     LaunchedEffect(knobFocusRequests) {
-        if (knobFocusRequests > 0) knobEntry.requestFocus()
+        if (knobFocusRequests > 0) {
+            if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus()
+        }
     }
     BoxWithConstraints(
         modifier
@@ -229,15 +233,17 @@ fun LauncherHome(
             // The knob moves focus in the direction it's pushed or turned. Where there is nothing
             // that way (a knob that only turns sends one axis), it steps to the next or previous
             // control instead, so every control is reachable either way. Past the last control it
-            // wraps round to the DSP bar rather than leaving the screen with nothing focused.
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            // wraps round to the DSP bar rather than leaving the screen with nothing focused. The
+            // focused control sees the key first, so one that uses arrows itself (the search box's
+            // cursor) keeps them.
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val (direction, step) = when (event.key) {
                     Key.DirectionLeft -> FocusDirection.Left to FocusDirection.Previous
                     Key.DirectionRight -> FocusDirection.Right to FocusDirection.Next
                     Key.DirectionUp -> FocusDirection.Up to FocusDirection.Previous
                     Key.DirectionDown -> FocusDirection.Down to FocusDirection.Next
-                    else -> return@onPreviewKeyEvent false
+                    else -> return@onKeyEvent false
                 }
                 val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
                 if (!moved || !view.hasFocus()) knobEntry.requestFocus()
@@ -326,11 +332,11 @@ fun LauncherHome(
         val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
         val overlayTop = scale.dp(TopMargin) + letterbox
         when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
+            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             is LauncherOverlay.CarMenu -> CarMenu(
-                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions,
+                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
             )
-            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, onOverlayChange, actions)
+            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             LauncherOverlay.None -> {}
         }
     }

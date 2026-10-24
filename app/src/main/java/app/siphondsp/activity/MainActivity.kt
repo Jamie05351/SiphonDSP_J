@@ -323,11 +323,6 @@ class MainActivity : BaseActivity() {
     }
 
     /**
-     * MainActivity is singleTask (it is the home screen), so later launches arrive here: the Home
-     * button (MENU, short press) goes back to the plain home screen, and a file opened from a file
-     * manager is imported as it would be on a fresh start.
-     */
-    /**
      * The iDrive knob arrives as D-pad keys. Until something on the home screen has focus they
      * would go to the views around it, so the first one brings focus into the home screen.
      */
@@ -339,6 +334,11 @@ class MainActivity : BaseActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /**
+     * MainActivity is singleTask (it is the home screen), so later launches arrive here: the Home
+     * button (MENU, short press) goes back to the plain home screen, and a file opened from a file
+     * manager is imported as it would be on a fresh start.
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
