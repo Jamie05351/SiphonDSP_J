@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.focusGroup
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -222,10 +223,14 @@ fun LauncherHome(
     var overlayHasFocus by remember { mutableStateOf(false) }
     // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
     // focus then lands on the open drawer or car menu, else on the DSP bar (on screen in every
-    // other state), and moves on from there.
+    // other state), and moves on from there. Each request is handled once: entering composition
+    // again (a rebuilt view) starts from the current count, so focus is never taken without a
+    // knob press.
+    var handledKnobRequests by remember { mutableIntStateOf(knobFocusRequests) }
     LaunchedEffect(knobFocusRequests) {
-        if (knobFocusRequests > 0) {
-            if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus()
+        if (knobFocusRequests > handledKnobRequests) {
+            handledKnobRequests = knobFocusRequests
+            runCatching { if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus() }
         }
     }
     BoxWithConstraints(
@@ -235,10 +240,10 @@ fun LauncherHome(
             .focusGroup()
             // The knob moves focus in the direction it's pushed or turned. Where there is nothing
             // that way (a knob that only turns sends one axis), it steps to the next or previous
-            // control instead, so every control is reachable either way. Past the last control it
-            // wraps round to the DSP bar rather than leaving the screen with nothing focused. The
-            // focused control sees the key first, so one that uses arrows itself (the search box's
-            // cursor) keeps them.
+            // control instead, which wraps round from the last control to the first, so every
+            // control is reachable either way. If focus would otherwise leave the screen it goes
+            // back to the DSP bar. The focused control sees the key first, so one that uses arrows
+            // itself (the search box's cursor) keeps them.
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val (direction, step) = when (event.key) {
