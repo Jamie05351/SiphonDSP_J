@@ -30,6 +30,7 @@ import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.SlotTarget
 import app.siphondsp.launcher.Track
 import app.siphondsp.view.LevelReadout
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,6 +89,22 @@ class LauncherHomeRenderTest {
     /** The large now-playing card, with the system font size turned up as on the head unit. */
     @Test
     fun nowPlayingLarge() = render("now-playing-large", expanded = false, overlay = LauncherOverlay.None, large = true)
+
+    /** The launcher's text ignores a larger system font size (it overflowed the fixed layout). */
+    @Test
+    fun textKeepsItsDesignSize() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        var inside = 0f
+        controller.get().setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
+                DesignFontScale { inside = LocalDensity.current.fontScale }
+            }
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1f, inside, 0f)
+        controller.pause().stop().destroy()
+    }
 
     private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0, large: Boolean = false) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so

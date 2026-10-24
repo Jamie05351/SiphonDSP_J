@@ -241,10 +241,7 @@ fun LauncherHome(
             onKnobFocusResult(taken)
         }
     }
-    // The layout is fixed at 1280 x 480 design units, so text keeps its design size too: a larger
-    // system font size would overflow the fixed boxes (the now-playing card lost its lines to it).
-    val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
+    DesignFontScale {
         BoxWithConstraints(
             modifier
                 .fillMaxSize()
@@ -374,6 +371,17 @@ fun LauncherHome(
             }
         }
     }
+}
+
+/**
+ * Text at its design size, whatever the system font size: the launcher is laid out in fixed
+ * 1280 x 480 design units, and a larger font size overflowed its fixed boxes (the now-playing card
+ * lost its lines to it on the head unit).
+ */
+@Composable
+internal fun DesignFontScale(content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f), content = content)
 }
 
 /** The 1280 x 480 design area, at the current scale. */
