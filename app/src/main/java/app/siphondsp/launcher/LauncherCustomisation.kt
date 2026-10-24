@@ -46,6 +46,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         val icons: Map<String, ImageBitmap> = emptyMap(),
         val hidden: Set<String> = emptySet(),
         val wallpaper: ImageBitmap? = null,
+        val nowPlayingLarge: Boolean = false,
     )
 
     private val prefs = context.getSharedPreferences("launcher_look", Context.MODE_PRIVATE)
@@ -54,8 +55,19 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     private val lock = Mutex()
     /** Why the last image couldn't be used, for the message; only touched under [lock]. */
     private var lastFailure = ""
-    private val _look = MutableStateFlow(Look(hidden = prefs.getStringSet(KEY_HIDDEN, emptySet())!!.toSet()))
+    private val _look = MutableStateFlow(
+        Look(
+            hidden = prefs.getStringSet(KEY_HIDDEN, emptySet())!!.toSet(),
+            nowPlayingLarge = prefs.getBoolean(KEY_NOW_PLAYING_LARGE, false),
+        ),
+    )
     val look: StateFlow<Look> = _look.asStateFlow()
+
+    /** Switches the now-playing card between its compact and large sizes. */
+    fun toggleNowPlayingSize() {
+        val next = _look.updateAndGet { it.copy(nowPlayingLarge = !it.nowPlayingLarge) }
+        prefs.edit { putBoolean(KEY_NOW_PLAYING_LARGE, next.nowPlayingLarge) }
+    }
 
     init {
         scope.launch { lock.withLock { reload() } }
@@ -344,6 +356,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     companion object {
         private const val KEY_HIDDEN = "hidden"
         private const val KEY_ICONS = "icons"
+        private const val KEY_NOW_PLAYING_LARGE = "now_playing_large"
         private const val FORMAT = "siphondsp-home-layout"
         private const val ICON_PX = 192
         private const val WALL_W = 1920

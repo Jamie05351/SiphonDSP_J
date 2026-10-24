@@ -92,6 +92,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspColors
@@ -173,6 +174,8 @@ interface LauncherActions {
     fun mediaNext()
     fun mediaPrevious()
     fun openTrackApp(track: Track)
+    /** Switches the now-playing card between its compact and large sizes. */
+    fun toggleNowPlayingSize()
 }
 
 /**
@@ -238,134 +241,147 @@ fun LauncherHome(
             onKnobFocusResult(taken)
         }
     }
-    BoxWithConstraints(
-        modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            // Whether any control here has focus, for the host: the view can keep Android focus
-            // after the focused control goes away, which wouldn't say whether the knob has a target.
-            .onFocusChanged { onHasFocusChanged(it.hasFocus) }
-            .focusGroup()
-            // The knob moves focus in the direction it's pushed or turned. Where there is nothing
-            // that way (a knob that only turns sends one axis), it steps to the next or previous
-            // control instead, which wraps round from the last control to the first, so every
-            // control is reachable either way. If focus would otherwise leave the screen it goes
-            // back to the DSP bar. The focused control sees the key first, so one that uses arrows
-            // itself (the search box's cursor) keeps them.
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                val (direction, step) = when (event.key) {
-                    Key.DirectionLeft -> FocusDirection.Left to FocusDirection.Previous
-                    Key.DirectionRight -> FocusDirection.Right to FocusDirection.Next
-                    Key.DirectionUp -> FocusDirection.Up to FocusDirection.Previous
-                    Key.DirectionDown -> FocusDirection.Down to FocusDirection.Next
-                    else -> return@onKeyEvent false
-                }
-                val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
-                // With a drawer or menu open, focus stays in it: a move that would land on the bar or
-                // volume behind it, or off the end, wraps to the panel's Close button instead.
-                val inOverlay = overlay != LauncherOverlay.None
-                // Guarded: the target can be between compositions (an overlay switching) as a key
-                // arrives, and a failed request must never take the home screen down.
-                when {
-                    inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> runCatching { overlayEntry.requestFocus() }
-                    !inOverlay && (!moved || !view.hasFocus()) -> runCatching { knobEntry.requestFocus() }
-                }
-                true
-            },
-    ) {
-        val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
-        val scale = HomeScale(k)
-        val g = animateActive(powered, "launcher power")
-        val covered = expanded || overlay != LauncherOverlay.None
-        val blur by animateDpAsState(if (covered) 16.dp else 0.dp, tween(PanelMs), label = "home blur")
-        // Without blur (before Android 12) the home screen is dimmed harder so what's over it reads.
-        val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        val dimTo = when {
-            expanded -> if (blurs) 0.5f else 0.75f
-            covered -> if (blurs) 0.6f else 0.85f
-            else -> 0f
-        }
-        val dim by animateFloatAsState(dimTo, tween(PanelMs), label = "home dim")
-        val homeAlpha by animateFloatAsState(if (covered) 0f else 1f, tween(PanelMs / 2), label = "home fade")
-        // 0 home, 1 raised: the bar's move to the top, the volume column's growth and the chain
-        // screen's rise all follow it together.
-        val raise by animateFloatAsState(if (expanded) 1f else 0f, tween(PanelMs), label = "raise")
+    DesignFontScale {
+        BoxWithConstraints(
+            modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                // Whether any control here has focus, for the host: the view can keep Android focus
+                // after the focused control goes away, which wouldn't say whether the knob has a target.
+                .onFocusChanged { onHasFocusChanged(it.hasFocus) }
+                .focusGroup()
+                // The knob moves focus in the direction it's pushed or turned. Where there is nothing
+                // that way (a knob that only turns sends one axis), it steps to the next or previous
+                // control instead, which wraps round from the last control to the first, so every
+                // control is reachable either way. If focus would otherwise leave the screen it goes
+                // back to the DSP bar. The focused control sees the key first, so one that uses arrows
+                // itself (the search box's cursor) keeps them.
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    val (direction, step) = when (event.key) {
+                        Key.DirectionLeft -> FocusDirection.Left to FocusDirection.Previous
+                        Key.DirectionRight -> FocusDirection.Right to FocusDirection.Next
+                        Key.DirectionUp -> FocusDirection.Up to FocusDirection.Previous
+                        Key.DirectionDown -> FocusDirection.Down to FocusDirection.Next
+                        else -> return@onKeyEvent false
+                    }
+                    val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
+                    // With a drawer or menu open, focus stays in it: a move that would land on the bar or
+                    // volume behind it, or off the end, wraps to the panel's Close button instead.
+                    val inOverlay = overlay != LauncherOverlay.None
+                    // Guarded: the target can be between compositions (an overlay switching) as a key
+                    // arrives, and a failed request must never take the home screen down.
+                    when {
+                        inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> runCatching { overlayEntry.requestFocus() }
+                        !inOverlay && (!moved || !view.hasFocus()) -> runCatching { knobEntry.requestFocus() }
+                    }
+                    true
+                },
+        ) {
+            val k = minOf(1f, maxWidth.value / DesignW, maxHeight.value / DesignH)
+            val scale = HomeScale(k)
+            val g = animateActive(powered, "launcher power")
+            val covered = expanded || overlay != LauncherOverlay.None
+            val blur by animateDpAsState(if (covered) 16.dp else 0.dp, tween(PanelMs), label = "home blur")
+            // Without blur (before Android 12) the home screen is dimmed harder so what's over it reads.
+            val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            val dimTo = when {
+                expanded -> if (blurs) 0.5f else 0.75f
+                covered -> if (blurs) 0.6f else 0.85f
+                else -> 0f
+            }
+            val dim by animateFloatAsState(dimTo, tween(PanelMs), label = "home dim")
+            val homeAlpha by animateFloatAsState(if (covered) 0f else 1f, tween(PanelMs / 2), label = "home fade")
+            // 0 home, 1 raised: the bar's move to the top, the volume column's growth and the chain
+            // screen's rise all follow it together.
+            val raise by animateFloatAsState(if (expanded) 1f else 0f, tween(PanelMs), label = "raise")
 
-        CompositionLocalProvider(LocalHomeScale provides scale) {
-            // The home screen itself, blurred while something is over it.
-            Box(Modifier.fillMaxSize().blur(blur)) {
-                val wallpaper = look.wallpaper
-                if (wallpaper != null) {
-                    Image(
-                        wallpaper, contentDescription = null,
-                        contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Image(
-                        painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
-                        contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
-                        modifier = Modifier.fillMaxSize(),
+            CompositionLocalProvider(LocalHomeScale provides scale) {
+                // The home screen itself, blurred while something is over it.
+                Box(Modifier.fillMaxSize().blur(blur)) {
+                    val wallpaper = look.wallpaper
+                    if (wallpaper != null) {
+                        Image(
+                            wallpaper, contentDescription = null,
+                            contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Image(
+                            painterResource(R.drawable.launcher_wallpaper), contentDescription = null,
+                            contentScale = ContentScale.Crop, alignment = Alignment.CenterEnd,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    // The app grid and corner buttons fade away while the chain or a drawer is up, so
+                    // what's over the blurred background isn't competing with them.
+                    if (homeAlpha > 0f) {
+                        Design(Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
+                            AppGrid(apps, slots, look.icons, onOverlayChange, actions)
+                            if (track != null) NowPlayingCard(track, look.nowPlayingLarge, actions)
+                            CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
+                            CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
+                        }
+                    }
+                }
+                if (dim > 0f) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = dim))
+                            .then(
+                                // Tapping the dimmed space above the chain closes it.
+                                if (expanded) Modifier.clickable(remember { MutableInteractionSource() }, null) { onExpandedChange(false) } else Modifier,
+                            ),
                     )
                 }
-                // The app grid and corner buttons fade away while the chain or a drawer is up, so
-                // what's over the blurred background isn't competing with them.
-                if (homeAlpha > 0f) {
-                    Design(Modifier.align(Alignment.Center).graphicsLayer { alpha = homeAlpha }) {
-                        AppGrid(apps, slots, look.icons, onOverlayChange, actions)
-                        if (track != null) NowPlayingCard(track, actions)
-                        CornerButton(DrawerX, stringResource(R.string.launcher_drawer), { onOverlayChange(LauncherOverlay.Drawer()) }) { drawDrawerGlyph() }
-                        CornerButton(CarX, stringResource(R.string.launcher_car_menu), { onOverlayChange(LauncherOverlay.CarMenu()) }) { drawSettingsGlyph() }
+                Design(Modifier.align(Alignment.Center)) {
+                    // Raised, the front page's old layout comes back: the bar moves up to where the top
+                    // screen was and the chain screen rises into its old place under it.
+                    if (raise > 0f) {
+                        ChainScreen(engine, powered, g, raise, openingStage, animateTiles, actions)
+                    }
+                    DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions, knobEntry)
+                    // The master volume stays in focus whatever is open; raised, it runs down beside the
+                    // chain screen as on the old front page. The chain and drawers leave its column clear.
+                    CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
+                        VolumeColumn(
+                            engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
+                            Modifier
+                                .offset(scale.dp(Margin), scale.dp(TopMargin))
+                                .height(scale.dp(lerp(GridBottom, ChainBottom, raise) - TopMargin)),
+                        )
                     }
                 }
             }
-            if (dim > 0f) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = dim))
-                        .then(
-                            // Tapping the dimmed space above the chain closes it.
-                            if (expanded) Modifier.clickable(remember { MutableInteractionSource() }, null) { onExpandedChange(false) } else Modifier,
-                        ),
+            // Drawers start under the head unit's top banner and stop above the DSP bar, which stays
+            // usable under them.
+            val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
+            val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
+            val overlayTop = scale.dp(TopMargin) + letterbox
+            Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
+            when (overlay) {
+                is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
+                is LauncherOverlay.CarMenu -> CarMenu(
+                    carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
+                LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
+                LauncherOverlay.None -> {}
             }
-            Design(Modifier.align(Alignment.Center)) {
-                // Raised, the front page's old layout comes back: the bar moves up to where the top
-                // screen was and the chain screen rises into its old place under it.
-                if (raise > 0f) {
-                    ChainScreen(engine, powered, g, raise, openingStage, animateTiles, actions)
-                }
-                DspBar(engine, powered, g, raise, readout, meterLevels, expanded, onExpandedChange, actions, knobEntry)
-                // The master volume stays in focus whatever is open; raised, it runs down beside the
-                // chain screen as on the old front page. The chain and drawers leave its column clear.
-                CompositionLocalProvider(LocalHomeScale provides HomeScale(k * VolumeScale)) {
-                    VolumeColumn(
-                        engine.masterVolumeDb, engine.masterMuted, g, actions::volumeStep, actions::toggleMute,
-                        Modifier
-                            .offset(scale.dp(Margin), scale.dp(TopMargin))
-                            .height(scale.dp(lerp(GridBottom, ChainBottom, raise) - TopMargin)),
-                    )
-                }
             }
-        }
-        // Drawers start under the head unit's top banner and stop above the DSP bar, which stays
-        // usable under them.
-        val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
-        val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
-        val overlayTop = scale.dp(TopMargin) + letterbox
-        Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
-        when (overlay) {
-            is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
-            is LauncherOverlay.CarMenu -> CarMenu(
-                carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
-            )
-            LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
-            LauncherOverlay.None -> {}
-        }
         }
     }
+}
+
+/**
+ * Text at its design size, whatever the system font size: the launcher is laid out in fixed
+ * 1280 x 480 design units, and a larger font size overflowed its fixed boxes (the now-playing card
+ * lost its lines to it on the head unit).
+ */
+@Composable
+internal fun DesignFontScale(content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f), content = content)
 }
 
 /** The 1280 x 480 design area, at the current scale. */
@@ -851,14 +867,19 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 /**
  * What's playing, on a small screen above the car between the grid and the corner buttons: the
  * album art, title and artist (tap to open the playing app), and previous / play-pause / next.
+ * Long-pressing the art or title switches it between a compact and a [large] size, whose art, text
+ * and buttons are all bigger and which reaches further down over the wallpaper.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NowPlayingCard(track: Track, actions: LauncherActions) {
+private fun NowPlayingCard(track: Track, large: Boolean, actions: LauncherActions) {
     val s = LocalHomeScale.current
+    val height = if (large) NowHeightLarge else NowHeight
+    val text = if (large) 1.3f else 1f
     val shape = RoundedCornerShape(s.dp(14f))
     Row(
         Modifier
-            .at(NowX, TopMargin, DrawerX - 14f - NowX, NowHeight)
+            .at(NowX, TopMargin, DrawerX - 14f - NowX, height)
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(1.5f), HomePalette.PanelEdge, shape)
@@ -870,37 +891,43 @@ private fun NowPlayingCard(track: Track, actions: LauncherActions) {
                 .weight(1f)
                 .knobFocusRing(s.dp(10f))
                 .clip(RoundedCornerShape(s.dp(10f)))
-                .clickable(role = Role.Button) { actions.openTrackApp(track) },
+                .combinedClickable(
+                    role = Role.Button,
+                    onLongClickLabel = stringResource(R.string.launcher_now_playing_resize),
+                    onLongClick = actions::toggleNowPlayingSize,
+                ) { actions.openTrackApp(track) },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val art = track.art
-            val artSize = Modifier.size(s.dp(NowHeight - 14f)).clip(RoundedCornerShape(s.dp(8f)))
+            val artSize = Modifier.size(s.dp(height - 14f)).clip(RoundedCornerShape(s.dp(8f)))
             if (art != null) {
                 Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = artSize)
             } else {
                 Box(artSize.background(HomePalette.IdleFill))
             }
             Column(Modifier.padding(horizontal = s.dp(12f)).weight(1f)) {
-                Text(track.title, color = Color.White, fontSize = s.sp(17f), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.title, color = Color.White, fontSize = s.sp(17f * text), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (track.artist.isNotEmpty()) {
-                    Text(track.artist, color = HomePalette.Subtitle, fontSize = s.sp(13f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(track.artist, color = HomePalette.Subtitle, fontSize = s.sp(13f * text), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
+        MediaButton(stringResource(R.string.launcher_media_previous), height, actions::mediaPrevious) { drawSkip(forward = false) }
         MediaButton(
-            stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), actions::mediaPlayPause,
+            stringResource(if (track.playing) R.string.launcher_media_pause else R.string.launcher_media_play), height, actions::mediaPlayPause,
         ) { if (track.playing) drawPause() else drawPlay() }
-        MediaButton(stringResource(R.string.launcher_media_next), actions::mediaNext) { drawSkip(forward = true) }
+        MediaButton(stringResource(R.string.launcher_media_next), height, actions::mediaNext) { drawSkip(forward = true) }
     }
 }
 
 @Composable
-private fun MediaButton(label: String, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
+private fun MediaButton(label: String, cardHeight: Float, onClick: () -> Unit, glyph: DrawScope.() -> Unit) {
     val s = LocalHomeScale.current
+    // As tall as the card allows, but no wider than in the compact card, so the large card's extra
+    // width goes to the title.
     Box(
         Modifier
-            .size(s.dp(NowHeight - 14f))
+            .size(s.dp(NowHeight - 14f), s.dp(cardHeight - 14f))
             .knobFocusRing(s.dp(10f))
             .clip(RoundedCornerShape(s.dp(10f)))
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
@@ -960,6 +987,7 @@ private const val CornerSize = 58f
 // The now-playing card: from just right of the grid to the corner buttons, above the car.
 private const val NowX = 690f
 private const val NowHeight = 56f
+private const val NowHeightLarge = 84f
 private const val CarX = DesignW - Margin - CornerSize
 private const val DrawerX = CarX - 12f - CornerSize
 private const val BarSide = 10f

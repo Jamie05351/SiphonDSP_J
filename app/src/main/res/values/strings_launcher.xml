@@ -52,6 +52,7 @@
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>
     <string name="launcher_media_next">Next track</string>
+    <string name="launcher_now_playing_resize">Change the card size</string>
     <string name="launcher_media_previous">Previous track</string>
 
     <string name="car_settings">Factory &amp; KSW settings</string>
