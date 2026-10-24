@@ -502,6 +502,7 @@ class DspFragment : Fragment() {
         override fun mediaPlayPause() = nowPlaying.playPause()
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()
+        override fun toggleNowPlayingSize() = LauncherCustomisation.get(requireContext()).toggleNowPlayingSize()
         override fun openTrackApp(track: Track) {
             requireContext().packageManager.getLaunchIntentForPackage(track.packageName)?.let { Launch.start(requireContext(), it) }
         }

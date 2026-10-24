@@ -1,5 +1,9 @@
 package app.siphondsp.compose.launcher
 
+import app.siphondsp.launcher.LauncherCustomisation
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.CompositionLocalProvider
 import android.content.ComponentName
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -81,27 +85,33 @@ class LauncherHomeRenderTest {
     @Test
     fun knobFocus() = render("knob-focus", expanded = false, overlay = LauncherOverlay.None, knob = 1)
 
-    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0) {
+    /** The large now-playing card, with the system font size turned up as on the head unit. */
+    @Test
+    fun nowPlayingLarge() = render("now-playing-large", expanded = false, overlay = LauncherOverlay.None, large = true)
+
+    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0, large: Boolean = false) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
         // knob (D-pad) focus can be taken and drawn.
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         instrumentation.setInTouchMode(knob == 0)
         try {
-            renderIn(name, expanded, overlay, knob)
+            renderIn(name, expanded, overlay, knob, large)
         } finally {
             // Touch mode is global to the instrumentation; put it back for the next test.
             instrumentation.setInTouchMode(true)
         }
     }
 
-    private fun renderIn(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int) {
+    private fun renderIn(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int, large: Boolean) {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
         val activity = controller.get()
         activity.setContent {
             // As in the car: the knob's first press arrives after the home screen is up.
             var knobRequests by remember { mutableIntStateOf(0) }
             if (knob > 0) LaunchedEffect(Unit) { delay(500); knobRequests = 1 }
+            val density = LocalDensity.current
             BmwDspTheme {
+              CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = if (large) 1.3f else 1f)) {
                 LauncherHome(
                     engine = engine, powered = true, readout = { levels }, meterLevels = { levels },
                     apps = apps, slots = slots, carFunctions = CarFunction.entries,
@@ -110,7 +120,9 @@ class LauncherHomeRenderTest {
                     track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.music"),
                     nowPlayingAllowed = false,
                     knobFocusRequests = knobRequests,
+                    look = LauncherCustomisation.Look(nowPlayingLarge = large),
                 )
+              }
             }
         }
         // Let enter animations and the power sweep finish.
@@ -166,5 +178,6 @@ class LauncherHomeRenderTest {
         override fun mediaNext() {}
         override fun mediaPrevious() {}
         override fun openTrackApp(track: Track) {}
+        override fun toggleNowPlayingSize() {}
     }
 }
