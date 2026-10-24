@@ -55,7 +55,8 @@ object AppDock {
         if (!Settings.canDrawOverlays(app)) return
         handler.removeCallbacks(collapse)
         val wm = app.getSystemService(WindowManager::class.java) ?: return
-        val view = if (expanded) panel(app) else tab(app)
+        // Nothing to offer (no filled slots, or their apps are gone): no sidebar at all.
+        val view = (if (expanded) panel(app) else tab(app)) ?: return hide(app)
         try {
             current?.let { runCatching { wm.removeViewImmediate(it) } }
             current = null
@@ -98,8 +99,8 @@ object AppDock {
         y = top
     }
 
-    /** The open sidebar: one tile per filled home slot, sized so all of them fit the height. */
-    private fun panel(context: Context): View {
+    /** The open sidebar: one tile per filled home slot, sized so all of them fit the height. Null with none. */
+    private fun panel(context: Context): View? {
         val targets = HomeSlots.get(context).slots.value.filter { it != SlotTarget.Empty }
         val apps = InstalledApps.get(context).apps.value.orEmpty()
         val icons = LauncherCustomisation.get(context).look.value.icons
@@ -147,7 +148,7 @@ object AppDock {
                     when {
                         target.function.run(context) -> show(context)
                         // iDrive, AUX and the like switch the display away from Android.
-                        target.function.command != null -> hide(context)
+                        target.function.command != null && !target.function.blocked -> hide(context)
                     }
                 }
                 SlotTarget.Empty -> continue
@@ -157,7 +158,7 @@ object AppDock {
                 setMargins(0, gap, 0, gap)
             })
         }
-        return column
+        return column.takeIf { it.childCount > 0 }
     }
 
     /** A tile with a short name on it, as the home screen draws a car function. */

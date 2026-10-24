@@ -89,6 +89,14 @@ class AppDockTest {
     }
 
     @Test
+    fun noSidebarWithNothingToOffer() {
+        ShadowSettings.setCanDrawOverlays(true)
+        HomeSlots.get(context).setAll(emptyList())
+        AppDock.show(context)
+        assertTrue(windows().isEmpty())
+    }
+
+    @Test
     fun staysAwayWithoutTheOverlayPermission() {
         ShadowSettings.setCanDrawOverlays(false)
         AppDock.show(context)
