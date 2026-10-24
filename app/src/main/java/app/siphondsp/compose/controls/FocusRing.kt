@@ -50,14 +50,15 @@ fun Modifier.bmwFocusRing(interactionSource: InteractionSource, cornerRadius: Dp
  * focus of the next focusable modifier in the chain, so put it before the clickable. With
  * [withinChildren] it lights while anything inside has focus instead (for a wrapper whose
  * focusable part is a child). It is white, not the DSP pages' purple: the home screen is lit in
- * that purple all over, where a purple ring couldn't be seen.
+ * that purple all over, where a purple ring couldn't be seen. With [grow] the focused control
+ * (ring included) grows by 8%, past its bounds: only for a control with room around it, not one
+ * that fills its parent or sits in a clipped one, where the ring's outer edge would be cut off.
  */
-fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = false, grow: Boolean = true): Modifier =
+fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = false, grow: Boolean = false): Modifier =
     composed {
         var focused by remember { mutableStateOf(false) }
-        // In the car a thin ring was hard to find at a glance, so the focused control also grows a
-        // little (not a wide one like the DSP bar, which would spill off screen), and the ring has a
-        // dark band inside it so it shows on light wallpaper too.
+        // In the car a thin ring was hard to find at a glance, so the ring has a dark band inside it
+        // that shows on light wallpaper too, and a control with room around it also grows a little.
         val scale by animateFloatAsState(if (focused && grow) KnobGrow else 1f, tween(KnobGrowMs), label = "knob focus")
         onFocusChanged { focused = if (withinChildren) it.hasFocus else it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }

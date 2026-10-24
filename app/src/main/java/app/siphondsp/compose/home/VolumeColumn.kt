@@ -136,7 +136,7 @@ private fun VolumeButton(label: String, plus: Boolean, g: Float, onStep: () -> U
             }
             // The iDrive knob (a D-pad) can reach it too: a press is one step. Holding the knob
             // down doesn't repeat, so it can't run the volume up unattended.
-            .knobFocusRing(s.dp(VolumeCorner))
+            .knobFocusRing(s.dp(VolumeCorner), grow = true)
             .focusable()
             .onKeyEvent { event ->
                 val press = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
