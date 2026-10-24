@@ -116,14 +116,25 @@ class DspFragment : Fragment() {
     private val pickIconImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val key = iconKeyPicking
         iconKeyPicking = null
-        if (uri != null && key != null) {
-            LauncherCustomisation.get(requireContext()).setIcon(key, uri) { ok -> if (!ok) toast(R.string.launcher_icon_failed) }
+        // Messages go through the app, not this fragment: the home screen can be rebuilt while the
+        // picker is open, and a detached fragment would drop them, so a failure looked like nothing.
+        val context = context?.applicationContext ?: return@registerForActivityResult
+        when {
+            uri == null -> {}
+            key == null -> Toast.makeText(context, R.string.launcher_icon_lost, Toast.LENGTH_LONG).show()
+            else -> LauncherCustomisation.get(context).setIcon(key, uri) { failure ->
+                val message = if (failure == null) context.getString(R.string.launcher_icon_done) else context.getString(R.string.launcher_icon_failed, failure)
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
     private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            LauncherCustomisation.get(requireContext()).setWallpaper(uri) { ok -> if (!ok) toast(R.string.launcher_wallpaper_failed) }
+        val context = context?.applicationContext
+        if (uri != null && context != null) {
+            LauncherCustomisation.get(context).setWallpaper(uri) { failure ->
+                if (failure != null) Toast.makeText(context, context.getString(R.string.launcher_wallpaper_failed, failure), Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -568,6 +579,16 @@ class DspFragment : Fragment() {
 
     /** Fragment-hosted ComposeViews are disposed with the fragment view, not the window. */
     private fun ComposeView.setHomeContent(content: @Composable () -> Unit) {
+        // A knob (D-pad) key takes the device out of touch mode, and Android then draws its default
+        // focus highlight over whichever view holds focus: here the whole home screen, which washed
+        // the screen white. The controls draw their own rings, so the highlight is turned off on
+        // this view and on the Compose view it adds inside itself.
+        defaultFocusHighlightEnabled = false
+        setOnHierarchyChangeListener(object : ViewGroup.OnHierarchyChangeListener {
+            override fun onChildViewAdded(parent: View, child: View) { child.defaultFocusHighlightEnabled = false }
+            override fun onChildViewRemoved(parent: View, child: View) = Unit
+        })
+        for (i in 0 until childCount) getChildAt(i).defaultFocusHighlightEnabled = false
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent { BmwDspTheme { content() } }
     }

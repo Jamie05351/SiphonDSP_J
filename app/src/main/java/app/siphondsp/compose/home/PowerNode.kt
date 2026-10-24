@@ -59,7 +59,7 @@ fun PowerNode(
                     // The glow: a soft purple halo past the rim, gone while bypassed.
                     drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
                 }
-                .knobFocusRing(s.dp(NodeSize / 2))
+                .knobFocusRing(s.dp(NodeSize / 2), grow = true)
                 .clip(CircleShape)
                 .toggleable(value = powered, role = Role.Switch, onValueChange = { onToggle() })
                 .semantics { contentDescription = description },
