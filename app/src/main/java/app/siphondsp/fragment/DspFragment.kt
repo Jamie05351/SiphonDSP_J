@@ -101,6 +101,9 @@ class DspFragment : Fragment() {
     /** Bumped to move iDrive knob focus into the home screen; see [enterKnobFocus]. */
     private var knobFocusRequests by mutableIntStateOf(0)
 
+    /** The last knob focus request couldn't land; the next knob key goes to Android as usual. */
+    private var knobFocusFailed = false
+
     /** The icon key ([SlotTarget.encode]) whose image is being picked; kept across recreation. */
     private var iconKeyPicking: String? = null
 
@@ -333,6 +336,7 @@ class DspFragment : Fragment() {
                 track = track,
                 nowPlayingAllowed = nowPlayingAllowed,
                 knobFocusRequests = knobFocusRequests,
+                onKnobFocusResult = { taken -> knobFocusFailed = !taken },
             )
         }
         levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
@@ -398,6 +402,12 @@ class DspFragment : Fragment() {
         // (an error screen) or with the settings page or another screen in front.
         if (!isResumed || view == null || !::binding.isInitialized || binding.dspPager.currentItem != 0) return false
         if (shortcutsBinding.homeScreen.hasFocus()) return false
+        // If the last request couldn't land, don't keep swallowing keys: this one goes through
+        // normally and the one after tries again.
+        if (knobFocusFailed) {
+            knobFocusFailed = false
+            return false
+        }
         knobFocusRequests++
         return true
     }

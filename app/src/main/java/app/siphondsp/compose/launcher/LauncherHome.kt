@@ -214,6 +214,7 @@ fun LauncherHome(
     track: Track? = null,
     nowPlayingAllowed: Boolean = true,
     knobFocusRequests: Int = 0,
+    onKnobFocusResult: (Boolean) -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
@@ -230,7 +231,10 @@ fun LauncherHome(
     LaunchedEffect(knobFocusRequests) {
         if (knobFocusRequests > handledKnobRequests) {
             handledKnobRequests = knobFocusRequests
-            runCatching { if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus() }
+            val taken = runCatching {
+                if (overlay != LauncherOverlay.None) overlayEntry.requestFocus() else knobEntry.requestFocus()
+            }.getOrDefault(false)
+            onKnobFocusResult(taken)
         }
     }
     BoxWithConstraints(
@@ -257,9 +261,11 @@ fun LauncherHome(
                 // With a drawer or menu open, focus stays in it: a move that would land on the bar or
                 // volume behind it, or off the end, wraps to the panel's Close button instead.
                 val inOverlay = overlay != LauncherOverlay.None
+                // Guarded: the target can be between compositions (an overlay switching) as a key
+                // arrives, and a failed request must never take the home screen down.
                 when {
-                    inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> overlayEntry.requestFocus()
-                    !inOverlay && (!moved || !view.hasFocus()) -> knobEntry.requestFocus()
+                    inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> runCatching { overlayEntry.requestFocus() }
+                    !inOverlay && (!moved || !view.hasFocus()) -> runCatching { knobEntry.requestFocus() }
                 }
                 true
             },

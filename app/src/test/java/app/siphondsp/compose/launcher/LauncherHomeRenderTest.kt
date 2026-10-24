@@ -84,7 +84,17 @@ class LauncherHomeRenderTest {
     private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
         // knob (D-pad) focus can be taken and drawn.
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().setInTouchMode(knob == 0)
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        instrumentation.setInTouchMode(knob == 0)
+        try {
+            renderIn(name, expanded, overlay, knob)
+        } finally {
+            // Touch mode is global to the instrumentation; put it back for the next test.
+            instrumentation.setInTouchMode(true)
+        }
+    }
+
+    private fun renderIn(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int) {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
         val activity = controller.get()
         activity.setContent {
