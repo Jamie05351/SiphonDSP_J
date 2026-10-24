@@ -667,21 +667,24 @@ private fun ChainScreen(
     )
     val shape = RoundedCornerShape(s.dp(16f))
     val width = DesignW - RaisedLeft - BarSide
-    val height = ChainBottom - ChainScreenTop
-    val layout = ChainLayout(width)
+    // As on the old front page: the chain drawn at ChainScale of its design size, so the tiles keep
+    // their old size and the even gaps between them.
+    val layout = ChainLayout(width / ChainScale)
     Box(
         Modifier
-            .at(RaisedLeft, ChainScreenTop + (1 - raise) * ChainRise, width, height)
+            .at(RaisedLeft, ChainScreenTop + (1 - raise) * ChainRise, width, ChainScreenHeight)
             .graphicsLayer { alpha = raise }
             .clip(shape)
             .background(HomePalette.Panel)
             .border(s.dp(2f), lerp(HomePalette.PanelEdge, signal, 0.7f * g), shape),
     ) {
+      CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * ChainScale)) {
+        val c = LocalHomeScale.current
         SignalPath(g, { sweep.value }, spark = powered, layout = layout)
-        InputNode(g, Modifier.offset(x = s.dp(layout.powerX - ColumnWidth / 2)))
+        InputNode(g, Modifier.offset(x = c.dp(layout.powerX - ColumnWidth / 2)))
         Row(
-            Modifier.offset(x = s.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = s.dp(TileInset)),
-            horizontalArrangement = Arrangement.spacedBy(s.dp(layout.gap)),
+            Modifier.offset(x = c.dp(layout.tileLeft(0))).fillMaxHeight().padding(vertical = c.dp(TileInset)),
+            horizontalArrangement = Arrangement.spacedBy(c.dp(layout.gap)),
         ) {
             for (stage in HomeStage.entries) {
                 val tile = stage.tile()
@@ -694,13 +697,14 @@ private fun ChainScreen(
                     spark = powered,
                     selected = openingStage == stage,
                     onClick = { actions.openStage(stage) },
-                    modifier = Modifier.knobFocusRing(s.dp(16f)),
+                    modifier = Modifier.knobFocusRing(c.dp(16f)),
                     width = layout.cardWidth,
                     animateArt = animateTiles,
                 )
             }
         }
-        OutputNode({ ChainSweep.arrived(sweep.value) }, Modifier.offset(x = s.dp(layout.outX - OutColumnWidth / 2)))
+        OutputNode({ ChainSweep.arrived(sweep.value) }, Modifier.offset(x = c.dp(layout.outX - OutColumnWidth / 2)))
+      }
     }
 }
 
@@ -888,12 +892,19 @@ private const val ChipScale = 0.82f
 private const val ChipWidth = 150f
 private const val MeterScale = 0.56f
 // Raised: the bar and the chain screen start right of the volume column, the bar at the top and the
-// chain screen under it down to the bar's home bottom edge; the screen rises [ChainRise] into place.
+// chain screen centred in the height under it, at the old front page's size; it rises [ChainRise]
+// into place. The volume column runs down to the chain screen's bottom edge, as it used to.
 private const val RaisedLeft = GridLeft
-private const val ChainScreenTop = TopMargin + BarHeight + 16f
-private const val ChainBottom = BarTop + BarHeight
+private const val ChainScale = 0.76f
+// The chain screen's height in chain units (232 dp at ChainScale), and the room above and below the
+// tiles inside it (they stand 225 units tall), both as on the old front page.
+private const val ChainUnits = 305f
+private const val TileInset = 40f
+private const val ChainScreenHeight = ChainUnits * ChainScale
+private const val ChainSpaceTop = TopMargin + BarHeight
+private const val ChainScreenTop = ChainSpaceTop + (BarTop + BarHeight - ChainSpaceTop - ChainScreenHeight) / 2
+private const val ChainBottom = ChainScreenTop + ChainScreenHeight
 private const val ChainRise = 60f
-private const val TileInset = 34f
 private const val PanelMs = 380
 private const val SweepOnMs = 3000
 private const val SweepOffMs = 900
