@@ -321,6 +321,20 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    /**
+     * MainActivity is singleTask (it is the home screen), so later launches arrive here: the Home
+     * button (MENU, short press) goes back to the plain home screen, and a file opened from a file
+     * manager is imported as it would be on a fresh start.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        when {
+            intent.hasCategory(Intent.CATEGORY_HOME) -> if (::dspFragment.isInitialized) dspFragment.onHomePressed()
+            intent.action == Intent.ACTION_VIEW -> intent.data?.let { handleFileIntent(it) }
+        }
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
             setPowerUi(prefsApp.get(R.string.key_powered_on))

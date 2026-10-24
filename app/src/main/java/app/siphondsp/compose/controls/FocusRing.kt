@@ -3,6 +3,11 @@ package app.siphondsp.compose.controls
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
@@ -30,26 +35,45 @@ fun Modifier.bmwFocusRing(interactionSource: InteractionSource, cornerRadius: Dp
         val focused by interactionSource.collectIsFocusedAsState()
         drawWithContent {
             drawContent()
-            if (!focused) return@drawWithContent
-            val strokePx = StrokeWidth.toPx()
-            val inset = strokePx / 2f
-            val corner = CornerRadius(cornerRadius.toPx())
-            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
-            val ringSize = Size(size.width - strokePx, size.height - strokePx)
-            drawRoundRect(
-                color = RingColor,
-                topLeft = topLeft,
-                size = ringSize,
-                cornerRadius = corner,
-                style = Stroke(GlowWidth.toPx()),
-                alpha = 0.35f,
-            )
-            drawRoundRect(
-                color = RingColor,
-                topLeft = topLeft,
-                size = ringSize,
-                cornerRadius = corner,
-                style = Stroke(strokePx),
-            )
+            if (focused) drawFocusRing(cornerRadius)
         }
     }
+
+/**
+ * The same ring as [bmwFocusRing], for a control whose interaction source isn't at hand: it follows
+ * the focus of the next focusable modifier in the chain, so put it before the clickable. With
+ * [withinChildren] it lights while anything inside has focus instead (for a wrapper whose
+ * focusable part is a child).
+ */
+fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = false): Modifier =
+    composed {
+        var focused by remember { mutableStateOf(false) }
+        onFocusChanged { focused = if (withinChildren) it.hasFocus else it.isFocused }
+            .drawWithContent {
+                drawContent()
+                if (focused) drawFocusRing(cornerRadius)
+            }
+    }
+
+private fun DrawScope.drawFocusRing(cornerRadius: Dp) {
+    val strokePx = StrokeWidth.toPx()
+    val inset = strokePx / 2f
+    val corner = CornerRadius(cornerRadius.toPx())
+    val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+    val ringSize = Size(size.width - strokePx, size.height - strokePx)
+    drawRoundRect(
+        color = RingColor,
+        topLeft = topLeft,
+        size = ringSize,
+        cornerRadius = corner,
+        style = Stroke(GlowWidth.toPx()),
+        alpha = 0.35f,
+    )
+    drawRoundRect(
+        color = RingColor,
+        topLeft = topLeft,
+        size = ringSize,
+        cornerRadius = corner,
+        style = Stroke(strokePx),
+    )
+}

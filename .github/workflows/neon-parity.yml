@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - master
+      - head-unit
     paths:
       - app/src/main/cpp/libjamesdsp-wrapper/**
       - app/src/main/cpp/libjdspimptoolbox/dr_wav.h
@@ -18,6 +19,7 @@ on:
   push:
     branches:
       - master
+      - head-unit
     paths:
       - app/src/main/cpp/libjamesdsp-wrapper/**
       - app/src/main/cpp/libjdspimptoolbox/dr_wav.h

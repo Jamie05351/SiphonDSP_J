@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
 import app.siphondsp.R
+import app.siphondsp.compose.controls.knobFocusRing
 import app.siphondsp.compose.theme.BmwTheme
 
 /**
@@ -58,6 +59,7 @@ fun PowerNode(
                     // The glow: a soft purple halo past the rim, gone while bypassed.
                     drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
                 }
+                .knobFocusRing(s.dp(NodeSize / 2))
                 .clip(CircleShape)
                 .toggleable(value = powered, role = Role.Switch, onValueChange = { onToggle() })
                 .semantics { contentDescription = description },
