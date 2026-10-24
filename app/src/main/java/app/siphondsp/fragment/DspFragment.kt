@@ -483,8 +483,7 @@ class DspFragment : Fragment() {
             if (Launch.component(requireContext(), app.component)) AppDock.show(requireContext())
         }
         override fun runCar(function: CarFunction) {
-            function.run(requireContext())
-            if (function.component != null && !function.blocked) AppDock.show(requireContext())
+            if (function.run(requireContext())) AppDock.show(requireContext())
         }
         override fun assignSlot(index: Int, target: SlotTarget) = HomeSlots.get(requireContext()).set(index, target)
         override fun swapSlots(a: Int, b: Int) = HomeSlots.get(requireContext()).swap(a, b)

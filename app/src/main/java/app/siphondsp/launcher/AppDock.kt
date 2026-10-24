@@ -1,6 +1,5 @@
 package app.siphondsp.launcher
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -100,7 +99,6 @@ object AppDock {
     }
 
     /** The open sidebar: one tile per filled home slot, sized so all of them fit the height. */
-    @SuppressLint("ClickableViewAccessibility")
     private fun panel(context: Context): View {
         val targets = HomeSlots.get(context).slots.value.filter { it != SlotTarget.Empty }
         val apps = InstalledApps.get(context).apps.value.orEmpty()
@@ -109,7 +107,12 @@ object AppDock {
         val pitch = min(context.dp(MAX_PITCH_DP), height / targets.size.coerceAtLeast(1))
         val tile = pitch - context.dp(6f)
 
-        val column = LinearLayout(context).apply {
+        val column = TouchAwareColumn(context) {
+            // Any touch on it, a tile's included, keeps it open for another [SHOW_MS], so it can't
+            // shrink away between a tile's press and release.
+            handler.removeCallbacks(collapse)
+            handler.postDelayed(collapse, SHOW_MS)
+        }.apply {
             orientation = LinearLayout.VERTICAL
             setPadding(context.dp(5f), context.dp(4f), context.dp(5f), context.dp(4f))
             background = GradientDrawable().apply {
@@ -126,8 +129,7 @@ object AppDock {
                     if (entry == null && apps.isNotEmpty()) continue
                     val label = entry?.label ?: target.component.packageName
                     val open = {
-                        Launch.component(context, target.component)
-                        show(context)
+                        if (Launch.component(context, target.component)) show(context)
                     }
                     val image = icons[target.encode()] ?: entry?.icon
                     if (image != null) {
@@ -142,8 +144,11 @@ object AppDock {
                     }
                 }
                 is SlotTarget.Car -> textTile(context, context.getString(target.function.short), context.getString(target.function.label), tile) {
-                    target.function.run(context)
-                    show(context)
+                    when {
+                        target.function.run(context) -> show(context)
+                        // iDrive, AUX and the like switch the display away from Android.
+                        target.function.command != null -> hide(context)
+                    }
                 }
                 SlotTarget.Empty -> continue
             }
@@ -151,14 +156,6 @@ object AppDock {
                 val gap = (pitch - tile) / 2
                 setMargins(0, gap, 0, gap)
             })
-        }
-        // Any touch on it keeps it open for another [SHOW_MS].
-        column.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                handler.removeCallbacks(collapse)
-                handler.postDelayed(collapse, SHOW_MS)
-            }
-            false
         }
         return column
     }
@@ -200,6 +197,14 @@ object AppDock {
                 FrameLayout.LayoutParams(context.dp(TAB_W_DP), context.dp(TAB_H_DP)),
             )
         }
+
+    /** A column that reports every touch-down, including those its tiles go on to take. */
+    private class TouchAwareColumn(context: Context, private val onTouchDown: () -> Unit) : LinearLayout(context) {
+        override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) onTouchDown()
+            return false
+        }
+    }
 
     private fun Context.dp(value: Float): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).toInt()

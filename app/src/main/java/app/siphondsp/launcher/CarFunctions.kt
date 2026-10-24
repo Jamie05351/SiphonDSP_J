@@ -60,12 +60,18 @@ enum class CarFunction(
         else -> WitsPms.isPresent()
     }
 
-    fun run(context: Context) {
-        when {
-            blocked -> return
-            component != null -> Launch.component(context, component)
-            command != null -> WitsPms.send(context, WitsPms.SYSTEM, command)
+    /**
+     * Opens the screen or sends the command. True only when an Android screen opened: a command
+     * switches the display away from Android, and a blocked or failed one opened nothing.
+     */
+    fun run(context: Context): Boolean = when {
+        blocked -> false
+        component != null -> Launch.component(context, component)
+        command != null -> {
+            WitsPms.send(context, WitsPms.SYSTEM, command)
+            false
         }
+        else -> false
     }
 
     companion object {

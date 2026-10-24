@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -11,6 +12,7 @@ import androidx.core.view.drawToBitmap
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +62,30 @@ class AppDockTest {
 
         AppDock.hide(context)
         assertTrue(windows().isEmpty())
+    }
+
+    @Test
+    fun aTouchOnATileKeepsItOpen() {
+        ShadowSettings.setCanDrawOverlays(true)
+        HomeSlots.get(context).setAll(listOf(SlotTarget.Car(CarFunction.SETTINGS), SlotTarget.App(ComponentName("a.one", "a.one.Main"))))
+        AppDock.show(context)
+        val panel = windows().single() as ViewGroup
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        panel.layout(0, 0, panel.measuredWidth, panel.measuredHeight)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(4))
+
+        // Pressed on the first tile just before it would have shrunk.
+        val tile = panel.getChildAt(0)
+        val x = tile.left + tile.width / 2f
+        val y = tile.top + tile.height / 2f
+        val down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, x, y, 0)
+        panel.dispatchTouchEvent(down)
+        down.recycle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertSame("still open past the original 5 s", panel, windows().single())
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(4))
+        assertEquals("then shrunk to the tab", 1, (windows().single() as ViewGroup).childCount)
     }
 
     @Test
