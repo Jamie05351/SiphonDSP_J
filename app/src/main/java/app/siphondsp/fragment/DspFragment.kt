@@ -118,7 +118,7 @@ class DspFragment : Fragment() {
         iconKeyPicking = null
         // Messages go through the app, not this fragment: the home screen can be rebuilt while the
         // picker is open, and a detached fragment would drop them, so a failure looked like nothing.
-        val context = requireContext().applicationContext
+        val context = context?.applicationContext ?: return@registerForActivityResult
         when {
             uri == null -> {}
             key == null -> Toast.makeText(context, R.string.launcher_icon_lost, Toast.LENGTH_LONG).show()
@@ -130,8 +130,8 @@ class DspFragment : Fragment() {
     }
 
     private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val context = requireContext().applicationContext
+        val context = context?.applicationContext
+        if (uri != null && context != null) {
             LauncherCustomisation.get(context).setWallpaper(uri) { failure ->
                 if (failure != null) Toast.makeText(context, context.getString(R.string.launcher_wallpaper_failed, failure), Toast.LENGTH_LONG).show()
             }
