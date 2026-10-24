@@ -24,6 +24,7 @@ private val StrokeWidth = 2.dp
 private val GlowWidth = 5.dp
 private val KnobRingColor = Color.White
 private val KnobStrokeWidth = 3.dp
+private val KnobGlowWidth = 7.dp
 
 /**
  * The hardware D-pad/rotary "you are here" indicator -- visually the same cyan glow + stroke
@@ -54,11 +55,16 @@ fun Modifier.knobFocusRing(cornerRadius: Dp = 6.dp, withinChildren: Boolean = fa
         onFocusChanged { focused = if (withinChildren) it.hasFocus else it.isFocused }
             .drawWithContent {
                 drawContent()
-                if (focused) drawFocusRing(cornerRadius, KnobRingColor, KnobStrokeWidth)
+                if (focused) drawFocusRing(cornerRadius, KnobRingColor, KnobStrokeWidth, KnobGlowWidth)
             }
     }
 
-private fun DrawScope.drawFocusRing(cornerRadius: Dp, color: Color = RingColor, width: Dp = StrokeWidth) {
+private fun DrawScope.drawFocusRing(
+    cornerRadius: Dp,
+    color: Color = RingColor,
+    width: Dp = StrokeWidth,
+    glow: Dp = GlowWidth,
+) {
     val strokePx = width.toPx()
     val inset = strokePx / 2f
     val corner = CornerRadius(cornerRadius.toPx())
@@ -69,7 +75,7 @@ private fun DrawScope.drawFocusRing(cornerRadius: Dp, color: Color = RingColor, 
         topLeft = topLeft,
         size = ringSize,
         cornerRadius = corner,
-        style = Stroke(GlowWidth.toPx() + strokePx),
+        style = Stroke(glow.toPx()),
         alpha = 0.35f,
     )
     drawRoundRect(

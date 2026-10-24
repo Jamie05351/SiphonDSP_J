@@ -60,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -217,6 +218,8 @@ fun LauncherHome(
     val view = LocalView.current
     val knobEntry = remember { FocusRequester() }
     val overlayEntry = remember { FocusRequester() }
+    // Whether knob focus is inside the open drawer or car menu; see the key handler below.
+    var overlayHasFocus by remember { mutableStateOf(false) }
     // The host bumps [knobFocusRequests] when the iDrive knob is used while nothing here has focus:
     // focus then lands on the open drawer or car menu, else on the DSP bar (on screen in every
     // other state), and moves on from there.
@@ -246,7 +249,13 @@ fun LauncherHome(
                     else -> return@onKeyEvent false
                 }
                 val moved = focusManager.moveFocus(direction) || focusManager.moveFocus(step)
-                if (!moved || !view.hasFocus()) knobEntry.requestFocus()
+                // With a drawer or menu open, focus stays in it: a move that would land on the bar or
+                // volume behind it, or off the end, wraps to the panel's Close button instead.
+                val inOverlay = overlay != LauncherOverlay.None
+                when {
+                    inOverlay && (!moved || !view.hasFocus() || !overlayHasFocus) -> overlayEntry.requestFocus()
+                    !inOverlay && (!moved || !view.hasFocus()) -> knobEntry.requestFocus()
+                }
                 true
             },
     ) {
@@ -331,6 +340,7 @@ fun LauncherHome(
         val letterbox = ((maxHeight - scale.dp(DesignH)) / 2).coerceAtLeast(0.dp)
         val overlayBottom = scale.dp(DesignH - BarTop + 12f) + letterbox
         val overlayTop = scale.dp(TopMargin) + letterbox
+        Box(Modifier.fillMaxSize().onFocusChanged { overlayHasFocus = it.hasFocus }) {
         when (overlay) {
             is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             is LauncherOverlay.CarMenu -> CarMenu(
@@ -338,6 +348,7 @@ fun LauncherHome(
             )
             LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
             LauncherOverlay.None -> {}
+        }
         }
     }
 }
