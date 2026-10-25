@@ -20,6 +20,7 @@
     <string name="launcher_home_full">Home is full: long-press a home icon to replace it</string>
     <string name="launcher_open_missing">That app or screen isn\'t on this head unit</string>
     <string name="launcher_open_restricted">Android won\'t let J_DSP open that screen</string>
+    <string name="launcher_dock_open">Show the app sidebar</string>
     <string name="launcher_car_command_failed">The head unit didn\'t accept that command</string>
     <string name="launcher_dsp_bar">DSP: tap to show the signal chain</string>
     <string name="launcher_dsp_bar_close">Tap to hide the signal chain</string>

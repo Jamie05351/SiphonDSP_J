@@ -60,12 +60,18 @@ enum class CarFunction(
         else -> WitsPms.isPresent()
     }
 
-    fun run(context: Context) {
-        when {
-            blocked -> return
-            component != null -> Launch.component(context, component)
-            command != null -> WitsPms.send(context, WitsPms.SYSTEM, command)
+    /**
+     * Opens the screen or sends the command. True only when an Android screen opened: a command
+     * switches the display away from Android, and a blocked or failed one opened nothing.
+     */
+    fun run(context: Context): Boolean = when {
+        blocked -> false
+        component != null -> Launch.component(context, component)
+        command != null -> {
+            WitsPms.send(context, WitsPms.SYSTEM, command)
+            false
         }
+        else -> false
     }
 
     companion object {
@@ -77,10 +83,9 @@ private const val KSW = "com.wits.ksw"
 
 /** Starts other apps from the home screen without ever crashing it (which would stop the audio). */
 object Launch {
-    /** Opens [component] as its app's main entry, in that app's own task. */
-    fun component(context: Context, component: ComponentName) {
+    /** Opens [component] as its app's main entry, in that app's own task. True if it opened. */
+    fun component(context: Context, component: ComponentName): Boolean =
         start(context, Intent.makeMainActivity(component).addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
-    }
 
     /** Starts [intent] in its own task; a missing, disabled, restricted or broken target shows a message. */
     fun start(context: Context, intent: Intent): Boolean = try {
