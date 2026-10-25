@@ -53,11 +53,19 @@ object SpectrumEngine {
 
     @Volatile
     private var activationCount = 0
-    val isActive: Boolean get() = activationCount > 0
+
+    // Holders that only want the L/R levels (the home screen's meters): they need the feed and the
+    // analyzer thread, but not the two 16384-point FFTs a graph needs, which they'd otherwise run
+    // for as long as the home screen shows.
+    @Volatile
+    private var levelsOnlyCount = 0
+
+    /** Whether the audio thread should publish buffers: a graph or a level meter is showing. */
+    val isActive: Boolean get() = activationCount > 0 || levelsOnlyCount > 0
 
     /** Publishes one tick's dry (pre-DSP) and wet (post-DSP) interleaved buffers as a pair. */
     fun publish(dryInterleaved: FloatArray, wetInterleaved: FloatArray, length: Int, sampleRate: Int) {
-        if (activationCount <= 0) return
+        if (!isActive) return
         synchronized(feedLock) {
             feedDryScratch = growIfNeeded(feedDryScratch, length).also {
                 System.arraycopy(dryInterleaved, 0, it, 0, length)
@@ -90,6 +98,24 @@ object SpectrumEngine {
     @Synchronized
     fun acquire() {
         activationCount++
+        startThread()
+    }
+
+    /** Like [acquire], for the L/R levels only ([channelLevelsInto]): no spectrum is analysed for it. */
+    @Synchronized
+    fun acquireLevels() {
+        levelsOnlyCount++
+        startThread()
+    }
+
+    @Synchronized
+    fun releaseLevels() {
+        if (levelsOnlyCount == 0) return
+        levelsOnlyCount--
+        stopThreadIfUnused()
+    }
+
+    private fun startThread() {
         if (thread == null) {
             running = true
             thread = Thread({ runLoop() }, "SiphonDSP-Spectrum").apply {
@@ -104,7 +130,11 @@ object SpectrumEngine {
     fun release() {
         if (activationCount == 0) return
         activationCount--
-        if (activationCount == 0) {
+        stopThreadIfUnused()
+    }
+
+    private fun stopThreadIfUnused() {
+        if (activationCount == 0 && levelsOnlyCount == 0) {
             running = false
             thread?.interrupt()
             // Wait for the loop to actually exit before returning: it only ever sleeps for 16ms
@@ -132,8 +162,10 @@ object SpectrumEngine {
         while (running) {
             val consumed = drainInto(dryDrain, wetDrain)
             if (consumed > 0) {
-                dryChannel.feed(dryDrain, consumed, fft)
-                wetChannel.feed(wetDrain, consumed, fft)
+                if (activationCount > 0) {
+                    dryChannel.feed(dryDrain, consumed, fft)
+                    wetChannel.feed(wetDrain, consumed, fft)
+                }
                 updateLevelsFromInterleaved(wetDrain, consumed)
             }
             try {
