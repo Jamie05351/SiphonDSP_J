@@ -991,9 +991,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         var diagnostics = startupDiagnostics
 
         try {
-            recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+            recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes * RECORD_BUFFER_BLOCKS)
             diagnostics?.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
-            track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+            track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes * TRACK_BUFFER_BLOCKS)
             diagnostics?.recordTrackCreated(track.state, track.playState, track.sampleRate)
             synchronized(recorderLifecycleLock) {
                 activeRecorder = recorder
@@ -1052,9 +1052,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         bufferSizeBytes,
                         bufferSamples,
                     )
-                    recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+                    recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes * RECORD_BUFFER_BLOCKS)
                     diagnostics.recordRecorderCreated(recorder.state, recorder.recordingState, recorder.sampleRate)
-                    track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+                    track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes * TRACK_BUFFER_BLOCKS)
                     diagnostics.recordTrackCreated(track.state, track.playState, track.sampleRate)
                     synchronized(recorderLifecycleLock) {
                         activeRecorder = recorder
@@ -1505,6 +1505,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     companion object {
         @Volatile private var activeInstance: RootlessAudioProcessorService? = null
         private const val CHANNEL_COUNT = 2
+
+        // The loop reads, processes and writes one block (bufferSizeBytes) at a time. With the
+        // recorder and track holding exactly one block each there was no slack at all: a slow
+        // process() (on the head unit 28 ms average, but peaks past 60 ms of an 80 ms block) let the
+        // track run dry (dropouts) and the recorder overflow (skips), with nothing ever over budget.
+        // The recorder holds extra blocks at no latency cost (it only fills while the loop is late);
+        // the track's second block is the slack, at up to one block of added latency.
+        private const val RECORD_BUFFER_BLOCKS = 3
+        private const val TRACK_BUFFER_BLOCKS = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
         // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
