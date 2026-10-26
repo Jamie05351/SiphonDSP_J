@@ -1100,6 +1100,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     continue
                 }
 
+                var primeTrack = false
                 synchronized(recorderLifecycleLock) {
                     if (isProcessorDisposing || isServiceDisposing) break
                     if (recreateRecorderRequested) continue
@@ -1110,9 +1111,24 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     if(currentRecorder.recordingState == AudioRecord.RECORDSTATE_STOPPED)
                         currentRecorder.startRecording()
                     diagnostics?.recordRecorderStarted(currentRecorder.recordingState)
-                    if(currentTrack.playState != AudioTrack.PLAYSTATE_PLAYING)
+                    if(currentTrack.playState != AudioTrack.PLAYSTATE_PLAYING) {
                         currentTrack.play()
+                        primeTrack = true
+                    }
                     diagnostics?.recordTrackStarted(currentTrack.playState)
+                }
+                // The loop writes one block per block read, so the track only ever holds what it's
+                // given: a larger buffer alone stays near empty. One block of silence on each start
+                // keeps a block in hand from then on, the slack a late process() draws on instead of
+                // underrunning (see TRACK_BUFFER_BLOCKS). The track has room, so this doesn't block.
+                if (primeTrack) {
+                    if (encoding == AudioEncoding.PcmShort) {
+                        shortOutBuffer.fill(0)
+                        writeFully(currentTrack, shortOutBuffer, bufferSamples, diagnostics)
+                    } else {
+                        floatOutBuffer.fill(0f)
+                        writeFully(currentTrack, floatOutBuffer, bufferSamples, diagnostics)
+                    }
                 }
 
                 // The measurement generator fully replaces whatever's captured (see
@@ -1511,7 +1527,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // process() (on the head unit 28 ms average, but peaks past 60 ms of an 80 ms block) let the
         // track run dry (dropouts) and the recorder overflow (skips), with nothing ever over budget.
         // The recorder holds extra blocks at no latency cost (it only fills while the loop is late);
-        // the track's second block is the slack, at up to one block of added latency.
+        // the track's second block is the slack, filled with silence when the track starts, at
+        // one block of added latency.
         private const val RECORD_BUFFER_BLOCKS = 3
         private const val TRACK_BUFFER_BLOCKS = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
