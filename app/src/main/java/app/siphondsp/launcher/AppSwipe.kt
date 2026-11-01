@@ -54,6 +54,9 @@ object AppSwipe {
     val PAIR = listOf("com.spotify.music", "com.waze")
 
     private const val POLL_MS = 1_500L
+    private const val RECHECK_MS = 30_000L
+    // How long to leave the strips away after Android refused one of their windows.
+    private const val ADD_RETRY_MS = 30_000L
     // How far back the first look for the front app goes, before any event since the last one.
     private const val FIRST_LOOK_MS = 10 * 60_000L
     private const val TOP_DP = 48f          // clear of the head unit's top banner, as the home screen
@@ -109,8 +112,9 @@ object AppSwipe {
         poll = scope.launch {
             var front: String? = null
             var since = System.currentTimeMillis() - FIRST_LOOK_MS
-            // The front app the swipe target was last worked out for, and that target.
+            // The front app the swipe target was last worked out for, when, and that target.
             var checkedFor: String? = null
+            var checkedAt = 0L
             var next: String? = null
             while (isActive) {
                 // Screen off: nothing to swipe, so no reads; what changed meanwhile is read on waking.
@@ -123,17 +127,23 @@ object AppSwipe {
                 val now = System.currentTimeMillis()
                 front = withContext(Dispatchers.IO) { lastResumed(usage, since, now) } ?: front
                 since = now
-                // The dump, a large read, is only taken when the front app changes to one of the pair,
-                // to see if the other is open: whether it is only changes as apps come and go.
-                if (front != checkedFor) {
-                    checkedFor = front
-                    next = if (front in PAIR) {
-                        withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }
+                // The dump, a large read, is only taken when the front app changes, or every
+                // [RECHECK_MS] while one of the pair stays in front, in case the other was closed or
+                // opened meanwhile. A failed read is tried again on the next poll.
+                if (front != checkedFor || (front in PAIR && now - checkedAt >= RECHECK_MS)) {
+                    if (front in PAIR) {
+                        val tasks = withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }
                             ?.let(::parse)
-                            // Usage stats know the front app even when the dump's wording isn't one parse reads.
-                            ?.let { swipeTarget(it.copy(front = it.front ?: front)) }
+                            ?.takeIf { it.open.isNotEmpty() }
+                        // Usage stats know the front app even when the dump's wording isn't one parse reads.
+                        next = tasks?.let { swipeTarget(it.copy(front = it.front ?: front)) }
+                        if (tasks != null) {
+                            checkedFor = front
+                            checkedAt = now
+                        }
                     } else {
-                        null
+                        next = null
+                        checkedFor = front
                     }
                 }
                 update(app, next)
@@ -194,21 +204,31 @@ object AppSwipe {
         strips.forEach { it.contentDescription = next?.let { pkg -> context.getString(R.string.launcher_swipe_to, label(context, pkg)) } }
     }
 
+    /**
+     * Adds both strips, or neither: if Android refuses one, any added is taken away again and no
+     * new try is made for [ADD_RETRY_MS], so a refusal isn't logged every poll.
+     */
     private fun addStrips(context: Context) {
+        if (System.currentTimeMillis() - addFailedAt < ADD_RETRY_MS) return
         val wm = context.getSystemService(WindowManager::class.java) ?: return
         val added = mutableListOf<View>()
-        for (gravity in listOf(Gravity.START, Gravity.END)) {
-            val strip = strip(context) { leftwards -> target?.let { switchTo(context, it, leftwards) } }
-            try {
+        try {
+            for (gravity in listOf(Gravity.START, Gravity.END)) {
+                val strip = strip(context) { leftwards -> target?.let { switchTo(context, it, leftwards) } }
                 wm.addView(strip, params(context, gravity))
                 added += strip
-            } catch (e: RuntimeException) {
-                // A refused overlay must never take the home screen (and the audio) down with it.
-                Timber.w(e, "Swipe strip could not be shown")
             }
+            strips = added
+        } catch (e: RuntimeException) {
+            // A refused overlay must never take the home screen (and the audio) down with it.
+            Timber.w(e, "Swipe strips could not be shown")
+            added.forEach { runCatching { wm.removeViewImmediate(it) } }
+            addFailedAt = System.currentTimeMillis()
         }
-        strips = added
     }
+
+    /** When Android last refused a strip's window; see [addStrips]. */
+    private var addFailedAt = 0L
 
     private fun removeStrips(context: Context) {
         val wm = context.getSystemService(WindowManager::class.java)
