@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
 import app.siphondsp.compose.launcher.LauncherOverlay
-import app.siphondsp.launcher.AppDock
+import app.siphondsp.launcher.AppSwipe
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
 import app.siphondsp.launcher.HomeSlots
@@ -98,6 +98,9 @@ class DspFragment : Fragment() {
 
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
+
+    /** Whether the Spotify / Waze swipe has what it needs; checked each time home comes back. */
+    private var appSwipeAllowed by mutableStateOf(true)
 
     /** Bumped to move iDrive knob focus into the home screen; see [enterKnobFocus]. */
     private var knobFocusRequests by mutableIntStateOf(0)
@@ -253,8 +256,10 @@ class DspFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         resumed = true
-        // Home again: the app sidebar is only for moving between apps.
-        AppDock.hide(requireContext())
+        // Home again: the Spotify / Waze swipe is only for moving between those apps.
+        AppSwipe.stop(requireContext())
+        // Without both apps installed, or with nothing J_DSP can open to grant, the car menu offers nothing.
+        appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext()) || AppSwipe.settingsToAllow(requireContext()) == null
         nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
@@ -273,6 +278,8 @@ class DspFragment : Fragment() {
         resumed = false
         nowPlaying.stop()
         updateLevelFeed()
+        // Spotify or Waze may be what comes up; see AppSwipe.
+        AppSwipe.start(requireContext())
     }
 
     override fun onDestroyView() {
@@ -352,6 +359,7 @@ class DspFragment : Fragment() {
                 look = look,
                 track = track,
                 nowPlayingAllowed = nowPlayingAllowed,
+                appSwipeAllowed = appSwipeAllowed,
                 knobFocusRequests = knobFocusRequests,
                 onKnobFocusResult = { taken -> knobFocusFailed = !taken },
                 onHasFocusChanged = { homeHasFocus = it },
@@ -478,13 +486,8 @@ class DspFragment : Fragment() {
         // level is on screen); the saved value comes back through settingsReceiver.
         override fun volumeStep(steps: Int) { MasterVolume.step(requireContext(), steps) }
         override fun toggleMute() { MasterVolume.setMuted(requireContext(), null) }
-        // Opening an app (or a KSW screen) from here brings up the app sidebar over it.
-        override fun launchApp(app: AppEntry) {
-            if (Launch.component(requireContext(), app.component)) AppDock.show(requireContext())
-        }
-        override fun runCar(function: CarFunction) {
-            if (function.run(requireContext())) AppDock.show(requireContext())
-        }
+        override fun launchApp(app: AppEntry) { Launch.component(requireContext(), app.component) }
+        override fun runCar(function: CarFunction) { function.run(requireContext()) }
         override fun assignSlot(index: Int, target: SlotTarget) = HomeSlots.get(requireContext()).set(index, target)
         override fun swapSlots(a: Int, b: Int) = HomeSlots.get(requireContext()).swap(a, b)
         override fun appInfo(app: AppEntry) {
@@ -507,6 +510,7 @@ class DspFragment : Fragment() {
         override fun backUpLayout() = launchPicker { saveLayout.launch("j_dsp-home-layout.json") }
         override fun restoreLayout() = launchPicker { openLayout.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         override fun allowNowPlaying() { Launch.start(requireContext(), Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        override fun allowAppSwipe() { AppSwipe.settingsToAllow(requireContext())?.let { Launch.start(requireContext(), it) } }
         override fun mediaPlayPause() = nowPlaying.playPause()
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()

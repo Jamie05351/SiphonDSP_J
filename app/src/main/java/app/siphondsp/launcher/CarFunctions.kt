@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcel
 import android.widget.Toast
@@ -87,9 +88,12 @@ object Launch {
     fun component(context: Context, component: ComponentName): Boolean =
         start(context, Intent.makeMainActivity(component).addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
 
-    /** Starts [intent] in its own task; a missing, disabled, restricted or broken target shows a message. */
-    fun start(context: Context, intent: Intent): Boolean = try {
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    /**
+     * Starts [intent] in its own task, with [options] (a transition) if given; a missing, disabled,
+     * restricted or broken target shows a message.
+     */
+    fun start(context: Context, intent: Intent, options: Bundle? = null): Boolean = try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options)
         true
     } catch (e: ActivityNotFoundException) {
         Timber.w(e, "Launch target missing")

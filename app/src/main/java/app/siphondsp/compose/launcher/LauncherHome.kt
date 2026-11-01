@@ -170,6 +170,8 @@ interface LauncherActions {
     fun restoreLayout()
     /** Opens Android's notification-access settings so now playing can see media sessions. */
     fun allowNowPlaying()
+    /** Opens the Android settings page for what the Spotify / Waze swipe still lacks. */
+    fun allowAppSwipe()
     fun mediaPlayPause()
     fun mediaNext()
     fun mediaPrevious()
@@ -216,6 +218,7 @@ fun LauncherHome(
     look: LauncherCustomisation.Look = LauncherCustomisation.Look(),
     track: Track? = null,
     nowPlayingAllowed: Boolean = true,
+    appSwipeAllowed: Boolean = true,
     knobFocusRequests: Int = 0,
     onKnobFocusResult: (Boolean) -> Unit = {},
     onHasFocusChanged: (Boolean) -> Unit = {},
@@ -363,7 +366,7 @@ fun LauncherHome(
             when (overlay) {
                 is LauncherOverlay.Drawer -> AppDrawer(apps, slots, look, overlay.pickFor, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 is LauncherOverlay.CarMenu -> CarMenu(
-                    carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
+                    carFunctions, overlay.pickFor, look.wallpaper != null, nowPlayingAllowed, appSwipeAllowed, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions,
                 )
                 LauncherOverlay.HiddenApps -> HiddenApps(apps, look, scale.dp(GridLeft), overlayTop, overlayBottom, overlayEntry, onOverlayChange, actions)
                 LauncherOverlay.None -> {}
