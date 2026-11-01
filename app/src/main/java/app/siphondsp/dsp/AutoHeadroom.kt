@@ -93,7 +93,18 @@ class AutoHeadroomCalculator(private val pointCount: Int = DEFAULT_POINT_COUNT) 
         var peak = AutoHeadroom.peakDb(coarseCurves)
         if (!coarseCurves.processorEnabled) return peak
 
-        val candidates = findCandidates(peak)
+        // Virtual Bass: below 5x its cut (the sub plus its harmonics) the level can reach
+        // (1 + Amount) x what the response there passes, so that region's peak -- coarse and
+        // refined alike -- counts with the allowance on top.
+        val boostDb = NativeBmwDspValues.virtualBassWorstCaseBoostDb(values)
+        val reachHz = NativeBmwDspValues.virtualBassCutHz(values) * NativeBmwDspValues.VIRTUAL_BASS_TOP_RATIO
+        fun withVirtualBass(curves: BmwResponseCurves, peakSoFar: Double): Double =
+            if (boostDb > 0.0) max(peakSoFar, AutoHeadroom.peakDb(curves, reachHz) + boostDb) else peakSoFar
+        peak = withVirtualBass(coarseCurves, peak)
+
+        // Candidates are found on the plain response, with the window widened by the allowance
+        // while Virtual Bass is on, so a bass peak that only wins with it is refined too.
+        val candidates = findCandidates(AutoHeadroom.peakDb(coarseCurves) - max(boostDb, 0.0))
         val frequencies = coarseCurves.frequencies
         for (c in 0 until candidates) {
             val i = candidateIndex[c]
@@ -101,14 +112,7 @@ class AutoHeadroomCalculator(private val pointCount: Int = DEFAULT_POINT_COUNT) 
             fine.invalidateAll()
             fine.compute(zeroHeadroom, peq, fineCurves)
             peak = max(peak, AutoHeadroom.peakDb(fineCurves))
-        }
-        // Virtual Bass: below 5x its cut (the sub plus its harmonics) the level can reach
-        // (1 + Amount) x what the response there passes. The curves there are smooth (crossover
-        // slopes, the sub removal), so the coarse grid reads them well enough.
-        val boostDb = NativeBmwDspValues.virtualBassWorstCaseBoostDb(values)
-        if (boostDb > 0.0) {
-            val reachHz = NativeBmwDspValues.virtualBassCutHz(values) * NativeBmwDspValues.VIRTUAL_BASS_TOP_RATIO
-            peak = max(peak, AutoHeadroom.peakDb(coarseCurves, reachHz) + boostDb)
+            peak = withVirtualBass(fineCurves, peak)
         }
         return peak
     }

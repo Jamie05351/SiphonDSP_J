@@ -294,18 +294,25 @@ TEST_CASE("a non-finite sample doesn't latch virtual bass") {
     VirtualBass vb;
     vb.rebuild(50.f, kSampleRate);
     const double w = 2.0 * kPi * 30.0 / kSampleRate;
-    for (int n = 0; n < 96000; ++n) {
+    const int measureFrom = 48000, total = 96000;
+    std::vector<float> out(2 * (total - measureFrom));
+    for (int n = 0; n < total; ++n) {
         float s = static_cast<float>(0.3 * std::sin(w * n));
         if (n == 1000) s = std::numeric_limits<float>::quiet_NaN();
         if (n == 1001) s = std::numeric_limits<float>::infinity();
         float l = s, r = s;
-        vb.process(l, r, 1.f, 1.f, 1.f);
+        vb.process(l, r, 1.f, 0.f, 1.f);
         REQUIRE(std::isfinite(l));
         REQUIRE(std::isfinite(r));
+        if (n >= measureFrom) {
+            out[2 * (n - measureFrom)] = l;
+            out[2 * (n - measureFrom) + 1] = r;
+        }
     }
-    // And it still works afterwards: harmonics present.
-    const auto out = runStage(50.f, 30.0, 0.3, 0.f, 1.f);
+    // The same instance still works afterwards: harmonics present, the sub passed through.
+    INFO("after the bad samples: 60 Hz ", relDb(out, 60.0, 0.3), " dB, 30 Hz ", relDb(out, 30.0, 0.3), " dB");
     CHECK(relDb(out, 60.0, 0.3) > -14.0);
+    CHECK(std::fabs(relDb(out, 30.0, 0.3)) < 0.5);
 }
 
 TEST_CASE("virtual bass stays silent on silence") {

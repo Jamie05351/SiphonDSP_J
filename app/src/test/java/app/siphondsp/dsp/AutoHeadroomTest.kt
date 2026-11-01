@@ -71,6 +71,24 @@ class AutoHeadroomTest {
     }
 
     @Test
+    fun virtualBassAllowanceRidesANarrowBassPeakFoundBetweenGridPoints() {
+        // +12 dB at Q 30 near 100 Hz, inside 5x a 50 Hz cut: the refined peak, not the coarse
+        // grid's lower reading, gets the 100% allowance.
+        val sharp = bands(ParametricEqBand(103.7, 12.0, 30.0))
+        val h = headroom(
+            values {
+                it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE] = 0f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 50f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT] = 100f
+            },
+            peq(full = sharp),
+        )
+        val ideal = -(12.0 + 6.0206 + AutoHeadroom.MARGIN_DB).toFloat()
+        assertEquals("headroom vs ideal", ideal, h, 0.05f)
+    }
+
+    @Test
     fun aNarrowPreEqPeakIsFoundBetweenGridPoints() {
         // +12 dB at the PEQ's highest Q, off any round frequency: the grid must not step over it.
         val sharp = bands(ParametricEqBand(1234.5, 12.0, 30.0))
