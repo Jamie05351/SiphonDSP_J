@@ -283,22 +283,22 @@ fun CrossoverTiltPage(
         ArtGroupHeader(
             title = "Virtual Bass",
             accent = bassColor,
-            modifier = row(246, 40),
+            modifier = row(244, 40),
             checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED),
             onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED, if (on) 1f else 0f) },
         )
         DspArtSlider(
             dsp, "Cut", NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
             NativeBmwDspValues.VIRTUAL_BASS_MIN_HZ..NativeBmwDspValues.VIRTUAL_BASS_MAX_HZ,
-            NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(288, 48),
+            NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(286, 48),
         )
         DspArtSlider(
-            dsp, "Amount", NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT, 0f..100f, 5f, "%", bassColor, row(338, 48),
+            dsp, "Amount", NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT, 0f..100f, 5f, "%", bassColor, row(336, 48),
         )
         // 0 = Warm (even harmonics), 100 = Punchy (more of the 3rd).
         DspArtSlider(
             dsp, "Warm ↔ Punch", NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER, 0f..100f, 5f, "%", bassColor,
-            row(388, 48),
+            row(386, 48),
         )
         ArtSwitchRow(
             label = "Remove sub",
@@ -306,7 +306,8 @@ fun CrossoverTiltPage(
             onCheckedChange = { on ->
                 dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB, if (on) 1f else 0f)
             },
-            modifier = row(440, 36),
+            // Ends at y 472, where the head unit's page ends (the activity keeps an 8dp border).
+            modifier = row(436, 36),
             labelWidth = ControlLabelWidth,
         )
     }

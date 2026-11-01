@@ -296,6 +296,20 @@ TEST_CASE("virtual bass character moves the mix from even (warm) to the 3rd (pun
     CHECK(warm4 > punchy4 + 6.0);
 }
 
+TEST_CASE("the engine applies the virtual bass character setting") {
+    // Only slot 303 differs: the engine's own output must move from even-heavy to 3rd-heavy, so a
+    // processor that ignored the setting would fail here (the click test alone wouldn't).
+    auto thirdOverSecond = [](float character) {
+        const auto c = config(true, 50.f, 100.f, false, character);
+        return engineDb(c, 30.0, 90.0, 0.2) - engineDb(c, 30.0, 60.0, 0.2);
+    };
+    const double warm = thirdOverSecond(0.f), mid = thirdOverSecond(50.f), punchy = thirdOverSecond(100.f);
+    INFO("engine 3rd re 2nd: warm ", warm, " dB, 50% ", mid, " dB, punchy ", punchy, " dB");
+    CHECK(punchy > warm + 10.0);
+    CHECK(mid > warm + 3.0);
+    CHECK(punchy > mid + 3.0);
+}
+
 TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     // Full Amount, sub kept: the added signal (output minus input) stays within the input's peak
     // for a range of sub tones, so the stage can't add more than the sub's own level -- at either
