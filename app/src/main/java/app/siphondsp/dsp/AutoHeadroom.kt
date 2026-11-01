@@ -35,7 +35,13 @@ object AutoHeadroom {
      * channels, from [curves] computed with 0 dB headroom. A muted band's curve is silent and so
      * never wins; a disabled processor is a flat 0 dB.
      */
-    fun peakDb(curves: BmwResponseCurves, upToHz: Double = Double.POSITIVE_INFINITY): Double {
+    fun peakDb(
+        curves: BmwResponseCurves,
+        upToHz: Double = Double.POSITIVE_INFINITY,
+        // What a range with no finite point reads as: 0 dB for the whole response (a silent or
+        // disabled one), -inf where "nothing here" must not count as a peak.
+        ifNone: Double = 0.0,
+    ): Double {
         val n = if (upToHz.isInfinite()) Int.MAX_VALUE else curves.frequencies.count { it <= upToHz }
         var peak = Double.NEGATIVE_INFINITY
         for (ch in 0 until 2) {
@@ -44,7 +50,7 @@ object AutoHeadroom {
             if (curves.midBranchActive) peak = max(peak, curves.midBranchDb[ch].maxFinite(n))
             if (curves.highBranchActive) peak = max(peak, curves.highBranchDb[ch].maxFinite(n))
         }
-        return if (peak.isFinite()) peak else 0.0
+        return if (peak.isFinite()) peak else ifNone
     }
 
     // The first [count] points (the frequencies are ascending).
@@ -99,7 +105,13 @@ class AutoHeadroomCalculator(private val pointCount: Int = DEFAULT_POINT_COUNT) 
         val boostDb = NativeBmwDspValues.virtualBassWorstCaseBoostDb(values)
         val reachHz = NativeBmwDspValues.virtualBassCutHz(values) * NativeBmwDspValues.VIRTUAL_BASS_TOP_RATIO
         fun withVirtualBass(curves: BmwResponseCurves, peakSoFar: Double): Double =
-            if (boostDb > 0.0) max(peakSoFar, AutoHeadroom.peakDb(curves, reachHz) + boostDb) else peakSoFar
+            // A window with no point below reachHz (a fine pass up in the treble) reads -inf, not
+            // 0 dB, so the allowance isn't added to a peak that isn't there.
+            if (boostDb > 0.0) {
+                max(peakSoFar, AutoHeadroom.peakDb(curves, reachHz, ifNone = Double.NEGATIVE_INFINITY) + boostDb)
+            } else {
+                peakSoFar
+            }
         peak = withVirtualBass(coarseCurves, peak)
 
         // Candidates are found on the plain response, with the window widened by the allowance

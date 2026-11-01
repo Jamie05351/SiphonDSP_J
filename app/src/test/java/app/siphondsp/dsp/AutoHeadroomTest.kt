@@ -71,6 +71,27 @@ class AutoHeadroomTest {
     }
 
     @Test
+    fun virtualBassAddsNothingWhenTheBassRegionIsQuietAndTheRefinedPeakIsInTheTreble() {
+        // -12 dB preamp and a +9 dB bell at 4 kHz: the loudest point is -3 dB, up in the treble,
+        // and the bass region sits at -12 dB, so even +6 dB of allowance there (-6 dB) needs no
+        // cut. The 4 kHz fine pass has no point below 5x the cut and must not count as a 0 dB
+        // bass peak.
+        val p = peq(preampDb = -12f, full = bands(ParametricEqBand(4000.0, 9.0, 1.0)))
+        val plain = headroom(values { it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE] = 0f }, p)
+        val withVb = headroom(
+            values {
+                it[NativeBmwDspValues.INDEX_MEASUREMENT_MUTE] = 0f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 50f
+                it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT] = 100f
+            },
+            p,
+        )
+        assertEquals(0f, plain, 0.01f)
+        assertEquals(plain, withVb, 0.01f)
+    }
+
+    @Test
     fun virtualBassAllowanceRidesANarrowBassPeakFoundBetweenGridPoints() {
         // +12 dB at Q 30 near 100 Hz, inside 5x a 50 Hz cut: the refined peak, not the coarse
         // grid's lower reading, gets the 100% allowance.
