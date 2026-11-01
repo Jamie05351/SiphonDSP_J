@@ -42,7 +42,7 @@ import kotlin.math.abs
  * invisible overlay windows down the screen edges (J_DSP already holds "display over other apps"
  * for its boot start); everywhere else touches go to the app as usual. Which app is in front comes
  * from usage stats every [POLL_MS] while the home screen is away ([start] .. [stop]), a cheap read
- * of the few events since the last one. Only while Spotify or Waze is in front does it also read
+ * of the few events since the last one. Only when Spotify or Waze comes to the front does it also read
  * the activity manager's dump, to see whether the other is open: that needs the DUMP permission
  * J_DSP holds for audio sessions as well as usage access. Without all three ([allowed]) the strips
  * never appear.
@@ -101,9 +101,13 @@ object AppSwipe {
         poll = scope.launch {
             var front: String? = null
             var since = System.currentTimeMillis() - FIRST_LOOK_MS
+            // The front app the swipe target was last worked out for, and that target.
+            var checkedFor: String? = null
+            var next: String? = null
             while (isActive) {
                 // Screen off: nothing to swipe, so no reads; what changed meanwhile is read on waking.
                 if (power?.isInteractive == false) {
+                    checkedFor = null
                     update(app, null)
                     delay(POLL_MS)
                     continue
@@ -111,14 +115,18 @@ object AppSwipe {
                 val now = System.currentTimeMillis()
                 front = withContext(Dispatchers.IO) { lastResumed(usage, since, now) } ?: front
                 since = now
-                // The dump is only read while one of the pair is in front, to see if the other is open.
-                val next = if (front in PAIR) {
-                    withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }
-                        ?.let(::parse)
-                        // Usage stats know the front app even when the dump's wording isn't one parse reads.
-                        ?.let { swipeTarget(it.copy(front = it.front ?: front)) }
-                } else {
-                    null
+                // The dump, a large read, is only taken when the front app changes to one of the pair,
+                // to see if the other is open: whether it is only changes as apps come and go.
+                if (front != checkedFor) {
+                    checkedFor = front
+                    next = if (front in PAIR) {
+                        withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }
+                            ?.let(::parse)
+                            // Usage stats know the front app even when the dump's wording isn't one parse reads.
+                            ?.let { swipeTarget(it.copy(front = it.front ?: front)) }
+                    } else {
+                        null
+                    }
                 }
                 update(app, next)
                 delay(POLL_MS)
