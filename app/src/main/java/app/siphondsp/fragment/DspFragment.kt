@@ -258,8 +258,8 @@ class DspFragment : Fragment() {
         resumed = true
         // Home again: the Spotify / Waze swipe is only for moving between those apps.
         AppSwipe.stop(requireContext())
-        // Without both apps installed there is nothing to allow, so the car menu offers nothing.
-        appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext())
+        // Without both apps installed, or with nothing J_DSP can open to grant, the car menu offers nothing.
+        appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext()) || AppSwipe.settingsToAllow(requireContext()) == null
         nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
@@ -510,7 +510,7 @@ class DspFragment : Fragment() {
         override fun backUpLayout() = launchPicker { saveLayout.launch("j_dsp-home-layout.json") }
         override fun restoreLayout() = launchPicker { openLayout.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         override fun allowNowPlaying() { Launch.start(requireContext(), Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-        override fun allowAppSwipe() { Launch.start(requireContext(), AppSwipe.settingsToAllow(requireContext())) }
+        override fun allowAppSwipe() { AppSwipe.settingsToAllow(requireContext())?.let { Launch.start(requireContext(), it) } }
         override fun mediaPlayPause() = nowPlaying.playPause()
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()

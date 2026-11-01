@@ -82,15 +82,14 @@ object AppSwipe {
 
     /**
      * Where to grant what the swipe still lacks: display over other apps first, then DUMP (J_DSP's
-     * own setup, which grants it through Shizuku or root), then usage access.
+     * own permission setup, through Shizuku), then usage access. Null when only DUMP is missing on a
+     * root build: its DUMP setup also turns on enhanced processing, which the swipe mustn't change.
      */
-    fun settingsToAllow(context: Context): Intent = when {
+    fun settingsToAllow(context: Context): Intent? = when {
         !Settings.canDrawOverlays(context) ->
             Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
-        !context.hasDumpPermission() -> Intent(context, OnboardingActivity::class.java).apply {
-            if (isRootless()) putExtra(OnboardingActivity.EXTRA_FIX_PERMS, true)
-            else putExtra(OnboardingActivity.EXTRA_ROOT_SETUP_DUMP_PERM, true)
-        }
+        !context.hasDumpPermission() ->
+            if (isRootless()) Intent(context, OnboardingActivity::class.java).putExtra(OnboardingActivity.EXTRA_FIX_PERMS, true) else null
         else -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
     }
 
@@ -126,7 +125,9 @@ object AppSwipe {
                 }
                 val now = System.currentTimeMillis()
                 front = withContext(Dispatchers.IO) { lastResumed(usage, since, now) } ?: front
-                since = now
+                // Events can be written a little after their time, so each look overlaps the last;
+                // only the latest resume counts, so seeing one twice is harmless.
+                since = now - POLL_MS
                 // The dump, a large read, is only taken when the front app changes, or every
                 // [RECHECK_MS] while one of the pair stays in front, in case the other was closed or
                 // opened meanwhile. A failed read is tried again on the next poll.
