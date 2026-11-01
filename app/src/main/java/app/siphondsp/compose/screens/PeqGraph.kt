@@ -1024,7 +1024,8 @@ private fun bandDbAt(m: PeqResponseModel, band: ParametricEqBand, frequency: Dou
  * Where a filter's node sits, in dB. With the individual filters showing it caps the filter's own
  * shape (its peak / dip at its frequency, the knee of a shelf or pass), so the dot and its shape read
  * as one object, as in a desktop PEQ. With them hidden it rides the bank's curve, as before. Kept
- * inside the plot so a deep cut's node stays on screen.
+ * inside the plot so a deep cut's node (or a notch's, -inf at its centre) stays on screen at the
+ * bottom, where its shape goes.
  */
 private fun nodeDb(
     m: PeqResponseModel,
@@ -1036,7 +1037,8 @@ private fun nodeDb(
     g: PeqPlotGeometry,
 ): Double {
     val db = if (showIndividualFilters) bandDbAt(m, band, band.frequency, sampleRate) else curveDbAt(bankCurve, band.frequency, maxFrequency)
-    return if (db.isFinite()) db.coerceIn(g.minGain, g.maxGain) else 0.0
+    // A notch's own response at its centre is -inf: clamp it to the bottom with its shape, not 0 dB.
+    return if (db.isNaN()) 0.0 else db.coerceIn(g.minGain, g.maxGain)
 }
 
 /**
