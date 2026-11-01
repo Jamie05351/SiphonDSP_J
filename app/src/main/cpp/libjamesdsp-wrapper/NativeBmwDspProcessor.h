@@ -131,7 +131,9 @@ public:
     // 299..302 -- Virtual Bass, added in the 299 -> 303 growth:
     //   299      enabled              300  cut frequency Hz (30..80)
     //   301      harmonics level %    302  remove the original sub below the cut
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 303 };
+    //
+    // 303 -- Virtual Bass character, Warm 0 .. Punchy 100 %, added in the 303 -> 304 growth.
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 304 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -506,6 +508,7 @@ private:
     float virtualBassMix_ = 0.f;
     float virtualBassRemoveMix_ = 0.f;
     float virtualBassGain_ = 0.f;
+    float virtualBassCharacter_ = .5f;  // follows p_.virtualBassCharacter like virtualBassGain_
     // Loudness compensation, after the master volume (see Loudness).
     NativeBmwDsp::Loudness loudness_;
     // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the

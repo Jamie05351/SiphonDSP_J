@@ -299,7 +299,7 @@ void VirtualBass::clear() {
     }
     env_ = 0.f;
 }
-void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain) {
+void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
     // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
     // the envelope and filter state, where it would stick until the stage was cleared.
     if (!std::isfinite(l) || !std::isfinite(r)) {
@@ -318,7 +318,11 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
         const float t2 = 2.f * u2 - 1.f;
         const float t3 = u * (4.f * u2 - 3.f);
         const float t4 = 8.f * u2 * (u2 - 1.f) + 1.f;
-        harmonics = env_ * (kW2 * t2 + kW3 * t3 + kW4 * t4);
+        const float c = clampf(character, 0.f, 1.f);
+        const float w2 = kWarmW2 + (kPunchyW2 - kWarmW2) * c;
+        const float w3 = kWarmW3 + (kPunchyW3 - kWarmW3) * c;
+        const float w4 = kWarmW4 + (kPunchyW4 - kWarmW4) * c;
+        harmonics = env_ * (w2 * t2 + w3 * t3 + w4 * t4);
     }
     // Keep only what the woofers can play: the T2 / T4 offsets and anything left below the cut go,
     // as does the top of the series.

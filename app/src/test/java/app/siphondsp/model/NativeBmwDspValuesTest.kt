@@ -888,6 +888,7 @@ class NativeBmwDspValuesTest {
         assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ], 0f)
         assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT], 0f)
         assertEquals(0f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER], 0f)
         assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
         // On, but keeping the sub: still no filter to draw.
         values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f

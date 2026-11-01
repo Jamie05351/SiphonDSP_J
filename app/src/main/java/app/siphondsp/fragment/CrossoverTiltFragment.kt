@@ -29,7 +29,7 @@ import app.siphondsp.compose.screens.CrossoverTiltPage
  * - [CrossoverMidHighPage] -- the same graph under the master 3-way switch, over the Mid/High
  *   corner and Mid-align rows, plus a deep link to the full All-pass screen.
  * - [CrossoverTiltPage] -- the same graph beside the Tonality Tilt switch, amount and pivot, and
- *   the Virtual Bass switch, cut, amount and sub removal.
+ *   the Virtual Bass switch, cut, amount, warm/punch character and sub removal.
  * The two crossover pages share one graph-mode choice, held here.
  *
  * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same

@@ -125,6 +125,7 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
                                    NativeBmwDsp::VirtualBass::kMaxHz);
     next.virtualBassAmount = clampIn(v[nbschema::kVirtualBassAmount], 0, 100) * .01f;
     next.virtualBassRemoveSub = flagIn(v[nbschema::kVirtualBassRemoveSub]);
+    next.virtualBassCharacter = clampIn(v[nbschema::kVirtualBassCharacter], 0, 100) * .01f;
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -1021,6 +1022,7 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         virtualBass_.clear();
         virtualBassRemoveMix_ = p_.virtualBassRemoveSub ? 1.f : 0.f;
         virtualBassGain_ = p_.virtualBassAmount;
+        virtualBassCharacter_ = p_.virtualBassCharacter;
     }
     if (d & DirtyVirtual) {
         virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
@@ -1033,6 +1035,7 @@ void NativeBmwDspProcessor::snapVirtualBass() {
     virtualBassMix_ = p_.virtualBassEnabled ? 1.f : 0.f;
     virtualBassRemoveMix_ = p_.virtualBassRemoveSub ? 1.f : 0.f;
     virtualBassGain_ = p_.virtualBassAmount;
+    virtualBassCharacter_ = p_.virtualBassCharacter;
 }
 
 void NativeBmwDspProcessor::rebuildAll() {

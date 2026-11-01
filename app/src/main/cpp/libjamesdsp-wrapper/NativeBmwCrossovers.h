@@ -219,7 +219,8 @@ private:
 //
 //   m    = (L+R)/2, band-limited to [~20 Hz .. cut] (HP2 at kSubsonicHz, LR4 lowpass at cut)
 //   u    = m / env(m), clamped to [-1, 1]   (env: instant-attack peak follower, kReleaseSeconds)
-//   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. kTopRatio * cut]
+//   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. kTopRatio * cut],
+//          the weights blended between a Warm and a Punchy set by Character
 //          (w2 + w3 + w4 = 1, so |h| <= env before the band-limiting)
 //   out  = base + gain * h on both channels, base = in, or in high-passed at cut (LR4) when the
 //          original sub is removed
@@ -238,17 +239,22 @@ public:
     // onMix crossfades from the input (0) to the processed signal (1): the on/off transition.
     // removeMix crossfades the base from the input (0) to the input high-passed at the cut (1).
     // gain is the harmonics' linear level (1 = the harmonics at the sub's own amplitude).
-    void process(float& left, float& right, float onMix, float removeMix, float gain);
+    // character blends the harmonic mix from Warm (0) to Punchy (1).
+    void process(float& left, float& right, float onMix, float removeMix, float gain, float character);
 
 private:
     static constexpr float kSubsonicHz = 20.f;
     static constexpr float kTopRatio = 5.f;
     static constexpr float kReleaseSeconds = 0.2f;
-    // Harmonic weights, normalised so they sum to 1: at |u| = 1 every T_n is +-1, so the
-    // harmonics never peak above the sub's own envelope -- at full Amount they add at most the
-    // sub's level, never the ~1.9x the raw 1 / 0.6 / 0.3 would.
-    static constexpr float kWeightSum = 1.f + .6f + .3f;
-    static constexpr float kW2 = 1.f / kWeightSum, kW3 = .6f / kWeightSum, kW4 = .3f / kWeightSum;
+    // Harmonic weights (2nd, 3rd, 4th) at the two ends of Character, each normalised so it sums
+    // to 1 -- and so does any blend of them: at |u| = 1 every T_n is +-1, so the harmonics never
+    // peak above the sub's own envelope, at any Character. Warm leans on the even harmonics (the
+    // octave and two octaves: round, tube-like); Punchy brings up the 3rd (an octave and a fifth:
+    // more edge and growl, and a stronger sense of the missing fundamental).
+    static constexpr float kWarmSum = 1.f + .15f + .6f;
+    static constexpr float kWarmW2 = 1.f / kWarmSum, kWarmW3 = .15f / kWarmSum, kWarmW4 = .6f / kWarmSum;
+    static constexpr float kPunchySum = 1.f + .8f + .2f;
+    static constexpr float kPunchyW2 = 1.f / kPunchySum, kPunchyW3 = .8f / kPunchySum, kPunchyW4 = .2f / kPunchySum;
     Biquad inHp_, inLp1_, inLp2_;           // the sub band of (L+R)/2
     Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band
     Biquad cutL1_, cutL2_, cutR1_, cutR2_;  // the original sub's removal, per channel
