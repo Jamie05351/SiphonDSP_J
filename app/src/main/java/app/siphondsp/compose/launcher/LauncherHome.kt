@@ -170,7 +170,7 @@ interface LauncherActions {
     fun restoreLayout()
     /** Opens Android's notification-access settings so now playing can see media sessions. */
     fun allowNowPlaying()
-    /** Opens Android's usage-access settings, which the Spotify / Waze swipe needs. */
+    /** Opens the Android settings page for what the Spotify / Waze swipe still lacks. */
     fun allowAppSwipe()
     fun mediaPlayPause()
     fun mediaNext()

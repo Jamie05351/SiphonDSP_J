@@ -510,7 +510,7 @@ class DspFragment : Fragment() {
         override fun backUpLayout() = launchPicker { saveLayout.launch("j_dsp-home-layout.json") }
         override fun restoreLayout() = launchPicker { openLayout.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         override fun allowNowPlaying() { Launch.start(requireContext(), Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-        override fun allowAppSwipe() { Launch.start(requireContext(), Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+        override fun allowAppSwipe() { Launch.start(requireContext(), AppSwipe.settingsToAllow(requireContext())) }
         override fun mediaPlayPause() = nowPlaying.playPause()
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()

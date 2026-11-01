@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
@@ -73,6 +74,14 @@ object AppSwipe {
     /** Whether the swipe can work: overlays, DUMP and usage access are all granted. */
     fun allowed(context: Context): Boolean =
         Settings.canDrawOverlays(context) && context.hasDumpPermission() && hasUsageAccess(context)
+
+    /** The settings page for what the swipe still lacks: display over other apps first, else usage access. */
+    fun settingsToAllow(context: Context): Intent =
+        if (!Settings.canDrawOverlays(context)) {
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
+        } else {
+            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        }
 
     /** Usage access, without which the activity manager refuses its dump too. */
     private fun hasUsageAccess(context: Context): Boolean {
