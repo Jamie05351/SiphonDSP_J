@@ -161,7 +161,10 @@ internal class GraphSpectrumBars {
         fluidEdge.strokeWidth = 1.6f * density
         fluidGlow.strokeWidth = 6f * density
 
-        // Points: the plot's left edge, every band centre inside the axis, the right edge.
+        // Points: every band whose third-octave range overlaps the axis (as [draw] picks its bars),
+        // each at its centre clamped onto the axis -- so the 20 Hz band lands on the left edge at
+        // its own level rather than being dropped -- plus edge points only where the outermost
+        // band's centre falls short of an edge.
         val floorDb = SpectrumEngine.FLOOR_DB
         val rangeDb = SpectrumEngine.CEILING_DB - floorDb
         fun yAt(level: Float) = yForDb(floorDb + level * rangeDb).coerceIn(top, bottom)
@@ -169,17 +172,23 @@ internal class GraphSpectrumBars {
         var first = -1
         var last = -1
         for (i in 0 until BAND_COUNT) {
-            val c = bars.centreHz(i)
-            if (c <= minHz || c >= maxHz) continue
+            if (bars.highEdgeHz(i) <= minHz || bars.lowEdgeHz(i) >= maxHz) continue
             if (first < 0) first = i
             last = i
         }
         if (first < 0) return
-        fluidX[n] = xForHz(minHz); fluidY[n] = yAt(fluid[first]); n++
-        for (i in first..last) {
-            fluidX[n] = xForHz(bars.centreHz(i)); fluidY[n] = yAt(fluid[i]); n++
+        val leftX = xForHz(minHz)
+        val rightX = xForHz(maxHz)
+        val firstX = xForHz(bars.centreHz(first).coerceIn(minHz, maxHz))
+        if (firstX > leftX) {
+            fluidX[n] = leftX; fluidY[n] = yAt(fluid[first]); n++
         }
-        fluidX[n] = xForHz(maxHz); fluidY[n] = yAt(fluid[last]); n++
+        for (i in first..last) {
+            fluidX[n] = xForHz(bars.centreHz(i).coerceIn(minHz, maxHz)); fluidY[n] = yAt(fluid[i]); n++
+        }
+        if (fluidX[n - 1] < rightX) {
+            fluidX[n] = rightX; fluidY[n] = yAt(fluid[last]); n++
+        }
 
         // Catmull-Rom through the points as cubic Béziers, control points clamped to the plot so
         // the spline never overshoots past the floor or the ceiling.
