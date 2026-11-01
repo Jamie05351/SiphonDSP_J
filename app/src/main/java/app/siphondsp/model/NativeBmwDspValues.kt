@@ -419,6 +419,27 @@ object NativeBmwDspValues {
     const val VIRTUAL_BASS_DEFAULT_HZ = 50f
     const val VIRTUAL_BASS_STEP_HZ = 5f
     const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
+    // The harmonics are band-limited to cut .. this x cut (native VirtualBass::kTopRatio).
+    const val VIRTUAL_BASS_TOP_RATIO = 5.0
+
+    /** Virtual Bass's cut in Hz as native runs it, or 0 while it's off. */
+    fun virtualBassCutHz(values: FloatArray): Double {
+        if (values.getOrElse(INDEX_VIRTUAL_BASS_ENABLED) { 0f } < .5f) return 0.0
+        val hz = values.getOrElse(INDEX_VIRTUAL_BASS_FREQ) { VIRTUAL_BASS_DEFAULT_HZ }
+        return (if (hz.isFinite()) hz else VIRTUAL_BASS_DEFAULT_HZ).coerceIn(VIRTUAL_BASS_MIN_HZ, VIRTUAL_BASS_MAX_HZ).toDouble()
+    }
+
+    /**
+     * The most Virtual Bass can raise the level below [VIRTUAL_BASS_TOP_RATIO] x its cut, in dB, or
+     * 0 while it's off: its harmonics peak at most at the sub's own envelope (native normalises
+     * their weights), added at Amount, so the bass region can reach (1 + Amount) x the sub.
+     */
+    fun virtualBassWorstCaseBoostDb(values: FloatArray): Double {
+        if (virtualBassCutHz(values) <= 0.0) return 0.0
+        val pct = values.getOrElse(INDEX_VIRTUAL_BASS_AMOUNT) { VIRTUAL_BASS_DEFAULT_AMOUNT }
+        val amount = (if (pct.isFinite()) pct else VIRTUAL_BASS_DEFAULT_AMOUNT).coerceIn(0f, 100f) / 100.0
+        return 20.0 * kotlin.math.log10(1.0 + amount)
+    }
 
     /**
      * The cut at which Virtual Bass high-passes the original sub away, in Hz as native runs it, or
@@ -426,10 +447,8 @@ object NativeBmwDspValues {
      * linear response can show -- the harmonics it adds are not a filter.
      */
     fun virtualBassRemovalHz(values: FloatArray): Double {
-        if (values.getOrElse(INDEX_VIRTUAL_BASS_ENABLED) { 0f } < .5f) return 0.0
         if (values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } < .5f) return 0.0
-        val hz = values.getOrElse(INDEX_VIRTUAL_BASS_FREQ) { VIRTUAL_BASS_DEFAULT_HZ }
-        return (if (hz.isFinite()) hz else VIRTUAL_BASS_DEFAULT_HZ).coerceIn(VIRTUAL_BASS_MIN_HZ, VIRTUAL_BASS_MAX_HZ).toDouble()
+        return virtualBassCutHz(values)
     }
     // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
     const val LOUDNESS_BASS_HZ = 100.0

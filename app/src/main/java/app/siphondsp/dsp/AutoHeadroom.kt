@@ -9,7 +9,9 @@ import kotlin.math.min
  * Automatic headroom: just enough cut ahead of the band split that the loudest point of the
  * response the PEQ graph draws -- preamp + Pre EQ, and each audible band's crossover, band PEQ and
  * gain -- sits [MARGIN_DB] below full scale. Worst band and channel wins. Tilt, loudness, post
- * gain and the master volume come after the band sum and aren't part of it.
+ * gain and the master volume come after the band sum and aren't part of it. Virtual Bass, ahead
+ * of it all, isn't a filter the curves can show, so its worst case is added on top of the
+ * response where it acts (see [AutoHeadroomCalculator.peakDb]).
  *
  * Pure: the same values and PEQ always give the same headroom, so the service (which sends it to
  * the engine) and the screens (which show it and draw with it) agree without passing it around.
@@ -33,20 +35,25 @@ object AutoHeadroom {
      * channels, from [curves] computed with 0 dB headroom. A muted band's curve is silent and so
      * never wins; a disabled processor is a flat 0 dB.
      */
-    fun peakDb(curves: BmwResponseCurves): Double {
+    fun peakDb(curves: BmwResponseCurves, upToHz: Double = Double.POSITIVE_INFINITY): Double {
+        val n = if (upToHz.isInfinite()) Int.MAX_VALUE else curves.frequencies.count { it <= upToHz }
         var peak = Double.NEGATIVE_INFINITY
         for (ch in 0 until 2) {
-            peak = max(peak, curves.preSplitDb[ch].maxFinite())
-            if (curves.lowBranchActive) peak = max(peak, curves.lowBranchDb[ch].maxFinite())
-            if (curves.midBranchActive) peak = max(peak, curves.midBranchDb[ch].maxFinite())
-            if (curves.highBranchActive) peak = max(peak, curves.highBranchDb[ch].maxFinite())
+            peak = max(peak, curves.preSplitDb[ch].maxFinite(n))
+            if (curves.lowBranchActive) peak = max(peak, curves.lowBranchDb[ch].maxFinite(n))
+            if (curves.midBranchActive) peak = max(peak, curves.midBranchDb[ch].maxFinite(n))
+            if (curves.highBranchActive) peak = max(peak, curves.highBranchDb[ch].maxFinite(n))
         }
         return if (peak.isFinite()) peak else 0.0
     }
 
-    private fun DoubleArray.maxFinite(): Double {
+    // The first [count] points (the frequencies are ascending).
+    private fun DoubleArray.maxFinite(count: Int = size): Double {
         var m = Double.NEGATIVE_INFINITY
-        for (v in this) if (v.isFinite() && v > m) m = v
+        for (i in 0 until min(count, size)) {
+            val v = this[i]
+            if (v.isFinite() && v > m) m = v
+        }
         return m
     }
 }
@@ -94,6 +101,14 @@ class AutoHeadroomCalculator(private val pointCount: Int = DEFAULT_POINT_COUNT) 
             fine.invalidateAll()
             fine.compute(zeroHeadroom, peq, fineCurves)
             peak = max(peak, AutoHeadroom.peakDb(fineCurves))
+        }
+        // Virtual Bass: below 5x its cut (the sub plus its harmonics) the level can reach
+        // (1 + Amount) x what the response there passes. The curves there are smooth (crossover
+        // slopes, the sub removal), so the coarse grid reads them well enough.
+        val boostDb = NativeBmwDspValues.virtualBassWorstCaseBoostDb(values)
+        if (boostDb > 0.0) {
+            val reachHz = NativeBmwDspValues.virtualBassCutHz(values) * NativeBmwDspValues.VIRTUAL_BASS_TOP_RATIO
+            peak = max(peak, AutoHeadroom.peakDb(coarseCurves, reachHz) + boostDb)
         }
         return peak
     }

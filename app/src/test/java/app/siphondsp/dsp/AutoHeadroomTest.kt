@@ -51,6 +51,26 @@ class AutoHeadroomTest {
     }
 
     @Test
+    fun virtualBassAddsItsWorstCaseOnlyWhereItActs() {
+        val flat = headroom()
+        fun vb(amount: Float, edit: (FloatArray) -> Unit = {}) = values {
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 50f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT] = amount
+            edit(it)
+        }
+        // Off, or on at 0%: no change.
+        assertEquals(flat, headroom(vb(0f)), 1e-4f)
+        // At 100% the bass region can double: 6 dB more headroom than the flat response needs.
+        assertEquals(flat - 6.02f, headroom(vb(100f)), 0.05f)
+        // At 50%: 20 log10(1.5) = 3.5 dB.
+        assertEquals(flat - 3.52f, headroom(vb(50f)), 0.05f)
+        // A treble boost well above 5x the cut already sets the headroom: Virtual Bass adds nothing.
+        val treble = peq(full = bands(ParametricEqBand(4000.0, 9.0, 1.0)))
+        assertEquals(headroom(peq = treble), headroom(vb(100f), treble), 0.05f)
+    }
+
+    @Test
     fun aNarrowPreEqPeakIsFoundBetweenGridPoints() {
         // +12 dB at the PEQ's highest Q, off any round frequency: the grid must not step over it.
         val sharp = bands(ParametricEqBand(1234.5, 12.0, 30.0))

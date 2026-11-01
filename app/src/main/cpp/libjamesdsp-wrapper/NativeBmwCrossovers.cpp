@@ -300,6 +300,12 @@ void VirtualBass::clear() {
     env_ = 0.f;
 }
 void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain) {
+    // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
+    // the envelope and filter state, where it would stick until the stage was cleared.
+    if (!std::isfinite(l) || !std::isfinite(r)) {
+        l = std::isfinite(l) ? l : 0.f;
+        r = std::isfinite(r) ? r : 0.f;
+    }
     // The sub band, and its envelope (instant attack, so |u| <= 1 without clipping a rising edge).
     const float sub = inLp2_.run(inLp1_.run(inHp_.run((l + r) * .5f)));
     const float mag = std::fabs(sub);

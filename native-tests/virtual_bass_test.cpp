@@ -290,6 +290,24 @@ TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     }
 }
 
+TEST_CASE("a non-finite sample doesn't latch virtual bass") {
+    VirtualBass vb;
+    vb.rebuild(50.f, kSampleRate);
+    const double w = 2.0 * kPi * 30.0 / kSampleRate;
+    for (int n = 0; n < 96000; ++n) {
+        float s = static_cast<float>(0.3 * std::sin(w * n));
+        if (n == 1000) s = std::numeric_limits<float>::quiet_NaN();
+        if (n == 1001) s = std::numeric_limits<float>::infinity();
+        float l = s, r = s;
+        vb.process(l, r, 1.f, 1.f, 1.f);
+        REQUIRE(std::isfinite(l));
+        REQUIRE(std::isfinite(r));
+    }
+    // And it still works afterwards: harmonics present.
+    const auto out = runStage(50.f, 30.0, 0.3, 0.f, 1.f);
+    CHECK(relDb(out, 60.0, 0.3) > -14.0);
+}
+
 TEST_CASE("virtual bass stays silent on silence") {
     VirtualBass vb;
     vb.rebuild(50.f, kSampleRate);
