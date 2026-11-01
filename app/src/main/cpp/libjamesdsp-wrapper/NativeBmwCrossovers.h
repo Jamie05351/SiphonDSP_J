@@ -220,6 +220,7 @@ private:
 //   m    = (L+R)/2, band-limited to [~20 Hz .. cut] (HP2 at kSubsonicHz, LR4 lowpass at cut)
 //   u    = m / env(m), clamped to [-1, 1]   (env: instant-attack peak follower, kReleaseSeconds)
 //   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. kTopRatio * cut]
+//          (w2 + w3 + w4 = 1, so |h| <= env before the band-limiting)
 //   out  = base + gain * h on both channels, base = in, or in high-passed at cut (LR4) when the
 //          original sub is removed
 //
@@ -243,7 +244,11 @@ private:
     static constexpr float kSubsonicHz = 20.f;
     static constexpr float kTopRatio = 5.f;
     static constexpr float kReleaseSeconds = 0.2f;
-    static constexpr float kW2 = 1.f, kW3 = .6f, kW4 = .3f;
+    // Harmonic weights, normalised so they sum to 1: at |u| = 1 every T_n is +-1, so the
+    // harmonics never peak above the sub's own envelope -- at full Amount they add at most the
+    // sub's level, never the ~1.9x the raw 1 / 0.6 / 0.3 would.
+    static constexpr float kWeightSum = 1.f + .6f + .3f;
+    static constexpr float kW2 = 1.f / kWeightSum, kW3 = .6f / kWeightSum, kW4 = .3f / kWeightSum;
     Biquad inHp_, inLp1_, inLp2_;           // the sub band of (L+R)/2
     Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band
     Biquad cutL1_, cutL2_, cutR1_, cutR2_;  // the original sub's removal, per channel

@@ -89,8 +89,9 @@ TEST_CASE("virtual bass rebuilds a 30 Hz tone as its 60 and 90 Hz harmonics") {
     const auto out = runStage(50.f, 30.0, amp, 0.f, 1.f);
     const double h2 = relDb(out, 60.0, amp), h3 = relDb(out, 90.0, amp), fund = relDb(out, 30.0, amp);
     INFO("30 Hz ", fund, " dB   60 Hz ", h2, " dB   90 Hz ", h3, " dB");
-    CHECK(h2 > -8.0);
-    CHECK(h3 > -10.0);
+    // Weights 1 : 0.6 : 0.3 normalised to sum to 1 (-5.6 dB), then the band-pass.
+    CHECK(h2 > -14.0);
+    CHECK(h3 > -16.0);
     // The fundamental itself is kept (sub removal off).
     CHECK(std::fabs(fund) < 0.5);
     // Both channels get the same harmonics.
@@ -127,7 +128,7 @@ TEST_CASE("virtual bass sub removal high-passes the original sub at the cut") {
     INFO("30 Hz kept ", relDb(kept, 30.0, amp), " dB, removed ", relDb(removed, 30.0, amp), " dB");
     // LR4 at 50 Hz: about -19 dB at 30 Hz, and the harmonics stay.
     CHECK(relDb(removed, 30.0, amp) < -15.0);
-    CHECK(relDb(removed, 60.0, amp) > -10.0);
+    CHECK(relDb(removed, 60.0, amp) > -14.0);
     // Well above the cut the removal is transparent.
     const auto high = runStage(50.f, 1000.0, 0.5, 1.f, 1.f);
     CHECK(std::fabs(relDb(high, 1000.0, 0.5)) < 0.05);
@@ -267,6 +268,25 @@ TEST_CASE("virtual bass settings outside their ranges are clamped, non-finite on
         bad[slot] = std::numeric_limits<float>::quiet_NaN();
         INFO("slot ", slot);
         CHECK_FALSE(proc.configure(bad.data(), bad.size()));
+    }
+}
+
+TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
+    // Full Amount, sub kept: the added signal (output minus input) stays within the input's peak
+    // for a range of sub tones, so the stage can't add more than the sub's own level.
+    for (double f : {20.0, 30.0, 45.0}) {
+        VirtualBass vb;
+        vb.rebuild(80.f, kSampleRate);
+        const double amp = 0.7, w = 2.0 * kPi * f / kSampleRate;
+        float worst = 0.f;
+        for (int n = 0; n < 96000; ++n) {
+            const float s = static_cast<float>(amp * std::sin(w * n));
+            float l = s, r = s;
+            vb.process(l, r, 1.f, 0.f, 1.f);
+            if (n > 48000) worst = std::max(worst, std::fabs(l - s));
+        }
+        INFO(f, " Hz: largest added sample ", worst, " for a ", amp, " peak sub");
+        CHECK(worst < amp * 1.05f);
     }
 }
 
