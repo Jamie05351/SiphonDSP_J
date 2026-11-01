@@ -1625,6 +1625,9 @@ private class PeqResponseModel {
             if (band.gain < low) low = band.gain
         }
         if (!high.isFinite() || !low.isFinite()) return
+        // Filter shapes hang from the 0 dB line, so keep it on screen even when every curve sits
+        // below it (all cuts, or headroom pulling the curves down).
+        high = maxOf(high, 0.0)
         val top = ceil((high + 3.0) / 6.0) * 6.0
         val span = when {
             top - low <= 22.0 -> 24.0
