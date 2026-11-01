@@ -56,6 +56,7 @@ add_executable(native_tests
     retune_continuity_test.cpp
     loudness_test.cpp
     mono_bass_test.cpp
+    virtual_bass_test.cpp
     flush_to_zero_test.cpp
     ramps_test.cpp
 )

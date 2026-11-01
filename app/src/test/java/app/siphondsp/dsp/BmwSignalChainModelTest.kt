@@ -636,6 +636,34 @@ class BmwSignalChainModelTest {
         for (k in offPhase.indices) assertEquals("phase at point $k", offPhase[k], curves.sumPhase[0][k], 1e-9)
     }
 
+    @Test
+    fun virtualBassDrawsOnlyItsSubRemoval() {
+        val off = NativeBmwDspValues.DEFAULTS.copyOf()
+        val keep = off.copyOf().also {
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 50f
+        }
+        val remove = keep.copyOf().also { it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB] = 1f }
+        calculator.invalidateAll()
+        calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
+        calculator.compute(off, BmwPeqState.empty(), curves)
+        val offSum = curves.sumDb[0].copyOf()
+        // On but keeping the sub: the harmonics aren't a filter, so the curve doesn't move.
+        calculator.compute(keep, BmwPeqState.empty(), curves)
+        for (i in offSum.indices) assertEquals("kept, point $i", offSum[i], curves.sumDb[0][i], 1e-9)
+        // Removing it: LR4 at 50 Hz -- -6 dB at the cut, about -19 dB at 30 Hz, nothing up high.
+        calculator.compute(remove, BmwPeqState.empty(), curves)
+        val at50 = nearestIndex(50.0)
+        val at30 = nearestIndex(30.0)
+        val at1k = nearestIndex(1000.0)
+        assertEquals(-6.0, curves.sumDb[0][at50] - offSum[at50], 0.6)
+        assertTrue("30 Hz drop ${curves.sumDb[0][at30] - offSum[at30]}", curves.sumDb[0][at30] - offSum[at30] < -15.0)
+        assertEquals(0.0, curves.sumDb[0][at1k] - offSum[at1k], 0.01)
+        // And back off restores the curve exactly.
+        calculator.compute(off, BmwPeqState.empty(), curves)
+        for (i in offSum.indices) assertEquals("off again, point $i", offSum[i], curves.sumDb[0][i], 1e-9)
+    }
+
     companion object {
         private const val POINT_COUNT = 192
         private const val SAMPLE_RATE = 48_000.0

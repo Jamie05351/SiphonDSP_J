@@ -35,6 +35,12 @@ struct Params {
     // Mono Bass (v[297..298]): on/off and the split frequency, Hz.
     bool monoBassEnabled = false;
     float monoBassFreq = 90.f;
+    // Virtual Bass (v[299..302]): on/off, cut Hz, harmonics level 0..1 (v[301] is percent), and
+    // whether the original sub below the cut is high-passed away.
+    bool virtualBassEnabled = false;
+    float virtualBassFreq = 50.f;
+    float virtualBassAmount = .5f;
+    bool virtualBassRemoveSub = false;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the

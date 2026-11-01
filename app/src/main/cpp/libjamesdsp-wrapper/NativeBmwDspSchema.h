@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 299;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 303;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -231,6 +231,14 @@ inline constexpr int kHeadroomAuto = 296;
 // earlier mono bass used -- those stay reclaimed.)
 inline constexpr int kMonoBassEnabled = 297;
 inline constexpr int kMonoBassFreq = 298;  // Hz, 60..120
+
+// --- Virtual Bass (299..302), added in the 299 -> 303 growth. Right after Mono Bass: rebuilds the
+// sub below the cut as harmonics the woofers can play (see NativeBmwDsp::VirtualBass), optionally
+// high-passing the original sub away. Ships off; older saves backfill it off.
+inline constexpr int kVirtualBassEnabled = 299;
+inline constexpr int kVirtualBassFreq = 300;       // cut, Hz, 30..80
+inline constexpr int kVirtualBassAmount = 301;     // harmonics level, percent, 0..100
+inline constexpr int kVirtualBassRemoveSub = 302;  // high-pass the original sub at the cut
 
 }  // namespace nbschema
 

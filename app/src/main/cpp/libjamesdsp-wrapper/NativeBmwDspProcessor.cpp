@@ -142,6 +142,18 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     if (monoBassMix_ > 0.f) {
         monoBass_.process(sL, sR, monoBassMix_);
     }
+    if (p_.virtualBassEnabled) {
+        virtualBassMix_ = std::min(1.f, virtualBassMix_ + monoBassFadeStep_);
+    } else if (virtualBassMix_ > 0.f) {
+        virtualBassMix_ = std::max(0.f, virtualBassMix_ - monoBassFadeStep_);
+    }
+    if (virtualBassMix_ > 0.f) {
+        virtualBassRemoveMix_ = p_.virtualBassRemoveSub
+                                    ? std::min(1.f, virtualBassRemoveMix_ + monoBassFadeStep_)
+                                    : std::max(0.f, virtualBassRemoveMix_ - monoBassFadeStep_);
+        virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, loudnessRampCoef_);
+        virtualBass_.process(sL, sR, virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_);
+    }
     if (peqEnabled_) {
         sL *= peqPreamp_;
         sR *= peqPreamp_;
