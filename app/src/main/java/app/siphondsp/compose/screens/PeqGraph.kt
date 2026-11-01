@@ -72,6 +72,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
+import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
@@ -1586,19 +1587,19 @@ private class PeqResponseModel {
         calculator.invalidateAll()
         calculator.compute(autoHeadroom.effectiveValues(values, peq, sampleRate), peq, curves)
         baseline?.applyTo(curves)
-        fitAxis(measured = baseline != null)
+        fitAxis(peq, measured = baseline != null)
     }
 
     /**
      * Fits the gain window to what's drawn, so the curves use the plot's height instead of sitting
      * in the bottom of a fixed -24..+12: the top is the first 6 dB line at least 3 dB above the
-     * highest point of the full curve or any bank's curve (uncapped, so a big stacked boost still
+     * highest point of the full curve, any bank's curve or any filter's own peak (uncapped, so a big stacked boost still
      * shows its real height); the window is 24 dB tall, or 36 dB when
      * the full curve dips further than that (ignoring the rolled-off ends below 40 Hz / above
      * 16 kHz). With a car baseline added ([measured]) the curves carry the cabin's real peaks and
      * dips, so the window may grow to 48 dB.
      */
-    private fun fitAxis(measured: Boolean = false) {
+    private fun fitAxis(peq: BmwPeqState, measured: Boolean = false) {
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
         val freqs = curves.frequencies
@@ -1611,6 +1612,17 @@ private class PeqResponseModel {
             for (i in sum.indices) {
                 if (i < freqs.size && freqs[i] in 40.0..16_000.0 && sum[i].isFinite() && sum[i] < low) low = sum[i]
             }
+        }
+        // Each filter's own extreme too: the graph draws every filter's own shape from 0 dB, and a
+        // boost that its neighbours (or the crossover) cancel in the curves above would otherwise
+        // be flattened against the top edge with its node pinned there. A peaking / shelf
+        // filter's own response tops out at its gain; a notch has no finite extreme, so skip it.
+        val banks = mutableListOf(peq.fullRangeBands, peq.lowBandBands, peq.midBandBands)
+        if (curves.highBranchActive) banks.add(peq.highBandBands)
+        for (bank in banks) for (band in bank) {
+            if (band.filterType == ParametricEqFilterType.NOTCH || !band.gain.isFinite()) continue
+            if (band.gain > high) high = band.gain
+            if (band.gain < low) low = band.gain
         }
         if (!high.isFinite() || !low.isFinite()) return
         val top = ceil((high + 3.0) / 6.0) * 6.0
