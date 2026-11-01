@@ -80,7 +80,10 @@ object NativeBmwDspValues {
     //
     // 299..302 are Virtual Bass (enabled, cut Hz, amount %, remove sub), added in the 299 -> 303
     // growth. Default off, so older saves are unchanged.
-    const val SIZE = 303
+    //
+    // 303 is Virtual Bass's character (Warm 0 .. Punchy 100 %), added in the 303 -> 304 growth.
+    // Default 50; inert while Virtual Bass is off.
+    const val SIZE = 304
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -414,11 +417,13 @@ object NativeBmwDspValues {
     const val INDEX_VIRTUAL_BASS_FREQ = 300 // cut, Hz
     const val INDEX_VIRTUAL_BASS_AMOUNT = 301 // harmonics level, percent
     const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
+    const val INDEX_VIRTUAL_BASS_CHARACTER = 303 // Warm 0 .. Punchy 100, percent
     const val VIRTUAL_BASS_MIN_HZ = 30f
     const val VIRTUAL_BASS_MAX_HZ = 80f
     const val VIRTUAL_BASS_DEFAULT_HZ = 50f
     const val VIRTUAL_BASS_STEP_HZ = 5f
     const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
+    const val VIRTUAL_BASS_DEFAULT_CHARACTER = 50f
     // The harmonics are band-limited to cut .. this x cut (native VirtualBass::kTopRatio).
     const val VIRTUAL_BASS_TOP_RATIO = 5.0
 
@@ -658,6 +663,8 @@ object NativeBmwDspValues {
         VIRTUAL_BASS_DEFAULT_HZ, // 300 virtual bass cut Hz
         VIRTUAL_BASS_DEFAULT_AMOUNT, // 301 virtual bass amount %
         0f, // 302 virtual bass remove sub (off)
+        // --- Virtual Bass character (303) ---
+        VIRTUAL_BASS_DEFAULT_CHARACTER, // 303 virtual bass character % (Warm 0 .. Punchy 100)
     )
 
     init {

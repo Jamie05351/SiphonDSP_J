@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 303;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 304;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -239,6 +239,8 @@ inline constexpr int kVirtualBassEnabled = 299;
 inline constexpr int kVirtualBassFreq = 300;       // cut, Hz, 30..80
 inline constexpr int kVirtualBassAmount = 301;     // harmonics level, percent, 0..100
 inline constexpr int kVirtualBassRemoveSub = 302;  // high-pass the original sub at the cut
+// Added in the 303 -> 304 growth: the harmonic mix, Warm (0) .. Punchy (100).
+inline constexpr int kVirtualBassCharacter = 303;  // percent, 0..100
 
 }  // namespace nbschema
 

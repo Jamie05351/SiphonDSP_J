@@ -16,7 +16,7 @@ namespace {
 
 // Runs a VirtualBass at cut on a centred sine of amplitude amp at freqHz and returns the left
 // output (interleaved L/R) after a warm-up long enough for the envelope and filters to settle.
-std::vector<float> runStage(float cut, double freqHz, double amp, float removeMix, float gain) {
+std::vector<float> runStage(float cut, double freqHz, double amp, float removeMix, float gain, float character = .5f) {
     VirtualBass vb;
     vb.rebuild(cut, kSampleRate);
     const std::size_t warm = 48000, measure = 48000;
@@ -25,7 +25,7 @@ std::vector<float> runStage(float cut, double freqHz, double amp, float removeMi
     for (std::size_t n = 0; n < warm + measure; ++n) {
         const float s = static_cast<float>(amp * std::sin(w * static_cast<double>(n)));
         float l = s, r = s;
-        vb.process(l, r, 1.f, removeMix, gain);
+        vb.process(l, r, 1.f, removeMix, gain, character);
         if (n >= warm) {
             out[2 * (n - warm)] = l;
             out[2 * (n - warm) + 1] = r;
@@ -39,8 +39,10 @@ double relDb(const std::vector<float>& out, double freqHz, double amp) {
     return linToDb(channelMagnitudeAt(out, 0, freqHz) / amp);
 }
 
-std::array<float, kConfigSize> config(bool on, float cut = 50.f, float amount = 50.f, bool removeSub = false) {
+std::array<float, kConfigSize> config(bool on, float cut = 50.f, float amount = 50.f, bool removeSub = false,
+                                      float character = 50.f) {
     auto c = defaultConfig();
+    c[sch::kVirtualBassCharacter] = character;
     c[sch::kVirtualBassEnabled] = on ? 1.f : 0.f;
     c[sch::kVirtualBassFreq] = cut;
     c[sch::kVirtualBassAmount] = amount;
@@ -140,9 +142,10 @@ TEST_CASE("virtual bass is off by default and then leaves the signal bit-identic
     CHECK(stock[sch::kVirtualBassFreq] == 50.f);
     CHECK(stock[sch::kVirtualBassAmount] == 50.f);
     CHECK(stock[sch::kVirtualBassRemoveSub] == 0.f);
+    CHECK(stock[sch::kVirtualBassCharacter] == 50.f);
     // Different (inactive) settings change nothing while it's off.
     NativeBmwDspProcessor a, b;
-    auto ca = config(false), cb = config(false, 80.f, 100.f, true);
+    auto ca = config(false), cb = config(false, 80.f, 100.f, true, 0.f);
     a.setSampleRate(kSampleRate);
     b.setSampleRate(kSampleRate);
     REQUIRE(a.configure(ca.data(), ca.size()));
@@ -217,7 +220,7 @@ TEST_CASE("changing the virtual bass cut or amount while it plays doesn't click"
         float from, to;
     };
     for (Edit e : {Edit{sch::kVirtualBassFreq, 50.f, 55.f}, Edit{sch::kVirtualBassFreq, 30.f, 80.f},
-                   Edit{sch::kVirtualBassAmount, 0.f, 100.f}}) {
+                   Edit{sch::kVirtualBassAmount, 0.f, 100.f}, Edit{sch::kVirtualBassCharacter, 0.f, 100.f}}) {
         NativeBmwDspProcessor proc;
         auto c = config(true);
         c[e.slot] = e.from;
@@ -263,7 +266,7 @@ TEST_CASE("virtual bass settings outside their ranges are clamped, non-finite on
     auto c = config(true, 500.f, 400.f);
     CHECK(proc.configure(c.data(), c.size()));
     for (int slot : {sch::kVirtualBassEnabled, sch::kVirtualBassFreq, sch::kVirtualBassAmount,
-                     sch::kVirtualBassRemoveSub}) {
+                     sch::kVirtualBassRemoveSub, sch::kVirtualBassCharacter}) {
         auto bad = config(true);
         bad[slot] = std::numeric_limits<float>::quiet_NaN();
         INFO("slot ", slot);
@@ -271,9 +274,33 @@ TEST_CASE("virtual bass settings outside their ranges are clamped, non-finite on
     }
 }
 
+TEST_CASE("virtual bass character moves the mix from even (warm) to the 3rd (punchy)") {
+    // The 3rd harmonic against the 2nd: low at Warm, high at Punchy, in between at 50%.
+    const double amp = 0.3;
+    auto thirdOverSecond = [&](float character) {
+        const auto out = runStage(50.f, 30.0, amp, 0.f, 1.f, character);
+        return relDb(out, 90.0, amp) - relDb(out, 60.0, amp);
+    };
+    auto fourthOverSecond = [&](float character) {
+        const auto out = runStage(50.f, 30.0, amp, 0.f, 1.f, character);
+        return relDb(out, 120.0, amp) - relDb(out, 60.0, amp);
+    };
+    const double warm = thirdOverSecond(0.f), mid = thirdOverSecond(.5f), punchy = thirdOverSecond(1.f);
+    INFO("3rd re 2nd: warm ", warm, " dB, 50% ", mid, " dB, punchy ", punchy, " dB");
+    CHECK(punchy > warm + 10.0);
+    CHECK(mid > warm);
+    CHECK(mid < punchy);
+    // And the 4th, the other even harmonic, the other way round.
+    const double warm4 = fourthOverSecond(0.f), punchy4 = fourthOverSecond(1.f);
+    INFO("4th re 2nd: warm ", warm4, " dB, punchy ", punchy4, " dB");
+    CHECK(warm4 > punchy4 + 6.0);
+}
+
 TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     // Full Amount, sub kept: the added signal (output minus input) stays within the input's peak
-    // for a range of sub tones, so the stage can't add more than the sub's own level.
+    // for a range of sub tones, so the stage can't add more than the sub's own level -- at either
+    // end of Character and in between.
+    for (float character : {0.f, .5f, 1.f})
     for (double f : {20.0, 30.0, 45.0}) {
         VirtualBass vb;
         vb.rebuild(80.f, kSampleRate);
@@ -282,10 +309,10 @@ TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
         for (int n = 0; n < 96000; ++n) {
             const float s = static_cast<float>(amp * std::sin(w * n));
             float l = s, r = s;
-            vb.process(l, r, 1.f, 0.f, 1.f);
+            vb.process(l, r, 1.f, 0.f, 1.f, character);
             if (n > 48000) worst = std::max(worst, std::fabs(l - s));
         }
-        INFO(f, " Hz: largest added sample ", worst, " for a ", amp, " peak sub");
+        INFO("character ", character, ", ", f, " Hz: largest added sample ", worst, " for a ", amp, " peak sub");
         CHECK(worst < amp * 1.05f);
     }
 }
@@ -301,7 +328,7 @@ TEST_CASE("a non-finite sample doesn't latch virtual bass") {
         if (n == 1000) s = std::numeric_limits<float>::quiet_NaN();
         if (n == 1001) s = std::numeric_limits<float>::infinity();
         float l = s, r = s;
-        vb.process(l, r, 1.f, 0.f, 1.f);
+        vb.process(l, r, 1.f, 0.f, 1.f, .5f);
         REQUIRE(std::isfinite(l));
         REQUIRE(std::isfinite(r));
         if (n >= measureFrom) {
@@ -320,7 +347,7 @@ TEST_CASE("virtual bass stays silent on silence") {
     vb.rebuild(50.f, kSampleRate);
     for (int n = 0; n < 48000; ++n) {
         float l = 0.f, r = 0.f;
-        vb.process(l, r, 1.f, 1.f, 1.f);
+        vb.process(l, r, 1.f, 1.f, 1.f, .5f);
         REQUIRE(l == 0.f);
         REQUIRE(r == 0.f);
     }
