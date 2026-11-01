@@ -67,6 +67,9 @@ object AppSwipe {
     /** What the activity manager says is open: the app in front, and every app with an activity. */
     internal data class Tasks(val front: String?, val open: Set<String>)
 
+    /** Whether both apps are installed: without them there is nothing to swipe between. */
+    fun installed(context: Context): Boolean = PAIR.all { context.packageManager.getLaunchIntentForPackage(it) != null }
+
     /** Whether the swipe can work: overlays, DUMP and usage access are all granted. */
     fun allowed(context: Context): Boolean =
         Settings.canDrawOverlays(context) && context.hasDumpPermission() && hasUsageAccess(context)
@@ -83,9 +86,7 @@ object AppSwipe {
     fun start(context: Context) {
         val app = context.applicationContext
         if (poll?.isActive == true) return
-        if (!allowed(app)) return
-        // Nothing to swipe between unless both apps are installed.
-        if (PAIR.any { app.packageManager.getLaunchIntentForPackage(it) == null }) return
+        if (!installed(app) || !allowed(app)) return
         val usage = app.getSystemService(UsageStatsManager::class.java) ?: return
         val power = app.getSystemService(PowerManager::class.java)
         poll = scope.launch {
@@ -143,7 +144,8 @@ object AppSwipe {
 
     /**
      * Reads `dumpsys activity activities`: the app in front is the top resumed activity's (the
-     * resumed one's before Android 10), and an app is open while any activity record of it is.
+     * resumed one's before Android 10), and an app is open while a task holds an activity of it
+     * (a `Hist #` record). A record named only as, say, the last paused activity doesn't count.
      */
     internal fun parse(dump: String): Tasks {
         val front = FRONT.firstNotNullOfOrNull { it.find(dump)?.groupValues?.get(1) }
@@ -151,7 +153,7 @@ object AppSwipe {
         return Tasks(front, open)
     }
 
-    private val RECORD = Regex("""ActivityRecord\{\S+ u\d+ ([A-Za-z0-9_.]+)/""")
+    private val RECORD = Regex("""Hist #\d+: ActivityRecord\{\S+ u\d+ ([A-Za-z0-9_.]+)/""")
     private val FRONT = listOf("topResumedActivity", "mResumedActivity", "ResumedActivity").map {
         Regex("""\b$it[=:]\s*ActivityRecord\{\S+ u\d+ ([A-Za-z0-9_.]+)/""")
     }
@@ -192,7 +194,9 @@ object AppSwipe {
     /** A strip's window: the full height below the top banner, [STRIP_DP] wide, on one edge. */
     private fun params(context: Context, edge: Int) = WindowManager.LayoutParams(
         context.dp(STRIP_DP),
-        context.resources.displayMetrics.heightPixels - context.dp(TOP_DP),
+        // The screen's height whatever it becomes (a rotation or resize); what runs past the bottom
+        // edge, below the banner's offset, is off screen.
+        WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or

@@ -258,7 +258,8 @@ class DspFragment : Fragment() {
         resumed = true
         // Home again: the Spotify / Waze swipe is only for moving between those apps.
         AppSwipe.stop(requireContext())
-        appSwipeAllowed = AppSwipe.allowed(requireContext())
+        // Without both apps installed there is nothing to allow, so the car menu offers nothing.
+        appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext())
         nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)

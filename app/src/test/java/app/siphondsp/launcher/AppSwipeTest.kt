@@ -13,6 +13,19 @@ class AppSwipeTest {
     }
 
     @Test
+    fun anAppNamedOnlyAsTheLastPausedOneIsNotOpen() {
+        val dump = """
+            * Task{8d1e0f2 #45 type=standard A=10112:com.waze U=0 visible=true mode=fullscreen translucent=false sz=1}
+              mLastPausedActivity: ActivityRecord{2f4a1b9 u0 com.spotify.music/.MainActivity t44}
+              * Hist #0: ActivityRecord{c33a7d1 u0 com.waze/.FreeMapAppActivity t45}
+            topResumedActivity=ActivityRecord{c33a7d1 u0 com.waze/.FreeMapAppActivity t45}
+        """.trimIndent()
+        val tasks = AppSwipe.parse(dump)
+        assertEquals(setOf("com.waze"), tasks.open)
+        assertNull("nothing to swipe to", AppSwipe.swipeTarget(tasks))
+    }
+
+    @Test
     fun readsTheFrontAppFromAnOlderDump() {
         val dump = "  mResumedActivity: ActivityRecord{5b1c2a u0 com.spotify.music/.MainActivity t31}\n"
         assertEquals("com.spotify.music", AppSwipe.parse(dump).front)
