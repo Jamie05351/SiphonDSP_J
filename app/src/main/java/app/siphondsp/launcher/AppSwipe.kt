@@ -20,8 +20,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import app.siphondsp.R
+import app.siphondsp.activity.OnboardingActivity
 import app.siphondsp.session.dump.utils.DumpUtils
 import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
+import app.siphondsp.utils.isRootless
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,13 +77,19 @@ object AppSwipe {
     fun allowed(context: Context): Boolean =
         Settings.canDrawOverlays(context) && context.hasDumpPermission() && hasUsageAccess(context)
 
-    /** The settings page for what the swipe still lacks: display over other apps first, else usage access. */
-    fun settingsToAllow(context: Context): Intent =
-        if (!Settings.canDrawOverlays(context)) {
+    /**
+     * Where to grant what the swipe still lacks: display over other apps first, then DUMP (J_DSP's
+     * own setup, which grants it through Shizuku or root), then usage access.
+     */
+    fun settingsToAllow(context: Context): Intent = when {
+        !Settings.canDrawOverlays(context) ->
             Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
-        } else {
-            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        !context.hasDumpPermission() -> Intent(context, OnboardingActivity::class.java).apply {
+            if (isRootless()) putExtra(OnboardingActivity.EXTRA_FIX_PERMS, true)
+            else putExtra(OnboardingActivity.EXTRA_ROOT_SETUP_DUMP_PERM, true)
         }
+        else -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+    }
 
     /** Usage access, without which the activity manager refuses its dump too. */
     private fun hasUsageAccess(context: Context): Boolean {
