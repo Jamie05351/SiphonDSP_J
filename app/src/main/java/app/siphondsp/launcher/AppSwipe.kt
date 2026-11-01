@@ -1,10 +1,17 @@
 package app.siphondsp.launcher
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityOptions
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.os.PowerManager
+import android.os.Process
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -33,15 +40,19 @@ import kotlin.math.abs
  * Android gives no app the touches meant for another, so the swipe is caught by two thin,
  * invisible overlay windows down the screen edges (J_DSP already holds "display over other apps"
  * for its boot start); everywhere else touches go to the app as usual. Which app is in front comes
- * from the activity manager's dump, read with the DUMP permission J_DSP holds for audio sessions,
- * every [POLL_MS] while the home screen is away ([start] .. [stop]). Without either permission the
- * strips never appear.
+ * from usage stats every [POLL_MS] while the home screen is away ([start] .. [stop]), a cheap read
+ * of the few events since the last one. Only while Spotify or Waze is in front does it also read
+ * the activity manager's dump, to see whether the other is open: that needs the DUMP permission
+ * J_DSP holds for audio sessions as well as usage access. Without all three ([allowed]) the strips
+ * never appear.
  */
 object AppSwipe {
     /** The two apps to swipe between. */
     val PAIR = listOf("com.spotify.music", "com.waze")
 
     private const val POLL_MS = 1_500L
+    // How far back the first look for the front app goes, before any event since the last one.
+    private const val FIRST_LOOK_MS = 10 * 60_000L
     private const val TOP_DP = 48f          // clear of the head unit's top banner, as the home screen
     private const val STRIP_DP = 18f
     private const val SWIPE_DP = 60f
@@ -56,18 +67,64 @@ object AppSwipe {
     /** What the activity manager says is open: the app in front, and every app with an activity. */
     internal data class Tasks(val front: String?, val open: Set<String>)
 
+    /** Whether the swipe can work: overlays, DUMP and usage access are all granted. */
+    fun allowed(context: Context): Boolean =
+        Settings.canDrawOverlays(context) && context.hasDumpPermission() && hasUsageAccess(context)
+
+    /** Usage access, without which the activity manager refuses its dump too. */
+    private fun hasUsageAccess(context: Context): Boolean {
+        val ops = context.getSystemService(AppOpsManager::class.java) ?: return false
+        val mode = ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
+        return mode == AppOpsManager.MODE_ALLOWED ||
+            (mode == AppOpsManager.MODE_DEFAULT && context.checkSelfPermission(Manifest.permission.PACKAGE_USAGE_STATS) == PackageManager.PERMISSION_GRANTED)
+    }
+
     /** The home screen went away: watch for Spotify or Waze in front. */
     fun start(context: Context) {
         val app = context.applicationContext
         if (poll?.isActive == true) return
-        if (!Settings.canDrawOverlays(app) || !app.hasDumpPermission()) return
+        if (!allowed(app)) return
+        // Nothing to swipe between unless both apps are installed.
+        if (PAIR.any { app.packageManager.getLaunchIntentForPackage(it) == null }) return
+        val usage = app.getSystemService(UsageStatsManager::class.java) ?: return
+        val power = app.getSystemService(PowerManager::class.java)
         poll = scope.launch {
+            var front: String? = null
+            var since = System.currentTimeMillis() - FIRST_LOOK_MS
             while (isActive) {
-                val tasks = withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }?.let(::parse)
-                update(app, tasks?.let(::swipeTarget))
+                // Screen off: nothing to swipe, so no reads; what changed meanwhile is read on waking.
+                if (power?.isInteractive == false) {
+                    update(app, null)
+                    delay(POLL_MS)
+                    continue
+                }
+                val now = System.currentTimeMillis()
+                front = withContext(Dispatchers.IO) { lastResumed(usage, since, now) } ?: front
+                since = now
+                // The dump is only read while one of the pair is in front, to see if the other is open.
+                val next = if (front in PAIR) {
+                    withContext(Dispatchers.IO) { DumpUtils.dumpAll(app, "activity", arrayOf("activities")) }
+                        ?.let(::parse)
+                        // Usage stats know the front app even when the dump's wording isn't one parse reads.
+                        ?.let { swipeTarget(it.copy(front = it.front ?: front)) }
+                } else {
+                    null
+                }
+                update(app, next)
                 delay(POLL_MS)
             }
         }
+    }
+
+    /** The app whose activity came to the front last between [from] and [to], if any did. */
+    private fun lastResumed(usage: UsageStatsManager, from: Long, to: Long): String? {
+        val events = runCatching { usage.queryEvents(from, to) }.getOrNull() ?: return null
+        val event = UsageEvents.Event()
+        var last: String? = null
+        while (events.getNextEvent(event)) {
+            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) last = event.packageName
+        }
+        return last
     }
 
     /** The home screen is back: no strips, no watching. */
@@ -114,7 +171,7 @@ object AppSwipe {
         val wm = context.getSystemService(WindowManager::class.java) ?: return
         val added = mutableListOf<View>()
         for (gravity in listOf(Gravity.START, Gravity.END)) {
-            val strip = strip(context)
+            val strip = strip(context) { leftwards -> target?.let { switchTo(context, it, leftwards) } }
             try {
                 wm.addView(strip, params(context, gravity))
                 added += strip
@@ -146,9 +203,12 @@ object AppSwipe {
         y = context.dp(TOP_DP)
     }
 
-    /** An invisible strip that opens [target] once a touch on it has moved [SWIPE_DP] sideways. */
+    /**
+     * An invisible strip that calls [onSwipe] once per touch, when it has moved [SWIPE_DP] sideways
+     * (true: towards the left).
+     */
     @SuppressLint("ClickableViewAccessibility")
-    private fun strip(context: Context): View = View(context).apply {
+    internal fun strip(context: Context, onSwipe: (leftwards: Boolean) -> Unit): View = View(context).apply {
         var startX = 0f
         var startY = 0f
         var done = false
@@ -165,7 +225,7 @@ object AppSwipe {
                     // Mostly sideways, so a drag down the edge doesn't switch.
                     if (!done && abs(dx) >= context.dp(SWIPE_DP) && abs(dx) > 2 * abs(dy)) {
                         done = true
-                        target?.let { switchTo(context, it, leftwards = dx < 0) }
+                        onSwipe(dx < 0)
                     }
                 }
             }

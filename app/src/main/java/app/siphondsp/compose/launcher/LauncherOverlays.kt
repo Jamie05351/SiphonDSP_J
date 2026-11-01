@@ -184,6 +184,7 @@ internal fun CarMenu(
     pickFor: Int?,
     customWallpaper: Boolean,
     nowPlayingAllowed: Boolean,
+    appSwipeAllowed: Boolean,
     start: Dp,
     top: Dp,
     bottom: Dp,
@@ -226,6 +227,13 @@ internal fun CarMenu(
                     item(key = "now_playing") {
                         MenuTile(stringResource(R.string.launcher_allow_now_playing), Modifier.fillMaxWidth(), stringResource(R.string.launcher_allow_now_playing_hint)) {
                             close(); actions.allowNowPlaying()
+                        }
+                    }
+                }
+                if (!appSwipeAllowed) {
+                    item(key = "app_swipe") {
+                        MenuTile(stringResource(R.string.launcher_allow_app_swipe), Modifier.fillMaxWidth(), stringResource(R.string.launcher_allow_app_swipe_hint)) {
+                            close(); actions.allowAppSwipe()
                         }
                     }
                 }

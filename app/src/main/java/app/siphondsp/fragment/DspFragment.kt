@@ -99,6 +99,9 @@ class DspFragment : Fragment() {
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
 
+    /** Whether the Spotify / Waze swipe has what it needs; checked each time home comes back. */
+    private var appSwipeAllowed by mutableStateOf(true)
+
     /** Bumped to move iDrive knob focus into the home screen; see [enterKnobFocus]. */
     private var knobFocusRequests by mutableIntStateOf(0)
 
@@ -255,6 +258,7 @@ class DspFragment : Fragment() {
         resumed = true
         // Home again: the Spotify / Waze swipe is only for moving between those apps.
         AppSwipe.stop(requireContext())
+        appSwipeAllowed = AppSwipe.allowed(requireContext())
         nowPlaying.start()
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
@@ -354,6 +358,7 @@ class DspFragment : Fragment() {
                 look = look,
                 track = track,
                 nowPlayingAllowed = nowPlayingAllowed,
+                appSwipeAllowed = appSwipeAllowed,
                 knobFocusRequests = knobFocusRequests,
                 onKnobFocusResult = { taken -> knobFocusFailed = !taken },
                 onHasFocusChanged = { homeHasFocus = it },
@@ -504,6 +509,7 @@ class DspFragment : Fragment() {
         override fun backUpLayout() = launchPicker { saveLayout.launch("j_dsp-home-layout.json") }
         override fun restoreLayout() = launchPicker { openLayout.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         override fun allowNowPlaying() { Launch.start(requireContext(), Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        override fun allowAppSwipe() { Launch.start(requireContext(), Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
         override fun mediaPlayPause() = nowPlaying.playPause()
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()

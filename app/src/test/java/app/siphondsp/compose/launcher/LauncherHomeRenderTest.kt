@@ -191,6 +191,7 @@ class LauncherHomeRenderTest {
         override fun backUpLayout() {}
         override fun restoreLayout() {}
         override fun allowNowPlaying() {}
+        override fun allowAppSwipe() {}
         override fun mediaPlayPause() {}
         override fun mediaNext() {}
         override fun mediaPrevious() {}
