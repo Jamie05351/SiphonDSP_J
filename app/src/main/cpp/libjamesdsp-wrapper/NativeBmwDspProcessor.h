@@ -127,7 +127,11 @@ public:
     //
     // 297..298 -- Mono Bass, added in the 297 -> 299 growth:
     //   297      enabled              298  split frequency Hz (60..120)
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 299 };
+    //
+    // 299..302 -- Virtual Bass, added in the 299 -> 303 growth:
+    //   299      enabled              300  cut frequency Hz (30..80)
+    //   301      harmonics level %    302  remove the original sub below the cut
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 303 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -308,6 +312,8 @@ private:
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
         DirtyMonoBass = 1u << 27,        // Mono Bass split frequency: retune (keeps state)
         DirtyMonoBassResume = 1u << 28,  // Mono Bass switched on from silent: clear its state
+        DirtyVirtualBass = 1u << 29,        // Virtual Bass cut frequency: retune (keeps state)
+        DirtyVirtualBassResume = 1u << 30,  // Virtual Bass switched on from silent: clear its state
         DirtyAll = 0xffffffffu,
     };
 
@@ -490,12 +496,24 @@ private:
     float monoBassMix_ = 0.f;
     static constexpr float kMonoBassFadeSeconds = 0.02f;
     float monoBassFadeStep_ = 1.f / (0.02f * 48000.f);
+    // Virtual Bass, right after Mono Bass. virtualBassMix_ crossfades from the input (0) to the
+    // processed signal (1) and virtualBassRemoveMix_ the base from the input to the input
+    // high-passed at the cut, both linear ramps over kMonoBassFadeSeconds; virtualBassGain_ follows
+    // the harmonics level on a one-pole (loudnessRampCoef_). At virtualBassMix_ 0 the stage is
+    // skipped, so with Virtual Bass off the signal is untouched. Snapped on a full rebuild and on
+    // the first configure().
+    NativeBmwDsp::VirtualBass virtualBass_;
+    float virtualBassMix_ = 0.f;
+    float virtualBassRemoveMix_ = 0.f;
+    float virtualBassGain_ = 0.f;
     // Loudness compensation, after the master volume (see Loudness).
     NativeBmwDsp::Loudness loudness_;
     // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the
     // ramping masterGain_ and at its target, so the lift never exceeds the attenuation in effect
     // while the volume ramps either way.
     void retuneLoudness();
+    // Lands Virtual Bass's on/off, sub-removal and level ramps on their settings at once.
+    void snapVirtualBass();
     unsigned loudnessRetuneCounter_ = 0;
     // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
     // enough that the stepwise retunes are far smaller than the signal's own movement.

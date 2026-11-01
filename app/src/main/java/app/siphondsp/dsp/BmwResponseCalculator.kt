@@ -52,6 +52,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
     // Mono Bass split built into fullCascade (0 = off), so a change rebuilds it.
     private var builtMonoBassHz = 0.0
+    private var builtVirtualBassRemovalHz = 0.0
 
     private val preSplitAcc = arrayOf(ComplexAcc(), ComplexAcc())
     private val branchAcc = ComplexAcc()
@@ -103,7 +104,12 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         axisDirty = false
     }
 
-    private fun rebuildFullCascade(peq: BmwPeqState, channel: BmwOutputChannel, monoBassHz: Double) {
+    private fun rebuildFullCascade(
+        peq: BmwPeqState,
+        channel: BmwOutputChannel,
+        monoBassHz: Double,
+        virtualBassRemovalHz: Double,
+    ) {
         val cascade = fullCascade[channel.ordinal]
         cascade.clear()
         if (includeDcBlocker) cascade.addDcBlocker(DC_BLOCKER_HZ, sampleRate)
@@ -111,6 +117,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // describes that sums to a 2nd-order Butterworth-Q all-pass at the split -- flat, only
         // phase. (Side content folded to mono isn't something a single-channel curve can show.)
         if (monoBassHz > 0.0) cascade.addAllPass(true, true, monoBassHz, BUTTERWORTH_Q, sampleRate)
+        // Native VirtualBass with Remove sub: the original sub high-passed at the cut (LR4, two
+        // Butterworth sections on each channel). The harmonics it adds back aren't a filter, so
+        // they aren't drawn.
+        if (virtualBassRemovalHz > 0.0) {
+            cascade.addHighPass(virtualBassRemovalHz, BUTTERWORTH_Q, sampleRate)
+            cascade.addHighPass(virtualBassRemovalHz, BUTTERWORTH_Q, sampleRate)
+        }
         if (peq.enabled) {
             for (band in peq.fullRangeBands) {
                 if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
@@ -369,8 +382,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             dirty.add(Stage.FULL_BANK)
             builtMonoBassHz = monoBassHz
         }
+        val virtualBassRemovalHz = NativeBmwDspValues.virtualBassRemovalHz(values)
+        if (virtualBassRemovalHz != builtVirtualBassRemovalHz) {
+            dirty.add(Stage.FULL_BANK)
+            builtVirtualBassRemovalHz = virtualBassRemovalHz
+        }
         for (channel in BmwOutputChannel.entries) {
-            if (Stage.FULL_BANK in dirty) rebuildFullCascade(peq, channel, monoBassHz)
+            if (Stage.FULL_BANK in dirty) rebuildFullCascade(peq, channel, monoBassHz, virtualBassRemovalHz)
             if (Stage.LOW_BRANCH in dirty) rebuildLowCascade(values, peq, channel)
             if (Stage.MID_BRANCH in dirty) rebuildMidCascade(values, peq, channel)
             if (Stage.HIGH_BRANCH in dirty) rebuildHighCascade(values, peq, channel)

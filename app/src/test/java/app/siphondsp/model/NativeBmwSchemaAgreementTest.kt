@@ -167,6 +167,10 @@ class NativeBmwSchemaAgreementTest {
         "kHeadroomAuto" to NativeBmwDspValues.INDEX_HEADROOM_AUTO,
         "kMonoBassEnabled" to NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
         "kMonoBassFreq" to NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
+        "kVirtualBassEnabled" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED,
+        "kVirtualBassFreq" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
+        "kVirtualBassAmount" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT,
+        "kVirtualBassRemoveSub" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB,
     )
 
     @Test

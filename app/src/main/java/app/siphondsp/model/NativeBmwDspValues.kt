@@ -77,7 +77,10 @@ object NativeBmwDspValues {
     // 297..298 are Mono Bass (enabled, split Hz), added in the 297 -> 299 growth -- new slots,
     // not the reclaimed 42..45 an earlier mono bass used. Default off, so older saves are
     // unchanged.
-    const val SIZE = 299
+    //
+    // 299..302 are Virtual Bass (enabled, cut Hz, amount %, remove sub), added in the 299 -> 303
+    // growth. Default off, so older saves are unchanged.
+    const val SIZE = 303
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -404,6 +407,30 @@ object NativeBmwDspValues {
         val hz = values.getOrElse(INDEX_MONO_BASS_FREQ) { MONO_BASS_DEFAULT_HZ }
         return (if (hz.isFinite()) hz else MONO_BASS_DEFAULT_HZ).coerceIn(MONO_BASS_MIN_HZ, MONO_BASS_MAX_HZ).toDouble()
     }
+    // Virtual Bass: the sub below the cut rebuilt as harmonics the woofers can play (native
+    // VirtualBass, right after Mono Bass); optionally the original sub high-passed away (LR4 at the
+    // cut). Ranges mirror native VirtualBass.
+    const val INDEX_VIRTUAL_BASS_ENABLED = 299
+    const val INDEX_VIRTUAL_BASS_FREQ = 300 // cut, Hz
+    const val INDEX_VIRTUAL_BASS_AMOUNT = 301 // harmonics level, percent
+    const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
+    const val VIRTUAL_BASS_MIN_HZ = 30f
+    const val VIRTUAL_BASS_MAX_HZ = 80f
+    const val VIRTUAL_BASS_DEFAULT_HZ = 50f
+    const val VIRTUAL_BASS_STEP_HZ = 5f
+    const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
+
+    /**
+     * The cut at which Virtual Bass high-passes the original sub away, in Hz as native runs it, or
+     * 0 when it doesn't (Virtual Bass off, or Remove sub off). The only part of Virtual Bass a
+     * linear response can show -- the harmonics it adds are not a filter.
+     */
+    fun virtualBassRemovalHz(values: FloatArray): Double {
+        if (values.getOrElse(INDEX_VIRTUAL_BASS_ENABLED) { 0f } < .5f) return 0.0
+        if (values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } < .5f) return 0.0
+        val hz = values.getOrElse(INDEX_VIRTUAL_BASS_FREQ) { VIRTUAL_BASS_DEFAULT_HZ }
+        return (if (hz.isFinite()) hz else VIRTUAL_BASS_DEFAULT_HZ).coerceIn(VIRTUAL_BASS_MIN_HZ, VIRTUAL_BASS_MAX_HZ).toDouble()
+    }
     // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
     const val LOUDNESS_BASS_HZ = 100.0
     const val LOUDNESS_TREBLE_HZ = 8000.0
@@ -607,6 +634,11 @@ object NativeBmwDspValues {
         // --- Mono Bass (297..298), ships off ---
         0f, // 297 mono bass enabled (off)
         MONO_BASS_DEFAULT_HZ, // 298 mono bass split Hz
+        // --- Virtual Bass (299..302), ships off ---
+        0f, // 299 virtual bass enabled (off)
+        VIRTUAL_BASS_DEFAULT_HZ, // 300 virtual bass cut Hz
+        VIRTUAL_BASS_DEFAULT_AMOUNT, // 301 virtual bass amount %
+        0f, // 302 virtual bass remove sub (off)
     )
 
     init {
