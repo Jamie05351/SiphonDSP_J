@@ -277,4 +277,74 @@ void MonoBass::process(float& l, float& r, float mix) {
     }
 }
 
+void VirtualBass::rebuild(float cutHz, float sampleRate) {
+    const float fc = clampf(cutHz, kMinHz, kMaxHz);
+    constexpr float kButterworthQ = 0.70710678f;
+    makeHighPass(inHp_, kSubsonicHz, kButterworthQ, sampleRate);
+    makeLowPass(inLp1_, fc, kButterworthQ, sampleRate);
+    makeLowPass(inLp2_, fc, kButterworthQ, sampleRate);
+    makeHighPass(outHp1_, fc, kButterworthQ, sampleRate);
+    makeHighPass(outHp2_, fc, kButterworthQ, sampleRate);
+    makeLowPass(outLp1_, fc * kTopRatio, kButterworthQ, sampleRate);
+    makeLowPass(outLp2_, fc * kTopRatio, kButterworthQ, sampleRate);
+    for (Biquad* b : {&cutL1_, &cutL2_, &cutR1_, &cutR2_}) {
+        makeHighPass(*b, fc, kButterworthQ, sampleRate);
+    }
+    release_ = std::exp(-1.f / (kReleaseSeconds * sampleRate));
+}
+void VirtualBass::clear() {
+    for (Biquad* b : {&inHp_, &inLp1_, &inLp2_, &outHp1_, &outHp2_, &outLp1_, &outLp2_, &cutL1_, &cutL2_,
+                      &cutR1_, &cutR2_}) {
+        b->clear();
+    }
+    env_ = 0.f;
+}
+void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
+    // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
+    // the envelope and filter state, where it would stick until the stage was cleared.
+    if (!std::isfinite(l) || !std::isfinite(r)) {
+        l = std::isfinite(l) ? l : 0.f;
+        r = std::isfinite(r) ? r : 0.f;
+    }
+    // The sub band, and its envelope (instant attack, so |u| <= 1 without clipping a rising edge).
+    const float sub = inLp2_.run(inLp1_.run(inHp_.run((l + r) * .5f)));
+    const float mag = std::fabs(sub);
+    env_ = mag > env_ * release_ ? mag : env_ * release_;
+    float harmonics = 0.f;
+    // Below ~-120 dBFS there's nothing to extend (and dividing by it would only amplify noise).
+    if (env_ > 1e-6f) {
+        const float u = clampf(sub / env_, -1.f, 1.f);
+        const float u2 = u * u;
+        const float t2 = 2.f * u2 - 1.f;
+        const float t3 = u * (4.f * u2 - 3.f);
+        const float t4 = 8.f * u2 * (u2 - 1.f) + 1.f;
+        const float c = clampf(character, 0.f, 1.f);
+        const float w2 = kWarmW2 + (kPunchyW2 - kWarmW2) * c;
+        const float w3 = kWarmW3 + (kPunchyW3 - kWarmW3) * c;
+        const float w4 = kWarmW4 + (kPunchyW4 - kWarmW4) * c;
+        harmonics = env_ * (w2 * t2 + w3 * t3 + w4 * t4);
+    }
+    // Keep only what the woofers can play: the T2 / T4 offsets and anything left below the cut go,
+    // as does the top of the series.
+    harmonics = outLp2_.run(outLp1_.run(outHp2_.run(outHp1_.run(harmonics))));
+
+    float baseL = l, baseR = r;
+    float hl = l, hr = r;
+    Biquad::runPair(cutL1_, cutR1_, hl, hr);
+    Biquad::runPair(cutL2_, cutR2_, hl, hr);
+    if (removeMix > 0.f) {
+        baseL += (hl - baseL) * removeMix;
+        baseR += (hr - baseR) * removeMix;
+    }
+    const float add = gain * harmonics;
+    const float outL = baseL + add, outR = baseR + add;
+    if (onMix >= 1.f) {
+        l = outL;
+        r = outR;
+    } else {
+        l += (outL - l) * onMix;
+        r += (outR - r) * onMix;
+    }
+}
+
 }  // namespace NativeBmwDsp

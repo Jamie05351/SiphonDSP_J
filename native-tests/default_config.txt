@@ -1,5 +1,5 @@
 # ============================================================================
-# Canonical NativeBmwDspProcessor flat-config defaults (299 floats).
+# Canonical NativeBmwDspProcessor flat-config defaults (304 floats).
 #
 # Single source of truth for the default config, shared by:
 #   - native-tests/test_support.h :: defaultConfig()  -- parsed at test time
@@ -394,3 +394,12 @@
 # 297..298  Mono Bass (added in the 297 -> 299 growth)
 0            # 297 monoBassEnabled (off)
 90           # 298 monoBassFreq (Hz, 60..120)
+
+# 299..302  Virtual Bass (added in the 299 -> 303 growth)
+0            # 299 virtualBassEnabled (off)
+50           # 300 virtualBassFreq (cut, Hz, 30..80)
+50           # 301 virtualBassAmount (harmonics level, percent)
+0            # 302 virtualBassRemoveSub (off)
+
+# 303  Virtual Bass character (added in the 303 -> 304 growth)
+50           # 303 virtualBassCharacter (Warm 0 .. Punchy 100 %)

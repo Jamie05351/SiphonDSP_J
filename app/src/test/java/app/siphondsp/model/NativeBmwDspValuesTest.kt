@@ -880,4 +880,29 @@ class NativeBmwDspValuesTest {
         // A save from before the 297 -> 299 growth has neither slot: off.
         assertEquals(0.0, NativeBmwDspValues.monoBassSplitHz(values.copyOf(297)), 0.0)
     }
+
+    @Test
+    fun virtualBassShipsOffAndOnlyItsSubRemovalIsAFilter() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT], 0f)
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER], 0f)
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // On, but keeping the sub: still no filter to draw.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB] = 1f
+        assertEquals(50.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 400f
+        assertEquals(80.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = Float.NaN
+        assertEquals(50.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // Remove sub set but Virtual Bass off: nothing.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 0f
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // A save from before the 299 -> 303 growth has none of the slots: off.
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values.copyOf(299)), 0.0)
+    }
 }

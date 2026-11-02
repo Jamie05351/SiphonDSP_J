@@ -57,7 +57,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import app.siphondsp.audio.SpectrumEngine
-import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.AutoHeadroomCalculator
@@ -73,6 +72,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
+import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
@@ -82,6 +82,7 @@ import kotlinx.coroutines.delay
 import android.graphics.Color as AndroidColor
 import java.util.UUID
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -138,18 +139,19 @@ private const val FOCUS_FADE_MS = 400
 // Per-filter colours (node, shape and callout), by global filter number. Chosen to stay clear of
 // the bank colours (Pre EQ white, Low cyan, Mid yellow, High pink) and the L purple / R green
 // curves, so a filter never reads as a band or a channel, and different enough from each other
-// that overlapping shapes stay tellable apart.
+// that overlapping shapes stay tellable apart. All saturated: each filter is drawn as its own
+// filled shape from 0 dB, so a washed-out hue (the old silver / bronze / peach) just read as grey.
 private val FilterPalette = intArrayOf(
     AndroidColor.rgb(0x2D, 0xE1, 0xC2), // teal
-    AndroidColor.rgb(0xE0, 0xE0, 0xE0), // silver
+    AndroidColor.rgb(0x3F, 0xA9, 0xF5), // azure
     AndroidColor.rgb(0xFF, 0x7A, 0x59), // coral
     AndroidColor.rgb(0xB5, 0xE6, 0x55), // lime
     AndroidColor.rgb(0xFF, 0xA2, 0x4C), // orange
-    AndroidColor.rgb(0xC8, 0xA1, 0x65), // bronze
+    AndroidColor.rgb(0xE0, 0x8A, 0x3C), // copper
     AndroidColor.rgb(0x7D, 0xFF, 0xB2), // mint
     AndroidColor.rgb(0xFF, 0x4D, 0x4D), // red
     AndroidColor.rgb(0x7B, 0x8C, 0xFF), // periwinkle
-    AndroidColor.rgb(0xFF, 0xC7, 0xA0), // peach
+    AndroidColor.rgb(0xFF, 0xA8, 0x7A), // salmon
 )
 
 private fun filterColor(globalIndex: Int): Int = FilterPalette[globalIndex.mod(FilterPalette.size)]
@@ -341,7 +343,7 @@ fun PeqGraph(
         ComposeCanvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency) {
+                .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency, showIndividualFilters, sampleRate) {
                     detectTapGestures { offset ->
                         // While the full curve has focus the nodes aren't showing, so a tap only
                         // brings the bank back into focus; it doesn't pick a node it can't see.
@@ -357,7 +359,10 @@ fun PeqGraph(
                         val bottom = size.height - PlotPadBottom.toPx()
                         if (right <= left || bottom <= top) return@detectTapGestures
                         val geometry = model.geometry(left, right, top, bottom, maxFrequency)
-                        val hit = hitTestFocusedBank(offset, geometry, model.curves, peqState, activeBank, channelDisplay, maxFrequency, density)
+                        val hit = hitTestFocusedBank(
+                            offset, geometry, model.curves, peqState, activeBank, channelDisplay, maxFrequency, density,
+                            model, showIndividualFilters, sampleRate,
+                        )
                         tappedNodeId = hit?.band?.uuid
                         // Keep the callout on-screen: pin its top-left inside the graph bounds.
                         callout = hit?.let {
@@ -1003,11 +1008,45 @@ private fun drawVignette(nc: Canvas, ctx: PeqDrawContext) {
     nc.drawRect(g.left, g.top, g.right, g.bottom, glass.vignettePaint)
 }
 
+/** [band]'s own response in dB at [frequency] (the filter alone, no crossover, no other bands). */
+private fun bandDbAt(m: PeqResponseModel, band: ParametricEqBand, frequency: Double, sampleRate: Double): Double {
+    m.bandCascade.clear()
+    m.bandCascade.addPeqBand(band, sampleRate)
+    val w = 2.0 * PI * frequency / sampleRate
+    val cosW = cos(w)
+    val sinW = sin(w)
+    m.bandAcc.setUnity()
+    m.bandCascade.accumulate(cosW, sinW, 2.0 * cosW * cosW - 1.0, 2.0 * sinW * cosW, m.bandAcc)
+    return m.bandAcc.magnitudeDb()
+}
+
 /**
- * Each of the focused bank's filters as its own shape in its own colour: the region between the
- * bank's curve and "the bank's curve without this filter" (exact for an LTI cascade: subtract the
- * filter's own dB response). Translucent, so where two filters overlap their colours mix. No
- * outline: dashed "without" edges crowded the curve wherever filters sat side by side. Fades with
+ * Where a filter's node sits, in dB. With the individual filters showing it caps the filter's own
+ * shape (its peak / dip at its frequency, the knee of a shelf or pass), so the dot and its shape read
+ * as one object, as in a desktop PEQ. With them hidden it rides the bank's curve, as before. Kept
+ * inside the plot so a deep cut's node (or a notch's, -inf at its centre) stays on screen at the
+ * bottom, where its shape goes.
+ */
+private fun nodeDb(
+    m: PeqResponseModel,
+    band: ParametricEqBand,
+    bankCurve: DoubleArray,
+    showIndividualFilters: Boolean,
+    sampleRate: Double,
+    maxFrequency: Double,
+    g: PeqPlotGeometry,
+): Double {
+    val db = if (showIndividualFilters) bandDbAt(m, band, band.frequency, sampleRate) else curveDbAt(bankCurve, band.frequency, maxFrequency)
+    // A notch's own response at its centre is -inf: clamp it to the bottom with its shape, not 0 dB.
+    return if (db.isNaN()) 0.0 else db.coerceIn(g.minGain, g.maxGain)
+}
+
+/**
+ * Each of the focused bank's filters as its own shape in its own colour, in the desktop-PEQ style:
+ * the filter's own response, filled from the 0 dB line, densest at its peak / dip and fading to
+ * nothing at 0 dB, with a crisp outline along its curve. Every shape shares the 0 dB baseline, so
+ * neighbours read side by side -- where two overlap their washes mix, and how far one reaches into
+ * the next is plain -- while the bank's bright curve on top shows what they add up to. Fades with
  * focus, so idle shows no stacked shapes at all.
  */
 private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
@@ -1016,58 +1055,97 @@ private fun drawFocusedFilterShapes(nc: Canvas, ctx: PeqDrawContext) {
     if (bands.isEmpty()) return
     val g = ctx.geometry
     val m = ctx.model
-    val perChannel = bankCurves(ctx.curves, ctx.activeBank)
     val fill = ctx.glass.filterShapePaint
+    val edge = ctx.glass.filterEdgePaint
     val shape = Path()
+    val outline = Path()
+    val zeroY = g.yForGain(0.0)
     val offset = ctx.bankNumberOffset(ctx.activeBank)
+    // Keep a pass filter's plunge to -inf (or a cut deeper than the window) a sane path.
+    val floorDb = g.minGain - 6.0
+    val ceilDb = g.maxGain + 6.0
+    nc.save()
+    nc.clipRect(g.left, g.top, g.right, g.bottom)
     bands.forEachIndexed { index, band ->
-        val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
-        val reference = perChannel[channel]
-        if (reference.size != SYSTEM_POINT_COUNT) return@forEachIndexed
+        channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
         m.bandCascade.clear()
         m.bandCascade.addPeqBand(band, ctx.sampleRate)
+        var extremeDb = 0.0
         for (i in 0 until SYSTEM_POINT_COUNT) {
             val frequency = ctx.curves.frequencies[i]
             val w = 2.0 * PI * frequency / ctx.sampleRate
             val cosW = cos(w)
             val sinW = sin(w)
-            val cos2W = 2.0 * cosW * cosW - 1.0
-            val sin2W = 2.0 * sinW * cosW
             m.bandAcc.setUnity()
-            m.bandCascade.accumulate(cosW, sinW, cos2W, sin2W, m.bandAcc)
+            m.bandCascade.accumulate(cosW, sinW, 2.0 * cosW * cosW - 1.0, 2.0 * sinW * cosW, m.bandAcc)
+            val raw = m.bandAcc.magnitudeDb()
+            val db = if (raw.isFinite()) raw.coerceIn(floorDb, ceilDb) else floorDb
+            if (abs(db) > abs(extremeDb)) extremeDb = db
             m.fillX[i] = g.left + (i.toFloat() / (SYSTEM_POINT_COUNT - 1)) * (g.right - g.left)
-            m.fillTopY[i] = g.yForGain(reference[i])
-            m.fillBottomY[i] = g.yForGain(reference[i] - m.bandAcc.magnitudeDb())
+            m.fillTopY[i] = g.yForGain(db)
+            m.fillBottomY[i] = db.toFloat() // reused as the dB row for the outline pass below
         }
+        if (abs(extremeDb) < 0.05) return@forEachIndexed // a 0 dB filter has no shape to show
+
         shape.rewind()
-        for (i in 0 until SYSTEM_POINT_COUNT) {
-            if (i == 0) shape.moveTo(m.fillX[i], m.fillTopY[i]) else shape.lineTo(m.fillX[i], m.fillTopY[i])
-        }
-        for (i in SYSTEM_POINT_COUNT - 1 downTo 0) shape.lineTo(m.fillX[i], m.fillBottomY[i])
+        shape.moveTo(g.left, zeroY)
+        for (i in 0 until SYSTEM_POINT_COUNT) shape.lineTo(m.fillX[i], m.fillTopY[i])
+        shape.lineTo(g.right, zeroY)
         shape.close()
+
         val color = filterColor(offset + index)
-        fill.color = color
-        fill.alpha = scaleAlpha(97, ctx.focus)
+        val extremeY = g.yForGain(extremeDb).coerceIn(g.top, g.bottom)
+        fill.shader = LinearGradient(
+            0f, extremeY, 0f, zeroY,
+            intArrayOf(
+                ColorUtils.setAlphaComponent(color, scaleAlpha(150, ctx.focus)),
+                ColorUtils.setAlphaComponent(color, scaleAlpha(70, ctx.focus)),
+                ColorUtils.setAlphaComponent(color, scaleAlpha(10, ctx.focus)),
+            ),
+            floatArrayOf(0f, 0.55f, 1f),
+            Shader.TileMode.CLAMP,
+        )
         nc.drawPath(shape, fill)
+        fill.shader = null
+
+        // The outline only where the filter actually does something, so a dozen filters' flat
+        // tails don't stack a rainbow along the 0 dB line.
+        outline.rewind()
+        var drawing = false
+        for (i in 0 until SYSTEM_POINT_COUNT) {
+            val active = abs(m.fillBottomY[i]) >= OUTLINE_MIN_DB
+            if (active) {
+                if (drawing) outline.lineTo(m.fillX[i], m.fillTopY[i]) else outline.moveTo(m.fillX[i], m.fillTopY[i])
+            }
+            drawing = active
+        }
+        edge.color = ColorUtils.blendARGB(color, AndroidColor.WHITE, 0.15f)
+        edge.alpha = scaleAlpha(210, ctx.focus)
+        nc.drawPath(outline, edge)
     }
+    nc.restore()
 }
 
-// --- live spectrum: bars in the front page's style, with the faint pre-DSP reference line ----------
+// A filter's outline is drawn only where it moves the response by at least this much.
+private const val OUTLINE_MIN_DB = 0.15f
 
-// The live spectrum bars' opacity: background to the curves, not competing with them.
-private const val SPECTRUM_BAR_ALPHA = 110
+// --- live spectrum: a fluid purple surface, with the faint pre-DSP reference line ----------------
+
+// The live spectrum's opacity: background to the curves, not competing with them.
+private const val SPECTRUM_FLUID_ALPHA = 120
 
 /**
- * The live spectrum behind the curves: the processed output as third-octave bars
- * ([GraphSpectrumBars], the style the front page and the crossover graph share), stepped once per
- * [frame], and the faint pre-DSP trace over them as the reference for what the DSP changed.
+ * The live spectrum behind the curves: the processed output as one smooth, glowing purple surface
+ * ([GraphSpectrumBars.drawFluid] -- the same third-octave analysis as the front page's and the
+ * crossover graph's bars, drawn as a flowing curve), stepped once per [frame], and the faint
+ * pre-DSP trace over it as the reference for what the DSP changed.
  */
 private fun drawUnifiedSpectrum(nc: Canvas, ctx: PeqDrawContext, frame: Int) {
     val g = ctx.geometry
     val p = ctx.paints
     val m = ctx.model
-    m.spectrumBars.draw(
-        nc, frame, g.top, g.bottom, p.spectrumAccentColor, HomePalette.MeterHot.toArgb(), SPECTRUM_BAR_ALPHA, ctx.density,
+    m.spectrumBars.drawFluid(
+        nc, frame, g.top, g.bottom, LeftChannelColor, SPECTRUM_FLUID_ALPHA, ctx.density,
         minHz = PeqGraphMath.MIN_FREQUENCY,
         maxHz = ctx.maxFrequency,
         xForHz = { hz -> g.xForFrequency(hz) },
@@ -1118,7 +1196,9 @@ private fun drawFocusedNodes(nc: Canvas, ctx: PeqDrawContext) {
         val channel = channelFor(band, ctx.channelDisplay) ?: return@forEachIndexed
         val color = filterColor(numberOffset + index)
         val x = g.xForFrequency(band.frequency)
-        val y = g.yForGain(curveDbAt(perChannel[channel], band.frequency, ctx.maxFrequency))
+        val y = g.yForGain(
+            nodeDb(ctx.model, band, perChannel[channel], ctx.showIndividualFilters, ctx.sampleRate, ctx.maxFrequency, g),
+        )
         val highlighted = band.uuid == ctx.selectedId ||
             band.uuid == ctx.calloutBandId ||
             band.uuid == ctx.highlightId
@@ -1259,7 +1339,7 @@ private class NodeHit(
 
 /**
  * Nearest of [bank]'s nodes within [NODE_TOUCH_RADIUS_DP] of [tap], at the same place
- * [drawFocusedNodes] draws them (on the bank's own curve). Only the focused bank's nodes are on
+ * [drawFocusedNodes] draws them (see [nodeDb]). Only the focused bank's nodes are on
  * screen, so only they can be hit. Numbers are global 1-based (Pre EQ, then Low, Mid, High).
  */
 private fun hitTestFocusedBank(
@@ -1271,6 +1351,9 @@ private fun hitTestFocusedBank(
     channelDisplay: PeqChannelDisplay,
     maxFrequency: Double,
     density: Float,
+    model: PeqResponseModel,
+    showIndividualFilters: Boolean,
+    sampleRate: Double,
 ): NodeHit? {
     val full = peqState.fullRangeBands.toList()
     val low = peqState.lowBandBands.toList()
@@ -1291,7 +1374,9 @@ private fun hitTestFocusedBank(
     bands.forEachIndexed { index, band ->
         val channel = channelFor(band, channelDisplay) ?: return@forEachIndexed
         val x = geometry.xForFrequency(band.frequency)
-        val y = geometry.yForGain(curveDbAt(perChannel[channel], band.frequency, maxFrequency))
+        val y = geometry.yForGain(
+            nodeDb(model, band, perChannel[channel], showIndividualFilters, sampleRate, maxFrequency, geometry),
+        )
         val distance = hypot(tap.x - x, tap.y - y)
         if (distance <= radius && distance < bestDistance) {
             bestDistance = distance
@@ -1504,19 +1589,19 @@ private class PeqResponseModel {
         calculator.invalidateAll()
         calculator.compute(autoHeadroom.effectiveValues(values, peq, sampleRate), peq, curves)
         baseline?.applyTo(curves)
-        fitAxis(measured = baseline != null)
+        fitAxis(peq, measured = baseline != null)
     }
 
     /**
      * Fits the gain window to what's drawn, so the curves use the plot's height instead of sitting
      * in the bottom of a fixed -24..+12: the top is the first 6 dB line at least 3 dB above the
-     * highest point of the full curve or any bank's curve (uncapped, so a big stacked boost still
+     * highest point of the full curve, any bank's curve or any filter's own peak (uncapped, so a big stacked boost still
      * shows its real height); the window is 24 dB tall, or 36 dB when
      * the full curve dips further than that (ignoring the rolled-off ends below 40 Hz / above
      * 16 kHz). With a car baseline added ([measured]) the curves carry the cabin's real peaks and
      * dips, so the window may grow to 48 dB.
      */
-    private fun fitAxis(measured: Boolean = false) {
+    private fun fitAxis(peq: BmwPeqState, measured: Boolean = false) {
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
         val freqs = curves.frequencies
@@ -1530,7 +1615,21 @@ private class PeqResponseModel {
                 if (i < freqs.size && freqs[i] in 40.0..16_000.0 && sum[i].isFinite() && sum[i] < low) low = sum[i]
             }
         }
+        // Each filter's own extreme too: the graph draws every filter's own shape from 0 dB, and a
+        // boost that its neighbours (or the crossover) cancel in the curves above would otherwise
+        // be flattened against the top edge with its node pinned there. A peaking / shelf
+        // filter's own response tops out at its gain; a notch has no finite extreme, so skip it.
+        val banks = mutableListOf(peq.fullRangeBands, peq.lowBandBands, peq.midBandBands)
+        if (curves.highBranchActive) banks.add(peq.highBandBands)
+        for (bank in banks) for (band in bank) {
+            if (band.filterType == ParametricEqFilterType.NOTCH || !band.gain.isFinite()) continue
+            if (band.gain > high) high = band.gain
+            if (band.gain < low) low = band.gain
+        }
         if (!high.isFinite() || !low.isFinite()) return
+        // Filter shapes hang from the 0 dB line, so keep it on screen even when every curve sits
+        // below it (all cuts, or headroom pulling the curves down).
+        high = maxOf(high, 0.0)
         val top = ceil((high + 3.0) / 6.0) * 6.0
         val span = when {
             top - low <= 22.0 -> 24.0
@@ -1579,8 +1678,14 @@ private class PeqGlassPaints(density: Float) {
         strokeWidth = 1.5f * density
     }
 
-    // A focused bank's filters: one translucent shape each.
+    // A focused bank's filters: one gradient-filled shape each from 0 dB, and its outline.
     val filterShapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    val filterEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.4f * density
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
 
     // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.
     val octaveGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

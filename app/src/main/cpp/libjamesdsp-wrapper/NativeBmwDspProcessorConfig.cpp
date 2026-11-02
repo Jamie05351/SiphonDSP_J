@@ -120,6 +120,12 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.monoBassEnabled = flagIn(v[nbschema::kMonoBassEnabled]);
     next.monoBassFreq = clampIn(v[nbschema::kMonoBassFreq], NativeBmwDsp::MonoBass::kMinHz,
                                 NativeBmwDsp::MonoBass::kMaxHz);
+    next.virtualBassEnabled = flagIn(v[nbschema::kVirtualBassEnabled]);
+    next.virtualBassFreq = clampIn(v[nbschema::kVirtualBassFreq], NativeBmwDsp::VirtualBass::kMinHz,
+                                   NativeBmwDsp::VirtualBass::kMaxHz);
+    next.virtualBassAmount = clampIn(v[nbschema::kVirtualBassAmount], 0, 100) * .01f;
+    next.virtualBassRemoveSub = flagIn(v[nbschema::kVirtualBassRemoveSub]);
+    next.virtualBassCharacter = clampIn(v[nbschema::kVirtualBassCharacter], 0, 100) * .01f;
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -608,6 +614,14 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     if (!p_.monoBassEnabled && next.monoBassEnabled && monoBassMix_ == 0.f) {
         dirty |= DirtyMonoBassResume;
     }
+    if (changed(next.virtualBassFreq, p_.virtualBassFreq)) {
+        dirty |= DirtyVirtualBass;
+    }
+    // Likewise Virtual Bass: skipped once fully faded out, so switching it back on starts its
+    // filters and envelope clean, its level and sub removal from where they're set.
+    if (!p_.virtualBassEnabled && next.virtualBassEnabled && virtualBassMix_ == 0.f) {
+        dirty |= DirtyVirtualBassResume;
+    }
 
     p_ = next;
     masterGainTarget_ = p_.masterMute ? 0.f : std::pow(10.f, p_.masterVolumeDb / 20.f);
@@ -642,6 +656,8 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         retuneLoudness();
         // ...nor crossfade Mono Bass in.
         monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
+        // ...nor Virtual Bass.
+        snapVirtualBass();
         outputGainsPrimed_ = true;
     }
 }
@@ -999,6 +1015,15 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyMonoBassResume) {
         monoBass_.clear();
     }
+    if (d & DirtyVirtualBass) {
+        virtualBass_.rebuild(p_.virtualBassFreq, sampleRate_);
+    }
+    if (d & DirtyVirtualBassResume) {
+        virtualBass_.clear();
+        virtualBassRemoveMix_ = p_.virtualBassRemoveSub ? 1.f : 0.f;
+        virtualBassGain_ = p_.virtualBassAmount;
+        virtualBassCharacter_ = p_.virtualBassCharacter;
+    }
     if (d & DirtyVirtual) {
         virtual_.rebuild(p_.virtualStage, sampleRate_, (d & DirtyVirtualState) != 0);
     }
@@ -1006,6 +1031,13 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         virtual_.zeroMeter();
     }
 }
+void NativeBmwDspProcessor::snapVirtualBass() {
+    virtualBassMix_ = p_.virtualBassEnabled ? 1.f : 0.f;
+    virtualBassRemoveMix_ = p_.virtualBassRemoveSub ? 1.f : 0.f;
+    virtualBassGain_ = p_.virtualBassAmount;
+    virtualBassCharacter_ = p_.virtualBassCharacter;
+}
+
 void NativeBmwDspProcessor::rebuildAll() {
     dcR_ = NativeBmwDsp::DcBlocker::coefficient(sampleRate_);
     updatePairing();
@@ -1022,6 +1054,9 @@ void NativeBmwDspProcessor::rebuildAll() {
     monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
     monoBass_.clear();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
+    virtualBass_.rebuild(p_.virtualBassFreq, sampleRate_);
+    virtualBass_.clear();
+    snapVirtualBass();
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);

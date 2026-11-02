@@ -242,6 +242,13 @@ fun CrossoverMidHighPage(
  * already includes the tilt, so Amount and Pivot show on it as they change). The section switch
  * sits in the column's header; Amount and Pivot stay adjustable while it is off, so they can be
  * set before it is switched on.
+ *
+ * Under it, **Virtual Bass**: the sub below the Cut that the woofers can't play, rebuilt as
+ * harmonics they can (the ear hears the missing fundamental). Amount is the harmonics' level;
+ * Warm ↔ Punch their mix (even harmonics for a round, warm bass; more of the 3rd for punch);
+ * Remove sub high-passes the original sub away at the Cut, sparing the woofers' excursion and
+ * the headroom it took -- that removal shows on the graph, the harmonics (not a filter) don't.
+ * Like Tilt, its settings stay adjustable while it is off.
  */
 @Composable
 fun CrossoverTiltPage(
@@ -254,6 +261,7 @@ fun CrossoverTiltPage(
     val title = stringResource(R.string.bmw_dsp_tilt_section)
     val amount = stringResource(R.string.bmw_dsp_tilt_amount)
     val pivot = stringResource(R.string.bmw_dsp_tilt_pivot)
+    val bassColor = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
 
     val controls: @Composable (ControlRow) -> Unit = { row ->
         ArtGroupHeader(
@@ -271,6 +279,37 @@ fun CrossoverTiltPage(
             tiltColor, row(132, 48), displayScale = endGain,
         )
         DspArtSlider(dsp, pivot, NativeBmwDspValues.INDEX_TILT_FREQ, 200f..2000f, 1f, "Hz", tiltColor, row(192, 48))
+
+        ArtGroupHeader(
+            title = "Virtual Bass",
+            accent = bassColor,
+            modifier = row(244, 40),
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED),
+            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED, if (on) 1f else 0f) },
+        )
+        DspArtSlider(
+            dsp, "Cut", NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
+            NativeBmwDspValues.VIRTUAL_BASS_MIN_HZ..NativeBmwDspValues.VIRTUAL_BASS_MAX_HZ,
+            NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(286, 48),
+        )
+        DspArtSlider(
+            dsp, "Amount", NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT, 0f..100f, 5f, "%", bassColor, row(336, 48),
+        )
+        // 0 = Warm (even harmonics), 100 = Punchy (more of the 3rd).
+        DspArtSlider(
+            dsp, "Warm ↔ Punch", NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER, 0f..100f, 5f, "%", bassColor,
+            row(386, 48),
+        )
+        ArtSwitchRow(
+            label = "Remove sub",
+            checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB),
+            onCheckedChange = { on ->
+                dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB, if (on) 1f else 0f)
+            },
+            // Ends at y 472, where the head unit's page ends (the activity keeps an 8dp border).
+            modifier = row(436, 36),
+            labelWidth = ControlLabelWidth,
+        )
     }
 
     CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
