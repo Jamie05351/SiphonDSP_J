@@ -24,6 +24,18 @@ import androidx.core.view.drawToBitmap
 import app.siphondsp.compose.home.GlobalStage
 import app.siphondsp.compose.home.HomeEngineState
 import app.siphondsp.compose.home.HomeStage
+import app.siphondsp.compose.home.HomeScale
+import app.siphondsp.compose.home.LocalHomeScale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.CarFunction
@@ -60,23 +72,21 @@ class LauncherHomeRenderTest {
         "MiXplorer" to 0xFFF57828, "KSW Toolkit 3" to 0xFF286EE6, "Play Store" to 0xFF00B48C, "Radio" to 0xFFE63C3C,
     ).map { (label, colour) -> AppEntry(label, ComponentName("test.$label", "test.Main"), icon(colour.toInt())) }
 
+    // In tile order: Navigation, Music, File Explorer, Drive, KSW Toolkit, Settings, DSP.
     private val slots = listOf(
-        SlotTarget.App(apps[0].component), SlotTarget.App(apps[1].component), SlotTarget.App(apps[2].component),
-        SlotTarget.Car(CarFunction.SETTINGS), SlotTarget.App(apps[3].component), SlotTarget.App(apps[4].component),
-        SlotTarget.App(apps[5].component), SlotTarget.App(apps[6].component), SlotTarget.Empty,
+        SlotTarget.App(apps[0].component), SlotTarget.App(apps[1].component), SlotTarget.App(apps[4].component),
+        SlotTarget.App(apps[3].component), SlotTarget.App(apps[5].component), SlotTarget.Car(CarFunction.SETTINGS),
+        SlotTarget.Empty, SlotTarget.Empty, SlotTarget.Empty,
     )
 
     @Test
-    fun home() = render("home", expanded = false, overlay = LauncherOverlay.None)
+    fun home() = render("home", overlay = LauncherOverlay.None)
 
     @Test
-    fun chainRaised() = render("chain-raised", expanded = true, overlay = LauncherOverlay.None)
+    fun drawer() = render("drawer", overlay = LauncherOverlay.Drawer())
 
     @Test
-    fun drawer() = render("drawer", expanded = false, overlay = LauncherOverlay.Drawer())
-
-    @Test
-    fun carMenu() = render("car-menu", expanded = false, overlay = LauncherOverlay.CarMenu())
+    fun carMenu() = render("car-menu", overlay = LauncherOverlay.CarMenu())
 
     /**
      * The iDrive knob's first press and two turns, saved for a visual check of the focus ring. Not
@@ -84,11 +94,42 @@ class LauncherHomeRenderTest {
      * reliably delivered once other render tests have run, so an assertion here is flaky.
      */
     @Test
-    fun knobFocus() = render("knob-focus", expanded = false, overlay = LauncherOverlay.None, knob = 1)
+    fun knobFocus() = render("knob-focus", overlay = LauncherOverlay.None, knob = 1)
 
     /** The large now-playing card, with the system font size turned up as on the head unit. */
     @Test
-    fun nowPlayingLarge() = render("now-playing-large", expanded = false, overlay = LauncherOverlay.None, large = true)
+    fun nowPlayingLarge() = render("now-playing-large", overlay = LauncherOverlay.None, large = true)
+
+    /** Every home tile side by side, for checking their pictures. */
+    @Test
+    @Config(qualifiers = "w1100dp-h600dp-land-mdpi")
+    fun tiles() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        val activity = controller.get()
+        activity.setContent {
+            BmwDspTheme {
+                CompositionLocalProvider(LocalHomeScale provides HomeScale(1f)) {
+                    Column(Modifier.background(Color(0xFF1A1B20)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        for (row in HomeTile.entries.chunked(4)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                for (tile in row) {
+                                    Box(Modifier.size(220.dp, 240.dp)) {
+                                        HomeTileFace(tile, apps[tile.ordinal].label, {}, null)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        repeat(5) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+        val root = activity.window.decorView.findViewById<View>(android.R.id.content)
+        val bitmap = root.drawToBitmap()
+        val out = File("build/launcher-renders").apply { mkdirs() }
+        File(out, "tiles.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        controller.pause().stop().destroy()
+    }
 
     /** The launcher's text ignores a larger system font size (it overflowed the fixed layout). */
     @Test
@@ -106,20 +147,20 @@ class LauncherHomeRenderTest {
         controller.pause().stop().destroy()
     }
 
-    private fun render(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int = 0, large: Boolean = false) {
+    private fun render(name: String, overlay: LauncherOverlay, knob: Int = 0, large: Boolean = false) {
         // Out of touch mode, as after a knob press, and with window focus, as on a real screen, so
         // knob (D-pad) focus can be taken and drawn.
         val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
         instrumentation.setInTouchMode(knob == 0)
         try {
-            renderIn(name, expanded, overlay, knob, large)
+            renderIn(name, overlay, knob, large)
         } finally {
             // Touch mode is global to the instrumentation; put it back for the next test.
             instrumentation.setInTouchMode(true)
         }
     }
 
-    private fun renderIn(name: String, expanded: Boolean, overlay: LauncherOverlay, knob: Int, large: Boolean) {
+    private fun renderIn(name: String, overlay: LauncherOverlay, knob: Int, large: Boolean) {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().windowFocusChanged(true)
         val activity = controller.get()
         activity.setContent {
@@ -132,9 +173,9 @@ class LauncherHomeRenderTest {
                 LauncherHome(
                     engine = engine, powered = true, readout = { levels }, meterLevels = { levels },
                     apps = apps, slots = slots, carFunctions = CarFunction.entries,
-                    expanded = expanded, onExpandedChange = {}, overlay = overlay, onOverlayChange = {},
+                    overlay = overlay, onOverlayChange = {},
                     openingStage = null, animateTiles = false, actions = NoActions,
-                    track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.music"),
+                    track = Track("Blinding Lights", "The Weeknd", icon(0xFF8E2DE2.toInt()), playing = true, packageName = "test.Spotify"),
                     nowPlayingAllowed = false,
                     knobFocusRequests = knobRequests,
                     look = LauncherCustomisation.Look(nowPlayingLarge = large),
@@ -169,6 +210,8 @@ class LauncherHomeRenderTest {
 
     private object NoActions : LauncherActions {
         override fun togglePower() {}
+        override fun hideTile(key: String) {}
+        override fun showHiddenTiles() {}
         override fun openStage(stage: HomeStage) {}
         override fun openGlobal(stage: GlobalStage) {}
         override fun dspSettings() {}

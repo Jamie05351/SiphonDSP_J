@@ -183,6 +183,7 @@ internal fun CarMenu(
     functions: List<CarFunction>,
     pickFor: Int?,
     customWallpaper: Boolean,
+    tilesHidden: Boolean,
     nowPlayingAllowed: Boolean,
     appSwipeAllowed: Boolean,
     start: Dp,
@@ -221,6 +222,9 @@ internal fun CarMenu(
                 item(key = "wallpaper") { MenuTile(stringResource(R.string.launcher_wallpaper), Modifier.fillMaxWidth()) { close(); actions.pickWallpaper() } }
                 if (customWallpaper) {
                     item(key = "wallpaper_reset") { MenuTile(stringResource(R.string.launcher_wallpaper_reset), Modifier.fillMaxWidth()) { actions.resetWallpaper() } }
+                }
+                if (tilesHidden) {
+                    item(key = "hidden_tiles") { MenuTile(stringResource(R.string.launcher_show_tiles), Modifier.fillMaxWidth()) { close(); actions.showHiddenTiles() } }
                 }
                 item(key = "hidden") { MenuTile(stringResource(R.string.launcher_hidden_apps), Modifier.fillMaxWidth()) { onOverlayChange(LauncherOverlay.HiddenApps) } }
                 if (!nowPlayingAllowed) {

@@ -36,7 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
  * One signal-chain tile: a menu button that opens its DSP screen. The tile's fill and artwork
  * always show in its [accent], whatever the stage or the DSP power is doing; the artwork plays its
  * own small loop ([TileArt]) while [animateArt]. It is [width] wide
- * (in design units, from [ChainLayout]) and as tall as the chain panel allows.
+ * (in design units, from [ChainLayout]) and as tall as the chain panel allows. Without a
+ * [subtitle] (the launcher's dock), the title alone sits under the artwork.
  *
  * Its border is the signal passing through: grey while dark, lit in [accent] by [borderLit]
  * (0..1, from the power-on sweep, see [ChainSweep]) starting where the chain's line comes in at
@@ -51,7 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 @Composable
 fun StageCard(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     accent: Color,
     art: TileArt,
     borderLit: () -> Float,
@@ -114,14 +115,16 @@ fun StageCard(
             softWrap = false,
             modifier = Modifier.padding(start = s.dp(4f)),
         )
-        Text(
-            text = subtitle,
-            color = HomePalette.Subtitle,
-            fontSize = s.sp(15f),
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.padding(start = s.dp(4f), top = s.dp(8f), bottom = s.dp(6f)),
-        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                color = HomePalette.Subtitle,
+                fontSize = s.sp(15f),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(start = s.dp(4f), top = s.dp(8f), bottom = s.dp(6f)),
+            )
+        }
     }
 }
 

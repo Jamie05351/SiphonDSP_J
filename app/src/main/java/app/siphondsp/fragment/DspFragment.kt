@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import app.siphondsp.compose.launcher.HomeTile
 import app.siphondsp.compose.launcher.LauncherActions
 import app.siphondsp.compose.launcher.LauncherHome
 import app.siphondsp.compose.launcher.LauncherOverlay
@@ -92,9 +93,6 @@ class DspFragment : Fragment() {
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
-
-    /** Whether the signal chain is raised out of the DSP bar. */
-    private var chainRaised by mutableStateOf(false)
 
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
@@ -237,7 +235,7 @@ class DspFragment : Fragment() {
                 reportHomePageOffset(position * binding.dspPager.width + positionOffsetPixels)
             }
         })
-        // chainRaised and overlay outlive a view recreation; the new pager needs its swipe set again.
+        // overlay outlives a view recreation; the new pager needs its swipe set again.
         updatePagerInput()
 
         return binding.root
@@ -349,12 +347,10 @@ class DspFragment : Fragment() {
                 apps = apps,
                 slots = slotList,
                 carFunctions = carFunctions,
-                expanded = chainRaised,
-                onExpandedChange = ::raiseChain,
                 overlay = overlay,
                 onOverlayChange = ::showOverlay,
                 openingStage = openingTile,
-                animateTiles = homeLive && chainRaised,
+                animateTiles = homeLive,
                 actions = launcherActions,
                 look = look,
                 track = track,
@@ -399,22 +395,17 @@ class DspFragment : Fragment() {
         shortcutsBinding.pageShortcutsRoot.layoutTransition = transition
     }
 
-    private fun raiseChain(raised: Boolean) {
-        chainRaised = raised
-        updatePagerInput()
-    }
-
     private fun showOverlay(next: LauncherOverlay) {
         overlay = next
         updatePagerInput()
     }
 
     /**
-     * The settings page (output control, convolver) is part of the DSP, so it can only be swiped to
-     * while the signal chain is raised, never from the plain home screen or with a drawer open.
+     * The settings page (output control, convolver) is swiped to straight from the home screen
+     * (the tile row keeps its own swipes), but not with a drawer or menu open.
      */
     private fun updatePagerInput() {
-        if (::binding.isInitialized) binding.dspPager.isUserInputEnabled = chainRaised && overlay == LauncherOverlay.None
+        if (::binding.isInitialized) binding.dspPager.isUserInputEnabled = overlay == LauncherOverlay.None
     }
 
     /**
@@ -445,7 +436,6 @@ class DspFragment : Fragment() {
     fun onHomePressed() {
         cancelPendingOpen()
         showOverlay(LauncherOverlay.None)
-        raiseChain(false)
         if (::binding.isInitialized) binding.dspPager.setCurrentItem(0, false)
     }
 
@@ -458,7 +448,6 @@ class DspFragment : Fragment() {
         override fun handleOnBackPressed() {
             when {
                 overlay != LauncherOverlay.None -> showOverlay(LauncherOverlay.None)
-                chainRaised -> raiseChain(false)
                 binding.dspPager.currentItem != 0 -> binding.dspPager.currentItem = 0
                 !isHome() -> requireActivity().finish()
             }
@@ -515,6 +504,11 @@ class DspFragment : Fragment() {
         override fun mediaNext() = nowPlaying.next()
         override fun mediaPrevious() = nowPlaying.previous()
         override fun toggleNowPlayingSize() = LauncherCustomisation.get(requireContext()).toggleNowPlayingSize()
+        override fun hideTile(key: String) = LauncherCustomisation.get(requireContext()).setHidden(key, true)
+        override fun showHiddenTiles() {
+            val customisation = LauncherCustomisation.get(requireContext())
+            customisation.look.value.hidden.filter { it.startsWith(HomeTile.KeyPrefix) }.forEach { customisation.setHidden(it, false) }
+        }
         override fun openTrackApp(track: Track) {
             requireContext().packageManager.getLaunchIntentForPackage(track.packageName)?.let { Launch.start(requireContext(), it) }
         }
