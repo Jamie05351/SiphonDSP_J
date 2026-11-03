@@ -76,7 +76,7 @@ class LauncherHomeRenderTest {
     private val slots = listOf(
         SlotTarget.App(apps[0].component), SlotTarget.App(apps[1].component), SlotTarget.App(apps[4].component),
         SlotTarget.App(apps[3].component), SlotTarget.App(apps[5].component), SlotTarget.Car(CarFunction.SETTINGS),
-        SlotTarget.Empty, SlotTarget.Empty, SlotTarget.Empty,
+        SlotTarget.Empty,
     )
 
     @Test

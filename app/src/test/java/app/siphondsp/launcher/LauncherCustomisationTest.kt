@@ -39,7 +39,7 @@ class LauncherCustomisationTest {
 
     @Test
     fun backupRestoresSlotsAndHiddenApps() {
-        val slots = listOf(waze, SlotTarget.Car(CarFunction.SETTINGS)) + List(7) { SlotTarget.Empty }
+        val slots = listOf(waze, SlotTarget.Car(CarFunction.SETTINGS)) + List(HomeSlots.SLOTS - 2) { SlotTarget.Empty }
         look.setHidden(waze.encode(), true)
         val file = File(context.cacheDir, "layout.json")
         var saved = false
@@ -53,6 +53,21 @@ class LauncherCustomisationTest {
 
         assertTrue(ok)
         assertEquals(slots, restored)
+        assertTrue(waze.encode() in look.look.value.hidden)
+    }
+
+    /** A backup from the nine-icon grid: its slots meant nothing about the tiles, so only they are skipped. */
+    @Test
+    fun anOldGridBackupRestoresAllButItsSlots() {
+        val file = File(context.cacheDir, "old-layout.json").apply {
+            writeText("""{"format":"siphondsp-home-layout","version":1,"slots":["${waze.encode()}"],"hidden":["${waze.encode()}"]}""")
+        }
+        var restored: List<SlotTarget>? = null
+        var ok = false
+        await(look.import(Uri.fromFile(file), { restored = it }) { ok = it })
+
+        assertTrue(ok)
+        assertEquals(null, restored)
         assertTrue(waze.encode() in look.look.value.hidden)
     }
 

@@ -131,7 +131,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
     }
 
     /**
-     * The whole home layout as one JSON document: the nine slots, hidden apps, custom icons and the
+     * The whole home layout as one JSON document: the tiles' slots, hidden apps, custom icons and the
      * wallpaper (images as base64). Written to [uri] off the main thread.
      */
     fun export(slots: List<SlotTarget>, uri: Uri, onDone: (Boolean) -> Unit) = scope.launch {
@@ -139,7 +139,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             val doc = lock.withLock {
                 JSONObject()
                     .put("format", FORMAT)
-                    .put("version", 1)
+                    .put("version", BACKUP_VERSION)
                     .put("slots", JSONArray(slots.map { it.encode() }))
                     .put("hidden", JSONArray(_look.value.hidden.toList()))
                     .put("icons", JSONObject().apply {
@@ -158,7 +158,9 @@ class LauncherCustomisation internal constructor(private val context: Context) {
 
     /**
      * Reads a document written by [export] and applies it: slots through [applySlots] (on the main
-     * thread), the rest here. Nothing is changed unless the whole document reads correctly.
+     * thread), the rest here. Nothing is changed unless the whole document reads correctly. A backup
+     * from the old nine-icon grid (version 1) restores everything but its slots, which don't match
+     * the tiles.
      */
     fun import(uri: Uri, applySlots: (List<SlotTarget>) -> Unit, onDone: (Boolean) -> Unit) = scope.launch {
         val slots = try {
@@ -167,6 +169,7 @@ class LauncherCustomisation internal constructor(private val context: Context) {
             val doc = JSONObject(String(bytes))
             require(doc.optString("format") == FORMAT) { "Not a home layout backup" }
             val slots = doc.getJSONArray("slots").let { a -> List(a.length()) { SlotTarget.decode(a.getString(it)) } }
+                .takeIf { doc.optInt("version", 1) >= BACKUP_VERSION }
             val hidden = doc.optJSONArray("hidden")?.let { a -> List(a.length()) { a.getString(it) }.toSet() } ?: emptySet()
             val icons = doc.optJSONObject("icons")?.let { o -> o.keys().asSequence().associateWith { Base64.decode(o.getString(it), Base64.NO_WRAP) } } ?: emptyMap()
             val wallpaper = doc.optString("wallpaper").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.NO_WRAP) }
@@ -207,18 +210,18 @@ class LauncherCustomisation internal constructor(private val context: Context) {
                 _look.update { it.copy(hidden = hidden) }
                 reload()
             }
-            slots
+            Result.success(slots)
         } catch (e: Exception) {
             Timber.w(e, "Home layout import failed")
             dir.listFiles { f -> f.name.endsWith(".import") }?.forEach { it.delete() }
-            null
+            Result.failure(e)
         } catch (e: OutOfMemoryError) {
             Timber.w(e, "Home layout import too large")
-            null
+            Result.failure(e)
         }
         withContext(Dispatchers.Main) {
-            if (slots != null) applySlots(slots)
-            onDone(slots != null)
+            slots.getOrNull()?.let(applySlots)
+            onDone(slots.isSuccess)
         }
     }
 
@@ -358,6 +361,8 @@ class LauncherCustomisation internal constructor(private val context: Context) {
         private const val KEY_ICONS = "icons"
         private const val KEY_NOW_PLAYING_LARGE = "now_playing_large"
         private const val FORMAT = "siphondsp-home-layout"
+        // 2: slots are one per home tile; 1 was the nine-icon grid.
+        private const val BACKUP_VERSION = 2
         private const val ICON_PX = 192
         private const val WALL_W = 1920
         private const val WALL_H = 720

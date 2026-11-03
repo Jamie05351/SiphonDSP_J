@@ -52,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -415,8 +416,9 @@ private fun TileRow(
     val view = LocalView.current
     val tiles = HomeTile.entries.filter { it.key !in hidden }
     if (tiles.isEmpty()) return
-    // Many copies of the row, starting in the middle, so swiping either way never runs out.
-    val pager = rememberPagerState(initialPage = tiles.size * LoopCopies / 2) { tiles.size * LoopCopies }
+    // Many copies of the row, starting in the middle, so swiping either way never runs out. Started
+    // again when a tile is hidden or shown, so every page still maps to the same tile and dot.
+    val pager = key(tiles.size) { rememberPagerState(initialPage = tiles.size * (LoopCopies / 2)) { tiles.size * LoopCopies } }
     HorizontalPager(
         pager,
         Modifier
@@ -454,7 +456,7 @@ private fun TileRow(
 
 /**
  * [tile], opening the app or car function kept in its slot. The music tile shows what's playing,
- * with the album art on its record and the media controls. Hold for the slot's menu.
+ * with the album art and the media controls. Hold for the slot's menu.
  */
 @Composable
 private fun Tile(
@@ -484,10 +486,11 @@ private fun Tile(
         SlotTarget.Empty -> stringResource(if (tile == HomeTile.DSP) R.string.launcher_dsp_settings else R.string.launcher_tile_choose)
     }
     Box(Modifier.fillMaxSize()) {
-        val playing = track?.takeIf { tile == HomeTile.MUSIC && app != null && it.packageName == app.component.packageName }
+        // Whatever is playing shows on the music tile, from any player; tapping it opens that player.
+        val playing = track?.takeIf { tile == HomeTile.MUSIC }
         if (playing != null) {
             HomeTileFace(
-                tile, listOf(playing.title, playing.artist).filter { it.isNotEmpty() }.joinToString(" · "), open, { menu = true },
+                tile, listOf(playing.title, playing.artist).filter { it.isNotEmpty() }.joinToString(" · "), { actions.openTrackApp(playing) }, { menu = true },
                 art = playing.art,
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -647,9 +650,12 @@ private fun Dock(
 private fun HeadroomNode(readout: () -> LevelReadout, ceilingDb: Float, g: Float, lit: () -> Float, modifier: Modifier) {
     val s = LocalHomeScale.current
     // Read here, so a new readout recomposes only this.
-    val headroomDb = readout().headroomDb(ceilingDb)
+    val levels = readout()
+    val headroomDb = levels.headroomDb(ceilingDb)
+    // headroomDb stops at 0; past the ceiling is the louder peak itself going over it.
+    val over = !levels.silent && maxOf(levels.leftPeakDb, levels.rightPeakDb) > ceilingDb
     val powered = g >= 0.5f
-    val colour = if (headroomDb != null && headroomDb < 0f) HomePalette.HeadroomCritical else BmwTheme.colors.sliderHeadroom
+    val colour = if (over) HomePalette.HeadroomCritical else BmwTheme.colors.sliderHeadroom
     Box(modifier.width(s.dp(ColumnWidth)).fillMaxHeight().clearAndSetSemantics { }) {
         Box(
             Modifier
