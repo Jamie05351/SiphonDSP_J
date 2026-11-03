@@ -9,8 +9,8 @@ using namespace nbtest;
 namespace sch = nbschema;
 using NativeBmwDsp::VirtualBass;
 
-// Virtual Bass: the sub below the cut rebuilt as 2nd..4th harmonics the woofers can play, right
-// after Mono Bass, optionally with the original sub high-passed away.
+// Virtual Bass: notes below the woofers' reach (the cut) rebuilt as 2nd..4th harmonics the woofers
+// can play, right after Mono Bass, optionally with what lies below the reach gently high-passed.
 
 namespace {
 
@@ -123,23 +123,76 @@ TEST_CASE("virtual bass leaves content above the cut alone") {
     }
 }
 
-TEST_CASE("virtual bass sub removal high-passes the original sub at the cut") {
+TEST_CASE("virtual bass sub removal only thins what lies below the woofers' reach") {
+    // Reach 40 Hz: a gentle HP2 at 32 Hz. What the woofers play keeps its level; what they can't
+    // is thinned (the harmonics stand in for it).
     const double amp = 0.3;
-    const auto kept = runStage(50.f, 30.0, amp, 0.f, 1.f);
-    const auto removed = runStage(50.f, 30.0, amp, 1.f, 1.f);
-    INFO("30 Hz kept ", relDb(kept, 30.0, amp), " dB, removed ", relDb(removed, 30.0, amp), " dB");
-    // LR4 at 50 Hz: about -19 dB at 30 Hz, and the harmonics stay.
-    CHECK(relDb(removed, 30.0, amp) < -15.0);
-    CHECK(relDb(removed, 60.0, amp) > -14.0);
-    // Well above the cut the removal is transparent.
-    const auto high = runStage(50.f, 1000.0, 0.5, 1.f, 1.f);
-    CHECK(std::fabs(relDb(high, 1000.0, 0.5)) < 0.05);
+    auto removedDb = [&](double f) { return relDb(runStage(40.f, f, amp, 1.f, 0.f), f, amp); };
+    const double at20 = removedDb(20.0), at40 = removedDb(40.0), at60 = removedDb(60.0), at80 = removedDb(80.0);
+    INFO("removal at a 40 Hz reach: 20 Hz ", at20, "  40 Hz ", at40, "  60 Hz ", at60, "  80 Hz ", at80, " dB");
+    CHECK(at20 < -6.0);
+    CHECK(at40 > -2.0);
+    CHECK(at60 > -0.6);
+    CHECK(at80 > -0.25);
+    CHECK(std::fabs(relDb(runStage(40.f, 1000.0, 0.5, 1.f, 1.f), 1000.0, 0.5)) < 0.05);
+}
+
+TEST_CASE("notes the woofers can play generate (almost) no harmonics") {
+    // Reach 40 Hz: a 60 or 80 Hz bass note is the woofers' own job, so it mustn't grow a fuzz of
+    // harmonics on top -- that was the mud. The LR8 input band keeps it far down.
+    const double amp = 0.3;
+    for (double f : {50.0, 60.0, 80.0}) {
+        const auto out = runStage(40.f, f, amp, 0.f, 1.f);
+        const double h2 = relDb(out, 2 * f, amp), h3 = relDb(out, 3 * f, amp);
+        INFO("reach 40 Hz, ", f, " Hz note: 2nd ", h2, " dB, 3rd ", h3, " dB, itself ", relDb(out, f, amp), " dB");
+        const double limit = f < 55.0 ? -25.0 : -35.0;
+        CHECK(h2 < limit);
+        CHECK(h3 < limit);
+        CHECK(std::fabs(relDb(out, f, amp)) < 0.1);
+    }
+}
+
+TEST_CASE("a bass line the woofers can play stays clean (no intermodulation mud)") {
+    // Two notes above a 40 Hz reach, as a bass line with a kick under it: the sum/difference
+    // products that made the old stage sound like distortion must stay far down.
+    VirtualBass vb;
+    vb.rebuild(40.f, kSampleRate);
+    const double f1 = 55.0, f2 = 73.4, amp = 0.25;
+    const std::size_t warm = 48000, measure = 48000;
+    std::vector<float> out(2 * measure);
+    for (std::size_t n = 0; n < warm + measure; ++n) {
+        const double t = static_cast<double>(n) / kSampleRate;
+        const float s = static_cast<float>(amp * (std::sin(2 * kPi * f1 * t) + std::sin(2 * kPi * f2 * t)));
+        float l = s, r = s;
+        vb.process(l, r, 1.f, 0.f, 1.f, 0.f);
+        if (n >= warm) {
+            out[2 * (n - warm)] = l;
+            out[2 * (n - warm) + 1] = r;
+        }
+    }
+    for (double p : {f1 + f2, 2 * f1, 2 * f2, 2 * f1 + f2, f1 + 2 * f2, f2 - f1 + f2}) {
+        INFO("product at ", p, " Hz: ", relDb(out, p, amp), " dB");
+        CHECK(relDb(out, p, amp) < -30.0);
+    }
+}
+
+TEST_CASE("in a car whose woofers reach 35 Hz, virtual bass keeps the woofer band intact") {
+    // The reported setup with the reach set where the subsonic HPF starts: Remove sub on, 60%,
+    // Warm. Everything the woofers play (40 Hz and up) must come out within a dB of Virtual Bass
+    // off -- the old stage took 12 dB out of 60 Hz here.
+    const double amp = 0.2;
+    for (double f : {40.0, 50.0, 60.0, 80.0, 100.0, 150.0}) {
+        const double off = engineDb(config(false), f, f, amp);
+        const double on = engineDb(config(true, 35.f, 60.f, true, 0.f), f, f, amp);
+        INFO(f, " Hz: off ", off, " dB, on ", on, " dB");
+        CHECK(std::fabs(on - off) < 1.0);
+    }
 }
 
 TEST_CASE("virtual bass is off by default and then leaves the signal bit-identical") {
     auto stock = defaultConfig();
     CHECK(stock[sch::kVirtualBassEnabled] == 0.f);
-    CHECK(stock[sch::kVirtualBassFreq] == 50.f);
+    CHECK(stock[sch::kVirtualBassFreq] == 40.f);
     CHECK(stock[sch::kVirtualBassAmount] == 50.f);
     CHECK(stock[sch::kVirtualBassRemoveSub] == 0.f);
     CHECK(stock[sch::kVirtualBassCharacter] == 50.f);
@@ -165,11 +218,11 @@ TEST_CASE("virtual bass in the engine adds harmonics to a sub tone, scaled by th
     INFO("60 Hz from a 30 Hz tone: off ", off, " dB, 50% ", half, " dB, 100% ", full, " dB");
     CHECK(half > off + 30.0);
     CHECK(std::fabs((full - half) - 6.02) < 0.5);
-    // And the sub removal reaches the engine too.
-    const double kept = engineDb(config(true, 50.f, 50.f, false), 30.0, 30.0, amp);
-    const double removed = engineDb(config(true, 50.f, 50.f, true), 30.0, 30.0, amp);
-    INFO("30 Hz: kept ", kept, " dB, removed ", removed, " dB");
-    CHECK(removed < kept - 15.0);
+    // And the sub removal reaches the engine too (HP2 at 40 Hz for a 50 Hz reach: ~-8 dB at 25 Hz).
+    const double kept = engineDb(config(true, 50.f, 50.f, false), 25.0, 25.0, amp);
+    const double removed = engineDb(config(true, 50.f, 50.f, true), 25.0, 25.0, amp);
+    INFO("25 Hz: kept ", kept, " dB, removed ", removed, " dB");
+    CHECK(removed < kept - 5.0);
 }
 
 TEST_CASE("switching virtual bass or its sub removal crossfades instead of stepping") {
@@ -219,7 +272,7 @@ TEST_CASE("changing the virtual bass cut or amount while it plays doesn't click"
         int slot;
         float from, to;
     };
-    for (Edit e : {Edit{sch::kVirtualBassFreq, 50.f, 55.f}, Edit{sch::kVirtualBassFreq, 30.f, 80.f},
+    for (Edit e : {Edit{sch::kVirtualBassFreq, 50.f, 55.f}, Edit{sch::kVirtualBassFreq, 25.f, 60.f},
                    Edit{sch::kVirtualBassAmount, 0.f, 100.f}, Edit{sch::kVirtualBassCharacter, 0.f, 100.f}}) {
         NativeBmwDspProcessor proc;
         auto c = config(true);
@@ -253,8 +306,8 @@ TEST_CASE("changing the virtual bass cut or amount while it plays doesn't click"
         const float settledStep = maxStep(settled, last);
         INFO("slot ", e.slot, " ", e.from, " -> ", e.to, ": steady step ", steadyStep, "  settled ", settledStep,
              "  step after ", edit);
-        // One screen step must be seamless; the whole cut range in one go (a preset load) retunes
-        // six filters at once and is allowed a little more, as Mono Bass's full-range jump is.
+        // One screen step must be seamless; the whole reach range in one go (a preset load) retunes
+        // every filter at once and is allowed a little more, as Mono Bass's full-range jump is.
         const bool wholeRange = e.slot == sch::kVirtualBassFreq && e.to - e.from > 10.f;
         CHECK(edit < std::max(steadyStep, settledStep) * (wholeRange ? 2.f : 1.5f));
     }
@@ -317,7 +370,7 @@ TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     for (float character : {0.f, .5f, 1.f})
     for (double f : {20.0, 30.0, 45.0}) {
         VirtualBass vb;
-        vb.rebuild(80.f, kSampleRate);
+        vb.rebuild(60.f, kSampleRate);
         const double amp = 0.7, w = 2.0 * kPi * f / kSampleRate;
         float worst = 0.f;
         for (int n = 0; n < 96000; ++n) {

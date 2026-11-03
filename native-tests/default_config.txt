@@ -397,7 +397,7 @@
 
 # 299..302  Virtual Bass (added in the 299 -> 303 growth)
 0            # 299 virtualBassEnabled (off)
-50           # 300 virtualBassFreq (cut, Hz, 30..80)
+40           # 300 virtualBassFreq (woofer reach, Hz, 25..60)
 50           # 301 virtualBassAmount (harmonics level, percent)
 0            # 302 virtualBassRemoveSub (off)
 

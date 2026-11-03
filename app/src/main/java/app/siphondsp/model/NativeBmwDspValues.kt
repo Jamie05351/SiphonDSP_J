@@ -418,9 +418,14 @@ object NativeBmwDspValues {
     const val INDEX_VIRTUAL_BASS_AMOUNT = 301 // harmonics level, percent
     const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
     const val INDEX_VIRTUAL_BASS_CHARACTER = 303 // Warm 0 .. Punchy 100, percent
-    const val VIRTUAL_BASS_MIN_HZ = 30f
-    const val VIRTUAL_BASS_MAX_HZ = 80f
-    const val VIRTUAL_BASS_DEFAULT_HZ = 50f
+    // The cut is the woofers' reach: the lowest note they really play (e.g. where the subsonic HPF
+    // starts). Notes below it are rebuilt as harmonics; notes above it are left alone. Capped at
+    // 60 Hz so it can't be set into the band the woofers carry.
+    const val VIRTUAL_BASS_MIN_HZ = 25f
+    const val VIRTUAL_BASS_MAX_HZ = 60f
+    const val VIRTUAL_BASS_DEFAULT_HZ = 40f
+    // Remove sub is a gentle HP2 this far below the reach (native VirtualBass::kRemovalRatio).
+    const val VIRTUAL_BASS_REMOVAL_RATIO = 0.8
     const val VIRTUAL_BASS_STEP_HZ = 5f
     const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
     const val VIRTUAL_BASS_DEFAULT_CHARACTER = 50f
@@ -447,13 +452,14 @@ object NativeBmwDspValues {
     }
 
     /**
-     * The cut at which Virtual Bass high-passes the original sub away, in Hz as native runs it, or
-     * 0 when it doesn't (Virtual Bass off, or Remove sub off). The only part of Virtual Bass a
-     * linear response can show -- the harmonics it adds are not a filter.
+     * The corner of Virtual Bass's Remove sub high-pass (an HP2 at [VIRTUAL_BASS_REMOVAL_RATIO] x
+     * the reach), in Hz as native runs it, or 0 when it doesn't run (Virtual Bass off, or Remove
+     * sub off). The only part of Virtual Bass a linear response can show -- the harmonics it adds
+     * are not a filter.
      */
     fun virtualBassRemovalHz(values: FloatArray): Double {
         if (values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } < .5f) return 0.0
-        return virtualBassCutHz(values)
+        return virtualBassCutHz(values) * VIRTUAL_BASS_REMOVAL_RATIO
     }
     // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
     const val LOUDNESS_BASS_HZ = 100.0

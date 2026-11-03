@@ -280,21 +280,25 @@ void MonoBass::process(float& l, float& r, float mix) {
 void VirtualBass::rebuild(float cutHz, float sampleRate) {
     const float fc = clampf(cutHz, kMinHz, kMaxHz);
     constexpr float kButterworthQ = 0.70710678f;
-    makeHighPass(inHp_, kSubsonicHz, kButterworthQ, sampleRate);
-    makeLowPass(inLp1_, fc, kButterworthQ, sampleRate);
-    makeLowPass(inLp2_, fc, kButterworthQ, sampleRate);
+    // 4th-order Butterworth as two sections; squared, an LR8.
+    constexpr float kBw4QA = 0.54119610f, kBw4QB = 1.30656296f;
+    makeHighPass(inHp_, fc * .5f, kButterworthQ, sampleRate);
+    const float inFc = fc * kInputRatio;
+    makeLowPass(inLpA1_, inFc, kBw4QA, sampleRate);
+    makeLowPass(inLpB1_, inFc, kBw4QB, sampleRate);
+    makeLowPass(inLpA2_, inFc, kBw4QA, sampleRate);
+    makeLowPass(inLpB2_, inFc, kBw4QB, sampleRate);
     makeHighPass(outHp1_, fc, kButterworthQ, sampleRate);
     makeHighPass(outHp2_, fc, kButterworthQ, sampleRate);
     makeLowPass(outLp1_, fc * kTopRatio, kButterworthQ, sampleRate);
     makeLowPass(outLp2_, fc * kTopRatio, kButterworthQ, sampleRate);
-    for (Biquad* b : {&cutL1_, &cutL2_, &cutR1_, &cutR2_}) {
-        makeHighPass(*b, fc, kButterworthQ, sampleRate);
-    }
+    makeHighPass(cutL_, fc * kRemovalRatio, kButterworthQ, sampleRate);
+    makeHighPass(cutR_, fc * kRemovalRatio, kButterworthQ, sampleRate);
     release_ = std::exp(-1.f / (kReleaseSeconds * sampleRate));
 }
 void VirtualBass::clear() {
-    for (Biquad* b : {&inHp_, &inLp1_, &inLp2_, &outHp1_, &outHp2_, &outLp1_, &outLp2_, &cutL1_, &cutL2_,
-                      &cutR1_, &cutR2_}) {
+    for (Biquad* b : {&inHp_, &inLpA1_, &inLpB1_, &inLpA2_, &inLpB2_, &outHp1_, &outHp2_, &outLp1_, &outLp2_,
+                      &cutL_, &cutR_}) {
         b->clear();
     }
     env_ = 0.f;
@@ -307,7 +311,7 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
         r = std::isfinite(r) ? r : 0.f;
     }
     // The sub band, and its envelope (instant attack, so |u| <= 1 without clipping a rising edge).
-    const float sub = inLp2_.run(inLp1_.run(inHp_.run((l + r) * .5f)));
+    const float sub = inLpB2_.run(inLpA2_.run(inLpB1_.run(inLpA1_.run(inHp_.run((l + r) * .5f)))));
     const float mag = std::fabs(sub);
     env_ = mag > env_ * release_ ? mag : env_ * release_;
     float harmonics = 0.f;
@@ -330,8 +334,7 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
 
     float baseL = l, baseR = r;
     float hl = l, hr = r;
-    Biquad::runPair(cutL1_, cutR1_, hl, hr);
-    Biquad::runPair(cutL2_, cutR2_, hl, hr);
+    Biquad::runPair(cutL_, cutR_, hl, hr);
     if (removeMix > 0.f) {
         baseL += (hl - baseL) * removeMix;
         baseR += (hr - baseR) * removeMix;

@@ -651,13 +651,16 @@ class BmwSignalChainModelTest {
         // On but keeping the sub: the harmonics aren't a filter, so the curve doesn't move.
         calculator.compute(keep, BmwPeqState.empty(), curves)
         for (i in offSum.indices) assertEquals("kept, point $i", offSum[i], curves.sumDb[0][i], 1e-9)
-        // Removing it: LR4 at 50 Hz -- -6 dB at the cut, about -19 dB at 30 Hz, nothing up high.
+        // Removing it: a gentle HP2 at 40 Hz (0.8 x the 50 Hz reach) -- -1.5 dB at the reach,
+        // about -12 dB at 20 Hz, under half a dB from 80 Hz up.
         calculator.compute(remove, BmwPeqState.empty(), curves)
         val at50 = nearestIndex(50.0)
-        val at30 = nearestIndex(30.0)
+        val at20 = nearestIndex(20.5)
+        val at80 = nearestIndex(80.0)
         val at1k = nearestIndex(1000.0)
-        assertEquals(-6.0, curves.sumDb[0][at50] - offSum[at50], 0.6)
-        assertTrue("30 Hz drop ${curves.sumDb[0][at30] - offSum[at30]}", curves.sumDb[0][at30] - offSum[at30] < -15.0)
+        assertEquals(-1.5, curves.sumDb[0][at50] - offSum[at50], 0.4)
+        assertTrue("20 Hz drop ${curves.sumDb[0][at20] - offSum[at20]}", curves.sumDb[0][at20] - offSum[at20] < -10.0)
+        assertTrue("80 Hz drop ${curves.sumDb[0][at80] - offSum[at80]}", curves.sumDb[0][at80] - offSum[at80] > -0.5)
         assertEquals(0.0, curves.sumDb[0][at1k] - offSum[at1k], 0.01)
         // And back off restores the curve exactly.
         calculator.compute(off, BmwPeqState.empty(), curves)

@@ -212,38 +212,46 @@ private:
     Biquad hpL1_, hpL2_, hpR1_, hpR2_;
 };
 
-// Virtual Bass: psychoacoustic bass extension (the "missing fundamental"). Sub content below
-// the woofers' reach is rebuilt as its 2nd..4th harmonics, which the woofers can play and from
-// which the ear infers the fundamental -- a 30 Hz note is heard as 30 Hz from its 60 / 90 / 120 Hz
-// harmonics.
+// Virtual Bass: psychoacoustic bass extension (the "missing fundamental"). Notes below the
+// woofers' reach -- the "cut", set to the lowest note they really play, e.g. where the subsonic
+// HPF starts -- are rebuilt as their 2nd..4th harmonics, which the woofers can play and from which
+// the ear infers the fundamental: a 30 Hz note is heard as 30 Hz from its 60 / 90 / 120 Hz
+// harmonics. Notes the woofers can play are left alone and generate nothing.
 //
-//   m    = (L+R)/2, band-limited to [~20 Hz .. cut] (HP2 at kSubsonicHz, LR4 lowpass at cut)
+//   m    = (L+R)/2, band-limited to the octave below the reach: HP2 at cut / 2, and an LR8
+//          lowpass at kInputRatio * cut (48 dB/oct from just under the reach, so a note a third
+//          above it is ~27 dB down and barely feeds the harmonics -- that's what keeps bass lines
+//          the woofers can play from turning to mud)
 //   u    = m / env(m), clamped to [-1, 1]   (env: instant-attack peak follower, kReleaseSeconds)
 //   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. kTopRatio * cut],
 //          the weights blended between a Warm and a Punchy set by Character
 //          (w2 + w3 + w4 = 1, so |h| <= env before the band-limiting)
-//   out  = base + gain * h on both channels, base = in, or in high-passed at cut (LR4) when the
-//          original sub is removed
+//   out  = base + gain * h on both channels, base = in, or, when the sub is removed, in through a
+//          gentle HP2 at kRemovalRatio * cut: it only thins what lies below the reach (-1.6 dB at
+//          the reach, -0.5 dB half an octave above it), never the band the woofers play
 //
 // T_n are Chebyshev polynomials: for a sine, T_n(cos t) = cos(n t) exactly, so a steady tone
 // yields clean harmonics at the input's own amplitude, and normalising by the envelope keeps that
 // true at any level (the harmonics scale linearly with the bass, no level-dependent distortion
-// colour). Band-limiting the input to below the cut keeps intermodulation with the rest of the
-// mix out. Every filter is a fixed member: nothing allocates.
+// colour). Every filter is a fixed member: nothing allocates.
 class VirtualBass {
 public:
-    static constexpr float kMinHz = 30.f, kMaxHz = 80.f, kDefaultHz = 50.f;
+    static constexpr float kMinHz = 25.f, kMaxHz = 60.f, kDefaultHz = 40.f;
+    // Remove sub's HP2 sits this far below the reach (Kotlin mirrors it for the response graph).
+    static constexpr float kRemovalRatio = .8f;
+    // The input lowpass's corner, a little under the reach (notes at the reach the woofers still
+    // play; it's those well below it that need rebuilding).
+    static constexpr float kInputRatio = .85f;
     // Retunes every filter for the cut frequency, keeping their state (see Biquad::retune).
     void rebuild(float cutHz, float sampleRate);
     void clear();
     // onMix crossfades from the input (0) to the processed signal (1): the on/off transition.
-    // removeMix crossfades the base from the input (0) to the input high-passed at the cut (1).
+    // removeMix crossfades the base from the input (0) to the input high-passed below the cut (1).
     // gain is the harmonics' linear level (1 = the harmonics at the sub's own amplitude).
     // character blends the harmonic mix from Warm (0) to Punchy (1).
     void process(float& left, float& right, float onMix, float removeMix, float gain, float character);
 
 private:
-    static constexpr float kSubsonicHz = 20.f;
     static constexpr float kTopRatio = 5.f;
     static constexpr float kReleaseSeconds = 0.2f;
     // Harmonic weights (2nd, 3rd, 4th) at the two ends of Character, each normalised so it sums
@@ -255,9 +263,9 @@ private:
     static constexpr float kWarmW2 = 1.f / kWarmSum, kWarmW3 = .15f / kWarmSum, kWarmW4 = .6f / kWarmSum;
     static constexpr float kPunchySum = 1.f + .8f + .2f;
     static constexpr float kPunchyW2 = 1.f / kPunchySum, kPunchyW3 = .8f / kPunchySum, kPunchyW4 = .2f / kPunchySum;
-    Biquad inHp_, inLp1_, inLp2_;           // the sub band of (L+R)/2
+    Biquad inHp_, inLpA1_, inLpB1_, inLpA2_, inLpB2_;  // the sub band of (L+R)/2 (LR8 = BW4 x BW4)
     Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band
-    Biquad cutL1_, cutL2_, cutR1_, cutR2_;  // the original sub's removal, per channel
+    Biquad cutL_, cutR_;  // the original sub's removal, per channel
     float env_ = 0.f;
     float release_ = 0.99989584f;  // exp(-1 / (0.2 s * 48 kHz))
 };

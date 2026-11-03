@@ -117,13 +117,9 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         // describes that sums to a 2nd-order Butterworth-Q all-pass at the split -- flat, only
         // phase. (Side content folded to mono isn't something a single-channel curve can show.)
         if (monoBassHz > 0.0) cascade.addAllPass(true, true, monoBassHz, BUTTERWORTH_Q, sampleRate)
-        // Native VirtualBass with Remove sub: the original sub high-passed at the cut (LR4, two
-        // Butterworth sections on each channel). The harmonics it adds back aren't a filter, so
-        // they aren't drawn.
-        if (virtualBassRemovalHz > 0.0) {
-            cascade.addHighPass(virtualBassRemovalHz, BUTTERWORTH_Q, sampleRate)
-            cascade.addHighPass(virtualBassRemovalHz, BUTTERWORTH_Q, sampleRate)
-        }
+        // Native VirtualBass with Remove sub: a gentle HP2 just below the woofers' reach, on each
+        // channel. The harmonics it adds back aren't a filter, so they aren't drawn.
+        if (virtualBassRemovalHz > 0.0) cascade.addHighPass(virtualBassRemovalHz, BUTTERWORTH_Q, sampleRate)
         if (peq.enabled) {
             for (band in peq.fullRangeBands) {
                 if (BmwSignalChain.bandAppliesTo(band, channel)) cascade.addPeqBand(band, sampleRate)
