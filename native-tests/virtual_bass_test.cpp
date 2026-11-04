@@ -4,6 +4,7 @@
 #include "NativeBmwDspSchema.h"
 
 #include <limits>
+#include <random>
 
 using namespace nbtest;
 namespace sch = nbschema;
@@ -458,6 +459,61 @@ TEST_CASE("virtual bass never raises a peak past the allowance auto headroom mak
             // And the allowance isn't wildly generous either (that just lowers the volume).
             if (removeMix == 0.f) CHECK(worst > allowance - 0.6);
         }
+    }
+}
+
+TEST_CASE("programme-like bass stays within the auto-headroom allowance too") {
+    // Not just sines: two sub notes beating, a kick (falling 55 -> 30 Hz, fast decay) over a bass
+    // line, and sub-heavy noise, at full Amount, with the sub kept and removed, and with Remove sub
+    // half faded (the state it passes through while switching).
+    auto riseDb = [](float reach, float removeMix, float character, auto gen) {
+        VirtualBass vb;
+        vb.rebuild(reach, kSampleRate);
+        double inPeak = 0, outPeak = 0;
+        for (int n = 0; n < 144000; ++n) {
+            const float s = gen(n);
+            float l = s, r = s;
+            vb.process(l, r, 1.f, removeMix, 1.f, character);
+            if (n > 48000) {
+                inPeak = std::max(inPeak, static_cast<double>(std::fabs(s)));
+                outPeak = std::max(outPeak, static_cast<double>(std::fabs(l)));
+            }
+        }
+        return linToDb(outPeak / inPeak);
+    };
+    for (float removeMix : {0.f, 0.5f, 1.f}) {
+        const float rise = removeMix >= 1.f ? VirtualBass::kPeakRiseRemoved : VirtualBass::kPeakRiseKept;
+        const double allowance = linToDb(1.0 + rise);
+        double worst = -99.0;
+        for (float reach : {25.f, 35.f, 45.f, 60.f}) {
+            for (float character : {0.f, 1.f}) {
+                for (double f1 : {20.0, 24.0, 28.0}) {
+                    for (double f2 : {26.0, 31.0, 37.0}) {
+                        worst = std::max(worst, riseDb(reach, removeMix, character, [=](int n) {
+                            const double t = n / static_cast<double>(kSampleRate);
+                            return static_cast<float>(0.3 * std::sin(2 * kPi * f1 * t) + 0.3 * std::sin(2 * kPi * f2 * t));
+                        }));
+                    }
+                }
+                worst = std::max(worst, riseDb(reach, removeMix, character, [](int n) {
+                    const double t = std::fmod(n / static_cast<double>(kSampleRate), 0.5);
+                    const double phase = 2 * kPi * (30 * t + 25 * 0.03 * (1 - std::exp(-t / 0.03)));
+                    return static_cast<float>(0.8 * std::exp(-t / 0.15) * std::sin(phase) +
+                                              0.2 * std::sin(2 * kPi * 55 * n / static_cast<double>(kSampleRate)));
+                }));
+                std::mt19937 rng(7);
+                std::normal_distribution<double> noise(0.0, 1.0);
+                const double a = std::exp(-2 * kPi * 40 / static_cast<double>(kSampleRate));
+                double y1 = 0, y2 = 0;
+                worst = std::max(worst, riseDb(reach, removeMix, character, [&](int) {
+                    y1 = a * y1 + (1 - a) * noise(rng);
+                    y2 = a * y2 + (1 - a) * y1;
+                    return static_cast<float>(6 * y2);
+                }));
+            }
+        }
+        INFO("removeMix ", removeMix, ": worst programme rise ", worst, " dB, allowance ", allowance, " dB");
+        CHECK(worst <= allowance);
     }
 }
 
