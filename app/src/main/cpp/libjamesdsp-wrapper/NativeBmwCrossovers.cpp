@@ -304,7 +304,7 @@ void VirtualBass::clear() {
         b->clear();
     }
     env_ = 0.f;
-    peakL_ = peakR_ = 0.f;
+    peak_ = 0.f;
     capGain_ = 1.f;
 }
 void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
@@ -344,23 +344,25 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
         baseR += (hr - baseR) * removeMix;
     }
     float add = gain * harmonics;
-    // The peak cap. Each channel's peak may rise at most (1 + rise x gain) over its recent peak --
-    // the allowance auto headroom makes -- so where this sample's harmonics would carry it further,
-    // they're scaled down to just reach it (a channel already past it on its own takes none). The
-    // gain drops at once and recovers smoothly; it's the harmonics alone that duck, not the music,
-    // and only on the rare peak where the added harmonics land in step with the note's own.
-    peakL_ = std::max(std::max(std::fabs(l), std::fabs(baseL)), peakL_ * release_);
-    peakR_ = std::max(std::max(std::fabs(r), std::fabs(baseR)), peakR_ * release_);
+    // The peak cap. The output may rise at most (1 + rise x gain) over the recent stereo peak --
+    // the allowance auto headroom makes, which bounds the level, not each channel against itself
+    // (so a note panned hard to one side still gets its harmonics in both, as it always has) --
+    // and where this sample's harmonics would carry either channel further, they're scaled down to
+    // just reach it (a channel already past it on its own takes none). The gain drops at once and
+    // recovers smoothly; it's the harmonics alone that duck, not the music, and only on the rare
+    // peak where the added harmonics land in step with the note's own.
+    peak_ = std::max(std::max(std::max(std::fabs(l), std::fabs(r)), std::max(std::fabs(baseL), std::fabs(baseR))),
+                     peak_ * release_);
     const float rise = (removeMix > 0.f ? kPeakRiseRemoved : kPeakRiseKept) * std::max(gain, 0.f);
-    auto allowed = [&](float base, float peak) {
-        const float limit = (1.f + rise) * peak;
+    const float limit = (1.f + rise) * peak_;
+    auto allowed = [&](float base) {
         if (std::fabs(base + add) <= limit) return 1.f;
         if (std::fabs(base) >= limit) return 0.f;
         // base + g x add reaches +-limit on the side add pushes it toward.
         const float edge = add > 0.f ? limit : -limit;
         return clampf((edge - base) / add, 0.f, 1.f);
     };
-    const float capTarget = std::min(allowed(baseL, peakL_), allowed(baseR, peakR_));
+    const float capTarget = std::min(allowed(baseL), allowed(baseR));
     capGain_ = std::min(capTarget, capGain_ + (1.f - capGain_) * capRecovery_);
     add *= capGain_;
     const float outL = baseL + add, outR = baseR + add;

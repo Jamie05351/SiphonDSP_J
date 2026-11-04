@@ -584,6 +584,24 @@ TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
     }
 }
 
+TEST_CASE("a bass note panned to one side still gets its harmonics, in both channels") {
+    // The cap bounds the stereo level, so a silent right channel must not veto the harmonics.
+    VirtualBass vb;
+    vb.rebuild(40.f, kSampleRate);
+    std::vector<float> out(2 * 48000);
+    for (int n = 0; n < 48000; ++n) {
+        float l = 0.5f * static_cast<float>(std::sin(2 * kPi * 30.0 * n / kSampleRate)), r = 0.f;
+        vb.process(l, r, 1.f, 0.f, 1.f, 0.f);
+        out[2 * n] = l;
+        out[2 * n + 1] = r;
+    }
+    std::vector<float> tail(out.begin() + 2 * 24000, out.end());
+    const double left = channelMagnitudeAt(tail, 0, 60.0), right = channelMagnitudeAt(tail, 1, 60.0);
+    INFO("60 Hz harmonic: left ", linToDb(left), " dB, right ", linToDb(right), " dB");
+    CHECK(linToDb(left / 0.25) > -12.0);
+    CHECK(std::fabs(linToDb(left) - linToDb(right)) < 0.5);
+}
+
 TEST_CASE("virtual bass stays silent on silence") {
     VirtualBass vb;
     vb.rebuild(50.f, kSampleRate);

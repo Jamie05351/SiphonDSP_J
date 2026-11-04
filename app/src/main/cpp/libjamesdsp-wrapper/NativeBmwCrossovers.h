@@ -239,8 +239,8 @@ public:
     static constexpr float kMinHz = 25.f, kMaxHz = 60.f, kDefaultHz = 40.f;
     // Remove sub's HP2 sits this far below the reach (Kotlin mirrors it for the response graph).
     static constexpr float kRemovalRatio = .8f;
-    // The most the harmonics may raise a peak, as 20 log10(1 + rise x gain), over the larger of the
-    // input's and the base's (the input, Remove sub's high-pass blended in) recent peak. Auto
+    // The most the harmonics may raise a peak, as 20 log10(1 + rise x gain), over the recent stereo
+    // peak of the input and the base (the input, Remove sub's high-pass blended in). Auto
     // headroom allows exactly this (Kotlin VIRTUAL_BASS_PEAK_RISE_*). A lone note rises at most
     // 0.53 with the sub kept and 0.11 with it removed, so it plays untouched; a note whose own
     // harmonics line up with the added ones would go further, and there the stage turns its
@@ -278,11 +278,11 @@ private:
     Biquad cutL_, cutR_;  // the original sub's removal, per channel
     float env_ = 0.f;
     float release_ = 0.99989584f;  // exp(-1 / (0.2 s * 48 kHz))
-    // The peak cap: each channel's recent peak (input or base, whichever is larger; instant attack,
-    // the same release as env_), and the harmonics' gain under the cap -- it drops at once to what
-    // a peak needs, then recovers over kCapRecoverySeconds.
+    // The peak cap: the recent stereo peak (either channel, input or base, whichever is largest;
+    // instant attack, the same release as env_), and the harmonics' gain under the cap -- it drops
+    // at once to what a peak needs, then recovers over kCapRecoverySeconds.
     static constexpr float kCapRecoverySeconds = 0.03f;
-    float peakL_ = 0.f, peakR_ = 0.f;
+    float peak_ = 0.f;
     float capGain_ = 1.f;
     float capRecovery_ = 0.00069420f;  // 1 - exp(-1 / (0.03 s * 48 kHz))
 };
