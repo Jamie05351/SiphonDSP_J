@@ -440,16 +440,24 @@ object NativeBmwDspValues {
     }
 
     /**
-     * The most Virtual Bass can raise the level below [VIRTUAL_BASS_TOP_RATIO] x its cut, in dB, or
-     * 0 while it's off: its harmonics peak at most at the sub's own envelope (native normalises
-     * their weights), added at Amount, so the bass region can reach (1 + Amount) x the sub.
+     * The most Virtual Bass can raise the peak level below [VIRTUAL_BASS_TOP_RATIO] x its cut, in dB,
+     * or 0 while it's off: 20 log10(1 + rise x Amount), the rise measured on the native stage across
+     * every reach, Character and sub frequency (native VirtualBass::kPeakRiseKept / kPeakRiseRemoved,
+     * pinned by a native test). The harmonics never peak in step with the sub, so the real rise is
+     * about half of the (1 + Amount) a naive sum would allow -- and with Remove sub on, what's taken
+     * away almost cancels what's added. A bigger allowance only turns the whole system down.
      */
     fun virtualBassWorstCaseBoostDb(values: FloatArray): Double {
         if (virtualBassCutHz(values) <= 0.0) return 0.0
         val pct = values.getOrElse(INDEX_VIRTUAL_BASS_AMOUNT) { VIRTUAL_BASS_DEFAULT_AMOUNT }
         val amount = (if (pct.isFinite()) pct else VIRTUAL_BASS_DEFAULT_AMOUNT).coerceIn(0f, 100f) / 100.0
-        return 20.0 * kotlin.math.log10(1.0 + amount)
+        val removing = values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } >= .5f
+        val rise = if (removing) VIRTUAL_BASS_PEAK_RISE_REMOVED else VIRTUAL_BASS_PEAK_RISE_KEPT
+        return 20.0 * kotlin.math.log10(1.0 + rise * amount)
     }
+    // Mirrors native VirtualBass::kPeakRiseKept / kPeakRiseRemoved.
+    const val VIRTUAL_BASS_PEAK_RISE_KEPT = 0.55
+    const val VIRTUAL_BASS_PEAK_RISE_REMOVED = 0.12
 
     /**
      * The corner of Virtual Bass's Remove sub high-pass (an HP2 at [VIRTUAL_BASS_REMOVAL_RATIO] x
