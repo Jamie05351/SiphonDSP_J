@@ -34,15 +34,25 @@ sealed interface SlotTarget {
 }
 
 /**
- * The home screen's nine app slots, saved in the launcher's own preferences. Changes are kept in
- * [slots] for the screen and written straight away.
+ * The home screen's app slots, one per home tile in the tile row's order (Navigation, Music, File
+ * Explorer, Drive, KSW Toolkit, Settings, DSP), saved in the launcher's own preferences. Changes
+ * are kept in [slots] for the screen and written straight away.
  *
- * On first run the slots start as the earlier M Launcher's layout. Apps are matched to those names only
- * when exactly one installed app has that name ([fillDefaults]); anything ambiguous or missing
- * stays an empty slot to pick by hand.
+ * On first run each slot starts as the app for its tile. Apps are matched to those names only when
+ * exactly one installed app has that name ([fillDefaults]); anything ambiguous or missing stays an
+ * empty slot to pick by hand. Slots saved by the old nine-icon grid meant nothing about the tiles,
+ * so they are cleared once and filled again from the defaults.
  */
 class HomeSlots private constructor(private val context: Context) {
-    private val prefs = context.getSharedPreferences("launcher_home", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("launcher_home", Context.MODE_PRIVATE).also { prefs ->
+        if (prefs.getInt(KEY_LAYOUT, 1) < LAYOUT) {
+            prefs.edit {
+                for (i in 0 until OLD_SLOTS) remove(key(i))
+                remove(KEY_DEFAULTS_DONE)
+                putInt(KEY_LAYOUT, LAYOUT)
+            }
+        }
+    }
     private val _slots = MutableStateFlow(List(SLOTS) { SlotTarget.decode(prefs.getString(key(it), null)) })
     val slots: StateFlow<List<SlotTarget>> = _slots.asStateFlow()
 
@@ -89,6 +99,7 @@ class HomeSlots private constructor(private val context: Context) {
         Defaults.forEachIndexed { i, name ->
             if (next[i] != SlotTarget.Empty) return@forEachIndexed
             next[i] = when (name) {
+                NONE -> SlotTarget.Empty
                 // Only on a head unit that has the KSW settings; elsewhere the slot stays free.
                 FACTORY -> if (CarFunction.SETTINGS.isAvailable(context)) SlotTarget.Car(CarFunction.SETTINGS) else SlotTarget.Empty
                 else -> apps.filter { normalise(it.label) == normalise(name) }.singleOrNull()
@@ -99,17 +110,22 @@ class HomeSlots private constructor(private val context: Context) {
         _slots.value = next
         prefs.edit {
             next.forEachIndexed { i, t -> putString(key(i), t.encode()) }
-            if (next.none { it == SlotTarget.Empty }) putBoolean(KEY_DEFAULTS_DONE, true)
+            if (next.indices.all { next[it] != SlotTarget.Empty || Defaults[it] == NONE }) putBoolean(KEY_DEFAULTS_DONE, true)
         }
     }
 
     companion object {
-        const val SLOTS = 9
+        /** One per home tile. */
+        const val SLOTS = 7
+        private const val OLD_SLOTS = 9
         private const val KEY_DEFAULTS_DONE = "defaults_done"
+        // 2: one slot per home tile; before, nine free slots in a grid.
+        private const val KEY_LAYOUT = "layout"
+        private const val LAYOUT = 2
         private const val FACTORY = "\u0000factory"
-        private val Defaults = listOf(
-            "Waze", "Spotify", "Google Maps", FACTORY, "Drive", "MiXplorer", "KSW Toolkit 3", "Play Store", "Radio",
-        )
+        private const val NONE = ""
+        // In tile order; the DSP tile opens J_DSP's settings while its slot is empty.
+        private val Defaults = listOf("Waze", "Spotify", "MiXplorer", "Drive", "KSW Toolkit 3", FACTORY, NONE)
 
         private fun key(i: Int) = "slot_$i"
         private fun normalise(s: String) = s.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
