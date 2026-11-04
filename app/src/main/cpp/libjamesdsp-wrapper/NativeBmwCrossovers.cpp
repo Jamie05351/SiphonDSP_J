@@ -296,6 +296,7 @@ void VirtualBass::rebuild(float cutHz, float sampleRate) {
     makeHighPass(cutL_, fc * kRemovalRatio, kButterworthQ, sampleRate);
     makeHighPass(cutR_, fc * kRemovalRatio, kButterworthQ, sampleRate);
     release_ = std::exp(-1.f / (kReleaseSeconds * sampleRate));
+    capRecovery_ = 1.f - std::exp(-1.f / (kCapRecoverySeconds * sampleRate));
 }
 void VirtualBass::clear() {
     for (Biquad* b : {&inHp_, &inLpA1_, &inLpB1_, &inLpA2_, &inLpB2_, &outHp1_, &outHp2_, &outLp1_, &outLp2_,
@@ -303,6 +304,8 @@ void VirtualBass::clear() {
         b->clear();
     }
     env_ = 0.f;
+    peakL_ = peakR_ = 0.f;
+    capGain_ = 1.f;
 }
 void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
     // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
@@ -340,7 +343,26 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
         baseL += (hl - baseL) * removeMix;
         baseR += (hr - baseR) * removeMix;
     }
-    const float add = gain * harmonics;
+    float add = gain * harmonics;
+    // The peak cap. Each channel's peak may rise at most (1 + rise x gain) over its recent peak --
+    // the allowance auto headroom makes -- so where this sample's harmonics would carry it further,
+    // they're scaled down to just reach it (a channel already past it on its own takes none). The
+    // gain drops at once and recovers smoothly; it's the harmonics alone that duck, not the music,
+    // and only on the rare peak where the added harmonics land in step with the note's own.
+    peakL_ = std::max(std::max(std::fabs(l), std::fabs(baseL)), peakL_ * release_);
+    peakR_ = std::max(std::max(std::fabs(r), std::fabs(baseR)), peakR_ * release_);
+    const float rise = (removeMix > 0.f ? kPeakRiseRemoved : kPeakRiseKept) * std::max(gain, 0.f);
+    auto allowed = [&](float base, float peak) {
+        const float limit = (1.f + rise) * peak;
+        if (std::fabs(base + add) <= limit) return 1.f;
+        if (std::fabs(base) >= limit) return 0.f;
+        // base + g x add reaches +-limit on the side add pushes it toward.
+        const float edge = add > 0.f ? limit : -limit;
+        return clampf((edge - base) / add, 0.f, 1.f);
+    };
+    const float capTarget = std::min(allowed(baseL, peakL_), allowed(baseR, peakR_));
+    capGain_ = std::min(capTarget, capGain_ + (1.f - capGain_) * capRecovery_);
+    add *= capGain_;
     const float outL = baseL + add, outR = baseR + add;
     if (onMix >= 1.f) {
         l = outL;

@@ -5,6 +5,7 @@
 
 #include <limits>
 #include <random>
+#include <vector>
 
 using namespace nbtest;
 namespace sch = nbschema;
@@ -514,6 +515,72 @@ TEST_CASE("programme-like bass stays within the auto-headroom allowance too") {
         }
         INFO("removeMix ", removeMix, ": worst programme rise ", worst, " dB, allowance ", allowance, " dB");
         CHECK(worst <= allowance);
+    }
+}
+
+TEST_CASE("the peak cap holds the harmonics to the allowance whatever lines up with them") {
+    // A note carrying its own harmonic in step with the ones the stage adds (here the fundamental
+    // and a 2nd..5th at every phase) is what pushes past the allowance without the cap. Against
+    // the larger of the input's and the base's own peak (the base alone: the stage at gain 0),
+    // the output must stay within 1 + rise x gain, kept, removed and half faded, at two Amounts.
+    auto peaks = [](float reach, float removeMix, float gain, float character, auto gen) {
+        VirtualBass vb;
+        vb.rebuild(reach, kSampleRate);
+        double peak = 0;
+        for (int n = 0; n < 48000; ++n) {
+            float l = gen(n), r = l;
+            vb.process(l, r, 1.f, removeMix, gain, character);
+            if (n > 14400) peak = std::max(peak, static_cast<double>(std::fabs(l)));
+        }
+        return peak;
+    };
+    double worstRatio = 0;
+    for (float removeMix : {0.f, 0.5f, 1.f}) {
+        const float riseFactor = removeMix > 0.f ? VirtualBass::kPeakRiseRemoved : VirtualBass::kPeakRiseKept;
+        for (float gain : {0.6f, 1.f}) {
+            for (float reach : {25.f, 35.f, 60.f}) {
+                for (float character : {0.f, 1.f}) {
+                    for (double f = 18.0; f <= 56.0; f += 6.0) {
+                        for (int k : {2, 3, 4, 5}) {
+                            for (double ph : {0.0, kPi / 2, kPi, 3 * kPi / 2}) {
+                                auto gen = [=](int n) {
+                                    const double t = n / static_cast<double>(kSampleRate);
+                                    return static_cast<float>(0.4 * (std::sin(2 * kPi * f * t) +
+                                                                     0.5 * std::sin(2 * kPi * k * f * t + ph)));
+                                };
+                                double in = 0;
+                                for (int n = 14401; n < 48000; ++n) in = std::max(in, static_cast<double>(std::fabs(gen(n))));
+                                const double base = peaks(reach, removeMix, 0.f, character, gen);
+                                const double out = peaks(reach, removeMix, gain, character, gen);
+                                const double ratio = out / (std::max(in, base) * (1.0 + riseFactor * gain));
+                                worstRatio = std::max(worstRatio, ratio);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    INFO("worst output peak over its allowance: x", worstRatio);
+    CHECK(worstRatio <= 1.0 + 1e-4);
+}
+
+TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
+    // A single sub note never reaches the allowance, so the cap must not touch it: the stage's
+    // harmonics come out at the same level as with no cap to speak of (checked against the 2nd).
+    for (float removeMix : {0.f, 1.f}) {
+        VirtualBass vb;
+        vb.rebuild(40.f, kSampleRate);
+        std::vector<float> out(2 * 48000);
+        for (int n = 0; n < 48000; ++n) {
+            float l = 0.5f * static_cast<float>(std::sin(2 * kPi * 30.0 * n / kSampleRate)), r = l;
+            vb.process(l, r, 1.f, removeMix, 1.f, 0.f);
+            out[2 * n] = l;
+            out[2 * n + 1] = r;
+        }
+        std::vector<float> tail(out.begin() + 2 * 24000, out.end());
+        INFO("removeMix ", removeMix, ": 60 Hz harmonic at ", linToDb(channelMagnitudeAt(tail, 0, 60.0)), " dB");
+        CHECK(linToDb(channelMagnitudeAt(tail, 0, 60.0) / 0.5) > -12.0);
     }
 }
 
