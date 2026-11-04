@@ -174,7 +174,9 @@ struct PeqBank {
 // Coefficient builders. Each (re)writes q's topology + coefficients through Biquad::retune(), so
 // a running filter keeps its state across an edit; callers that need a clean start clear().
 void makeLowPass(Biquad& q, float fc, float Q, float sr);
-void makeHighPass(Biquad& q, float fc, float Q, float sr);
+// fc is clamped to minFc..0.49 sr; minFc defaults to 20 Hz, below which nothing else in the chain
+// is meant to reach (Virtual Bass's input band goes lower, see VirtualBass::rebuild).
+void makeHighPass(Biquad& q, float fc, float Q, float sr, float minFc = 20.f);
 void makeLowPass1(Biquad& q, float fc, float sr);
 void makeHighPass1(Biquad& q, float fc, float sr);
 void makeIdentity(Biquad& q);

@@ -242,6 +242,9 @@ public:
     // The input lowpass's corner, a little under the reach (notes at the reach the woofers still
     // play; it's those well below it that need rebuilding).
     static constexpr float kInputRatio = .85f;
+    // The input highpass's corner: an octave under the reach, which at the lowest reach (25 Hz) is
+    // below the 20 Hz the other filters stop at.
+    static constexpr float kInputHpRatio = .5f;
     // Retunes every filter for the cut frequency, keeping their state (see Biquad::retune).
     void rebuild(float cutHz, float sampleRate);
     void clear();

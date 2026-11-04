@@ -152,6 +152,23 @@ TEST_CASE("notes the woofers can play generate (almost) no harmonics") {
     }
 }
 
+TEST_CASE("at the lowest reach the octave below it is rebuilt as strongly as at the default") {
+    // The input band is the octave under the reach. At a 25 Hz reach it starts at 12.5 Hz, below
+    // the 20 Hz the other filters stop at; clamped there, a 12.5 Hz note lost 8.8 dB instead of 3
+    // and its harmonics came out ~6 dB weak. A note at half the reach must make the same harmonics
+    // at any reach, as every filter scales with it.
+    const double amp = 0.3;
+    for (double ratio : {0.5, 0.6}) {
+        const auto low = runStage(25.f, 25.0 * ratio, amp, 0.f, 1.f);
+        const auto stock = runStage(40.f, 40.0 * ratio, amp, 0.f, 1.f);
+        for (int h : {2, 3}) {
+            const double atLow = relDb(low, h * 25.0 * ratio, amp), atStock = relDb(stock, h * 40.0 * ratio, amp);
+            INFO("note at ", ratio, " x reach, harmonic ", h, ": 25 Hz reach ", atLow, " dB, 40 Hz reach ", atStock, " dB");
+            CHECK(std::fabs(atLow - atStock) < 0.75);
+        }
+    }
+}
+
 TEST_CASE("a bass line the woofers can play stays clean (no intermodulation mud)") {
     // Two notes above a 40 Hz reach, as a bass line with a kick under it: the sum/difference
     // products that made the old stage sound like distortion must stay far down.

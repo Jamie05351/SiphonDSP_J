@@ -282,7 +282,8 @@ void VirtualBass::rebuild(float cutHz, float sampleRate) {
     constexpr float kButterworthQ = 0.70710678f;
     // 4th-order Butterworth as two sections; squared, an LR8.
     constexpr float kBw4QA = 0.54119610f, kBw4QB = 1.30656296f;
-    makeHighPass(inHp_, fc * .5f, kButterworthQ, sampleRate);
+    // Its own floor: at a 25 Hz reach the octave below starts at 12.5 Hz, not 20.
+    makeHighPass(inHp_, fc * kInputHpRatio, kButterworthQ, sampleRate, kMinHz * kInputHpRatio);
     const float inFc = fc * kInputRatio;
     makeLowPass(inLpA1_, inFc, kBw4QA, sampleRate);
     makeLowPass(inLpB1_, inFc, kBw4QB, sampleRate);
