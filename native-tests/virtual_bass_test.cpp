@@ -566,8 +566,9 @@ TEST_CASE("the peak cap holds the harmonics to the allowance whatever lines up w
 }
 
 TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
-    // A single sub note never reaches the allowance, so the cap must not touch it: the stage's
-    // harmonics come out at the same level as with no cap to speak of (checked against the 2nd).
+    // A single sub note never reaches the allowance, so the cap must not touch it: the 2nd
+    // harmonic comes out at exactly the level the stage made before the cap existed (-15.06 dB
+    // for this note, measured on the uncapped stage), kept or removed.
     for (float removeMix : {0.f, 1.f}) {
         VirtualBass vb;
         vb.rebuild(40.f, kSampleRate);
@@ -580,7 +581,7 @@ TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
         }
         std::vector<float> tail(out.begin() + 2 * 24000, out.end());
         INFO("removeMix ", removeMix, ": 60 Hz harmonic at ", linToDb(channelMagnitudeAt(tail, 0, 60.0)), " dB");
-        CHECK(linToDb(channelMagnitudeAt(tail, 0, 60.0) / 0.5) > -12.0);
+        CHECK(std::fabs(linToDb(channelMagnitudeAt(tail, 0, 60.0)) - (-15.0637)) < 0.01);
     }
 }
 
