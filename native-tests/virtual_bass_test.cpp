@@ -426,6 +426,41 @@ TEST_CASE("a non-finite sample doesn't latch virtual bass") {
     CHECK(std::fabs(relDb(out, 30.0, 0.3)) < 0.5);
 }
 
+TEST_CASE("virtual bass never raises a peak past the allowance auto headroom makes for it") {
+    // Auto headroom turns the whole system down by 20 log10(1 + rise x Amount) for Virtual Bass, so
+    // that must cover the real worst case -- but no more, or the system just gets quieter.
+    auto peakRiseDb = [](float reach, double f, float amount, float removeMix, float character) {
+        VirtualBass vb;
+        vb.rebuild(reach, kSampleRate);
+        double inPeak = 0, outPeak = 0;
+        for (int n = 0; n < 144000; ++n) {
+            const double s = 0.5 * std::sin(2 * kPi * f * n / kSampleRate);
+            float l = static_cast<float>(s), r = l;
+            vb.process(l, r, 1.f, removeMix, amount, character);
+            if (n > 96000) {
+                inPeak = std::max(inPeak, std::fabs(s));
+                outPeak = std::max(outPeak, static_cast<double>(std::fabs(l)));
+            }
+        }
+        return linToDb(outPeak / inPeak);
+    };
+    for (float removeMix : {0.f, 1.f}) {
+        const float rise = removeMix > 0.f ? VirtualBass::kPeakRiseRemoved : VirtualBass::kPeakRiseKept;
+        for (float amount : {0.5f, 1.f}) {
+            const double allowance = linToDb(1.0 + rise * amount);
+            double worst = -99.0;
+            for (float reach : {25.f, 35.f, 60.f})
+                for (float character : {0.f, 1.f})
+                    for (double f = 14.0; f <= reach * 1.2; f += 3.0)
+                        worst = std::max(worst, peakRiseDb(reach, f, amount, removeMix, character));
+            INFO("remove ", removeMix, " amount ", amount, ": worst rise ", worst, " dB, allowance ", allowance, " dB");
+            CHECK(worst <= allowance);
+            // And the allowance isn't wildly generous either (that just lowers the volume).
+            if (removeMix == 0.f) CHECK(worst > allowance - 0.6);
+        }
+    }
+}
+
 TEST_CASE("virtual bass stays silent on silence") {
     VirtualBass vb;
     vb.rebuild(50.f, kSampleRate);

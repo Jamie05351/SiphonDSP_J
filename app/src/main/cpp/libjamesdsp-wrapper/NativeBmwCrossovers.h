@@ -239,6 +239,11 @@ public:
     static constexpr float kMinHz = 25.f, kMaxHz = 60.f, kDefaultHz = 40.f;
     // Remove sub's HP2 sits this far below the reach (Kotlin mirrors it for the response graph).
     static constexpr float kRemovalRatio = .8f;
+    // The most the stage raises a peak, as 20 log10(1 + rise x gain): measured across every reach,
+    // Character and sub frequency (worst 0.53 with the sub kept, 0.11 with it removed), with a
+    // margin. Auto headroom allows exactly this (Kotlin VIRTUAL_BASS_PEAK_RISE_*); a native test
+    // holds the stage to it.
+    static constexpr float kPeakRiseKept = .55f, kPeakRiseRemoved = .12f;
     // The input lowpass's corner, a little under the reach (notes at the reach the woofers still
     // play; it's those well below it that need rebuilding).
     static constexpr float kInputRatio = .85f;
