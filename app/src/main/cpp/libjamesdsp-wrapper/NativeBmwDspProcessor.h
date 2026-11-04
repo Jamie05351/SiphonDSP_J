@@ -129,7 +129,7 @@ public:
     //   297      enabled              298  split frequency Hz (60..120)
     //
     // 299..302 -- Virtual Bass, added in the 299 -> 303 growth:
-    //   299      enabled              300  cut frequency Hz (30..80)
+    //   299      enabled              300  woofer reach (cut) Hz (25..60)
     //   301      harmonics level %    302  remove the original sub below the cut
     //
     // 303 -- Virtual Bass character, Warm 0 .. Punchy 100 %, added in the 303 -> 304 growth.

@@ -191,9 +191,9 @@ void makeLowPass(Biquad& q, float fc, float Q, float sr) {
     n.m2 = 1;
     q.retune(n);
 }
-void makeHighPass(Biquad& q, float fc, float Q, float sr) {
+void makeHighPass(Biquad& q, float fc, float Q, float sr, float minFc) {
     Biquad n;
-    double w = 2 * PI * clampf(fc, 20, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
+    double w = 2 * PI * clampf(fc, minFc, sr * .49f) / sr, g = std::tan(w * .5), k = 1. / Q;
     const auto [a1, a2, a3] = NativeBmwRouting::svfCore(g, k);
     n.topology = Biquad::Topology::Svf2;
     n.a1 = a1;
