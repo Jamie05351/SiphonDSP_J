@@ -489,12 +489,15 @@ private fun Tile(
         // Whatever is playing shows on the music tile, from any player; tapping it opens that player.
         val playing = track?.takeIf { tile == HomeTile.MUSIC }
         if (playing != null) {
-            // The edge takes the colour of the app that's playing, as tapping opens that app.
-            val player = apps?.firstOrNull { it.component.packageName == playing.packageName }
+            // The edge takes the colour of the app that's playing, as tapping opens that app: the
+            // slot's own entry when the player is the attached app (a package can list several),
+            // else the player's first entry; never the slot app's colour for a different player.
+            val player = app?.takeIf { it.component.packageName == playing.packageName }
+                ?: apps?.firstOrNull { it.component.packageName == playing.packageName }
             HomeTileFace(
                 tile, listOf(playing.title, playing.artist).filter { it.isNotEmpty() }.joinToString(" · "), { actions.openTrackApp(playing) }, { menu = true },
                 art = playing.art,
-                edge = player?.accent ?: app?.accent ?: tile.accent,
+                edge = player?.accent ?: tile.accent,
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     MediaButton(stringResource(R.string.launcher_media_previous), actions::mediaPrevious) { drawSkip(forward = false) }
