@@ -441,11 +441,12 @@ object NativeBmwDspValues {
 
     /**
      * The most Virtual Bass can raise the peak level below [VIRTUAL_BASS_TOP_RATIO] x its cut, in dB,
-     * or 0 while it's off: 20 log10(1 + rise x Amount), the rise measured on the native stage across
-     * every reach, Character and sub frequency (native VirtualBass::kPeakRiseKept / kPeakRiseRemoved,
-     * pinned by a native test). The harmonics never peak in step with the sub, so the real rise is
-     * about half of the (1 + Amount) a naive sum would allow -- and with Remove sub on, what's taken
-     * away almost cancels what's added. A bigger allowance only turns the whole system down.
+     * or 0 while it's off: 20 log10(1 + rise x Amount) (native VirtualBass::kPeakRiseKept /
+     * kPeakRiseRemoved). A lone note's harmonics stay inside it on their own -- they never peak in
+     * step with the sub, and with Remove sub on what's taken away almost cancels what's added --
+     * and where a note's own harmonics line up with the added ones, the native stage turns its
+     * harmonics down for that peak, so the allowance holds for any signal (a native test pins it).
+     * A bigger allowance would only turn the whole system down.
      */
     fun virtualBassWorstCaseBoostDb(values: FloatArray): Double {
         if (virtualBassCutHz(values) <= 0.0) return 0.0
