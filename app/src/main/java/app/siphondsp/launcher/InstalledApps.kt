@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable
 import android.os.Process
 import android.os.UserHandle
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -23,9 +24,12 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Locale
 
-/** One app on the head unit that has a launcher entry: its name, the exact activity, its icon. */
+/**
+ * One app on the head unit that has a launcher entry: its name, the exact activity, its icon, and
+ * its primary colour read from that icon ([AppAccent]; null when the icon has no clear colour).
+ */
 @Immutable
-class AppEntry(val label: String, val component: ComponentName, val icon: ImageBitmap?) {
+class AppEntry(val label: String, val component: ComponentName, val icon: ImageBitmap?, val accent: Color? = null) {
     val key: String get() = component.flattenToString()
 }
 
@@ -43,7 +47,7 @@ class InstalledApps private constructor(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _apps = MutableStateFlow<List<AppEntry>?>(null)
     private var reload: Job? = null
-    private val icons = HashMap<String, Pair<Long, ImageBitmap?>>()
+    private val icons = HashMap<String, CachedIcon>()
 
     /** Every launchable app except J_DSP itself, sorted by name; null until the first load ends. */
     val apps: StateFlow<List<AppEntry>?> = _apps.asStateFlow()
@@ -93,14 +97,13 @@ class InstalledApps private constructor(private val context: Context) {
     private fun entry(info: LauncherActivityInfo, size: Int): AppEntry {
         val key = info.componentName.flattenToString()
         val stamp = info.firstInstallTime xor lastUpdate(info.componentName.packageName)
-        val cached = icons[key]
-        val icon = if (cached != null && cached.first == stamp) {
-            cached.second
-        } else {
-            draw(info.getBadgedIcon(0), size).also { icons[key] = stamp to it }
-        }
-        return AppEntry(info.label.toString(), info.componentName, icon)
+        val cached = icons[key]?.takeIf { it.stamp == stamp }
+            ?: draw(info.getBadgedIcon(0), size).let { icon -> CachedIcon(stamp, icon, accentOf(icon)) }.also { icons[key] = it }
+        return AppEntry(info.label.toString(), info.componentName, cached.icon, cached.accent)
     }
+
+    /** An app's drawn icon and the colour read from it, for one install/update [stamp]. */
+    private class CachedIcon(val stamp: Long, val icon: ImageBitmap?, val accent: Color?)
 
     private fun lastUpdate(pkg: String): Long = try {
         context.packageManager.getPackageInfo(pkg, 0).lastUpdateTime
@@ -118,6 +121,18 @@ class InstalledApps private constructor(private val context: Context) {
             instance ?: synchronized(this) {
                 instance ?: InstalledApps(context.applicationContext).also { instance = it }
             }
+
+        /** The primary colour of [icon] ([AppAccent]), or null when it has no clear one. */
+        internal fun accentOf(icon: ImageBitmap?): Color? = try {
+            icon?.let {
+                val pixels = IntArray(it.width * it.height)
+                it.readPixels(pixels)
+                AppAccent.of(pixels)?.let { argb -> Color(argb) }
+            }
+        } catch (e: RuntimeException) {
+            Timber.w(e, "Icon colour could not be read")
+            null
+        }
 
         /** [drawable] as a square bitmap [size] px across, or null if it can't be drawn. */
         internal fun draw(drawable: Drawable?, size: Int): ImageBitmap? = try {

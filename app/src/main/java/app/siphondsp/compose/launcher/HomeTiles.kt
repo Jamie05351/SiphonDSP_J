@@ -58,7 +58,8 @@ internal enum class HomeTile(@StringRes val title: Int, val accent: Color, @Draw
 
 /**
  * A home tile: its picture over the whole face, the title and the attached app's name along the
- * bottom, and the launcher's edge ([neonEdge]) in [HomeTile.accent]. The picture is opaque.
+ * bottom, and the launcher's edge ([neonEdge]) in [edge]: the attached app's own colour when it has
+ * one (see [AppAccent]), else [HomeTile.accent]. The picture is opaque.
  * [art] is the album art, which replaces
  * the picture on the music tile while something is playing; [extra] sits just above the title (the media controls).
  */
@@ -70,12 +71,13 @@ internal fun HomeTileFace(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
     art: ImageBitmap? = null,
+    edge: Color = tile.accent,
     extra: (@Composable () -> Unit)? = null,
 ) {
     val s = LocalHomeScale.current
     val corner = s.dp(TileCorner)
     val shape = RoundedCornerShape(corner)
-    val accent = tile.accent
+    val accent = edge
     val title = stringResource(tile.title)
     Box(
         Modifier
