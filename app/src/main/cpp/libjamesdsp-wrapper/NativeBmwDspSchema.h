@@ -236,7 +236,7 @@ inline constexpr int kMonoBassFreq = 298;  // Hz, 60..120
 // sub below the cut as harmonics the woofers can play (see NativeBmwDsp::VirtualBass), optionally
 // high-passing the original sub away. Ships off; older saves backfill it off.
 inline constexpr int kVirtualBassEnabled = 299;
-inline constexpr int kVirtualBassFreq = 300;       // cut, Hz, 30..80
+inline constexpr int kVirtualBassFreq = 300;       // woofer reach (cut), Hz, 25..60
 inline constexpr int kVirtualBassAmount = 301;     // harmonics level, percent, 0..100
 inline constexpr int kVirtualBassRemoveSub = 302;  // high-pass the original sub at the cut
 // Added in the 303 -> 304 growth: the harmonic mix, Warm (0) .. Punchy (100).

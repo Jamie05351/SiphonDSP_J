@@ -243,11 +243,12 @@ fun CrossoverMidHighPage(
  * sits in the column's header; Amount and Pivot stay adjustable while it is off, so they can be
  * set before it is switched on.
  *
- * Under it, **Virtual Bass**: the sub below the Cut that the woofers can't play, rebuilt as
- * harmonics they can (the ear hears the missing fundamental). Amount is the harmonics' level;
+ * Under it, **Virtual Bass**: notes below the Woofer reach -- the lowest note the woofers really
+ * play, e.g. where the subsonic HPF starts -- rebuilt as harmonics they can play (the ear hears
+ * the missing fundamental); notes above it are left alone. Amount is the harmonics' level;
  * Warm ↔ Punch their mix (even harmonics for a round, warm bass; more of the 3rd for punch);
- * Remove sub high-passes the original sub away at the Cut, sparing the woofers' excursion and
- * the headroom it took -- that removal shows on the graph, the harmonics (not a filter) don't.
+ * Remove sub gently thins what lies below the reach (never the woofers' own band), sparing
+ * excursion -- that shows on the graph, the harmonics (not a filter) don't.
  * Like Tilt, its settings stay adjustable while it is off.
  */
 @Composable
@@ -288,7 +289,7 @@ fun CrossoverTiltPage(
             onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED, if (on) 1f else 0f) },
         )
         DspArtSlider(
-            dsp, "Cut", NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
+            dsp, "Woofer reach", NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
             NativeBmwDspValues.VIRTUAL_BASS_MIN_HZ..NativeBmwDspValues.VIRTUAL_BASS_MAX_HZ,
             NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(286, 48),
         )
