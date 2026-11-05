@@ -102,8 +102,8 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         fun seatPower(seat: Int, chain: Array<Array<Complex>>): DoubleArray {
             val (leftSpk, rightSpk) = speakers[seat]
             return DoubleArray(freqs.size) { i ->
-                val gL = if (measuredWith == MeasuredWith.DSP_OFF) chain[0][i] else chain[0][i] / current[0][i]
-                val gR = if (measuredWith == MeasuredWith.DSP_OFF) chain[1][i] else chain[1][i] / current[1][i]
+                val gL = if (measuredWith == MeasuredWith.DSP_OFF) chain[0][i] else change(chain[0][i], current[0][i])
+                val gR = if (measuredWith == MeasuredWith.DSP_OFF) chain[1][i] else change(chain[1][i], current[1][i])
                 (leftSpk[i] * gL + rightSpk[i] * gR).power()
             }
         }
@@ -153,7 +153,7 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
             val chain = appChain(trial, peq)
             val after = seats.indices.map { blank(it, smoothDb(seatPower(it, chain))) }
             val sc = score(after)
-            if (best == null || sc > best!!.second) best = Triple(c, sc, after)
+            if (sc.isFinite() && (best == null || sc > best!!.second)) best = Triple(c, sc, after)
             if (k % 16 == 0) onProgress(k / candidates.size.toFloat())
         }
         onProgress(1f)
@@ -179,6 +179,14 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
             replacesExisting = replaces,
         )
     }
+
+    /**
+     * What a candidate changes, measured with the DSP on: candidate / current. Where the current
+     * chain is (near) silent -- a muted output, a hard null -- the measurement holds nothing of
+     * that channel to rescale, so it's left as it is rather than divided into Inf/NaN.
+     */
+    private fun change(candidate: Complex, current: Complex): Complex =
+        if (current.power() < SILENT_POWER) Complex.ONE else candidate / current
 
     private class SeatFit(val shiftedLeft: List<Complex>, val rmsDb: Double?, val shiftSeconds: Double)
 
@@ -270,6 +278,8 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         const val MIN_IMPROVEMENT_DB = 0.5
         private const val MAX_SHIFT_S = 0.004
         private const val MIN_FIT_POINTS = 8
+        /** -120 dB: below this a chain point counts as silent. */
+        private const val SILENT_POWER = 1e-12
         private const val SHIFT_STEP_S = 0.00002
 
         /** The all-pass section Auto Align writes to (0-based: "section 2" on the All-pass page). */
