@@ -221,8 +221,13 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun undoApply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): String? {
         val previous = undo ?: return null
-        val restore = previous.filterKeys { i -> applied[i]?.let { values.getOrNull(i) == it } == true }
-        val kept = previous.size - restore.size
+        // Judged per all-pass section, not per value: restoring the "enabled" of a section whose
+        // corner was since retuned by hand would switch off the filter the user just edited.
+        val untouched = previous.keys.groupBy(::sectionOf).filterValues { indices ->
+            indices.all { i -> applied[i]?.let { values.getOrNull(i) == it } == true }
+        }.values.flatten().toSet()
+        val restore = previous.filterKeys { it in untouched }
+        val kept = previous.keys.groupBy(::sectionOf).size - restore.keys.groupBy(::sectionOf).size
         if (restore.isNotEmpty() && !commit(restore)) {
             failure = "Couldn't restore the previous all-pass."
             return null
@@ -233,9 +238,13 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         return when {
             kept == 0 -> "Restored the all-passes from before Auto Align"
             restore.isEmpty() -> "Nothing restored: you've changed those all-pass settings since Auto Align"
-            else -> "Restored the all-passes from before Auto Align, leaving $kept setting(s) you've changed since"
+            else -> "Restored the all-passes from before Auto Align, leaving $kept all-pass section(s) you've changed since as they are"
         }
     }
+
+    /** The all-pass section an index belongs to (Auto Align only writes the Low/Mid section block). */
+    private fun sectionOf(index: Int) =
+        (index - NativeBmwDspValues.INDEX_ALL_PASS) / NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
 
     private companion object {
         const val MAX_BYTES = 4 * 1024 * 1024
