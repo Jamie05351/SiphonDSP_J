@@ -38,7 +38,15 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     /** (seat, slot) -> why the last import of it was rejected. */
     val importErrors = mutableStateMapOf<Pair<Seat, Slot>, String>()
 
-    var measuredWith by mutableStateOf(AutoAlignSolver.MeasuredWith.DSP_OFF)
+    private var measuredWithState by mutableStateOf(AutoAlignSolver.MeasuredWith.DSP_OFF)
+    /** Changing it invalidates any result: the two modes map the speakers differently. */
+    var measuredWith: AutoAlignSolver.MeasuredWith
+        get() = measuredWithState
+        set(value) {
+            if (value == measuredWithState) return
+            measuredWithState = value
+            result = null
+        }
     var progress by mutableStateOf<Float?>(null)
         private set
     var result by mutableStateOf<AutoAlignSolver.Result?>(null)
@@ -50,6 +58,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     private var job: Job? = null
+    /** The DSP values the current [result] was computed for; Apply refuses if they've changed. */
+    private var analysedValues: FloatArray? = null
 
     fun import(seat: Seat, slot: Slot, uri: Uri) {
         viewModelScope.launch {
@@ -97,6 +107,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         result = null
         progress = 0f
         val snapshot = values.copyOf()
+        analysedValues = snapshot
         job = viewModelScope.launch {
             val outcome = withContext(Dispatchers.Default) {
                 runCatching {
@@ -115,9 +126,17 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     /** Writes the proposal through [commit]; remembers what it replaced for [undoApply]. */
     fun apply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val updates = result?.updates?.takeIf { it.isNotEmpty() } ?: return false
+        if (analysedValues?.contentEquals(values) != true) {
+            // Settings moved since Analyse (here or on another screen): the proposal was solved
+            // for the old chain, so don't write it -- ask for a fresh analysis instead.
+            failure = "Your settings changed since the analysis -- tap Analyse again before applying."
+            result = null
+            return false
+        }
         val previous = AutoAlignSolver.previousValues(updates, values)
         if (!commit(updates)) return false
         undo = previous
+        // analysedValues stays the pre-apply chain: Undo returns to it, and Apply can run again.
         return true
     }
 
