@@ -54,7 +54,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         private set
     var failure by mutableStateOf<String?>(null)
         private set
-    /** What [apply] overwrote, for [undo]; null when there's nothing to undo. */
+    /** The settings Auto Align's applies overwrote, as they were before the first; null when there's nothing to undo. */
     var undo by mutableStateOf<Map<Int, Float>?>(null)
         private set
 
@@ -65,6 +65,9 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     private var analysedPeq: BmwPeqState? = null
     /** Bumped per analysis, so a superseded run's progress and result are dropped. */
     private var runId = 0
+    /** The result [apply] last wrote, so the same one isn't written twice. */
+    var appliedResult by mutableStateOf<AutoAlignSolver.Result?>(null)
+        private set
 
     fun import(seat: Seat, slot: Slot, uri: Uri) {
         viewModelScope.launch {
@@ -111,10 +114,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         runId++
         progress = null
         result = null
-        // The undo belongs to the result it applied; a new one starts from whatever is set now
-        // (including that earlier apply, and any hand edits since), so it mustn't be reverted
-        // underneath it.
-        undo = null
+        // [undo] survives: it's the way back to the settings from before Auto Align, and a new
+        // import or analysis doesn't change what those were.
     }
 
     /** Seats with both a left and a right measurement. */
@@ -135,6 +136,14 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             // speakers too, and there's no telling the two apart.
             failure = "With SiphonDSP on, measure with Mono Bass and Virtual Bass switched off -- they send " +
                 "each side's bass to both, so a one-side measurement isn't one side. Or measure with SiphonDSP off."
+            return
+        }
+        val smoothed = seats.flatMap { listOfNotNull(it.left, it.right, it.both) }.filter { it.heavilySmoothed }
+        if (smoothed.isNotEmpty()) {
+            // Smoothing that coarse blurs the phase the solver sums by (left + right stop
+            // reproducing the both-together measurement), so its answer wouldn't be one to apply.
+            failure = "Re-export ${smoothed.joinToString { it.name }} at 1/12 octave or finer (1/48 is best) -- " +
+                "coarser smoothing blurs the phase Auto Align needs."
             return
         }
         progress = 0f
@@ -164,11 +173,10 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Writes the proposal through [commit]; remembers what it replaced for [undoApply]. */
     fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {
-        val updates = result?.updates?.takeIf { it.isNotEmpty() } ?: return false
-        if (undo != null) {
-            // Already applied: a second Apply would snapshot the applied values and lose the
-            // original ones Undo has to restore.
-            failure = "Already applied -- Undo first to apply again."
+        val current = result ?: return false
+        val updates = current.updates.takeIf { it.isNotEmpty() } ?: return false
+        if (current === appliedResult) {
+            failure = "Already applied."
             return false
         }
         if (analysedValues?.contentEquals(values) != true || analysedPeq != peq) {
@@ -178,14 +186,17 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             result = null
             return false
         }
-        val previous = AutoAlignSolver.previousValues(updates, values)
+        // Undo goes back to before Auto Align: keep what an earlier apply already recorded for an
+        // index, and add the current value only for indices this apply touches for the first time.
+        val previous = LinkedHashMap(undo.orEmpty())
+        for ((index, value) in AutoAlignSolver.previousValues(updates, values)) previous.putIfAbsent(index, value)
         if (!commit(updates)) {
             failure = "Couldn't save the change."
             return false
         }
         failure = null
         undo = previous
-        // analysedValues stays the pre-apply chain: Undo returns to it, and Apply can run again.
+        appliedResult = current
         return true
     }
 
@@ -196,6 +207,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             return false
         }
         undo = null
+        appliedResult = null
         return true
     }
 

@@ -133,6 +133,15 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
             }
 
             model.result?.let { result -> ResultSection(model, result, dsp.values) { dsp.commitAll(it) } }
+            if (model.undo != null) {
+                Section("UNDO") {
+                    Body("Puts every all-pass Auto Align changed back the way it was before Auto Align.", small = true)
+                    ActionPill("Undo Auto Align") {
+                        val ok = model.undoApply { dsp.commitAll(it) }
+                        Toast.makeText(context, if (ok) "Restored the all-passes from before Auto Align" else model.failure ?: "Couldn't restore", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -225,17 +234,13 @@ private fun ResultSection(
             } ?: Body("No both-together measurement: timing taken from REW's delay notes.", color = Warn, small = true)
         }
         if (p != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (model.undo == null) ActionPill("Apply") {
+            if (model.appliedResult !== result) {
+                ActionPill("Apply") {
                     val ok = model.apply(values, BmwPeqState.load(context), commit)
                     Toast.makeText(context, if (ok) "Auto Align applied" else model.failure ?: "Couldn't save the change", Toast.LENGTH_LONG).show()
                 }
-                if (model.undo != null) {
-                    ActionPill("Undo") {
-                        val ok = model.undoApply(commit)
-                        Toast.makeText(context, if (ok) "Restored the previous all-pass" else "Couldn't restore", Toast.LENGTH_SHORT).show()
-                    }
-                }
+            } else {
+                Body("Applied.", color = Accent, small = true)
             }
             Body("Measure again afterwards with SiphonDSP on to confirm, and run Auto Align on that if you like.", small = true)
         }

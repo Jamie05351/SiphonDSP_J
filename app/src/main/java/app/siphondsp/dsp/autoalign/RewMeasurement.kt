@@ -39,7 +39,7 @@ class RewMeasurement private constructor(
         return polar(splDb[lo] + (splDb[hi] - splDb[lo]) * t, phaseRad[lo] + (phaseRad[hi] - phaseRad[lo]) * t)
     }
 
-    /** True when the export was smoothed too heavily to trust its phase for summing (1/3 octave or wider). */
+    /** True when the export was smoothed coarser than 1/12 octave (1/6, 1/3, ...): too blurred to sum its phase. */
     val heavilySmoothed: Boolean
         get() {
             val s = smoothing ?: return false
