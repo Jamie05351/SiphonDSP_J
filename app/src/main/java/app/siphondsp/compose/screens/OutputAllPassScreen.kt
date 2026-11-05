@@ -1,7 +1,5 @@
 package app.siphondsp.compose.screens
 
-import android.content.Intent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -27,11 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.siphondsp.activity.AutoAlignActivity
 import app.siphondsp.compose.controls.ArtGroupHeader
 import app.siphondsp.compose.controls.ArtLabel
 import app.siphondsp.compose.controls.ArtLabelSize
@@ -44,7 +38,6 @@ import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.abs
 
@@ -78,30 +71,13 @@ fun AllPassPage(modifier: Modifier = Modifier) {
         key(output) { OutputAllPassScreen(output, title, band.slider, m) }
     }
 
-    val context = LocalContext.current
-    val autoAlign: @Composable (Modifier) -> Unit = { m ->
-        Box(
-            m.clickable { context.startActivity(Intent(context, AutoAlignActivity::class.java)) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "Auto Align ›",
-                color = Color(BmwDashboardSkin.LIGHT_BLUE),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                textDecoration = TextDecoration.Underline,
-            )
-        }
-    }
-
     BmwDspTheme {
-        if (context.isHeadUnitDisplay()) {
+        if (LocalContext.current.isHeadUnitDisplay()) {
             Box(modifier.fillMaxSize()) {
                 page(Modifier.fillMaxSize())
                 WorkspaceArtBox(Modifier.fillMaxSize()) {
                     sides(Modifier.artRect(artDp(SectionLeftX, SelectorTop, 170, 44)))
                     bands(Modifier.artRect(artDp(SectionLeftX + 186, SelectorTop, 420, 44)))
-                    autoAlign(Modifier.artRect(artDp(SectionLeftX + 622, SelectorTop, 164, 44)))
                 }
             }
         } else {
@@ -113,7 +89,6 @@ fun AllPassPage(modifier: Modifier = Modifier) {
                     sides(Modifier.width(150.dp).height(44.dp))
                     bands(Modifier.weight(1f).height(44.dp))
                 }
-                autoAlign(Modifier.padding(start = 12.dp, top = 4.dp).height(32.dp))
                 page(Modifier.weight(1f))
             }
         }
