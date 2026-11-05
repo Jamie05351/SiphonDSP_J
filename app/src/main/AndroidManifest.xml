@@ -244,6 +244,11 @@
         </activity>
 
         <activity
+            android:name=".activity.AutoAlignActivity"
+            android:exported="false"
+            android:label="@string/title_activity_auto_align"
+            android:theme="@style/Theme.SiphonDSP" />
+        <activity
             android:name=".activity.GainLimiterActivity"
             android:exported="false"
             android:label="@string/title_activity_gain_limiter"
