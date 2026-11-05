@@ -109,7 +109,16 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         }
 
         val band = freqs.map { it in SCORE_LOW_HZ..SCORE_HIGH_HZ }
-        val before = seats.indices.map { smoothDb(seatPower(it, current)) }
+        // Where a seat's files don't all reach, its curves are blanked (NaN) rather than drawn as
+        // a speaker gone silent; the scored band is always covered (RewMeasurement requires it).
+        val covered = seats.map { seat ->
+            val ms = listOfNotNull(seat.left, seat.right, seat.both)
+            val lo = ms.maxOf { it.frequencies.first() }
+            val hi = ms.minOf { it.frequencies.last() }
+            BooleanArray(freqs.size) { freqs[it] in lo..hi }
+        }
+        fun blank(seat: Int, db: DoubleArray) = DoubleArray(db.size) { if (covered[seat][it]) db[it] else Double.NaN }
+        val before = seats.indices.map { blank(it, smoothDb(seatPower(it, current))) }
 
         fun score(after: List<DoubleArray>): Double {
             var total = 0.0
@@ -142,7 +151,7 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
             values.copyInto(trial)
             for ((index, value) in updatesFor(c)) trial[index] = value
             val chain = appChain(trial, peq)
-            val after = seats.indices.map { smoothDb(seatPower(it, chain)) }
+            val after = seats.indices.map { blank(it, smoothDb(seatPower(it, chain))) }
             val sc = score(after)
             if (best == null || sc > best!!.second) best = Triple(c, sc, after)
             if (k % 16 == 0) onProgress(k / candidates.size.toFloat())

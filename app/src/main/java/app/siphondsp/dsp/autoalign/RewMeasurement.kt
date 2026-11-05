@@ -48,6 +48,9 @@ class RewMeasurement private constructor(
         }
 
     companion object {
+        /** The band every measurement must cover. */
+        const val MIN_COVER_HZ = 28.0
+        const val MAX_COVER_HZ = 500.0
         private val Row = Regex("""^\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)""")
         private val DelayNote = Regex("""Delay\s+(-?[0-9.]+)\s*ms""")
         private val SmoothingNote = Regex("""^\*\s*Smoothing:\s*(.+)$""")
@@ -78,8 +81,9 @@ class RewMeasurement private constructor(
             if (f.size < 16) {
                 return Result.failure(IllegalArgumentException("$name: no frequency / SPL / phase rows -- export from REW with File > Export > Measurement as text"))
             }
-            if (f.first() > 40.0 || f.last() < 400.0) {
-                return Result.failure(IllegalArgumentException("$name: needs to cover at least 40-400 Hz"))
+            // The solver scores 30-400 Hz with 1/24-octave smoothing and times L/R up to 500 Hz.
+            if (f.first() > MIN_COVER_HZ || f.last() < MAX_COVER_HZ) {
+                return Result.failure(IllegalArgumentException("$name: needs to cover at least 28-500 Hz (REW exports 20 Hz-20 kHz by default)"))
             }
             val delay = delayMs / 1000.0
             val unwrapped = DoubleArray(ph.size)

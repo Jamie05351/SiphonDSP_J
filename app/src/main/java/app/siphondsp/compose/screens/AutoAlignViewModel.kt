@@ -111,6 +111,10 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         runId++
         progress = null
         result = null
+        // The undo belongs to the result it applied; a new one starts from whatever is set now
+        // (including that earlier apply, and any hand edits since), so it mustn't be reverted
+        // underneath it.
+        undo = null
     }
 
     /** Seats with both a left and a right measurement. */
@@ -123,9 +127,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     fun analyse(values: FloatArray, peq: BmwPeqState) {
         val seats = readySeats()
         if (seats.isEmpty()) return
-        job?.cancel()
+        invalidate()
         failure = null
-        result = null
         if (measuredWith == AutoAlignSolver.MeasuredWith.DSP_ON && crossfeeds(values)) {
             // Mono Bass (and Virtual Bass's mono harmonics) put each side's bass in both
             // channels, so a "left only" measurement taken through them already holds the right
@@ -138,7 +141,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         val snapshot = values.copyOf()
         analysedValues = snapshot
         analysedPeq = peq
-        val run = ++runId
+        val run = runId
         job = viewModelScope.launch {
             val outcome = withContext(Dispatchers.Default) {
                 runCatching {

@@ -245,7 +245,7 @@ private fun ResultSection(
 @Composable
 private fun BeforeAfterChart(seat: AutoAlignSolver.SeatResult, modifier: Modifier) {
     val f = seat.frequencies
-    val all = seat.beforeDb.indices.filter { f[it] in 25.0..1000.0 }
+    val all = seat.beforeDb.indices.filter { f[it] in 25.0..1000.0 && seat.beforeDb[it].isFinite() && seat.afterDb[it].isFinite() }
     val top = all.maxOf { maxOf(seat.beforeDb[it], seat.afterDb[it]) } + 3
     val bottom = top - 36
     Canvas(modifier.background(Panel, RoundedCornerShape(6.dp))) {
