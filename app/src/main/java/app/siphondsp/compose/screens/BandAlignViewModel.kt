@@ -104,6 +104,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         runId++
         analysing = false
         results = null
+        failure = null
     }
 
     /** Per side, the seats with both a Low-only and a Mid-only measurement. */
@@ -202,8 +203,14 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             results = null
             return false
         }
+        // Undo goes back to before Band Align: an index still holding what the last apply wrote
+        // keeps its older snapshot; one edited by hand since gets that hand edit as its snapshot,
+        // so a second apply's Undo returns to it rather than past it.
         val previous = LinkedHashMap(undo.orEmpty())
-        for (index in updates.keys) previous.putIfAbsent(index, values[index])
+        for (index in updates.keys) {
+            val stillApplied = applied[index]?.let { abs(values[index] - it) < UNDO_TOLERANCE } == true
+            if (!(stillApplied && previous.containsKey(index))) previous[index] = values[index]
+        }
         if (!commit(updates)) {
             failure = "Couldn't save the change."
             return false
