@@ -135,10 +135,10 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
             model.result?.let { result -> ResultSection(model, result, dsp.values) { dsp.commitAll(it) } }
             if (model.undo != null) {
                 Section("UNDO") {
-                    Body("Puts every all-pass Auto Align changed back the way it was before Auto Align.", small = true)
+                    Body("Puts every all-pass Auto Align changed back the way it was before Auto Align (any you've since edited by hand are left as you set them).", small = true)
                     ActionPill("Undo Auto Align") {
-                        val ok = model.undoApply { dsp.commitAll(it) }
-                        Toast.makeText(context, if (ok) "Restored the all-passes from before Auto Align" else model.failure ?: "Couldn't restore", Toast.LENGTH_SHORT).show()
+                        val message = model.undoApply(dsp.values) { dsp.commitAll(it) }
+                        Toast.makeText(context, message ?: model.failure ?: "Couldn't restore", Toast.LENGTH_LONG).show()
                     }
                 }
             }

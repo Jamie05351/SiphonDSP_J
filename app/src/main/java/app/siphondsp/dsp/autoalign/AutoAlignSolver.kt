@@ -58,6 +58,8 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         val fitRmsDb: Double?,
         /** The left/right time offset the fit settled on, ms (0 without a both-channels measurement). */
         val shiftMs: Double,
+        /** True when the both-channels fit had a rival offset as good, so REW's own timing was kept. */
+        val timingAmbiguous: Boolean = false,
     )
 
     data class Result(

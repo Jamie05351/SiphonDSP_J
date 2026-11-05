@@ -58,6 +58,9 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     var undo by mutableStateOf<Map<Int, Float>?>(null)
         private set
 
+    /** What Auto Align's applies last wrote, per index; Undo restores only indices that still hold it. */
+    private var applied: Map<Int, Float> = emptyMap()
+
     private var job: Job? = null
     /** The DSP values the current [result] was computed for; Apply refuses if they've changed. */
     private var analysedValues: FloatArray? = null
@@ -165,7 +168,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
                     AutoAlignSolver().solve(
                         seats, measuredWith, snapshot, peq,
                         isActive = { isActive },
-                        onProgress = { p -> launch(Dispatchers.Main) { if (run == runId && progress != null) progress = p } },
+                        onProgress = { p -> viewModelScope.launch(Dispatchers.Main) { if (run == runId && progress != null) progress = p } },
                     )
                 }
             }
@@ -206,19 +209,32 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         }
         failure = null
         undo = previous
+        applied = LinkedHashMap(applied).apply { putAll(updates) }
         appliedResult = current
         return true
     }
 
-    fun undoApply(commit: (Map<Int, Float>) -> Boolean): Boolean {
-        val previous = undo ?: return false
-        if (!commit(previous)) {
+    /**
+     * Puts back what Auto Align replaced, but only where the setting still holds what Auto Align
+     * wrote: one edited by hand since (here or on another screen) is the user's newer choice and
+     * is left alone. Returns what to tell the user, or null if the restore couldn't be saved.
+     */
+    fun undoApply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): String? {
+        val previous = undo ?: return null
+        val restore = previous.filterKeys { i -> applied[i]?.let { values.getOrNull(i) == it } == true }
+        val kept = previous.size - restore.size
+        if (restore.isNotEmpty() && !commit(restore)) {
             failure = "Couldn't restore the previous all-pass."
-            return false
+            return null
         }
         undo = null
+        applied = emptyMap()
         appliedResult = null
-        return true
+        return when {
+            kept == 0 -> "Restored the all-passes from before Auto Align"
+            restore.isEmpty() -> "Nothing restored: you've changed those all-pass settings since Auto Align"
+            else -> "Restored the all-passes from before Auto Align, leaving $kept setting(s) you've changed since"
+        }
     }
 
     private companion object {
