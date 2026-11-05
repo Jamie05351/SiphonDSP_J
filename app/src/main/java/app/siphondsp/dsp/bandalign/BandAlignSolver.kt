@@ -24,8 +24,8 @@ import kotlin.math.sqrt
  *
  * Each candidate is scored by what the side's Low + Mid sum does through the crossover region
  * (see [scoreBand]), power-smoothed over +-1/24 octave, averaged over the region with cuts
- * counted double -- so a dip filled at one seat can't pay for one dug at another -- and over the
- * seats. Only the Low band's delay (the Gains & Delay range, 0-2.8 ms) and polarity change; Mid
+ * counted double, and over the seats. A candidate that leaves any seat worse off on that
+ * measure is rejected outright, so one seat is never traded for another. Only the Low band's delay (the Gains & Delay range, 0-2.8 ms) and polarity change; Mid
  * stays as it is, so whatever the Mid delays do between the two sides is left alone.
  */
 class BandAlignSolver {
@@ -105,6 +105,7 @@ class BandAlignSolver {
         }
 
         val before = seats.indices.map { sideDb(it, current) }
+        /** The mean over the seats, or NaN when any seat ends up worse: no seat is traded for another. */
         fun score(after: List<DoubleArray>): Double {
             var total = 0.0
             for (s in seats.indices) {
@@ -116,7 +117,9 @@ class BandAlignSolver {
                     sum += if (d > 0) d else 2 * d
                     n++
                 }
-                if (n > 0) total += sum / n
+                val seatScore = if (n > 0) sum / n else 0.0
+                if (seatScore < 0) return Double.NaN
+                total += seatScore
             }
             return total / seats.size
         }

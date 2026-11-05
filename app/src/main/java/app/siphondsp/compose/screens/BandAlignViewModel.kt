@@ -53,6 +53,10 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
     var appliedResults by mutableStateOf<List<BandAlignSolver.SideResult>?>(null)
         private set
 
+    /** True right after an apply cleared the imports, until a new file is imported. */
+    var measuredBeforeApply by mutableStateOf(false)
+        private set
+
     private var job: Job? = null
     private var analysedValues: FloatArray? = null
     /** The PEQ the current [results] were computed for: its Low and Mid filters shape what was measured. */
@@ -83,6 +87,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             outcome.onSuccess { (name, m) ->
                 imports[key] = Imported(name, m)
                 importErrors.remove(key)
+                measuredBeforeApply = false
             }.onFailure {
                 // The slot no longer holds what was picked last, so it holds nothing.
                 imports.remove(key)
@@ -219,6 +224,11 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         undo = previous
         applied = LinkedHashMap(applied).apply { putAll(updates) }
         appliedResults = current
+        // The imported files were measured with the settings just replaced. Analysed again they
+        // would be read as measured with the new ones and the same correction proposed twice, so
+        // they're dropped: the next analysis needs a fresh measurement of the new tune.
+        for (key in imports.keys.toList()) clear(key)
+        measuredBeforeApply = true
         return true
     }
 

@@ -80,7 +80,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
                 "Lines each side's Low band up with its Mid band. Through the crossover both bands play, so " +
                     "how they add up there depends on their timing and polarity. Band Align finds the Low " +
                     "delay and polarity, against Mid, that make them add up best at the seats you measure -- " +
-                    "both seats together, so neither is traded for the other. Mid's delays are left as they are.",
+                    "both seats together, rejecting any setting that leaves either seat worse. Mid's delays are left as they are.",
             )
 
             Section("1  HOW TO MEASURE") {
@@ -110,6 +110,13 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
 
             Section("3  ANALYSE") {
                 val ready = model.readySides()
+                if (model.measuredBeforeApply) {
+                    Body(
+                        "Applied. The files you imported were measured before that change, so they've been cleared -- " +
+                            "measure again (Low + Mid is enough to confirm) and import the new files to check it or go further.",
+                        color = Accent, small = true,
+                    )
+                }
                 Body(
                     if (ready.isEmpty()) {
                         "Import at least one side's Low only and Mid only at a seat."

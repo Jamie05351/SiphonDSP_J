@@ -117,6 +117,17 @@ class BandAlignSolverTest {
     }
 
     @Test
+    fun aSettingThatLeavesEitherSeatWorseIsRejected() {
+        // The driver's seat already adds up; only the passenger's is out. Any move helps the
+        // passenger at the driver's expense, so nothing is proposed.
+        val r = BandAlignSolver().solveSide(
+            BmwOutputChannel.LEFT, listOf(seat("Driver", 0.0), seat("Passenger", 0.0018)),
+            BandAlignSolver.Setting(2.2, false), band,
+        )
+        assertNull(r.proposal)
+    }
+
+    @Test
     fun theLowPlusMidMeasurementCorrectsAMistimedLowFile() {
         // The Low file's delay note is 0.5 ms off, which would move the answer by 0.5 ms; the
         // both-bands measurement shows the truth.
