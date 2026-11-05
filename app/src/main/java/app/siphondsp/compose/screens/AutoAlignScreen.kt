@@ -92,7 +92,7 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
 
             Section("1  HOW YOU MEASURED") {
                 BmwSegmentedControl(
-                    options = listOf("SiphonDSP OFF (factory)", "SiphonDSP ON (this tune)"),
+                    options = listOf("SiphonDSP OFF", "ON, all passthrough", "ON, this tune"),
                     selectedIndex = model.measuredWith.ordinal,
                     onSelect = { model.measuredWith = AutoAlignSolver.MeasuredWith.entries[it] },
                     modifier = Modifier.fillMaxWidth().height(44.dp),
@@ -100,12 +100,17 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
                     segmentGap = 6.dp,
                 )
                 Body(
-                    if (model.measuredWith == AutoAlignSolver.MeasuredWith.DSP_OFF) {
-                        "With SiphonDSP off its left/right swap (which corrects the car's reversed speaker " +
-                            "harness) isn't running, so the file REW calls \"L\" played through the right-hand " +
-                            "speakers. Auto Align accounts for that."
-                    } else {
-                        "Measured through this tune exactly as it's set now. Change nothing between measuring and analysing."
+                    when (model.measuredWith) {
+                        AutoAlignSolver.MeasuredWith.DSP_OFF ->
+                            "SiphonDSP switched off. Its left/right swap (which corrects the car's reversed speaker " +
+                                "harness) isn't running then, so the file REW calls \"L\" played through the right-hand " +
+                                "speakers. Auto Align accounts for that."
+                        AutoAlignSolver.MeasuredWith.PASSTHROUGH ->
+                            "SiphonDSP on, with every stage set to pass through: the factory system's own sound. The " +
+                                "left/right swap runs whenever SiphonDSP is on, so REW's \"L\" is the left speakers, and " +
+                                "Auto Align adds your whole tune on top."
+                        AutoAlignSolver.MeasuredWith.DSP_ON ->
+                            "Measured through this tune exactly as it's set now. Change nothing between measuring and analysing."
                     },
                     small = true,
                 )
@@ -372,7 +377,7 @@ private fun rememberConvolverActive(): Boolean {
 }
 
 private fun convolverWarning(measuredWith: AutoAlignSolver.MeasuredWith) =
-    if (measuredWith == AutoAlignSolver.MeasuredWith.DSP_OFF) {
+    if (measuredWith.modelsWholeChain) {
         "The convolver is on. These measurements were taken without it and Auto Align doesn't model it, " +
             "so an impulse response that shifts left against right (a phase-correction IR does) will undo " +
             "the alignment. Switch the convolver off before applying, or measure again with SiphonDSP on."

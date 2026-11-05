@@ -101,6 +101,37 @@ class AutoAlignSolverTest {
     }
 
     @Test
+    fun measuredOnButPassingThroughTheSwapRanSoTheFixStaysOnItsOwnSide() {
+        // SiphonDSP on with every stage passing through: the factory sound, but the harness swap
+        // ran, so "R" was the right-hand speakers and the fix goes on the app's RIGHT outputs.
+        val left = measurement("L", response = flat(0.004))
+        val right = measurement("R") { f -> flat(0.004)(f) / allPass(f, 170.0, 0.5) }
+        val result = AutoAlignSolver().solve(
+            listOf(AutoAlignSolver.Seat("Driver", left, right, null)),
+            AutoAlignSolver.MeasuredWith.PASSTHROUGH, NativeBmwDspValues.DEFAULTS.copyOf(), peq(),
+        )
+        assertEquals(BmwOutputChannel.RIGHT, result.proposal!!.side)
+        assertEquals(170.0, result.proposal!!.frequencyHz, 170.0 * 0.06)
+    }
+
+    @Test
+    fun passthroughModelsTheWholeChainLikeTheFactoryMode() {
+        // The measurement holds none of the tune, so the tune as set now (here an all-pass already
+        // on the left) is modelled on top of it -- same as with SiphonDSP off, mirrored.
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        val base = AutoAlignSolver.sectionTwoIndices(BmwOutputChannel.LEFT).first()
+        values[base] = 1f; values[base + 1] = 2f; values[base + 2] = 90f; values[base + 3] = 0.7f
+        val left = measurement("L", response = flat(0.004))
+        val right = measurement("R") { f -> flat(0.004)(f) / allPass(f, 170.0, 0.5) }
+        fun solve(mode: AutoAlignSolver.MeasuredWith, l: RewMeasurement, r: RewMeasurement) =
+            AutoAlignSolver().solve(listOf(AutoAlignSolver.Seat("Driver", l, r, null)), mode, values, peq())
+        val passthrough = solve(AutoAlignSolver.MeasuredWith.PASSTHROUGH, left, right)
+        val off = solve(AutoAlignSolver.MeasuredWith.DSP_OFF, right, left)
+        assertEquals(off.proposal?.side, passthrough.proposal?.side)
+        assertEquals(off.scoreDb, passthrough.scoreDb, 1e-9)
+    }
+
+    @Test
     fun itModelsTheChainAsItWillRunEvenWithTheProcessorSwitchedOff() {
         // Measured with SiphonDSP off, it's often still off when Auto Align runs; the proposal
         // must come out the same as with it on, not as "nothing to change".

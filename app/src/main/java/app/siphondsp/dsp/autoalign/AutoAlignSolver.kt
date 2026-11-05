@@ -38,8 +38,18 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
          */
         DSP_OFF,
 
+        /**
+         * SiphonDSP on but every stage set to pass through: the speakers as the factory system
+         * drives them, like [DSP_OFF], but the app's left/right swap ran -- it's applied whenever the
+         * processor is on, whatever the settings -- so "L" played through the left-hand speakers.
+         */
+        PASSTHROUGH,
+
         /** SiphonDSP on, with the settings it has now: the app chain is already in the measurement. */
-        DSP_ON,
+        DSP_ON;
+
+        /** The measurement holds none of the app chain, so the whole chain is modelled on top of it. */
+        val modelsWholeChain get() = this != DSP_ON
     }
 
     data class Seat(val name: String, val left: RewMeasurement, val right: RewMeasurement, val both: RewMeasurement?)
@@ -97,15 +107,15 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
             val right = freqs.map { f -> seat.right.at(f) ?: Complex(0.0, 0.0) }
             when (measuredWith) {
                 MeasuredWith.DSP_OFF -> Pair(right, shifted) // (app LEFT feeds "R", app RIGHT feeds "L")
-                MeasuredWith.DSP_ON -> Pair(shifted, right)
+                MeasuredWith.PASSTHROUGH, MeasuredWith.DSP_ON -> Pair(shifted, right)
             }
         }
 
         fun seatPower(seat: Int, chain: Array<Array<Complex>>): DoubleArray {
             val (leftSpk, rightSpk) = speakers[seat]
             return DoubleArray(freqs.size) { i ->
-                val gL = if (measuredWith == MeasuredWith.DSP_OFF) chain[0][i] else change(chain[0][i], current[0][i])
-                val gR = if (measuredWith == MeasuredWith.DSP_OFF) chain[1][i] else change(chain[1][i], current[1][i])
+                val gL = if (measuredWith.modelsWholeChain) chain[0][i] else change(chain[0][i], current[0][i])
+                val gR = if (measuredWith.modelsWholeChain) chain[1][i] else change(chain[1][i], current[1][i])
                 (leftSpk[i] * gL + rightSpk[i] * gR).power()
             }
         }
