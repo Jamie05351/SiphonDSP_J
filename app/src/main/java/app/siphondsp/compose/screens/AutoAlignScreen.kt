@@ -227,7 +227,7 @@ private fun ResultSection(
         if (p != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (model.undo == null) ActionPill("Apply") {
-                    val ok = model.apply(values, commit)
+                    val ok = model.apply(values, BmwPeqState.load(context), commit)
                     Toast.makeText(context, if (ok) "Auto Align applied" else model.failure ?: "Couldn't save the change", Toast.LENGTH_LONG).show()
                 }
                 if (model.undo != null) {

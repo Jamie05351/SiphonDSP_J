@@ -184,6 +184,8 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         val both = seat.both ?: return SeatFit(l, null, 0.0)
         val target = freqs.map { f -> both.at(f)?.let { 10 * log10(it.power().coerceAtLeast(1e-30)) } }
         val fitBand = freqs.indices.filter { freqs[it] in 30.0..500.0 && target[it] != null }
+        // A both-together file that doesn't cover the band can't time anything: treat it as absent.
+        if (fitBand.size < MIN_FIT_POINTS) return SeatFit(l, null, 0.0)
         fun rms(tau: Double): Double {
             val err = fitBand.map { i ->
                 val shift = Complex.polar(1.0, -2 * PI * freqs[i] * tau)
@@ -258,6 +260,7 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         /** Below this mean improvement Auto Align recommends leaving things as they are. */
         const val MIN_IMPROVEMENT_DB = 0.5
         private const val MAX_SHIFT_S = 0.004
+        private const val MIN_FIT_POINTS = 8
         private const val SHIFT_STEP_S = 0.00002
 
         /** The all-pass section Auto Align writes to (0-based: "section 2" on the All-pass page). */

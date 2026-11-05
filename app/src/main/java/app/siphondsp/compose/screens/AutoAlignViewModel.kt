@@ -61,6 +61,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     private var job: Job? = null
     /** The DSP values the current [result] was computed for; Apply refuses if they've changed. */
     private var analysedValues: FloatArray? = null
+    /** The PEQ the current [result] was computed for (it's part of the modelled chain too). */
+    private var analysedPeq: BmwPeqState? = null
     /** Bumped per analysis, so a superseded run's progress and result are dropped. */
     private var runId = 0
 
@@ -135,6 +137,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         progress = 0f
         val snapshot = values.copyOf()
         analysedValues = snapshot
+        analysedPeq = peq
         val run = ++runId
         job = viewModelScope.launch {
             val outcome = withContext(Dispatchers.Default) {
@@ -157,7 +160,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             values.getOrElse(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED) { 0f } >= .5f
 
     /** Writes the proposal through [commit]; remembers what it replaced for [undoApply]. */
-    fun apply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): Boolean {
+    fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val updates = result?.updates?.takeIf { it.isNotEmpty() } ?: return false
         if (undo != null) {
             // Already applied: a second Apply would snapshot the applied values and lose the
@@ -165,7 +168,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             failure = "Already applied -- Undo first to apply again."
             return false
         }
-        if (analysedValues?.contentEquals(values) != true) {
+        if (analysedValues?.contentEquals(values) != true || analysedPeq != peq) {
             // Settings moved since Analyse (here or on another screen): the proposal was solved
             // for the old chain, so don't write it -- ask for a fresh analysis instead.
             failure = "Your settings changed since the analysis -- tap Analyse again before applying."
