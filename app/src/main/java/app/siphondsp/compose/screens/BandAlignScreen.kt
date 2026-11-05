@@ -112,8 +112,9 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
                 val ready = model.readySides()
                 if (model.measuredBeforeApply) {
                     Body(
-                        "Applied. The files you imported were measured before that change, so they've been cleared -- " +
-                            "measure again (Low + Mid is enough to confirm) and import the new files to check it or go further.",
+                        "Applied. The files you imported were measured before that change, so they've been cleared. " +
+                            "To confirm, measure Low + Mid again and compare it with the old one in REW. To analyse again, " +
+                            "measure Low only and Mid only afresh and import those.",
                         color = Accent, small = true,
                     )
                 }
@@ -269,7 +270,7 @@ private fun ResultSection(
             } else {
                 Body("Applied.", color = Accent, small = true)
             }
-            Body("Measure Low + Mid again afterwards to confirm.", small = true)
+            Body("Afterwards, measure Low + Mid again and compare it in REW to confirm.", small = true)
         }
     }
 }
