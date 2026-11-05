@@ -82,6 +82,7 @@
     <string name="peq_bands">Parametric EQ bands</string>
     <string name="title_activity_peq">Parametric equalizer</string>
     <string name="title_activity_gain_limiter">Alignment</string>
+    <string name="title_activity_auto_align">Auto Align</string>
     <string name="title_activity_output">Output</string>
     <string name="title_activity_crossover_tilt">Crossovers &amp; Tilt</string>
     <string name="peq_add_filter_row">Add filter</string>
