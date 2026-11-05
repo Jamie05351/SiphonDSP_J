@@ -69,7 +69,13 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     var appliedResult by mutableStateOf<AutoAlignSolver.Result?>(null)
         private set
 
+    /** Bumped per pick/clear of a slot, so a slow earlier read can't land over a newer choice. */
+    private val slotGeneration = HashMap<Pair<Seat, Slot>, Int>()
+
     fun import(seat: Seat, slot: Slot, uri: Uri) {
+        val key = seat to slot
+        val generation = (slotGeneration[key] ?: 0) + 1
+        slotGeneration[key] = generation
         viewModelScope.launch {
             val app = getApplication<Application>()
             val outcome = withContext(Dispatchers.IO) {
@@ -84,6 +90,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
                     name to RewMeasurement.parse(name, text).getOrThrow()
                 }
             }
+            if (slotGeneration[key] != generation) return@launch
             outcome.onSuccess { (name, m) ->
                 imports[seat to slot] = Imported(name, m)
                 importErrors.remove(seat to slot)
@@ -99,6 +106,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun clear(seat: Seat, slot: Slot) {
+        slotGeneration[seat to slot] = (slotGeneration[seat to slot] ?: 0) + 1
         imports.remove(seat to slot)
         importErrors.remove(seat to slot)
         invalidate()
@@ -134,8 +142,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             // Mono Bass (and Virtual Bass's mono harmonics) put each side's bass in both
             // channels, so a "left only" measurement taken through them already holds the right
             // speakers too, and there's no telling the two apart.
-            failure = "With SiphonDSP on, measure with Mono Bass and Virtual Bass switched off -- they send " +
-                "each side's bass to both, so a one-side measurement isn't one side. Or measure with SiphonDSP off."
+            failure = "With SiphonDSP on, measure with Mono Bass, Virtual Bass and Virtual Centre switched off -- " +
+                "they mix the two sides, so a one-side measurement isn't one side. Or measure with SiphonDSP off."
             return
         }
         val smoothed = seats.flatMap { listOfNotNull(it.left, it.right, it.both) }.filter { it.heavilySmoothed }
@@ -167,9 +175,11 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Stages that put one side's signal into the other (or behave differently for one side than for both). */
     private fun crossfeeds(values: FloatArray) =
         values.getOrElse(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED) { 0f } >= .5f ||
-            values.getOrElse(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED) { 0f } >= .5f
+            values.getOrElse(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED) { 0f } >= .5f ||
+            values.getOrElse(NativeBmwDspValues.INDEX_VIRTUAL_ENABLED) { 0f } >= .5f
 
     /** Writes the proposal through [commit]; remembers what it replaced for [undoApply]. */
     fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {

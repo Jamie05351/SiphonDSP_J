@@ -232,6 +232,13 @@ private fun ResultSection(
                     small = true,
                 )
             } ?: Body("No both-together measurement: timing taken from REW's delay notes.", color = Warn, small = true)
+            if (seat.timingAmbiguous) {
+                Body(
+                    "The both-together measurement fits a timing offset either way round, so REW's own timing was kept. " +
+                        "Measure all three against the same acoustic timing reference for a sure result.",
+                    color = Warn, small = true,
+                )
+            }
         }
         if (p != null) {
             if (model.appliedResult !== result) {

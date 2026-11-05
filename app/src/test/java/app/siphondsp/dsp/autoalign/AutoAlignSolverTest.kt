@@ -130,8 +130,10 @@ class AutoAlignSolverTest {
     @Test
     fun theBothChannelsMeasurementRecoversALeftRightOffsetTheDelayNotesMissed() {
         // The left file's delay note is 1.2 ms off; the both-channels measurement shows the truth.
+        // (The right side carries some phase of its own, as real speakers do; with two pure delays
+        // the magnitude fits two mirror-image offsets equally -- see the next test.)
         val trueLeft = flat(0.0042)
-        val right = flat(0.0050)
+        val right = { f: Double -> flat(0.0050)(f) * allPass(f, 120.0, 0.7) }
         val left = measurement("L", delayMs = -3.0, response = { f -> trueLeft(f) * Complex.polar(1.0, 2 * PI * f * 0.0012) })
         val r = measurement("R", response = right)
         val both = measurement("L+R") { f -> trueLeft(f) + right(f) }
@@ -142,6 +144,23 @@ class AutoAlignSolverTest {
         val seat = result.seats.single()
         assertEquals(1.2, seat.shiftMs, 0.05)
         assertTrue("fit ${seat.fitRmsDb}", seat.fitRmsDb!! < 0.3)
+        assertTrue(!seat.timingAmbiguous)
+    }
+
+    @Test
+    fun anOffsetTheFitCantTellFromItsMirrorIsntApplied() {
+        // Two pure delays: 1.2 ms and its mirror about the true offset fit the summed magnitude
+        // exactly as well, so the shift's direction isn't known -- REW's timing is kept and flagged.
+        val trueLeft = flat(0.0042)
+        val right = flat(0.0050)
+        val left = measurement("L", delayMs = -3.0, response = { f -> trueLeft(f) * Complex.polar(1.0, 2 * PI * f * 0.0012) })
+        val result = AutoAlignSolver().solve(
+            listOf(AutoAlignSolver.Seat("Driver", left, measurement("R", response = right), measurement("L+R") { f -> trueLeft(f) + right(f) })),
+            AutoAlignSolver.MeasuredWith.DSP_ON, NativeBmwDspValues.DEFAULTS.copyOf(), peq(),
+        )
+        val seat = result.seats.single()
+        assertTrue(seat.timingAmbiguous)
+        assertEquals(0.0, seat.shiftMs, 1e-9)
     }
 
     @Test

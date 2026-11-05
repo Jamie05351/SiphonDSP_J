@@ -173,6 +173,7 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
                     afterDb = winner?.third?.get(i) ?: before[i],
                     fitRmsDb = fits[i].rmsDb,
                     shiftMs = fits[i].shiftSeconds * 1000.0,
+                    timingAmbiguous = fits[i].ambiguous,
                 )
             },
             updates = updates,
@@ -188,7 +189,12 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
     private fun change(candidate: Complex, current: Complex): Complex =
         if (current.power() < SILENT_POWER) Complex.ONE else candidate / current
 
-    private class SeatFit(val shiftedLeft: List<Complex>, val rmsDb: Double?, val shiftSeconds: Double)
+    private class SeatFit(
+        val shiftedLeft: List<Complex>,
+        val rmsDb: Double?,
+        val shiftSeconds: Double,
+        val ambiguous: Boolean = false,
+    )
 
     /**
      * Lines the seat's left measurement up in time with its right one. REW's delay notes usually
@@ -214,9 +220,11 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         val atZero = rms(0.0)
         var bestTau = 0.0
         var bestRms = atZero
+        val fits = ArrayList<Pair<Double, Double>>()
         var tau = -MAX_SHIFT_S
         while (tau <= MAX_SHIFT_S) {
             val e = rms(tau)
+            fits += tau to e
             if (e < bestRms) {
                 bestRms = e
                 bestTau = tau
@@ -224,8 +232,20 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
             tau += SHIFT_STEP_S
         }
         if (atZero - bestRms < 0.3) {
-            bestTau = 0.0
-            bestRms = atZero
+            return SeatFit(l, atZero, 0.0)
+        }
+        // The sum's magnitude alone can fit two different shifts equally well -- mirror images about
+        // the true offset, exactly so when both sides are pure delays. If another distinct local
+        // minimum fits about as well, the offset isn't known, and the wrong one would put the
+        // all-pass on the wrong side: keep REW's own timing instead, and say so.
+        val rival = fits.indices
+            .filter { k ->
+                k > 0 && k < fits.size - 1 && abs(fits[k].first - bestTau) > RIVAL_DISTANCE_S &&
+                    fits[k].second <= fits[k - 1].second && fits[k].second <= fits[k + 1].second
+            }
+            .minOfOrNull { fits[it].second }
+        if (rival != null && rival - bestRms < AMBIGUOUS_FIT_DB) {
+            return SeatFit(l, atZero, 0.0, ambiguous = true)
         }
         val shifted = l.mapIndexed { i, c -> c * Complex.polar(1.0, -2 * PI * freqs[i] * bestTau) }
         return SeatFit(shifted, bestRms, bestTau)
@@ -278,6 +298,9 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         const val MIN_IMPROVEMENT_DB = 0.5
         private const val MAX_SHIFT_S = 0.004
         private const val MIN_FIT_POINTS = 8
+        /** A fit the other way within this of the best leaves the offset's direction unknown. */
+        private const val AMBIGUOUS_FIT_DB = 0.2
+        private const val RIVAL_DISTANCE_S = 0.0003
         /** -120 dB: below this a chain point counts as silent. */
         private const val SILENT_POWER = 1e-12
         private const val SHIFT_STEP_S = 0.00002
