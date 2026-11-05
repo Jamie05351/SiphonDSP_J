@@ -39,11 +39,16 @@ class RewMeasurement private constructor(
         return polar(splDb[lo] + (splDb[hi] - splDb[lo]) * t, phaseRad[lo] + (phaseRad[hi] - phaseRad[lo]) * t)
     }
 
-    /** True when the export was smoothed coarser than 1/12 octave (1/6, 1/3, ...): too blurred to sum its phase. */
+    /**
+     * True when the export was smoothed too coarsely to sum its phase: coarser than 1/12 octave
+     * (1/6, 1/3, ...), or one of REW's variable smoothings (Psychoacoustic, ERB, Var), which are
+     * 1/3 to 1/6 octave through the bass -- exactly where Auto Align works.
+     */
     val heavilySmoothed: Boolean
         get() {
             val s = smoothing ?: return false
-            val m = Regex("""1/(\d+)""").find(s) ?: return false
+            val m = Regex("""1/(\d+)""").find(s)
+                ?: return !s.trim().lowercase().let { it == "none" || it.startsWith("no ") }
             return (m.groupValues[1].toIntOrNull() ?: 48) < 12
         }
 

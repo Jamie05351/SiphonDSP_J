@@ -164,6 +164,19 @@ class AutoAlignSolverTest {
     }
 
     @Test
+    fun variableSmoothingCountsAsTooCoarse() {
+        fun smoothed(label: String) = RewMeasurement.parse(
+            "L", rewText("L", response = flat(0.004)).replace("* Smoothing: 1/48 octave", "* Smoothing: $label"),
+        ).getOrThrow().heavilySmoothed
+        assertTrue(smoothed("Psychoacoustic"))
+        assertTrue(smoothed("ERB"))
+        assertTrue(smoothed("1/6 octave"))
+        assertTrue(!smoothed("1/48 octave"))
+        assertTrue(!smoothed("1/12 octave"))
+        assertTrue(!smoothed("None"))
+    }
+
+    @Test
     fun replacingASectionInUseIsFlagged() {
         val values = NativeBmwDspValues.DEFAULTS.copyOf()
         val base = AutoAlignSolver.sectionTwoIndices(BmwOutputChannel.RIGHT).first()
