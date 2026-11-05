@@ -46,9 +46,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         set(value) {
             if (value == measuredWithState) return
             measuredWithState = value
-            job?.cancel()
-            progress = null
-            result = null
+            invalidate()
         }
     var progress by mutableStateOf<Float?>(null)
         private set
@@ -84,7 +82,7 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             outcome.onSuccess { (name, m) ->
                 imports[seat to slot] = Imported(name, m)
                 importErrors.remove(seat to slot)
-                result = null
+                invalidate()
             }.onFailure {
                 importErrors[seat to slot] = it.message ?: "couldn't read that file"
             }
@@ -94,6 +92,18 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     fun clear(seat: Seat, slot: Slot) {
         imports.remove(seat to slot)
         importErrors.remove(seat to slot)
+        invalidate()
+    }
+
+    /**
+     * The inputs changed (a file, or how they were measured): any result, or analysis in flight,
+     * describes the old ones, so drop it -- the bumped run id makes a still-finishing run's
+     * progress and result land nowhere.
+     */
+    private fun invalidate() {
+        job?.cancel()
+        runId++
+        progress = null
         result = null
     }
 
