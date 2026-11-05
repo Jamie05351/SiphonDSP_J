@@ -9,12 +9,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -261,8 +263,17 @@ private fun BeforeAfterChart(seat: AutoAlignSolver.SeatResult, modifier: Modifie
         curve(seat.beforeDb, Before, 2.dp.toPx())
         if (!seat.afterDb.contentEquals(seat.beforeDb)) curve(seat.afterDb, Accent, 2.5.dp.toPx())
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        for (label in listOf("25", "50", "100", "200", "500", "1k Hz")) Text(label, color = Before, fontSize = 11.sp)
+    // Each label under its own grid line (the axis is log-scaled, so they aren't evenly spaced).
+    BoxWithConstraints(Modifier.fillMaxWidth().height(16.dp)) {
+        val lnMin = ln(25.0)
+        val lnMax = ln(1000.0)
+        for ((hz, label) in listOf(50.0 to "50", 100.0 to "100", 200.0 to "200", 500.0 to "500 Hz")) {
+            val frac = ((ln(hz) - lnMin) / (lnMax - lnMin)).toFloat()
+            Text(
+                label, color = Before, fontSize = 11.sp,
+                modifier = Modifier.offset(x = maxWidth * frac - 10.dp),
+            )
+        }
     }
 }
 
