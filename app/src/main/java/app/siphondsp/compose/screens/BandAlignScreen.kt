@@ -43,6 +43,7 @@ import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.bandalign.BandAlignSolver
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.BmwDashboardSkin
 import kotlin.math.ln
@@ -84,7 +85,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
 
             Section("1  HOW TO MEASURE") {
                 Body(
-                    "With SiphonDSP on and your tune as it is now (Virtual Bass off). Same mic position for " +
+                    "With SiphonDSP on and your tune as it is now, but Mono Bass, Virtual Bass and Virtual Centre off (they mix the two sides). Same mic position for " +
                         "every measurement at a seat, and REW's acoustic timing reference on. For each side, play " +
                         "REW's sweep on that channel only:",
                     small = true,
@@ -120,7 +121,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
                     small = true,
                 )
                 ActionPill(if (model.analysing) "Analysing..." else "Analyse", enabled = ready.isNotEmpty() && !model.analysing) {
-                    model.analyse(dsp.values)
+                    model.analyse(dsp.values, BmwPeqState.load(context))
                 }
                 if (model.analysing) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Accent)
                 model.failure?.let { Body(it, color = Warn, small = true) }
@@ -255,7 +256,7 @@ private fun ResultSection(
             }
             if (model.appliedResults !== results) {
                 ActionPill("Apply") {
-                    val ok = model.apply(values, commit)
+                    val ok = model.apply(values, BmwPeqState.load(context), commit)
                     Toast.makeText(context, if (ok) "Band Align applied" else model.failure ?: "Couldn't save the change", Toast.LENGTH_LONG).show()
                 }
             } else {

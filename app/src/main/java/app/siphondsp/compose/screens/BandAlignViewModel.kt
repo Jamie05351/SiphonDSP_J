@@ -12,12 +12,14 @@ import androidx.lifecycle.viewModelScope
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.bandalign.BandAlignSolver
 import app.siphondsp.dsp.bandalign.RewMeasurement
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /**
  * Band Align's imports, analysis and undo, kept across rotation (the imported measurements are
@@ -53,6 +55,8 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var job: Job? = null
     private var analysedValues: FloatArray? = null
+    /** The PEQ the current [results] were computed for: its Low and Mid filters shape what was measured. */
+    private var analysedPeq: BmwPeqState? = null
     private var runId = 0
     /** What Band Align's applies last wrote, per index; Undo restores only sides that still hold it. */
     private var applied: Map<Int, Float> = emptyMap()
@@ -112,7 +116,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }.filterValues { it.isNotEmpty() }
 
-    fun analyse(values: FloatArray) {
+    fun analyse(values: FloatArray, peq: BmwPeqState) {
         val sides = readySides()
         if (sides.isEmpty()) return
         invalidate()
@@ -129,6 +133,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         }
         val snapshot = values.copyOf()
         analysedValues = snapshot
+        analysedPeq = peq
         analysing = true
         val run = runId
         job = viewModelScope.launch {
@@ -168,11 +173,23 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         if (values[NativeBmwDspValues.INDEX_LPF_PASS] >= .5f || values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f) {
             return "Switch LPF and HPF passthrough off -- a band in passthrough skips its delay and polarity."
         }
+        // These feed one side's signal into the other side's bands, so a sweep on one channel
+        // plays through both sides' Low (or Mid), and a "left Low" measurement isn't the left
+        // Low alone -- shifting all of it by the left delay would predict a sum that never plays.
+        val mixing = buildList {
+            if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] >= .5f) add("Mono Bass")
+            if (values[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED] >= .5f) add("Virtual Centre")
+            if (values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] >= .5f) add("Virtual Bass")
+        }
+        if (mixing.isNotEmpty()) {
+            return "Switch ${mixing.joinToString(" and ")} off while measuring and analysing -- they mix the two " +
+                "sides, so a one-side measurement isn't one side. Switch them back on after applying."
+        }
         return null
     }
 
     /** Writes every side's proposal through [commit]; remembers what it replaced for [undoApply]. */
-    fun apply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): Boolean {
+    fun apply(values: FloatArray, peq: BmwPeqState, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val current = results ?: return false
         val updates = LinkedHashMap<Int, Float>().apply { current.forEach { putAll(it.updates) } }
         if (updates.isEmpty()) return false
@@ -180,7 +197,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             failure = "Already applied."
             return false
         }
-        if (analysedValues?.contentEquals(values) != true) {
+        if (analysedValues?.contentEquals(values) != true || analysedPeq != peq) {
             failure = "Your settings changed since the analysis -- tap Analyse again before applying."
             results = null
             return false
@@ -211,7 +228,7 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         val untouched = bySide.filterValues { indices ->
-            indices.all { i -> applied[i]?.let { values.getOrNull(i) == it } == true }
+            indices.all { i -> applied[i]?.let { a -> values.getOrNull(i)?.let { abs(it - a) < UNDO_TOLERANCE } } == true }
         }
         val restore = previous.filterKeys { k -> untouched.values.any { k in it } }
         val kept = bySide.size - untouched.size
@@ -231,6 +248,8 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
 
     private companion object {
         const val MAX_BYTES = 4 * 1024 * 1024
+        /** Half the delay step: a value within this still holds what Band Align wrote. */
+        const val UNDO_TOLERANCE = 0.005f
     }
 }
 
