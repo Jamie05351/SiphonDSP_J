@@ -1,5 +1,6 @@
 package app.siphondsp.compose.screens
 
+import android.content.ActivityNotFoundException
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -139,6 +140,7 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
 
 @Composable
 private fun SeatImports(model: AutoAlignViewModel, seat: AutoAlignViewModel.Seat) {
+    val context = LocalContext.current
     Column(
         Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(6.dp)).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -167,7 +169,11 @@ private fun SeatImports(model: AutoAlignViewModel, seat: AutoAlignViewModel.Seat
                 }
                 if (model.imports[key] != null) ActionPill("Clear", small = true) { model.clear(seat, slot) }
                 ActionPill(if (model.imports[key] != null) "Replace" else "Import", small = true) {
-                    launcher.launch(arrayOf("text/*", "application/octet-stream"))
+                    try {
+                        launcher.launch(arrayOf("text/*", "application/octet-stream"))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, "No file picker on this device -- import the files on a phone", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }

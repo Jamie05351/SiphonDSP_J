@@ -84,7 +84,11 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
                 importErrors.remove(seat to slot)
                 invalidate()
             }.onFailure {
+                // The slot no longer holds what the user picked last, so it holds nothing: an
+                // old file kept silently behind the error would still feed Analyse.
+                imports.remove(seat to slot)
                 importErrors[seat to slot] = it.message ?: "couldn't read that file"
+                invalidate()
             }
         }
     }
@@ -169,7 +173,11 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
             return false
         }
         val previous = AutoAlignSolver.previousValues(updates, values)
-        if (!commit(updates)) return false
+        if (!commit(updates)) {
+            failure = "Couldn't save the change."
+            return false
+        }
+        failure = null
         undo = previous
         // analysedValues stays the pre-apply chain: Undo returns to it, and Apply can run again.
         return true
@@ -177,7 +185,10 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun undoApply(commit: (Map<Int, Float>) -> Boolean): Boolean {
         val previous = undo ?: return false
-        if (!commit(previous)) return false
+        if (!commit(previous)) {
+            failure = "Couldn't restore the previous all-pass."
+            return false
+        }
         undo = null
         return true
     }
