@@ -24,8 +24,8 @@ import kotlin.math.sqrt
  * that lifts the 30-400 Hz sum the most across the seats -- a cut counts double a lift, so a fix
  * for one seat can't simply be paid for by another.
  *
- * The result goes in all-pass section 2 of every output on the chosen side (section 1 is left to
- * the user and to the Crossovers page's Mid align; whatever it holds is part of the model).
+ * The result goes in all-pass section 2 of the chosen side's Low and Mid outputs (section 1 is
+ * left to the user and to the Crossovers page's Mid align; whatever it holds is part of the model).
  */
 class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
 
@@ -266,26 +266,31 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         /** The all-pass section Auto Align writes to (0-based: "section 2" on the All-pass page). */
         const val SECTION = 1
 
+        /**
+         * The side's Low and Mid outputs. High is left alone: it plays only above the Mid/High
+         * corner (1 kHz+), where a 60-320 Hz all-pass is within ~15 degrees of a full turn -- the
+         * Mid/High sum moves by about 0.1 dB -- and the All-pass page shows High's corner only
+         * from 1 kHz, so a sub-1 kHz value there would read (and re-save) as something it isn't.
+         */
         private fun outputsOf(side: BmwOutputChannel) = if (side == BmwOutputChannel.LEFT) {
-            Triple(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.OUTPUT_HIGH_LEFT)
+            NativeBmwDspValues.OUTPUT_LOW_LEFT to NativeBmwDspValues.OUTPUT_MID_LEFT
         } else {
-            Triple(NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.OUTPUT_MID_RIGHT, NativeBmwDspValues.OUTPUT_HIGH_RIGHT)
+            NativeBmwDspValues.OUTPUT_LOW_RIGHT to NativeBmwDspValues.OUTPUT_MID_RIGHT
         }
 
         private fun sectionBase(output: Int) = NativeBmwDspValues.INDEX_ALL_PASS +
             (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + SECTION) * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
 
-        /** The enable index of section 2 on each of [side]'s outputs. */
+        /** The enable index of section 2 on each output of [side] that Auto Align writes. */
         fun sectionTwoIndices(side: BmwOutputChannel): List<Int> {
-            val (low, mid, high) = outputsOf(side)
-            return listOf(sectionBase(low), sectionBase(mid), NativeBmwDspValues.highAllPassIndex(high, SECTION, 0))
+            val (low, mid) = outputsOf(side)
+            return listOf(sectionBase(low), sectionBase(mid))
         }
 
-        /** Section 2 = on, 2nd order, [Proposal.frequencyHz], [Proposal.q] on every output of the side. */
+        /** Section 2 = on, 2nd order, [Proposal.frequencyHz], [Proposal.q] on the side's Low and Mid outputs. */
         fun updatesFor(p: Proposal): Map<Int, Float> {
-            val (low, mid, high) = outputsOf(p.side)
             val out = LinkedHashMap<Int, Float>()
-            for (base in listOf(sectionBase(low), sectionBase(mid), NativeBmwDspValues.highAllPassIndex(high, SECTION, 0))) {
+            for (base in sectionTwoIndices(p.side)) {
                 out[base] = 1f
                 out[base + 1] = 2f
                 out[base + 2] = p.frequencyHz.toFloat()

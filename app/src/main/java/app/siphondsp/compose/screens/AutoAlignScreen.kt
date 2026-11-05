@@ -78,7 +78,7 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
                     "sides by different paths, so through the bass and lower mids they arrive out of step " +
                     "and cancel -- a loss EQ can't fill. Auto Align finds the all-pass that rotates one side " +
                     "into step, through your crossovers and settings as they are now, and puts it in " +
-                    "all-pass section 2 of every output on that side.",
+                    "all-pass section 2 of that side's Low and Mid outputs.",
             )
 
             Section("1  HOW YOU MEASURED") {
@@ -199,7 +199,7 @@ private fun ResultSection(
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
             )
             Body(
-                "Section 2 of Low, Mid and High ${side.lowercase()}. Average gain over 30-400 Hz: " +
+                "Section 2 of Low and Mid ${side.lowercase()}. Average gain over 30-400 Hz: " +
                     "+${"%.1f".format(result.scoreDb)} dB (cuts counted double).",
                 small = true,
             )
