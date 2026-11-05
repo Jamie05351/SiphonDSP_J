@@ -61,10 +61,15 @@ class AutoHeadroomTest {
         }
         // Off, or on at 0%: no change.
         assertEquals(flat, headroom(vb(0f)), 1e-4f)
-        // At 100% the bass region can double: 6 dB more headroom than the flat response needs.
-        assertEquals(flat - 6.02f, headroom(vb(100f)), 0.05f)
-        // At 50%: 20 log10(1.5) = 3.5 dB.
-        assertEquals(flat - 3.52f, headroom(vb(50f)), 0.05f)
+        // At 100%, sub kept: the measured worst peak rise, 20 log10(1 + 0.55) = 3.81 dB.
+        assertEquals(flat - 3.81f, headroom(vb(100f)), 0.05f)
+        // At 50%: 20 log10(1.275) = 2.11 dB.
+        assertEquals(flat - 2.11f, headroom(vb(50f)), 0.05f)
+        // Remove sub on: what's taken away nearly cancels what's added -- 20 log10(1.12) = 0.98 dB at
+        // 100%, 20 log10(1.072) = 0.60 dB at 60%.
+        val removing: (FloatArray) -> Unit = { it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB] = 1f }
+        assertEquals(flat - 0.98f, headroom(vb(100f, removing)), 0.1f)
+        assertEquals(flat - 0.60f, headroom(vb(60f, removing)), 0.1f)
         // A treble boost well above 5x the cut already sets the headroom: Virtual Bass adds nothing.
         val treble = peq(full = bands(ParametricEqBand(4000.0, 9.0, 1.0)))
         assertEquals(headroom(peq = treble), headroom(vb(100f), treble), 0.05f)
@@ -105,7 +110,7 @@ class AutoHeadroomTest {
             },
             peq(full = sharp),
         )
-        val ideal = -(12.0 + 6.0206 + AutoHeadroom.MARGIN_DB).toFloat()
+        val ideal = -(12.0 + 20.0 * kotlin.math.log10(1.55) + AutoHeadroom.MARGIN_DB).toFloat()
         assertEquals("headroom vs ideal", ideal, h, 0.05f)
     }
 
