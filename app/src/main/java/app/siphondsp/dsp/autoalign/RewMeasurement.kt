@@ -69,7 +69,10 @@ class RewMeasurement private constructor(
             var smoothing: String? = null
             for (line in text.lineSequence()) {
                 if (line.startsWith("*")) {
-                    DelayNote.find(line)?.let { delayMs = it.groupValues[1].toDouble() }
+                    DelayNote.find(line)?.let { m ->
+                        delayMs = m.groupValues[1].toDoubleOrNull()
+                            ?: return Result.failure(IllegalArgumentException("$name: couldn't read the delay in its header note"))
+                    }
                     SmoothingNote.find(line.trim())?.let { smoothing = it.groupValues[1].trim() }
                     continue
                 }

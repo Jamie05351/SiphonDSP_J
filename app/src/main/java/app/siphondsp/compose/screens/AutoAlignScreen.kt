@@ -27,6 +27,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -43,7 +48,10 @@ import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.autoalign.AutoAlignSolver
+import app.siphondsp.R
+import app.siphondsp.interop.PreferenceCache
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.utils.Constants
 import app.siphondsp.view.BmwDashboardSkin
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -63,6 +71,7 @@ private val Panel = Color(0xFF101318)
 fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
     val context = LocalContext.current
     val dsp = rememberBmwDspState()
+    val convolverOn = rememberConvolverActive()
     BmwDspTheme {
         Column(
             Modifier
@@ -129,6 +138,7 @@ fun AutoAlignScreen(model: AutoAlignViewModel = viewModel()) {
                 model.progress?.let { p ->
                     LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth(), color = Accent)
                 }
+                if (convolverOn) Body(convolverWarning(model.measuredWith), color = Warn, small = true)
                 model.failure?.let { Body("Analysis failed: $it", color = Warn, small = true) }
             }
 
@@ -337,3 +347,36 @@ private fun ActionPill(text: String, enabled: Boolean = true, small: Boolean = f
         Text(text, color = c, fontSize = if (small) 13.sp else 15.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+/**
+ * Whether the convolver is switched on with an impulse response chosen, kept live: Auto Align
+ * doesn't model the convolver, and a phase-correction IR shifts the two sides against each other.
+ */
+@Composable
+private fun rememberConvolverActive(): Boolean {
+    val context = LocalContext.current
+    val prefs = remember(context) { PreferenceCache.getPreferences(context, Constants.PREF_CONVOLVER) }
+    val enableKey = remember(context) { context.getString(R.string.key_convolver_enable) }
+    val fileKey = remember(context) { context.getString(R.string.key_convolver_file) }
+    fun read() = runCatching {
+        prefs.getBoolean(enableKey, false) && !prefs.getString(fileKey, null).isNullOrBlank()
+    }.getOrDefault(false)
+    var active by remember(prefs) { mutableStateOf(read()) }
+    DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> active = read() }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        active = read()
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    return active
+}
+
+private fun convolverWarning(measuredWith: AutoAlignSolver.MeasuredWith) =
+    if (measuredWith == AutoAlignSolver.MeasuredWith.DSP_OFF) {
+        "The convolver is on. These measurements were taken without it and Auto Align doesn't model it, " +
+            "so an impulse response that shifts left against right (a phase-correction IR does) will undo " +
+            "the alignment. Switch the convolver off before applying, or measure again with SiphonDSP on."
+    } else {
+        "The convolver is on. That's fine if it was on, with the same impulse response, while you measured -- " +
+            "if you've changed it since, measure again before applying."
+    }
