@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.siphondsp.activity.BandAlignActivity
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
@@ -179,6 +180,7 @@ private fun HeadUnitDelayPage(
         StereoLinkRow(dsp, linked, true, Modifier.artRect(LinkRect))
         MonoBassSwitchRow(dsp, true, Modifier.artRect(MonoBassSwitchRect))
         MonoBassFreqRow(dsp, HeadUnitSizing, true, Modifier.artRect(MonoBassFreqRect))
+        BandAlignLink(Modifier.artRect(BandAlignRect))
     }
 }
 
@@ -213,11 +215,30 @@ private fun PhoneDelayPage(
             StereoLinkRow(dsp, linked, false, Modifier.fillMaxWidth())
             MonoBassSwitchRow(dsp, false, Modifier.fillMaxWidth())
             MonoBassFreqRow(dsp, PhoneSizing, false, Modifier.fillMaxWidth())
+            BandAlignLink(Modifier.height(36.dp))
         }
     }
 }
 
 // ---------------------------------------------------------------- pieces
+
+/** Opens Band Align, which solves each side's Low delay and polarity against Mid from REW measurements. */
+@Composable
+private fun BandAlignLink(modifier: Modifier) {
+    val context = LocalContext.current
+    Box(
+        modifier.clickable { context.startActivity(android.content.Intent(context, BandAlignActivity::class.java)) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Band Align ›",
+            color = Color(BmwDashboardSkin.LIGHT_BLUE),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+        )
+    }
+}
 
 /** The High / Mid / Low tabs, each in its band colour. Shared with the ALLPASS page. */
 @Composable
@@ -559,6 +580,7 @@ private fun snapGain(raw: Float): Float {
 // Mid · PROPOSED"). Band tabs across the top, the 3-way note under them while High is off, the car
 // in the middle with the Left and Right cards either side of it, then the stereo link.
 private val TabsRect = artDp(487, 76, 420, 40)
+private val BandAlignRect = artDp(1042, 76, 200, 40)
 private val NoteRect = artDp(447, 118, 500, 22)
 private val CarRect = artDp(447, 140, 500, 251)
 private val LeftCardRect = artDp(152, 150, 320, 240)

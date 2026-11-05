@@ -1,4 +1,4 @@
-package app.siphondsp.dsp.autoalign
+package app.siphondsp.dsp.bandalign
 
 import kotlin.math.PI
 import kotlin.math.cos
@@ -12,9 +12,9 @@ import kotlin.math.sin
  * measurement's delay out of the phase ("Delay -4.4223 ms ... using estimated IR delay ...").
  *
  * The complex response is rebuilt with that delay put back, so two measurements made against the
- * same acoustic timing reference line up in time -- which is what summing them needs. Auto Align
- * then refines the residual left/right offset against a both-channels measurement when there is
- * one (see [AutoAlignSolver]), because REW's delay estimate isn't always taken the same way.
+ * same acoustic timing reference line up in time -- which is what summing them needs. Band Align
+ * then refines the residual Low/Mid offset against a both-bands measurement when there is one
+ * (see [BandAlignSolver]), because REW's delay estimate isn't always taken the same way.
  */
 class RewMeasurement private constructor(
     val name: String,
@@ -42,7 +42,7 @@ class RewMeasurement private constructor(
     /**
      * True when the export was smoothed too coarsely to sum its phase: coarser than 1/12 octave
      * (1/6, 1/3, ...), or one of REW's variable smoothings (Psychoacoustic, ERB, Var), which are
-     * 1/3 to 1/6 octave through the bass -- exactly where Auto Align works.
+     * 1/3 to 1/6 octave through the bass -- exactly where Band Align works.
      */
     val heavilySmoothed: Boolean
         get() {
@@ -89,7 +89,7 @@ class RewMeasurement private constructor(
             if (f.size < 16) {
                 return Result.failure(IllegalArgumentException("$name: no frequency / SPL / phase rows -- export from REW with File > Export > Measurement as text"))
             }
-            // The solver scores 30-400 Hz with 1/24-octave smoothing and times L/R up to 500 Hz.
+            // The solver scores the crossover region (within 40-400 Hz) and times Low/Mid up to 500 Hz.
             if (f.first() > MIN_COVER_HZ || f.last() < MAX_COVER_HZ) {
                 return Result.failure(IllegalArgumentException("$name: needs to cover at least 28-500 Hz (REW exports 20 Hz-20 kHz by default)"))
             }
