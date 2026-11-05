@@ -218,7 +218,7 @@ private fun ResultSection(
         }
         if (p != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActionPill("Apply") {
+                if (model.undo == null) ActionPill("Apply") {
                     val ok = model.apply(values, commit)
                     Toast.makeText(context, if (ok) "Auto Align applied" else model.failure ?: "Couldn't save the change", Toast.LENGTH_LONG).show()
                 }

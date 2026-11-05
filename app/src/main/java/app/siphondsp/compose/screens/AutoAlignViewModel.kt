@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import app.siphondsp.dsp.autoalign.AutoAlignSolver
 import app.siphondsp.dsp.autoalign.RewMeasurement
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.NativeBmwDspValues
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -45,6 +46,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         set(value) {
             if (value == measuredWithState) return
             measuredWithState = value
+            job?.cancel()
+            progress = null
             result = null
         }
     var progress by mutableStateOf<Float?>(null)
@@ -60,6 +63,8 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
     private var job: Job? = null
     /** The DSP values the current [result] was computed for; Apply refuses if they've changed. */
     private var analysedValues: FloatArray? = null
+    /** Bumped per analysis, so a superseded run's progress and result are dropped. */
+    private var runId = 0
 
     fun import(seat: Seat, slot: Slot, uri: Uri) {
         viewModelScope.launch {
@@ -105,27 +110,47 @@ class AutoAlignViewModel(application: Application) : AndroidViewModel(applicatio
         job?.cancel()
         failure = null
         result = null
+        if (measuredWith == AutoAlignSolver.MeasuredWith.DSP_ON && crossfeeds(values)) {
+            // Mono Bass (and Virtual Bass's mono harmonics) put each side's bass in both
+            // channels, so a "left only" measurement taken through them already holds the right
+            // speakers too, and there's no telling the two apart.
+            failure = "With SiphonDSP on, measure with Mono Bass and Virtual Bass switched off -- they send " +
+                "each side's bass to both, so a one-side measurement isn't one side. Or measure with SiphonDSP off."
+            return
+        }
         progress = 0f
         val snapshot = values.copyOf()
         analysedValues = snapshot
+        val run = ++runId
         job = viewModelScope.launch {
             val outcome = withContext(Dispatchers.Default) {
                 runCatching {
                     AutoAlignSolver().solve(
                         seats, measuredWith, snapshot, peq,
                         isActive = { isActive },
-                        onProgress = { p -> launch(Dispatchers.Main) { if (progress != null) progress = p } },
+                        onProgress = { p -> launch(Dispatchers.Main) { if (run == runId && progress != null) progress = p } },
                     )
                 }
             }
+            if (run != runId) return@launch
             progress = null
             outcome.onSuccess { result = it }.onFailure { failure = it.message ?: "analysis failed" }
         }
     }
 
+    private fun crossfeeds(values: FloatArray) =
+        values.getOrElse(NativeBmwDspValues.INDEX_MONO_BASS_ENABLED) { 0f } >= .5f ||
+            values.getOrElse(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED) { 0f } >= .5f
+
     /** Writes the proposal through [commit]; remembers what it replaced for [undoApply]. */
     fun apply(values: FloatArray, commit: (Map<Int, Float>) -> Boolean): Boolean {
         val updates = result?.updates?.takeIf { it.isNotEmpty() } ?: return false
+        if (undo != null) {
+            // Already applied: a second Apply would snapshot the applied values and lose the
+            // original ones Undo has to restore.
+            failure = "Already applied -- Undo first to apply again."
+            return false
+        }
         if (analysedValues?.contentEquals(values) != true) {
             // Settings moved since Analyse (here or on another screen): the proposal was solved
             // for the old chain, so don't write it -- ask for a fresh analysis instead.
