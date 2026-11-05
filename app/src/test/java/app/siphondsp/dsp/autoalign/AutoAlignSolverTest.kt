@@ -101,6 +101,21 @@ class AutoAlignSolverTest {
     }
 
     @Test
+    fun itModelsTheChainAsItWillRunEvenWithTheProcessorSwitchedOff() {
+        // Measured with SiphonDSP off, it's often still off when Auto Align runs; the proposal
+        // must come out the same as with it on, not as "nothing to change".
+        val values = NativeBmwDspValues.DEFAULTS.copyOf().also { it[NativeBmwDspValues.INDEX_ENABLED] = 0f }
+        val left = measurement("L", response = flat(0.004))
+        val right = measurement("R") { f -> flat(0.004)(f) / allPass(f, 170.0, 0.5) }
+        val result = AutoAlignSolver().solve(
+            listOf(AutoAlignSolver.Seat("Driver", left, right, null)),
+            AutoAlignSolver.MeasuredWith.DSP_OFF, values, peq(),
+        )
+        assertEquals(BmwOutputChannel.LEFT, result.proposal!!.side)
+        assertTrue(result.scoreDb > 1.0)
+    }
+
+    @Test
     fun aSeatThatAlreadyAddsUpGetsNoProposal() {
         val left = measurement("L", response = flat(0.004))
         val right = measurement("R", response = flat(0.004))

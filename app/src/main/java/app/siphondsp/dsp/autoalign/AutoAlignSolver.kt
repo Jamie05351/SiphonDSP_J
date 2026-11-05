@@ -212,15 +212,21 @@ class AutoAlignSolver(private val sampleRate: Double = 48_000.0) {
         return SeatFit(shifted, bestRms, bestTau)
     }
 
-    /** The app chain per channel ([0] left, [1] right) for [values], on the solver's axis. */
+    private val enabledValues = FloatArray(NativeBmwDspValues.SIZE)
+
+    /**
+     * The app chain per channel ([0] left, [1] right) for [values], on the solver's axis --
+     * always as it runs with the processor switched on, which is how the proposal will be heard
+     * (the user may well have SiphonDSP off right now, having just measured the factory system;
+     * modelled off, every candidate would be the same identity and none could win).
+     */
     private fun appChain(values: FloatArray, peq: BmwPeqState): Array<Array<Complex>> {
+        values.copyInto(enabledValues)
+        enabledValues[NativeBmwDspValues.INDEX_ENABLED] = 1f
         calculator.invalidateAll()
-        calculator.compute(values, peq, curves)
+        calculator.compute(enabledValues, peq, curves)
         return Array(2) { ch ->
-            Array(POINTS) { i ->
-                if (!curves.processorEnabled) Complex.ONE
-                else Complex.polar(10.0.pow(curves.sumDb[ch][i] / 20.0), curves.sumPhase[ch][i])
-            }
+            Array(POINTS) { i -> Complex.polar(10.0.pow(curves.sumDb[ch][i] / 20.0), curves.sumPhase[ch][i]) }
         }
     }
 
