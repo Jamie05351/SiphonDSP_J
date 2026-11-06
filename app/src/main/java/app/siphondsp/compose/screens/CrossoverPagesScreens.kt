@@ -412,7 +412,7 @@ private fun PhoneCrossoverPage(
 @Composable
 private fun GraphModePicker(graphMode: CrossoverGraphMode, onGraphModeChange: (CrossoverGraphMode) -> Unit) {
     BmwSegmentedControl(
-        options = listOf("MAG", "PHASE", "BOTH", "DELAY"),
+        options = listOf("MAG", "PHASE", "BOTH", "DELAY", "ALIGN"),
         selectedIndex = graphMode.ordinal,
         onSelect = { onGraphModeChange(CrossoverGraphMode.entries[it]) },
         modifier = Modifier.fillMaxWidth(),

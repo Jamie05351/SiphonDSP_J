@@ -808,11 +808,18 @@ private fun drawPhaseCurves(nc: Canvas, ctx: PeqDrawContext) {
     // Each band per channel, never an L/R average: phase wraps at +-180, so the mean of +179 and
     // -179 reads 0, and where the two sides genuinely differ (their own delays or polarity) an
     // average is a curve neither channel has. L solid, R dashed, as everywhere else.
+    // Only the selected bank's band lines: all three per channel on top of the sums was eight
+    // lines through the bass, too many to read. PRE EQ shows the sums alone.
     val p = ctx.paints
-    val branches = buildList {
-        add(Triple(ctx.curves.lowBranchPhase, p.lowBranchPaint, p.lowBranchPaintDashed))
-        add(Triple(ctx.curves.midBranchPhase, p.midBranchPaint, p.midBranchPaintDashed))
-        if (ctx.curves.highBranchActive) add(Triple(ctx.curves.highBranchPhase, p.highBranchPaint, p.highBranchPaintDashed))
+    val branches = when (ctx.activeBank) {
+        BmwPeqBank.LOW -> listOf(Triple(ctx.curves.lowBranchPhase, p.lowBranchPaint, p.lowBranchPaintDashed))
+        BmwPeqBank.MID -> listOf(Triple(ctx.curves.midBranchPhase, p.midBranchPaint, p.midBranchPaintDashed))
+        BmwPeqBank.HIGH -> if (ctx.curves.highBranchActive) {
+            listOf(Triple(ctx.curves.highBranchPhase, p.highBranchPaint, p.highBranchPaintDashed))
+        } else {
+            emptyList()
+        }
+        BmwPeqBank.FULL -> emptyList()
     }
     for ((phase, left, right) in branches) {
         if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) drawCurveForChannel(nc, ctx, phase[BmwOutputChannel.LEFT.ordinal], left, toY)
