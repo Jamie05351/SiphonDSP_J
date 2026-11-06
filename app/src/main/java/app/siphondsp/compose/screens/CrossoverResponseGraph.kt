@@ -511,7 +511,7 @@ private fun drawBothModeKey(nc: Canvas, left: Float, top: Float, density: Float,
 
 /** ALIGN's one line of explanation, under the overlay's toggles. */
 private fun drawAlignKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint) {
-    nc.drawText("LOW vs MID PHASE  ·  0 = IN STEP  ·  ±180 = CANCELLING", left + 8f * density, top + 58f * density, legendPaint)
+    nc.drawText("LOW−MID  0 = ADD  ±180 = CANCEL", left + 8f * density, top + 58f * density, legendPaint)
 }
 
 /**
