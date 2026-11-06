@@ -262,9 +262,9 @@
         </activity>
 
         <activity
-            android:name=".activity.AutoAlignActivity"
+            android:name=".activity.BandAlignActivity"
             android:exported="false"
-            android:label="@string/title_activity_auto_align"
+            android:label="@string/title_activity_band_align"
             android:theme="@style/Theme.SiphonDSP">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
