@@ -19,7 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -43,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.dsp.AutoHeadroomCalculator
@@ -134,6 +137,8 @@ private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 /** ALIGN draws a phase difference only where Low and Mid are both within this of each other. */
 private const val ALIGN_OVERLAP_DB = 15.0
+/** Below this a band counts as silent (a muted branch reads as the calculator's -120 dB floor). */
+private const val ALIGN_SILENT_DB = -100.0
 private val GroupDelayGridLines = floatArrayOf(10f, 6f, 2f, 0f, -2f)
 private val FreqGridLines =
     floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f)
@@ -427,15 +432,18 @@ private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb:
 /** A small toggle whose tap target is the full 48dp tall (the pill drawn inside stays small). */
 @Composable
 private fun GraphChip(text: String, on: Boolean, tint: ComposeColor, onClick: () -> Unit) {
+    // Shared with the pill's focus ring, so the iDrive knob shows which chip it's on.
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         Modifier
             .height(48.dp)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
     Box(
         Modifier
+            .bmwFocusRing(interactionSource, cornerRadius = 10.dp)
             .background(ComposeColor.Black.copy(alpha = if (on) 0.75f else 0.55f), RoundedCornerShape(10.dp))
             .padding(horizontal = 9.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
@@ -611,7 +619,10 @@ private fun drawResponse(
                 var penDown = false
                 var lastDeg = 0f
                 for (i in 0 until POINT_COUNT) {
+                    // A muted or silent band reads as the calculator's -120 dB floor with a 0 phase; it
+                    // has no phase to compare, so it counts as not playing.
                     val both = lowDb[i].isFinite() && midDb[i].isFinite() && lowPh[i].isFinite() && midPh[i].isFinite() &&
+                        lowDb[i] > ALIGN_SILENT_DB && midDb[i] > ALIGN_SILENT_DB &&
                         kotlin.math.abs(lowDb[i] - midDb[i]) <= ALIGN_OVERLAP_DB
                     if (!both) {
                         penDown = false
