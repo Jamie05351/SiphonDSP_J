@@ -172,6 +172,7 @@ class NativeBmwSchemaAgreementTest {
         "kVirtualBassAmount" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT,
         "kVirtualBassRemoveSub" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB,
         "kVirtualBassCharacter" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER,
+        "kSubsonicSlope" to NativeBmwDspValues.INDEX_SUBSONIC_SLOPE,
     )
 
     @Test
