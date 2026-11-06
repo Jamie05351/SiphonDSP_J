@@ -34,6 +34,7 @@ import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.ArtSwitchRow
 import app.siphondsp.compose.controls.BmwDropdown
+import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
@@ -130,15 +131,32 @@ fun CrossoverLowMidPage(
             dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
             row(312, 48), mirrors = subsonicFreqMirror,
         )
-        ArtSwitchRow(
-            label = "Subsonic",
-            checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
-            onCheckedChange = { on ->
-                dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
-            },
-            modifier = row(372, 36),
-            labelWidth = ControlLabelWidth,
-        )
+        // On/off and the slope in one row: LR4 (24 dB/oct, the original) or BW2 (12 dB/oct, half
+        // the phase turn through the bass, a little less excursion protection).
+        ArtRow("Subsonic", row(372, 36), labelWidth = ControlLabelWidth) {
+            BmwSwitch(
+                checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
+                onCheckedChange = { on ->
+                    dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
+                },
+                contentDescription = "Subsonic",
+                // Narrower than the usual 100dp so the selector fits the 333dp column beside the
+                // 150dp label: 150 + 72 + 8 + 100 = 330.
+                width = 72.dp,
+            )
+            Spacer(Modifier.width(8.dp))
+            BmwSegmentedControl(
+                options = listOf("LR4", "BW2"),
+                selectedIndex = if (dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_SLOPE)) 1 else 0,
+                onSelect = { i ->
+                    dsp.commit(
+                        NativeBmwDspValues.INDEX_SUBSONIC_SLOPE,
+                        if (i == 1) NativeBmwDspValues.SUBSONIC_SLOPE_BW2 else NativeBmwDspValues.SUBSONIC_SLOPE_LR4,
+                    )
+                },
+                modifier = Modifier.width(100.dp),
+            )
+        }
     }
 
     CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)

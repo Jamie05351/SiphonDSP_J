@@ -430,3 +430,38 @@ TEST_CASE("Auto-correction holds at an 8 kHz corner and skips a deliberate gap")
     const auto snap = proc.captureTruthSnapshot();
     CHECK(snap[3 + 2 * NativeBmwDspProcessor::kTruthOutputWidth + 5] == 0.0);  // Mid L not inverted
 }
+
+// The Low subsonic high-pass: LR4 (the default, 24 dB/oct) or BW2 (12 dB/oct), v[kSubsonicSlope].
+namespace {
+std::array<float, kConfigSize> subsonicConfig(float fc, bool bw2) {
+    auto c = lowOnlyConfig(320.f, kLr4);  // Low's lowpass far above, out of the way
+    for (int out = 0; out < 2; ++out) {
+        const std::size_t base = sch::kOutputConfigBase + out * sch::kOutputConfigWidth;
+        c[base + sch::kOutSubsonicEnabled] = 1.f;
+        c[base + sch::kOutSubsonicFreq] = fc;
+    }
+    c[sch::kSubsonicSlope] = bw2 ? 1.f : 0.f;
+    return c;
+}
+}  // namespace
+
+TEST_CASE("Subsonic LR4 (default) rolls off at 24 dB/oct and BW2 at 12 dB/oct") {
+    constexpr float fc = 60.f;
+    CHECK(defaultConfig()[sch::kSubsonicSlope] == 0.f);
+    CHECK(stopbandSlopeDbPerOctave(subsonicConfig(fc, false), fc / 4, fc / 8) ==
+          doctest::Approx(-24.f).epsilon(0.06));
+    CHECK(stopbandSlopeDbPerOctave(subsonicConfig(fc, true), fc / 4, fc / 8) ==
+          doctest::Approx(-12.f).epsilon(0.06));
+}
+
+TEST_CASE("Subsonic BW2 is -3 dB at its corner, LR4 -6 dB") {
+    constexpr float fc = 60.f;
+    NativeBmwDspProcessor pass, lr4, bw2;
+    auto off = subsonicConfig(fc, false);  // the same chain with the subsonic off: the reference
+    for (int out = 0; out < 2; ++out) {
+        off[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutSubsonicEnabled] = 0.f;
+    }
+    const float ref = outLevelDbAt(pass, off, fc);
+    CHECK(outLevelDbAt(lr4, subsonicConfig(fc, false), fc) - ref == doctest::Approx(-6.f).epsilon(0.08));
+    CHECK(outLevelDbAt(bw2, subsonicConfig(fc, true), fc) - ref == doctest::Approx(-3.f).epsilon(0.1));
+}

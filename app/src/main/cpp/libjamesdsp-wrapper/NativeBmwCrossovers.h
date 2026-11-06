@@ -48,6 +48,10 @@ struct OutputConfig {
     // The upper corner's own slope (v[288]/v[289], added in the 288 -> 291 growth), independent
     // of crossoverType above, which only shapes the lower (Low/Mid) highpass.
     CrossoverType upperCrossoverType = CrossoverType::LinkwitzRiley4;
+    // The subsonic high-pass's slope (v[304], global, added in the 304 -> 305 growth): false =
+    // LR4, two Butterworth sections, 24 dB/oct; true = BW2, one section, 12 dB/oct. Low only, like
+    // subsonicEnabled/subsonicFreq. Appended for the same aggregate-initializer reason as above.
+    bool subsonicBw2 = false;
 };
 
 struct OutputRuntime {
