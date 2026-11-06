@@ -611,7 +611,8 @@ private fun drawResponse(
                 var penDown = false
                 var lastDeg = 0f
                 for (i in 0 until POINT_COUNT) {
-                    val both = lowDb[i].isFinite() && midDb[i].isFinite() && kotlin.math.abs(lowDb[i] - midDb[i]) <= ALIGN_OVERLAP_DB
+                    val both = lowDb[i].isFinite() && midDb[i].isFinite() && lowPh[i].isFinite() && midPh[i].isFinite() &&
+                        kotlin.math.abs(lowDb[i] - midDb[i]) <= ALIGN_OVERLAP_DB
                     if (!both) {
                         penDown = false
                         continue
