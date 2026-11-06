@@ -1,7 +1,10 @@
 package app.siphondsp.fragment
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.LayoutTransition
 import android.animation.ValueAnimator
+import android.app.ActivityOptions
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,13 +13,16 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -25,10 +31,14 @@ import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import app.siphondsp.R
 import androidx.compose.ui.geometry.Rect
 import app.siphondsp.compose.home.GlobalStage
 import app.siphondsp.compose.home.HomeEngineState
+import app.siphondsp.compose.home.HomeScreen
+import app.siphondsp.compose.home.SidebarMorphMs
 import androidx.activity.OnBackPressedCallback
 import android.content.pm.PackageManager
 import android.provider.Settings
@@ -69,9 +79,11 @@ import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.preferences.Preferences
+import app.siphondsp.view.DspCrossNavBar
 import app.siphondsp.view.HomeLevelFeed
 import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
+import app.siphondsp.view.isHeadUnitDisplay
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.util.Locale
@@ -93,6 +105,16 @@ class DspFragment : Fragment() {
 
     /** The launch waiting out the glow flash; cancelled if the user goes anywhere else first. */
     private var pendingOpen: Job? = null
+
+    /**
+     * Whether this screen is the head unit's (see isHeadUnitDisplay). The launcher home screen is
+     * laid out for the head unit's 1280x480 display only; a phone gets the DSP front page it had
+     * before the launcher, with its own artwork and the tiles folding into the sidebar.
+     */
+    private val launcher: Boolean get() = requireContext().isHeadUnitDisplay()
+
+    /** On a phone, the front page turning into the workspace (SidebarMorph), 0..1, while a tile opens. */
+    private var morphProgress by mutableFloatStateOf(0f)
 
     /** The app drawer or car menu, when one is open over the home screen. */
     private var overlay by mutableStateOf<LauncherOverlay>(LauncherOverlay.None)
@@ -254,11 +276,13 @@ class DspFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         resumed = true
-        // Home again: the Spotify / Waze swipe is only for moving between those apps.
-        AppSwipe.stop(requireContext())
-        // Without both apps installed, or with nothing J_DSP can open to grant, the car menu offers nothing.
-        appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext()) || AppSwipe.settingsToAllow(requireContext()) == null
-        nowPlaying.start()
+        if (launcher) {
+            // Home again: the Spotify / Waze swipe is only for moving between those apps.
+            AppSwipe.stop(requireContext())
+            // Without both apps installed, or with nothing J_DSP can open to grant, the car menu offers nothing.
+            appSwipeAllowed = !AppSwipe.installed(requireContext()) || AppSwipe.allowed(requireContext()) || AppSwipe.settingsToAllow(requireContext()) == null
+            nowPlaying.start()
+        }
         // Coming back from a DSP screen; in-place changes arrive via settingsReceiver.
         refreshValues(null)
         // Re-assert the current page after a restore, where onPageSelected doesn't fire.
@@ -274,10 +298,12 @@ class DspFragment : Fragment() {
         // tile launch still waiting out its flash must not open over it.
         cancelPendingOpen()
         resumed = false
-        nowPlaying.stop()
         updateLevelFeed()
-        // Spotify or Waze may be what comes up; see AppSwipe.
-        AppSwipe.start(requireContext())
+        if (launcher) {
+            nowPlaying.stop()
+            // Spotify or Waze may be what comes up; see AppSwipe.
+            AppSwipe.start(requireContext())
+        }
     }
 
     override fun onDestroyView() {
@@ -292,6 +318,7 @@ class DspFragment : Fragment() {
         // The DSP screen (or whatever else) now covers this page, so taps can't reach it: release
         // the guard. The glow fades out as the page comes back.
         openingTile = null
+        morphProgress = 0f
     }
 
     private fun onPageSelectedInternal(position: Int) {
@@ -320,6 +347,10 @@ class DspFragment : Fragment() {
     }
 
     private fun setUpShortcutsPage() {
+        if (!launcher) {
+            setUpPhoneHome()
+            return
+        }
         val slots = HomeSlots.get(requireContext())
         val installed = InstalledApps.get(requireContext())
         val customisation = LauncherCustomisation.get(requireContext())
@@ -361,6 +392,35 @@ class DspFragment : Fragment() {
                 onHasFocusChanged = { homeHasFocus = it },
             )
         }
+        startHomeFeeds()
+    }
+
+    /** The phone's front page: the DSP chain and its tiles, as before the launcher. */
+    private fun setUpPhoneHome() {
+        shortcutsBinding.homeScreen.setHomeContent {
+            HomeScreen(
+                engine = engineState,
+                powered = powerOn,
+                readout = { levelReadout },
+                meterLevels = { levelFrame },
+                openingStage = openingTile,
+                onTogglePower = { if (openingTile == null) onPowerClick?.invoke() },
+                onOpenStage = { stage, _ -> openStage(stage) },
+                onOpenGlobal = ::openGlobal,
+                onSettings = { if (openingTile == null) onSettingsClick?.invoke() },
+                onMore = ::openMore,
+                onVolumeStep = { steps -> MasterVolume.step(requireContext(), steps) },
+                onToggleMute = { MasterVolume.setMuted(requireContext(), null) },
+                morphProgress = { morphProgress },
+                sidebarWidth = DspCrossNavBar.sidebarWidthDp(requireActivity()).dp,
+                animateTiles = homeLive,
+            )
+        }
+        startHomeFeeds()
+    }
+
+    /** The level feed and settings receiver both home screens need. */
+    private fun startHomeFeeds() {
         levelFeed = HomeLevelFeed(onFrame = { levelFrame = it }, onReadout = { levelReadout = it })
         requireContext().registerLocalReceiver(
             settingsReceiver,
@@ -417,7 +477,7 @@ class DspFragment : Fragment() {
     fun enterKnobFocus(): Boolean {
         // Only while this home screen is really what's showing: not after its view was replaced
         // (an error screen) or with the settings page or another screen in front.
-        if (!isResumed || view == null || !::binding.isInitialized || binding.dspPager.currentItem != 0) return false
+        if (!isResumed || view == null || !launcher || !::binding.isInitialized || binding.dspPager.currentItem != 0) return false
         if (homeHasFocus) return false
         // If the last request couldn't land, don't keep swallowing keys: this one goes through
         // normally and the one after tries again.
@@ -526,8 +586,9 @@ class DspFragment : Fragment() {
 
     /**
      * Opens a DSP screen from its tile in the raised chain: the tile's glow flashes on for
-     * [TILE_FLASH_MS] so the tap reads as confirmed, then the screen opens. With animations turned
-     * off in system settings it opens at once.
+     * [TILE_FLASH_MS] so the tap reads as confirmed, then the screen opens (on a phone, after the
+     * front page has turned into the workspace over [SidebarMorphMs]). With animations turned off
+     * in system settings it opens at once.
      *
      * Other tile, chip, power, Settings and More taps are ignored from the tap until this page
      * stops (see [openingTile]), not just during the flash, so a quick second tap can't open a
@@ -546,9 +607,37 @@ class DspFragment : Fragment() {
         }
         openingTile = stage
         pendingOpen = viewLifecycleOwner.lifecycleScope.launch {
-            if (ValueAnimator.areAnimatorsEnabled()) delay(TILE_FLASH_MS)
-            startActivity(intent)
+            if (!ValueAnimator.areAnimatorsEnabled()) {
+                startActivity(intent)
+                return@launch
+            }
+            delay(TILE_FLASH_MS)
+            if (launcher) {
+                startActivity(intent)
+            } else {
+                // The phone's front page turns into the workspace, and the screen opens over that
+                // last frame with no animation, since it already looks the same.
+                runSidebarMorph()
+                startActivity(intent, ActivityOptions.makeCustomAnimation(requireContext(), 0, 0).toBundle())
+            }
         }
+    }
+
+    /** Runs [morphProgress] 0..1 over [SidebarMorphMs]; cancelling the caller stops it. */
+    private suspend fun runSidebarMorph() = suspendCancellableCoroutine { cont ->
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = SidebarMorphMs
+            // The morph eases each piece itself.
+            interpolator = LinearInterpolator()
+            addUpdateListener { morphProgress = it.animatedValue as Float }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            })
+        }
+        cont.invokeOnCancellation { animator.cancel() }
+        animator.start()
     }
 
     /** A global stage's chip: opens the screen that owns the stage, as the workspace toolbar does. */
@@ -580,6 +669,7 @@ class DspFragment : Fragment() {
         if (pendingOpen?.isActive == true) {
             pendingOpen?.cancel()
             openingTile = null
+            morphProgress = 0f
         }
         pendingOpen = null
     }
