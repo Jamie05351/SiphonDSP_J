@@ -140,8 +140,11 @@ fun CrossoverLowMidPage(
                     dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
                 },
                 contentDescription = "Subsonic",
+                // Narrower than the usual 100dp so the selector fits the 333dp column beside the
+                // 150dp label: 150 + 72 + 8 + 100 = 330.
+                width = 72.dp,
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
             BmwSegmentedControl(
                 options = listOf("LR4", "BW2"),
                 selectedIndex = if (dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_SLOPE)) 1 else 0,
@@ -151,7 +154,7 @@ fun CrossoverLowMidPage(
                         if (i == 1) NativeBmwDspValues.SUBSONIC_SLOPE_BW2 else NativeBmwDspValues.SUBSONIC_SLOPE_LR4,
                     )
                 },
-                modifier = Modifier.width(110.dp),
+                modifier = Modifier.width(100.dp),
             )
         }
     }
