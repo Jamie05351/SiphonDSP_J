@@ -16,6 +16,25 @@ import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -26,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import app.siphondsp.audio.SpectrumEngine
+import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.home.HomePalette
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.dsp.AutoHeadroomCalculator
@@ -82,7 +102,22 @@ import kotlin.math.log10
  * washes) spring from the shape last drawn to the new one over about 250 ms ([MagnitudeMorph]),
  * read only while drawing. Phase and group delay switch straight to the new curves.
  */
-enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY }
+enum class CrossoverGraphMode { MAGNITUDE, PHASE, MAGNITUDE_PHASE, GROUP_DELAY, ALIGN }
+
+/** Which channels the crossover graph draws. */
+enum class GraphChannels(val label: String) { BOTH("L+R"), LEFT("L"), RIGHT("R") }
+
+/**
+ * What the crossover graph shows beyond its mode, shared by every crossover page (so turning a
+ * page keeps it) and kept while the app runs: the channels, and which band lines PHASE draws
+ * under the sums -- none by default, so the view opens on just the two sum lines.
+ */
+internal object CrossoverGraphView {
+    var channels by mutableStateOf(GraphChannels.BOTH)
+    var lowPhase by mutableStateOf(false)
+    var midPhase by mutableStateOf(false)
+    var highPhase by mutableStateOf(false)
+}
 
 // --- geometry / constants, 1:1 with NativeBmwDspResponseView ---------------------------------
 private const val PAD_LEFT_DP = 42f
@@ -100,6 +135,10 @@ private const val SPECTRUM_TICK_MS = 33L
 
 private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
+/** ALIGN draws a phase difference only where Low and Mid are both within this of each other. */
+private const val ALIGN_OVERLAP_DB = 15.0
+/** Below this a band counts as silent (a muted branch reads as the calculator's -120 dB floor). */
+private const val ALIGN_SILENT_DB = -100.0
 private val GroupDelayGridLines = floatArrayOf(10f, 6f, 2f, 0f, -2f)
 private val FreqGridLines =
     floatArrayOf(20f, 50f, 100f, 200f, 500f, 1000f, 2000f, 5000f, 10000f, 20000f)
@@ -204,24 +243,7 @@ fun CrossoverResponseGraph(
             color = highArgb
         }
     }
-    val sumPaint = remember(density, sumArgb) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 3.1f * density
-            color = sumArgb
-        }
-    }
-    // §1: real Gaussian blur glow beneath the summed curve (BlurMaskFilter, same as the PEQ port).
-    val sumGlowPaint = remember(density, sumArgb) {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 3.1f * density * 2.2f
-            maskFilter = BlurMaskFilter(SUM_GLOW_BLUR_DP * density, BlurMaskFilter.Blur.NORMAL)
-            color = sumArgb
-            alpha = SUM_GLOW_ALPHA
-        }
-    }
-    // The sum per channel (magnitude modes): L neon purple, R neon green, each over a blurred glow.
+    // The sum per channel (every mode): L neon purple, R neon green, each over a blurred glow.
     val leftPaint = remember(density) { channelCurvePaint(density, LeftChannelColor) }
     val rightPaint = remember(density) { channelCurvePaint(density, RightChannelColor) }
     val leftGlowPaint = remember(density) { channelGlowPaint(density, LeftChannelColor) }
@@ -242,6 +264,13 @@ fun CrossoverResponseGraph(
             color = sumArgb
         }
     }
+    // Per-channel phase: R's branch lines dashed (L solid), and the phase overlay in the channel
+    // colours -- L and R are never averaged (see drawResponse).
+    val rightPhasePaints = remember(density, lowArgb, midArgb, highArgb) {
+        RightPhasePaints(dashedCopy(lowPaint, density), dashedCopy(midPaint, density), dashedCopy(highPaint, density))
+    }
+    val phaseOverlayLeft = remember(density) { Paint(phasePaint).apply { color = LeftChannelColor } }
+    val phaseOverlayRight = remember(density) { Paint(phasePaint).apply { color = RightChannelColor } }
     val spectrumBars = remember { GraphSpectrumBars() }
     val spectrumSignalArgb = BmwTheme.colors.sliderHeadroom.toArgb()
     val markerPaint = remember(density, gridArgb) {
@@ -307,7 +336,12 @@ fun CrossoverResponseGraph(
         }
     }
 
-    ComposeCanvas(modifier.graphPanel()) {
+    val view = CrossoverGraphView
+    val showLeft = view.channels != GraphChannels.RIGHT
+    val showRight = view.channels != GraphChannels.LEFT
+    val bandLines = BandLines(view.lowPhase, view.midPhase, view.highPhase)
+    Box(modifier) {
+    ComposeCanvas(Modifier.fillMaxSize().graphPanel()) {
         val left = PAD_LEFT_DP * density
         val right = size.width - PAD_RIGHT_DP * density
         val top = PAD_TOP_DP * density
@@ -320,15 +354,16 @@ fun CrossoverResponseGraph(
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
             if (mode == CrossoverGraphMode.MAGNITUDE_PHASE) drawBothModeKey(nc, left, top, density, legendPaint)
+            if (mode == CrossoverGraphMode.ALIGN) drawAlignKey(nc, left, top, density, legendPaint)
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
                     { v -> dbToY(v, top, bottom) }
-                CrossoverGraphMode.PHASE -> { v -> valueToY(v, -180f, 180f, top, bottom) }
+                CrossoverGraphMode.PHASE, CrossoverGraphMode.ALIGN -> { v -> valueToY(v, -180f, 180f, top, bottom) }
                 CrossoverGraphMode.GROUP_DELAY -> { v -> valueToY(v, -2f, 10f, top, bottom) }
             }
             val gridLines = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE -> DbGridLines
-                CrossoverGraphMode.PHASE -> PhaseGridLines
+                CrossoverGraphMode.PHASE, CrossoverGraphMode.ALIGN -> PhaseGridLines
                 CrossoverGraphMode.GROUP_DELAY -> GroupDelayGridLines
             }
             drawGrid(
@@ -351,15 +386,80 @@ fun CrossoverResponseGraph(
                 )
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
-                drawBandAreas(nc, curves, morph, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint)
+                drawBandAreas(nc, curves, morph, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint, view.channels)
             }
             drawResponse(
-                nc, mode, curves, morph, left, right, top, bottom, lowPaint, midPaint, highPaint, sumPaint, sumGlowPaint, phasePaint,
+                nc, mode, curves, morph, left, right, top, bottom, lowPaint, midPaint, highPaint,
                 ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
+                rightPhasePaints, phaseOverlayLeft, phaseOverlayRight,
+                showLeft, showRight, bandLines,
             )
         }
     }
+    GraphOverlay(mode, curves.highBranchActive, lowArgb, midArgb, highArgb)
+    }
 }
+
+/**
+ * The graph's own toggles: the channels (every mode) at the top right and, in PHASE, which band
+ * lines to draw at the bottom left, so the two groups never share a row (on a narrow phone graph
+ * they'd overlap). Tappable and reachable with the iDrive knob.
+ */
+@Composable
+private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb: Int, midArgb: Int, highArgb: Int) {
+    val view = CrossoverGraphView
+    Box(Modifier.fillMaxSize().padding(start = PAD_LEFT_DP.dp, end = PAD_RIGHT_DP.dp, bottom = PAD_BOTTOM_DP.dp)) {
+        if (mode == CrossoverGraphMode.PHASE) {
+            Row(Modifier.align(Alignment.BottomStart), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                GraphChip("LOW", view.lowPhase, ComposeColor(lowArgb)) { view.lowPhase = !view.lowPhase }
+                GraphChip("MID", view.midPhase, ComposeColor(midArgb)) { view.midPhase = !view.midPhase }
+                if (highActive) GraphChip("HIGH", view.highPhase, ComposeColor(highArgb)) { view.highPhase = !view.highPhase }
+            }
+        }
+        Row(Modifier.align(Alignment.TopEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (option in GraphChannels.entries) {
+                val tint = when (option) {
+                    GraphChannels.LEFT -> ComposeColor(LeftChannelColor)
+                    GraphChannels.RIGHT -> ComposeColor(RightChannelColor)
+                    GraphChannels.BOTH -> ComposeColor.White
+                }
+                GraphChip(option.label, view.channels == option, tint) { view.channels = option }
+            }
+        }
+    }
+}
+
+/** A small toggle whose tap target is the full 48dp tall (the pill drawn inside stays small). */
+@Composable
+private fun GraphChip(text: String, on: Boolean, tint: ComposeColor, onClick: () -> Unit) {
+    // Shared with the pill's focus ring, so the iDrive knob shows which chip it's on.
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .height(48.dp)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .padding(horizontal = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+    Box(
+        Modifier
+            .bmwFocusRing(interactionSource, cornerRadius = 10.dp)
+            .background(ComposeColor.Black.copy(alpha = if (on) 0.75f else 0.55f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            color = if (on) tint else tint.copy(alpha = 0.4f),
+            fontSize = 12.sp,
+            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+        )
+    }
+    }
+}
+
+/** Which band phase lines PHASE draws under the sums. */
+private class BandLines(val low: Boolean, val mid: Boolean, val high: Boolean)
 
 // --- drawing, 1:1 with NativeBmwDspResponseView ---------------------------------------------
 
@@ -409,11 +509,16 @@ private fun drawBothModeKey(nc: Canvas, left: Float, top: Float, density: Float,
     nc.drawText("SOLID = MAGNITUDE, DASHED = PHASE", left + 8f * density, top + 14f * density, legendPaint)
 }
 
+/** ALIGN's one line of explanation, under the overlay's toggles. */
+private fun drawAlignKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint) {
+    nc.drawText("LOW−MID  0 = ADD  ±180 = CANCEL", left + 8f * density, top + 58f * density, legendPaint)
+}
+
 /**
  * = `NativeBmwDspResponseView.drawResponse` (Low / Mid / Sum, per display mode, plus the 3-way
  * High branch whenever it's audible), plus
- * ANALYZER_VISUAL_SPEC §1: the summed curve is stroked twice -- a blurred [sumGlowPaint] pass
- * then the crisp [sumPaint] -- while the low/mid branch curves stay plain.
+ * ANALYZER_VISUAL_SPEC §1: each channel's sum is stroked over its blurred glow, L and R apiece
+ * (never averaged), while the low/mid branch curves stay plain.
  */
 private fun drawResponse(
     nc: Canvas,
@@ -427,10 +532,13 @@ private fun drawResponse(
     lowPaint: Paint,
     midPaint: Paint,
     highPaint: Paint,
-    sumPaint: Paint,
-    sumGlowPaint: Paint,
-    phasePaint: Paint,
     channels: ChannelPaints,
+    rightPhase: RightPhasePaints,
+    phaseOverlayLeft: Paint,
+    phaseOverlayRight: Paint,
+    showLeft: Boolean,
+    showRight: Boolean,
+    bands: BandLines,
 ) {
     val lastIndex = POINT_COUNT - 1
     fun pathFor(sample: (Int) -> Float): Path = Path().apply {
@@ -440,10 +548,6 @@ private fun drawResponse(
             if (i == 0) moveTo(x, y) else lineTo(x, y)
         }
     }
-    fun strokeSum(path: Path) {
-        nc.drawPath(path, sumGlowPaint)
-        nc.drawPath(path, sumPaint)
-    }
     // Magnitude modes: the sum per channel, L purple / R green, each over its glow. The branches
     // are drawn by drawBandAreas, so no branch lines here.
     fun strokeChannelSums() {
@@ -451,10 +555,20 @@ private fun drawResponse(
         val rightSum = morph.shown[MagnitudeMorph.SUM_R]
         val leftPath = pathFor { i -> dbToY(leftSum[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
         val rightPath = pathFor { i -> dbToY(rightSum[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
-        nc.drawPath(rightPath, channels.rightGlow)
-        nc.drawPath(rightPath, channels.right)
-        nc.drawPath(leftPath, channels.leftGlow)
-        nc.drawPath(leftPath, channels.left)
+        if (showRight) {
+            nc.drawPath(rightPath, channels.rightGlow)
+            nc.drawPath(rightPath, channels.right)
+        }
+        if (showLeft) {
+            nc.drawPath(leftPath, channels.leftGlow)
+            nc.drawPath(leftPath, channels.left)
+        }
+    }
+    // A channel's sum, over its glow, if that channel is shown.
+    fun strokeSum(path: Path, isLeft: Boolean) {
+        if (isLeft && !showLeft || !isLeft && !showRight) return
+        nc.drawPath(path, if (isLeft) channels.leftGlow else channels.rightGlow)
+        nc.drawPath(path, if (isLeft) channels.left else channels.right)
     }
     val l = BmwOutputChannel.LEFT
     val r = BmwOutputChannel.RIGHT
@@ -463,22 +577,68 @@ private fun drawResponse(
     val drawHigh = curves.highBranchActive
     when (mode) {
         CrossoverGraphMode.MAGNITUDE -> strokeChannelSums()
+        // Phase is drawn per channel, never as an L/R average: it wraps at +-180, so the mean of
+        // +179 and -179 reads 0, and where the sides genuinely differ (their own delays or
+        // polarity, as Band Align sets) an average is a curve neither channel has.
         CrossoverGraphMode.PHASE -> {
-            nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.lowBranchPhaseFor(l)[i], curves.lowBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, lowPaint)
-            nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.midBranchPhaseFor(l)[i], curves.midBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, midPaint)
-            if (drawHigh) nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.highBranchPhaseFor(l)[i], curves.highBranchPhaseFor(r)[i]), -180f, 180f, top, bottom) }, highPaint)
-            strokeSum(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) })
+            fun phasePath(rad: DoubleArray) = pathFor { i -> valueToY(deg(rad[i]), -180f, 180f, top, bottom) }
+            // Band lines only when switched on (the overlay's LOW / MID / HIGH), each per shown channel.
+            fun bandLines(on: Boolean, l: DoubleArray, r: DoubleArray, leftPaint: Paint, rightPaint: Paint) {
+                if (!on) return
+                if (showLeft) nc.drawPath(phasePath(l), leftPaint)
+                if (showRight) nc.drawPath(phasePath(r), rightPaint)
+            }
+            bandLines(bands.low, curves.lowBranchPhaseFor(l), curves.lowBranchPhaseFor(r), lowPaint, rightPhase.low)
+            bandLines(bands.mid, curves.midBranchPhaseFor(l), curves.midBranchPhaseFor(r), midPaint, rightPhase.mid)
+            if (drawHigh) bandLines(bands.high, curves.highBranchPhaseFor(l), curves.highBranchPhaseFor(r), highPaint, rightPhase.high)
+            strokeSum(phasePath(curves.sumPhaseFor(r)), isLeft = false)
+            strokeSum(phasePath(curves.sumPhaseFor(l)), isLeft = true)
         }
         CrossoverGraphMode.MAGNITUDE_PHASE -> {
             strokeChannelSums()
-            nc.drawPath(pathFor { i -> valueToY(averageDeg(curves.sumPhaseFor(l)[i], curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) }, phasePaint)
+            if (showRight) nc.drawPath(pathFor { i -> valueToY(deg(curves.sumPhaseFor(r)[i]), -180f, 180f, top, bottom) }, phaseOverlayRight)
+            if (showLeft) nc.drawPath(pathFor { i -> valueToY(deg(curves.sumPhaseFor(l)[i]), -180f, 180f, top, bottom) }, phaseOverlayLeft)
         }
         CrossoverGraphMode.GROUP_DELAY -> {
-            val leftDelay = curves.groupDelayMsFor(l)
-            val rightDelay = curves.groupDelayMsFor(r)
-            strokeSum(
-                pathFor { i -> valueToY((((leftDelay[i] + rightDelay[i]) * 0.5).toFloat()).coerceIn(-2f, 10f), -2f, 10f, top, bottom) },
-            )
+            // Per channel too: an average would hide the very L/R difference this view is for.
+            fun delayPath(ms: DoubleArray) = pathFor { i -> valueToY(ms[i].toFloat().coerceIn(-2f, 10f), -2f, 10f, top, bottom) }
+            strokeSum(delayPath(curves.groupDelayMsFor(r)), isLeft = false)
+            strokeSum(delayPath(curves.groupDelayMsFor(l)), isLeft = true)
+        }
+        CrossoverGraphMode.ALIGN -> {
+            // Each side's Low phase minus its Mid phase, through the crossover: 0 where the two add
+            // in step, +-180 where they cancel. Drawn only where both bands play (within
+            // ALIGN_OVERLAP_DB of each other) -- elsewhere one is silent and the angle means nothing.
+            for (ch in listOf(r, l)) {
+                if (ch == l && !showLeft || ch == r && !showRight) continue
+                val lowDb = curves.lowBranchDbFor(ch)
+                val midDb = curves.midBranchDbFor(ch)
+                val lowPh = curves.lowBranchPhaseFor(ch)
+                val midPh = curves.midBranchPhaseFor(ch)
+                val path = Path()
+                var penDown = false
+                var lastDeg = 0f
+                for (i in 0 until POINT_COUNT) {
+                    // A muted or silent band reads as the calculator's -120 dB floor with a 0 phase; it
+                    // has no phase to compare, so it counts as not playing.
+                    val both = lowDb[i].isFinite() && midDb[i].isFinite() && lowPh[i].isFinite() && midPh[i].isFinite() &&
+                        lowDb[i] > ALIGN_SILENT_DB && midDb[i] > ALIGN_SILENT_DB &&
+                        kotlin.math.abs(lowDb[i] - midDb[i]) <= ALIGN_OVERLAP_DB
+                    if (!both) {
+                        penDown = false
+                        continue
+                    }
+                    val d = wrapDeg(Math.toDegrees(lowPh[i] - midPh[i]))
+                    val x = left + (i.toFloat() / lastIndex) * (right - left)
+                    val y = valueToY(d, -180f, 180f, top, bottom)
+                    // A wrap from +180 to -180 is the same angle: lift the pen rather than draw a
+                    // vertical line across the plot.
+                    if (penDown && kotlin.math.abs(d - lastDeg) <= 180f) path.lineTo(x, y) else path.moveTo(x, y)
+                    penDown = true
+                    lastDeg = d
+                }
+                strokeSum(path, isLeft = ch == l)
+            }
         }
     }
 }
@@ -568,6 +728,13 @@ private val MorphSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 700f)
 /** The magnitude modes' L / R sum paints, bundled for [drawResponse]. */
 private class ChannelPaints(val left: Paint, val right: Paint, val leftGlow: Paint, val rightGlow: Paint)
 
+/** The right channel's branch phase lines: the branch colours, dashed. */
+private class RightPhasePaints(val low: Paint, val mid: Paint, val high: Paint)
+
+private fun dashedCopy(paint: Paint, density: Float) = Paint(paint).apply {
+    pathEffect = DashPathEffect(floatArrayOf(6f * density, 5f * density), 0f)
+}
+
 private fun channelCurvePaint(density: Float, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     style = Paint.Style.STROKE
     strokeWidth = 2.4f * density
@@ -599,6 +766,7 @@ private fun drawBandAreas(
     colors: IntArray,
     washPaint: Paint,
     edgePaint: Paint,
+    channels: GraphChannels,
 ) {
     val lastIndex = POINT_COUNT - 1
     val shown = morph.shown
@@ -612,7 +780,12 @@ private fun drawBandAreas(
         val edge = Path()
         for (i in 0 until POINT_COUNT) {
             val x = left + (i.toFloat() / lastIndex) * (right - left)
-            val y = dbToY(averageDb(leftDb[i], rightDb[i]), top, bottom)
+            val db = when (channels) {
+                GraphChannels.BOTH -> averageDb(leftDb[i], rightDb[i])
+                GraphChannels.LEFT -> leftDb[i].toFloat().coerceIn(-24f, 12f)
+                GraphChannels.RIGHT -> rightDb[i].toFloat().coerceIn(-24f, 12f)
+            }
+            val y = dbToY(db, top, bottom)
             if (i == 0) edge.moveTo(x, y) else edge.lineTo(x, y)
         }
         val area = Path(edge).apply {
@@ -673,8 +846,15 @@ private fun drawCrossoverMarkers(
 private fun averageDb(left: Double, right: Double): Float =
     ((left + right) * 0.5).toFloat().coerceIn(-24f, 12f)
 
-private fun averageDeg(left: Double, right: Double): Float =
-    Math.toDegrees((left + right) * 0.5).toFloat().coerceIn(-180f, 180f)
+private fun deg(rad: Double): Float = Math.toDegrees(rad).toFloat().coerceIn(-180f, 180f)
+
+/** [degrees] wrapped into -180..180. */
+private fun wrapDeg(degrees: Double): Float {
+    var d = degrees % 360.0
+    if (d > 180.0) d -= 360.0
+    if (d < -180.0) d += 360.0
+    return d.toFloat()
+}
 
 private fun dbToY(db: Float, top: Float, bottom: Float): Float = valueToY(db, -24f, 12f, top, bottom)
 

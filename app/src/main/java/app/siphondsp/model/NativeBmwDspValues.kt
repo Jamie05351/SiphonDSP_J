@@ -83,7 +83,10 @@ object NativeBmwDspValues {
     //
     // 303 is Virtual Bass's character (Warm 0 .. Punchy 100 %), added in the 303 -> 304 growth.
     // Default 50; inert while Virtual Bass is off.
-    const val SIZE = 304
+    //
+    // 304 is the Low subsonic high-pass's slope (0 = LR4, 1 = BW2), added in the 304 -> 305
+    // growth. Default LR4, so older saves are unchanged.
+    const val SIZE = 305
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -418,6 +421,11 @@ object NativeBmwDspValues {
     const val INDEX_VIRTUAL_BASS_AMOUNT = 301 // harmonics level, percent
     const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
     const val INDEX_VIRTUAL_BASS_CHARACTER = 303 // Warm 0 .. Punchy 100, percent
+    // The subsonic high-pass's slope, both sides: LR4 (24 dB/oct) or BW2 (12 dB/oct, half the
+    // phase turn through the bass).
+    const val INDEX_SUBSONIC_SLOPE = 304
+    const val SUBSONIC_SLOPE_LR4 = 0f
+    const val SUBSONIC_SLOPE_BW2 = 1f
     // The cut is the woofers' reach: the lowest note they really play (e.g. where the subsonic HPF
     // starts). Notes below it are rebuilt as harmonics; notes above it are left alone. Capped at
     // 60 Hz so it can't be set into the band the woofers carry.
@@ -680,6 +688,8 @@ object NativeBmwDspValues {
         0f, // 302 virtual bass remove sub (off)
         // --- Virtual Bass character (303) ---
         VIRTUAL_BASS_DEFAULT_CHARACTER, // 303 virtual bass character % (Warm 0 .. Punchy 100)
+        // --- Subsonic slope (304) ---
+        SUBSONIC_SLOPE_LR4, // 304 subsonic slope (LR4)
     )
 
     init {

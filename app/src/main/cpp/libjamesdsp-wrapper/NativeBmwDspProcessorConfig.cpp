@@ -274,6 +274,7 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
                                              : OutputConfig::CrossoverType::LinkwitzRiley4;
         cfg.subsonicEnabled = flagIn(v[base + 2]);
         cfg.subsonicFreq = clampIn(v[base + 3], 20, 60);
+        cfg.subsonicBw2 = flagIn(v[nbschema::kSubsonicSlope]);
         cfg.muted = flagIn(v[base + 4]);
         cfg.polarityInverted = flagIn(v[base + 5]);
     }
@@ -479,6 +480,7 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
             }
         }
         if (low && (old.subsonicEnabled != now.subsonicEnabled ||
+                    old.subsonicBw2 != now.subsonicBw2 ||
                     changed(old.subsonicFreq, now.subsonicFreq))) {
             dirty |= DirtySubsonic;
             // The subsonic stage doesn't run while off; one switching back on starts clean

@@ -135,9 +135,11 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
             val subsonicEnabled = outputValue(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED) >= .5f
             val subsonicFreq = outputValue(values, output, NativeBmwDspValues.FIELD_SUBSONIC_FREQ).toDouble()
             if (subsonicEnabled) {
-                // LR4: two cascaded Butterworth sections, as native's buildSubsonic().
+                // As native's buildSubsonic(): LR4 is two cascaded Butterworth sections, BW2 one.
                 cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
-                cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
+                if (values[NativeBmwDspValues.INDEX_SUBSONIC_SLOPE] < .5f) {
+                    cascade.addHighPass(subsonicFreq, BUTTERWORTH_Q, sampleRate)
+                }
             }
 
             // The set corner, moved by the BW2/BW4 pair auto-correction (CrossoverPairing).

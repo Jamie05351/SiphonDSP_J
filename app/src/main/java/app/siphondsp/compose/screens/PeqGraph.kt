@@ -803,33 +803,28 @@ private fun drawCurveForChannel(
     strokeNeon(nc, path, paint, ctx.paints.glowPaint)
 }
 
-/** = ParametricEqSurface.drawSystemCurve (arithmetic L/R mean, used for the phase branch lines). */
-private fun drawCurveAverage(
-    nc: Canvas,
-    ctx: PeqDrawContext,
-    perChannel: Array<DoubleArray>,
-    paint: Paint,
-    toY: (Double) -> Float,
-) {
-    val leftValues = perChannel[BmwOutputChannel.LEFT.ordinal]
-    val rightValues = perChannel[BmwOutputChannel.RIGHT.ordinal]
-    if (leftValues.isEmpty()) return
-    val g = ctx.geometry
-    val path = Path()
-    for (i in leftValues.indices) {
-        val avg = (leftValues[i] + rightValues[i]) * 0.5
-        val x = g.left + (i.toFloat() / (leftValues.size - 1).coerceAtLeast(1)) * (g.right - g.left)
-        val y = toY(avg)
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-    }
-    strokeNeon(nc, path, paint, ctx.paints.glowPaint)
-}
-
 private fun drawPhaseCurves(nc: Canvas, ctx: PeqDrawContext) {
     val toY: (Double) -> Float = { ctx.geometry.yForPhaseDeg(Math.toDegrees(it)) }
-    drawCurveAverage(nc, ctx, ctx.curves.lowBranchPhase, ctx.paints.lowBranchPaint, toY)
-    drawCurveAverage(nc, ctx, ctx.curves.midBranchPhase, ctx.paints.midBranchPaint, toY)
-    if (ctx.curves.highBranchActive) drawCurveAverage(nc, ctx, ctx.curves.highBranchPhase, ctx.paints.highBranchPaint, toY)
+    // Each band per channel, never an L/R average: phase wraps at +-180, so the mean of +179 and
+    // -179 reads 0, and where the two sides genuinely differ (their own delays or polarity) an
+    // average is a curve neither channel has. L solid, R dashed, as everywhere else.
+    // Only the selected bank's band lines: all three per channel on top of the sums was eight
+    // lines through the bass, too many to read. PRE EQ shows the sums alone.
+    val p = ctx.paints
+    val branches = when (ctx.activeBank) {
+        BmwPeqBank.LOW -> listOf(Triple(ctx.curves.lowBranchPhase, p.lowBranchPaint, p.lowBranchPaintDashed))
+        BmwPeqBank.MID -> listOf(Triple(ctx.curves.midBranchPhase, p.midBranchPaint, p.midBranchPaintDashed))
+        BmwPeqBank.HIGH -> if (ctx.curves.highBranchActive) {
+            listOf(Triple(ctx.curves.highBranchPhase, p.highBranchPaint, p.highBranchPaintDashed))
+        } else {
+            emptyList()
+        }
+        BmwPeqBank.FULL -> emptyList()
+    }
+    for ((phase, left, right) in branches) {
+        if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) drawCurveForChannel(nc, ctx, phase[BmwOutputChannel.LEFT.ordinal], left, toY)
+        if (ctx.channelDisplay != PeqChannelDisplay.LEFT) drawCurveForChannel(nc, ctx, phase[BmwOutputChannel.RIGHT.ordinal], right, toY)
+    }
     if (ctx.channelDisplay != PeqChannelDisplay.RIGHT) {
         drawCurveForChannel(nc, ctx, ctx.curves.sumPhase[BmwOutputChannel.LEFT.ordinal], ctx.paints.sumPaintSolid, toY)
     }

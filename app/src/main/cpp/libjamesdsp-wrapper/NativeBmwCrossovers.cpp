@@ -7,7 +7,13 @@ namespace NativeBmwDsp {
 
 void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate) {
     makeHighPass(out.subsonic1, cfg.subsonicFreq, BW, sampleRate);
-    makeHighPass(out.subsonic2, cfg.subsonicFreq, BW, sampleRate);
+    // LR4: the same Butterworth section twice. BW2: the one section, the second an identity
+    // pass-through, so the stage keeps its shape (both sections always run) at half the slope.
+    if (cfg.subsonicBw2) {
+        makeIdentity(out.subsonic2);
+    } else {
+        makeHighPass(out.subsonic2, cfg.subsonicFreq, BW, sampleRate);
+    }
 }
 float spreadCorner(float fc, float k, float sampleRate) {
     if (k == 1.f || !(sampleRate > 0.f)) {

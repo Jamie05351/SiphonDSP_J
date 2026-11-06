@@ -133,7 +133,9 @@ public:
     //   301      harmonics level %    302  remove the original sub below the cut
     //
     // 303 -- Virtual Bass character, Warm 0 .. Punchy 100 %, added in the 303 -> 304 growth.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 304 };
+    //
+    // 304 -- subsonic slope, 0 = LR4 (default) / 1 = BW2, added in the 304 -> 305 growth.
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 305 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
