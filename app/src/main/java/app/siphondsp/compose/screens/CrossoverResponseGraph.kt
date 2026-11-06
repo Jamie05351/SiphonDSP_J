@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -395,15 +396,16 @@ fun CrossoverResponseGraph(
 }
 
 /**
- * The graph's own toggles, over its top edge: the channels (every mode) at the right and, in
- * PHASE, which band lines to draw at the left. Tappable and reachable with the iDrive knob.
+ * The graph's own toggles: the channels (every mode) at the top right and, in PHASE, which band
+ * lines to draw at the bottom left, so the two groups never share a row (on a narrow phone graph
+ * they'd overlap). Tappable and reachable with the iDrive knob.
  */
 @Composable
 private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb: Int, midArgb: Int, highArgb: Int) {
     val view = CrossoverGraphView
-    Box(Modifier.fillMaxSize().padding(start = PAD_LEFT_DP.dp, end = PAD_RIGHT_DP.dp, top = 2.dp)) {
+    Box(Modifier.fillMaxSize().padding(start = PAD_LEFT_DP.dp, end = PAD_RIGHT_DP.dp, bottom = PAD_BOTTOM_DP.dp)) {
         if (mode == CrossoverGraphMode.PHASE) {
-            Row(Modifier.align(Alignment.TopStart), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.align(Alignment.BottomStart), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 GraphChip("LOW", view.lowPhase, ComposeColor(lowArgb)) { view.lowPhase = !view.lowPhase }
                 GraphChip("MID", view.midPhase, ComposeColor(midArgb)) { view.midPhase = !view.midPhase }
                 if (highActive) GraphChip("HIGH", view.highPhase, ComposeColor(highArgb)) { view.highPhase = !view.highPhase }
@@ -422,12 +424,19 @@ private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb:
     }
 }
 
+/** A small toggle whose tap target is the full 48dp tall (the pill drawn inside stays small). */
 @Composable
 private fun GraphChip(text: String, on: Boolean, tint: ComposeColor, onClick: () -> Unit) {
     Box(
         Modifier
-            .background(ComposeColor.Black.copy(alpha = if (on) 0.75f else 0.55f), RoundedCornerShape(10.dp))
+            .height(48.dp)
             .clickable(onClick = onClick)
+            .padding(horizontal = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+    Box(
+        Modifier
+            .background(ComposeColor.Black.copy(alpha = if (on) 0.75f else 0.55f), RoundedCornerShape(10.dp))
             .padding(horizontal = 9.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -437,6 +446,7 @@ private fun GraphChip(text: String, on: Boolean, tint: ComposeColor, onClick: ()
             fontSize = 12.sp,
             fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
         )
+    }
     }
 }
 
@@ -493,7 +503,7 @@ private fun drawBothModeKey(nc: Canvas, left: Float, top: Float, density: Float,
 
 /** ALIGN's one line of explanation, under the overlay's toggles. */
 private fun drawAlignKey(nc: Canvas, left: Float, top: Float, density: Float, legendPaint: Paint) {
-    nc.drawText("LOW vs MID PHASE  ·  0 = IN STEP  ·  ±180 = CANCELLING", left + 8f * density, top + 34f * density, legendPaint)
+    nc.drawText("LOW vs MID PHASE  ·  0 = IN STEP  ·  ±180 = CANCELLING", left + 8f * density, top + 58f * density, legendPaint)
 }
 
 /**
