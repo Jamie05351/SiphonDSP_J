@@ -928,8 +928,8 @@ class NativeBmwDspValuesTest {
         assertEquals(8.0, NativeBmwDspValues.virtualBassRange(values), 1e-9)
         values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = Float.NaN
         assertEquals(5.0, NativeBmwDspValues.virtualBassRange(values), 1e-9)
-        // The harmonics really reach the 4th of the highest rebuilt note (0.85 x 35 x 4 = 119 Hz),
-        // whatever the band allows above that; a narrower band trims them.
+        // The harmonics mostly reach the 4th of a note at the input corner (0.85 x 35 x 4 = 119 Hz),
+        // with only a steep tail above; a narrower band trims them.
         values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 5f
         assertEquals(119.0, NativeBmwDspValues.virtualBassHarmonicsTopHz(values), 1e-9)
         values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 3f
