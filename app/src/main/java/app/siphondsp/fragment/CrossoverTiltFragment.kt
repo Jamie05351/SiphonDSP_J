@@ -21,16 +21,18 @@ import app.siphondsp.compose.screens.CrossoverGraphMode
 import app.siphondsp.compose.screens.CrossoverLowMidPage
 import app.siphondsp.compose.screens.CrossoverMidHighPage
 import app.siphondsp.compose.screens.CrossoverTiltPage
+import app.siphondsp.compose.screens.CrossoverVirtualBassPage
 
 /**
- * Crossovers & Tilt workspace -- three Compose pages:
+ * Crossovers & Tilt workspace -- four Compose pages:
  * - [CrossoverLowMidPage] -- the response graph over the Low lowpass / Mid highpass / Subsonic
  *   rows.
  * - [CrossoverMidHighPage] -- the same graph under the master 3-way switch, over the Mid/High
  *   corner and Mid-align rows, plus a deep link to the full All-pass screen.
- * - [CrossoverTiltPage] -- the same graph beside the Tonality Tilt switch, amount and pivot, and
- *   the Virtual Bass switch, cut, amount, warm/punch character and sub removal.
- * The two crossover pages share one graph-mode choice, held here.
+ * - [CrossoverTiltPage] -- the same graph beside the Tonality Tilt switch, amount and pivot.
+ * - [CrossoverVirtualBassPage] -- the same graph beside the Virtual Bass switch, reach, amount,
+ *   range, warm/punch character, response and sub removal.
+ * The pages share one graph-mode choice, held here.
  *
  * Both read/write the same `NativeBmwDspValues` indices via `BmwDspState` and broadcast the same
  * way. Phase 11.1: hosted directly by Compose's own `HorizontalPager` instead of the View-based
@@ -54,7 +56,7 @@ class CrossoverTiltFragment : Fragment() {
     }
 
     companion object {
-        const val PAGE_COUNT = 3
+        const val PAGE_COUNT = 4
     }
 }
 
@@ -65,7 +67,8 @@ private fun CrossoverTiltPager(pagerState: PagerState) {
         when (page) {
             0 -> CrossoverLowMidPage(graphMode, { graphMode = it })
             1 -> CrossoverMidHighPage(graphMode, { graphMode = it })
-            else -> CrossoverTiltPage(graphMode, { graphMode = it })
+            2 -> CrossoverTiltPage(graphMode, { graphMode = it })
+            else -> CrossoverVirtualBassPage(graphMode, { graphMode = it })
         }
     }
 }
