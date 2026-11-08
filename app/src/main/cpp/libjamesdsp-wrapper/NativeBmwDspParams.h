@@ -43,6 +43,9 @@ struct Params {
     bool virtualBassRemoveSub = false;
     // v[303]: the harmonic mix, Warm 0 .. Punchy 1 (v[303] is percent).
     float virtualBassCharacter = .5f;
+    // v[305]: harmonics kept up to this x the cut; v[306]: detector release, ms.
+    float virtualBassRange = 5.f;
+    float virtualBassResponseMs = 200.f;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the

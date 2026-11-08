@@ -22,7 +22,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 305;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 307;  // == NativeBmwDspValues.SIZE
 
 // --- global scalars -------------------------------------------------------------------------
 inline constexpr int kEnabled = 0;
@@ -244,6 +244,10 @@ inline constexpr int kVirtualBassCharacter = 303;  // percent, 0..100
 // Added in the 304 -> 305 growth: the Low subsonic high-pass's slope, 0 = LR4 (24 dB/oct, the
 // original and default), 1 = BW2 (12 dB/oct, half the phase turn).
 inline constexpr int kSubsonicSlope = 304;
+// Virtual Bass range and response (added in the 305 -> 307 growth): how far above the reach the
+// harmonics are kept (x the reach), and the detector's release.
+inline constexpr int kVirtualBassRange = 305;     // x the reach, 3..8
+inline constexpr int kVirtualBassResponse = 306;  // release, ms, 100..500
 
 }  // namespace nbschema
 

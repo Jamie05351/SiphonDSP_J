@@ -406,3 +406,7 @@
 
 # 304  Subsonic slope (added in the 304 -> 305 growth)
 0            # 304 subsonicSlope (0 = LR4, 1 = BW2)
+
+# 305..306  Virtual Bass range and response (added in the 305 -> 307 growth)
+5            # 305 virtualBassRange (harmonics kept up to x the reach, 3..8)
+200          # 306 virtualBassResponse (detector release, ms, 100..500)

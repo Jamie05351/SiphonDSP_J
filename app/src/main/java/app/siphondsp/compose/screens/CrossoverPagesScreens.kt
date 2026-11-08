@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import app.siphondsp.R
 import app.siphondsp.activity.GainLimiterActivity
 import app.siphondsp.compose.controls.ArtGroupHeader
@@ -259,15 +260,8 @@ fun CrossoverMidHighPage(
  * The third Crossovers page: Tonality Tilt, beside the same response graph as the other two (it
  * already includes the tilt, so Amount and Pivot show on it as they change). The section switch
  * sits in the column's header; Amount and Pivot stay adjustable while it is off, so they can be
- * set before it is switched on.
- *
- * Under it, **Virtual Bass**: notes below the Woofer reach -- the lowest note the woofers really
- * play, e.g. where the subsonic HPF starts -- rebuilt as harmonics they can play (the ear hears
- * the missing fundamental); notes above it are left alone. Amount is the harmonics' level;
- * Warm ↔ Punch their mix (even harmonics for a round, warm bass; more of the 3rd for punch);
- * Remove sub gently thins what lies below the reach (never the woofers' own band), sparing
- * excursion -- that shows on the graph, the harmonics (not a filter) don't.
- * Like Tilt, its settings stay adjustable while it is off.
+ * set before it is switched on. Virtual Bass, which shared this page, has its own: see
+ * [CrossoverVirtualBassPage].
  */
 @Composable
 fun CrossoverTiltPage(
@@ -280,7 +274,6 @@ fun CrossoverTiltPage(
     val title = stringResource(R.string.bmw_dsp_tilt_section)
     val amount = stringResource(R.string.bmw_dsp_tilt_amount)
     val pivot = stringResource(R.string.bmw_dsp_tilt_pivot)
-    val bassColor = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
 
     val controls: @Composable (ControlRow) -> Unit = { row ->
         ArtGroupHeader(
@@ -298,26 +291,65 @@ fun CrossoverTiltPage(
             tiltColor, row(132, 48), displayScale = endGain,
         )
         DspArtSlider(dsp, pivot, NativeBmwDspValues.INDEX_TILT_FREQ, 200f..2000f, 1f, "Hz", tiltColor, row(192, 48))
+    }
 
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
+}
+
+/**
+ * The fourth Crossovers page: **Virtual Bass**, beside the same response graph. Notes below the
+ * Woofer reach -- the lowest note the woofers really play, e.g. where the subsonic HPF starts --
+ * are rebuilt as harmonics they can play (the ear hears the missing fundamental); notes above it
+ * are left alone.
+ * - Amount: the harmonics' level.
+ * - Range: how far up the harmonics are kept, x the reach (the line under the controls says where
+ *   that lands in Hz). Lower keeps them on the woofers; higher reaches up toward the mids.
+ * - Warm ↔ Punch: their mix (even harmonics for a round, warm bass; more of the 3rd for punch).
+ * - Response: how quickly they follow each note's decay -- fast is tighter and punchier, slow is
+ *   smoother and fuller.
+ * - Remove sub: gently thins what lies below the reach (never the woofers' own band), sparing
+ *   excursion. That shows on the graph; the harmonics (not a filter) don't.
+ * Its settings stay adjustable while it is off.
+ */
+@Composable
+fun CrossoverVirtualBassPage(
+    graphMode: CrossoverGraphMode,
+    onGraphModeChange: (CrossoverGraphMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dsp = rememberBmwDspState()
+    val bassColor = Color(BmwDashboardSkin.SLIDER_LOW_BAND_COLOR)
+
+    val controls: @Composable (ControlRow) -> Unit = { row ->
         ArtGroupHeader(
             title = "Virtual Bass",
             accent = bassColor,
-            modifier = row(244, 40),
+            modifier = row(80, 40),
             checked = dsp.isOn(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED),
             onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED, if (on) 1f else 0f) },
         )
         DspArtSlider(
             dsp, "Woofer reach", NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ,
             NativeBmwDspValues.VIRTUAL_BASS_MIN_HZ..NativeBmwDspValues.VIRTUAL_BASS_MAX_HZ,
-            NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(286, 48),
+            NativeBmwDspValues.VIRTUAL_BASS_STEP_HZ, "Hz", bassColor, row(126, 48),
         )
         DspArtSlider(
-            dsp, "Amount", NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT, 0f..100f, 5f, "%", bassColor, row(336, 48),
+            dsp, "Amount", NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT, 0f..100f, 5f, "%", bassColor, row(178, 48),
+        )
+        DspArtSlider(
+            dsp, "Range", NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE,
+            NativeBmwDspValues.VIRTUAL_BASS_MIN_RANGE..NativeBmwDspValues.VIRTUAL_BASS_MAX_RANGE,
+            NativeBmwDspValues.VIRTUAL_BASS_STEP_RANGE, "×", bassColor, row(230, 48),
         )
         // 0 = Warm (even harmonics), 100 = Punchy (more of the 3rd).
         DspArtSlider(
             dsp, "Warm ↔ Punch", NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER, 0f..100f, 5f, "%", bassColor,
-            row(386, 48),
+            row(282, 48),
+        )
+        DspArtSlider(
+            dsp, "Response", NativeBmwDspValues.INDEX_VIRTUAL_BASS_RESPONSE,
+            NativeBmwDspValues.VIRTUAL_BASS_MIN_RESPONSE_MS..NativeBmwDspValues.VIRTUAL_BASS_MAX_RESPONSE_MS,
+            NativeBmwDspValues.VIRTUAL_BASS_STEP_RESPONSE_MS, "ms", bassColor, row(334, 48),
         )
         ArtSwitchRow(
             label = "Remove sub",
@@ -325,10 +357,22 @@ fun CrossoverTiltPage(
             onCheckedChange = { on ->
                 dsp.commit(NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB, if (on) 1f else 0f)
             },
-            // Ends at y 472, where the head unit's page ends (the activity keeps an 8dp border).
-            modifier = row(436, 36),
+            modifier = row(386, 36),
             labelWidth = ControlLabelWidth,
         )
+        // Where the harmonics land, from the reach and range as the engine clamps them (shown
+        // whether or not it's on, as the controls are).
+        val shown = dsp.values.copyOf().also { it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f }
+        val fromHz = NativeBmwDspValues.virtualBassCutHz(shown).roundToInt()
+        val toHz = NativeBmwDspValues.virtualBassTopHz(shown).roundToInt()
+        Box(row(430, 36), contentAlignment = Alignment.CenterStart) {
+            Text(
+                text = "Harmonics $fromHz – $toHz Hz",
+                color = bassColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 
     CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)

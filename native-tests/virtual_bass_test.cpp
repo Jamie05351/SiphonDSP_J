@@ -18,9 +18,11 @@ namespace {
 
 // Runs a VirtualBass at cut on a centred sine of amplitude amp at freqHz and returns the left
 // output (interleaved L/R) after a warm-up long enough for the envelope and filters to settle.
-std::vector<float> runStage(float cut, double freqHz, double amp, float removeMix, float gain, float character = .5f) {
+std::vector<float> runStage(float cut, double freqHz, double amp, float removeMix, float gain, float character = .5f,
+                            float range = VirtualBass::kDefaultRange,
+                            float responseMs = VirtualBass::kDefaultResponseMs) {
     VirtualBass vb;
-    vb.rebuild(cut, kSampleRate);
+    vb.rebuild(cut, range, responseMs, kSampleRate);
     const std::size_t warm = 48000, measure = 48000;
     const double w = 2.0 * kPi * freqHz / kSampleRate;
     std::vector<float> out(2 * measure);
@@ -102,6 +104,51 @@ TEST_CASE("virtual bass rebuilds a 30 Hz tone as its 60 and 90 Hz harmonics") {
     CHECK(std::fabs(linToDb(channelMagnitudeAt(out, 0, 60.0)) - linToDb(channelMagnitudeAt(out, 1, 60.0))) < 1e-3);
 }
 
+TEST_CASE("virtual bass range sets how far up the harmonics reach") {
+    // A 30 Hz tone at a 40 Hz cut: its 4th harmonic is 120 Hz. At range 3 that is the top corner
+    // (an LR4, -6 dB); at range 8 the corner is 320 Hz, so it passes. The 2nd (60 Hz) barely moves.
+    const double amp = 0.3;
+    const auto narrow = runStage(40.f, 30.0, amp, 0.f, 1.f, .5f, VirtualBass::kMinRange);
+    const auto wide = runStage(40.f, 30.0, amp, 0.f, 1.f, .5f, VirtualBass::kMaxRange);
+    const double h4Narrow = relDb(narrow, 120.0, amp), h4Wide = relDb(wide, 120.0, amp);
+    const double h2Narrow = relDb(narrow, 60.0, amp), h2Wide = relDb(wide, 60.0, amp);
+    INFO("120 Hz: range 3 ", h4Narrow, " dB, range 8 ", h4Wide, " dB;  60 Hz: ", h2Narrow, " / ", h2Wide, " dB");
+    CHECK(h4Wide - h4Narrow > 4.5);
+    CHECK(std::fabs(h2Wide - h2Narrow) < 1.5);
+    // Out-of-range values clamp rather than misbehave.
+    const auto clamped = runStage(40.f, 30.0, amp, 0.f, 1.f, .5f, 100.f);
+    CHECK(std::fabs(relDb(clamped, 120.0, amp) - h4Wide) < 0.05);
+}
+
+TEST_CASE("virtual bass response sets how soon the harmonics follow a note that drops") {
+    // A 30 Hz note that falls 20 dB at once. The envelope releases from the loud level, and while
+    // it is still above the note the harmonics come out smaller than the bass now warrants. A fast
+    // release has caught up by 250..600 ms after the drop; a slow one hasn't. Measured on the added
+    // signal alone (output minus input, sub removal off).
+    auto addedAfterDrop = [](float responseMs) {
+        VirtualBass vb;
+        vb.rebuild(40.f, VirtualBass::kDefaultRange, responseMs, kSampleRate);
+        const double w = 2.0 * kPi * 30.0 / kSampleRate;
+        const std::size_t drop = 48000, from = drop + 12000, to = drop + 28800;
+        std::vector<float> added;
+        for (std::size_t n = 0; n < to; ++n) {
+            const double amp = n < drop ? 0.5 : 0.05;
+            const float s = static_cast<float>(amp * std::sin(w * static_cast<double>(n)));
+            float l = s, r = s;
+            vb.process(l, r, 1.f, 0.f, 1.f, .5f);
+            if (n >= from) {
+                added.push_back(l - s);
+                added.push_back(r - s);
+            }
+        }
+        return linToDb(channelMagnitudeAt(added, 0, 60.0));
+    };
+    const double fast = addedAfterDrop(VirtualBass::kMinResponseMs);
+    const double slow = addedAfterDrop(VirtualBass::kMaxResponseMs);
+    INFO("60 Hz harmonic 250..600 ms after the drop: fast ", fast, " dB  slow ", slow, " dB");
+    CHECK(fast - slow > 3.0);
+}
+
 TEST_CASE("virtual bass harmonics scale with the bass level, not a fixed distortion colour") {
     // 18 dB less bass in: 18 dB less harmonics out, at every harmonic.
     const auto loud = runStage(50.f, 30.0, 0.4, 0.f, 1.f);
@@ -175,7 +222,7 @@ TEST_CASE("a bass line the woofers can play stays clean (no intermodulation mud)
     // Two notes above a 40 Hz reach, as a bass line with a kick under it: the sum/difference
     // products that made the old stage sound like distortion must stay far down.
     VirtualBass vb;
-    vb.rebuild(40.f, kSampleRate);
+    vb.rebuild(40.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
     const double f1 = 55.0, f2 = 73.4, amp = 0.25;
     const std::size_t warm = 48000, measure = 48000;
     std::vector<float> out(2 * measure);
@@ -215,6 +262,8 @@ TEST_CASE("virtual bass is off by default and then leaves the signal bit-identic
     CHECK(stock[sch::kVirtualBassAmount] == 50.f);
     CHECK(stock[sch::kVirtualBassRemoveSub] == 0.f);
     CHECK(stock[sch::kVirtualBassCharacter] == 50.f);
+    CHECK(stock[sch::kVirtualBassRange] == 5.f);
+    CHECK(stock[sch::kVirtualBassResponse] == 200.f);
     // Different (inactive) settings change nothing while it's off.
     NativeBmwDspProcessor a, b;
     auto ca = config(false), cb = config(false, 80.f, 100.f, true, 0.f);
@@ -292,7 +341,9 @@ TEST_CASE("changing the virtual bass cut or amount while it plays doesn't click"
         float from, to;
     };
     for (Edit e : {Edit{sch::kVirtualBassFreq, 50.f, 55.f}, Edit{sch::kVirtualBassFreq, 25.f, 60.f},
-                   Edit{sch::kVirtualBassAmount, 0.f, 100.f}, Edit{sch::kVirtualBassCharacter, 0.f, 100.f}}) {
+                   Edit{sch::kVirtualBassAmount, 0.f, 100.f}, Edit{sch::kVirtualBassCharacter, 0.f, 100.f},
+                   Edit{sch::kVirtualBassRange, 5.f, 5.5f}, Edit{sch::kVirtualBassRange, 3.f, 8.f},
+                   Edit{sch::kVirtualBassResponse, 200.f, 225.f}, Edit{sch::kVirtualBassResponse, 100.f, 500.f}}) {
         NativeBmwDspProcessor proc;
         auto c = config(true);
         c[e.slot] = e.from;
@@ -327,7 +378,8 @@ TEST_CASE("changing the virtual bass cut or amount while it plays doesn't click"
              "  step after ", edit);
         // One screen step must be seamless; the whole reach range in one go (a preset load) retunes
         // every filter at once and is allowed a little more, as Mono Bass's full-range jump is.
-        const bool wholeRange = e.slot == sch::kVirtualBassFreq && e.to - e.from > 10.f;
+        const bool wholeRange = (e.slot == sch::kVirtualBassFreq && e.to - e.from > 10.f) ||
+                                (e.slot == sch::kVirtualBassRange && e.to - e.from > 1.f);
         CHECK(edit < std::max(steadyStep, settledStep) * (wholeRange ? 2.f : 1.5f));
     }
 }
@@ -338,7 +390,8 @@ TEST_CASE("virtual bass settings outside their ranges are clamped, non-finite on
     auto c = config(true, 500.f, 400.f);
     CHECK(proc.configure(c.data(), c.size()));
     for (int slot : {sch::kVirtualBassEnabled, sch::kVirtualBassFreq, sch::kVirtualBassAmount,
-                     sch::kVirtualBassRemoveSub, sch::kVirtualBassCharacter}) {
+                     sch::kVirtualBassRemoveSub, sch::kVirtualBassCharacter, sch::kVirtualBassRange,
+                     sch::kVirtualBassResponse}) {
         auto bad = config(true);
         bad[slot] = std::numeric_limits<float>::quiet_NaN();
         INFO("slot ", slot);
@@ -389,7 +442,7 @@ TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     for (float character : {0.f, .5f, 1.f})
     for (double f : {20.0, 30.0, 45.0}) {
         VirtualBass vb;
-        vb.rebuild(60.f, kSampleRate);
+        vb.rebuild(60.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
         const double amp = 0.7, w = 2.0 * kPi * f / kSampleRate;
         float worst = 0.f;
         for (int n = 0; n < 96000; ++n) {
@@ -405,7 +458,7 @@ TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
 
 TEST_CASE("a non-finite sample doesn't latch virtual bass") {
     VirtualBass vb;
-    vb.rebuild(50.f, kSampleRate);
+    vb.rebuild(50.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
     const double w = 2.0 * kPi * 30.0 / kSampleRate;
     const int measureFrom = 48000, total = 96000;
     std::vector<float> out(2 * (total - measureFrom));
@@ -433,7 +486,7 @@ TEST_CASE("virtual bass never raises a peak past the allowance auto headroom mak
     // that must cover the real worst case -- but no more, or the system just gets quieter.
     auto peakRiseDb = [](float reach, double f, float amount, float removeMix, float character) {
         VirtualBass vb;
-        vb.rebuild(reach, kSampleRate);
+        vb.rebuild(reach, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
         double inPeak = 0, outPeak = 0;
         for (int n = 0; n < 144000; ++n) {
             const double s = 0.5 * std::sin(2 * kPi * f * n / kSampleRate);
@@ -469,7 +522,7 @@ TEST_CASE("programme-like bass stays within the auto-headroom allowance too") {
     // half faded (the state it passes through while switching).
     auto riseDb = [](float reach, float removeMix, float character, auto gen) {
         VirtualBass vb;
-        vb.rebuild(reach, kSampleRate);
+        vb.rebuild(reach, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
         double inPeak = 0, outPeak = 0;
         for (int n = 0; n < 144000; ++n) {
             const float s = gen(n);
@@ -525,7 +578,7 @@ TEST_CASE("the peak cap holds the harmonics to the allowance whatever lines up w
     // the output must stay within 1 + rise x gain, kept, removed and half faded, at two Amounts.
     auto peaks = [](float reach, float removeMix, float gain, float character, auto gen) {
         VirtualBass vb;
-        vb.rebuild(reach, kSampleRate);
+        vb.rebuild(reach, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
         double peak = 0;
         for (int n = 0; n < 48000; ++n) {
             float l = gen(n), r = l;
@@ -571,7 +624,7 @@ TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
     // for this note, measured on the uncapped stage), kept or removed.
     for (float removeMix : {0.f, 1.f}) {
         VirtualBass vb;
-        vb.rebuild(40.f, kSampleRate);
+        vb.rebuild(40.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
         std::vector<float> out(2 * 48000);
         for (int n = 0; n < 48000; ++n) {
             float l = 0.5f * static_cast<float>(std::sin(2 * kPi * 30.0 * n / kSampleRate)), r = l;
@@ -588,7 +641,7 @@ TEST_CASE("the peak cap leaves a lone note's harmonics alone") {
 TEST_CASE("a bass note panned to one side still gets its harmonics, in both channels") {
     // The cap bounds the stereo level, so a silent right channel must not veto the harmonics.
     VirtualBass vb;
-    vb.rebuild(40.f, kSampleRate);
+    vb.rebuild(40.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
     std::vector<float> out(2 * 48000);
     for (int n = 0; n < 48000; ++n) {
         float l = 0.5f * static_cast<float>(std::sin(2 * kPi * 30.0 * n / kSampleRate)), r = 0.f;
@@ -605,7 +658,7 @@ TEST_CASE("a bass note panned to one side still gets its harmonics, in both chan
 
 TEST_CASE("virtual bass stays silent on silence") {
     VirtualBass vb;
-    vb.rebuild(50.f, kSampleRate);
+    vb.rebuild(50.f, VirtualBass::kDefaultRange, VirtualBass::kDefaultResponseMs, kSampleRate);
     for (int n = 0; n < 48000; ++n) {
         float l = 0.f, r = 0.f;
         vb.process(l, r, 1.f, 1.f, 1.f, .5f);

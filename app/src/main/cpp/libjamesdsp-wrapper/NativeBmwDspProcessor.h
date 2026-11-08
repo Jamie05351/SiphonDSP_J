@@ -135,7 +135,7 @@ public:
     // 303 -- Virtual Bass character, Warm 0 .. Punchy 100 %, added in the 303 -> 304 growth.
     //
     // 304 -- subsonic slope, 0 = LR4 (default) / 1 = BW2, added in the 304 -> 305 growth.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 305 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 307 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -316,7 +316,7 @@ private:
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
         DirtyMonoBass = 1u << 27,        // Mono Bass split frequency: retune (keeps state)
         DirtyMonoBassResume = 1u << 28,  // Mono Bass switched on from silent: clear its state
-        DirtyVirtualBass = 1u << 29,        // Virtual Bass cut frequency: retune (keeps state)
+        DirtyVirtualBass = 1u << 29,        // Virtual Bass cut, range or response: retune (keeps state)
         DirtyVirtualBassResume = 1u << 30,  // Virtual Bass switched on from silent: clear its state
         DirtyAll = 0xffffffffu,
     };
