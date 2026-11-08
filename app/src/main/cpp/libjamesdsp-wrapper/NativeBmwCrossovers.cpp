@@ -283,8 +283,9 @@ void MonoBass::process(float& l, float& r, float mix) {
     }
 }
 
-void VirtualBass::rebuild(float cutHz, float sampleRate) {
+void VirtualBass::rebuild(float cutHz, float range, float responseMs, float sampleRate) {
     const float fc = clampf(cutHz, kMinHz, kMaxHz);
+    const float top = fc * clampf(range, kMinRange, kMaxRange);
     constexpr float kButterworthQ = 0.70710678f;
     // 4th-order Butterworth as two sections; squared, an LR8.
     constexpr float kBw4QA = 0.54119610f, kBw4QB = 1.30656296f;
@@ -297,11 +298,12 @@ void VirtualBass::rebuild(float cutHz, float sampleRate) {
     makeLowPass(inLpB2_, inFc, kBw4QB, sampleRate);
     makeHighPass(outHp1_, fc, kButterworthQ, sampleRate);
     makeHighPass(outHp2_, fc, kButterworthQ, sampleRate);
-    makeLowPass(outLp1_, fc * kTopRatio, kButterworthQ, sampleRate);
-    makeLowPass(outLp2_, fc * kTopRatio, kButterworthQ, sampleRate);
+    makeLowPass(outLp1_, top, kButterworthQ, sampleRate);
+    makeLowPass(outLp2_, top, kButterworthQ, sampleRate);
     makeHighPass(cutL_, fc * kRemovalRatio, kButterworthQ, sampleRate);
     makeHighPass(cutR_, fc * kRemovalRatio, kButterworthQ, sampleRate);
-    release_ = std::exp(-1.f / (kReleaseSeconds * sampleRate));
+    release_ = std::exp(-1.f / (clampf(responseMs, kMinResponseMs, kMaxResponseMs) * .001f * sampleRate));
+    peakRelease_ = std::exp(-1.f / (kPeakReleaseSeconds * sampleRate));
     capRecovery_ = 1.f - std::exp(-1.f / (kCapRecoverySeconds * sampleRate));
 }
 void VirtualBass::clear() {
@@ -358,7 +360,7 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
     // recovers smoothly; it's the harmonics alone that duck, not the music, and only on the rare
     // peak where the added harmonics land in step with the note's own.
     peak_ = std::max(std::max(std::max(std::fabs(l), std::fabs(r)), std::max(std::fabs(baseL), std::fabs(baseR))),
-                     peak_ * release_);
+                     peak_ * peakRelease_);
     const float rise = (removeMix > 0.f ? kPeakRiseRemoved : kPeakRiseKept) * std::max(gain, 0.f);
     const float limit = (1.f + rise) * peak_;
     auto allowed = [&](float base) {

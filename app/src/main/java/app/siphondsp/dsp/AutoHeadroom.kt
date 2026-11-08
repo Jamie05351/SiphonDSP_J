@@ -99,11 +99,11 @@ class AutoHeadroomCalculator(private val pointCount: Int = DEFAULT_POINT_COUNT) 
         var peak = AutoHeadroom.peakDb(coarseCurves)
         if (!coarseCurves.processorEnabled) return peak
 
-        // Virtual Bass: below 5x its cut (the sub plus its harmonics) the level can reach
+        // Virtual Bass: below the top of its harmonics (cut x Range: the sub plus its harmonics) the level can reach
         // (1 + Amount) x what the response there passes, so that region's peak -- coarse and
         // refined alike -- counts with the allowance on top.
         val boostDb = NativeBmwDspValues.virtualBassWorstCaseBoostDb(values)
-        val reachHz = NativeBmwDspValues.virtualBassCutHz(values) * NativeBmwDspValues.VIRTUAL_BASS_TOP_RATIO
+        val reachHz = NativeBmwDspValues.virtualBassTopHz(values)
         fun withVirtualBass(curves: BmwResponseCurves, peakSoFar: Double): Double =
             // A window with no point below reachHz (a fine pass up in the treble) reads -inf, not
             // 0 dB, so the allowance isn't added to a peak that isn't there.

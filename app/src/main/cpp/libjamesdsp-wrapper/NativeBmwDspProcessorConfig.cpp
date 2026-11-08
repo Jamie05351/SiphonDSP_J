@@ -126,6 +126,10 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.virtualBassAmount = clampIn(v[nbschema::kVirtualBassAmount], 0, 100) * .01f;
     next.virtualBassRemoveSub = flagIn(v[nbschema::kVirtualBassRemoveSub]);
     next.virtualBassCharacter = clampIn(v[nbschema::kVirtualBassCharacter], 0, 100) * .01f;
+    next.virtualBassRange = clampIn(v[nbschema::kVirtualBassRange], NativeBmwDsp::VirtualBass::kMinRange,
+                                    NativeBmwDsp::VirtualBass::kMaxRange);
+    next.virtualBassResponseMs = clampIn(v[nbschema::kVirtualBassResponse], NativeBmwDsp::VirtualBass::kMinResponseMs,
+                                         NativeBmwDsp::VirtualBass::kMaxResponseMs);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);
@@ -616,7 +620,8 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
     if (!p_.monoBassEnabled && next.monoBassEnabled && monoBassMix_ == 0.f) {
         dirty |= DirtyMonoBassResume;
     }
-    if (changed(next.virtualBassFreq, p_.virtualBassFreq)) {
+    if (changed(next.virtualBassFreq, p_.virtualBassFreq) || changed(next.virtualBassRange, p_.virtualBassRange) ||
+        changed(next.virtualBassResponseMs, p_.virtualBassResponseMs)) {
         dirty |= DirtyVirtualBass;
     }
     // Likewise Virtual Bass: skipped once fully faded out, so switching it back on starts its
@@ -1018,7 +1023,7 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         monoBass_.clear();
     }
     if (d & DirtyVirtualBass) {
-        virtualBass_.rebuild(p_.virtualBassFreq, sampleRate_);
+        virtualBass_.rebuild(p_.virtualBassFreq, p_.virtualBassRange, p_.virtualBassResponseMs, sampleRate_);
     }
     if (d & DirtyVirtualBassResume) {
         virtualBass_.clear();
@@ -1056,7 +1061,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
     monoBass_.clear();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
-    virtualBass_.rebuild(p_.virtualBassFreq, sampleRate_);
+    virtualBass_.rebuild(p_.virtualBassFreq, p_.virtualBassRange, p_.virtualBassResponseMs, sampleRate_);
     virtualBass_.clear();
     snapVirtualBass();
     detector_.rebuild(sampleRate_);

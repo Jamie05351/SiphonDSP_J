@@ -76,6 +76,22 @@ class AutoHeadroomTest {
     }
 
     @Test
+    fun virtualBassAllowanceCoversHowFarUpItsRangeReaches() {
+        // A narrow +9 dB bell at 380 Hz, with a 50 Hz reach. At range 3 the harmonics stop at
+        // 150 Hz, far below it, so it sets the headroom alone; at range 8 they reach 400 Hz, so
+        // the bell's peak counts with the allowance on top.
+        val bell = peq(full = bands(ParametricEqBand(380.0, 9.0, 4.0)))
+        fun vb(range: Float) = values {
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 50f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT] = 100f
+            it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = range
+        }
+        assertEquals(headroom(peq = bell), headroom(vb(3f), bell), 0.05f)
+        assertEquals(headroom(peq = bell) - 3.81f, headroom(vb(8f), bell), 0.1f)
+    }
+
+    @Test
     fun virtualBassAddsNothingWhenTheBassRegionIsQuietAndTheRefinedPeakIsInTheTreble() {
         // -12 dB preamp and a +9 dB bell at 4 kHz: the loudest point is -3 dB, up in the treble,
         // and the bass region sits at -12 dB, so even +6 dB of allowance there (-6 dB) needs no

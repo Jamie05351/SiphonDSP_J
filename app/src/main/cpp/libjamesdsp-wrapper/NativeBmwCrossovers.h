@@ -226,8 +226,8 @@ private:
 //          lowpass at kInputRatio * cut (48 dB/oct from just under the reach, so a note a third
 //          above it is ~27 dB down and barely feeds the harmonics -- that's what keeps bass lines
 //          the woofers can play from turning to mud)
-//   u    = m / env(m), clamped to [-1, 1]   (env: instant-attack peak follower, kReleaseSeconds)
-//   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. kTopRatio * cut],
+//   u    = m / env(m), clamped to [-1, 1]   (env: instant-attack peak follower, Response release)
+//   h    = env * (w2 T2(u) + w3 T3(u) + w4 T4(u)), band-limited to [cut .. range * cut],
 //          the weights blended between a Warm and a Punchy set by Character
 //          (w2 + w3 + w4 = 1, so |h| <= env before the band-limiting)
 //   out  = base + gain * h on both channels, base = in, or, when the sub is removed, in through a
@@ -241,6 +241,14 @@ private:
 class VirtualBass {
 public:
     static constexpr float kMinHz = 25.f, kMaxHz = 60.f, kDefaultHz = 40.f;
+    // Range: the harmonics are kept from the cut up to this many times it. Lower keeps them on the
+    // woofers; higher lets them reach further up (a stronger sense of bass, more of it on the mids).
+    static constexpr float kMinRange = 3.f, kMaxRange = 8.f, kDefaultRange = 5.f;
+    // Response: the detector envelope's release. Faster follows each note's decay (tighter, punchier
+    // kicks); slower holds the harmonics through it (smoother, fuller lines). The floor stays above
+    // the period of the lowest note the input band passes (an octave under the lowest cut, ~12.5 Hz
+    // = 80 ms), so the envelope never sags inside a single cycle.
+    static constexpr float kMinResponseMs = 100.f, kMaxResponseMs = 500.f, kDefaultResponseMs = 200.f;
     // Remove sub's HP2 sits this far below the reach (Kotlin mirrors it for the response graph).
     static constexpr float kRemovalRatio = .8f;
     // The most the harmonics may raise a peak, as 20 log10(1 + rise x gain), over the recent stereo
@@ -256,8 +264,9 @@ public:
     // The input highpass's corner: an octave under the reach, which at the lowest reach (25 Hz) is
     // below the 20 Hz the other filters stop at.
     static constexpr float kInputHpRatio = .5f;
-    // Retunes every filter for the cut frequency, keeping their state (see Biquad::retune).
-    void rebuild(float cutHz, float sampleRate);
+    // Retunes every filter for the cut frequency and range, keeping their state (see
+    // Biquad::retune), and sets the detector's release.
+    void rebuild(float cutHz, float range, float responseMs, float sampleRate);
     void clear();
     // onMix crossfades from the input (0) to the processed signal (1): the on/off transition.
     // removeMix crossfades the base from the input (0) to the input high-passed below the cut (1).
@@ -266,8 +275,8 @@ public:
     void process(float& left, float& right, float onMix, float removeMix, float gain, float character);
 
 private:
-    static constexpr float kTopRatio = 5.f;
-    static constexpr float kReleaseSeconds = 0.2f;
+    // The peak cap's own release, fixed whatever Response is: the recent peak it measures against.
+    static constexpr float kPeakReleaseSeconds = 0.2f;
     // Harmonic weights (2nd, 3rd, 4th) at the two ends of Character, each normalised so it sums
     // to 1 -- and so does any blend of them: at |u| = 1 every T_n is +-1, so the harmonics never
     // peak above the sub's own envelope, at any Character. Warm leans on the even harmonics (the
@@ -281,9 +290,10 @@ private:
     Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band
     Biquad cutL_, cutR_;  // the original sub's removal, per channel
     float env_ = 0.f;
-    float release_ = 0.99989584f;  // exp(-1 / (0.2 s * 48 kHz))
+    float release_ = 0.99989584f;      // env_: exp(-1 / (Response * 48 kHz)), 0.2 s here
+    float peakRelease_ = 0.99989584f;  // peak_: exp(-1 / (kPeakReleaseSeconds * 48 kHz))
     // The peak cap: the recent stereo peak (either channel, input or base, whichever is largest;
-    // instant attack, the same release as env_), and the harmonics' gain under the cap -- it drops
+    // instant attack, kPeakReleaseSeconds), and the harmonics' gain under the cap -- it drops
     // at once to what a peak needs, then recovers over kCapRecoverySeconds.
     static constexpr float kCapRecoverySeconds = 0.03f;
     float peak_ = 0.f;

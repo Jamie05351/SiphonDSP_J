@@ -86,7 +86,7 @@ object NativeBmwDspValues {
     //
     // 304 is the Low subsonic high-pass's slope (0 = LR4, 1 = BW2), added in the 304 -> 305
     // growth. Default LR4, so older saves are unchanged.
-    const val SIZE = 305
+    const val SIZE = 307
 
     const val INDEX_ENABLED = 0
     const val INDEX_LPF_PASS = 1
@@ -426,6 +426,19 @@ object NativeBmwDspValues {
     const val INDEX_SUBSONIC_SLOPE = 304
     const val SUBSONIC_SLOPE_LR4 = 0f
     const val SUBSONIC_SLOPE_BW2 = 1f
+    // Virtual Bass Range: the harmonics are kept from the reach up to this x the reach (native
+    // VirtualBass::kMinRange..kMaxRange). Response: the detector's release, ms (native
+    // kMinResponseMs..kMaxResponseMs) -- faster is punchier, slower smoother.
+    const val INDEX_VIRTUAL_BASS_RANGE = 305
+    const val INDEX_VIRTUAL_BASS_RESPONSE = 306
+    const val VIRTUAL_BASS_MIN_RANGE = 3f
+    const val VIRTUAL_BASS_MAX_RANGE = 8f
+    const val VIRTUAL_BASS_DEFAULT_RANGE = 5f
+    const val VIRTUAL_BASS_STEP_RANGE = 0.5f
+    const val VIRTUAL_BASS_MIN_RESPONSE_MS = 100f
+    const val VIRTUAL_BASS_MAX_RESPONSE_MS = 500f
+    const val VIRTUAL_BASS_DEFAULT_RESPONSE_MS = 200f
+    const val VIRTUAL_BASS_STEP_RESPONSE_MS = 25f
     // The cut is the woofers' reach: the lowest note they really play (e.g. where the subsonic HPF
     // starts). Notes below it are rebuilt as harmonics; notes above it are left alone. Capped at
     // 60 Hz so it can't be set into the band the woofers carry.
@@ -437,8 +450,31 @@ object NativeBmwDspValues {
     const val VIRTUAL_BASS_STEP_HZ = 5f
     const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
     const val VIRTUAL_BASS_DEFAULT_CHARACTER = 50f
-    // The harmonics are band-limited to cut .. this x cut (native VirtualBass::kTopRatio).
-    const val VIRTUAL_BASS_TOP_RATIO = 5.0
+    /** How far up Virtual Bass keeps its harmonics, x its cut, as native clamps it. */
+    fun virtualBassRange(values: FloatArray): Double {
+        val r = values.getOrElse(INDEX_VIRTUAL_BASS_RANGE) { VIRTUAL_BASS_DEFAULT_RANGE }
+        return (if (r.isFinite()) r else VIRTUAL_BASS_DEFAULT_RANGE).coerceIn(VIRTUAL_BASS_MIN_RANGE, VIRTUAL_BASS_MAX_RANGE).toDouble()
+    }
+
+    /** The top of Virtual Bass's harmonics band in Hz (cut x range), or 0 while it's off. */
+    fun virtualBassTopHz(values: FloatArray): Double = virtualBassCutHz(values) * virtualBassRange(values)
+
+    // Virtual Bass's input lowpass (native VirtualBass::kInputRatio x the cut, an LR8) is -6 dB at
+    // its corner and falls 48 dB/oct above it, and the highest harmonic it makes is a note's 4th.
+    const val VIRTUAL_BASS_INPUT_RATIO = 0.85
+    const val VIRTUAL_BASS_HIGHEST_HARMONIC = 4
+
+    /**
+     * Where Virtual Bass's harmonics mostly land, in Hz: up to the 4th harmonic of a note at its
+     * input lowpass corner (where that note is already 6 dB down; notes above it, and so higher
+     * harmonics, fall off steeply), or the top of its band ([virtualBassTopHz]) if that is lower.
+     * Not a hard ceiling: a note at the reach still gives a 4th harmonic about 13 dB down, which
+     * Range's band filter shapes. 0 while off.
+     */
+    fun virtualBassHarmonicsTopHz(values: FloatArray): Double {
+        val made = virtualBassCutHz(values) * VIRTUAL_BASS_INPUT_RATIO * VIRTUAL_BASS_HIGHEST_HARMONIC
+        return minOf(made, virtualBassTopHz(values))
+    }
 
     /** Virtual Bass's cut in Hz as native runs it, or 0 while it's off. */
     fun virtualBassCutHz(values: FloatArray): Double {
@@ -448,7 +484,7 @@ object NativeBmwDspValues {
     }
 
     /**
-     * The most Virtual Bass can raise the peak level below [VIRTUAL_BASS_TOP_RATIO] x its cut, in dB,
+     * The most Virtual Bass can raise the peak level below [virtualBassTopHz], in dB,
      * or 0 while it's off: 20 log10(1 + rise x Amount) (native VirtualBass::kPeakRiseKept /
      * kPeakRiseRemoved). A lone note's harmonics stay inside it on their own -- they never peak in
      * step with the sub, and with Remove sub on what's taken away almost cancels what's added --
@@ -690,6 +726,9 @@ object NativeBmwDspValues {
         VIRTUAL_BASS_DEFAULT_CHARACTER, // 303 virtual bass character % (Warm 0 .. Punchy 100)
         // --- Subsonic slope (304) ---
         SUBSONIC_SLOPE_LR4, // 304 subsonic slope (LR4)
+        // --- Virtual Bass range and response (305..306) ---
+        VIRTUAL_BASS_DEFAULT_RANGE, // 305 virtual bass range (x the reach)
+        VIRTUAL_BASS_DEFAULT_RESPONSE_MS, // 306 virtual bass response (release, ms)
     )
 
     init {
