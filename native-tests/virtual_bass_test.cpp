@@ -435,6 +435,43 @@ TEST_CASE("the engine applies the virtual bass character setting") {
     CHECK(punchy > mid + 3.0);
 }
 
+TEST_CASE("the engine applies the virtual bass range setting") {
+    // Only slot 305 differs. A 30 Hz tone at a 40 Hz reach: the 4th harmonic (120 Hz) sits on the
+    // top corner at range 3 and well inside it at range 8. Taken against the 2nd (60 Hz), so the
+    // crossovers' own shape cancels out.
+    auto fourthOverSecond = [](float range) {
+        auto c = config(true, 40.f, 100.f);
+        c[sch::kVirtualBassRange] = range;
+        return engineDb(c, 30.0, 120.0, 0.2) - engineDb(c, 30.0, 60.0, 0.2);
+    };
+    const double narrow = fourthOverSecond(3.f), wide = fourthOverSecond(8.f);
+    INFO("engine 4th re 2nd: range 3 ", narrow, " dB, range 8 ", wide, " dB");
+    CHECK(wide > narrow + 4.0);
+}
+
+TEST_CASE("the engine applies the virtual bass response setting") {
+    // Only slot 306 differs. A 30 Hz tone drops 20 dB; 250..600 ms later a fast release has let the
+    // harmonics recover to the quiet note's level and a slow one hasn't. The engine's output at
+    // 60 Hz (where the tone itself has nothing) is the 2nd harmonic.
+    auto secondAfterDrop = [](float responseMs) {
+        auto c = config(true, 40.f, 100.f);
+        c[sch::kVirtualBassResponse] = responseMs;
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto loud = sine(30.0, 0.5, 0, 48000);
+        proc.process(loud.data(), loud.size());
+        auto gap = sine(30.0, 0.05, 48000, 12000);
+        proc.process(gap.data(), gap.size());
+        auto win = sine(30.0, 0.05, 60000, 16800);
+        proc.process(win.data(), win.size());
+        return linToDb(channelMagnitudeAt(win, 0, 60.0));
+    };
+    const double fast = secondAfterDrop(100.f), slow = secondAfterDrop(500.f);
+    INFO("engine 60 Hz after the drop: fast ", fast, " dB, slow ", slow, " dB");
+    CHECK(fast > slow + 3.0);
+}
+
 TEST_CASE("virtual bass harmonics never peak above the sub they come from") {
     // Full Amount, sub kept: the added signal (output minus input) stays within the input's peak
     // for a range of sub tones, so the stage can't add more than the sub's own level -- at either
