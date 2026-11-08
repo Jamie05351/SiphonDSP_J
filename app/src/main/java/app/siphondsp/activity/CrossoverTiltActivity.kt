@@ -45,7 +45,7 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
             val finder = isHeadUnitDisplay()
             setContent {
                 BmwDspTheme {
-                    if (finder) ArtPagerFinder(pagerState, CROSSOVER_PAGE_LABELS, WorkspaceArt.finder3)
+                    if (finder) ArtPagerFinder(pagerState, CROSSOVER_PAGE_LABELS, WorkspaceArt.finder4)
                     else DspPagerArrows(pagerState)
                 }
             }
@@ -58,6 +58,6 @@ class CrossoverTiltActivity : DspWorkspaceActivity() {
         const val MODE_CROSSOVER = "crossover"
 
         /** One per CrossoverTiltFragment page, in pager order. */
-        private val CROSSOVER_PAGE_LABELS = listOf("LOW/MID", "MID/HIGH", "TILT")
+        private val CROSSOVER_PAGE_LABELS = listOf("LOW/MID", "MID/HIGH", "TILT", "V-BASS")
     }
 }
