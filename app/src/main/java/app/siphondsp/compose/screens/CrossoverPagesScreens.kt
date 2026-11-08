@@ -302,8 +302,9 @@ fun CrossoverTiltPage(
  * are rebuilt as harmonics they can play (the ear hears the missing fundamental); notes above it
  * are left alone.
  * - Amount: the harmonics' level.
- * - Range: how far up the harmonics are kept, x the reach (the line under the controls says where
- *   that lands in Hz). Lower keeps them on the woofers; higher reaches up toward the mids.
+ * - Range: how far up the harmonics are kept, x the reach. The line under the controls says where
+ *   they really land in Hz: never above the 4th harmonic of the highest note rebuilt (3.4x the
+ *   reach), so Range only trims them below that.
  * - Warm ↔ Punch: their mix (even harmonics for a round, warm bass; more of the 3rd for punch).
  * - Response: how quickly they follow each note's decay -- fast is tighter and punchier, slow is
  *   smoother and fuller.
@@ -360,11 +361,11 @@ fun CrossoverVirtualBassPage(
             modifier = row(386, 36),
             labelWidth = ControlLabelWidth,
         )
-        // Where the harmonics land, from the reach and range as the engine clamps them (shown
-        // whether or not it's on, as the controls are).
+        // Where the harmonics really land (not just the band Range allows), from the reach and range
+        // as the engine clamps them; shown whether or not it's on, as the controls are.
         val shown = dsp.values.copyOf().also { it[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f }
         val fromHz = NativeBmwDspValues.virtualBassCutHz(shown).roundToInt()
-        val toHz = NativeBmwDspValues.virtualBassTopHz(shown).roundToInt()
+        val toHz = NativeBmwDspValues.virtualBassHarmonicsTopHz(shown).roundToInt()
         Box(row(430, 36), contentAlignment = Alignment.CenterStart) {
             Text(
                 text = "Harmonics $fromHz – $toHz Hz",

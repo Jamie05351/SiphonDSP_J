@@ -456,8 +456,23 @@ object NativeBmwDspValues {
         return (if (r.isFinite()) r else VIRTUAL_BASS_DEFAULT_RANGE).coerceIn(VIRTUAL_BASS_MIN_RANGE, VIRTUAL_BASS_MAX_RANGE).toDouble()
     }
 
-    /** The top of Virtual Bass's harmonics in Hz (cut x range), or 0 while it's off. */
+    /** The top of Virtual Bass's harmonics band in Hz (cut x range), or 0 while it's off. */
     fun virtualBassTopHz(values: FloatArray): Double = virtualBassCutHz(values) * virtualBassRange(values)
+
+    // The highest note Virtual Bass rebuilds sits at its input lowpass (native
+    // VirtualBass::kInputRatio x the cut), and the highest harmonic it makes is that note's 4th.
+    const val VIRTUAL_BASS_INPUT_RATIO = 0.85
+    const val VIRTUAL_BASS_HIGHEST_HARMONIC = 4
+
+    /**
+     * Where Virtual Bass's harmonics really land, in Hz: from the cut up to the 4th harmonic of the
+     * highest note it rebuilds, or the top of its band ([virtualBassTopHz]) if that is lower. A
+     * Range above 3.4x widens the band but adds nothing, as no harmonic reaches it. 0 while off.
+     */
+    fun virtualBassHarmonicsTopHz(values: FloatArray): Double {
+        val made = virtualBassCutHz(values) * VIRTUAL_BASS_INPUT_RATIO * VIRTUAL_BASS_HIGHEST_HARMONIC
+        return minOf(made, virtualBassTopHz(values))
+    }
 
     /** Virtual Bass's cut in Hz as native runs it, or 0 while it's off. */
     fun virtualBassCutHz(values: FloatArray): Double {
