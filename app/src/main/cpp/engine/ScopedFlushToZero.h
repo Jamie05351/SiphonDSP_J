@@ -11,9 +11,9 @@
 // floating-point control register back exactly as it was.
 //
 // Denormal (subnormal) arithmetic can be many times slower than normal arithmetic, and a decaying
-// filter or convolver tail sits in that range during fades and silence. The BMW chain flushes its
-// own recursive state by hand (ftz()/ftzd()), but JamesDSP's convolver and limiter don't. Setting
-// the mode for the duration of a process call covers everything that call runs.
+// filter tail sits in that range during fades and silence. The BMW chain flushes its own
+// recursive state by hand (ftz()/ftzd()); setting the mode for the duration of a process call
+// covers everything else that call runs.
 //
 // It must be restored on the way out: the audio thread is a Java thread, and Java code on it
 // relies on IEEE denormals. Reading and writing the control register costs a few cycles, twice

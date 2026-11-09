@@ -2,10 +2,9 @@
 #include <cmath>
 #include "NativeBmwDspMath.h"
 #include "NativeBmwDspProcessor.h"
-// Declarations only -- NOT defining DR_WAV_IMPLEMENTATION here. JdspImpResToolbox.c already
-// defines it once and jamesdsp-wrapper links against jdspimprestoolbox (see CMakeLists.txt),
-// so the actual drwav_* function bodies are resolved from there at link time.
-#include "../libjdspimptoolbox/dr_wav.h"
+// Declarations only -- NOT defining DR_WAV_IMPLEMENTATION here. DrWavImpl.cpp defines it once
+// for the app (native-tests/drwav_impl.cpp for the host tests).
+#include "third_party/dr_wav.h"
 
 namespace NativeBmwDsp {
 

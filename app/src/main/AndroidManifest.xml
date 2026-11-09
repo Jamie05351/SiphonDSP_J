@@ -72,47 +72,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.CATEGORY_CONTENT_MUSIC" />
             </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="content" />
-                <data android:mimeType="*/*" />
-
-                <!--
-                    Work around Android's ugly primitive PatternMatcher
-                    implementation that can't cope with finding a . early in
-                    the path unless it's explicitly matched.
-                -->
-                <data android:host="*" />
-                <data android:pathPattern=".*\\.irs" />
-                <data android:pathPattern=".*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\.wav" />
-                <data android:pathPattern=".*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\.tar" />
-                <data android:pathPattern=".*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-            </intent-filter>
         </activity>
 
         <!-- DSP master volume shortcuts for the steering-wheel remapper (KSW Toolkit "Start App"):
@@ -307,14 +266,6 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
-
-        <!-- Root only: FGS service permission is granted in root/AndroidManifest.xml -->
-        <service
-            android:name=".service.RootAudioProcessorService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:ignore="ForegroundServicePermission" />
 
         <service
             android:name=".service.NotificationListenerService"

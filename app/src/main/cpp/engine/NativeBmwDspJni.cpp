@@ -1,23 +1,141 @@
+// The JNI layer: one NativeEngine handle per audio pipeline, wrapping NativeBmwDspProcessor. The
+// Kotlin side is app.siphondsp.interop.NativeDsp (natives) and DspEngine (handle lifetime and
+// locking). Not compiled into the host tests or the parity harness (both use the processor
+// directly).
 #include <jni.h>
+#include <android/trace.h>
+
+#include <atomic>
+#include <cstdint>
+#include <new>
+
 #include "NativeBmwDspProcessor.h"
-#include "JamesDspWrapper.h"
+#include "ScopedFlushToZero.h"
 
 namespace {
 constexpr jlong kRevisionRejected = -1;
+
+// Sample formats processDirect() accepts; match NativeDsp.ENCODING_* (and AudioEncoding.value).
+constexpr jint kEncodingPcm16 = 0;
+constexpr jint kEncodingPcmFloat = 1;
+
+struct NativeEngine {
+    NativeBmwDspProcessor processor;
+    // Native-side acknowledgement of the last completely accepted configuration. Advanced only
+    // after the processor accepted the update, so a rejected request never advances them.
+    std::atomic<std::int64_t> dspRevision{0};
+    std::atomic<std::int64_t> peqRevision{0};
+    // Audio-path counters for the diagnostics screen (NativeDsp.REALTIME_*), written by the
+    // audio thread with relaxed stores, read lock-free.
+    std::atomic<std::int64_t> lastBlockFrames{0};
+    std::atomic<std::int64_t> blockSizeChanges{0};
+};
+
+NativeEngine* fromHandle(jlong handle) {
+    return reinterpret_cast<NativeEngine*>(handle);
+}
+
+// A Perfetto/systrace slice for the duration of the scope, recorded only while tracing is on.
+class TraceSection {
+public:
+    explicit TraceSection(const char* name) : enabled_(ATrace_isEnabled()) {
+        if (enabled_) {
+            ATrace_beginSection(name);
+        }
+    }
+    ~TraceSection() {
+        if (enabled_) {
+            ATrace_endSection();
+        }
+    }
+    TraceSection(const TraceSection&) = delete;
+    TraceSection& operator=(const TraceSection&) = delete;
+
+private:
+    const bool enabled_;
+};
+}  // namespace
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_alloc(JNIEnv*, jobject) {
+    return reinterpret_cast<jlong>(new (std::nothrow) NativeEngine());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_free(JNIEnv*, jobject, jlong self) {
+    delete fromHandle(self);
+}
+
+// Processes `sampleCount` interleaved stereo samples of a direct ByteBuffer in place: no copy and
+// no array pinning, so a buffer costs one JNI transition and the DSP itself. False (buffer
+// untouched) for a gone handle, a heap buffer, an unknown encoding or a count the buffer can't
+// hold; the caller then plays the buffer unprocessed.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_NativeDsp_processDirect(JNIEnv* env, jobject, jlong self,
+                                                    jobject buffer, jint sampleCount,
+                                                    jint encoding) {
+    if (env == nullptr || self == 0 || buffer == nullptr || sampleCount <= 0) {
+        return JNI_FALSE;
+    }
+    const std::size_t bytesPerSample =
+        encoding == kEncodingPcm16 ? sizeof(std::int16_t)
+        : encoding == kEncodingPcmFloat ? sizeof(float) : 0;
+    if (bytesPerSample == 0) {
+        return JNI_FALSE;
+    }
+    void* address = env->GetDirectBufferAddress(buffer);
+    const jlong capacity = env->GetDirectBufferCapacity(buffer);
+    const auto samples = static_cast<std::size_t>(sampleCount) & ~std::size_t{1};
+    if (address == nullptr || capacity < 0 ||
+        static_cast<std::size_t>(capacity) < samples * bytesPerSample) {
+        return JNI_FALSE;
+    }
+    auto* engine = fromHandle(self);
+    const auto frames = static_cast<std::int64_t>(samples / 2);
+    if (engine->lastBlockFrames.exchange(frames, std::memory_order_relaxed) != frames) {
+        engine->blockSizeChanges.fetch_add(1, std::memory_order_relaxed);
+    }
+    const TraceSection trace("SiphonDSP process");
+    // Denormals flushed for the processing only, not the JNI calls around it.
+    const ScopedFlushToZero flushToZero;
+    if (encoding == kEncodingPcm16) {
+        engine->processor.process(static_cast<const std::int16_t*>(address), samples);
+    } else {
+        engine->processor.process(static_cast<const float*>(address), samples);
+    }
+    return JNI_TRUE;
+}
+
+// Fills [out] with the audio-path counters, in NativeDsp.REALTIME_* order: lastBlockFrames,
+// blockSizeChanges. Atomics only, so it takes no lock. False for a gone handle or a short array.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_siphondsp_interop_NativeDsp_getRealtimeCounters(JNIEnv* env, jobject, jlong self,
+                                                          jlongArray out) {
+    if (env == nullptr || self == 0 || out == nullptr) {
+        return JNI_FALSE;
+    }
+    const auto* engine = fromHandle(self);
+    const jlong values[] = {
+        engine->lastBlockFrames.load(std::memory_order_relaxed),
+        engine->blockSizeChanges.load(std::memory_order_relaxed),
+    };
+    constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+    if (env->GetArrayLength(out) < count) {
+        return JNI_FALSE;
+    }
+    env->SetLongArrayRegion(out, 0, count, values);
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwDsp(JNIEnv* env, jobject, jlong self,
+Java_app_siphondsp_interop_NativeDsp_configureNativeBmwDsp(JNIEnv* env, jobject, jlong self,
                                                                  jfloatArray valuesObj,
                                                                  jlong revision) {
     if (env == nullptr || self == 0 || valuesObj == nullptr || revision <= 0) {
         return kRevisionRejected;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return kRevisionRejected;
-    }
+    auto* engine = fromHandle(self);
+    auto* processor = &engine->processor;
     const jsize count = env->GetArrayLength(valuesObj);
     if (count != static_cast<jsize>(NativeBmwDspProcessor::kConfigSize)) {
         return kRevisionRejected;
@@ -35,23 +153,22 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwDsp(JNIEnv* env, jo
     // thread, which installs it at the start of its next buffer (and anything that reads the
     // running state installs it first). Publish the acknowledgement only after that commit
     // point; a rejected request can therefore never advance native-active.
-    wrapper->nativeBmwDspRevision.store(static_cast<std::int64_t>(revision),
+    engine->dspRevision.store(static_cast<std::int64_t>(revision),
                                         std::memory_order_release);
     return revision;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwDspActiveRevision(JNIEnv*, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeBmwDspActiveRevision(JNIEnv*, jobject,
                                                                          jlong self) {
     if (self == 0) {
         return 0;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    return static_cast<jlong>(wrapper->nativeBmwDspRevision.load(std::memory_order_acquire));
+    return static_cast<jlong>(fromHandle(self)->dspRevision.load(std::memory_order_acquire));
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jobject, jlong self,
+Java_app_siphondsp_interop_NativeDsp_configureNativeBmwPeq(JNIEnv* env, jobject, jlong self,
                                                                  jboolean enabled, jfloat preampDb,
                                                                  jdoubleArray fullObj,
                                                                  jdoubleArray lowObj,
@@ -62,11 +179,8 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
         midObj == nullptr || highObj == nullptr || revision <= 0) {
         return kRevisionRejected;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return kRevisionRejected;
-    }
+    auto* engine = fromHandle(self);
+    auto* processor = &engine->processor;
     const jsize fullCount = env->GetArrayLength(fullObj), lowCount = env->GetArrayLength(lowObj),
                 midCount = env->GetArrayLength(midObj), highCount = env->GetArrayLength(highObj);
     jdouble* full = env->GetDoubleArrayElements(fullObj, nullptr);
@@ -97,51 +211,42 @@ Java_app_siphondsp_interop_JamesDspWrapper_configureNativeBmwPeq(JNIEnv* env, jo
     if (!result) {
         return kRevisionRejected;
     }
-    wrapper->nativeBmwPeqRevision.store(static_cast<std::int64_t>(revision),
+    engine->peqRevision.store(static_cast<std::int64_t>(revision),
                                         std::memory_order_release);
     return revision;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwPeqActiveRevision(JNIEnv*, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeBmwPeqActiveRevision(JNIEnv*, jobject,
                                                                          jlong self) {
     if (self == 0) {
         return 0;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    return static_cast<jlong>(wrapper->nativeBmwPeqRevision.load(std::memory_order_acquire));
+    return static_cast<jlong>(fromHandle(self)->peqRevision.load(std::memory_order_acquire));
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_setNativeBmwDspSampleRate(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_setSampleRate(JNIEnv* env, jobject,
                                                                      jlong self,
                                                                      jfloat sampleRate) {
     if (env == nullptr || self == 0) {
         return;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor != nullptr) {
-        processor->setSampleRate(sampleRate);
-    }
+    fromHandle(self)->processor.setSampleRate(sampleRate);
 }
 
 // Fills [out] with one meter's current values instead of returning a new array, so a UI poll
-// running ~30 times a second allocates nothing. kind (JamesDspWrapper.METER_*): 1 = MBC
+// running ~30 times a second allocates nothing. kind (NativeDsp.METER_*): 1 = MBC
 // (12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]), 2 = bus limiters (3 floats:
 // [lowGrDb, midGrDb, highGrDb]). False, with [out] untouched, for an unknown kind, a short
 // array or a gone handle. The readers only load atomics, so no lock is taken.
 extern "C" JNIEXPORT jboolean JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_readNativeBmwMeter(JNIEnv* env, jobject, jlong self,
+Java_app_siphondsp_interop_NativeDsp_readNativeBmwMeter(JNIEnv* env, jobject, jlong self,
                                                              jint kind, jfloatArray out) {
     if (env == nullptr || self == 0 || out == nullptr) {
         return JNI_FALSE;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return JNI_FALSE;
-    }
+    auto* processor = &fromHandle(self)->processor;
     float values[12];
     jsize count = 0;
     switch (kind) {
@@ -164,16 +269,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_readNativeBmwMeter(JNIEnv* env, jobje
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeBmwMasterLimiterMeter(JNIEnv* env, jobject,
                                                                           jlong self) {
     if (env == nullptr || self == 0) {
         return nullptr;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
+    auto* processor = &fromHandle(self)->processor;
     float values[1];
     processor->readMasterLimiterMeter(values, 1);
     jfloatArray result = env->NewFloatArray(1);
@@ -184,16 +285,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwMasterLimiterMeter(JNIEnv
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwVirtualMeter(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeBmwVirtualMeter(JNIEnv* env, jobject,
                                                                     jlong self) {
     if (env == nullptr || self == 0) {
         return nullptr;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
+    auto* processor = &fromHandle(self)->processor;
     float values[2];
     processor->readVirtualMeter(values, 2);
     jfloatArray result = env->NewFloatArray(2);
@@ -204,16 +301,12 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwVirtualMeter(JNIEnv* env,
 }
 
 extern "C" JNIEXPORT jdoubleArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeTruthSnapshot(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeTruthSnapshot(JNIEnv* env, jobject,
                                                                   jlong self) {
     if (env == nullptr || self == 0) {
         return nullptr;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return nullptr;
-    }
+    auto* processor = &fromHandle(self)->processor;
     // See NativeBmwDspProcessor::captureTruthSnapshot()'s comment for the exact array layout.
     const std::vector<double> snapshot = processor->captureTruthSnapshot();
     jdoubleArray result = env->NewDoubleArray(static_cast<jsize>(snapshot.size()));
@@ -224,50 +317,36 @@ Java_app_siphondsp_interop_JamesDspWrapper_getNativeTruthSnapshot(JNIEnv* env, j
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_startNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
+Java_app_siphondsp_interop_NativeDsp_startNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
         return;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor != nullptr) {
-        processor->startCapture();
-    }
+    fromHandle(self)->processor.startCapture();
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_stopNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
+Java_app_siphondsp_interop_NativeDsp_stopNativeBmwCapture(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
         return;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor != nullptr) {
-        processor->stopCapture();
-    }
+    fromHandle(self)->processor.stopCapture();
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_getNativeBmwCaptureFrameCount(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_getNativeBmwCaptureFrameCount(JNIEnv* env, jobject,
                                                                          jlong self) {
     if (env == nullptr || self == 0) {
         return 0;
     }
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) {
-        return 0;
-    }
+    auto* processor = &fromHandle(self)->processor;
     return static_cast<jlong>(processor->captureFrameCount());
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_takeNativeBmwCaptureSnapshot(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_takeNativeBmwCaptureSnapshot(JNIEnv* env, jobject,
                                                                        jlong self) {
     if (env == nullptr || self == 0) return 0;
-    auto* wrapper = reinterpret_cast<JamesDspWrapper*>(self);
-    auto* processor = static_cast<NativeBmwDspProcessor*>(wrapper->nativeBmwDsp);
-    if (processor == nullptr) return 0;
+    auto* processor = &fromHandle(self)->processor;
     try {
         return reinterpret_cast<jlong>(processor->takeCaptureSnapshot().release());
     } catch (const std::bad_alloc&) {
@@ -276,13 +355,13 @@ Java_app_siphondsp_interop_JamesDspWrapper_takeNativeBmwCaptureSnapshot(JNIEnv* 
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_freeNativeBmwCaptureSnapshot(JNIEnv*, jobject,
+Java_app_siphondsp_interop_NativeDsp_freeNativeBmwCaptureSnapshot(JNIEnv*, jobject,
                                                                        jlong snapshot) {
     delete reinterpret_cast<NativeBmwDspProcessor::CaptureSnapshot*>(snapshot);
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_app_siphondsp_interop_JamesDspWrapper_exportNativeBmwCaptureWav(JNIEnv* env, jobject,
+Java_app_siphondsp_interop_NativeDsp_exportNativeBmwCaptureWav(JNIEnv* env, jobject,
                                                                      jlong snapshotHandle,
                                                                      jstring rawInPathObj,
                                                                      jstring outPathObj) {

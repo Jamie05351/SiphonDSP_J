@@ -51,17 +51,6 @@
     <string name="error_projection_api_missing">Az eszközöd gyártója letiltotta a belső audiót felvevő API-kat. Ez az alkalmazás nem működik ezek nélkül.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Hang feldolgozás bekapcsolása</string>
-    <string name="convolver_enable">Tekercs</string>
-    <string name="convolver_impulse">Impulzus jelleggörbe</string>
-    <string name="convolver_advanced_editing">Haladó hullámforma szerkesztés</string>
-    <string name="convolver_convolution_mode">Impulzus jelleggörbe optimalizálás</string>
-    <string name="convolver_convolution_mode_original">Eredeti</string>
-    <string name="convolver_convolution_mode_shrink">Összehúzódás</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimális fázistranszformáció és zsugorítás</string>
-    <string name="output_control_header">Kimenet szabályozás</string>
-    <string name="output_limiter_threshold">Határérték-küszöb</string>
-    <string name="output_limiter_release">Határérték kioldás</string>
-    <string name="output_control_postgain">Után erősítés</string>
     <!-- Onboarding -->
     <string name="onboarding_back">Vissza</string>
     <string name="onboarding_next">Tovább</string>

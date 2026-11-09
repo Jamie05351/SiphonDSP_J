@@ -5,20 +5,16 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
-import app.siphondsp.BuildConfig
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.session.rootless.RootlessSessionDatabase
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
-import app.siphondsp.utils.isPlugin
-import app.siphondsp.utils.isRoot
 import timber.log.Timber
 
 class SessionReceiver : BroadcastReceiver() {
 
     @SuppressLint("BinaryOperationInTimber")
     override fun onReceive(context: Context?, intent: Intent?) {
-        if (isPlugin() || intent == null || context == null) {
+        if (intent == null || context == null) {
             return
         }
 
@@ -38,12 +34,5 @@ class SessionReceiver : BroadcastReceiver() {
                     putExtras(intent)
                 }
         )
-
-        if(isRoot()) {
-            Intent(context, RootAudioProcessorService::class.java)
-                .apply { this.action = intent.action }
-                .apply { putExtras(intent) }
-                .run { RootAudioProcessorService.startService(context, this) }
-        }
     }
 }

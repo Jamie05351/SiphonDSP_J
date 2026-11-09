@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Produsen perangkat anda tidak mengaktifkan API perekaman audio internal. Aplikasi ini tidak bisa berfungsi tanpa API tersebut.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Alihkan pemrosesan audio</string>
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Respon impulse</string>
-    <string name="convolver_advanced_editing">Pengeditan wavefrom lanjutan</string>
-    <string name="convolver_convolution_mode">Optimasi respon impulse</string>
-    <string name="convolver_convolution_mode_original">Asli</string>
-    <string name="convolver_convolution_mode_shrink">Perkecil</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Phase transform minimum dan perkecil</string>
-    <string name="output_control_header">Kontrol output</string>
-    <string name="output_limiter_threshold">Batas limiter</string>
-    <string name="output_limiter_release">Limit melepaskan</string>
-    <string name="output_control_postgain">Pos gain</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
     <string name="onboarding_back">Kembali</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Tidak ada akses root</string>
     <string name="onboarding_root_shell_fail">Akses root tidak tersedia, gunakan metode lainnya.</string>
     <string name="onboarding_root_shell_fail_unknown">Gagal memberi izin via root, gunakan metode lainnya.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Enhanced processing sedang disiapkan</string>
     <string name="onboarding_adb_shizuku_title">Shizuku setup</string>
     <string name="onboarding_adb_adb_title">ADB setup</string>
     <string name="onboarding_adb_caption">Aplikasi membutuhkan izin khusus untuk memperoleh audio policy perangkat. Ikuti instruksi berikut ini.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Mengaktifkan opsi ini dapat menyebabkan duplikasi suara saat audio effect lain mengambil kendali sesi audio.\nBiarkan opsi ini tetap aktif kecuali anda mengalami kehilangan sesi palsu.</string>
     <string name="audio_format_header">Pemrosesan audio</string>
     <string name="audio_format_section_header">Format audio pilihan</string>
-    <string name="audio_format_processing_header">Pemroses audio idle</string>
-    <string name="audio_format_processing_legacy">Mode Legacy</string>
-    <string name="audio_format_processing_legacy_on">Sandingkan secara global ke sesi 0 (usang)</string>
-    <string name="audio_format_processing_legacy_off">Sandingkan untuk setiap aplikasi satu per satu</string>
-    <string name="audio_format_enhanced_processing">Pemrosesan Ditingkatkan</string>
-    <string name="audio_format_enhanced_processing_on">Kontrol per aplikasi dan dukungan disempurnakan untuk aplikasi yang diaktifkan</string>
-    <string name="audio_format_enhanced_processing_off">Pemrosesan yang ditingkatkan nonaktif</string>
-    <string name="audio_format_enhanced_processing_info_title">Apa itu Pemrosesan yang ditingkatkan?</string>
-    <string name="audio_format_enhanced_processing_info">Tekan untuk melihat rincian</string>
-    <string name="audio_format_enhanced_processing_info_content">Saat Pemrosesan Ditingkatkan diaktifkan, anda bisa memilih aplikasi yang ingin dikecualikan dari SiphonDSP. Gunakan 3-dot menu di pojok bawah dan pilih \'Aplikasi Dikecualikan\' untuk mengakses fitur ini.\n\nSaat Mode Legacy dinonaktifkan, SiphonDSP bergantung pada aplikasi media yang mengirim System Broadcast saat mereka memulai pemutaran suara. Ini merupakan sebuah kelebihan dari Mode Legacy karena setiap aplikasi mendapat effect engine SiphonDSP masing-masing untuk setiap aplikasi, yang memungkinkan kontrol lebih halus. Jika tidak, Mode Legacy akan diaktifkan dan semua aplikasi akan berbagi satu processing engine, yang sudah usang dan seharusnya tidak digunakan lagi menurut Android. \n\nSayangnya, tidak semua aplikasi media melakukannya dengan benar. Oleh karena itu, mode ini tidak bekerja dengan baik saat Mode Legacy dinonaktifkan. Untuk memperbaiki ini, anda bisa mengaktifkan Pemrosesan Ditingkatkan. Daripada bergantung pada system broadcast, SiphonDSP akan memindai sesi media baru secara aktif dan memungkinkan dukungan pada aplikasi media yang tidak kooperatif.</string>
     <string name="audio_format_media_apps_need_restart">Anda harus memuat ulang semua aplikasi media setelah mengubah pengaturan ini untuk melanjutkan.</string>
     <string name="audio_format_summary">Pengodean audio pilihan, ukuran buffer</string>
     <string name="audio_format_summary_root">Mode Legacy, pemrosesan yang ditingkatkan</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Ukuran buffer</string>
     <string name="audio_format_buffer_size_unit">&#xa0;sampel</string>
     <string name="audio_format_buffer_size_warning_low_value">Peringatan: Ukuran Buffer kecil dapat menyebabkan suara pecah!</string>
-    <string name="audio_format_optimization_header">Optimasi modul Convolver</string>
-    <string name="audio_format_optimization_refresh">Menyegarkan perbandingan data</string>
-    <string name="audio_format_optimization_benchmark">Menggunakan benchmarks untuk mengoptimalkan performa</string>
-    <string name="audio_format_optimization_benchmark_summary">Meningkatkan kinerja efek yang menggunakan modul convolver</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Pengujian kinerja sedang berlangsung…</string>
     <string name="app_behavior">Perilaku aplikasi</string>
     <string name="exclude_app_from_recents">Kecualikan aplikasi dari Recent</string>
     <string name="exclude_app_from_recents_off">Aplikasi tidak kecualikan dari Recent</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Tampilan detail dari keterbatasan aplikasi</string>
     <string name="troubleshooting_notification_access">Izinkan akses notifikasi untuk deteksi sesi yang lebih baik</string>
     <string name="troubleshooting_notification_access_summary">Memungkinkan deteksi sesi audio yang lebih andal</string>
-    <string name="troubleshooting_repair_assets">Pulihkan bundel IRS, DDC, dan skrip</string>
-    <string name="troubleshooting_repair_assets_summary">Ekstrak preloaded aset jika anda kehilangan</string>
-    <string name="troubleshooting_repair_assets_success">Bundled aset sudah dikembalikan</string>
     <string name="misc_settings">Lainnya</string>
     <string name="misc_settings_summary">Laporan kerusakan dan tindakan lain</string>
     <string name="misc_permission_skip_prompt">Lewati permintaan izin capture</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Ulangi setup wizard</string>
     <string name="misc_permission_restart_setup_summary">Beri izin opsional yang hilang</string>
     <string name="misc_permission_header">Izin opsional</string>
-    <string name="assets">Aset</string>
     <string name="about_settings">Tentang</string>
     <string name="about_settings_summary">Kredit, dukungan, pembaruan</string>
     <string name="credits">Kredit</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Nama diubah menjadi \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' dihapus</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">VDC yang dipilih rusak, silahkan pilih yang lainnya.</string>
-    <string name="message_irs_corrupt">Impulse yang dipilih rusak, silahkan pilih yang lainnya.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: Advanced waveform editing berisi nilai yang tidak valid.</string>
-    <string name="message_liveprog_compile_fail">Ekseskusi Liveprog gagal, skrip yang dipilih rusak. Gunakan editor skrip untuk debugging.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Modul sudah terpasang?</string>
     <string name="load_fail_arch_card">Jika anda sudah memasang modul magisk, sepertinya anda memilih pengaturan yang salah saat pemasangan. Ulangi pemasangan dan coba aktifkan kompatibilitas Huawei (Walaupun perangkat anda bukan Huawei).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Fitur tidak tersedia</string>
-    <string name="enhanced_processing_feature_unavailable_content">Fitur ini hanya tersedia saat fitur \'pemrosesan ditingkatkan\' diaktifkan di pengaturan. Pergi ke \'Pengaturan &gt; Pemrosesan audio &gt; Pemrosesan Ditingkatkan\' dan aktifkan opsi untuk mengakses menu ini.\n\nCatatan \'Pemrosesan Ditingkatkan\' tidak bisa digunakan bersamaan dengan Mode Legacy.</string>
-    <string name="enhanced_processing_missing_perm">Pemrosesan ditingkatkan dinonaktifkan karena hilangnya beberapa izin. Atur kembali apilkasi di pengaturan.</string>
     <!-- App list -->
     <string name="app_list_loading">Memuat aplikasi…</string>
     <string name="app_list_search">Cari</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Apakah Anda yakin?</string>
     <string name="revert_confirmation">Anda ingin menyetel ulang preset SiphonDSP saat ini ke nilai awal?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Impor respon impulse</string>
-    <string name="intent_import_mode_add">Hanya impor</string>
-    <string name="intent_import_mode_select">Impor dan aktifkan</string>
-    <string name="intent_import_fail">Gagal mengimpor file \'%1$s\'</string>
-    <string name="intent_import_success">File \'%1$s\' di impor</string>
-    <string name="intent_import_select_success">File \'%1$s\' di impor dan diaktifkan</string>
-    <string name="intent_import_error_file_uri">Gagal mengimpor file, URI tidak didukung.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Bantu kami menerjemahkan aplikasi ke bahasa anda! Tekan di sini untuk melihat situs project di Crowdin.</string>
     <string name="translation_notice">Kontribusi penerjemahan</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Tidak Dikenal</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Paket magisk SiphonDSP perlu diperbarui</string>
-    <string name="version_mismatch_root_description">Paket SiphonDSP Magisk yang terinstal di perangkat Anda sudah usang dan tidak lagi didukung oleh aplikasi ini.\n\nMohon ambil paket ZIP SiphonDSP Magisk terbaru dan pasang melalui Magisk.\nPerlu diingat bahwa paket Magisk ini mungkin akan menggantikan aplikasi ini dengan aplikasi resmi SiphonDSP.\n\nApakah Anda ingin mengunjungi situs web unduhan untuk paket Magisk sekarang?</string>
-    <string name="version_mismatch_root_toast">Gagal memulai. Versi package magisk SiphonDSP yang terpasang sudah terlalu lama dan tidak didukung oleh aplikasi ini lagi.</string>
 </resources>

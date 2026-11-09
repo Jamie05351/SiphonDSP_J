@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Le fabricant de votre appareil a désactivé les API d\'enregistrement audio interne. Cette application ne peut pas fonctionner sans eux.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Activer/Désactiver le traitement audio</string>
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Réponse impulsive</string>
-    <string name="convolver_advanced_editing">Édition avancée de la forme d\'onde</string>
-    <string name="convolver_convolution_mode">Optimisation de la réponse</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Réduire</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Transformation et rétrécissement de phase minimum</string>
-    <string name="output_control_header">Contrôle du gain</string>
-    <string name="output_limiter_threshold">Seuil de limite</string>
-    <string name="output_limiter_release">Libération du limiteur</string>
-    <string name="output_control_postgain">Gain post-traitement</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Fonctionnel</string>
     <string name="onboarding_back">Précédent</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Aucun accès root</string>
     <string name="onboarding_root_shell_fail">Aucun accès root disponible. Veuillez utiliser une autre méthode de configuration.</string>
     <string name="onboarding_root_shell_fail_unknown">Impossible d\'accorder l\'autorisation via root. Veuillez utiliser une autre méthode d\'installation.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Le traitement amélioré est configuré</string>
     <string name="onboarding_adb_shizuku_title">Configuration de Shizuku</string>
     <string name="onboarding_adb_adb_title">Configuration ADB</string>
     <string name="onboarding_adb_caption">Cette application nécessite des autorisations spéciales pour le dumping de la politique audio de votre appareil. Veuillez suivre les instructions ci-dessous.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">L\'activation de ce paramètre peut entraîner une duplication de l\'audio lorsqu\'une autre application d\'effets audio prend le contrôle d\'une session audio.\nVeuillez garder ce paramètre désactivé sauf si vous rencontrez des événements de perte de session faussement positifs.</string>
     <string name="audio_format_header">Traitement audio</string>
     <string name="audio_format_section_header">Format audio préféré</string>
-    <string name="audio_format_processing_header">Options du traitement audio</string>
-    <string name="audio_format_processing_legacy">Mode hérité</string>
-    <string name="audio_format_processing_legacy_on">Attacher globalement à la session 0 (obsolète)</string>
-    <string name="audio_format_processing_legacy_off">Attacher chaque application individuellement</string>
-    <string name="audio_format_enhanced_processing">Traitement amélioré</string>
-    <string name="audio_format_enhanced_processing_on">Contrôle par application et support amélioré pour les applications activé</string>
-    <string name="audio_format_enhanced_processing_off">Traitement audio désactivé</string>
-    <string name="audio_format_enhanced_processing_info_title">Qu\'est-ce que le traitement amélioré ?</string>
-    <string name="audio_format_enhanced_processing_info">Appuyez pour afficher la documentation</string>
-    <string name="audio_format_enhanced_processing_info_content">Lorsque le traitement amélioré est activé, vous pouvez exclure sélectivement certaines applications d\'être traitées par SiphonDSP. Utilisez le menu à 3 points en bas à droite et sélectionnez « Applications exclues » pour accéder à cette fonctionnalité.\n\nAlors que le mode hérité est désactivé, SiphonDSP s\'appuie sur les applications multimédia pour envoyer une diffusion système lorsqu\'ils démarrent la lecture. Ceci est un avantage par rapport au mode hérité car chaque application obtient son propre moteur d\'effet SiphonDSP qui lui est assigné, ce qui permet un contrôle plus précis. Sinon, lorsque le mode hérité est activé, toutes les applications partageraient un seul moteur de traitement, ce qui est obsolète et ne devrait plus être utilisé.\n\nMalheureusement, toutes les applications multimédia ne le font pas correctement et ne fonctionneraient donc pas correctement avec le mode hérité désactivé. Pour résoudre ce problème, vous pouvez utilisé le traitement amélioré. Au lieu de s\'appuyer sur les émissions système à propos des sessions sur les nouveaux médias, SiphonDSP analysera de façon automatique les sessions de médias par lui-même et permettra un support adéquat pour les applications multimédia non coopératives.</string>
     <string name="audio_format_media_apps_need_restart">Vous devez redémarrer toutes les applications multimédia actives après avoir modifié ce paramètre pour reprendre le traitement audio.</string>
     <string name="audio_format_summary">Encodage audio préféré, taille du tampon</string>
     <string name="audio_format_summary_root">Mode hérité, traitement amélioré</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Taille du tampon</string>
     <string name="audio_format_buffer_size_unit">&#xa0;échantillons</string>
     <string name="audio_format_buffer_size_warning_low_value">Attention : Des tailles de tampon faibles peuvent causer des problèmes audio tels que le clipping!</string>
-    <string name="audio_format_optimization_header">Optimisations du module Convolver</string>
-    <string name="audio_format_optimization_refresh">Actualiser les données de benchmarking</string>
-    <string name="audio_format_optimization_benchmark">Utiliser des benchmarks pour optimiser les performances</string>
-    <string name="audio_format_optimization_benchmark_summary">Augmente les performances des effets qui utilisent les modules convolver</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Benchmark en cours…</string>
     <string name="app_behavior">Comportement de l\'application</string>
     <string name="exclude_app_from_recents">Exclure l\'application de la liste des tâches récentes</string>
     <string name="exclude_app_from_recents_off">Ne pas exclure l\'application de la liste des tâches récentes</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Afficher les détails sur les limitations de cette application</string>
     <string name="troubleshooting_notification_access">Autoriser l\'accès aux notifications pour une meilleure détection de session</string>
     <string name="troubleshooting_notification_access_summary">Permet une détection plus fiable de la session audio</string>
-    <string name="troubleshooting_repair_assets">Restaurer les IRS, DDC et scripts intégrés</string>
-    <string name="troubleshooting_repair_assets_summary">Décompresser les actifs préchargés si vous les avez perdus</string>
-    <string name="troubleshooting_repair_assets_success">Les assets groupées ont été restaurées</string>
     <string name="misc_settings">Divers</string>
     <string name="misc_settings_summary">Rapports de plantage, autres actions</string>
     <string name="misc_permission_skip_prompt">Ignorer la demande d\'autorisation de capture</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Redémarrer l\'assistant de configuration</string>
     <string name="misc_permission_restart_setup_summary">Accorder les autorisations facultatives manquantes</string>
     <string name="misc_permission_header">Permissions optionnelles</string>
-    <string name="assets">Assets</string>
     <string name="about_settings">À propos</string>
     <string name="about_settings_summary">Crédits, support et mises à jour</string>
     <string name="credits">Crédits</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Renommé en \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' supprimé</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Le fichier VDC sélectionné est corrompu. Veuillez en choisir un autre.</string>
-    <string name="message_irs_corrupt">La réponse d\'impulsion sélectionnée est corrompu. Veuillez en choisir un autre.</string>
-    <string name="message_convolver_advimp_invalid">Convolver : L\'édition avancée de la forme d\'onde contient des valeurs non valides.</string>
-    <string name="message_liveprog_compile_fail">L\'exécution du Liveprog a échoué. Le script sélectionné est endommagé. Veuillez utiliser l\'éditeur de script pour le débogage.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Module déjà installé?</string>
     <string name="load_fail_arch_card">Si vous avez déjà installé le module magisk, il se peut que vous ayez choisi les mauvais paramètres lors de l\'installation. Veuillez réinstaller et essayer d\'activer la compatibilité Huawei (même si votre téléphone ne provient pas de ce fabricant).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Fonctionnalité non-disponible</string>
-    <string name="enhanced_processing_feature_unavailable_content">Cette fonctionnalité n\'est disponible que lorsque le \'traitement amélioré\' est activé dans les paramètres. Veuillez aller dans \'Paramètres &gt; Traitement audio &gt; Traitement amélioré\' et activer cette option pour accéder à ce menu.\n\nNote : \'Traitement amélioré\' ne peut pas être utilisé lorsque le mode hérité est activé.</string>
-    <string name="enhanced_processing_missing_perm">Le traitement amélioré a été désactivé en raison d\'une permission manquante. Veuillez la reconfigurer dans les paramètres.</string>
     <!-- App list -->
     <string name="app_list_loading">Loading apps…</string>
     <string name="app_list_search">Rechercher</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Êtes-vous sûr ?</string>
     <string name="revert_confirmation">Voulez-vous réinitialiser votre préréglage SiphonDSP actuel aux valeurs par défaut?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Importer une réponse impulsive</string>
-    <string name="intent_import_mode_add">Importer uniquement</string>
-    <string name="intent_import_mode_select">Importer et activer</string>
-    <string name="intent_import_fail">Impossible d\'importer le fichier \'%1$s\'</string>
-    <string name="intent_import_success">Fichier \'%1$s\' importé</string>
-    <string name="intent_import_select_success">Fichier \'%1$s\' importé et activé</string>
-    <string name="intent_import_error_file_uri">Impossible d\'importer le fichier. Fichier URI non pris en charge.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Veuillez nous aider à traduire cette application dans votre langue ! Appuyez ici pour visiter le site du projet sur Crowdin.</string>
     <string name="translation_notice">Contribuer aux traductions</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Inconnu</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Le module Magisk SiphonDSP nécessite une mise à jour</string>
-    <string name="version_mismatch_root_description">Le module Magisk SiphonDSP installé sur votre appareil est obsolète et n\'est plus supporté par cette application.\n\nMerci de télécharger la dernière version du module et de l\'installer via Magisk.\nVeuillez noter que le module Magisk peut remplacer cette application par la version officiel de SiphonDSP.\n\nVoulez-vous visitez le site de téléchargement maintenant ?</string>
-    <string name="version_mismatch_root_toast">Impossible de démarrer. Le module Magisk SiphonDSP installé est trop ancien et n\'est plus pris en charge par cette application.</string>
 </resources>

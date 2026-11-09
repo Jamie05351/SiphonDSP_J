@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Cihaz üreticiniz, dahili ses kaydı API\'lerini devre dışı bırakmış. Bu uygulama onlar olmadan çalışamaz.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Ses işlemeyi aç/kapat</string>
-    <string name="convolver_enable">Dönüştürücü</string>
-    <string name="convolver_impulse">Dürtü yanıtı</string>
-    <string name="convolver_advanced_editing">Gelişmiş dalga formu düzenleme</string>
-    <string name="convolver_convolution_mode">Darbe yanıtı optimizasyonu</string>
-    <string name="convolver_convolution_mode_original">Orjinal</string>
-    <string name="convolver_convolution_mode_shrink">Küçült</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum faz dönüşümü ve büzülümü</string>
-    <string name="output_control_header">Çıkış kontrolü</string>
-    <string name="output_limiter_threshold">Sınırlayıcı eşiği</string>
-    <string name="output_limiter_release">Sınırlayıcı salma</string>
-    <string name="output_control_postgain">Son büyüklük</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Katılım</string>
     <string name="onboarding_back">Geri</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Root erişimi yok</string>
     <string name="onboarding_root_shell_fail">Root erişimi bulunmuyor. Lütfen başka bir kurulum yöntemi deneyin.</string>
     <string name="onboarding_root_shell_fail_unknown">Root ile izin verilemedi. Lütfen başka bir kurulum yöntemi deneyin.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Gelişmiş işleme kurulu</string>
     <string name="onboarding_adb_shizuku_title">Shizuku kurulumu</string>
     <string name="onboarding_adb_adb_title">ADB kurulum</string>
     <string name="onboarding_adb_caption">Bu uygulama cihazınızın ses politikasını çöpe boşaltmak için özel izinler gerektirir. Lütfen aşağıdaki talimatları takip edin.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Bu ayarın etkinleştirilmesi, başka bir ses efektleri uygulaması bir ses oturumunun kontrolünü ele geçirdiğinde yinelenen sese neden olabilir.\nYanlış pozitif oturum kaybı olaylarıyla karşılaşmadığınız sürece lütfen bu ayarı devre dışı bırakın.</string>
     <string name="audio_format_header">Ses işleme</string>
     <string name="audio_format_section_header">Tercih edilen ses formatı</string>
-    <string name="audio_format_processing_header">Ses işleme seçenekleri</string>
-    <string name="audio_format_processing_legacy">Eski mod</string>
-    <string name="audio_format_processing_legacy_on">Genel olarak oturumu 0\'a ekle (kullanımdan kaldırıldı)</string>
-    <string name="audio_format_processing_legacy_off">Her uygulamaya ayrı ayrı iliştirin</string>
-    <string name="audio_format_enhanced_processing">Geliştirilmiş işleme</string>
-    <string name="audio_format_enhanced_processing_on">Uygulama başı kontrol ve uygulamalar için gelişmiş destek etkin</string>
-    <string name="audio_format_enhanced_processing_off">Gelişmiş işleme devre dışı</string>
-    <string name="audio_format_enhanced_processing_info_title">Gelişmiş işleme nedir?</string>
-    <string name="audio_format_enhanced_processing_info">Dokümentasyona bakmak için tıklayın</string>
-    <string name="audio_format_enhanced_processing_info_content">Gelişmiş işleme etkinleştirildiğinde, belirli uygulamaların SiphonDSP tarafından işlenmesini seçerek hariç tutabilirsiniz. Bu özelliğe erişmek için sağ alt köşedeki 3 noktalı menüyü kullanın ve \'Hariç tutulan uygulamalar\'ı seçin.\n\nEski mod devre dışıyken SiphonDSP, oynatmaya başlatıldıklarında bir sistem yayını göndermek için medya uygulamalarını kullanır. Bu, eski moda göre bir avantajdır çünkü her uygulama, kendisine atanmış kendi SiphonDSP efekt motorunu alır ve bu da daha ayrıntılı kontrol sağlar. Aksi takdirde, eski mod açıkken tüm uygulamalar, Android\'in kullanımdan kaldırdığı ve artık kullanılmaması gereken tek bir işleme motorunu paylaşır.\n\nMaalesef, tüm medya uygulamaları bunu doğru şekilde yapmaz ve bu nedenle eski modla düzgün çalışmaz. Bu sorunu çözmek için gelişmiş işlemeyi etkinleştirebilirsiniz. SiphonDSP, yeni medya oturumları hakkında sistem yayınlarına güvenmek yerine proaktif olarak medya oturumlarını kendisi tarayacak ve işbirliği yapmayan medya uygulamaları için uygun desteği sağlayacaktır.</string>
     <string name="audio_format_media_apps_need_restart">Ses işlemeye devam etmek için bu ayarı değiştirdikten sonra tüm aktif medya uygulamalarını yeniden başlatmanız gerekir.</string>
     <string name="audio_format_summary">Tercih edilen ses kodlaması, tampon boyutu</string>
     <string name="audio_format_summary_root">Eski mod, gelişmiş işleme</string>
@@ -207,9 +185,6 @@
     <string name="troubleshooting_view_limitations_summary">Bu uygulamanın sınırlamalarıyla ilgili ayrıntıları göster</string>
     <string name="troubleshooting_notification_access">Daha iyi oturum tespiti için bildirim erişimine izin verin</string>
     <string name="troubleshooting_notification_access_summary">Daha güvenilir sesli oturum algılama sağlar</string>
-    <string name="troubleshooting_repair_assets">Paketlenmiş IRS, DDC ve komutları geri yükleyin</string>
-    <string name="troubleshooting_repair_assets_summary">Kaybettiyseniz önceden yüklenmiş parçaları paketinden çıkarın</string>
-    <string name="troubleshooting_repair_assets_success">Paketlenmiş parçalar geri yüklendi</string>
     <string name="misc_settings">Çeşitli</string>
     <string name="misc_settings_summary">Çökme raporları, diğer işlemler</string>
     <string name="misc_permission_skip_prompt">Yakalama izni isteğini atla</string>
@@ -217,7 +192,6 @@
     <string name="misc_permission_restart_setup">Kurulum sihirbazını yeniden başlatın</string>
     <string name="misc_permission_restart_setup_summary">Eksik isteğe bağlı izinleri verin</string>
     <string name="misc_permission_header">İsteğe bağlı izinler</string>
-    <string name="assets">Parçalar</string>
     <string name="about_settings">Hakkında</string>
     <string name="about_settings_summary">Emektarlar, destek, güncellemeler</string>
     <string name="credits">Emektarlar</string>
@@ -288,10 +262,6 @@
     <string name="filelibrary_renamed">\'%1$s\' olarak yeniden adlandırıldı</string>
     <string name="filelibrary_deleted">\'%1$s\' silindi</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Seçilen VDC dosyası bozuk. Lütfen başka birini seçiniz.</string>
-    <string name="message_irs_corrupt">Seçilen dürtü yanıtı bozuk. Lütfen başka birini seçiniz.</string>
-    <string name="message_convolver_advimp_invalid">Dönüştürücü: Gelişmiş dalga formu düzenleme geçersiz değerler içeriyor.</string>
-    <string name="message_liveprog_compile_fail">Liveprog yürütme başarısız oldu. Seçilen komut dosyası bozuk. Lütfen hata ayıklama için komut dosyası düzenleyicisini kullanın.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -322,9 +292,6 @@
     <string name="load_fail_arch_card_title">Modül zaten kurulu mu?</string>
     <string name="load_fail_arch_card">Daha önce magisk modülünü kurduysanız kurulum sırasında yanlış ayarları seçmiş olabilirsiniz. Lütfen yeniden yükleyin ve Huawei uyumluluğunu etkinleştirmeyi deneyin (telefonunuz o üreticiden olmasa bile).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Özellik kullanılamıyor</string>
-    <string name="enhanced_processing_feature_unavailable_content">Bu özellik yalnızca ayarlarda \'gelişmiş işleme\' etkinleştirildiğinde kullanılabilir. Lütfen \'Ayarlar &gt; Ses işleme &gt; Gelişmiş işleme\' ve bu menüye erişmek için bu seçeneği etkinleştirin.\n\nNot: Eski mod etkinken \'Gelişmiş işleme\' kullanılamaz.</string>
-    <string name="enhanced_processing_missing_perm">Gelişmiş işleme, eksik bir izin nedeniyle devre dışı bırakıldı. Lütfen ayarlardan yeniden kurun.</string>
     <!-- App list -->
     <string name="app_list_loading">Uygulamalar yükleniyor…</string>
     <string name="app_list_search">Ara</string>
@@ -340,13 +307,6 @@
     <string name="revert_confirmation_title">Emin misin?</string>
     <string name="revert_confirmation">Geçerli SiphonDSP ön ayarınızı varsayılan değerlere sıfırlamak istiyor musunuz?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">İleti yanıtını içe aktar</string>
-    <string name="intent_import_mode_add">Yalnızca içe aktar</string>
-    <string name="intent_import_mode_select">İçe aktar ve etkinleştir</string>
-    <string name="intent_import_fail">\'%1$s\' dosyası içe aktarılamadı</string>
-    <string name="intent_import_success">\'%1$s\' dosyası içe aktarıldı</string>
-    <string name="intent_import_select_success">\'%1$s\' dosyası içe aktarıldı ve etkinleştirildi</string>
-    <string name="intent_import_error_file_uri">Dosya içe aktarılamadı. Desteklenmeyen dosya URI\'si.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Lütfen bu uygulamayı dilinize çevirmemize yardım edin! Crowdin\'deki proje sitesini ziyaret etmek için buraya dokunun.</string>
     <string name="translation_notice">Çevirilere katkıda bulunun</string>
@@ -385,7 +345,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Bilinmeyen</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">SiphonDSP magisk paketi bir güncelleme gerektiriyor</string>
-    <string name="version_mismatch_root_description">Cihazınızda yüklü olan SiphonDSP magisk paketi eski ve bu uygulama tarafından artık desteklenmemekte.\n\nLütfen en son SiphonDSP magisk paketi ZIP dosyasını edinin ve Magisk ile beraber yükleyin.\nNot edin ki magisk paketi bu uygulamayı resmi SiphonDSP uygulamasıyla değiştirebilir.\n\nŞimdi Magisk paketleri için indirme websitesini ziyaret etmek ister misiniz?</string>
-    <string name="version_mismatch_root_toast">Başlatılamadı. Yüklü olan SiphonDSP magisk paketi çok eski ve bu uygulama tarafından artık desteklenmiyor.</string>
 </resources>

@@ -20,7 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WRAPPER="$ROOT/app/src/main/cpp/libjamesdsp-wrapper"
+WRAPPER="$ROOT/app/src/main/cpp/engine"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
@@ -61,12 +61,18 @@ build "$OUT/parity_scalar" "$WRAPPER" -DSIPHON_DISABLE_NEON
 VARIANTS=(current scalar)
 if [ -n "${BASELINE_REF:-}" ]; then
     echo "building baseline from $BASELINE_REF"
-    mkdir -p "$OUT/base/libjamesdsp-wrapper" "$OUT/base/libjdspimptoolbox"
-    for f in $(git -C "$ROOT" ls-tree --name-only "$BASELINE_REF" app/src/main/cpp/libjamesdsp-wrapper/); do
-        git -C "$ROOT" show "$BASELINE_REF:$f" > "$OUT/base/libjamesdsp-wrapper/$(basename "$f")"
-    done
-    cp "$ROOT/app/src/main/cpp/libjdspimptoolbox/dr_wav.h" "$OUT/base/libjdspimptoolbox/"
-    build "$OUT/parity_baseline" "$OUT/base/libjamesdsp-wrapper"
+    # The engine lived in app/src/main/cpp/libjamesdsp-wrapper (with dr_wav.h in
+    # libjdspimptoolbox) until the JamesDSP core was removed; take whichever layout the ref has.
+    mkdir -p "$OUT/base"
+    if git -C "$ROOT" cat-file -e "$BASELINE_REF:app/src/main/cpp/engine" 2>/dev/null; then
+        git -C "$ROOT" archive "$BASELINE_REF" app/src/main/cpp/engine | tar -x -C "$OUT/base"
+        BASE_SRC="$OUT/base/app/src/main/cpp/engine"
+    else
+        git -C "$ROOT" archive "$BASELINE_REF" app/src/main/cpp/libjamesdsp-wrapper \
+            app/src/main/cpp/libjdspimptoolbox/dr_wav.h | tar -x -C "$OUT/base"
+        BASE_SRC="$OUT/base/app/src/main/cpp/libjamesdsp-wrapper"
+    fi
+    build "$OUT/parity_baseline" "$BASE_SRC"
     VARIANTS+=(baseline)
 fi
 

@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">此裝置的製造商禁止了擷取內部音訊的API。此應用程式需要此功能才能運作。</string>
     <!-- Main screen -->
     <string name="power_button_alt">音訊處理開關</string>
-    <string name="convolver_enable">卷積器</string>
-    <string name="convolver_impulse">脈衝響應</string>
-    <string name="convolver_advanced_editing">進階波形編輯</string>
-    <string name="convolver_convolution_mode">脈衝響應最佳化</string>
-    <string name="convolver_convolution_mode_original">原始</string>
-    <string name="convolver_convolution_mode_shrink">壓縮</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">最小相位轉換與壓縮</string>
-    <string name="output_control_header">輸出增益</string>
-    <string name="output_limiter_threshold">輸出閾值</string>
-    <string name="output_limiter_release">釋放時間</string>
-    <string name="output_control_postgain">後置增益</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">登機</string>
     <string name="onboarding_back">返回</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">沒有 root 權限</string>
     <string name="onboarding_root_shell_fail">沒有可用的 root 權限。請改用其他設定方法。</string>
     <string name="onboarding_root_shell_fail_unknown">無法透過 root 權限授予權限。請使用其他設定方法。</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">增強處理已設定完成</string>
     <string name="onboarding_adb_shizuku_title">Shizuku 設定</string>
     <string name="onboarding_adb_adb_title">ADB 設定</string>
     <string name="onboarding_adb_caption">此應用程式需要特殊權限來轉儲裝置的音訊政策。請依照以下說明操作。</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">啟用此設定後，若另一個應用程式控制了音訊工作階段，將可能會導致重複的音訊。\n除非您遇到誤報的工作階段遺失事件，否則請將此設定維持停用。</string>
     <string name="audio_format_header">音訊處理</string>
     <string name="audio_format_section_header">首選音訊格式</string>
-    <string name="audio_format_processing_header">音訊處理選項</string>
-    <string name="audio_format_processing_legacy">舊版模式</string>
-    <string name="audio_format_processing_legacy_on">全域連接至工作階段 0 (已棄用)</string>
-    <string name="audio_format_processing_legacy_off">各別連接至每個應用程式</string>
-    <string name="audio_format_enhanced_processing">增強處理</string>
-    <string name="audio_format_enhanced_processing_on">控制各別應用程式及增強支援已啟用的應用程式</string>
-    <string name="audio_format_enhanced_processing_off">增強處理已停用</string>
-    <string name="audio_format_enhanced_processing_info_title">什麼是增強處理？</string>
-    <string name="audio_format_enhanced_processing_info">輕觸以檢視說明</string>
-    <string name="audio_format_enhanced_processing_info_content">增強處理啟用時，您可以選擇性的停用某些應用程式，使其不被 SiphonDSP 處理。從底部右下角的按鈕，選擇「排除的應用程式」，以存取此功能。\n\n傳統模式停用時，SiphonDSP 會從每個應用程式接收廣播的音效。與傳統模式相比，這讓每個應用程式有自己對應的音效引擎，從而進行更精細的控制。由於傳統模式是一個已棄用的功能，啟用時會讓所有應用程式共用一個相同的處理引擎，因此不建議使用。\n\n但並非所有的程式都能在傳統模式停用時正常運作，您可以啟用增強處理以解決此問題。SiphonDSP將不使用系統廣播，改用自動掃描取得媒體階段，以支援這些程式。</string>
     <string name="audio_format_media_apps_need_restart">更改此設定後，您將需要重新啟動執行中的所有媒體程式以繼續處理音訊。</string>
     <string name="audio_format_summary">首選的音訊編碼，緩衝大小</string>
     <string name="audio_format_summary_root">傳統模式，增強處理</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">緩衝區大小</string>
     <string name="audio_format_buffer_size_unit">&#xa0; 個樣本</string>
     <string name="audio_format_buffer_size_warning_low_value">警告：緩衝區太小可能會導致聲音斷斷續續！</string>
-    <string name="audio_format_optimization_header"></string>
-    <string name="audio_format_optimization_refresh"></string>
-    <string name="audio_format_optimization_benchmark">使用基准数据优化性能</string>
-    <string name="audio_format_optimization_benchmark_summary">Increases performance of effects that use convolver modules</string>
-    <string name="audio_format_optimization_benchmark_ongoing"></string>
     <string name="backup_settings">備份與還原</string>
     <!-- Theme names -->
     <string name="theme_default">預設</string>

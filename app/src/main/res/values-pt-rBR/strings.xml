@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">O fabricante do seu dispositivo desativou a API interna de gravação de áudio. Este aplicativo não pode funcionar sem eles.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Ativar/desativar processamento de áudio</string>
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Resposta de impulso</string>
-    <string name="convolver_advanced_editing">Edição Avançada de onda</string>
-    <string name="convolver_convolution_mode">Otimização de resposta de impulso</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Reduzir</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Mínimo de transformação e redução de fase</string>
-    <string name="output_control_header">Controle de Saída</string>
-    <string name="output_limiter_threshold">Limite de limitação</string>
-    <string name="output_limiter_release">Liberação do limitador</string>
-    <string name="output_control_postgain">Ganho de saída</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Iniciando</string>
     <string name="onboarding_back">Voltar</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Sem acesso root</string>
     <string name="onboarding_root_shell_fail">Nenhum acesso root disponível. Por favor, utilize outro método de instalação.</string>
     <string name="onboarding_root_shell_fail_unknown">Falha ao conceder permissão via root. Por favor, use outro método de instalação.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Processamento aprimorado está configurado</string>
     <string name="onboarding_adb_shizuku_title">Configuração do Shizuku</string>
     <string name="onboarding_adb_adb_title">Configuração do ADB</string>
     <string name="onboarding_adb_caption">Este aplicativo requer permissões especiais para descarregar a política de áudio do seu dispositivo. Por favor, siga as instruções abaixo.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Habilitar esta configuração pode causar áudio duplicado quando outro aplicativo de efeitos de áudio assume o controle de uma sessão de áudio.\nMantenha essa configuração desativada, a menos que você encontre eventos de perda de sessão de falso positivo.</string>
     <string name="audio_format_header">Processamento do áudio</string>
     <string name="audio_format_section_header">Formato de áudio predileto</string>
-    <string name="audio_format_processing_header">Opções de processamento de áudio</string>
-    <string name="audio_format_processing_legacy">Modo Legacy</string>
-    <string name="audio_format_processing_legacy_on">Anexar globalmente à sessão 0 (obsoleto)</string>
-    <string name="audio_format_processing_legacy_off">Anexar a cada app individualmente</string>
-    <string name="audio_format_enhanced_processing">Processamento aprimorado</string>
-    <string name="audio_format_enhanced_processing_on">Controle por aplicativo e suporte aprimorado para apps ativados</string>
-    <string name="audio_format_enhanced_processing_off">Processamento aprimorado desativado</string>
-    <string name="audio_format_enhanced_processing_info_title">O que é um processamento aprimorado?</string>
-    <string name="audio_format_enhanced_processing_info">Toque para visualizar a documentação</string>
-    <string name="audio_format_enhanced_processing_info_content">Quando o processamento aprimorado está habilitado, você pode excluir determinados aplicativos de serem processados pelo SiphonDSP. Use o menu de 3 pontos no canto inferior direito e selecione \'Aplicativos excluídos\' para acessar este recurso.\n\nEnquanto o modo legacy estiver desativado, o SiphonDSP depende de aplicativos de mídia para enviar uma transmissão do sistema quando eles iniciarem a reprodução. Essa é uma vantagem sobre o modo legado, pois cada aplicativo tem seu próprio motor de efeito SiphonDSP designado a ele, que permite um controle mais refinado. Caso contrário, com o modo legado ativado, todos os aplicativos compartilharão um único motor de processamento, que o Android não recomenda e não deve mais ser usado.\n\nInfelizmente, nem todos os aplicativos de mídia fazem isso corretamente e, portanto, não funcionarão corretamente com o modo antigo desativado. Para resolver este problema, você pode habilitar o processamento melhorado. Em vez de depender de transmissões do sistema de novas sessões de mídia, SiphonDSP irá procurar proativamente sessões de mídia por si só e permitir suporte adequado para aplicativos de mídia não cooperativos.</string>
     <string name="audio_format_media_apps_need_restart">Você precisa reiniciar todos os aplicativos de mídia ativos após alterar esta configuração para retomar o processamento do áudio.</string>
     <string name="audio_format_summary">Codificação de áudio preferida, tamanho de buffer</string>
     <string name="audio_format_summary_root">Modo Legacy, processamento aprimorado</string>
@@ -207,9 +185,6 @@
     <string name="troubleshooting_view_limitations_summary">Mostrar detalhes sobre as limitações deste aplicativo</string>
     <string name="troubleshooting_notification_access">Permitir acesso às notificações para melhor detecção de sessão</string>
     <string name="troubleshooting_notification_access_summary">Permite uma detecção de sessão de áudio mais confiável</string>
-    <string name="troubleshooting_repair_assets">Restaurar empacotados de IRS, DC e scripts</string>
-    <string name="troubleshooting_repair_assets_summary">Descompactar os arquivos pré-carregados se você os perder</string>
-    <string name="troubleshooting_repair_assets_success">Os itens empacotados foram restaurados</string>
     <string name="misc_settings">Diversos</string>
     <string name="misc_settings_summary">Relatórios de erros, outras ações</string>
     <string name="misc_permission_skip_prompt">Ignorar solicitação de permissão de captura</string>
@@ -217,7 +192,6 @@
     <string name="misc_permission_restart_setup">Reiniciar assistente de instalação</string>
     <string name="misc_permission_restart_setup_summary">Conceder permissões opcionais faltantes</string>
     <string name="misc_permission_header">Permissões opcionais</string>
-    <string name="assets">Itens</string>
     <string name="about_settings">Sobre</string>
     <string name="about_settings_summary">Créditos, suporte, atualizações</string>
     <string name="credits">Créditos</string>
@@ -288,10 +262,6 @@
     <string name="filelibrary_renamed">Renomeado para \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' excluído</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">O arquivo VDC selecionado está corrompido. Por favor, escolha outro.</string>
-    <string name="message_irs_corrupt">Resposta de impulso selecionada está corrompida. Por favor, escolha outra.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: A edição de waveform avançada contém valores inválidos.</string>
-    <string name="message_liveprog_compile_fail">A execução do Liveprog falhou. O script selecionado está corrompido. Por favor, use o editor de scripts para depuração.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -357,7 +327,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Desconhecido</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Pacote magisk SiphonDSP requer uma atualização</string>
-    <string name="version_mismatch_root_description">O pacote de magisk SiphonDSP instalado no seu dispositivo está desatualizado e não é mais suportado por este aplicativo.\n\nPor favor, obtenha o mais recente ZIP do SiphonDSP magisk e instale-o via Magisk.\nNote que o pacote magisk pode substituir este app pelo aplicativo oficial SiphonDSP\n\nVocê quer visitar o site de download para os pacotes Magisk agora?</string>
-    <string name="version_mismatch_root_toast">Falha ao iniciar. O pacote de magisk SiphonDSP instalado é muito antigo e não é mais suportado por este aplicativo.</string>
 </resources>

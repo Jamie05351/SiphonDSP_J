@@ -2,115 +2,25 @@ package app.siphondsp.fragment.settings
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
-import androidx.preference.Preference
-import kotlinx.coroutines.launch
 import app.siphondsp.R
-import app.siphondsp.activity.OnboardingActivity
-import app.siphondsp.interop.BenchmarkManager
 import app.siphondsp.preference.MaterialSeekbarPreference
-import app.siphondsp.preference.MaterialSwitchPreference
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.requestIgnoreBatteryOptimizations
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
-import app.siphondsp.utils.extensions.ContextExtensions.showAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
-import app.siphondsp.utils.isRoot
-import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
-import timber.log.Timber
 
 class SettingsAudioFormatFragment : SettingsBaseFragment() {
 
     private val encoding by lazy { findPreference<ListPreference>(getString(R.string.key_audioformat_encoding)) }
     private val bufferSize by lazy { findPreference<MaterialSeekbarPreference>(getString(R.string.key_audioformat_buffersize)) }
-    private val legacyMode by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_audioformat_processing)) }
-    private val enhancedMode by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_audioformat_enhanced_processing)) }
-    private val enhancedModeInfo by lazy { findPreference<Preference>(getString(R.string.key_audioformat_enhanced_processing_info)) }
-    private val benchmark by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_audioformat_optimization_benchmark)) }
-    private val benchmarkRefresh by lazy { findPreference<Preference>(getString(R.string.key_audioformat_optimization_refresh)) }
 
     private val preferences: Preferences.App by inject()
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = Constants.PREF_APP
         setPreferencesFromResource(R.xml.app_audio_format_preferences, rootKey)
-
-        // Root: Hide audio format & benchmark category
-        encoding?.parent?.isVisible = isRootless()
-        benchmark?.parent?.isVisible = !isRoot()
-
-        // Rootless: Hide audio processing category
-        legacyMode?.parent?.isVisible = isRoot()
-        legacyMode?.setOnPreferenceChangeListener { _, newValue ->
-            if (!(newValue as Boolean))
-                requireContext().requestIgnoreBatteryOptimizations()
-            else
-                enhancedMode?.isChecked = false
-
-            RootAudioProcessorService.updateLegacyMode(requireContext(), newValue)
-            true
-        }
-        enhancedMode?.setOnPreferenceChangeListener { _, newValue ->
-            if (newValue as Boolean) {
-                // Check DUMP permissions
-                if(!requireContext().hasDumpPermission()) {
-                    Timber.i("Launching enhanced processing onboarding")
-
-                    Intent(requireContext(), OnboardingActivity::class.java).let {
-                        it.putExtra(OnboardingActivity.EXTRA_ROOT_SETUP_DUMP_PERM, true)
-                        startActivity(it)
-                    }
-                    return@setOnPreferenceChangeListener false
-                }
-
-                RootAudioProcessorService.startServiceEnhanced(requireContext())
-            }
-            else {
-                requireContext().toast(R.string.audio_format_media_apps_need_restart)
-                RootAudioProcessorService.stopService(requireContext())
-            }
-            true
-        }
-        enhancedModeInfo?.setOnPreferenceClickListener {
-            context?.showAlert(
-                R.string.audio_format_enhanced_processing_info_title,
-                R.string.audio_format_enhanced_processing_info_content
-            )
-            true
-        }
-
-        fun runBenchmark() = context?.let { ctx ->
-            BenchmarkManager.runBenchmarks(ctx) {
-                // onFinished fires from whatever thread completed the benchmark job, which may
-                // race with the view being torn down on the main thread; a plain view != null
-                // check doesn't close that window, so catch the resulting IllegalStateException.
-                try {
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        benchmark?.isChecked = BenchmarkManager.hasBenchmarksCached()
-                    }
-                } catch (_: IllegalStateException) {
-                    // View destroyed before benchmark completion landed
-                }
-            }
-        }
-
-        benchmark?.isChecked = BenchmarkManager.hasBenchmarksCached()
-        benchmark?.setOnPreferenceChangeListener { _, newValue ->
-            if(newValue as Boolean)
-                runBenchmark()
-            else
-                BenchmarkManager.clearBenchmarks()
-            true
-        }
-        benchmarkRefresh?.setOnPreferenceClickListener {
-            runBenchmark()
-            true
-        }
 
         bufferSize?.setDefaultValue(preferences.getDefault<Float>(R.string.key_audioformat_buffersize))
         bufferSize?.setOnPreferenceChangeListener { _, newValue ->

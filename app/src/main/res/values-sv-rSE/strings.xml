@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Din enhetstillverkare har inaktiverat interna ljudinspelnings-API:er. Applikation kan inte fungera utan dem.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Sätt på eller stäng av ljudprocessering</string>
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Impulssvar</string>
-    <string name="convolver_advanced_editing">Avancerad vågformsredigering</string>
-    <string name="convolver_convolution_mode">Impulssvarsoptimering</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Krymp</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minfastransformering- och krympning</string>
-    <string name="output_control_header">Utljudskontroll</string>
-    <string name="output_limiter_threshold">Tröskelvärde limiter</string>
-    <string name="output_limiter_release">Limiter release</string>
-    <string name="output_control_postgain">Förstärkning</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
     <string name="onboarding_back">Tillbaka</string>

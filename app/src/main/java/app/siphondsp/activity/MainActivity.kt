@@ -1,6 +1,5 @@
 package app.siphondsp.activity
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
@@ -9,9 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
-import android.content.SharedPreferences
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -22,65 +19,37 @@ import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import androidx.core.content.edit
 import androidx.core.content.getSystemService
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
-import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import app.siphondsp.BuildConfig
-import app.siphondsp.MainApplication
 import app.siphondsp.R
 import app.siphondsp.databinding.ActivityDspMainBinding
 import app.siphondsp.databinding.ContentMainBinding
-import app.siphondsp.flavor.UpdateManager
 import app.siphondsp.fragment.DspFragment
-import app.siphondsp.fragment.FileLibraryDialogFragment
 import app.siphondsp.fragment.LibraryLoadErrorFragment
-import app.siphondsp.interop.JamesDspRemoteEngine
-import app.siphondsp.interop.JamesDspWrapper
-import app.siphondsp.model.ProcessorMessage
-import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.service.BaseAudioProcessorService
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.Result
 import app.siphondsp.utils.SdkCheck
-import app.siphondsp.utils.extensions.AssetManagerExtensions.installPrivateAssets
-import app.siphondsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
 import app.siphondsp.utils.extensions.ContextExtensions.check
 import app.siphondsp.utils.extensions.ContextExtensions.getAppName
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.requestIgnoreBatteryOptimizations
 import app.siphondsp.utils.extensions.ContextExtensions.restoreDspSettings
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
-import app.siphondsp.utils.extensions.ContextExtensions.showAlert
-import app.siphondsp.utils.extensions.ContextExtensions.showSingleChoiceAlert
 import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
-import app.siphondsp.utils.isPlugin
-import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.sdkAbove
-import app.siphondsp.utils.storage.StorageUtils
-import app.siphondsp.view.isHeadUnitDisplay
-import app.siphondsp.view.isHeadUnitDisplay
-import org.koin.core.component.inject
 import timber.log.Timber
-import java.io.File
 import java.util.Timer
 import kotlin.concurrent.schedule
 import kotlin.math.abs
@@ -96,10 +65,7 @@ class MainActivity : BaseActivity() {
     private lateinit var mediaProjectionManager: MediaProjectionManager
     private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
 
-    /* Root version */
     private var hasLoadFailed = false
-    private lateinit var runtimePermissionLauncher: ActivityResultLauncher<Array<String>>
-    private val updateManager: UpdateManager by inject()
 
     private var processorService: BaseAudioProcessorService? = null
     private var processorServiceBound: Boolean = false
@@ -149,7 +115,6 @@ class MainActivity : BaseActivity() {
         }
 
         val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
-        assets.installPrivateAssets(this, force = firstBoot)
 
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
         binding = ActivityDspMainBinding.inflate(layoutInflater)
@@ -225,7 +190,6 @@ class MainActivity : BaseActivity() {
             addAction(Constants.ACTION_PRESET_LOADED)
             registerLocalReceiver(broadcastReceiver, this)
         }
-        registerLocalReceiver(processorMessageReceiver, IntentFilter(Constants.ACTION_PROCESSOR_MESSAGE))
 
         // The power button is the home screen's PowerNode (Compose). PowerHotspot stays as the
         // power state's holder (isToggled) but is no longer drawn or tapped.
@@ -254,42 +218,6 @@ class MainActivity : BaseActivity() {
             }
         }
 
-        // Root: show error if plugin unavailable
-        if(isRoot()) {
-            when(JamesDspRemoteEngine.isPluginInstalled()) {
-                JamesDspRemoteEngine.PluginState.Unavailable -> showLibraryLoadError()
-                JamesDspRemoteEngine.PluginState.Unsupported -> {
-                    prefsApp.set(R.string.key_powered_on, false)
-                    showYesNoAlert(
-                        getString(R.string.version_mismatch_root),
-                        getString(R.string.version_mismatch_root_description)
-                    ) {
-                        if(it) {
-                            startActivity(Intent(Intent.ACTION_VIEW, "https://zackptg5.com/android.php".toUri()))
-                        }
-                    }
-                }
-                else -> {}
-            }
-        }
-
-        /* Root: require battery optimizations turned off when legacy mode is disabled,
-           otherwise, the service will be block from launching from background */
-        if (isRoot() && !(application as MainApplication).isLegacyMode) {
-            requestIgnoreBatteryOptimizations()
-        }
-
-        // Root: request notification permission on Android 13 because the onboarding is not used for root
-        if (isRoot() && SdkCheck.isTiramisu) {
-            runtimePermissionLauncher = registerForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { isGranted ->
-                if (isGranted.all { it.value })
-                    Timber.d("All requested runtime permissions granted")
-            }
-            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
-        }
-
         // Load initial preference states
         val initialPrefList = arrayOf(R.string.key_appearance_nav_hide, R.string.key_powered_on)
         for (pref in initialPrefList)
@@ -297,36 +225,7 @@ class MainActivity : BaseActivity() {
 
         sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
 
-        if(isRoot() && app.isEnhancedProcessing) {
-            if(!hasDumpPermission()) {
-                Timber.e("Dump permission for enhanced processing lost")
-                toast(getString(R.string.enhanced_processing_missing_perm))
-                prefsApp.set(R.string.key_audioformat_enhanced_processing, false)
-            }
-            else {
-                Timber.d("Launching service due to enhanced processing")
-                RootAudioProcessorService.startServiceEnhanced(this)
-            }
-        }
-
         showAndroid15Alert()
-
-        dspFragment.setUpdateCardOnClick { updateManager.installUpdate(this) }
-        dspFragment.setUpdateCardOnCloseClick(::dismissUpdate)
-        checkForUpdates()
-
-        // Handle potential incoming file intent
-        if(intent?.action == Intent.ACTION_VIEW) {
-            intent.data?.let { handleFileIntent(it) }
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
-            setPowerUi(prefsApp.get(R.string.key_powered_on))
-        }
-
-        super.onSharedPreferenceChanged(sharedPreferences, key)
     }
 
     /** The front page's 3-dot menu: same items and actions the old bottom bar's overflow had. */
@@ -334,20 +233,10 @@ class MainActivity : BaseActivity() {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.menu_main_bottom, popup.menu)
 
-        if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))
-            popup.menu.removeItem(R.id.action_blocklist)
-
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_blocklist -> {
-                    if(!app.isEnhancedProcessing && isRoot()) {
-                        showAlert(
-                            R.string.enhanced_processing_feature_unavailable,
-                            R.string.enhanced_processing_feature_unavailable_content
-                        )
-                    }
-                    else
-                        startActivity(Intent(this, BlocklistActivity::class.java))
+                    startActivity(Intent(this, BlocklistActivity::class.java))
                     true
                 }
                 R.id.action_revert -> {
@@ -401,7 +290,6 @@ class MainActivity : BaseActivity() {
 
     override fun onDestroy() {
         unregisterLocalReceiver(broadcastReceiver)
-        unregisterLocalReceiver(processorMessageReceiver)
 
         try {
             if (processorService != null && processorServiceBound)
@@ -444,26 +332,6 @@ class MainActivity : BaseActivity() {
                 // Currently off, let's turn it on
                 requestCapturePermission()
             }
-        }
-        else if (isRoot()) {
-            when(JamesDspRemoteEngine.isPluginInstalled()) {
-                JamesDspRemoteEngine.PluginState.Available -> {
-                    val next = !binding.powerToggle.isToggled
-                    setPowerUi(next)
-                    prefsApp.set(R.string.key_powered_on, next)
-                }
-                JamesDspRemoteEngine.PluginState.Unsupported -> {
-                    toast(getString(R.string.version_mismatch_root_toast))
-                }
-                JamesDspRemoteEngine.PluginState.Unavailable -> {
-                    toast(getString(R.string.load_fail_header))
-                }
-            }
-        }
-        else if(isPlugin()) {
-            val next = !binding.powerToggle.isToggled
-            setPowerUi(next)
-            prefsApp.set(R.string.key_powered_on, next)
         }
     }
 
@@ -523,77 +391,6 @@ class MainActivity : BaseActivity() {
             .show()
     }
 
-    private fun checkForUpdates() {
-        if(!isRoot() ||
-            prefsVar.get<Long>(R.string.key_update_check_timeout) > (System.currentTimeMillis() / 1000L)) {
-            Timber.d("Update check rejected due to flavor or timeout")
-            return
-        }
-
-        lifecycleScope.launch(Dispatchers.Default) {
-            updateManager.isUpdateAvailable().collect {
-                when(it) {
-                    is Result.Error -> {
-                        Timber.e("Update check failed")
-                        Timber.d(it.exception)
-                        // Set timeout to +30min
-                        prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 1800L)
-                        false
-                    }
-                    is Result.Success -> {
-                        Timber.d("Is update available? ${it.data}")
-                        if(!it.data) {
-                            // Set timeout to +4h
-                            prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 14400L)
-                        }
-                        it.data
-                    }
-                    else -> false
-                }.let {
-                    withContext(Dispatchers.Main) {
-                        val info = updateManager.getUpdateVersionInfo()
-                        val skipUpdate = info?.second == prefsVar.get<Int>(R.string.key_update_check_skip)
-                        Timber.d("Should skip update ${info?.second}?: $skipUpdate")
-                        if(skipUpdate) {
-                            // Set timeout to +4h
-                            prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 14400L)
-                        }
-                        dspFragment.setUpdateCardTitle(getString(R.string.self_update_notice, info?.first ?: "..."))
-                        dspFragment.setUpdateCardVisible(it && !skipUpdate)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun dismissUpdate() {
-        if(!isRoot())
-            return
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.actions))
-            .setItems(R.array.update_dismiss_dialog) { dialogInterface, i ->
-                when(i) {
-                    0 -> updateManager.installUpdate(this)
-                    1 -> {
-                        prefsVar.set(R.string.key_update_check_skip, updateManager.getUpdateVersionInfo()?.second ?: 0)
-                        dspFragment.setUpdateCardVisible(false)
-                    }
-                    2 -> {
-                        prefsVar.set(
-                            R.string.key_update_check_timeout,
-                            (System.currentTimeMillis() / 1000L) + 43200L /* +12h snooze */
-                        )
-                        dspFragment.setUpdateCardVisible(false)
-                    }
-                }
-                dialogInterface.dismiss()
-            }
-            .setNegativeButton(getString(android.R.string.cancel)){ _, _ -> }
-            .create()
-            .show()
-    }
-
     private fun showLibraryLoadError() {
         if(DEBUG_IGNORE_MISSING_LIBRARY)
             return
@@ -622,11 +419,6 @@ class MainActivity : BaseActivity() {
                 }
             }
         }
-        else if (isRoot()) {
-            Intent(this, RootAudioProcessorService::class.java).also { intent ->
-                bindService(intent, processorServiceConnection, 0)
-            }
-        }
     }
 
     private fun unbindProcessorService() {
@@ -652,106 +444,6 @@ class MainActivity : BaseActivity() {
         catch (ex: ActivityNotFoundException) {
             toast(getString(R.string.error_projection_api_missing))
             Timber.e(ex)
-        }
-    }
-
-    private var processorMessageReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-
-        override fun onReceive(context: Context, intent: Intent) {
-            when (ProcessorMessage.Type.fromInt(intent.getIntExtra(ProcessorMessage.TYPE, 0))) {
-                ProcessorMessage.Type.VdcParseError -> {
-                    makeSnackbar(getString(R.string.message_vdc_corrupt)).show()
-                }
-                ProcessorMessage.Type.ConvolverParseError -> {
-                    when(ProcessorMessage.ConvolverErrorCode.fromInt(
-                        intent.getIntExtra(ProcessorMessage.Param.ConvolverErrorCode.name, 0)
-                    )) {
-                        ProcessorMessage.ConvolverErrorCode.Corrupted -> R.string.message_irs_corrupt
-                        ProcessorMessage.ConvolverErrorCode.AdvParamsInvalid -> R.string.message_convolver_advimp_invalid
-                        else -> null
-                    }?.let {
-                        makeSnackbar(getString(it)).show()
-                    }
-                }
-                ProcessorMessage.Type.LiveprogOutput -> {}
-                ProcessorMessage.Type.LiveprogExec -> {}
-                ProcessorMessage.Type.LiveprogResult -> {
-                    val ret = intent.getIntExtra(ProcessorMessage.Param.LiveprogResultCode.name, 1)
-                    if(ret <= 0)
-                    {
-                        val msg = JamesDspWrapper.eelErrorCodeToString(ret)
-                        makeSnackbar(getString(R.string.message_liveprog_compile_fail) + " ($msg)").show()
-                    }
-                }
-                else -> {}
-            }
-        }
-    }
-
-    private fun handleFileIntent(uri: Uri) {
-        val name = StorageUtils.queryName(this, uri)
-        if (name == null) {
-            toast(getString(R.string.intent_import_error_file_uri))
-            return
-        }
-
-        val choices = arrayOf<CharSequence>(
-            getString(R.string.intent_import_mode_add),
-            getString(R.string.intent_import_mode_select)
-        )
-
-        val titleRes: Int
-        val subDir: String
-        val namespace: String
-        val key: Int
-        val keyEnable: Int
-        when {
-            name.endsWith(".irs") || name.endsWith(".wav") -> {
-                titleRes = R.string.intent_import_irs
-                subDir = "Convolver"
-                namespace = Constants.PREF_CONVOLVER
-                key = R.string.key_convolver_file
-                keyEnable = R.string.key_convolver_enable
-            }
-            else -> return
-        }
-
-        showSingleChoiceAlert(titleRes, choices, -1) { idx ->
-            idx ?: return@showSingleChoiceAlert
-            if (idx < 0 || idx > 1)
-                return@showSingleChoiceAlert
-
-            val file = StorageUtils.importFile(
-                this,
-                File(getExternalFilesDir(null), subDir).absolutePath,
-                uri
-            )
-
-            if (file == null) {
-                Timber.w("Failed to import file '$uri'")
-                makeSnackbar(getString(R.string.intent_import_fail, name)).show()
-                return@showSingleChoiceAlert
-            }
-
-            when (idx) {
-                0 -> makeSnackbar(getString(R.string.intent_import_success, name)).show()
-                1 -> {
-                    lifecycleScope.launch(Dispatchers.Default) {
-                        delay(250L)
-
-                        @Suppress("DEPRECATION")
-                        getSharedPreferences(namespace, MODE_MULTI_PROCESS).edit {
-                            putBoolean(getString(keyEnable), true)
-                            putString(getString(key), file.absolutePath)
-                        }
-
-                        delay(250L)
-                        broadcastPresetLoadEvent()
-
-                        makeSnackbar(getString(R.string.intent_import_select_success, name)).show()
-                    }
-                }
-            }
         }
     }
 

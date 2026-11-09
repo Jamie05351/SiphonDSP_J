@@ -28,13 +28,10 @@ import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
 import app.siphondsp.receiver.MasterVolumeReceiver
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.session.dump.DumpManager
-import app.siphondsp.session.root.RootSessionDatabase
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.RoutingObserver
 import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.preferences.Preferences
@@ -59,13 +56,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
     }
 
     private val prefs: Preferences.App by inject()
-
-    val rootSessionDatabase by lazy { RootSessionDatabase(this) }
-    val isLegacyMode
-        get() = prefs.get<Boolean>(R.string.key_audioformat_processing)
-    val isEnhancedProcessing
-        get() = !isLegacyMode &&
-                prefs.get<Boolean>(R.string.key_audioformat_enhanced_processing)
 
     private val applicationScope = CoroutineScope(SupervisorJob())
     private val blockedAppDatabase by lazy { AppBlocklistDatabase.getDatabase(this, applicationScope) }
@@ -181,19 +171,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
                 this, MasterVolumeReceiver(), IntentFilter(MasterVolumeReceiver.ACTION),
                 ContextCompat.RECEIVER_EXPORTED,
             )
-        }
-
-        try {
-            if (isRoot() && isLegacyMode)
-                RootAudioProcessorService.updateLegacyMode(applicationContext, true)
-        }
-        catch(ex: Exception) {
-            /* Throws ForegroundServiceStartNotAllowedException on Android 13 if
-             * the service cannot be started from this point and battery optimizations were not
-             * disabled. BootCompletedReceiver handles auto-start after boot.
-             */
-            Timber.e("Failed to launch service in legacy mode on startup")
-            Timber.i(ex)
         }
         super.onCreate()
     }

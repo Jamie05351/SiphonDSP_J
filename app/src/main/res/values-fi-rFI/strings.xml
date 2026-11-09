@@ -27,7 +27,6 @@
     <string name="permission_allowed">Sallittu</string>
     <string name="permission_not_allowed">Ei sallittu</string>
     <!-- Main screen -->
-    <string name="convolver_convolution_mode_original">Alkuperäinen</string>
     <!-- Onboarding -->
     <string name="onboarding_back">Takaisin</string>
     <string name="onboarding_next">Seuraava</string>
@@ -103,7 +102,6 @@
     <!-- Root: Library load failure -->
     <string name="load_fail_header">Magisk-moduulia ei ole asennettu</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Ominaisuus ei ole käytettävissä</string>
     <!-- App list -->
     <string name="app_list_loading">Ladataan sovelluksia…</string>
     <string name="app_list_search">Hae</string>

@@ -12,8 +12,6 @@
 
     <!-- Internal DSP -->
     <string name="key_powered_on" translatable="false">powered_on</string>
-    <string name="key_benchmark_c0" translatable="false">benchmark_c0</string>
-    <string name="key_benchmark_c1" translatable="false">benchmark_c1</string>
 
     <!-- Settings categories (static) -->
     <string name="key_appearance" translatable="false">appearance</string>
@@ -36,9 +34,6 @@
     <string name="key_powersave_suspend" translatable="false">powersave_suspend</string>
     <string name="key_audioformat_encoding" translatable="false">audioformat_encoding</string>
     <string name="key_audioformat_buffersize" translatable="false">audioformat_buffersize</string>
-    <string name="key_audioformat_processing" translatable="false">audioformat_processing</string>
-    <string name="key_audioformat_enhanced_processing" translatable="false">audioformat_enhanced_processing</string>
-    <string name="key_audioformat_optimization_benchmark" translatable="false">audioformat_optimization_benchmark</string>
 
     <!-- Device profiles -->
     <string name="key_device_profiles_enable" translatable="false">device_profiles_enable</string>
@@ -61,14 +56,11 @@
     <string name="key_backup_restore" translatable="false">backup_restore</string>
     <string name="key_troubleshooting_dump" translatable="false">troubleshooting_dump</string>
     <string name="key_troubleshooting_notification_access" translatable="false">troubleshooting_notification_access</string>
-    <string name="key_troubleshooting_repair_assets" translatable="false">troubleshooting_repair_assets</string>
     <string name="key_troubleshooting_view_limitations" translatable="false">troubleshooting_view_limitations</string>
     <string name="key_credits_version" translatable="false">credits_version</string>
     <string name="key_credits_build_info" translatable="false">credits_build_info</string>
     <string name="key_credits_check_update" translatable="false">credits_check_update</string>
     <string name="key_credits_google_play" translatable="false">credits_google_play</string>
-    <string name="key_audioformat_enhanced_processing_info" translatable="false">audioformat_enhanced_processing_info</string>
-    <string name="key_audioformat_optimization_refresh" translatable="false">audioformat_optimization_refresh</string>
     <string name="key_misc_permission_skip_prompt" translatable="false">misc_permission_skip_prompt</string>
     <string name="key_misc_permission_auto_start" translatable="false">misc_permission_auto_start</string>
     <string name="key_misc_permission_restart_setup" translatable="false">misc_permission_restart_setup</string>
@@ -81,12 +73,5 @@
     <string name="key_peq_bands" translatable="false">peq_bands</string>
     <string name="key_peq_preamp" translatable="false">peq_preamp</string>
 
-    <string name="key_convolver_enable" translatable="false">convolver_enable</string>
-    <string name="key_convolver_file" translatable="false">convolver_file</string>
-    <string name="key_convolver_mode" translatable="false">convolver_mode</string>
-    <string name="key_convolver_adv_imp" translatable="false">convolver_adv_imp</string>
 
-    <string name="key_limiter_threshold" translatable="false">limiter_threshold</string>
-    <string name="key_limiter_release" translatable="false">limiter_release</string>
-    <string name="key_output_postgain" translatable="false">output_postgain</string>
 </resources>

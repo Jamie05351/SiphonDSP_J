@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Виробник вашого пристрою вимкнув внутрішні API для запису звуку. Ця програма не може працювати без них.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Перемкнути обробку аудіо</string>
-    <string name="convolver_enable">Конвольвер</string>
-    <string name="convolver_impulse">Імпульсний відгук</string>
-    <string name="convolver_advanced_editing">Редагування форми сигналу</string>
-    <string name="convolver_convolution_mode">Оптимізація імпульсного відгуку</string>
-    <string name="convolver_convolution_mode_original">Оригінал</string>
-    <string name="convolver_convolution_mode_shrink">Стиснення</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Мінімальне фазове перетворення і стиснення</string>
-    <string name="output_control_header">Контроль виводу звуку</string>
-    <string name="output_limiter_threshold">Поріг лімітера</string>
-    <string name="output_limiter_release">Час релізу</string>
-    <string name="output_control_postgain">Рівень вихідного підсилення</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Онбордінг</string>
     <string name="onboarding_back">Назад</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Немає root-доступу</string>
     <string name="onboarding_root_shell_fail">Root-права не надані або відсутні на пристрої. Будь ласка, скористайтеся іншим методом налаштування.</string>
     <string name="onboarding_root_shell_fail_unknown">Не вдалося надати дозвіл через root. Будь ласка, скористайтеся іншим методом налаштування.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Розширена обробка налаштована</string>
     <string name="onboarding_adb_shizuku_title">Налаштування Shizuku</string>
     <string name="onboarding_adb_adb_title">Налаштування ADB</string>
     <string name="onboarding_adb_caption">Для роботи цієї програми потрібні спеціальні дозволи для вивантаження аудіополітики вашого пристрою. Будь ласка, дотримуйтесь інструкцій нижче.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Активація цього параметру може призвести до дублювання звуку, якщо інший додаток для обробки аудіо отримає контроль над поточною аудіосесією. \nЯкщо у вас немає проблем з втратою сесій, то рекомендується залишити цю опцію вимкненою.</string>
     <string name="audio_format_header">Обробка аудіо</string>
     <string name="audio_format_section_header">Обраний аудіоформат</string>
-    <string name="audio_format_processing_header">Параметри обробки аудіо</string>
-    <string name="audio_format_processing_legacy">Режим legacy</string>
-    <string name="audio_format_processing_legacy_on">Прикріпити глобально до сесії 0 (застаріло)</string>
-    <string name="audio_format_processing_legacy_off">Прикріплювати до кожного додатка окремо</string>
-    <string name="audio_format_enhanced_processing">Розширена обробка</string>
-    <string name="audio_format_enhanced_processing_on">Керування додатками та розширена обробка увімкнені</string>
-    <string name="audio_format_enhanced_processing_off">Розширена обробка вимкнена</string>
-    <string name="audio_format_enhanced_processing_info_title">Що таке розширена обробка?</string>
-    <string name="audio_format_enhanced_processing_info">Натисніть, щоб переглянути документацію</string>
-    <string name="audio_format_enhanced_processing_info_content">У разі ввімкненої опції «Розширена обробка», ви можете обирати, які додатки виключити з обробки SiphonDSP, через меню з трьома крапками в правому нижньому кутку та натиснувши пункт «Виключені додатки». \n\nВимкнення режиму legacy дає змогу кожному додатку використовувати свій власний механізм ефектів SiphonDSP для більш тонкого контролю. В іншому випадку всі програми будуть використовувати один механізм обробки, який в Android застарів і більше не повинен використовуватися. \n\nНа жаль, деякі мультимедійні додатки не виконують цю функцію належним чином, тому є ймовірність, що вони не працюватимуть коректно, якщо режим legacy вимкнений. Для розв\'язання цієї проблеми можна увімкнути опцію «Розширена обробка», щоб SiphonDSP міг самостійно сканувати аудіосесії, не покладаючись на системні повідомлення та забезпечувати коректну підтримку таких додатків.</string>
     <string name="audio_format_media_apps_need_restart">Після зміни цього параметра необхідно перезапустити всі активні мультимедійні додатки, щоб відновити обробку звуку.</string>
     <string name="audio_format_summary">Кодування аудіо, розмір буфера</string>
     <string name="audio_format_summary_root">Режим legacy, розширена обробка</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Розмір буфера</string>
     <string name="audio_format_buffer_size_unit">&#xa0;samples</string>
     <string name="audio_format_buffer_size_warning_low_value">Попередження: Низькі розміри буфера можуть спричинити проблеми з аудіо, як-от кліппінг!</string>
-    <string name="audio_format_optimization_header">Оптимізації модуля конвольвера</string>
-    <string name="audio_format_optimization_refresh">Оновити дані бенчмаркінгу</string>
-    <string name="audio_format_optimization_benchmark">Використовувати бенчмарки для оптимізації продуктивності</string>
-    <string name="audio_format_optimization_benchmark_summary">Підвищує продуктивність ефектів, які використовують модулі конвольвера</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Виконується тест продуктивності…</string>
     <string name="app_behavior">Робота додатка</string>
     <string name="exclude_app_from_recents">Виключити додаток з нещодавніх</string>
     <string name="exclude_app_from_recents_off">Не видаляти додаток зі списку нещодавніх завдань</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Показати подробиці про обмеження цього додатка</string>
     <string name="troubleshooting_notification_access">Дозволити доступ до сповіщень</string>
     <string name="troubleshooting_notification_access_summary">Забезпечує надійнішу детекцію аудіосесії</string>
-    <string name="troubleshooting_repair_assets">Відновити вбудовані IR, DDC та скрипти</string>
-    <string name="troubleshooting_repair_assets_summary">Якщо ви втратили або видалили попередньо встановлені ресурси, ви можете їх відновити. Ресурси, імпортовані або створені вами, залишаться без змін</string>
-    <string name="troubleshooting_repair_assets_success">Попередньо встановлені ресурси були відновлені</string>
     <string name="misc_settings">Інше</string>
     <string name="misc_settings_summary">Звіти про помилки, інші дії</string>
     <string name="misc_permission_skip_prompt">Пропустити запит дозволу на захоплення</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Перезапустити майстер налаштування</string>
     <string name="misc_permission_restart_setup_summary">Надати відсутні додаткові дозволи</string>
     <string name="misc_permission_header">Додаткові дозволи</string>
-    <string name="assets">Ресурси</string>
     <string name="about_settings">Про додаток</string>
     <string name="about_settings_summary">Автори, підтримка, оновлення</string>
     <string name="credits">Подяки</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Перейменовано на %1$s</string>
     <string name="filelibrary_deleted">%1$s видалено</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Обраний файл VDC пошкоджений. Будь ласка, виберіть інший файл.</string>
-    <string name="message_irs_corrupt">Обраний файл імпульсного відгуку пошкоджений. Будь ласка, виберіть інший.</string>
-    <string name="message_convolver_advimp_invalid">Конвольвер: Розширене редагування форми сигналу містить неприпустимі значення.</string>
-    <string name="message_liveprog_compile_fail">Помилка виконання Liveprog. Обраний скрипт пошкоджений. Використайте редактор скриптів для налагодження.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Модуль вже встановлений?</string>
     <string name="load_fail_arch_card">Якщо ви вже встановили модуль Magisk, можливо, ви вибрали неправильні налаштування під час встановлення. Спробуйте перевстановити модуль і увімкнути сумісність із пристроями Huawei (навіть якщо ваш телефон не вироблений компанією Huawei).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Функція недоступна</string>
-    <string name="enhanced_processing_feature_unavailable_content">Функція доступна лише при увімкненій опції «Розширена обробка» в налаштуваннях. Будь ласка, увімкніть цю опцію в «Параметри &gt; Обробка аудіо &gt; Розширена обробка», щоб отримати доступ до цього меню. \n\nПримітка: опція «Розширена обробка» недоступна, якщо увімкнено режим legacy.</string>
-    <string name="enhanced_processing_missing_perm">Покращену обробку було вимкнено через відсутність необхідних дозволів. Будь ласка, повторно налаштуйте їх в параметрах.</string>
     <!-- App list -->
     <string name="app_list_loading">Завантаження списку додатків…</string>
     <string name="app_list_search">Пошук</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Ви впевнені?</string>
     <string name="revert_confirmation">Скинути поточний пресет SiphonDSP до типових значень?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Імпортувати імпульсний відгук</string>
-    <string name="intent_import_mode_add">Лише імпортувати</string>
-    <string name="intent_import_mode_select">Імпортувати та активувати</string>
-    <string name="intent_import_fail">Не вдалось імпортувати файл %1$s</string>
-    <string name="intent_import_success">Файл %1$s імпортовано</string>
-    <string name="intent_import_select_success">Файл %1$s імпортовано та активовано</string>
-    <string name="intent_import_error_file_uri">Не вдалося імпортувати файл. Непідтримувана URI-адреса файлу.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Допоможіть нам перекласти цей додаток вашою мовою! Натисніть тут, щоб перейти на сайт проекту на Crowdin.</string>
     <string name="translation_notice">Допомогти з перекладом</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Невідомо</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Пакет SiphonDSP для Magisk потребує оновлення</string>
-    <string name="version_mismatch_root_description">Встановлений на вашому пристрої пакет SiphonDSP для Magisk застарів і більше не підтримується цим застосунком.\n\nБудь ласка, отримайте останню версію ZIP-файлу пакета SiphonDSP для Magisk та встановіть його через Magisk.\nЗверніть увагу, що пакет Magisk може замінити цей додаток офіційним застосунком SiphonDSP.\n\nБажаєте відвідати веб-сайт для завантаження пакетів Magisk зараз?</string>
-    <string name="version_mismatch_root_toast">Не вдалося запустити. Встановлений пакет SiphonDSP для Magisk застарів і більше не підтримується цим застосунком.</string>
 </resources>

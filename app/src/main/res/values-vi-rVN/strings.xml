@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Nhà sản xuất thiết bị của bạn đã tắt API ghi âm nội bộ. Ứng dụng này không thể hoạt động nếu không có chúng.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Bật xử lý âm thanh</string>
-    <string name="convolver_enable">Bộ chuyển đổi</string>
-    <string name="convolver_impulse">Đáp ứng xung</string>
-    <string name="convolver_advanced_editing">Chỉnh sóng nâng cao</string>
-    <string name="convolver_convolution_mode">Tối ưu hoá phản ứng xung</string>
-    <string name="convolver_convolution_mode_original">Gốc</string>
-    <string name="convolver_convolution_mode_shrink">Co lại</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Biến đổi và thu nhỏ pha tối thiểu</string>
-    <string name="output_control_header">Kiểm soát đầu ra</string>
-    <string name="output_limiter_threshold">Ngưỡng giới hạn</string>
-    <string name="output_limiter_release">Thời gian phục hồi của giới hạn</string>
-    <string name="output_control_postgain">Âm lượng tổng</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Giới thiệu</string>
     <string name="onboarding_back">Quay Lại</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Không có quyền root</string>
     <string name="onboarding_root_shell_fail">Không có quyền root. Hãy dùng cách thiết lập khác.</string>
     <string name="onboarding_root_shell_fail_unknown">Không cấp được quyền thông qua root. Hãy sử dụng cách thiết lập khác.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Quá trình xử lý nâng cao đã được thiết lập</string>
     <string name="onboarding_adb_shizuku_title">thiết lập Shizuku</string>
     <string name="onboarding_adb_adb_title">Thiết lập ADB</string>
     <string name="onboarding_adb_caption">Ứng dụng này yêu cầu quyền đặc biệt để loại bỏ chính sách âm thanh trên thiết bị của bạn. Hãy làm theo hướng dẫn dưới đây.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Việc bật cài đặt này có thể khiến âm thanh bị trùng lặp khi một ứng dụng hiệu ứng âm thanh khác kiểm soát phiên âm thanh.\nVui lòng tắt cài đặt này trừ khi bạn gặp phải sự kiện mất phiên dương tính giả.</string>
     <string name="audio_format_header">Đang xử lý Âm thanh</string>
     <string name="audio_format_section_header">Định dạng âm thanh ưa thích</string>
-    <string name="audio_format_processing_header">Tùy chọn xử lý âm thanh</string>
-    <string name="audio_format_processing_legacy">Chế độ cổ điển</string>
-    <string name="audio_format_processing_legacy_on">Gán toàn bộ vào phiên 0 (Bị loại bỏ)</string>
-    <string name="audio_format_processing_legacy_off">Gán vào từng ứng dụng riêng lẻ</string>
-    <string name="audio_format_enhanced_processing">Xử lý nâng cao</string>
-    <string name="audio_format_enhanced_processing_on">Kiểm soát theo ứng dụng và hỗ trợ nâng cao cho ứng dụng đã được kích hoạt</string>
-    <string name="audio_format_enhanced_processing_off">Đã tắt xử lý nâng cao</string>
-    <string name="audio_format_enhanced_processing_info_title">Xử lý nâng cao là gì?</string>
-    <string name="audio_format_enhanced_processing_info">Nhấn để xem tài liệu</string>
-    <string name="audio_format_enhanced_processing_info_content">Khi xử lý nâng cao được bật, Bạn có thể loại trừ một số ứng dụng nhất định khỏi Bị Xử lý Bởi James dsp. Sử dụng menu 3 chấm ở góc dưới cùng bên phải và chọn \'Ứng dụng Bị Loại trừ\' để truy cập tính năng này.\n\n trong khi chế độ cổ điển bị vô hiệu hóa, SiphonDSP dựa vào các ứng dụng đa phương tiện để gửi phát sóng hệ thống khi chúng bắt đầu phát lại. Đây là một lợi thế so với chế độ cổ điển vì mỗi ứng dụng có Công cụ Hiệu Ứng James Dsp riêng được gán cho nó, cho phép kiểm soát chi tiết hơn. Nếu Không, với chế độ cổ điển được bật, tất cả các ứng dụng sẽ chia sẻ một công cụ xử lý duy nhất, Mà Android không dùng nữa và không nên sử dụng nữa.\n \n Thật Không May, không phải tất cả các ứng dụng phương tiện đều làm điều này một cách chính xác và do đó, sẽ không hoạt động chính xác với chế độ kế thừa bị vô hiệu hóa. Để giải quyết vấn đề này, bạn có thể bật xử lý nâng cao. Thay vì dựa vào các chương trình phát sóng hệ thống về các phiên truyền thông mới, James Dsp sẽ chủ động tự quét các phiên truyền thông và cho phép hỗ trợ thích hợp cho các ứng dụng truyền thông không hợp tác.</string>
     <string name="audio_format_media_apps_need_restart">Bạn cần khởi động lại tất cả các ứng dụng đa phương tiện đang hoạt động sau khi thay đổi cài đặt này để tiếp tục xử lý âm thanh.</string>
     <string name="audio_format_summary">Ưu tiên mã hóa âm thanh, kích thước bộ đệm</string>
     <string name="audio_format_summary_root">Chế độ kế thừa, xử lý nâng cao</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Kích thước bộ đệm</string>
     <string name="audio_format_buffer_size_unit">&#xa0;mẫu</string>
     <string name="audio_format_buffer_size_warning_low_value">Cảnh báo: Kích thước bộ đệm thấp có thể gây ra các vấn đề về âm thanh như bị rè!</string>
-    <string name="audio_format_optimization_header">Tối ưu hóa mô-đun tích chập</string>
-    <string name="audio_format_optimization_refresh">Làm mới dữ liệu điểm chuẩn</string>
-    <string name="audio_format_optimization_benchmark">Sử dụng đo điểm chuẩn để tối ưu hóa hiệu suất</string>
-    <string name="audio_format_optimization_benchmark_summary">Tăng hiệu suất của các hiệu ứng sử dụng module convolver</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Đang trong quá trình đánh giá…</string>
     <string name="app_behavior">Hành vi ứng dụng</string>
     <string name="exclude_app_from_recents">Loại trừ ứng dụng khỏi gần đây</string>
     <string name="exclude_app_from_recents_off">Không loại trừ ứng dụng khỏi danh sách tác vụ gần đây</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Hiển thị chi tiết về những hạn chế của ứng dụng này</string>
     <string name="troubleshooting_notification_access">Cho phép truy cập thông báo để phát hiện phiên tốt hơn</string>
     <string name="troubleshooting_notification_access_summary">Cho phép phát hiện phiên âm thanh đáng tin cậy hơn</string>
-    <string name="troubleshooting_repair_assets">Khôi phục bundled IRS, DDC và các script</string>
-    <string name="troubleshooting_repair_assets_summary">Giải nén tài sản được tải trước nếu bạn bị mất chúng</string>
-    <string name="troubleshooting_repair_assets_success">Bundled assets đã được khôi phục</string>
     <string name="misc_settings">Các tùy chọn khác</string>
     <string name="misc_settings_summary">Báo cáo sự cố, hành động khác</string>
     <string name="misc_permission_skip_prompt">Bỏ qua lời nhắc cấp phép chụp</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Khởi động lại trình hướng dẫn thiết lập</string>
     <string name="misc_permission_restart_setup_summary">Cấp các quyền tùy chọn còn thiếu</string>
     <string name="misc_permission_header">Quyền tùy chọn</string>
-    <string name="assets">Tài sản</string>
     <string name="about_settings">Thông tin</string>
     <string name="about_settings_summary">Tín dụng, hỗ trợ, các cập nhật</string>
     <string name="credits">Tín dụng</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Đã đổi tên thành \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' đã xoá</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Tệp VDC đã chọn bị hỏng. Vui lòng chọn cái khác.</string>
-    <string name="message_irs_corrupt">Phản hồi xung được chọn bị hỏng. Vui lòng chọn một cái khác.</string>
-    <string name="message_convolver_advimp_invalid">Bộ biến đổi: Chỉnh sửa sóng nâng cao chứa giá trị không hợp lệ.</string>
-    <string name="message_liveprog_compile_fail">Liveprog thực hiện thất bại. Tập lệnh đã chọn bị hỏng. Vui lòng sử dụng trình chỉnh sửa tập lệnh để gỡ lỗi.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Module đã cài đặt rồi?</string>
     <string name="load_fail_arch_card">Nếu bạn đã cài đặt module magisk, có thể bạn đã chọn những cài đặt không đúng trong quá trình cài đặt. Vui lòng cài đặt lại và thử kích hoạt tính năng tương thích với Huawei (ngay cả khi điện thoại của bạn không phải của hãng này).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Tính năng không có sẵn</string>
-    <string name="enhanced_processing_feature_unavailable_content">Tính năng này chỉ có sẵn khi ‘xử lý nâng cao’ được bật trong cài đặt. Vui lòng vào ‘Cài đặt &gt; Xử lý âm thanh &gt; Xử lý nâng cao’ và bật tùy chọn này để truy cập menu.\n\nLưu ý: ‘Xử lý nâng cao’ không thể sử dụng trong khi chế độ legacy được bật.</string>
-    <string name="enhanced_processing_missing_perm">Quá trình xử lý nâng cao đã bị vô hiệu hóa do không đủ quyền. Vui lòng thiết lập lại nó trong cài đặt.</string>
     <!-- App list -->
     <string name="app_list_loading">Đang tải ứng dụng…</string>
     <string name="app_list_search">Tìm kiếm</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Bạn chắc chứ?</string>
     <string name="revert_confirmation">Bạn có muốn đặt lại cài đặt SiphonDSP hiện tại của mình về giá trị mặc định không?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Nhập đáp ứng xung</string>
-    <string name="intent_import_mode_add">Chỉ nhập vào</string>
-    <string name="intent_import_mode_select">Nhập và kích hoạt</string>
-    <string name="intent_import_fail">Không thể nhập tệp \'%1$s\'</string>
-    <string name="intent_import_success">Đã nhập tệp \'%1$s\'</string>
-    <string name="intent_import_select_success">Tệp \'%1$s\' đã được nhập và kích hoạt</string>
-    <string name="intent_import_error_file_uri">Không thể nhập tệp. URI tệp không được hỗ trợ.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Hãy giúp chúng tôi dịch ứng dụng này sang ngôn ngữ của bạn! Nhấn vào đây để truy cập trang web dự án trên Crowdin.</string>
     <string name="translation_notice">Đóng góp bản dịch</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Không rõ</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Gói magisk SiphonDSP cần được cập nhật</string>
-    <string name="version_mismatch_root_description">Gói SiphonDSP magisk bạn đã cài đặt trên thiết bị đã lỗi thời và không còn được ứng dụng này hỗ trợ nữa.\n\nVui lòng tải xuống gói ZIP SiphonDSP magisk mới nhất và cài đặt qua Magisk.\nLưu ý rằng gói magisk có thể thay thế ứng dụng này bằng ứng dụng chính thức SiphonDSP.\n\nBạn có muốn truy cập trang web tải xuống cho các gói Magisk ngay bây giờ không?</string>
-    <string name="version_mismatch_root_toast">Không thể khởi động. SiphonDSP Magisk đã cài đặt trên thiết bị của bạn đã quá cũ và không còn được ứng dụng hỗ trợ nữa.</string>
 </resources>

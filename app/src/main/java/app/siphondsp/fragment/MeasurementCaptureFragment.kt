@@ -38,7 +38,7 @@ class MeasurementCaptureFragment : Fragment() {
 
     // Set when exportNativeBmwCaptureWav fails (e.g. a transient cache write error) -- the
     // engine keeps the completed native capture alive across that failure specifically so it can
-    // be retried without recording again (see JamesDspLocalEngine.exportNativeBmwCaptureWav).
+    // be retried without recording again (see DspEngine.exportNativeBmwCaptureWav).
     // Cleared by a successful retry, or by starting a genuinely new capture (which invalidates
     // whatever the retry would have re-exported anyway).
     private var pendingExportRetry = false
@@ -135,7 +135,7 @@ class MeasurementCaptureFragment : Fragment() {
         }
         // A pending retry belongs to whatever was captured before -- recording now replaces it
         // (and the engine frees the retained snapshot it would have retried, see
-        // JamesDspLocalEngine.startNativeBmwCapture).
+        // DspEngine.startNativeBmwCapture).
         pendingExportRetry = false
         capturing = true
         binding.measurementReadout.isVisible = false
@@ -171,7 +171,7 @@ class MeasurementCaptureFragment : Fragment() {
                 }
                 if (result == null || result.size < 3) {
                     // The native capture snapshot survives this failure (see
-                    // JamesDspLocalEngine.exportNativeBmwCaptureWav) -- offer a retry instead of
+                    // DspEngine.exportNativeBmwCaptureWav) -- offer a retry instead of
                     // requiring the user to record another 30s take from scratch.
                     pendingExportRetry = true
                     captureBinding.measurementCaptureButton.text = getString(R.string.measurement_retry_export)

@@ -10,15 +10,14 @@ arm64-v8a only. Not the upstream Play/F-Droid app — build from this repo.
 ## What it is
 
 J_DSP keeps RootlessJamesDSP's audio path — Android internal audio capture routed
-through a JNI DSP core and back out through `AudioTrack` — but replaces the effect
-chain with a single tuning suite aimed at driving a BMW factory amplifier from an
-Android head unit (developed against a 1280×480 landscape unit).
+through JNI into the native DSP and back out through `AudioTrack` — but the processing
+is entirely its own: a single tuning suite aimed at driving a BMW factory amplifier
+from an Android head unit (developed against a 1280×480 landscape unit).
 
-The general JamesDSP features are gone: graphic EQ, AutoEQ, compander, liveprog/EEL,
-stereo widen, DDC, device profiles, and the generic preset system have all been
-removed. What survives from upstream is the capture→process→playback service,
-session tracking / app blocklist, the Convolver (dormant), and the settings and
-backup scaffolding.
+Nothing of the JamesDSP engine is left: libjamesdsp (graphic EQ, compander,
+liveprog/EEL, the convolver and its own output limiter) and the root/plugin variants
+are gone. What survives from upstream is the capture→process→playback service,
+session tracking / app blocklist, and the settings and backup scaffolding.
 
 ## Tuning suite
 
@@ -70,7 +69,7 @@ internal-left chain lands on the physical right output. This is intentional; do 
 ## Running it
 
 Audio routing is still RootlessJamesDSP's: grant the app internal-audio-capture
-through Shizuku or ADB (or run the root variant). Caveats that still apply:
+through Shizuku or ADB. Caveats that still apply:
 
 - Apps that block internal capture stay unprocessed.
 - Latency is higher than a native/root audio effect.
@@ -106,9 +105,9 @@ Private build and recovery flow: [PRIVATE_BUILD_AND_RECOVERY.md](PRIVATE_BUILD_A
 ## Upstream & credits
 
 Fork of [RootlessJamesDSP](https://github.com/timschneeb/RootlessJamesDSP) by Tim
-Schneeberger — rootless routing, UI foundation, backup and theming scaffolding. DSP
-engine: [JamesDSP / libjamesdsp](https://github.com/james34602/JamesDSPManager) by
-James Fung. Theming and backup foundations from Tachiyomi, via upstream.
+Schneeberger — rootless routing, UI foundation, backup and theming scaffolding. The
+original DSP engine was [JamesDSP / libjamesdsp](https://github.com/james34602/JamesDSPManager)
+by James Fung (no longer used). Theming and backup foundations from Tachiyomi, via upstream.
 
 ## License
 

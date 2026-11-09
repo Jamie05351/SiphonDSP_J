@@ -27,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
-import app.siphondsp.interop.JamesDspWrapper
+import app.siphondsp.interop.NativeDsp
 import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.model.debug.CpuFrequencies
 import app.siphondsp.model.debug.NativeBiquadStage
@@ -51,7 +51,7 @@ private const val REFRESH_INTERVAL_MS = 500L
  * ACTUALLY running right now -- not SharedPreferences, not cached Kotlin state, not the last
  * requested UI value, not a broadcast. Every value below is sourced from one of:
  *   - [RootlessAudioProcessorService.nativeConfigRevisionStatus] (requested/native-active
- *     revision counters + last apply result, read from JamesDspLocalEngine's own bookkeeping and
+ *     revision counters + last apply result, read from DspEngine's own bookkeeping and
  *     the native revision-ack atomics via JNI getters).
  *   - [RootlessAudioProcessorService.nativeTruthSnapshot] (NativeBmwDspProcessor::
  *     captureTruthSnapshot(), one stateMutex_-guarded read of the actual installed crossover
@@ -335,23 +335,12 @@ private fun RealtimeSection(realtime: RealtimeDiagnostics?, cpu: List<CpuFrequen
                 KeyValueRow("Read size, min - max", "${realtime.readMin} - ${realtime.readMax}")
                 KeyValueRow("Short reads", realtime.shortReads.toString(), if (realtime.shortReads > 0) BmwYellow else Color.White)
                 val n = realtime.nativeCounters
-                if (n == null || n.size < JamesDspWrapper.REALTIME_COUNT) {
+                if (n == null || n.size < NativeDsp.REALTIME_COUNT) {
                     KeyValueRow("Native counters", "unavailable", Color.Gray)
                 } else {
-                    KeyValueRow("Convolver IR loads", n[JamesDspWrapper.REALTIME_IR_LOADS].toString())
-                    val changes = n[JamesDspWrapper.REALTIME_BLOCK_SIZE_CHANGES]
-                    KeyValueRow("Blocks off the prepared size", changes.toString(), if (changes > 0) BmwYellow else Color.White)
-                    val rebuilds = n[JamesDspWrapper.REALTIME_CONVOLVER_REBUILDS]
-                    KeyValueRow("Convolver rebuilds (audio thread)", rebuilds.toString(), if (rebuilds > 0) BmwRed else BmwGreen)
-                    val reallocs = n[JamesDspWrapper.REALTIME_WORK_BUFFER_REALLOCS]
-                    KeyValueRow("Work-buffer reallocs (audio thread)", reallocs.toString(), if (reallocs > 0) BmwRed else BmwGreen)
-                    KeyValueRow("Last block", "${n[JamesDspWrapper.REALTIME_LAST_BLOCK_FRAMES]} frames")
-                    val prepared = n[JamesDspWrapper.REALTIME_PREPARED_FRAMES]
-                    KeyValueRow(
-                        "Prepared block",
-                        if (prepared > 0) "$prepared frames" else "not prepared",
-                        if (prepared > 0) BmwGreen else BmwRed,
-                    )
+                    KeyValueRow("Last block", "${n[NativeDsp.REALTIME_LAST_BLOCK_FRAMES]} frames")
+                    val changes = n[NativeDsp.REALTIME_BLOCK_SIZE_CHANGES]
+                    KeyValueRow("Block size changes", changes.toString(), if (changes > 0) BmwYellow else Color.White)
                 }
             }
             if (cpu.isEmpty()) {
