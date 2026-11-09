@@ -17,7 +17,7 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | PR | Area | Branch | Status |
 |----|------|--------|--------|
 | 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | #577 — green, ready to merge |
-| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | in progress |
+| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | #578 — green, ready to merge |
 | 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | in progress |
 | 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | — |
 | 5 | Graph curves from the native engine | `ccr-efec0dfc-native-curves` | — |
