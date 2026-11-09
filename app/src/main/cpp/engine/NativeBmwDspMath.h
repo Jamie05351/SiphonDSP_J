@@ -36,6 +36,13 @@ constexpr float kButterworth4QHigh = 1.3065630f;
 inline float ftz(float x) {
     return (!std::isfinite(x) || std::fabs(x) < 1e-20f) ? 0.f : x;
 }
+// The last word on every output sample: a NaN or infinity becomes silence and anything past
+// full scale is clipped to it. With the master limiter off nothing else bounds the float output
+// on its way to the device (the int16/int32 paths also saturate in clampInt, which a NaN gets
+// past). A no-op for any finite sample within +-1.
+inline float outputGuard(float x) {
+    return std::isfinite(x) ? std::min(1.f, std::max(-1.f, x)) : 0.f;
+}
 inline double ftzd(double x) {
     return NativeBmwRouting::flushDenormal(x);
 }

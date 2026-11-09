@@ -58,6 +58,7 @@ add_executable(native_tests
     virtual_bass_test.cpp
     flush_to_zero_test.cpp
     ramps_test.cpp
+    output_guard_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.

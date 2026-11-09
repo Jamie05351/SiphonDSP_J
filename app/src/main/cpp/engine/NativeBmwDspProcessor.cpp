@@ -315,6 +315,8 @@ void NativeBmwDspProcessor::processBlock(float* w, std::size_t n) {
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
         capture_.tapIn(w[i], w[i + 1]);
         processFrame(w[i], w[i + 1]);
+        w[i] = NativeBmwDsp::outputGuard(w[i]);
+        w[i + 1] = NativeBmwDsp::outputGuard(w[i + 1]);
         capture_.tapOut(w[i], w[i + 1]);
     }
 }
@@ -340,6 +342,8 @@ void NativeBmwDspProcessor::processInt(Sample* w, std::size_t n, float scale) {
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
         capture_.tapIn(l, r);
         processFrame(l, r);
+        l = NativeBmwDsp::outputGuard(l);
+        r = NativeBmwDsp::outputGuard(r);
         capture_.tapOut(l, r);
         w[i] = NativeBmwDsp::clampInt<Sample>(l * scale);
         w[i + 1] = NativeBmwDsp::clampInt<Sample>(r * scale);
