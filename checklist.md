@@ -20,7 +20,7 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | #578 — merged |
 | 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | #579 — merged |
 | 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 |
-| 5 | Graph curves from the native engine | `ccr-efec0dfc-native-curves` | — |
+| 5 | Graphs checked against the native engine | `ccr-efec0dfc-native-curves` | in progress |
 | 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
 | 7 | Full Compose migration + Baseline Profile | `ccr-efec0dfc-compose` | — |
 
@@ -83,11 +83,21 @@ JamesDSP core.
 - [x] 4.4 A native test proves the schema's reader column: every slot marked native is the one
       `configure()` validates (a NaN there rejects the update), every other slot is ignored.
 
-## PR 5 — Graph curves from the native engine
+## PR 5 — Graphs checked against the native engine
 
-- [ ] 5.1 A JNI response function computed by the native filter code (no audio needed).
-- [ ] 5.2 The PEQ and crossover graphs and the automatic headroom use it; the duplicate Kotlin
-      filter math goes.
+**Changed approach (was: move the graph maths into native).** Moving `BmwResponseCalculator`
+into C++ would cut the JVM tests off from the graphs' code (Robolectric can't load the native
+library) and replace a well-tested model with an untested port. The same guarantee — the graphs
+can't disagree with what plays — comes from checking the two against each other instead:
+
+- [x] 5.1 `native-tests/response_golden.cpp` measures the real engine's frequency response
+      (steady sines, both channels) for seven scenarios — defaults, BW2 crossover with Mid
+      inverted, LR4 300 Hz with tilt and post gain, all four PEQ banks, 3-way with High on,
+      asymmetric gains/headroom/delays, BW2 subsonic with LPF bypass — into
+      `native-tests/golden/response_curves.txt`. Its `--check` mode is a ctest: the native
+      tests fail if the engine stops matching the file.
+- [x] 5.2 `ResponseGoldenAgreementTest.kt` runs the graph model on the same scenarios and axis
+      and fails if it differs from the measured engine by more than 0.5 dB (above −40 dB).
 
 ## PR 6 — Dependencies and static analysis
 
