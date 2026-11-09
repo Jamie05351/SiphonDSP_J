@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,10 +80,7 @@ fun BlocklistScreen(
         title = stringResource(R.string.title_activity_blocklist),
         onBack = onBack,
         actions = {
-            IconButton(onClick = {
-                onOpenPicker()
-                picking = true
-            }) {
+            IconButton(onClick = { picking = true }) {
                 Icon(
                     painterResource(R.drawable.ic_twotone_add_24dp),
                     contentDescription = stringResource(R.string.blocklist_add_exclusion_alt),
@@ -118,6 +116,12 @@ fun BlocklistScreen(
                 }
             }
         }
+    }
+
+    // Loads the installed apps whenever the picker is showing, including a picker restored open
+    // after the activity was recreated (the list itself isn't kept across that).
+    LaunchedEffect(picking) {
+        if (picking) onOpenPicker()
     }
 
     if (picking) {
