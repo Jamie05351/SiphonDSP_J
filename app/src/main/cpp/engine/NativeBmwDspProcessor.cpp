@@ -1,5 +1,6 @@
 #include "NativeBmwDspProcessor.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -48,7 +49,13 @@ NativeBmwDspProcessor::NativeBmwDspProcessor() {
 }
 NativeBmwDspProcessor::~NativeBmwDspProcessor() = default;
 void NativeBmwDspProcessor::setSampleRate(float sr) {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    std::lock_guard<std::mutex> lock(controlMutex_);
+    request_.kind = RequestKind::SetSampleRate;
+    request_.sampleRate = sr;
+    runControlRequest();
+}
+
+void NativeBmwDspProcessor::applySampleRate(float sr) {
     installPending();
     if (sr >= 8000 && std::fabs(sr - sampleRate_) > .5f) {
         sampleRate_ = sr;
@@ -123,16 +130,7 @@ void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
     (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).reset();
 }
 
-void NativeBmwDspProcessor::processFrame(float& l, float& r) {
-    if (!p_.enabled) {
-        return;
-    }
-    processFrameFront(l, r);
-    processFrameBack(l, r);
-}
-
-void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
-    using Band = NativeBmwRouting::Band;
+std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::processInputStages(float l, float r) {
     float sL = inputDcL_.run(l, dcR_), sR = inputDcR_.run(r, dcR_);
     if (p_.monoBassEnabled) {
         monoBassMix_ = std::min(1.f, monoBassMix_ + monoBassFadeStep_);
@@ -175,61 +173,57 @@ void NativeBmwDspProcessor::processFrameFront(float& l, float& r) {
     if (p_.virtualStage.enabled) {
         virtual_.process(sL, sR);
     }
-    const auto routed = routing_.process({sL, sR});
-    float lowL = routed[static_cast<std::size_t>(OutputId::LowLeft)],
-          lowR = routed[static_cast<std::size_t>(OutputId::LowRight)];
-    float midL = routed[static_cast<std::size_t>(OutputId::MidLeft)],
-          midR = routed[static_cast<std::size_t>(OutputId::MidRight)];
-    float highL = routed[static_cast<std::size_t>(OutputId::HighLeft)],
-          highR = routed[static_cast<std::size_t>(OutputId::HighRight)];
+    return routing_.process({sL, sR});
+}
 
-    // A bypassed band (lpfPass/hpfPass) skips the band chain -- its AlignmentDelay and its bus
-    // limiter's lookahead -- so it takes the same fixed latency here to stay aligned with the
-    // processed bands. Run every frame,
-    // bypassed or not, so a line is never stale the moment its bypass flag flips on.
-    const float lowLBypassed = bypassLatency_[0].run(lowL), lowRBypassed = bypassLatency_[1].run(lowR);
-    const float midLBypassed = bypassLatency_[2].run(midL), midRBypassed = bypassLatency_[3].run(midR);
-    const float highLBypassed = bypassLatency_[4].run(highL), highRBypassed = bypassLatency_[5].run(highR);
-    if (!p_.lpfPass) {
-        processBandChain(Band::Low, lowL, lowR);
+void NativeBmwDspProcessor::processBandStage(NativeBmwRouting::Band band, std::size_t frames) {
+    using Band = NativeBmwRouting::Band;
+    const BandOutputs ids = bandOutputs(band);
+    const auto li = static_cast<std::size_t>(ids.left), ri = static_cast<std::size_t>(ids.right);
+    float* xl = chunkLanes_[li].data();
+    float* xr = chunkLanes_[ri].data();
+    // What the band does with its routed signal: its chain, the raw routed signal through (the
+    // lpfPass/hpfPass/highPass contract), or silence (highXoPass: a tweeter with no HPF ahead of
+    // it is a speaker-damage risk, and the 3-way master-off switch's single write for High).
+    enum class Mode { Chain, Bypass, Silent };
+    Mode mode;
+    if (band == Band::Low) {
+        mode = p_.lpfPass ? Mode::Bypass : Mode::Chain;
+    } else if (band == Band::Mid) {
+        mode = p_.hpfPass ? Mode::Bypass : Mode::Chain;
     } else {
-        lowL = lowLBypassed;
-        lowR = lowRBypassed;
-        idleBandChain(Band::Low);
+        mode = p_.highXoPass ? Mode::Silent : p_.highPass ? Mode::Bypass : Mode::Chain;
     }
-    if (!p_.hpfPass) {
-        processBandChain(Band::Mid, midL, midR);
-    } else {
-        midL = midLBypassed;
-        midR = midRBypassed;
-        idleBandChain(Band::Mid);
+    auto& bypassL = bypassLatency_[li];
+    auto& bypassR = bypassLatency_[ri];
+    for (std::size_t i = 0; i < frames; ++i) {
+        // A bypassed band skips the band chain -- its AlignmentDelay and its bus limiter's
+        // lookahead -- so it takes the same fixed latency here to stay aligned with the processed
+        // bands. Run every frame, bypassed or not, so a line is never stale the moment its bypass
+        // flag flips on.
+        const float lBypassed = bypassL.run(xl[i]), rBypassed = bypassR.run(xr[i]);
+        switch (mode) {
+            case Mode::Chain:
+                processBandChain(band, xl[i], xr[i]);
+                break;
+            case Mode::Bypass:
+                xl[i] = lBypassed;
+                xr[i] = rBypassed;
+                idleBandChain(band);
+                break;
+            case Mode::Silent:
+                xl[i] = 0.f;
+                xr[i] = 0.f;
+                idleBandChain(band);
+                break;
+        }
     }
-    if (!p_.highXoPass && p_.highPass) {
-        // High's own passthrough: the lpfPass/hpfPass contract (raw routed signal, chain skipped).
-        highL = highLBypassed;
-        highR = highRBypassed;
-        idleBandChain(Band::High);
-    } else if (!p_.highXoPass) {
-        processBandChain(Band::High, highL, highR);
-    } else {
-        // Deliberately NOT the same contract as lpfPass/hpfPass (which pass the raw routed
-        // signal through unfiltered -- see the comment on the routed sum below). highXoPass is
-        // the 3-way master-off switch's single write for High: a tweeter with no HPF ahead of it
-        // is a real speaker-damage risk from raw bass, not just an audio-quality one the way an
-        // unfiltered woofer/mid is, and leaving highL/highR at their raw routed value here would
-        // also add a duplicate full-range path into sumToStereo(), breaking the "master toggle
-        // off is bit-identical to today's 2-way output" contract. Zeroing here makes highXoPass
-        // alone sufficient to silence High, independent of the per-output mute field -- no
-        // reliance on the caller keeping two flags in lockstep.
-        highL = 0.f;
-        highR = 0.f;
-        idleBandChain(Band::High);
-    }
+}
 
+void NativeBmwDspProcessor::processOutputStages(
+    std::array<float, NativeBmwRouting::kOutputCount> logical, float& l, float& r) {
     // Per-output polarity and mute, as one ramped multiplier (see OutputRuntime::outputGain).
     // Indexed in OutputId order.
-    std::array<float, NativeBmwRouting::kOutputCount> logical{
-        {lowL, lowR, midL, midR, highL, highR}};
     for (std::size_t i = 0; i < logical.size(); ++i) {
         auto& out = outputs_[i];
         out.outputGain = NativeBmwDsp::rampToward(out.outputGain, out.outputGainTarget, outputRampCoef_);
@@ -310,14 +304,52 @@ void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
     r = oL;
 }
 
+void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
+    using Band = NativeBmwRouting::Band;
+    // Front of the chain, frame by frame, up to the routing matrix: into one lane per output.
+    for (std::size_t i = 0; i < frames; ++i) {
+        float& l = w[2 * i];
+        float& r = w[2 * i + 1];
+        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
+        // The capture records input and output in pairs (it advances on tapOut), so the raw
+        // input waits here until the frame's output is known.
+        chunkRawIn_[2 * i] = l;
+        chunkRawIn_[2 * i + 1] = r;
+        const auto routed = processInputStages(l, r);
+        for (std::size_t o = 0; o < routed.size(); ++o) {
+            chunkLanes_[o][i] = routed[o];
+        }
+    }
+    // Each band's chain over the whole chunk. The bands share no state, so this is the same
+    // arithmetic, in the same order per band, as running them frame by frame -- bit-identical --
+    // with each band's filter and limiter state kept hot while it runs.
+    processBandStage(Band::Low, frames);
+    processBandStage(Band::Mid, frames);
+    processBandStage(Band::High, frames);
+    // Sum, the master stages and the output guard, frame by frame.
+    for (std::size_t i = 0; i < frames; ++i) {
+        std::array<float, NativeBmwRouting::kOutputCount> logical;
+        for (std::size_t o = 0; o < logical.size(); ++o) {
+            logical[o] = chunkLanes_[o][i];
+        }
+        float l, r;
+        processOutputStages(logical, l, r);
+        processFrameBack(l, r);
+        l = NativeBmwDsp::outputGuard(l);
+        r = NativeBmwDsp::outputGuard(r);
+        capture_.tapIn(chunkRawIn_[2 * i], chunkRawIn_[2 * i + 1]);
+        capture_.tapOut(l, r);
+        w[2 * i] = l;
+        w[2 * i + 1] = r;
+    }
+}
+
 void NativeBmwDspProcessor::processBlock(float* w, std::size_t n) {
-    for (std::size_t i = 0; i + 1 < n; i += 2) {
-        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, w[i], w[i + 1]);
-        capture_.tapIn(w[i], w[i + 1]);
-        processFrame(w[i], w[i + 1]);
-        w[i] = NativeBmwDsp::outputGuard(w[i]);
-        w[i + 1] = NativeBmwDsp::outputGuard(w[i + 1]);
-        capture_.tapOut(w[i], w[i + 1]);
+    const std::size_t frames = n / 2;
+    for (std::size_t done = 0; done < frames;) {
+        const std::size_t count = std::min<std::size_t>(frames - done, kChunkFrames);
+        processChunk(w + 2 * done, count);
+        done += count;
     }
 }
 
@@ -325,8 +357,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
     if (!s) {
         return s;
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    installPending();
+    const AudioOwnership owner(*this);
     if (!p_.enabled) {
         return s;
     }
@@ -337,16 +368,18 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
 template <class Sample>
 void NativeBmwDspProcessor::processInt(Sample* w, std::size_t n, float scale) {
     const float invScale = 1.f / scale;
-    for (std::size_t i = 0; i + 1 < n; i += 2) {
-        float l = static_cast<float>(w[i]) * invScale, r = static_cast<float>(w[i + 1]) * invScale;
-        NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
-        capture_.tapIn(l, r);
-        processFrame(l, r);
-        l = NativeBmwDsp::outputGuard(l);
-        r = NativeBmwDsp::outputGuard(r);
-        capture_.tapOut(l, r);
-        w[i] = NativeBmwDsp::clampInt<Sample>(l * scale);
-        w[i + 1] = NativeBmwDsp::clampInt<Sample>(r * scale);
+    const std::size_t frames = n / 2;
+    for (std::size_t done = 0; done < frames;) {
+        const std::size_t count = std::min<std::size_t>(frames - done, kChunkFrames);
+        Sample* in = w + 2 * done;
+        for (std::size_t i = 0; i < 2 * count; ++i) {
+            chunkInt_[i] = static_cast<float>(in[i]) * invScale;
+        }
+        processChunk(chunkInt_.data(), count);
+        for (std::size_t i = 0; i < 2 * count; ++i) {
+            in[i] = NativeBmwDsp::clampInt<Sample>(chunkInt_[i] * scale);
+        }
+        done += count;
     }
 }
 
@@ -354,8 +387,7 @@ const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
     if (!s) {
         return s;
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    installPending();
+    const AudioOwnership owner(*this);
     if (!p_.enabled) {
         return s;
     }
@@ -366,8 +398,7 @@ const int32_t* NativeBmwDspProcessor::process(const int32_t* s, std::size_t n) {
     if (!s) {
         return s;
     }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    installPending();
+    const AudioOwnership owner(*this);
     if (!p_.enabled) {
         return s;
     }
@@ -417,10 +448,22 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
 }
 
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    installPending();
     std::vector<double> out;
-    out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth + 4 * (3 + 16 * 6));
+    // Every value the snapshot can hold, so filling it never allocates (it may be the audio
+    // thread that fills it).
+    out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth +
+                4 * (3 + kMaxPeqSectionsPerChannel * 6));
+    std::lock_guard<std::mutex> lock(controlMutex_);
+    request_.kind = RequestKind::TruthSnapshot;
+    request_.truth = &out;
+    runControlRequest();
+    request_.truth = nullptr;
+    return out;
+}
+
+void NativeBmwDspProcessor::fillTruthSnapshot(std::vector<double>& out) {
+    installPending();
+    out.clear();
     out.push_back(static_cast<double>(sampleRate_));
     out.push_back(peqEnabled_ ? 1.0 : 0.0);
     out.push_back(static_cast<double>(peqPreampDb_));
@@ -490,42 +533,36 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     appendBank(lowPeqValues_, lowPeqValueCount_, lowPeq_);
     appendBank(midPeqValues_, midPeqValueCount_, midPeq_);
     appendBank(highPeqValues_, highPeqValueCount_, highPeq_);
-    return out;
 }
 
 void NativeBmwDspProcessor::startCapture() {
-    // The up-to-~46MB assign()/zero below used to run while holding stateMutex_, the same lock
-    // process() takes once per audio buffer -- if a capture (re)allocation landed while the audio
-    // thread was waiting on that lock, the allocation/zeroing time added directly to audio-thread
-    // latency (an audible glitch right when the user starts a capture). Build the new buffers
-    // (when actually needed) into locals first, outside any lock, then swap them in under a
-    // second, brief lock -- vector::swap is O(1), no memory touched while locked.
-    std::size_t capacity;
-    bool needsRealloc;
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        capacity = static_cast<std::size_t>(sampleRate_ * kCaptureMaxSeconds);
-        needsRealloc = !capture_.sizedFor(capacity);
+    std::lock_guard<std::mutex> lock(controlMutex_);
+    const auto capacity =
+        static_cast<std::size_t>(configSampleRate_.load(std::memory_order_relaxed) * kCaptureMaxSeconds);
+    // First without buffers: the current ones are reused when they already have this size.
+    request_.kind = RequestKind::StartCapture;
+    request_.captureCapacity = capacity;
+    runControlRequest();
+    if (!request_.captureStarted) {
+        // The up-to-~46 MB allocation and zeroing happen here, on the calling thread; the owner
+        // only swaps the buffers in (O(1)).
+        request_.rawInL.assign(capacity, 0.f);
+        request_.rawInR.assign(capacity, 0.f);
+        request_.outL.assign(capacity, 0.f);
+        request_.outR.assign(capacity, 0.f);
+        runControlRequest();
     }
-    std::vector<float> rawInL, rawInR, outL, outR;
-    if (needsRealloc) {
-        rawInL.assign(capacity, 0.f);
-        rawInR.assign(capacity, 0.f);
-        outL.assign(capacity, 0.f);
-        outR.assign(capacity, 0.f);
-    }
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    // sampleRate_ could in principle have changed between the two critical sections above (a
-    // concurrent setSampleRate() call) -- rare and harmless: worst case this capture's buffers
-    // are sized for the sample rate current when this call started, not a rate that changed
-    // mid-call. The recorder's capacity always reflects the size actually in use, so nothing
-    // downstream can index past what's real.
-    capture_.start(needsRealloc, rawInL, rawInR, outL, outR);
+    // The retired buffers (swapped out by the owner) are freed here, not on the audio thread.
+    request_.rawInL = {};
+    request_.rawInR = {};
+    request_.outL = {};
+    request_.outR = {};
 }
 
 void NativeBmwDspProcessor::stopCapture() {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    capture_.stop();
+    std::lock_guard<std::mutex> lock(controlMutex_);
+    request_.kind = RequestKind::StopCapture;
+    runControlRequest();
 }
 
 std::size_t NativeBmwDspProcessor::captureFrameCount() const {
@@ -535,9 +572,125 @@ std::size_t NativeBmwDspProcessor::captureFrameCount() const {
 std::unique_ptr<NativeBmwDspProcessor::CaptureSnapshot>
 NativeBmwDspProcessor::takeCaptureSnapshot() {
     auto snapshot = std::make_unique<CaptureSnapshot>();
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    snapshot->sampleRate = sampleRate_;
-    snapshot->frames =
-        capture_.take(snapshot->rawInL, snapshot->rawInR, snapshot->outL, snapshot->outR);
+    std::lock_guard<std::mutex> lock(controlMutex_);
+    request_.kind = RequestKind::TakeCapture;
+    runControlRequest();
+    snapshot->sampleRate = request_.capturedSampleRate;
+    snapshot->frames = request_.frames;
+    snapshot->rawInL.swap(request_.rawInL);
+    snapshot->rawInR.swap(request_.rawInR);
+    snapshot->outL.swap(request_.outL);
+    snapshot->outR.swap(request_.outR);
     return snapshot;
+}
+
+// ---- Ownership and control requests --------------------------------------------------------
+namespace {
+std::int64_t nowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+}  // namespace
+
+void NativeBmwDspProcessor::claimAudioOwnership() {
+    // Free unless a control call is serving a request on its own thread, which it only does while
+    // no audio was flowing: this buffer is the stream resuming, and waits out that one request.
+    std::uint32_t expected = kOwnerFree;
+    for (unsigned spins = 0; !ownership_.compare_exchange_weak(
+             expected, kOwnerAudio, std::memory_order_acquire, std::memory_order_relaxed);
+         ++spins) {
+        expected = kOwnerFree;
+        if (spins > 64) {
+            std::this_thread::yield();
+        }
+    }
+    audioThread_.store(std::this_thread::get_id(), std::memory_order_relaxed);
+    lastBufferNs_.store(nowNs(), std::memory_order_relaxed);
+}
+
+NativeBmwDspProcessor::AudioOwnership::AudioOwnership(NativeBmwDspProcessor& processor)
+    : processor_(processor) {
+    processor_.claimAudioOwnership();
+    if (processor_.requestSeq_.load(std::memory_order_acquire) !=
+        processor_.servedSeq_.load(std::memory_order_relaxed)) {
+        processor_.serveControlRequest();
+        processor_.audioServedRequests_.fetch_add(1, std::memory_order_relaxed);
+    }
+    processor_.installPending();
+}
+
+NativeBmwDspProcessor::AudioOwnership::~AudioOwnership() {
+    processor_.ownership_.store(kOwnerFree, std::memory_order_release);
+}
+
+void NativeBmwDspProcessor::serveControlRequest() {
+    serveRequest(request_);
+    servedSeq_.store(requestSeq_.load(std::memory_order_relaxed), std::memory_order_release);
+}
+
+void NativeBmwDspProcessor::serveRequest(ControlRequest& request) {
+    switch (request.kind) {
+        case RequestKind::SetSampleRate:
+            applySampleRate(request.sampleRate);
+            break;
+        case RequestKind::TruthSnapshot:
+            if (request.truth != nullptr) {
+                fillTruthSnapshot(*request.truth);
+            }
+            break;
+        case RequestKind::StartCapture: {
+            const bool sized = capture_.sizedFor(request.captureCapacity);
+            const bool supplied = request.rawInL.size() == request.captureCapacity &&
+                                  request.captureCapacity > 0;
+            request.captureStarted = sized || supplied;
+            if (request.captureStarted) {
+                capture_.start(!sized, request.rawInL, request.rawInR, request.outL, request.outR);
+            }
+            break;
+        }
+        case RequestKind::StopCapture:
+            capture_.stop();
+            break;
+        case RequestKind::TakeCapture:
+            request.capturedSampleRate = sampleRate_;
+            request.frames = capture_.take(request.rawInL, request.rawInR, request.outL, request.outR);
+            break;
+    }
+}
+
+void NativeBmwDspProcessor::runControlRequest() {
+    const std::uint32_t seq = requestSeq_.load(std::memory_order_relaxed) + 1;
+    const std::int64_t start = nowNs();
+    const bool audioFlowing =
+        start - lastBufferNs_.load(std::memory_order_relaxed) < kAudioIdleNs &&
+        audioThread_.load(std::memory_order_relaxed) != std::this_thread::get_id();
+    if (audioFlowing) {
+        // The audio thread serves it at the start of its next buffer.
+        requestSeq_.store(seq, std::memory_order_release);
+        while (servedSeq_.load(std::memory_order_acquire) != seq) {
+            if (nowNs() - start > kRequestTimeoutNs) {
+                break;  // the stream stopped meanwhile: serve it below
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+        }
+        if (servedSeq_.load(std::memory_order_acquire) == seq) {
+            return;
+        }
+    }
+    // Serve it here, as the owner. Waits out a buffer in progress (only a stream that stopped
+    // mid-request can be in one).
+    std::uint32_t expected = kOwnerFree;
+    while (!ownership_.compare_exchange_weak(expected, kOwnerControl, std::memory_order_acquire,
+                                             std::memory_order_relaxed)) {
+        expected = kOwnerFree;
+        std::this_thread::yield();
+    }
+    // The audio thread may have served a request posted above just before stopping.
+    if (!audioFlowing || servedSeq_.load(std::memory_order_acquire) != seq) {
+        serveRequest(request_);
+        requestSeq_.store(seq, std::memory_order_relaxed);
+        servedSeq_.store(seq, std::memory_order_relaxed);
+    }
+    ownership_.store(kOwnerFree, std::memory_order_release);
 }

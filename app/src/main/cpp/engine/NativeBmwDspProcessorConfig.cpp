@@ -35,7 +35,7 @@ bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (!v || n != kConfigSize) {
         return false;
     }
-    // Never stateMutex_: see the threading comment in NativeBmwDspProcessor.h.
+    // Never ownership_: see the threading comment in NativeBmwDspProcessor.h.
     std::lock_guard<std::mutex> lock(configMutex_);
     ParsedConfig& update = configHandoff_.back();
     if (!parseConfig(v, update)) {
@@ -674,7 +674,7 @@ bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const dou
                                          std::size_t lowCount, const double* mid,
                                          std::size_t midCount, const double* high,
                                          std::size_t highCount) {
-    // Never stateMutex_: see the threading comment in NativeBmwDspProcessor.h.
+    // Never ownership_: see the threading comment in NativeBmwDspProcessor.h.
     std::lock_guard<std::mutex> lock(configMutex_);
     if (!parsePeq(enabled, preampDb, full, fullCount, low, lowCount, mid, midCount, high,
                   highCount, configSampleRate_.load(std::memory_order_relaxed),
@@ -1098,6 +1098,6 @@ void NativeBmwDspProcessor::rebuildAll() {
     lowPeq_.clear();
     midPeq_.clear();
     highPeq_.clear();
-    // Runs from the constructor or from setSampleRate() (already holding stateMutex_).
+    // Runs from the constructor or a sample-rate change (by the owner).
     rebuildPeqLocked();
 }

@@ -16,8 +16,8 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 
 | PR | Area | Branch | Status |
 |----|------|--------|--------|
-| 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | in progress |
-| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | — |
+| 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | #577 — green, ready to merge |
+| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | in progress |
 | 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | — |
 | 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | — |
 | 5 | Graph curves from the native engine | `ccr-efec0dfc-native-curves` | — |
@@ -29,35 +29,39 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 Native wrapper, CMake, `interop/`, the service's audio loop, the Settings cards that drove the
 JamesDSP core.
 
-- [ ] 1.1 **Bug:** JamesDSP's limiter (−0.1 dBFS, 60 ms) and post gain no longer run after the
+- [x] 1.1 **Bug:** JamesDSP's limiter (−0.1 dBFS, 60 ms) and post gain no longer run after the
       BMW master limiter on every buffer. "Master limiter off" becomes a true bypass.
-- [ ] 1.2 **Bug:** the measurement capture records exactly what goes to the speakers (nothing
+- [x] 1.2 **Bug:** the measurement capture records exactly what goes to the speakers (nothing
       runs after the capture tap any more).
-- [ ] 1.3 Remove the legacy Output-control Settings card (the second post gain / limiter).
-- [ ] 1.4 Remove the convolver: Settings card, impulse-response loading, IR file library,
+- [x] 1.3 Remove the legacy Output-control Settings card (the second post gain / limiter).
+- [x] 1.4 Remove the convolver: Settings card, impulse-response loading, IR file library,
       bundled impulse responses, convolver messages.
-- [ ] 1.5 Remove the `libjamesdsp` submodule, the EEL/liveprog VM and callbacks, convolver
+- [x] 1.5 Remove the `libjamesdsp` submodule, the EEL/liveprog VM and callbacks, convolver
       benchmarks, the ASRC path, `libjdspimptoolbox` (except `dr_wav.h`), the crashlytics
       connector and the macro-patched double wrapper. One slim JNI layer around
       `NativeBmwDspProcessor`. Also closes the possible global EEL teardown race.
-- [ ] 1.6 Remove the dead root/plugin path (`RootAudioProcessorService`,
+- [x] 1.6 Remove the dead root/plugin path (`RootAudioProcessorService`,
       `JamesDspRemoteEngine`, root session tracking) — `isRoot()` is always false.
-- [ ] 1.7 Remove unused JNI entry points (`isHandleValid`, `processInt24Packed`,
+- [x] 1.7 Remove unused JNI entry points (`isHandleValid`, `processInt24Packed`,
       `processInt8U24`, …).
-- [ ] 1.8 Audio loop uses direct `ByteBuffer`s into native: no per-buffer array pin/copy.
-- [ ] 1.9 Spectrum feed handed to the analyser without a lock on the audio thread.
-- [ ] 1.10 Trace markers (`ATrace` / `android.os.Trace`) around read / process / write so
+- [x] 1.8 Audio loop uses direct `ByteBuffer`s into native: no per-buffer array pin/copy.
+- [x] 1.9 Spectrum feed handed to the analyser without a lock on the audio thread.
+- [x] 1.10 Trace markers (`ATrace` / `android.os.Trace`) around read / process / write so
       dropouts can be found with Perfetto.
+- [x] 1.11 **Bug (found in review):** an output guard (non-finite → 0, clip at full scale)
+      replaces the bound the JamesDSP limiter used to give the float output.
 
 ## PR 2 — Native processor: real-time safety and block processing
 
 `NativeBmwDspProcessor` and its modules.
 
-- [ ] 2.1 The audio thread takes no mutex: sample-rate changes, capture start/stop and the
+- [x] 2.1 The audio thread takes no mutex: sample-rate changes, capture start/stop and the
       truth snapshot are handed over lock-free.
-- [ ] 2.2 The truth snapshot no longer allocates while blocking the audio thread.
-- [ ] 2.3 Block-based processing (each stage over the whole buffer instead of the whole chain
-      per sample), bit-identical to today (parity job).
+- [x] 2.2 The truth snapshot no longer allocates while blocking the audio thread.
+- [x] 2.3 Block-based processing: buffers run in 64-frame chunks, each band chain over the
+      whole chunk instead of the whole chain per sample; bit-identical to today (parity job).
+      No measurable speed-up on an x86 host (≈440 ms per 20 s of audio either way); needs a
+      measurement on the head unit.
 
 ## PR 3 — Native verification tooling
 
