@@ -14,12 +14,8 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import app.siphondsp.R
-import app.siphondsp.activity.CrossoverTiltActivity
 import app.siphondsp.activity.EngineLauncherActivity
-import app.siphondsp.activity.NativeBmwCompressorActivity
-import app.siphondsp.activity.OutputActivity
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.AudioHealthLog
 import app.siphondsp.service.DspHealthBadge
@@ -66,8 +62,7 @@ class DspStatusStrip @JvmOverloads constructor(
     private class Segment(
         val label: String,
         val enabledIndex: Int,
-        val target: Class<out AppCompatActivity>,
-        val workspaceMode: String? = null,
+        val target: DspDestination,
         /** When set, the label reads "<label> <value> dB" instead of "<label> on/off". */
         val valueIndex: Int? = null,
     ) {
@@ -81,11 +76,11 @@ class DspStatusStrip @JvmOverloads constructor(
     private val offColor get() = if (stacked) Color.WHITE else Color.rgb(120, 128, 138)
 
     private val segments = listOf(
-        Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, CrossoverTiltActivity::class.java, CrossoverTiltActivity.MODE_CROSSOVER),
-        Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, NativeBmwCompressorActivity::class.java),
+        Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, DspDestination.CROSSOVER_TILT),
+        Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, DspDestination.DYNAMICS),
         Segment(
             // The master limiter lives on the Output workspace.
-            "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, OutputActivity::class.java,
+            "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, DspDestination.OUTPUT,
             valueIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD,
         ),
     )
@@ -289,13 +284,12 @@ class DspStatusStrip @JvmOverloads constructor(
      */
     var canOpen: () -> Boolean = { true }
 
+    /** Opens the workspace that owns a tapped cell's stage; set by the screen hosting the strip. */
+    var onOpen: ((DspDestination) -> Unit)? = null
+
     private fun open(segment: Segment) {
         if (!canOpen()) return
-        context.startActivity(
-            Intent(context, segment.target).apply {
-                segment.workspaceMode?.let { putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
-            },
-        )
+        onOpen?.invoke(segment.target)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
