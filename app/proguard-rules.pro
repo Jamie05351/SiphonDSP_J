@@ -41,8 +41,6 @@
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
-# Gson fills these by field name.
--keep class app.siphondsp.model.api.** { *; }
 -keepattributes Signature, *Annotation*
 
 # Passed through Bundles/Intents as java.io.Serializable.
