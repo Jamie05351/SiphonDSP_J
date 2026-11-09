@@ -24,6 +24,7 @@ value Kotlin migrates from), or reserved (read by nothing; kept so no later slot
 <kotlin> / <cpp> are the constant names for the slot, comma-separated, or '-'. Slots must appear
 in order from 0, one per index.
 """
+import math
 import pathlib
 import re
 import sys
@@ -64,7 +65,12 @@ def parse():
                 fail(f"slot {n} out of order (expected {len(slots)})")
             if reader not in READERS:
                 fail(f"reader must be one of {sorted(READERS)}")
-            float(default)
+            try:
+                value = float(default)
+            except ValueError:
+                fail(f"default '{default}' is not a number")
+            if not math.isfinite(value):
+                fail(f"default '{default}' must be finite")
             slots.append(dict(
                 n=int(n), default=default, reader=reader,
                 kotlin=[] if kotlin == "-" else kotlin.split(","),
