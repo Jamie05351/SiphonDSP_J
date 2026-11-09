@@ -22,6 +22,7 @@ import app.siphondsp.utils.extensions.CompatExtensions.getInstalledApplicationsC
 import app.siphondsp.utils.extensions.ContextExtensions.getAppIcon
 import app.siphondsp.utils.extensions.ContextExtensions.getAppNameFromUidSafe
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -91,9 +92,12 @@ class BlocklistActivity : BaseActivity() {
         }
     }
 
+    private var installedAppsJob: Job? = null
+
+    /** Each time the picker opens, so apps installed or removed meanwhile show up. */
     private fun loadInstalledApps() {
-        if (installedApps != null) return
-        lifecycleScope.launch {
+        if (installedAppsJob?.isActive == true) return
+        installedAppsJob = lifecycleScope.launch {
             installedApps = withContext(Dispatchers.IO) {
                 packageManager.getInstalledApplicationsCompat(0)
                     .filterNot { (it.flags and ApplicationInfo.FLAG_INSTALLED) == 0 }

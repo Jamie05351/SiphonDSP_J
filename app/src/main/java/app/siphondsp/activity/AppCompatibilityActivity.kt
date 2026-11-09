@@ -8,7 +8,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.getSystemService
-import androidx.lifecycle.lifecycleScope
 import app.siphondsp.R
 import app.siphondsp.compose.screens.AppCompatibilityScreen
 import app.siphondsp.compose.theme.BmwDspTheme
@@ -20,6 +19,8 @@ import app.siphondsp.utils.extensions.ContextExtensions.getAppIcon
 import app.siphondsp.utils.extensions.ContextExtensions.getAppNameFromUidSafe
 import app.siphondsp.utils.extensions.ContextExtensions.getPackageNameFromUid
 import app.siphondsp.utils.notifications.Notifications
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -51,11 +52,16 @@ class AppCompatibilityActivity : BaseActivity() {
 
         fun restartAndClose(afterMs: Long) {
             busy = true
-            lifecycleScope.launch {
+            // Not the activity's scope: being recreated during the wait must not cancel the
+            // engine restart. The app context outlives this instance.
+            val appContext = applicationContext
+            CoroutineScope(Dispatchers.Main).launch {
                 delay(afterMs)
-                if (projection != null && SdkCheck.isQ) RootlessAudioProcessorService.start(this@AppCompatibilityActivity, projection)
+                if (projection != null && SdkCheck.isQ) RootlessAudioProcessorService.start(appContext, projection)
                 delay(CLOSE_DELAY_MS)
-                if (internalCall) startActivity(Intent(this@AppCompatibilityActivity, MainActivity::class.java))
+                if (internalCall) {
+                    appContext.startActivity(Intent(appContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
                 finish()
             }
         }
@@ -74,7 +80,7 @@ class AppCompatibilityActivity : BaseActivity() {
                     },
                     onExclude = {
                         Timber.d("Requesting exclude of $appPackage")
-                        lifecycleScope.launch { app.blockedAppRepository.insert(BlockedApp(uid, appPackage, appName)) }
+                        CoroutineScope(Dispatchers.Main).launch { app.blockedAppRepository.insert(BlockedApp(uid, appPackage, appName)) }
                         restartAndClose(afterMs = EXCLUDE_DELAY_MS)
                     },
                     onBack = ::finish,

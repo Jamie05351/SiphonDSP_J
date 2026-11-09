@@ -169,7 +169,8 @@ class OnboardingActivity : BaseActivity() {
         val (title, steps) = setupInstructions()
         return OnboardingUi(
             page = page,
-            isFirstPage = page == firstPage,
+            // A re-run setup's first page can still go back: that leaves the wizard.
+            isFirstPage = page == firstPage && !redoAdbSetup,
             isLastPage = page == lastPage,
             shizukuSupported = SdkCheck.isQ,
             showNotificationPermission = SdkCheck.isTiramisu,

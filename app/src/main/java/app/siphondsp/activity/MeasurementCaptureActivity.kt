@@ -95,7 +95,19 @@ class MeasurementCaptureActivity : BaseActivity() {
     }
 
     override fun onStop() {
-        if (capturing) stopCapture()
+        if (capturing) {
+            if (isChangingConfigurations) {
+                // Recreated, not left: an export started now would be cancelled with this
+                // instance. Stop recording and let the new one offer the export (the engine keeps
+                // the finished capture until it is exported).
+                progressJob?.cancel()
+                RootlessAudioProcessorService.stopNativeBmwCapture()
+                capturing = false
+                pendingExportRetry = true
+            } else {
+                stopCapture()
+            }
+        }
         super.onStop()
     }
 

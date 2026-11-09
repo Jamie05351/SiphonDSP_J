@@ -128,7 +128,7 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
                 pollingTimeout = R.string.key_session_continuous_polling_rate.let {
                     preferences.get<String>(it).toLongOrNull()
                         ?: preferences.getDefault<String>(it).toLong()
-                }
+                }.coerceAtLeast(MIN_POLLING_INTERVAL_MS) // 0 would poll in a tight loop on the main thread
 
                 continuousPollingJob?.cancel()
                 updatePollingMode()
@@ -221,5 +221,9 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         }
 
         pollOnce(false)
+    }
+
+    private companion object {
+        const val MIN_POLLING_INTERVAL_MS = 100L
     }
 }

@@ -150,6 +150,9 @@ class SettingsActivity : BaseActivity(), SettingsActions {
     private fun resetFrequencyIfLocationUnset() {
         if (prefsApp.get<String>(R.string.key_backup_location).isBlank()) {
             prefsApp.reset<String>(R.string.key_backup_frequency)
+            // The job may already be scheduled (the frequency was picked first): with nowhere to
+            // write, it would only fail at every interval.
+            BackupCreatorJob.setupTask(this, 0)
         }
     }
 
