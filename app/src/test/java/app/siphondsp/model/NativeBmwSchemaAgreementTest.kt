@@ -219,8 +219,8 @@ class NativeBmwSchemaAgreementTest {
 
     private fun locateHeader(): File =
         locate(
-            "app/src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h",
-            "src/main/cpp/libjamesdsp-wrapper/NativeBmwDspSchema.h",
+            "app/src/main/cpp/engine/NativeBmwDspSchema.h",
+            "src/main/cpp/engine/NativeBmwDspSchema.h",
         )
 
     private fun locate(vararg rels: String): File {

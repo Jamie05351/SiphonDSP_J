@@ -1,5 +1,7 @@
 package app.siphondsp.service
 
+import java.nio.FloatBuffer
+import java.nio.ShortBuffer
 import android.os.SystemClock
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicLong
@@ -149,11 +151,11 @@ internal class StartupAudioDiagnostics private constructor(
     }
 
     @Synchronized
-    fun recordShortInput(buffer: ShortArray, count: Int) {
+    fun recordShortInput(buffer: ShortBuffer, count: Int) {
         if (!isActive() || nonZeroInput) return
-        val limit = min(count, buffer.size)
+        val limit = min(count, buffer.limit())
         for (i in 0 until limit) {
-            if (buffer[i].toInt() != 0) {
+            if (buffer.get(i).toInt() != 0) {
                 nonZeroInput = true
                 return
             }
@@ -161,11 +163,11 @@ internal class StartupAudioDiagnostics private constructor(
     }
 
     @Synchronized
-    fun recordFloatInput(buffer: FloatArray, count: Int) {
+    fun recordFloatInput(buffer: FloatBuffer, count: Int) {
         if (!isActive() || nonZeroInput) return
-        val limit = min(count, buffer.size)
+        val limit = min(count, buffer.limit())
         for (i in 0 until limit) {
-            if (buffer[i] != 0f) {
+            if (buffer.get(i) != 0f) {
                 nonZeroInput = true
                 return
             }
@@ -194,11 +196,11 @@ internal class StartupAudioDiagnostics private constructor(
     }
 
     @Synchronized
-    fun recordShortOutput(buffer: ShortArray, count: Int) {
+    fun recordShortOutput(buffer: ShortBuffer, count: Int) {
         if (!isActive() || nonZeroOutput) return
-        val limit = min(count, buffer.size)
+        val limit = min(count, buffer.limit())
         for (i in 0 until limit) {
-            if (buffer[i].toInt() != 0) {
+            if (buffer.get(i).toInt() != 0) {
                 nonZeroOutput = true
                 return
             }
@@ -206,11 +208,11 @@ internal class StartupAudioDiagnostics private constructor(
     }
 
     @Synchronized
-    fun recordFloatOutput(buffer: FloatArray, count: Int) {
+    fun recordFloatOutput(buffer: FloatBuffer, count: Int) {
         if (!isActive()) return
-        val limit = min(count, buffer.size)
+        val limit = min(count, buffer.limit())
         for (i in 0 until limit) {
-            val sample = buffer[i]
+            val sample = buffer.get(i)
             if (!sample.isFinite()) nonFiniteOutput = true
             if (sample != 0f) nonZeroOutput = true
             if (nonFiniteOutput && nonZeroOutput) return

@@ -28,7 +28,6 @@ import app.siphondsp.activity.OnboardingActivity.Companion.EXTRA_ROOTLESS_REDO_A
 import app.siphondsp.activity.OnboardingActivity.Companion.EXTRA_ROOT_SETUP_DUMP_PERM
 import app.siphondsp.databinding.OnboardingFragmentBinding
 import app.siphondsp.flavor.RootShellImpl
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.utils.SdkCheck
 import app.siphondsp.utils.extensions.ContextExtensions.isPackageInstalled
 import app.siphondsp.utils.extensions.ContextExtensions.launchApp
@@ -351,17 +350,7 @@ class OnboardingFragment : Fragment() {
         activity?.finish()
 
         // Mark setup as done
-        if(!useRoot) {
-            prefsVar.set(R.string.key_first_boot, false)
-        }
-        // Root: enable enhanced processing
-        else {
-            prefsApp.set(R.string.key_audioformat_enhanced_processing, true, async = false)
-            context?.let {
-                RootAudioProcessorService.startServiceEnhanced(it)
-                it.toast(R.string.onboarding_root_enhanced_processing_setup_success)
-            }
-        }
+        prefsVar.set(R.string.key_first_boot, false)
     }
 
     private fun goToPage(number: Int)

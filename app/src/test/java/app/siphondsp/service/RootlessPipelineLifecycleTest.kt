@@ -1,5 +1,6 @@
 package app.siphondsp.service
 
+import java.nio.ByteBuffer
 import android.media.AudioTrack
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -93,21 +94,26 @@ class RootlessPipelineLifecycleTest {
             (get("lastHealth") as AudioPipelineHealth.Result).state)
     }
 
+    private fun invokeWriteFully(lengthBytes: Int, bytesPerSample: Int) {
+        service.javaClass.getDeclaredMethod(
+            "writeFully",
+            AudioTrack::class.java,
+            ByteBuffer::class.java,
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            StartupAudioDiagnostics::class.java,
+        ).apply { isAccessible = true }
+            .invoke(service, track, ByteBuffer.allocateDirect(lengthBytes), lengthBytes, bytesPerSample, null)
+    }
+
     @Test fun repeatedZeroFloatWritesYieldToRecoveryInsteadOfSpinningForever() {
         var calls = 0
-        whenever(track.write(any<FloatArray>(), anyInt(), anyInt(), anyInt())).thenAnswer {
+        whenever(track.write(any<ByteBuffer>(), anyInt(), anyInt())).thenAnswer {
             if (++calls == 4) start()
             check(calls <= 4) { "write loop ignored recreation" }
             0
         }
-        service.javaClass.getDeclaredMethod(
-            "writeFully",
-            AudioTrack::class.java,
-            FloatArray::class.java,
-            Int::class.javaPrimitiveType,
-            StartupAudioDiagnostics::class.java,
-        ).apply { isAccessible = true }
-            .invoke(service, track, FloatArray(4), 4, null)
+        invokeWriteFully(lengthBytes = 4 * Float.SIZE_BYTES, bytesPerSample = Float.SIZE_BYTES)
         assertEquals(4, calls)
         assertEquals(3, get("consecutiveWriteFailures"))
         assertEquals(true, get("recreateRecorderRequested"))
@@ -117,19 +123,12 @@ class RootlessPipelineLifecycleTest {
 
     @Test fun repeatedNegativeShortWritesYieldToRecovery() {
         var calls = 0
-        whenever(track.write(any<ShortArray>(), anyInt(), anyInt(), anyInt())).thenAnswer {
+        whenever(track.write(any<ByteBuffer>(), anyInt(), anyInt())).thenAnswer {
             if (++calls == 4) start()
             check(calls <= 4) { "write loop ignored recreation" }
             AudioTrack.ERROR_DEAD_OBJECT
         }
-        service.javaClass.getDeclaredMethod(
-            "writeFully",
-            AudioTrack::class.java,
-            ShortArray::class.java,
-            Int::class.javaPrimitiveType,
-            StartupAudioDiagnostics::class.java,
-        ).apply { isAccessible = true }
-            .invoke(service, track, ShortArray(4), 4, null)
+        invokeWriteFully(lengthBytes = 4 * Short.SIZE_BYTES, bytesPerSample = Short.SIZE_BYTES)
         assertEquals(4, calls)
         assertEquals(3, get("consecutiveWriteFailures"))
         assertEquals(true, get("recreateRecorderRequested"))

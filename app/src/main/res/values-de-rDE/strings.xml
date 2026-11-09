@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Ihr Gerätehersteller hat die internen Audio-Aufnahme-APIs deaktiviert. Diese Anwendung kann ohne sie nicht funktionieren.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Audioverarbeitung umschalten</string>
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Impulsantwort</string>
-    <string name="convolver_advanced_editing">Erweiterte Wellenform-Bearbeitung</string>
-    <string name="convolver_convolution_mode">Impulsantwort-Optimierung</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Schrumpfen</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimale Phasenumwandlung und Schrumpfen</string>
-    <string name="output_control_header">Ausgabesteuerung</string>
-    <string name="output_limiter_threshold">Limiter-Schwelle</string>
-    <string name="output_limiter_release">Limiter-Release</string>
-    <string name="output_control_postgain">Nachverstärkung</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Erste Schritte</string>
     <string name="onboarding_back">Zurück</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Kein Root-Zugriff</string>
     <string name="onboarding_root_shell_fail">Kein Root-Zugriff verfügbar. Bitte verwende eine andere Installationsmethode.</string>
     <string name="onboarding_root_shell_fail_unknown">Berechtigung konnte über Root nicht erteilt werden. Bitte verwende eine andere Einrichtungsmethode.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Verbesserte Verarbeitung ist eingerichtet</string>
     <string name="onboarding_adb_shizuku_title">Shizuku einrichten</string>
     <string name="onboarding_adb_adb_title">ADB einrichten</string>
     <string name="onboarding_adb_caption">Diese App benötigt spezielle Berechtigungen für das Dumping der Audio-Richtlinien Ihres Geräts. Bitte folgen Sie den Anweisungen unten.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Aktivieren dieser Einstellung kann doppelte Audio-Samples verursachen, wenn eine andere Audioeffekt-App die Kontrolle über eine Audio-Sitzung übernimmt.\nBitte halten Sie diese Einstellung deaktiviert, es sei denn, Sie treffen auf falsch-positive Sitzungsverluste auf.</string>
     <string name="audio_format_header">Audioverarbeitung</string>
     <string name="audio_format_section_header">Bevorzugtes Audioformat</string>
-    <string name="audio_format_processing_header">Audioverarbeitungsoptionen</string>
-    <string name="audio_format_processing_legacy">Legacymodus</string>
-    <string name="audio_format_processing_legacy_on">Globale Sitzung 0 anhängen (veraltet)</string>
-    <string name="audio_format_processing_legacy_off">An jede App individuell anhängen</string>
-    <string name="audio_format_enhanced_processing">Erweiterte Verarbeitung</string>
-    <string name="audio_format_enhanced_processing_on">Per-App-Steuerung und verbesserte Unterstützung für Apps aktiviert</string>
-    <string name="audio_format_enhanced_processing_off">Erweiterte Verarbeitung deaktiviert</string>
-    <string name="audio_format_enhanced_processing_info_title">Was ist \'Erweiterte Verarbeitung\'?</string>
-    <string name="audio_format_enhanced_processing_info">Zum Anzeigen der Dokumentation tippen</string>
-    <string name="audio_format_enhanced_processing_info_content">Wenn die erweiterte Verarbeitung aktiviert ist, kannst du bestimmte Apps selektiv von SiphonDSP ausschließen. Benutze das 3-Punkte-Menü in der unteren rechten Ecke und wähle \'Ausgeschlossene Apps\', um auf diese Funktion zuzugreifen.\n\nWährend der Legacy-Modus deaktiviert ist, verlässt sich SiphonDSP auf Medien-Apps, dass sie einen System-Broadcasts senden, wenn sie die Wiedergabe starten. Dies ist ein Vorteil gegenüber dem Legacy-Modus, da jede App ihre eigene SiphonDSP-Effekt-Engine erhält, was eine feinere Kontrolle ermöglicht. Andernfalls würden alle Apps mit eingeschaltetem Legacy-Modus eine einzige Effekt-Engine teilen. Diese Funktion des Android-Betriebsystem ist veraltet und sollte nicht mehr verwendet werden.\n\nLeider machen nicht alle Medien-Apps dies richtig und würden daher nicht korrekt funktionieren, wenn der Legacy-Modus deaktiviert ist. Um dieses Problem zu lösen, kannst du die erweiterte Verarbeitung aktivieren. Anstatt sich auf System-Broadcasts über neue Mediensitzungen zu verlassen, wird SiphonDSP selbst proaktiv nach Mediensessions suchen und eine angemessene Unterstützung für unkooperative Medien-Apps ermöglichen.</string>
     <string name="audio_format_media_apps_need_restart">Nach dem Ändern dieser Einstellung müssen alle aktiven Medien-Apps neu gestartet werden, um die Audioverarbeitung fortzusetzen.</string>
     <string name="audio_format_summary">Bevorzugte Audio-Kodierung, Puffergröße</string>
     <string name="audio_format_summary_root">Legacy-Modus, erweiterte Verarbeitung</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Puffergröße</string>
     <string name="audio_format_buffer_size_unit">&#xa0;Samples</string>
     <string name="audio_format_buffer_size_warning_low_value">Warnung: Niedrige Puffergrößen können Audioprobleme wie Clipping verursachen!</string>
-    <string name="audio_format_optimization_header">Optimierung des Konvolvermoduls</string>
-    <string name="audio_format_optimization_refresh">Benchmarking-Daten aktualisieren</string>
-    <string name="audio_format_optimization_benchmark">Benchmarks zur Optimierung der Leistung verwenden</string>
-    <string name="audio_format_optimization_benchmark_summary">Erhöht die Leistung von Effekten, die Konvolvermodule verwenden</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Benchmark läuft…</string>
     <string name="app_behavior">App-Verhalten</string>
     <string name="exclude_app_from_recents">App von Anwendungsverlauf ausschließen</string>
     <string name="exclude_app_from_recents_off">App nicht von der Liste der letzten Aufgaben ausschließen</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Details zu den Einschränkungen dieser App anzeigen</string>
     <string name="troubleshooting_notification_access">Benachrichtigungszugriff für bessere Sitzungserkennung erlauben</string>
     <string name="troubleshooting_notification_access_summary">Ermöglicht zuverlässigeres Erkennen von Audiositzungen</string>
-    <string name="troubleshooting_repair_assets">Wiederherstellen gebündelter IRS, DDC und Skripte</string>
-    <string name="troubleshooting_repair_assets_summary">Vorgeladene Assets entpacken, wenn Sie diese verloren haben</string>
-    <string name="troubleshooting_repair_assets_success">Gebündelte Dateien wurden wiederhergestellt</string>
     <string name="misc_settings">Verschiedenes</string>
     <string name="misc_settings_summary">Absturzberichte, andere Aktionen</string>
     <string name="misc_permission_skip_prompt">Erlaubnisanfrage für Audio-Aufnahme überspringen</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Setup-Assistenten neu starten</string>
     <string name="misc_permission_restart_setup_summary">Fehlende optionale Berechtigungen erteilen</string>
     <string name="misc_permission_header">Optionale Berechtigungen</string>
-    <string name="assets">Assets</string>
     <string name="about_settings">Über</string>
     <string name="about_settings_summary">Credits, Support, Updates</string>
     <string name="credits">Mitwirkende</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Umbenannt zu \'%1$s\'</string>
     <string name="filelibrary_deleted">\'%1$s\' gelöscht</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Die ausgewählte VDC-Datei ist beschädigt. Bitte wählen Sie eine andere.</string>
-    <string name="message_irs_corrupt">Ausgewählte Impulsantwort ist beschädigt. Bitte wählen Sie eine andere.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: Erweiterte Wellenform-Bearbeitung enthält ungültige Werte.</string>
-    <string name="message_liveprog_compile_fail">Liveprog-Ausführung fehlgeschlagen. Ausgewähltes Skript ist beschädigt. Bitte benutzen Sie den Skript-Editor zum Debuggen.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Modul bereits installiert?</string>
     <string name="load_fail_arch_card">Wenn Sie das Magisk-Modul bereits installiert haben, haben Sie möglicherweise während der Installation die falschen Einstellungen ausgewählt. Bitte installieren Sie erneut und versuchen Sie die Huawei-Kompatibilität zu aktivieren (auch wenn Ihr Telefon nicht von diesem Hersteller ist).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Funktion nicht verfügbar</string>
-    <string name="enhanced_processing_feature_unavailable_content">Diese Funktion ist nur verfügbar, wenn \'Erweiterte Verarbeitung\' in den Einstellungen aktiviert ist. Bitte gehe zu \"Einstellungen &gt; Audioverarbeitung &gt; Erweiterte Verarbeitung\" und aktiviere diese Option, um auf dieses Menü zuzugreifen.\n\nHinweis: \'Erweiterte Verarbeitung\' kann nicht verwendet werden, während der Legacy-Modus aktiviert ist.</string>
-    <string name="enhanced_processing_missing_perm">Erweiterte Verarbeitung wurde aufgrund einer fehlenden Berechtigung deaktiviert. Bitte richte es in den Einstellungen erneut ein.</string>
     <!-- App list -->
     <string name="app_list_loading">Apps werden geladen…</string>
     <string name="app_list_search">Suche</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Sind Sie sicher?</string>
     <string name="revert_confirmation">Möchten Sie Ihre aktuellen Einstellungen auf die Standardwerte zurücksetzen?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Impulsantwort importieren</string>
-    <string name="intent_import_mode_add">Nur importieren</string>
-    <string name="intent_import_mode_select">Importieren und aktivieren</string>
-    <string name="intent_import_fail">Fehler beim Importieren der Datei \'%1$s\'</string>
-    <string name="intent_import_success">Datei \'%1$s\' importiert</string>
-    <string name="intent_import_select_success">Datei \'%1$s\' importiert und aktiviert</string>
-    <string name="intent_import_error_file_uri">Fehler beim Importieren der Datei. Nicht unterstützte Datei URI.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Bitte hilf uns diese App in deine Sprache zu übersetzen! Tippe hier, um die Projektseite auf Crowdin zu besuchen.</string>
     <string name="translation_notice">Übersetzungen beitragen</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Unbekannt</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">SiphonDSP Magisk-Paket benötigt ein Update</string>
-    <string name="version_mismatch_root_description">Das SiphonDSP Magisk-Modul, das auf deinem Gerät installiert ist, ist veraltet und wird von dieser App nicht mehr unterstützt.\n\nBitte lade das neueste SiphonDSP Magisk-Paket herunter und installiere es über Magisk.\nBeachte, dass das Magisk-Installationspaket diese App durch die offizielle SiphonDSP-App ersetzen kann.\n\nMöchtest du jetzt die Download-Website für die Magisk-Installationspakete besuchen?</string>
-    <string name="version_mismatch_root_toast">Fehler beim Starten. Das installierte SiphonDSP Magisk-Modul ist zu alt und wird von dieser App nicht mehr unterstützt.</string>
 </resources>

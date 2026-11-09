@@ -40,7 +40,7 @@ internal class BiquadCascade(maxSections: Int) {
         sectionCount++
     }
 
-    /** Mirrors JamesDspLocalEngine/NativeBmwDspProcessor::makePeq via the existing BiquadUtils formulas. */
+    /** Mirrors DspEngine/NativeBmwDspProcessor::makePeq via the existing BiquadUtils formulas. */
     fun addPeqBand(band: ParametricEqBand, sampleRate: Double) {
         val c = BiquadUtils.computeCoefficients(band.frequency, band.gain, band.q, band.filterType, sampleRate)
         addNormalised(c.b0 / c.a0, c.b1 / c.a0, c.b2 / c.a0, c.a1 / c.a0, c.a2 / c.a0)

@@ -1,5 +1,8 @@
 package app.siphondsp.audio
 
+import java.nio.FloatBuffer
+import java.nio.ShortBuffer
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -11,10 +14,9 @@ import kotlin.math.sqrt
  * Live spectrum for the PEQ graph overlay.
  *
  * The real-time audio thread (RootlessAudioProcessorService.runRecorderLoop) is the producer:
- * publish() takes a short-held lock to copy the just-processed buffer into a scratch array and
- * returns immediately. It never blocks on I/O and never allocates once the scratch buffer has
- * grown to the session's buffer size, so it cannot stall audio processing the way holding a lock
- * across disk/JNI calls would. All FFT work happens on a dedicated background thread instead.
+ * captureDry() and publishWet() copy the buffer before and after processing into a frame of a
+ * lock-free triple buffer and return. They never lock, block or allocate, so the analyser can
+ * never stall the audio thread. All FFT work happens on a dedicated background thread instead.
  *
  * Each tick publishes a matched pair of buffers from the same instant: the dry (pre-DSP) signal
  * and the wet (post-DSP) signal. Both are analyzed into independent traces so a graph can show
@@ -45,33 +47,83 @@ object SpectrumEngine {
     private val fft = FFT(FFT_LEN).apply { initHannWindow(FFT_LEN) }
 
     // --- Producer side (audio thread) ---
-    private val feedLock = Any()
-    private var feedDryScratch: FloatArray? = null
-    private var feedWetScratch: FloatArray? = null
-    private var feedLength = 0
-    private var feedSampleRate = 48000
+    // One matched dry/wet pair. FRAME_CAPACITY samples is the analyser's whole input window, so
+    // a longer buffer is cut to that (it only ever looks at the latest audio anyway).
+    private class Frame {
+        val dry = FloatArray(FRAME_CAPACITY)
+        val wet = FloatArray(FRAME_CAPACITY)
+        var length = 0
+        var sampleRate = 48000
+    }
+    private const val FRAME_CAPACITY = FFT_LEN * 2
+
+    // Triple buffer. The producer fills frames[back], then swaps it with the middle slot and
+    // marks that fresh; the consumer swaps its frames[front] with a fresh middle. The middle
+    // slot index and the fresh bit share one atomic, so neither side ever waits for the other,
+    // and getAndSet() publishes the frame's contents along with it. A newer buffer replaces one
+    // the consumer hasn't taken yet, as the old single-slot mailbox did.
+    private const val SLOT_MASK = 0b011
+    private const val FRESH = 0b100
+    // Allocated on the first acquire() (main thread), before any producer can see isActive.
+    @Volatile private var frames: Array<Frame>? = null
+    private val middle = AtomicInteger(1)
+    private var back = 0   // producer (audio thread) only
+    private var front = 2  // consumer (analyser thread) only
+    // Set by captureDry() for the buffer being processed; publishWet() publishes only after it.
+    private var dryCaptured = false
 
     @Volatile
     private var activationCount = 0
     val isActive: Boolean get() = activationCount > 0
 
-    /** Publishes one tick's dry (pre-DSP) and wet (post-DSP) interleaved buffers as a pair. */
-    fun publish(dryInterleaved: FloatArray, wetInterleaved: FloatArray, length: Int, sampleRate: Int) {
-        if (activationCount <= 0) return
-        synchronized(feedLock) {
-            feedDryScratch = growIfNeeded(feedDryScratch, length).also {
-                System.arraycopy(dryInterleaved, 0, it, 0, length)
-            }
-            feedWetScratch = growIfNeeded(feedWetScratch, length).also {
-                System.arraycopy(wetInterleaved, 0, it, 0, length)
-            }
-            feedLength = length
-            feedSampleRate = sampleRate
-        }
+    /** Copies one buffer's dry (pre-DSP) interleaved samples; call before processing it. */
+    fun captureDry(interleaved: FloatBuffer, length: Int) {
+        val frame = producerFrame() ?: return
+        val n = length.coerceIn(0, minOf(FRAME_CAPACITY, interleaved.limit()))
+        for (i in 0 until n) frame.dry[i] = interleaved.get(i)
+        frame.length = n
+        dryCaptured = true
     }
 
-    private fun growIfNeeded(existing: FloatArray?, length: Int): FloatArray =
-        if (existing == null || existing.size < length) FloatArray(length) else existing
+    fun captureDry(interleaved: ShortBuffer, length: Int) {
+        val frame = producerFrame() ?: return
+        val n = length.coerceIn(0, minOf(FRAME_CAPACITY, interleaved.limit()))
+        for (i in 0 until n) frame.dry[i] = interleaved.get(i) / 32768f
+        frame.length = n
+        dryCaptured = true
+    }
+
+    /**
+     * Copies the same buffer's wet (post-DSP) samples and publishes the pair. Does nothing unless
+     * [captureDry] ran for this buffer.
+     */
+    fun publishWet(interleaved: FloatBuffer, sampleRate: Int) {
+        val frame = takeDryFrame() ?: return
+        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i)
+        publish(frame, sampleRate)
+    }
+
+    fun publishWet(interleaved: ShortBuffer, sampleRate: Int) {
+        val frame = takeDryFrame() ?: return
+        for (i in 0 until frame.length) frame.wet[i] = interleaved.get(i) / 32768f
+        publish(frame, sampleRate)
+    }
+
+    private fun producerFrame(): Frame? {
+        if (activationCount <= 0) return null
+        return frames?.get(back)
+    }
+
+    private fun takeDryFrame(): Frame? {
+        if (!dryCaptured) return null
+        dryCaptured = false
+        return frames?.get(back)
+    }
+
+    private fun publish(frame: Frame, sampleRate: Int) {
+        frame.sampleRate = sampleRate
+        back = middle.getAndSet(back or FRESH) and SLOT_MASK
+    }
 
     // --- Consumer side (background analyzer thread) ---
     private val dryChannel = SpectrumChannel()
@@ -89,6 +141,7 @@ object SpectrumEngine {
 
     @Synchronized
     fun acquire() {
+        if (frames == null) frames = Array(3) { Frame() }
         activationCount++
         if (thread == null) {
             running = true
@@ -145,18 +198,15 @@ object SpectrumEngine {
     }
 
     private fun drainInto(dryDest: FloatArray, wetDest: FloatArray): Int {
-        synchronized(feedLock) {
-            val len = feedLength
-            if (len <= 0) return 0
-            val dry = feedDryScratch ?: return 0
-            val wet = feedWetScratch ?: return 0
-            val n = len.coerceAtMost(dryDest.size).coerceAtMost(wetDest.size)
-            System.arraycopy(dry, 0, dryDest, 0, n)
-            System.arraycopy(wet, 0, wetDest, 0, n)
-            feedLength = 0
-            analyzedSampleRate = feedSampleRate
-            return n
-        }
+        val all = frames ?: return 0
+        if ((middle.get() and FRESH) == 0) return 0
+        front = middle.getAndSet(front) and SLOT_MASK
+        val frame = all[front]
+        val n = frame.length.coerceAtMost(dryDest.size).coerceAtMost(wetDest.size)
+        System.arraycopy(frame.dry, 0, dryDest, 0, n)
+        System.arraycopy(frame.wet, 0, wetDest, 0, n)
+        analyzedSampleRate = frame.sampleRate
+        return n
     }
 
     private fun updateLevelsFromInterleaved(interleaved: FloatArray, length: Int) {

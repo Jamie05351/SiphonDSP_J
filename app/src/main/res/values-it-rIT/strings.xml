@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Il produttore del dispositivo ha disabilitato le API di registrazione audio interne. Questa applicazione non può funzionare senza di esse.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Attiva/disattiva l\'elaborazione audio</string>
-    <string name="convolver_enable">Convolutore</string>
-    <string name="convolver_impulse">Risposta impulsiva</string>
-    <string name="convolver_advanced_editing">Modifica avanzata della forma d’onda</string>
-    <string name="convolver_convolution_mode">Ottimizzazione della risposta impulsiva</string>
-    <string name="convolver_convolution_mode_original">Originale</string>
-    <string name="convolver_convolution_mode_shrink">Compressione orizzontale</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Trasformazione a sfasamento minimo e compressione orizzontale</string>
-    <string name="output_control_header">Controllo uscita</string>
-    <string name="output_limiter_threshold">Soglia del limitatore</string>
-    <string name="output_limiter_release">Rilascio del limitatore</string>
-    <string name="output_control_postgain">Postamplificazione</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Processo d\'inserimento</string>
     <string name="onboarding_back">Indietro</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Senza permessi di root</string>
     <string name="onboarding_root_shell_fail">Nessun permesso di root disponibile. Utilizza un altro metodo di configurazione.</string>
     <string name="onboarding_root_shell_fail_unknown">Impossibile concedere l\'autorizzazione tramite root. Utilizza un altro metodo di configurazione.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">L\'elaborazione migliorata è stata impostata</string>
     <string name="onboarding_adb_shizuku_title">Configurazione Shizuku</string>
     <string name="onboarding_adb_adb_title">Configurazione ADB</string>
     <string name="onboarding_adb_caption">Questa app richiede permessi speciali per l\'acquisizione della configurazione audio del dispositivo. Segui le istruzioni riportate di seguito.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Questa impostazione potrebbe causare la duplicazione dell\'audio quando un\'altra applicazione di effetti audio prende il controllo della sessione audio corrente.\nMantieni questa impostazione disabilitata a meno che non riscontri false notifiche d\'interruzione della sessione.</string>
     <string name="audio_format_header">Elaborazione audio</string>
     <string name="audio_format_section_header">Formato audio preferito</string>
-    <string name="audio_format_processing_header">Opzioni di elaborazione dell\'audio</string>
-    <string name="audio_format_processing_legacy">Modalità compatibilità</string>
-    <string name="audio_format_processing_legacy_on">Collegamento globale alla sessione 0 (obsoleto)</string>
-    <string name="audio_format_processing_legacy_off">Collegamento individualmente ad ogni applicazione</string>
-    <string name="audio_format_enhanced_processing">Elaborazione migliorata</string>
-    <string name="audio_format_enhanced_processing_on">Controllo individuale e supporto migliorato per le applicazioni abilitate</string>
-    <string name="audio_format_enhanced_processing_off">Elaborazione migliorata disabilitata</string>
-    <string name="audio_format_enhanced_processing_info_title">Cos\'è l\'elaborazione migliorata?</string>
-    <string name="audio_format_enhanced_processing_info">Tocca per visualizzare la guida</string>
-    <string name="audio_format_enhanced_processing_info_content">Quando l\'elaborazione migliorata è abilitata, è possibile escludere selettivamente alcune applicazioni dall\'elaborazione di SiphonDSP. Per accedere a questa funzionalità, utilizza il menù con i tre puntini nell\'angolo in basso a destra e seleziona \"applicazioni escluse\".\n\nInoltre, quando la modalità compatibilità è disattivata, SiphonDSP si affida alle applicazioni multimediali per inviare un comando di sistema all\'avvio della riproduzione. Questo è un vantaggio rispetto alla modalità compatibilità perché a ogni applicazione viene assegnata una sessione di elaborazione degli effetti, consentendone così un controllo individuale. Altrimenti, con la modalità compatibilità attivata, tutte le applicazioni condividono un unica sessione di elaborazione (Android ritiene quest\'ultima modalità ormai obsoleta).\n\nPurtroppo, non tutte le applicazioni multimediali eseguono correttamente questa operazione, pertanto, non funzionano correttamente mantenendo la modalità compatibilità disattivata. Per risolvere questo problema, è possibile attivare l\'elaborazione migliorata. Invece di affidarsi alle trasmissioni di sistema sulle nuove sessioni multimediali, SiphonDSP effettuerà da solo una scansione selettiva delle sessioni multimediali, consentendo un supporto adeguato alle applicazioni multimediali non compatibili.</string>
     <string name="audio_format_media_apps_need_restart">È necessario riavviare tutte le applicazioni multimediali attive.</string>
     <string name="audio_format_summary">Codifica audio preferita, dimensione del buffer</string>
     <string name="audio_format_summary_root">Modalità compatibilità, elaborazione migliorata</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Dimensione del buffer</string>
     <string name="audio_format_buffer_size_unit">&#xa0;campioni</string>
     <string name="audio_format_buffer_size_warning_low_value">Attenzione: dimensioni del buffer troppo piccole possono causare distorsioni dell\'audio!</string>
-    <string name="audio_format_optimization_header">Ottimizzazioni del convolutore</string>
-    <string name="audio_format_optimization_refresh">Aggiorna i dati comparativi</string>
-    <string name="audio_format_optimization_benchmark">Usa i dati comparativi per ottimizzare le prestazioni</string>
-    <string name="audio_format_optimization_benchmark_summary">Aumenta le prestazioni degli effetti che utilizzano i moduli del convolutore</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Calcolo dei dati comparativi in corso…</string>
     <string name="app_behavior">Comportamento dell\'applicazione</string>
     <string name="exclude_app_from_recents">Escludi l\'applicazione dalle app recenti</string>
     <string name="exclude_app_from_recents_off">Non escludere l\'applicazione dall\'elenco delle attività recenti</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Mostra dettagli sulle limitazioni di questa applicazione</string>
     <string name="troubleshooting_notification_access">Consenti l\'accesso alle notifiche per un migliore rilevamento della sessione</string>
     <string name="troubleshooting_notification_access_summary">Abilita un rilevamento più affidabile della sessione audio</string>
-    <string name="troubleshooting_repair_assets">Ripristina IRS, DDC e script predefiniti</string>
-    <string name="troubleshooting_repair_assets_summary">Ripristina le preimpostazioni di base se queste sono state eliminate</string>
-    <string name="troubleshooting_repair_assets_success">Le impostazioni predefinite sono state ripristinate</string>
     <string name="misc_settings">Altro</string>
     <string name="misc_settings_summary">Segnalazioni di arresti anomali, altre azioni</string>
     <string name="misc_permission_skip_prompt">Salta richiesta di autorizzazione di acquisizione</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Riavvia la configurazione guidata</string>
     <string name="misc_permission_restart_setup_summary">Concedi i permessi opzionali mancanti</string>
     <string name="misc_permission_header">Permessi opzionali</string>
-    <string name="assets">Impostazioni</string>
     <string name="about_settings">Informazioni</string>
     <string name="about_settings_summary">Ringraziamenti, supporto, aggiornamenti</string>
     <string name="credits">Ringraziamenti</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Rinominato in \"%1$s\"</string>
     <string name="filelibrary_deleted">\"%1$s\" eliminato</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Il file VDC selezionato è danneggiato. Per favore scegline un altro.</string>
-    <string name="message_irs_corrupt">La risposta impulsiva selezionata è danneggiata. Per favore scegline un\'altra.</string>
-    <string name="message_convolver_advimp_invalid">Convolutore: la modifica avanzata delle forme d\'onda contiene valori non validi.</string>
-    <string name="message_liveprog_compile_fail">Esecuzione dello script Liveprog non riuscita. Lo script selezionato è danneggiato. Modifica manualmente lo script per risolvere il problema.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Il modulo è già installato?</string>
     <string name="load_fail_arch_card">Se hai già installato il modulo Magisk, potresti aver scelto le impostazioni sbagliate durante l\'installazione. Reinstalla e prova ad abilitare la compatibilità Huawei (anche se il telefono non proviene da quel produttore).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Funzionalità non disponibile</string>
-    <string name="enhanced_processing_feature_unavailable_content">Questa funzione è disponibile solo quando l\'«elaborazione migliorata» è abilitata nelle impostazioni. Vai su \"impostazioni &gt; elaborazione audio &gt; elaborazione migliorata\" e abilita questa opzione per accedere a questo menù.\n\nNota: l\'«elaborazione migliorata» non può essere utilizzata mentre la modalità compatibilità è abilitata.</string>
-    <string name="enhanced_processing_missing_perm">L\'elaborazione avanzata è stata disabilitata a causa di un permesso mancante. Riconfigurala dalle impostazioni.</string>
     <!-- App list -->
     <string name="app_list_loading">Caricamento delle applicazioni…</string>
     <string name="app_list_search">Cerca</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Sei sicuro?</string>
     <string name="revert_confirmation">Vuoi reimpostare le attuali preimpostazioni di SiphonDSP ai valori predefiniti?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Importa risposta impulsiva</string>
-    <string name="intent_import_mode_add">Importa solamente</string>
-    <string name="intent_import_mode_select">Importa e attiva</string>
-    <string name="intent_import_fail">Impossibile importare il file \"%1$s\"</string>
-    <string name="intent_import_success">File \"%1$s\" importato</string>
-    <string name="intent_import_select_success">File \"%1$s\" importato e attivato</string>
-    <string name="intent_import_error_file_uri">Impossibile importare il file. file URI non supportato.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Aiutaci a tradurre questa app nella tua lingua! Tocca qui per visitare il sito del progetto su Crowdin.</string>
     <string name="translation_notice">Contribuisci alle traduzioni</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Sconosciuto</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Il pacchetto Magisk di SiphonDSP richiede un aggiornamento</string>
-    <string name="version_mismatch_root_description">Il pacchetto Magisk di SiphonDSP installato sul tuo dispositivo è obsoleto e non è più supportato da questa applicazione.\n\nScarica l\'ultimo pacchetto ZIP Magisk di SiphonDSP e installarlo tramite Magisk.\nNota che il pacchetto Magisk può sostituire questa appplicazione con l\'app ufficiale SiphonDSP.\n\nVuoi visitare il sito web di download dei pacchetti Magisk?</string>
-    <string name="version_mismatch_root_toast">Impossibile avviare. Il pacchetto Magisk di SiphonDSP installato è troppo vecchio e non è più supportato da questa applicazione.</string>
 </resources>

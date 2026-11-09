@@ -41,7 +41,7 @@ import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
-import app.siphondsp.interop.JamesDspWrapper
+import app.siphondsp.interop.NativeDsp
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.view.BmwDashboardSkin
@@ -81,7 +81,7 @@ private fun formatHz(hz: Float): String =
 @Composable
 fun CompressorVisualiserPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val mbcMeter = rememberMeterPoll(JamesDspWrapper.METER_MBC, MbcMeterSize)
+    val mbcMeter = rememberMeterPoll(NativeDsp.METER_MBC, MbcMeterSize)
 
     val graph: @Composable (Modifier) -> Unit = { m ->
         // Compose port of CompressorSurface: band regions, grid, threshold lines, GR readouts,
@@ -170,7 +170,7 @@ private fun MbcMasterControls(dsp: BmwDspState, row: MasterRow) {
 @Composable
 fun CompressorBandPage(band: Int, modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val mbcMeter = rememberMeterPoll(JamesDspWrapper.METER_MBC, MbcMeterSize)
+    val mbcMeter = rememberMeterPoll(NativeDsp.METER_MBC, MbcMeterSize)
 
     fun idx(field: Int) = NativeBmwDspValues.mbcBandIndex(band, field)
 
@@ -316,7 +316,7 @@ private typealias BusRow = (y: Int, h: Int) -> Modifier
 @Composable
 fun CompressorDriverPage(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
-    val busMeter = rememberMeterPoll(JamesDspWrapper.METER_BUS_LIMITER, BusMeterSize)
+    val busMeter = rememberMeterPoll(NativeDsp.METER_BUS_LIMITER, BusMeterSize)
     val bus: @Composable (Int, BusRow) -> Unit = { i, row ->
         BusLimiterColumn(dsp, BusColumns[i], { busMeter.value(i, 0f) }, row)
     }
@@ -387,7 +387,7 @@ private const val BusMeterSize = 3
  * STARTED. Nothing here is read during composition: [value] and [latest] read [tick], so call them
  * only where the meter is drawn (a Canvas lambda, an AndroidView update). A refresh then redraws
  * just that meter instead of recomposing the whole page and its sliders, and the poll allocates
- * nothing (JamesDspWrapper.readNativeBmwMeter fills [values] in place).
+ * nothing (NativeDsp.readNativeBmwMeter fills [values] in place).
  */
 @Stable
 private class MeterPoll(size: Int) {

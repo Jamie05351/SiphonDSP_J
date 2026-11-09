@@ -154,18 +154,7 @@
     <string name="bmw_dsp_tilt_amount">Tilt amount</string>
     <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
 
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Impulse response</string>
-    <string name="convolver_advanced_editing">Advanced waveform editing</string>
-    <string name="convolver_convolution_mode">Impulse response optimization</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Shrink</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
-    <string name="output_control_header">Output control</string>
-    <string name="output_limiter_threshold">Limiter threshold</string>
-    <string name="output_limiter_release">Limiter release</string>
-    <string name="output_control_postgain">Post gain</string>
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
@@ -196,7 +185,6 @@
     <string name="onboarding_root_shell_fail_title">No root access</string>
     <string name="onboarding_root_shell_fail">No root access available. Please use another setup method.</string>
     <string name="onboarding_root_shell_fail_unknown">Failed to grant permission via root. Please use another setup method.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Enhanced processing is set-up</string>
 
     <string name="onboarding_adb_shizuku_title">Shizuku setup</string>
     <string name="onboarding_adb_adb_title">ADB setup</string>
@@ -324,16 +312,6 @@
     <string name="session_loss_ignore_warning">Enabling this setting can cause duplicated audio when another audio effects app takes control of an audio session.\nPlease keep this setting disabled unless you encounter false-positive session loss events.</string>
     <string name="audio_format_header">Audio processing</string>
     <string name="audio_format_section_header">Preferred audio format</string>
-    <string name="audio_format_processing_header">Audio processing options</string>
-    <string name="audio_format_processing_legacy">Legacy mode</string>
-    <string name="audio_format_processing_legacy_on">Attach globally to session 0 (deprecated)</string>
-    <string name="audio_format_processing_legacy_off">Attach to each app individually</string>
-    <string name="audio_format_enhanced_processing">Enhanced processing</string>
-    <string name="audio_format_enhanced_processing_on">Per-app control and enhanced support for apps enabled</string>
-    <string name="audio_format_enhanced_processing_off">Enhanced processing disabled</string>
-    <string name="audio_format_enhanced_processing_info_title">What is enhanced processing?</string>
-    <string name="audio_format_enhanced_processing_info">Tap to view documentation</string>
-    <string name="audio_format_enhanced_processing_info_content">When enhanced processing is enabled, you can selectively exclude certain apps from being processed by J_DSP. Use the 3-dot menu on the bottom right corner and select \'Excluded apps\' to access this feature.\n\nWhile legacy mode is disabled, J_DSP relies on media apps to send a system broadcast when they start playback. This is an advantage over legacy mode because each app gets its own J_DSP effect engine assigned to it, which allows for more fine-grained control. Otherwise, with legacy mode turned on, all apps would share a single processing engine, which Android deprecates and should not be used anymore.\n\nUnfortunately, not all media apps do this correctly and, therefore, would not function correctly with legacy mode disabled. To solve this issue, you can enable enhanced processing. Instead of relying on system broadcasts about new media sessions, J_DSP will proactively scan for media sessions by itself and allow proper support for uncooperative media apps.</string>
     <string name="audio_format_media_apps_need_restart">You need to restart all active media apps after changing this setting to resume audio processing.</string>
     <string name="audio_format_summary">Preferred audio encoding, buffer size</string>
     <string name="audio_format_summary_root">Legacy mode, enhanced processing</string>
@@ -344,11 +322,6 @@
     <string name="audio_format_buffer_size">Buffer size</string>
     <string name="audio_format_buffer_size_unit">&#xa0;samples</string>
     <string name="audio_format_buffer_size_warning_low_value">Warning: Low buffer sizes may cause audio issues such as clipping!</string>
-    <string name="audio_format_optimization_header">Convolver module optimizations</string>
-    <string name="audio_format_optimization_refresh">Refresh benchmarking data</string>
-    <string name="audio_format_optimization_benchmark">Use benchmarks to optimize performance</string>
-    <string name="audio_format_optimization_benchmark_summary">Increases performance of effects that use convolver modules</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Benchmark in progress…</string>
     <string name="app_behavior">App behavior</string>
     <string name="exclude_app_from_recents">Exclude app from recents</string>
     <string name="exclude_app_from_recents_off">Don\'t exclude app from recent tasks list</string>
@@ -374,9 +347,6 @@
     <string name="troubleshooting_view_limitations_summary">Show details about the limitations of this app</string>
     <string name="troubleshooting_notification_access">Allow notification access for better session detection</string>
     <string name="troubleshooting_notification_access_summary">Enables more reliable audio session detection</string>
-    <string name="troubleshooting_repair_assets">Restore bundled IRS, DDC, and scripts</string>
-    <string name="troubleshooting_repair_assets_summary">Unpack preloaded assets if you lost them</string>
-    <string name="troubleshooting_repair_assets_success">Bundled assets have been restored</string>
     <string name="misc_settings">Miscellaneous</string>
     <string name="misc_settings_summary">Crash reports, other actions</string>
     <string name="misc_permission_skip_prompt">Skip capture permission prompt</string>
@@ -384,7 +354,6 @@
     <string name="misc_permission_restart_setup">Restart setup wizard</string>
     <string name="misc_permission_restart_setup_summary">Grant missing optional permissions</string>
     <string name="misc_permission_header">Optional permissions</string>
-    <string name="assets">Assets</string>
     <string name="about_settings">About</string>
     <string name="about_settings_summary">Credits, support, updates</string>
     <string name="credits">Credits</string>
@@ -464,10 +433,6 @@
     <string name="filelibrary_deleted">\'%1$s\' deleted</string>
 
     <!-- J_DSP engine messages -->
-    <string name="message_vdc_corrupt">Selected VDC file is corrupt. Please choose another one.</string>
-    <string name="message_irs_corrupt">Selected impulse response is corrupt. Please choose another one.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: Advanced waveform editing contains invalid values.</string>
-    <string name="message_liveprog_compile_fail">Liveprog execution failed. Selected script is damaged. Please use the script editor for debugging.</string>
 
     <!-- GraphicEQ editor -->
 
@@ -551,9 +516,6 @@
     <string name="load_fail_arch_card">If you already installed the magisk module, you may have chosen the wrong settings during installation. Please re-install and try to enable Huawei compatibility (even if your phone is not from that manufacturer).</string>
 
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Feature unavailable</string>
-    <string name="enhanced_processing_feature_unavailable_content">This feature is only available when \'enhanced processing\' is enabled in the settings. Please go to \'Settings > Audio processing > Enhanced processing\' and enable that option to access this menu.\n\nNote: \'Enhanced processing\' can not be used while legacy mode is enabled.</string>
-    <string name="enhanced_processing_missing_perm">Enhanced processing has been disabled due to a missing permission. Please re-setup it in settings.</string>
 
     <!-- App list -->
     <string name="app_list_loading">Loading apps…</string>
@@ -574,13 +536,6 @@
     <string name="revert_confirmation">Do you want to reset your current J_DSP preset to the default values?</string>
 
     <!-- File intent handler -->
-    <string name="intent_import_irs">Import impulse response</string>
-    <string name="intent_import_mode_add">Import only</string>
-    <string name="intent_import_mode_select">Import and activate</string>
-    <string name="intent_import_fail">Failed to import file \'%1$s\'</string>
-    <string name="intent_import_success">File \'%1$s\' imported</string>
-    <string name="intent_import_select_success">File \'%1$s\' imported and activated</string>
-    <string name="intent_import_error_file_uri">Failed to import file. Unsupported file URI.</string>
 
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Please help us to translate this app into your language! Tap here to visit the project site on Crowdin.</string>
@@ -624,9 +579,6 @@
     <string name="group_unknown">Unknown</string>
 
     <!-- Root version check -->
-    <string name="version_mismatch_root">J_DSP magisk package requires an update</string>
-    <string name="version_mismatch_root_description">The J_DSP magisk package installed on your device is outdated and not supported by this app anymore.\n\nPlease retrieve the latest J_DSP magisk package ZIP and install it via Magisk.\nNote that the magisk package may replace this app with the official J_DSP app.\n\nDo you want to visit the download website for the Magisk packages now?</string>
-    <string name="version_mismatch_root_toast">Failed to start. The installed J_DSP magisk package is too old and not supported by this app anymore.</string>
 
     <!-- Android 15 screenshare restriction warning -->
     <string name="android_15_screenshare_warning_title">Android 15 compatibility notice</string>

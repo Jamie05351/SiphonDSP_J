@@ -50,7 +50,6 @@
     <string name="permission_not_allowed">अनुमति नहीं</string>
     <!-- Main screen -->
     <string name="power_button_alt">ऑडियो प्रोसेसिंग टॉगल करें</string>
-    <string name="convolver_convolution_mode_original">मूल</string>
     <!-- Onboarding -->
     <!-- Rootless flavor -->
     <!-- Root flavor -->

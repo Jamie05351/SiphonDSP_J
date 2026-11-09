@@ -11,10 +11,6 @@ import app.siphondsp.activity.OnboardingActivity
 import app.siphondsp.preference.IconPreference
 import app.siphondsp.preference.MaterialSwitchPreference
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.AssetManagerExtensions.installPrivateAssets
-import app.siphondsp.utils.extensions.ContextExtensions.showAlert
-import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
-import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
@@ -23,7 +19,6 @@ import org.koin.android.ext.android.inject
 class SettingsMiscFragment : SettingsBaseFragment() {
 
     private val autoStartNotify by lazy { findPreference<MaterialSwitchPreference>(getString(R.string.key_autostart_prompt_at_boot)) }
-    private val repairAssets by lazy { findPreference<Preference>(getString(R.string.key_troubleshooting_repair_assets)) }
     private val debugDatabase by lazy { findPreference<Preference>(getString(R.string.key_debug_database)) }
     private val permSkipPrompt by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_skip_prompt)) }
     private val permAutoStart by lazy { findPreference<IconPreference>(getString(R.string.key_misc_permission_auto_start)) }
@@ -35,11 +30,6 @@ class SettingsMiscFragment : SettingsBaseFragment() {
         preferenceManager.sharedPreferencesName = Constants.PREF_APP
         setPreferencesFromResource(R.xml.app_misc_preferences, rootKey)
 
-        repairAssets?.setOnPreferenceClickListener {
-            requireContext().assets.installPrivateAssets(requireContext(), force = true)
-            requireContext().showAlert(R.string.success, R.string.troubleshooting_repair_assets_success)
-            true
-        }
 
 
         permRestartSetup?.setOnPreferenceClickListener {

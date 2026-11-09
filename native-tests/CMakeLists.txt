@@ -27,7 +27,7 @@ add_compile_options(-O2 -g -Wall -Wextra -fno-fast-math)
 # it here so a test run's output is about the tests.
 add_compile_options(-Wno-misleading-indentation)
 
-set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/libjamesdsp-wrapper)
+set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/engine)
 
 add_executable(native_tests
     test_main.cpp
@@ -41,7 +41,6 @@ add_executable(native_tests
     ${WRAPPER_DIR}/NativeBmwMeasurement.cpp
     ${WRAPPER_DIR}/NativeBmwVirtual.cpp
     concurrency_test.cpp
-    convolver_hook_test.cpp
     capture_test.cpp
     crossover_test.cpp
     default_config_test.cpp
@@ -59,6 +58,7 @@ add_executable(native_tests
     virtual_bass_test.cpp
     flush_to_zero_test.cpp
     ramps_test.cpp
+    output_guard_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.

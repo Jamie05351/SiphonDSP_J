@@ -8,7 +8,6 @@ import kotlinx.coroutines.Job
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
-import app.siphondsp.preference.FileLibraryPreference
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
 import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
@@ -48,10 +47,11 @@ class BackupManager(private val context: Context): KoinComponent {
 
                         // Delete older backups
                         val numberOfBackups = preferences.get<String>(R.string.key_backup_maximum).toIntOrNull() ?: 2
-                        val backupRegex = Regex("""jamesdsp_backup_\d+-\d+-\d+_\d+-\d+.tar.gz""")
+                        // Older builds named them jamesdsp_backup_*: rotate both, newest date first.
+                        val backupRegex = Regex("""(jamesdsp|siphondsp)_backup_\d+-\d+-\d+_\d+-\d+.tar.gz""")
                         dir.listFiles { _, filename -> backupRegex.matches(filename) }
                             .orEmpty()
-                            .sortedByDescending { it.name }
+                            .sortedByDescending { it.name.orEmpty().substringAfter("_backup_") }
                             .drop(numberOfBackups - 1)
                             .forEach { it.delete() }
 
@@ -99,13 +99,6 @@ class BackupManager(private val context: Context): KoinComponent {
                             .walkTopDown()
                             .forEach { c.add(it, "profiles/${it.toRelativeString(root)}") }
                     }
-                }
-
-                FileLibraryPreference.types.entries.forEach { entry ->
-                    File(context.getExternalFilesDir(null), "/${entry.key}")
-                        .listFiles()
-                        ?.filter { entry.value.any { ext -> it.absolutePath.endsWith(ext) } }
-                        ?.forEach { c.add(it, "${entry.key}/${it.name}") }
                 }
             }
 
@@ -182,9 +175,6 @@ class BackupManager(private val context: Context): KoinComponent {
                         true
                     )
                 }
-                else if(file.isDirectory && FileLibraryPreference.types.any { file.name.startsWith(it.key) }) {
-                    file.copyRecursively(File(context.getExternalFilesDir(null)!!.absolutePath + "/" + file.name), true)
-                }
             }
 
             targetFolder.deleteRecursively()
@@ -221,13 +211,12 @@ class BackupManager(private val context: Context): KoinComponent {
             return (name.contains("dsp_") && name.endsWith(".xml")) ||
                     name.startsWith("profiles/") ||
                     name.startsWith("no_backup/") ||
-                    BMW_SHARED_PREFS_FILES.any { name.endsWith(it) } ||
-                    FileLibraryPreference.types.any { name.contains(it.key) && it.value.any { ext -> name.endsWith(ext) } }
+                    BMW_SHARED_PREFS_FILES.any { name.endsWith(it) }
         }
 
         fun getBackupFilename(): String {
             val date = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault()).format(Date())
-            return "jamesdsp_backup_$date.tar.gz"
+            return "siphondsp_backup_$date.tar.gz"
         }
     }
 }

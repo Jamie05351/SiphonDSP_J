@@ -2,6 +2,7 @@
 #include <atomic>
 #include <chrono>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 using namespace nbtest;
@@ -74,18 +75,24 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
     CHECK(std::fabs(measuredDb - kGainDb) < 0.5);
 }
 
+// Reaches the processor's audio lock, so a test can hold it the way process() does for a whole
+// buffer (declared a friend in NativeBmwDspProcessor.h).
+struct NativeBmwDspProcessorTestAccess {
+    static std::mutex& audioLock(NativeBmwDspProcessor& proc) { return proc.stateMutex_; }
+};
+
 namespace {
-// A host stage that parks the audio thread inside process() -- while it holds the audio lock --
-// until the test releases it, or gives up after a few seconds.
+// Holds the audio lock on its own thread -- as the audio thread does mid-buffer -- until the test
+// releases it, or gives up after a few seconds.
 struct ParkedBuffer {
     std::atomic<bool> entered{false}, released{false}, timedOut{false};
-    static void hook(void* context, float*, std::size_t) {
-        auto* self = static_cast<ParkedBuffer*>(context);
-        self->entered.store(true);
+    void hold(NativeBmwDspProcessor& proc) {
+        std::lock_guard<std::mutex> lock(NativeBmwDspProcessorTestAccess::audioLock(proc));
+        entered.store(true);
         const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-        while (!self->released.load()) {
+        while (!released.load()) {
             if (std::chrono::steady_clock::now() > giveUp) {
-                self->timedOut.store(true);
+                timedOut.store(true);
                 return;
             }
             std::this_thread::yield();
@@ -126,8 +133,7 @@ TEST_CASE("Config pushes return while the audio thread is mid-buffer") {
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
 
     ParkedBuffer parked;
-    std::vector<float> buffer = stereoSine(1000.0, 0.05, 256, kSampleRate);
-    std::thread audio([&] { proc.process(buffer.data(), buffer.size(), &ParkedBuffer::hook, &parked); });
+    std::thread audio([&] { parked.hold(proc); });
     while (!parked.entered.load()) {
         std::this_thread::yield();
     }

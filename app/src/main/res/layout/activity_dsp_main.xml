@@ -20,7 +20,6 @@
         android:visibility="gone"
         app:liftOnScroll="true"
         app:liftOnScrollColor="?attr/colorPrimaryContainer"
-        app:liftOnScrollTargetViewId="@id/dsp_scrollview"
         app:statusBarForeground="@android:color/transparent">
 
         <com.google.android.material.appbar.MaterialToolbar

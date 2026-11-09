@@ -495,7 +495,7 @@ TEST_CASE("kMasterLimiterEnabled / kMasterLimiterThreshold slots") {
     INFO("bypass peak ", off.peak, " GR ", off.gr, " | on@-6 peak ", on6.peak, " GR ", on6.gr,
          " | on@-1 peak ", on1.peak, " GR ", on1.gr);
     CHECK(off.gr == doctest::Approx(0.0f));   // bypassed -> meter idle
-    CHECK(off.peak > 1.0f);                   // bypassed -> nothing holds the level
+    CHECK(off.peak >= 0.999f);                // bypassed -> nothing limits: full scale, clipped by the output guard
     CHECK(on6.gr > 3.f);                      // enabled -> limiting, meter live
     CHECK(on6.peak < 0.6f);                   // held near the -6 dBFS ceiling
     CHECK(on1.peak > on6.peak + 0.2f);        // a higher threshold lets more through

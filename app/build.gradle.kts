@@ -48,7 +48,6 @@ android {
         externalNativeBuild {
             cmake {
                 arguments.addAll(listOf("-DANDROID_ARM_NEON=ON"))
-                cFlags.add("-std=gnu11 -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-implicit-function-declaration")
             }
         }
     }

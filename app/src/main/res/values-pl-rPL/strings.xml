@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">Producent urządzenia wyłączył wewnętrzne API nagrywania dźwięku. Ta aplikacja nie może działać bez nich.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Przełącz przetwarzanie dźwięku</string>
-    <string name="convolver_enable">Convolver (Splatacz)</string>
-    <string name="convolver_impulse">Reakcja impulsu</string>
-    <string name="convolver_advanced_editing">Zaawansowana edycja fali</string>
-    <string name="convolver_convolution_mode">Optymalizacja reakcji impulsu</string>
-    <string name="convolver_convolution_mode_original">Oryginalne</string>
-    <string name="convolver_convolution_mode_shrink">Zmniejsz</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimalna faza przekształcania i kurczenia</string>
-    <string name="output_control_header">Kontrola wyjściowa</string>
-    <string name="output_limiter_threshold">Próg limitera</string>
-    <string name="output_limiter_release">Wydanie ogranicznika</string>
-    <string name="output_control_postgain">Przyrost postu</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Proces Adaptacyjny</string>
     <string name="onboarding_back">Wstecz</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">Brak dostepu do root</string>
     <string name="onboarding_root_shell_fail">Brak dostępu do roota. Proszę użyć innej metody konfiguracji.</string>
     <string name="onboarding_root_shell_fail_unknown">Nie udało się przyznać uprawnień przez root. Proszę użyć innej metody konfiguracji.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Zaawansowane przetwarzanie jest ustawione</string>
     <string name="onboarding_adb_shizuku_title">Shizuku setup</string>
     <string name="onboarding_adb_adb_title">Konfiguracja ADB</string>
     <string name="onboarding_adb_caption">Ta aplikacja wymaga specjalnych uprawnień aby usunąć politykę audio urządzenia. Postępuj zgodnie z poniższymi instrukcjami.</string>
@@ -163,16 +151,6 @@
     <string name="session_loss_ignore_warning">Włączenie tego ustawienia może powodować duplikaty dźwięku, gdy inna aplikacja przejmuje kontrolę nad sesją dźwiękową.\nProszę zachować to ustawienie wyłączone, chyba że napotkasz zdarzenia fałszywie dodatniej utraty sesji.</string>
     <string name="audio_format_header">Przetwarzanie audio</string>
     <string name="audio_format_section_header">Preferowany format audio</string>
-    <string name="audio_format_processing_header">Opcje przetwarzania dźwięku</string>
-    <string name="audio_format_processing_legacy">Tryb Legacy</string>
-    <string name="audio_format_processing_legacy_on">Dołącz globalnie do sesji 0 (przestarzałe)</string>
-    <string name="audio_format_processing_legacy_off">Dołącz do każdej aplikacji indywidualnie</string>
-    <string name="audio_format_enhanced_processing">Ulepszone przetwarzanie</string>
-    <string name="audio_format_enhanced_processing_on">Kontrola nad aplikacją i wsparcie dla aplikacji włączone</string>
-    <string name="audio_format_enhanced_processing_off">Ulepszone przetwarzanie wyłączone</string>
-    <string name="audio_format_enhanced_processing_info_title">Czym jest usprawnione przetwarzanie?</string>
-    <string name="audio_format_enhanced_processing_info">Dotknij, aby wyświetlić dokumentację</string>
-    <string name="audio_format_enhanced_processing_info_content">Po włączeniu ulepszonego przetwarzania możesz wybiórczo wykluczyć niektóre aplikacje z przetwarzania przez SiphonDSP. Użyj menu 3-kropkowego w prawym dolnym rogu i wybierz \"Wykluczone aplikacje\", aby uzyskać dostęp do tej funkcji.\n\nPodczas gdy tryb starszy jest wyłączony, SiphonDSP opiera się na aplikacjach multimedialnych do wysyłania transmisji systemowej po uruchomieniu odtwarzania. Jest to przewaga nad trybem starszym, ponieważ każda aplikacja otrzymuje własny silnik efektu SiphonDSP przypisany do niej, co pozwala na bardziej precyzyjną kontrolę. W przeciwnym razie z włączonym trybem starszym, wszystkie aplikacje udostępnią pojedynczy silnik przetwarzania, który Android depreksuje i nie powinien być już używany.\n\nNiestety, nie wszystkie aplikacje multimedialne robią to poprawnie i dlatego nie działałyby poprawnie w starszym trybie wyłączonym. Aby rozwiązać ten problem, możesz włączyć ulepszone przetwarzanie. zamiast polegać na transmisjach systemowych na nowych sesjach medialnych, SiphonDSP sam w sobie będzie aktywnie skanować sesje medialne i umożliwi odpowiednie wsparcie dla niewspółpracujących aplikacji medialnych.</string>
     <string name="audio_format_media_apps_need_restart">Musisz ponownie uruchomić wszystkie aktywne aplikacje multimedialne po zmianie tego ustawienia, aby wznowić przetwarzanie dźwięku.</string>
     <string name="audio_format_summary">Preferowane kodowanie dźwięku, rozmiar bufora</string>
     <string name="audio_format_summary_root">Tryb starszy, zaawansowane przetwarzanie</string>
@@ -183,11 +161,6 @@
     <string name="audio_format_buffer_size">Rozmiar bufora</string>
     <string name="audio_format_buffer_size_unit">&#xa0;próbki</string>
     <string name="audio_format_buffer_size_warning_low_value">Ostrzeżenie: Niski rozmiar bufora może powodować problemy z dźwiękiem, takie jak wycinanie!</string>
-    <string name="audio_format_optimization_header">Optymalizacje modułu splatacza</string>
-    <string name="audio_format_optimization_refresh">Odśwież dane benchmarku</string>
-    <string name="audio_format_optimization_benchmark">Użyj benchmarku dla optymalizacji wydajności</string>
-    <string name="audio_format_optimization_benchmark_summary">Zwiększa wydajność efektów używających modułów splatacza</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Testowanie w toku…</string>
     <string name="app_behavior">Zachowanie aplikacji</string>
     <string name="exclude_app_from_recents">Ukryj aplikacje w menu ostatnich aplikacji</string>
     <string name="exclude_app_from_recents_off">Nie wykluczaj aplikacji z listy ostatnich zadań</string>
@@ -213,9 +186,6 @@
     <string name="troubleshooting_view_limitations_summary">Pokaż szczegóły dotyczące ograniczeń tej aplikacji</string>
     <string name="troubleshooting_notification_access">Zezwalaj na dostęp do powiadomień dla lepszego wykrywania sesji</string>
     <string name="troubleshooting_notification_access_summary">Umożliwia bardziej niezawodne wykrywanie sesji audio</string>
-    <string name="troubleshooting_repair_assets">Przywróć pakiety IRS, DDC i skrypty</string>
-    <string name="troubleshooting_repair_assets_summary">Rozpakuj wstępnie załadowane zasoby, jeśli je zgubiłeś</string>
-    <string name="troubleshooting_repair_assets_success">Definicje zostały odzyskane</string>
     <string name="misc_settings">Różne</string>
     <string name="misc_settings_summary">Raporty o awariach, inne działania</string>
     <string name="misc_permission_skip_prompt">Pomiń monit o uprawnienia przechwytywania</string>
@@ -223,7 +193,6 @@
     <string name="misc_permission_restart_setup">Zrestartuj kreator konfiguracji</string>
     <string name="misc_permission_restart_setup_summary">Przyznaj brakujące uprawnienia opcjonalne</string>
     <string name="misc_permission_header">Uprawnienia opcjonalne</string>
-    <string name="assets">Zasoby</string>
     <string name="about_settings">O Aplikacji</string>
     <string name="about_settings_summary">O programie, wsparcie, aktualizacje</string>
     <string name="credits">Autorzy</string>
@@ -294,10 +263,6 @@
     <string name="filelibrary_renamed">Zmieniono nazwę na \'%1$s\'</string>
     <string name="filelibrary_deleted">%1$s skasowany</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">Wybrany plik VDC jest uszkodzony. Proszę wybrać inny.</string>
-    <string name="message_irs_corrupt">Wybrana odpowiedź impulsu jest uszkodzona. Proszę wybrać inną.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: Zaawansowana edycja formularza waveform zawiera nieprawidłowe wartości.</string>
-    <string name="message_liveprog_compile_fail">Wykonanie Liveprog nie powiodło się. Wybrany skrypt jest uszkodzony. Użyj edytora skryptu do debugowania.</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -328,9 +293,6 @@
     <string name="load_fail_arch_card_title">Moduł jest już zainstalowany?</string>
     <string name="load_fail_arch_card">Jeśli już zainstalowałeś moduł magisk, mogłeś wybrać nieprawidłowe ustawienia podczas instalacji. Zainstaluj ponownie i spróbuj włączyć kompatybilność z Huawei (nawet jeśli Twój telefon nie jest od tego producenta).</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Funkcja jest niedostępna</string>
-    <string name="enhanced_processing_feature_unavailable_content">Ta funkcja jest dostępna tylko wtedy, gdy w ustawieniach jest włączona opcja \"usprawnione przetwarzanie\". Przejdź do \'Ustawienia &gt; Przetwarzanie dźwięku &gt; Rozszerzone przetwarzanie\' i włącz tę opcję, aby uzyskać dostęp do tego menu.\n\nUwaga: \'Wzmocnione przetwarzanie\' nie może być używane, gdy włączony jest tryb starszeństwa.</string>
-    <string name="enhanced_processing_missing_perm">Ulepszone przetwarzanie zostało wyłączone z powodu braku uprawnień. Proszę ponownie skonfigurować je w ustawieniach.</string>
     <!-- App list -->
     <string name="app_list_loading">Wczytuję aplikacje…</string>
     <string name="app_list_search">Wyszukaj</string>
@@ -346,13 +308,6 @@
     <string name="revert_confirmation_title">Jesteś pewny?</string>
     <string name="revert_confirmation">Czy chcesz zresetować aktualne ustawienia SiphonDSP do wartości domyślnych?</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">Importuj odpowiedź impulsu</string>
-    <string name="intent_import_mode_add">Tylko importuj</string>
-    <string name="intent_import_mode_select">Importuj i aktywuj</string>
-    <string name="intent_import_fail">Nie udało się zaimportować pliku \'%1$s\'</string>
-    <string name="intent_import_success">Plik \'%1$s\' zaimportowany</string>
-    <string name="intent_import_select_success">Plik \'%1$s\' zaimportowany i aktywowany</string>
-    <string name="intent_import_error_file_uri">Nie udało się zaimportować pliku. Nieobsługiwany URI pliku.</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">Pomóż nam przetłumaczyć tę aplikację na swój język! Dotknij tutaj, aby odwiedzić stronę projektu na Crowdin.</string>
     <string name="translation_notice">Pomóż w tłumaczeniu</string>
@@ -391,7 +346,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">Nieznane</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">Pakiet magisk SiphonDSP wymaga aktualizacji</string>
-    <string name="version_mismatch_root_description">Pakiet SiphonDSP magisk zainstalowany na twoim urządzeniu jest nieaktualny i nie jest już obsługiwany przez tę aplikację.\n\nPobierz najnowszy pakiet SiphonDSP magisk ZIP i zainstaluj go za pośrednictwem Magisk.\nPamiętaj, że pakiet magisk może zastąpić tę aplikację oficjalną aplikacją SiphonDSP.\n\nCzy chcesz odwiedzić stronę pobierania pakietów Magisk?</string>
-    <string name="version_mismatch_root_toast">Nie udało się rozpocząć. Zainstalowany pakiet magisk SiphonDSP jest zbyt stary i nie jest już obsługiwany przez tę aplikację.</string>
 </resources>

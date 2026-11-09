@@ -16,10 +16,6 @@
         <attr name="labelMinWidth" format="dimension" />
     </declare-styleable>
 
-    <declare-styleable name="FileLibraryPreference">
-        <attr name="type" format="string" />
-    </declare-styleable>
-
     <declare-styleable name="DropDownPreference">
         <attr name="isStatic" format="boolean" />
     </declare-styleable>

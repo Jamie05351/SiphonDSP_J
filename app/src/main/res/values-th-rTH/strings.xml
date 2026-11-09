@@ -52,17 +52,6 @@
     <string name="error_projection_api_missing">ผู้ผลิตอุปกรณ์ของคุณได้ปิดใช้งาน API การบันทึกเสียงภายใน แอปพลิเคชันนี้ไม่สามารถทำงานได้หากไม่มี</string>
     <!-- Main screen -->
     <string name="power_button_alt">สลับการประมวลผลเสียง</string>
-    <string name="convolver_enable">คอนเวอร์เตอร์</string>
-    <string name="convolver_impulse">การตอบสนองแรงกระตุ้น</string>
-    <string name="convolver_advanced_editing">การแก้ไขรูปคลื่นขั้นสูง</string>
-    <string name="convolver_convolution_mode">การเพิ่มประสิทธิภาพการตอบสนองแรงกระตุ้น</string>
-    <string name="convolver_convolution_mode_original">ต้นฉบับ</string>
-    <string name="convolver_convolution_mode_shrink">หด</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">การแปลงเฟสขั้นต่ำและการลดขนาด</string>
-    <string name="output_control_header">การควบคุมอัตราขยายเอาต์พุต</string>
-    <string name="output_limiter_threshold">ขีด จำกัด</string>
-    <string name="output_limiter_release">ปล่อยลิมิตเตอร์</string>
-    <string name="output_control_postgain">ได้รับโพสต์</string>
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
     <string name="onboarding_back">กลับ</string>
@@ -90,7 +79,6 @@
     <string name="onboarding_root_shell_fail_title">ไม่มีการเข้าถึง Root</string>
     <string name="onboarding_root_shell_fail">ไม่มีการเข้าถึง Root  โปรดใช้วิธีการตั้งค่าอื่น</string>
     <string name="onboarding_root_shell_fail_unknown">การให้สิทธิ์ผ่าน Root ล้มเหลว  โปรดใช้วิธีการตั้งค่าอื่น</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">มีการตั้งค่าการประมวลผลขั้นสูง</string>
     <string name="onboarding_adb_shizuku_title">ตั้งค่า Shizuku</string>
     <string name="onboarding_adb_adb_title">ตั้งค่า ADB</string>
     <string name="onboarding_adb_caption">แอปนี้ต้องการสิทธิ์พิเศษในการทิ้งนโยบายเสียงของอุปกรณ์  โปรดปฏิบัติตามคำแนะนำด้านล่าง</string>
@@ -164,16 +152,6 @@
     <string name="session_loss_ignore_warning">การเปิดใช้งานการตั้งค่านี้อาจทำให้เกิดเสียงที่ซ้ำกันเมื่อแอปเอฟเฟ็กต์เสียงอื่นเข้าควบคุมเซสชันเสียง\nโปรดปิดการตั้งค่านี้ไว้จนกว่าคุณจะพบกับเหตุการณ์การสูญเสียเซสชันที่เป็นเท็จ</string>
     <string name="audio_format_header">การประมวลผลเสียง</string>
     <string name="audio_format_section_header">รูปแบบเสียงที่ต้องการ</string>
-    <string name="audio_format_processing_header">ตัวเลือกการประมวลผลเสียง</string>
-    <string name="audio_format_processing_legacy">โหมดดั้งเดิม</string>
-    <string name="audio_format_processing_legacy_on">แนบส่วนกลางกับเซสชัน 0 (เลิกใช้แล้ว)</string>
-    <string name="audio_format_processing_legacy_off">แนบกับแต่ละแอปแยกกัน</string>
-    <string name="audio_format_enhanced_processing">การประมวลผลขั้นสูง</string>
-    <string name="audio_format_enhanced_processing_on">การควบคุมต่อแอปและการสนับสนุนขั้นสูงสำหรับแอปที่เปิดใช้งาน</string>
-    <string name="audio_format_enhanced_processing_off">การประมวลผลขั้นสูงถูกปิดใช้งาน</string>
-    <string name="audio_format_enhanced_processing_info_title">การประมวลผลขั้นสูงคืออะไร?</string>
-    <string name="audio_format_enhanced_processing_info">แตะเพื่อดูเอกสาร</string>
-    <string name="audio_format_enhanced_processing_info_content">เมื่อเปิดใช้งานการประมวลผลขั้นสูง คุณสามารถเลือกแยกบางแอปออกจากการประมวลผลโดย SiphonDSP  ใช้เมนู 3 จุดที่มุมล่างขวาและเลือก \'แอปที่ยกเว้น\' เพื่อเข้าถึงคุณลักษณะนี้\n\nในขณะที่โหมดดั้งเดิมปิดอยู่ SiphonDSP อาศัยแอปสื่อเพื่อส่งการออกอากาศของระบบเมื่อเริ่มเล่น  นี่เป็นข้อได้เปรียบเหนือโหมดเดิมเพราะแต่ละแอปจะได้รับเอ็นจิ้นเอฟเฟกต์ SiphonDSP ของตัวเอง ซึ่งช่วยให้สามารถควบคุมได้ละเอียดยิ่งขึ้น  มิฉะนั้น เมื่อเปิดโหมดเดิม แอปทั้งหมดจะใช้เครื่องมือประมวลผลเดียวร่วมกัน ซึ่ง Android เลิกใช้งานและไม่ควรใช้อีกต่อไป\n\nขออภัย แอปสื่อบางแอปเท่านั้นที่ทำสิ่งนี้ได้อย่างถูกต้อง ดังนั้น จะทำงานไม่ถูกต้องในโหมดเดิม  พิการ.  เพื่อแก้ปัญหานี้ คุณสามารถเปิดใช้งานการประมวลผลขั้นสูง  แทนที่จะพึ่งพาการออกอากาศของระบบเกี่ยวกับเซสชันสื่อใหม่ SiphonDSP จะสแกนหาเซสชันสื่อในเชิงรุกด้วยตัวเอง และอนุญาตให้มีการสนับสนุนอย่างเหมาะสมสำหรับแอปสื่อที่ไม่ให้ความร่วมมือ</string>
     <string name="audio_format_media_apps_need_restart">คุณต้องรีสตาร์ทแอปสื่อที่ใช้งานอยู่ทั้งหมดหลังจากเปลี่ยนการตั้งค่านี้เพื่อดำเนินการประมวลผลเสียงต่อ</string>
     <string name="audio_format_summary">การเข้ารหัสเสียงที่ต้องการ ขนาดบัฟเฟอร์ </string>
     <string name="audio_format_summary_root">โหมด Legacy การประมวลผลขั้นสูง</string>
@@ -184,11 +162,6 @@
     <string name="audio_format_buffer_size">ขนาดของบัฟเฟอร์</string>
     <string name="audio_format_buffer_size_unit">&#xa0;ตัวอย่าง</string>
     <string name="audio_format_buffer_size_warning_low_value">คำเตือน: ขนาดบัฟเฟอร์ต่ำอาจทำให้เกิดปัญหาด้านเสียง เช่น การตัด!</string>
-    <string name="audio_format_optimization_header">การเพิ่มประสิทธิภาพโมดูล Convolver</string>
-    <string name="audio_format_optimization_refresh">รีเฟรชข้อมูลการเปรียบเทียบ</string>
-    <string name="audio_format_optimization_benchmark">ใช้เกณฑ์มาตรฐานเพื่อเพิ่มประสิทธิภาพ</string>
-    <string name="audio_format_optimization_benchmark_summary">เพิ่มประสิทธิภาพของเอฟเฟกต์ที่ใช้โมดูล convolver</string>
-    <string name="audio_format_optimization_benchmark_ongoing">กำลังดำเนินการเปรียบเทียบ…</string>
     <string name="app_behavior">ลักษณะการทำงานของแอพ</string>
     <string name="exclude_app_from_recents">ยกเว้นแอปจากล่าสุด</string>
     <string name="exclude_app_from_recents_off">อย่าแยกแอปออกจากรายการงานล่าสุด</string>
@@ -214,9 +187,6 @@
     <string name="troubleshooting_view_limitations_summary">แสดงรายละเอียดเกี่ยวกับข้อจำกัดของแอพนี้ </string>
     <string name="troubleshooting_notification_access">อนุญาตการเข้าถึงการแจ้งเตือนเพื่อการตรวจจับเซสชันที่ดีขึ้น</string>
     <string name="troubleshooting_notification_access_summary">เปิดใช้งานการตรวจจับเซสชันเสียงที่เชื่อถือได้มากขึ้น</string>
-    <string name="troubleshooting_repair_assets">กู้คืน IRS, DDC และสคริปต์ที่รวมไว้ </string>
-    <string name="troubleshooting_repair_assets_summary">แกะเนื้อหาที่โหลดไว้ล่วงหน้าหากคุณทำหาย</string>
-    <string name="troubleshooting_repair_assets_success">ค่าที่กำหนดเอาไว้ถูกเรียกคืนแล้ว</string>
     <string name="misc_settings">เบ็ดเตล็ด</string>
     <string name="misc_settings_summary">รายงานข้อขัดข้อง การดำเนินการอื่นๆ</string>
     <string name="misc_permission_skip_prompt">ข้ามพรอมต์การอนุญาตให้จับภาพ</string>
@@ -224,7 +194,6 @@
     <string name="misc_permission_restart_setup">รีสตาร์ทวิซาร์ดการตั้งค่า</string>
     <string name="misc_permission_restart_setup_summary">ให้สิทธิ์เพิ่มเติมที่ขาดหายไป</string>
     <string name="misc_permission_header">สิทธิ์เพิ่มเติม</string>
-    <string name="assets">สินทรัพย์</string>
     <string name="about_settings">เกี่ยวกับเรา</string>
     <string name="about_settings_summary">เครดิต การสนับสนุน การอัปเดต</string>
     <string name="credits">เครดิต</string>
@@ -295,10 +264,6 @@
     <string name="filelibrary_renamed">เปลี่ยนชื่อเป็น \'%1$s\'</string>
     <string name="filelibrary_deleted">ลบ \'%1$s\' แล้ว</string>
     <!-- SiphonDSP engine messages -->
-    <string name="message_vdc_corrupt">ไฟล์ VDC ที่เลือกเสียหาย  โปรดเลือกรายการอื่น</string>
-    <string name="message_irs_corrupt">การตอบสนองแรงกระตุ้นที่เลือกเสียหาย  โปรดเลือกรายการอื่น</string>
-    <string name="message_convolver_advimp_invalid">Convolver: การแก้ไขรูปคลื่นขั้นสูงมีค่าที่ไม่ถูกต้อง</string>
-    <string name="message_liveprog_compile_fail">การดำเนินการ Liveprog ล้มเหลว  สคริปต์ที่เลือกเสียหาย  โปรดใช้โปรแกรมแก้ไขสคริปต์สำหรับการดีบัก</string>
     <!-- GraphicEQ editor -->
     <!-- AutoEQ GraphicEQ selector -->
     <!-- Customizable liveprog script parameters -->
@@ -329,9 +294,6 @@
     <string name="load_fail_arch_card_title">ติดตั้งโมดูลแล้ว?</string>
     <string name="load_fail_arch_card">หากคุณติดตั้งโมดูล magisk แล้ว คุณอาจเลือกการตั้งค่าผิดระหว่างการติดตั้ง  โปรดติดตั้งใหม่และลองเปิดใช้งานความเข้ากันได้ของ Huawei (แม้ว่าโทรศัพท์ของคุณจะไม่ได้มาจากผู้ผลิตรายนั้นก็ตาม)</string>
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">คุณลักษณะไม่พร้อมใช้งาน</string>
-    <string name="enhanced_processing_feature_unavailable_content">คุณลักษณะนี้ใช้ได้เฉพาะเมื่อเปิดใช้งาน \'การประมวลผลขั้นสูง\' ในการตั้งค่า  โปรดไปที่ \'การตั้งค่า &gt;  การประมวลผลเสียง &gt;  การประมวลผลขั้นสูง\' และเปิดใช้งานตัวเลือกนั้นเพื่อเข้าถึงเมนูนี้\n\nหมายเหตุ: ไม่สามารถใช้ \'การประมวลผลขั้นสูง\' ในขณะที่เปิดใช้งานโหมดเดิม</string>
-    <string name="enhanced_processing_missing_perm">การประมวลผลขั้นสูงถูกปิดใช้งานเนื่องจากไม่มีสิทธิ์  โปรดตั้งค่าใหม่ในการตั้งค่า</string>
     <!-- App list -->
     <string name="app_list_loading">กำลังโหลดแอป …</string>
     <string name="app_list_search">ค้นหา</string>
@@ -347,13 +309,6 @@
     <string name="revert_confirmation_title">คุณแน่ใจไหม?</string>
     <string name="revert_confirmation">คุณต้องการรีเซ็ตการตั้งค่าล่วงหน้าของ SiphonDSP ปัจจุบันเป็นค่าเริ่มต้นหรือไม่</string>
     <!-- File intent handler -->
-    <string name="intent_import_irs">นำเข้าการตอบสนองแรงกระตุ้น</string>
-    <string name="intent_import_mode_add">ที่นำเข้าเท่านั้น</string>
-    <string name="intent_import_mode_select">นำเข้าและเปิดใช้งาน</string>
-    <string name="intent_import_fail">การนำเข้า %1$s ล้มเหลว</string>
-    <string name="intent_import_success">นำเข้าไฟล์ \'%1$s\' แล้ว</string>
-    <string name="intent_import_select_success">ไฟล์ \'%1$s\' นำเข้าและเปิดใช้งานแล้ว</string>
-    <string name="intent_import_error_file_uri">นำเข้าไฟล์ไม่สำเร็จ  URI ไฟล์ที่ไม่รองรับ</string>
     <!-- Translation notice box -->
     <string name="translation_notice_summary">โปรดช่วยเราแปลแอพนี้เป็นภาษาของคุณ!  แตะที่นี่เพื่อเยี่ยมชมไซต์โครงการบน Crowdin</string>
     <string name="translation_notice">ร่วมแปล</string>
@@ -392,7 +347,4 @@
     <string name="group_usb">USB</string>
     <string name="group_unknown">ไม่รู้จัก</string>
     <!-- Root version check -->
-    <string name="version_mismatch_root">แพ็คเกจ Magisk SiphonDSP ต้องการการอัปเดต</string>
-    <string name="version_mismatch_root_description">แพ็คเกจ magisk SiphonDSP ที่ติดตั้งบนอุปกรณ์ของคุณล้าสมัยและแอปนี้ไม่รองรับอีกต่อไป\n\nโปรดเรียกค้น ZIP แพ็คเกจ magisk SiphonDSP ล่าสุดและติดตั้งผ่าน Magisk\nโปรดทราบว่าแพ็คเกจ magisk อาจแทนที่แอปนี้ด้วยแอป SiphonDSP อย่างเป็นทางการ  .\n\nคุณต้องการไปที่เว็บไซต์ดาวน์โหลดแพ็คเกจ Magisk ตอนนี้หรือไม่?</string>
-    <string name="version_mismatch_root_toast">ไม่สามารถเริ่มต้น  แพ็คเกจ Magisk SiphonDSP ที่ติดตั้งนั้นเก่าเกินไปและแอพนี้ไม่รองรับอีกต่อไป</string>
 </resources>

@@ -46,7 +46,6 @@ import app.siphondsp.activity.NativeBmwCompressorActivity
 import app.siphondsp.activity.OutputActivity
 import app.siphondsp.activity.ParametricEqualizerActivity
 import app.siphondsp.databinding.FragmentDspBinding
-import app.siphondsp.databinding.FragmentDspPageSettingsBinding
 import app.siphondsp.databinding.FragmentDspPageShortcutsBinding
 import app.siphondsp.model.MasterVolume
 import app.siphondsp.model.NativeBmwDspValues
@@ -67,7 +66,6 @@ class DspFragment : Fragment() {
 
     private lateinit var binding: FragmentDspBinding
     private lateinit var shortcutsBinding: FragmentDspPageShortcutsBinding
-    private lateinit var settingsBinding: FragmentDspPageSettingsBinding
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
 
@@ -132,19 +130,14 @@ class DspFragment : Fragment() {
     ): View {
         binding = FragmentDspBinding.inflate(layoutInflater, container, false)
         shortcutsBinding = FragmentDspPageShortcutsBinding.inflate(layoutInflater, binding.dspPager, false)
-        settingsBinding = FragmentDspPageSettingsBinding.inflate(layoutInflater, binding.dspPager, false)
 
         setUpShortcutsPage()
 
-        // The settings page hosts child fragments through FragmentContainerView, which needs its
-        // container ids to already be resolvable in the live view tree when the transaction runs.
-        // ViewPager2 only actually attaches a page's view once that page is laid out, so the
-        // child-fragment transaction is deferred until the page view is attached to the window
-        // rather than run eagerly here.
-        binding.dspPager.offscreenPageLimit = 1
+        // The front page is the pager's only page since the legacy Output-control and Convolver
+        // cards (the second page) went with the JamesDSP core.
         binding.dspPager.adapter = StaticPagerAdapter(
-            pages = listOf(shortcutsBinding.root, settingsBinding.root),
-            onPageAttached = { position -> if (position == 1) setUpSettingsPage() },
+            pages = listOf(shortcutsBinding.root),
+            onPageAttached = { },
         )
         binding.dspPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
@@ -364,23 +357,6 @@ class DspFragment : Fragment() {
     private fun ComposeView.setHomeContent(content: @Composable () -> Unit) {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent { BmwDspTheme { content() } }
-    }
-
-    private fun setUpSettingsPage() {
-        val transition = LayoutTransition()
-        transition.enableTransitionType(LayoutTransition.CHANGING)
-        settingsBinding.cardContainer.layoutTransition = transition
-
-        childFragmentManager.beginTransaction()
-            .replace(
-                R.id.card_output_control, PreferenceGroupFragment.newInstance(Constants.PREF_OUTPUT,
-                    R.xml.dsp_output_control_preferences
-                ))
-            .replace(
-                R.id.card_convolver, PreferenceGroupFragment.newInstance(Constants.PREF_CONVOLVER,
-                    R.xml.dsp_convolver_preferences
-                ))
-            .commit()
     }
 
     private fun hideTranslationNotice() {

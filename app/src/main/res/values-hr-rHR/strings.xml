@@ -52,24 +52,12 @@
     <string name="error_projection_api_missing">Proizvođač vašeg uređaja je onemogućio API za interno snimanje zvuka. Ova aplikacija ne može raditi bez njih.</string>
     <!-- Main screen -->
     <string name="power_button_alt">Uključi/isključi procesiranje zvuka</string>
-    <string name="convolver_enable">Konvolver</string>
-    <string name="convolver_impulse">Impulsni odaziv</string>
-    <string name="convolver_advanced_editing">Napredno uređivanje valnog oblika</string>
-    <string name="convolver_convolution_mode">Optimiziranje impulsnog odaziva</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Smanji</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimalna transformacija faze i smanjenje</string>
-    <string name="output_control_header">Kontrola izlaza</string>
-    <string name="output_limiter_threshold">Prag za ograničenje</string>
-    <string name="output_limiter_release">Otpuštanje ograničenja</string>
-    <string name="output_control_postgain">Post gain</string>
     <!-- Onboarding -->
     <!-- Rootless flavor -->
     <!-- Root flavor -->
     <!-- Settings -->
     <string name="title_activity_settings">Postavke</string>
     <string name="audio_format_summary_plugin">Convolver optimizacije</string>
-    <string name="audio_format_optimization_header">Optimizacije Convolver modula</string>
     <string name="backup_settings">Sigurnosno kopiranje i vraćanje podataka</string>
     <!-- Theme names -->
     <!-- File library preference -->
