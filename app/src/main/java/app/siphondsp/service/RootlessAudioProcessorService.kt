@@ -3,10 +3,8 @@ package app.siphondsp.service
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.NotificationManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
@@ -27,9 +25,8 @@ import android.os.Trace
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
-import androidx.lifecycle.Observer
-import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
+import app.siphondsp.MainApplication
 import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.dsp.AutoHeadroom
@@ -52,24 +49,20 @@ import app.siphondsp.session.rootless.OnRootlessSessionChangeListener
 import app.siphondsp.session.rootless.RootlessSessionDatabase
 import app.siphondsp.session.rootless.RootlessSessionManager
 import app.siphondsp.session.rootless.SessionRecordingPolicyManager
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.Constants.ACTION_NATIVE_BMW_DSP_UPDATED
-import app.siphondsp.utils.Constants.ACTION_PRESET_LOADED
-import app.siphondsp.utils.Constants.ACTION_SERVICE_HARD_REBOOT_CORE
-import app.siphondsp.utils.Constants.ACTION_SERVICE_SOFT_REBOOT_CORE
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.CompatExtensions.getParcelableAs
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.notifications.ServiceNotificationHelper
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
@@ -237,12 +230,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val applicationScope = CoroutineScope(SupervisorJob())
     private val blockedAppDatabase by lazy { AppBlocklistDatabase.getDatabase(this, applicationScope) }
     private val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
-    private val blockedApps by lazy { blockedAppRepository.blocklist.asLiveData() }
-    private val blockedAppObserver = Observer<List<BlockedApp>?> {
-        Timber.d("blockedAppObserver: Database changed; ignored=${!workerAlive}")
-        if(workerAlive)
-            exclusionRecheckGate.request("Excluded apps list changed")
-    }
+    // Main-thread work: the excluded-apps list and the app's events. Not Main.immediate, so an
+    // event sent from the main thread is handled after the sender returns (as the local
+    // broadcasts it replaces were).
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // The excluded apps, as last read from the database (null until the first read).
+    @Volatile
+    private var blockedApps: List<BlockedApp>? = null
 
     // The exclusions the live AudioRecord was built with (null before the first build). Written
     // by buildAudioRecord() on the worker, read by recheckExclusions() on the main thread.
@@ -305,18 +300,28 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // replace it with the computed one.
         if (AutoHeadroom.isAuto(savedDspValues)) submitNativeBmwDspValues(savedDspValues)
 
-        val filter = IntentFilter()
-        filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
-        filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
-        filter.addAction(ACTION_NATIVE_BMW_DSP_UPDATED)
-        filter.addAction(ACTION_PRESET_LOADED)
-        registerLocalReceiver(broadcastReceiver, filter)
+        mainScope.launch {
+            AppEvents.flow.collect { event ->
+                when (event) {
+                    AppEvent.RestartCapture -> restartRecording()
+                    is AppEvent.NativeBmwDspUpdated -> submitNativeBmwDspValues(event.values)
+                    AppEvent.PresetLoaded -> resyncNativeBmwStateFromDisk()
+                    else -> Unit
+                }
+            }
+        }
 
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
         loadFromPreferences(getString(R.string.key_powersave_suspend))
         loadFromPreferences(getString(R.string.key_session_exclude_restricted))
 
-        blockedApps.observeForever(blockedAppObserver)
+        mainScope.launch {
+            blockedAppRepository.blocklist.collect {
+                blockedApps = it
+                Timber.d("Excluded apps changed; ignored=${!workerAlive}")
+                if (workerAlive) exclusionRecheckGate.request("Excluded apps list changed")
+            }
+        }
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
         recreateRecorderRequested = false
     }
@@ -354,7 +359,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             catch (ex: Exception) {
                 Timber.e("Failed to acquire media projection")
-                sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
+                discardAuthorization()
                 Timber.e(ex)
                 null
             }
@@ -363,7 +368,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         if (mediaProjection != null) {
             startRecording()
-            sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STARTED))
+            AppEvents.send(AppEvent.ServiceStarted)
         }
         else {
             StartupAudioDiagnostics.logImmediateFailure(
@@ -403,10 +408,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (closeEngineNow) engine.close()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
-        sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STOPPED))
+        AppEvents.send(AppEvent.ServiceStopped)
 
-        blockedApps.removeObserver(blockedAppObserver)
-        unregisterLocalReceiver(broadcastReceiver)
+        mainScope.cancel()
         mediaProjection?.unregisterCallback(projectionCallback)
         mediaProjection?.stop()
         mediaProjection = null
@@ -433,7 +437,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 return
 
             Timber.w("Capture permission revoked. Stopping service.")
-            sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
+            discardAuthorization()
 
             if(!preferencesVar.get<Boolean>(R.string.key_is_activity_active))
                 this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
@@ -443,25 +447,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
-                ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
-                ACTION_NATIVE_BMW_DSP_UPDATED -> {
-                    intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                        submitNativeBmwDspValues(it)
-                    }
-                }
-                ACTION_PRESET_LOADED -> resyncNativeBmwStateFromDisk()
-            }
-        }
+    /** The saved capture permission is no good any more: the next start asks again. */
+    private fun discardAuthorization() {
+        Timber.i("mediaProjectionStartIntent discarded")
+        (application as MainApplication).mediaProjectionStartIntent = null
     }
 
     private fun isMeasGenActive(values: FloatArray) =
         values.getOrElse(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE) { 0f } != 0f
 
-    // Backup restores broadcast ACTION_PRESET_LOADED, which otherwise doesn't reach the BMW
+    // Backup restores send AppEvent.PresetLoaded, which otherwise doesn't reach the BMW
     // DSP/PEQ engine state. Re-read both stores from disk and push them to the running engine so
     // a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
@@ -691,7 +686,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // What the next AudioRecord should exclude, from the current settings and capture-policy log.
     private fun computeExclusions(): ExclusionSet = ExclusionSet(
         restricted = if (excludeRestrictedSessions) sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet() else emptySet(),
-        blocked = blockedApps.value?.map { it.uid }?.toSet().orEmpty(),
+        blocked = blockedApps?.map { it.uid }?.toSet().orEmpty(),
         self = Process.myUid(),
         excludeRestricted = excludeRestrictedSessions,
     )
@@ -1612,7 +1607,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     pcmFloat = service.activePcmFloat,
                     bufferSamples = service.activeBufferSamples,
                     playbackSessions = service.sessionDatabaseOrNull()?.sessionList?.size ?: 0,
-                    excludedApps = service.blockedApps.value?.map { it.packageName }.orEmpty(),
+                    excludedApps = service.blockedApps?.map { it.packageName }.orEmpty(),
                     autoExcludedApps = service.autoExcludedPackages(),
                     excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )

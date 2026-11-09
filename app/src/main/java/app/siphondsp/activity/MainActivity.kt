@@ -1,11 +1,8 @@
 package app.siphondsp.activity
 
 import android.content.ActivityNotFoundException
-import android.content.BroadcastReceiver
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -26,6 +23,7 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.siphondsp.R
@@ -34,18 +32,18 @@ import app.siphondsp.compose.nav.AppNavHost
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.BaseAudioProcessorService
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.SdkCheck
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.view.DspDestination
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -83,14 +81,6 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private val serviceStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                Constants.ACTION_SERVICE_STOPPED -> powerOn = false
-                Constants.ACTION_SERVICE_STARTED -> powerOn = true
-            }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,10 +95,16 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        registerLocalReceiver(
-            serviceStateReceiver,
-            IntentFilter(Constants.ACTION_SERVICE_STOPPED).apply { addAction(Constants.ACTION_SERVICE_STARTED) },
-        )
+        // Not Main.immediate: handled after the service's sending call returns.
+        lifecycleScope.launch(Dispatchers.Main) {
+            AppEvents.flow.collect { event ->
+                when (event) {
+                    AppEvent.ServiceStarted -> powerOn = true
+                    AppEvent.ServiceStopped -> powerOn = false
+                    else -> Unit
+                }
+            }
+        }
 
         setContent {
             BmwDspTheme {
@@ -132,7 +128,6 @@ class MainActivity : BaseActivity() {
             requestCapturePermission()
         }
 
-        sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
         showAndroid15Alert()
     }
 
@@ -181,7 +176,6 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        unregisterLocalReceiver(serviceStateReceiver)
         prefsVar.set(R.string.key_is_activity_active, false)
         super.onDestroy()
     }

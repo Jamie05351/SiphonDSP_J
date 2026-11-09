@@ -1,10 +1,9 @@
 package app.siphondsp.model
 
 import android.content.Context
-import android.content.Intent
 import androidx.core.content.edit
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import timber.log.Timber
 
 object NativeBmwDspValues {
@@ -894,11 +893,8 @@ object NativeBmwDspValues {
         DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
 
-    /** [origin], when given, tags the broadcast so its sender can recognise its own echo. */
-    fun broadcast(context: Context, values: FloatArray, origin: String? = null) {
-        val intent = Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
-            .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
-        if (origin != null) intent.putExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN, origin)
-        context.sendLocalBroadcast(intent)
+    /** Tells the engine and every screen; [origin], when given, lets the sender recognise its own echo. */
+    fun broadcast(values: FloatArray, origin: String? = null) {
+        AppEvents.send(AppEvent.NativeBmwDspUpdated(values, origin))
     }
 }

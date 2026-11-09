@@ -1,15 +1,11 @@
 package app.siphondsp.session.shared
 
 import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
-import android.media.audiofx.AudioEffect
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Handler
@@ -31,9 +27,8 @@ import app.siphondsp.model.preference.SessionUpdateMode
 import app.siphondsp.service.NotificationListenerService
 import app.siphondsp.session.dump.DumpManager
 import app.siphondsp.session.dump.data.ISessionInfoDump
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.preferences.Preferences
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -41,7 +36,7 @@ import timber.log.Timber
 
 
 abstract class BaseSessionManager(protected val context: Context) : DumpManager.OnDumpMethodChangeListener,
-    BroadcastReceiver(), MediaSessionManager.OnActiveSessionsChangedListener, KoinComponent
+    MediaSessionManager.OnActiveSessionsChangedListener, KoinComponent
 {
     // System services
     private val audioManager = context.getSystemService<AudioManager>()!!
@@ -89,7 +84,9 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
 
         // Register callbacks
         dumpManager.registerOnDumpMethodChangeListener(this)
-        context.registerLocalReceiver(this, IntentFilter(Constants.ACTION_SESSION_CHANGED))
+        pollingScope.launch {
+            AppEvents.of<AppEvent.AudioEffectSessionChanged>().collect { onAudioEffectSessionChanged(it) }
+        }
         installNotificationListenerService()
 
         // Setup preferences
@@ -112,7 +109,6 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         audioPlaybackCallback?.let { audioManager.unregisterAudioPlaybackCallback(it) }
 
         sessionManager.removeOnActiveSessionsChangedListener(this)
-        context.unregisterLocalReceiver(this)
 
         continuousPollingJob?.cancel()
         pollingScope.cancel()
@@ -207,16 +203,11 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         pollOnce(true)
     }
 
-    override fun onReceive(context: Context?, intent: Intent?) {
-        if(intent?.action == Constants.ACTION_SESSION_CHANGED) {
-            // Too unreliable, most players don't implement this
-            val sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR)
-            if (sessionId < 0)
-                return
-
-            Timber.d("Audio effect control session broadcast: $sessionId (${intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME)})")
-            pollOnce(false)
-        }
+    private fun onAudioEffectSessionChanged(event: AppEvent.AudioEffectSessionChanged) {
+        // Too unreliable, most players don't implement this
+        if (event.sessionId < 0) return
+        Timber.d("Audio effect control session broadcast: ${event.sessionId} (${event.packageName})")
+        pollOnce(false)
     }
 
     @SuppressLint("BinaryOperationInTimber")

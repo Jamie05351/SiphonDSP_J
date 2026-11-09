@@ -3,11 +3,9 @@ package app.siphondsp.utils.extensions
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.ActivityNotFoundException
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Color
@@ -35,11 +33,11 @@ import androidx.core.graphics.blue
 import androidx.core.graphics.green
 import androidx.core.graphics.red
 import androidx.core.net.toUri
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import app.siphondsp.R
 import app.siphondsp.databinding.DialogTextinputBinding
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.CompatExtensions.getApplicationInfoCompat
 import app.siphondsp.utils.extensions.CompatExtensions.getPackageInfoCompat
 import app.siphondsp.utils.isPlugin
@@ -172,17 +170,6 @@ object ContextExtensions {
     // renaming the app (return 2) or changing the applicationId (return 1). Neutered.
     fun Context.check(): Int = 0
 
-    fun Context.sendLocalBroadcast(intent: Intent) {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
-
-    fun Context.registerLocalReceiver(broadcastReceiver: BroadcastReceiver, intentFilter: IntentFilter) {
-        LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter)
-    }
-
-    fun Context.unregisterLocalReceiver(broadcastReceiver: BroadcastReceiver) {
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver)
-    }
 
     fun Context.showAlert(@StringRes title: Int, @StringRes message: Int) {
         showAlert(getString(title), getString(message))
@@ -457,7 +444,6 @@ object ContextExtensions {
     }
 
     fun Context.broadcastPresetLoadEvent() {
-        sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
-        sendLocalBroadcast(Intent(Constants.ACTION_PRESET_LOADED))
+        AppEvents.send(AppEvent.PresetLoaded)
     }
 }

@@ -6,8 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import app.siphondsp.session.rootless.RootlessSessionDatabase
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import timber.log.Timber
 
 class SessionReceiver : BroadcastReceiver() {
@@ -28,11 +28,11 @@ class SessionReceiver : BroadcastReceiver() {
                     "session: ${intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR)}; " +
                     "package ${intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME)}")
 
-        context.sendLocalBroadcast(
-            Intent(Constants.ACTION_SESSION_CHANGED)
-                .apply {
-                    putExtras(intent)
-                }
+        AppEvents.send(
+            AppEvent.AudioEffectSessionChanged(
+                sessionId = intent.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, AudioEffect.ERROR),
+                packageName = intent.getStringExtra(AudioEffect.EXTRA_PACKAGE_NAME),
+            )
         )
     }
 }

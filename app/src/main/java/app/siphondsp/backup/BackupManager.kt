@@ -1,16 +1,15 @@
 package app.siphondsp.backup
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.Job
 import app.siphondsp.compose.controls.SpeakerGeometryState
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.storage.Tar
 import okio.buffer
@@ -185,7 +184,7 @@ class BackupManager(private val context: Context): KoinComponent {
             geometry?.apply(context, replace = !dirty)
 
             context.broadcastPresetLoadEvent()
-            context.sendLocalBroadcast(Intent(Constants.ACTION_BACKUP_RESTORED))
+            AppEvents.send(AppEvent.BackupRestored)
 
             if(enableDeviceProfiles)
                 preferences.set(R.string.key_device_profiles_enable, true)

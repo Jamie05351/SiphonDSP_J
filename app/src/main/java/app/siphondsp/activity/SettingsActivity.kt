@@ -25,8 +25,8 @@ import app.siphondsp.compose.settings.SettingsScreen
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.NotificationListenerService
 import app.siphondsp.session.dump.DumpManager
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import app.siphondsp.utils.sdkAbove
 import kotlinx.coroutines.Dispatchers
@@ -95,7 +95,7 @@ class SettingsActivity : BaseActivity(), SettingsActions {
     }
 
     override fun onBufferOrEncodingChanged() {
-        sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_HARD_REBOOT_CORE))
+        AppEvents.send(AppEvent.RestartCapture)
     }
 
     override fun pickBackupLocation() {

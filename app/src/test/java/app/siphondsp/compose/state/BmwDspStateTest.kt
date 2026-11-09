@@ -1,16 +1,12 @@
 package app.siphondsp.compose.state
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Looper
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.test.core.app.ApplicationProvider
 import app.siphondsp.model.NativeBmwDspStore
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.DspUpdateRecorder
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -42,23 +38,13 @@ class BmwDspStateTest {
         state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(File(context.noBackupFilesDir, NativeBmwDspStore.FILE_NAME + ".tmp").mkdir())
-        var received: FloatArray? = null
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                received = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
-            }
-        }
-        val broadcasts = LocalBroadcastManager.getInstance(context)
-        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
+        DspUpdateRecorder().use { updates ->
             assertFalse(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -9f))
             shadowOf(Looper.getMainLooper()).idle()
             assertArrayEquals(previous, state.values, 0f)
-            assertArrayEquals(previous, received, 0f)
+            assertArrayEquals(previous, updates.received.last().values, 0f)
             assertArrayEquals(previous, NativeBmwDspValues.load(context), 0f)
             assertTrue(ShadowToast.getTextOfLatestToast().contains("could not be saved"))
-        } finally {
-            broadcasts.unregisterReceiver(receiver)
         }
     }
 
@@ -78,24 +64,16 @@ class BmwDspStateTest {
         val context = context()
         val state = BmwDspState(context)
         var persistedAtBroadcastTime: Float? = null
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                // Deliberately reads via the outer `context` (the test's custom noBackupFilesDir
-                // wrapper), not the receiver's own `ctx` param -- if the receiver can already read
-                // the new value back from disk, save() happened before broadcast() -- the ordering
-                // commit() must preserve so a listener reacting to the broadcast (e.g. the native
-                // engine) never reads a config older than what was just persisted.
+        DspUpdateRecorder().use { updates ->
+            // The recorder runs inside the send call: if it can already read the new value back
+            // from disk, save() happened before the event was sent -- the ordering commit() must
+            // preserve so a listener reacting to it (e.g. the native engine) never reads a config
+            // older than what was just persisted.
+            updates.onUpdate = {
                 persistedAtBroadcastTime = NativeBmwDspValues.load(context)[NativeBmwDspValues.INDEX_HEADROOM]
             }
-        }
-        val broadcasts = LocalBroadcastManager.getInstance(context)
-        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
             assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -7f))
-            shadowOf(Looper.getMainLooper()).idle()
             assertEquals(-7f, persistedAtBroadcastTime)
-        } finally {
-            broadcasts.unregisterReceiver(receiver)
         }
     }
 
@@ -117,24 +95,12 @@ class BmwDspStateTest {
     fun resumeWithNothingPendingDoesNotRebroadcast() {
         val context = context()
         val state = BmwDspState(context)
-        var broadcasts = 0
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                broadcasts++
-            }
-        }
-        val manager = LocalBroadcastManager.getInstance(context)
-        manager.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
+        DspUpdateRecorder().use { updates ->
             state.refreshFromDisk()
-            shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(0, broadcasts)
+            assertEquals(0, updates.received.size)
             state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
             state.refreshFromDisk()  // the previewed value was never saved: the engine must drop it
-            shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(2, broadcasts)
-        } finally {
-            manager.unregisterReceiver(receiver)
+            assertEquals(2, updates.received.size)
         }
     }
 
@@ -155,29 +121,17 @@ class BmwDspStateTest {
     fun aLateEchoOfOurOwnPreviewDoesNotRollBackACommit() {
         val context = context()
         val state = BmwDspState(context)
-        val sent = mutableListOf<Pair<FloatArray, String?>>()
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                    sent += it to intent.getStringExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN)
-                }
-            }
-        }
-        val manager = LocalBroadcastManager.getInstance(context)
-        manager.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
+        DspUpdateRecorder().use { updates ->
             state.preview(NativeBmwDspValues.INDEX_HEADROOM, -9f)
             assertTrue(state.commit(NativeBmwDspValues.INDEX_HEADROOM, -4f))
-            shadowOf(Looper.getMainLooper()).idle()
             // The preview's echo arriving after the commit must not win.
-            state.onExternalUpdate(sent.first().first, sent.first().second)
+            val echo = updates.received.first()
+            state.onExternalUpdate(echo.values, echo.origin)
             assertEquals(-4f, state.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
             // Someone else's update still applies.
             val external = state.values.copyOf().also { it[NativeBmwDspValues.INDEX_HEADROOM] = -2f }
             state.onExternalUpdate(external)
             assertEquals(-2f, state.get(NativeBmwDspValues.INDEX_HEADROOM), 0f)
-        } finally {
-            manager.unregisterReceiver(receiver)
         }
     }
 

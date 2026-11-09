@@ -62,7 +62,7 @@ object MasterVolume {
         values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = next.db
         values[NativeBmwDspValues.INDEX_MASTER_MUTE] = if (next.muted) 1f else 0f
         if (!NativeBmwDspValues.save(context, values)) return null
-        NativeBmwDspValues.broadcast(context, values)
+        NativeBmwDspValues.broadcast(values)
         return next
     }
 

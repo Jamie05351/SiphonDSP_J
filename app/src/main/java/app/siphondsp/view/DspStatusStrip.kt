@@ -1,9 +1,6 @@
 package app.siphondsp.view
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
@@ -20,9 +17,13 @@ import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.AudioHealthLog
 import app.siphondsp.service.DspHealthBadge
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -38,7 +39,7 @@ import kotlin.math.roundToInt
  * recoveries, the saved event log -- with a Restart button. The log outlives a head-unit reset.
  *
  * Refreshes itself: on attach, whenever the window regains focus (returning from another
- * screen), and on the ACTION_NATIVE_BMW_DSP_UPDATED local broadcast that every edit sends.
+ * screen), and on the NativeBmwDspUpdated event that every edit sends.
  */
 class DspStatusStrip @JvmOverloads constructor(
     context: Context,
@@ -99,11 +100,8 @@ class DspStatusStrip @JvmOverloads constructor(
         }
     }
 
-    private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            refresh(intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES))
-        }
-    }
+    // While attached: every DSP edit refreshes the strip.
+    private var updates: CoroutineScope? = null
 
     private val cells = mutableListOf<TextView>()
 
@@ -170,14 +168,18 @@ class DspStatusStrip @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
+        updates?.cancel()
+        updates = CoroutineScope(SupervisorJob() + Dispatchers.Main).apply {
+            launch { AppEvents.of<AppEvent.NativeBmwDspUpdated>().collect { refresh(it.values) } }
+        }
         refresh(null)
         if (!stacked) handler.post(healthPoll)
     }
 
     override fun onDetachedFromWindow() {
         handler.removeCallbacks(healthPoll)
-        context.unregisterLocalReceiver(receiver)
+        updates?.cancel()
+        updates = null
         super.onDetachedFromWindow()
     }
 

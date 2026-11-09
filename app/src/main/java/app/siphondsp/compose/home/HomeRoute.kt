@@ -1,10 +1,7 @@
 package app.siphondsp.compose.home
 
 import android.animation.ValueAnimator
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -18,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,10 +36,9 @@ import app.siphondsp.compose.nav.LocalAppNavigator
 import app.siphondsp.compose.nav.Routes
 import app.siphondsp.model.MasterVolume
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.ContextExtensions.restoreDspSettings
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.DspRail
 import app.siphondsp.view.HomeLevelFeed
@@ -77,24 +74,15 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit) {
     var confirmRevert by remember { mutableStateOf(false) }
 
     // Settings changed underneath the page (an edit, a preset or backup loaded, a revert).
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                val values = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)
-                    ?.takeIf { it.size == NativeBmwDspValues.SIZE }
-                    ?: NativeBmwDspValues.load(ctx)
-                engineState = HomeEngineState.from(values)
-            }
+    LaunchedEffect(context) {
+        AppEvents.flow.collect { event ->
+            val values = when (event) {
+                is AppEvent.NativeBmwDspUpdated -> event.values.takeIf { it.size == NativeBmwDspValues.SIZE }
+                AppEvent.PresetLoaded, AppEvent.BackupRestored -> null
+                else -> return@collect
+            } ?: NativeBmwDspValues.load(context)
+            engineState = HomeEngineState.from(values)
         }
-        context.registerLocalReceiver(
-            receiver,
-            IntentFilter().apply {
-                addAction(Constants.ACTION_PRESET_LOADED)
-                addAction(Constants.ACTION_BACKUP_RESTORED)
-                addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
-            },
-        )
-        onDispose { context.unregisterLocalReceiver(receiver) }
     }
 
     // The level feed (and so the analyser) and the tiles' loops run only while the page is resumed.
