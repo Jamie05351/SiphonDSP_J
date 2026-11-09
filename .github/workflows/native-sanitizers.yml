@@ -1,0 +1,109 @@
+name: Native sanitizers
+
+# Runtime checks on the native DSP that the plain unit-test build can't make (see
+# native-tests/README.md, "Sanitizers and fuzzing"):
+#  - ASan + UBSan: the whole native suite, failing on any memory error or undefined behaviour.
+#  - TSan: the concurrency tests (the audio thread / control-thread handoff).
+#  - RTSan: rtsan_check runs process() as [[clang::nonblocking]] on an audio thread while another
+#    thread pushes configs and control requests; fails on any allocation, lock or blocking call
+#    on the audio thread.
+#  - libFuzzer: two minutes of fuzzing configure() / configurePeq(); every input must leave the
+#    processor producing finite output within full scale.
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - app/src/main/cpp/engine/**
+      - native-tests/**
+      - .github/workflows/native-sanitizers.yml
+  push:
+    branches:
+      - master
+    paths:
+      - app/src/main/cpp/engine/**
+      - native-tests/**
+      - .github/workflows/native-sanitizers.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sanitize:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ASan + UBSan (native tests)
+            kind: asan
+          - name: TSan (concurrency tests)
+            kind: tsan
+          - name: RTSan (audio path)
+            kind: rtsan
+          - name: libFuzzer (config)
+            kind: fuzz
+    env:
+      CXX: clang++-20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Clang 20
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-20 libclang-rt-20-dev
+
+      - name: ASan + UBSan
+        if: matrix.kind == 'asan'
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/asan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-O1 -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=undefined" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build/asan --target native_tests --parallel
+          build/asan/native_tests
+
+      - name: TSan
+        if: matrix.kind == 'tsan'
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/tsan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-O1 -fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+          cmake --build build/tsan --target native_tests --parallel
+          TSAN_OPTIONS=halt_on_error=1 build/tsan/native_tests -sf="*concurrency_test.cpp"
+
+      - name: RTSan
+        if: matrix.kind == 'rtsan'
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/rtsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSIPHON_RTSAN=ON
+          cmake --build build/rtsan --target rtsan_check --parallel
+          build/rtsan/rtsan_check
+
+      - name: libFuzzer
+        if: matrix.kind == 'fuzz'
+        run: |
+          set -euo pipefail
+          cmake -S native-tests -B build/fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSIPHON_FUZZ=ON
+          cmake --build build/fuzz --target fuzz_config --parallel
+          mkdir -p build/fuzz/corpus
+          cd build/fuzz
+          ./fuzz_config corpus -max_total_time=120 -max_len=1024 -print_final_stats=1
+
+      - name: Upload fuzz crash
+        if: failure() && matrix.kind == 'fuzz'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crash
+          path: build/fuzz/crash-*
+          if-no-files-found: ignore
