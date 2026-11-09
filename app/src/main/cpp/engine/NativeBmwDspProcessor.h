@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <thread>
 #include <memory>
 #include <vector>
 #include "NativeBmwCrossovers.h"
@@ -191,17 +192,26 @@ public:
                        CaptureExportResult& result) const;
     };
 
-    // Threading. process() (audio thread) holds stateMutex_ for its whole buffer. configure() and
-    // configurePeq() (config thread) never take it, so the audio thread never waits behind a
-    // config push and a push never waits out a buffer: they validate and build the update on the
-    // calling thread, then hand it over through a lock-free triple buffer (configHandoff_ /
-    // peqHandoff_). Whoever next holds stateMutex_ installs it -- normally process(), at the
-    // start of its next buffer, which is exactly when the old blocking push would have taken
-    // effect too. setSampleRate() and the truth snapshot install any pending update first, so
-    // they always see every accepted push. The capture calls also take stateMutex_ briefly but
-    // read no config state, so they leave pending updates to process(). Nothing installed runs
-    // allocating work on the audio thread: the measurement generator, the one stage whose
-    // rebuild allocates, is built with the update and swapped in (see ParsedConfig::generator).
+    // Threading. The running DSP state belongs to whoever holds ownership_: the audio thread for
+    // the length of each process() buffer, which it claims and releases with one atomic each and
+    // never waits for while audio is flowing. No call here takes a lock on the audio thread.
+    //
+    // configure() and configurePeq() (config thread) validate and build their update on the
+    // calling thread and hand it over through a lock-free triple buffer (configHandoff_ /
+    // peqHandoff_); the owner installs it at the start of its next buffer. Nothing installed runs
+    // allocating work on the audio thread: the measurement generator, the one stage whose rebuild
+    // allocates, is built with the update and swapped in (see ParsedConfig::generator).
+    //
+    // setSampleRate(), the truth snapshot and the capture calls are control requests: one at a
+    // time (controlMutex_), each posted to the audio thread, which serves it at the start of its
+    // next buffer -- an O(1) swap, a flag or a fill of a buffer the caller reserved -- while the
+    // caller waits. While no audio is flowing (no buffer for kAudioIdleNs, or the call is on the
+    // thread that ran the last buffer) the caller claims ownership itself and serves the request
+    // on its own thread. Only then can a buffer that starts at that moment wait for it: a stream
+    // resuming, never one in progress. A sample-rate change is the exception: it rebuilds
+    // everything (and allocates), so the caller always serves it itself, between buffers. The
+    // pipeline changes rate before audio flows; were a live stream to change rate, its next
+    // buffer would wait out the rebuild, as it would have for the old lock.
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);
@@ -230,10 +240,11 @@ public:
     void readVirtualMeter(float* values, std::size_t count) const;
 
     // Read-only whole-state snapshot for the native-truth debug screen (proves what this
-    // processor is actually running, as opposed to what Kotlin/UI last requested). Takes
-    // stateMutex_ once and installs any pending update first, so it reports every accepted
-    // configure()/configurePeq() and the crossover and PEQ data returned together represent one
-    // consistent instant. Not const (it installs, and stateMutex_ isn't mutable).
+    // processor is actually running, as opposed to what Kotlin/UI last requested). A control
+    // request: the owner installs any pending update first and fills a buffer this call reserved
+    // beforehand, so it reports every accepted configure()/configurePeq(), the crossover and PEQ
+    // data returned together represent one consistent instant, and the audio thread allocates
+    // nothing to produce it.
     //
     // Every value is a double. Layout:
     //   [0] sampleRate
@@ -260,9 +271,10 @@ public:
     enum : std::size_t { kTruthOutputWidth = 40 };
     std::vector<double> captureTruthSnapshot();
 
-    // Raw-input/final-output capture for the in-app measurement tool. (Re)allocates the capture
-    // buffers at the current sample rate, so it's a control-thread call, never made from
-    // process() itself. Each takes stateMutex_ briefly (the allocation happens outside it).
+    // Raw-input/final-output capture for the in-app measurement tool. Control requests:
+    // startCapture() (re)allocates the capture buffers at the current sample rate on the calling
+    // thread when their size changes, and the owner swaps them in; the retired buffers are freed
+    // back on the calling thread too.
     void startCapture();
     void stopCapture();
     // Acquire-paired with CaptureRecorder::tapOut()'s release store: any caller that reads this (UI-thread
@@ -270,7 +282,7 @@ public:
     // write up to the returned count, not just an up-to-date index with possibly-stale/torn
     // sample data behind it on a weakly-ordered CPU (this app's target, ARM64).
     std::size_t captureFrameCount() const;
-    // Stops capture and transfers its buffers in O(1) under the audio lock.
+    // Stops capture and transfers its buffers out in O(1) (a control request).
     // The take is consumed; startCapture() allocates fresh buffers for the next take.
     std::unique_ptr<CaptureSnapshot> takeCaptureSnapshot();
 
@@ -309,7 +321,7 @@ private:
     };
 
     using Biquad = NativeBmwDsp::Biquad;
-    // Host tests only (native-tests/concurrency_test.cpp): holds the audio lock like process().
+    // Host tests only (native-tests/concurrency_test.cpp): holds ownership like process().
     friend struct NativeBmwDspProcessorTestAccess;
 
     using PeqBank = NativeBmwDsp::PeqBank;
@@ -320,17 +332,33 @@ private:
 
     Params p_;
 
-    void processFrame(float& l, float& r);
-    // processFrame in two halves: the front runs everything up to the master limiter and leaves
-    // logical L / R in l / r; the back runs the master limiter, master volume, loudness and the
-    // hardware swap.
-    void processFrameFront(float& l, float& r);
+    // The chain runs in chunks of up to kChunkFrames frames (see processChunk()): the input
+    // stages frame by frame into one lane per output, each band's chain over the whole chunk, then
+    // the output stages frame by frame. Same arithmetic in the same order per band as a
+    // frame-by-frame loop, so bit-identical to it.
+    enum : std::size_t { kChunkFrames = 64 };
+    void processChunk(float* interleaved, std::size_t frames);
+    // DC blocker through the routing matrix: one input frame to the six routed outputs.
+    std::array<float, NativeBmwRouting::kOutputCount> processInputStages(float l, float r);
+    // One band's lanes over the chunk: its chain, its bypass latency, or silence.
+    void processBandStage(NativeBmwRouting::Band band, std::size_t frames);
+    // Per-output polarity/mute, the sum, tilt, post gain, channel mute and measurement bus: the
+    // six band outputs of one frame to logical L / R.
+    void processOutputStages(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l,
+                             float& r);
+    // The master limiter, master volume, loudness and the hardware swap.
     void processFrameBack(float& l, float& r);
     // The float processing for one buffer.
     void processBlock(float* interleaved, std::size_t sampleCount);
-    // The integer formats: each frame converted to float, processed and converted back.
+    // The integer formats: each chunk converted to float, processed and converted back.
     template <class Sample>
     void processInt(Sample* samples, std::size_t sampleCount, float scale);
+    // processChunk()'s per-output lanes and the integer paths' float chunk. Fixed size: nothing
+    // is allocated per buffer.
+    std::array<std::array<float, kChunkFrames>, NativeBmwRouting::kOutputCount> chunkLanes_{};
+    std::array<float, 2 * kChunkFrames> chunkInt_{};
+    // Each chunk frame's raw input, for the capture's input/output pairs.
+    std::array<float, 2 * kChunkFrames> chunkRawIn_{};
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
     // gain, then the band's stereo-linked bus limiter.
     void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);
@@ -382,12 +410,12 @@ private:
                          std::size_t midValueCount, const double* highBands,
                          std::size_t highValueCount, float sampleRate, ParsedPeq& out,
                          bool dropUnbuildable = false);
-    // Under stateMutex_: install an update, diffing it against the running state.
+    // Owner only: install an update, diffing it against the running state.
     void installConfig(ParsedConfig& config);
     void installPeq(ParsedPeq& peq);
-    // Under stateMutex_: install whatever configure()/configurePeq() handed over since last time.
+    // Owner only: install whatever configure()/configurePeq() handed over since last time.
     void installPending();
-    // Under stateMutex_: rebuild the PEQ banks from their saved raw values at sampleRate_ (a
+    // Owner only: rebuild the PEQ banks from their saved raw values at sampleRate_ (a
     // sample-rate change, or an update built at a rate that has since changed).
     void rebuildPeqLocked();
     void rebuildAll();
@@ -532,15 +560,62 @@ private:
     NativeBmwDsp::MeasurementBus measBus_;
     // Measurement signal generator (own module, see NativeBmwMeasurementGenerator.h). Per-instance
     // state, only ever touched from the process() loops (audio thread, while p_.measGenType != 0)
-    // and applyDirty() (control thread, under stateMutex_ like everything else here).
+    // and applyDirty() (by the owner, like everything else here).
     NativeBmwMeasurementGenerator measGen_;
-    // Capture state -- see startCapture()/stopCapture()/takeCaptureSnapshot(). Protected by
-    // stateMutex_ like everything else here (including from inside process() itself, which
-    // already holds stateMutex_ for the whole buffer); captureFrameCount() is the lock-free
-    // exception, see CaptureRecorder.
+    // Capture state -- see startCapture()/stopCapture()/takeCaptureSnapshot(). Touched only by
+    // the owner; captureFrameCount() is the lock-free exception, see CaptureRecorder.
     NativeBmwDsp::CaptureRecorder capture_;
 
-    std::mutex stateMutex_;
+    // ---- Ownership and control requests (see the threading comment above the constructor) ----
+    enum : std::uint32_t { kOwnerFree = 0, kOwnerAudio = 1, kOwnerControl = 2 };
+    // No buffer for this long and the stream counts as stopped: a control call serves itself.
+    static constexpr std::int64_t kAudioIdleNs = 200'000'000;
+    // How long a control call waits for the audio thread before serving itself.
+    static constexpr std::int64_t kRequestTimeoutNs = 1'000'000'000;
+    enum class RequestKind : std::uint8_t { SetSampleRate, TruthSnapshot, StartCapture, StopCapture, TakeCapture };
+    struct ControlRequest {
+        RequestKind kind = RequestKind::StopCapture;
+        float sampleRate = 0.f;                 // SetSampleRate
+        std::vector<double>* truth = nullptr;   // TruthSnapshot: reserved by the caller
+        std::size_t captureCapacity = 0;        // StartCapture: frames
+        bool captureStarted = false;            // StartCapture result: false = needs buffers
+        std::vector<float> rawInL, rawInR, outL, outR;  // StartCapture in / TakeCapture out
+        std::size_t frames = 0;                 // TakeCapture result
+        float capturedSampleRate = 0.f;         // TakeCapture result
+    };
+    // process()'s claim on the running state for one buffer: claims ownership, serves a pending
+    // control request and installs pending updates; gives ownership back when it goes.
+    class AudioOwnership {
+    public:
+        explicit AudioOwnership(NativeBmwDspProcessor& processor);
+        ~AudioOwnership();
+        AudioOwnership(const AudioOwnership&) = delete;
+        AudioOwnership& operator=(const AudioOwnership&) = delete;
+
+    private:
+        NativeBmwDspProcessor& processor_;
+    };
+    // Owner only: setSampleRate()'s work.
+    void applySampleRate(float sampleRate);
+    // Posts the request to the audio thread and waits for it to be served, or serves it on this
+    // thread while no audio is flowing. Caller holds controlMutex_.
+    void runControlRequest();
+    // Owner only: serves request_ if one is pending.
+    void serveControlRequest();
+    void serveRequest(ControlRequest& request);
+    // Owner only: the truth snapshot itself (see captureTruthSnapshot()).
+    void fillTruthSnapshot(std::vector<double>& out);
+    // Claims ownership for the audio thread (process()); returns when it has it.
+    void claimAudioOwnership();
+    std::mutex controlMutex_;
+    ControlRequest request_;
+    std::atomic<std::uint32_t> requestSeq_{0};
+    std::atomic<std::uint32_t> servedSeq_{0};
+    std::atomic<std::uint32_t> ownership_{kOwnerFree};
+    std::atomic<std::int64_t> lastBufferNs_{0};
+    std::atomic<std::thread::id> audioThread_{};
+    // Requests the audio thread served (as opposed to a control call serving itself); tests.
+    std::atomic<std::uint32_t> audioServedRequests_{0};
 
     // Config-thread side of the handoff (see the threading comment above the constructor).
     // configMutex_ serialises configure()/configurePeq() callers among themselves; the audio
@@ -553,7 +628,7 @@ private:
     std::atomic<float> configSampleRate_{48000.0f};
     NativeBmwDsp::TripleBuffer<ParsedConfig> configHandoff_;
     NativeBmwDsp::TripleBuffer<ParsedPeq> peqHandoff_;
-    // rebuildPeqLocked()'s workspace (too big for the stack), under stateMutex_.
+    // rebuildPeqLocked()'s workspace (too big for the stack); the owner's.
     ParsedPeq peqScratch_;
 };
 
