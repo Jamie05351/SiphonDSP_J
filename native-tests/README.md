@@ -58,7 +58,7 @@ output sample is finite and within ±1.
 | `test_main.cpp` | doctest entry point |
 | `drwav_impl.cpp` | the one TU that defines `DR_WAV_IMPLEMENTATION` (only `exportCaptureWav` needs it) |
 | `test_support.h` | `defaultConfig()` (parses `default_config.txt`), signal generators, a windowed single-frequency magnitude probe |
-| `default_config.txt` | canonical flat-config default; single source of truth shared with Kotlin (`NativeBmwSchemaAgreementTest` asserts it equals `NativeBmwDspValues.DEFAULTS`) |
+| `default_config.txt` | canonical flat-config default, generated from `app/src/main/schema/native_bmw_dsp.schema` by `scripts/gen-dsp-schema.py` (with the C++ header and the Kotlin defaults); don't edit it by hand |
 | `default_config_test.cpp` | config accepted / size guard; LR4 crossover sums flat through the handoff |
 | `limiter_test.cpp` | master limiter never exceeds −1 dBFS and doesn't touch a quiet signal; per-bus limiter GR engages only when hot / reads 0 when disabled |
 | `mbc_test.cpp` | MBC band GR follows the soft-knee gain computer and is monotone; meter idle while globally disabled |

@@ -84,14 +84,13 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.midDelayR = clampIn(v[22], 0, 2.8f);
     next.lowDelayL = clampIn(v[23], 0, 2.8f);
     next.lowDelayR = clampIn(v[24], 0, 2.8f);
-    // v[141] / v[142] (the retired stage-centering delay) are not read: see kConfigSize's comment.
+    // v[141] / v[142] (the retired stage-centering delay) are not read: see docs/NATIVE_BMW_DSP_SCHEMA.md.
     next.tilt = flagIn(v[25]);
     next.tiltAmount = clampIn(v[26], -6, 6);
     next.tiltFreq = clampIn(v[27], 200, 2000);
     // v[139]: measurement-mute bus brick-wall stopband offset in octaves (see MeasurementBus::rebuild()).
-    // v[140] is a Kotlin-only migration marker; v[141..142] (formerly the removed Pultec bass
-    // stage) now carry the Mid-band independent LPF -- read further down with the per-output
-    // config. See NativeBmwDspProcessor.h's kConfigSize comment.
+    // v[140] is a Kotlin-only migration marker; v[141..142] are retired and not read. See
+    // docs/NATIVE_BMW_DSP_SCHEMA.md.
     next.measBusStopbandOctaves = clampIn(v[139], 0, 4);
 
     // v[192..199]: measurement signal generator. type: 0 off, 1 sweep, 2 pink periodic noise.
