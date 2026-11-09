@@ -81,8 +81,18 @@ target_compile_definitions(native_tests PRIVATE
     NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
 )
 
+# The engine's measured frequency response for the app's graph-model check (see
+# response_golden.cpp). --check runs as a test; --write regenerates the committed file.
+add_executable(response_golden response_golden.cpp ${ENGINE_SOURCES})
+target_include_directories(response_golden PRIVATE
+    ${WRAPPER_DIR} ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
+target_compile_definitions(response_golden PRIVATE
+    NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
+    NBTEST_GOLDEN_RESPONSE_PATH="${CMAKE_CURRENT_LIST_DIR}/golden/response_curves.txt")
+
 enable_testing()
 add_test(NAME native_tests COMMAND native_tests)
+add_test(NAME response_golden COMMAND response_golden --check)
 
 # ---- Optional verification targets (Clang 20+; see native-tests/README.md and
 # .github/workflows/native-sanitizers.yml) ---------------------------------------------------
