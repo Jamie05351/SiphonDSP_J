@@ -60,7 +60,10 @@ jobs:
               echo '```'
             fi
             for f in app/build/reports/detekt/*.md; do
-              [ -f "$f" ] && { echo "### detekt"; head -n 200 "$f"; }
+              if [ -f "$f" ]; then
+                echo "### detekt"
+                head -n 200 "$f"
+              fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
