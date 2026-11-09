@@ -196,6 +196,22 @@ class NativeBmwSchemaAgreementTest {
     }
 
     @Test
+    fun generatedSchemaArraysCoverEverySlot() {
+        assertEquals(NativeBmwDspValues.SIZE, NativeBmwDspSchema.DEFAULTS.size)
+        assertEquals(NativeBmwDspValues.SIZE, NativeBmwDspSchema.READ_BY_NATIVE.size)
+        // Kotlin-only migration markers are never read natively.
+        for (marker in listOf(
+            NativeBmwDspValues.INDEX_MBC_MIGRATED,
+            NativeBmwDspValues.INDEX_MASTER_LIMITER_MIGRATED,
+            NativeBmwDspValues.INDEX_DELAY_LINKED,
+            NativeBmwDspValues.INDEX_HEADROOM_AUTO,
+        )) {
+            assertTrue("slot $marker must not be marked native", !NativeBmwDspSchema.READ_BY_NATIVE[marker])
+        }
+        assertTrue(NativeBmwDspSchema.READ_BY_NATIVE[NativeBmwDspValues.INDEX_HEADROOM])
+    }
+
+    @Test
     fun sizeMatchesDefaultsLength() {
         assertEquals(NativeBmwDspValues.SIZE, NativeBmwDspValues.DEFAULTS.size)
         assertEquals(NativeBmwDspValues.SIZE, headerConstants.getValue("kSize"))
@@ -203,10 +219,9 @@ class NativeBmwSchemaAgreementTest {
 
     @Test
     fun nativeTestDefaultConfigMatchesKotlinDefaults() {
-        // native-tests/default_config.txt is the canonical flat-config default, the single
-        // source of truth shared with the host-side DSP tests (test_support.h::defaultConfig()
-        // parses the same file). Require it element-for-element against the Kotlin DEFAULTS so
-        // the two can't drift -- a DEFAULTS change is then a one-line edit to that file.
+        // native-tests/default_config.txt and DEFAULTS are both generated from
+        // app/src/main/schema/native_bmw_dsp.schema (scripts/gen-dsp-schema.py; CI checks they're
+        // current). Require them element-for-element equal anyway, so a hand edit to either fails.
         val file = locate("native-tests/default_config.txt", "../native-tests/default_config.txt")
         val parsed = file.readLines()
             .map { it.substringBefore('#').trim() }

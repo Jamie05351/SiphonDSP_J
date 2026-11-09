@@ -1,0 +1,447 @@
+# The native DSP's flat float config: the array Kotlin (NativeBmwDspValues) sends
+# configureNativeBmwDsp() and NativeBmwDspProcessor::configure() reads.
+#
+# SOURCE OF TRUTH. After editing, run scripts/gen-dsp-schema.py: it regenerates the C++ header
+# (app/src/main/cpp/engine/NativeBmwDspSchema.h), the Kotlin indices and defaults
+# (app/src/main/java/app/siphondsp/model/NativeBmwDspSchema.kt), native-tests/default_config.txt and
+# docs/NATIVE_BMW_DSP_SCHEMA.md. CI runs it with --check.
+#
+# Saved tunings are stored by index: slots are append-only. Never move a slot or reuse one for a
+# different meaning without a migration; grow the array at the end.
+#
+#   section <title>
+#   slot <n> <default> <reader> <kotlin names|-> <c++ names|-> <description>
+#   const <c++ name> <value> <description>          (structure: widths, strides, field offsets)
+#
+# reader: native   configure() reads and validates it (a non-finite value rejects the update)
+#         kotlin   native never reads it: migration marker, UI state, or a legacy value Kotlin
+#                  migrates from
+#         reserved read by nothing; kept so no later slot moves
+
+
+section Enabled, lpfPass, hpfPass, channelMute, measurementMute
+slot 0   1           native   INDEX_ENABLED kEnabled enabled
+slot 1   0           native   INDEX_LPF_PASS kLpfPass lpfPass
+slot 2   0           native   INDEX_HPF_PASS kHpfPass hpfPass
+slot 3   0           native   INDEX_CHANNEL_MUTE kChannelMute channelMute
+slot 4   0           native   INDEX_MEASUREMENT_MUTE kMeasurementMute measurementMute
+
+section Headroom dB, low gain L/R, mid gain L/R, post gain L/R
+slot 5   -6          native   INDEX_HEADROOM kHeadroom headroom
+slot 6   0           native   INDEX_LOW_GAIN_L kLowGainL lowGainL
+slot 7   0           native   INDEX_LOW_GAIN_R kLowGainR lowGainR
+slot 8   -1          native   INDEX_MID_GAIN_L kMidGainL midGainL
+slot 9   -1          native   INDEX_MID_GAIN_R kMidGainR midGainR
+slot 10  0           native   INDEX_POST_GAIN_L kPostGainL postGainL
+slot 11  0           native   INDEX_POST_GAIN_R kPostGainR postGainR
+
+section Legacy shared-band settings, retained for migration -- the native engine reads the per-output block at 87..138 instead
+slot 12  1           kotlin   INDEX_SUBSONIC_ENABLED - subsonicEnabled (legacy)
+slot 13  32          kotlin   INDEX_SUBSONIC_FREQ - subsonicFreq (legacy)
+slot 14  0           kotlin   INDEX_LOW_MUTE - lowMute (legacy)
+slot 15  150         kotlin   INDEX_LOW_CROSSOVER_FREQ - lowCrossoverFreq (legacy)
+slot 16  0           kotlin   INDEX_LOW_LR4 - lowLr4 (legacy)
+slot 17  0           kotlin   INDEX_MID_MUTE - midMute (legacy)
+slot 18  150         kotlin   INDEX_MID_CROSSOVER_FREQ - midCrossoverFreq (legacy)
+slot 19  0           kotlin   INDEX_LOW_INVERT - lowInvert (legacy)
+slot 20  0           kotlin   INDEX_MID_INVERT - midInvert (legacy)
+
+section Mid delay L/R, low delay L/R (ms)
+slot 21  0           native   INDEX_MID_DELAY_L kMidDelayL midDelayL
+slot 22  0           native   INDEX_MID_DELAY_R kMidDelayR midDelayR
+slot 23  0           native   INDEX_LOW_DELAY_L kLowDelayL lowDelayL
+slot 24  0           native   INDEX_LOW_DELAY_R kLowDelayR lowDelayR
+
+section Tilt enabled, amount dB, pivot Hz
+slot 25  1           native   INDEX_TILT_ENABLED kTiltEnabled tiltEnabled
+slot 26  3           native   INDEX_TILT_AMOUNT kTiltAmount tiltAmount
+slot 27  550         native   INDEX_TILT_FREQ kTiltFreq tiltFreq
+
+section Legacy low-band compressor 7-tuple (retired path, not read natively)
+slot 28  1           kotlin   INDEX_LOW_COMPRESSOR_ENABLED - enabled
+slot 29  -12         kotlin   INDEX_LOW_COMPRESSOR_THRESHOLD - threshold
+slot 30  2           kotlin   INDEX_LOW_COMPRESSOR_RATIO - ratio
+slot 31  8           kotlin   INDEX_LOW_COMPRESSOR_KNEE - knee
+slot 32  40          kotlin   INDEX_LOW_COMPRESSOR_ATTACK - attack
+slot 33  250         kotlin   INDEX_LOW_COMPRESSOR_RELEASE - release
+slot 34  1.5         kotlin   INDEX_LOW_COMPRESSOR_MAKEUP - makeup
+
+section Legacy mid-band compressor 7-tuple
+slot 35  0           kotlin   INDEX_MID_COMPRESSOR_ENABLED - enabled
+slot 36  -10         kotlin   INDEX_MID_COMPRESSOR_THRESHOLD - threshold
+slot 37  1.5         kotlin   INDEX_MID_COMPRESSOR_RATIO - ratio
+slot 38  6           kotlin   INDEX_MID_COMPRESSOR_KNEE - knee
+slot 39  10          kotlin   INDEX_MID_COMPRESSOR_ATTACK - attack
+slot 40  180         kotlin   INDEX_MID_COMPRESSOR_RELEASE - release
+slot 41  0           kotlin   INDEX_MID_COMPRESSOR_MAKEUP - makeup
+
+section Reclaimed from the removed Mono Bass feature (enabled, freq Hz, blend %, makeup dB). 42 is now crossoverTypeMigrated (Kotlin-only marker); 43..45 still unused/unread.
+slot 42  0           kotlin   INDEX_CROSSOVER_TYPE_MIGRATED - crossoverTypeMigrated (Kotlin-only; 0 = unmigrated)
+slot 43  80          reserved - - unused (was monoBassFreq)
+slot 44  100         reserved - - unused (was monoBassBlend)
+slot 45  0           reserved - - unused (was monoBassMakeup)
+
+section Routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
+slot 46  1           native   INDEX_ROUTING,INDEX_ROUTE_LOW_LEFT_FRONT_LEFT kRoutingBase LowL <- FrontL
+slot 47  0           native   INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT - LowL <- FrontR
+slot 48  0           native   INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT - LowR <- FrontL
+slot 49  1           native   INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT - LowR <- FrontR
+slot 50  1           native   INDEX_ROUTE_MID_LEFT_FRONT_LEFT - MidL <- FrontL
+slot 51  0           native   INDEX_ROUTE_MID_LEFT_FRONT_RIGHT - MidL <- FrontR
+slot 52  0           native   INDEX_ROUTE_MID_RIGHT_FRONT_LEFT - MidR <- FrontL
+slot 53  1           native   INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT - MidR <- FrontR
+
+section Eight all-pass sections (2 per output x 4 outputs), each [enabled, order, freq Hz, Q] -- all disabled by default
+slot 54  0           native   INDEX_ALL_PASS kAllPassBase LowL sec0 enabled
+slot 55  2           native   - - LowL sec0 order
+slot 56  150         native   - - LowL sec0 freq
+slot 57  0.70710677  native   - - LowL sec0 Q
+slot 58  0           native   - - LowL sec1 enabled
+slot 59  2           native   - - LowL sec1 order
+slot 60  150         native   - - LowL sec1 freq
+slot 61  0.70710677  native   - - LowL sec1 Q
+slot 62  0           native   - - LowR sec0 enabled
+slot 63  2           native   - - LowR sec0 order
+slot 64  150         native   - - LowR sec0 freq
+slot 65  0.70710677  native   - - LowR sec0 Q
+slot 66  0           native   - - LowR sec1 enabled
+slot 67  2           native   - - LowR sec1 order
+slot 68  150         native   - - LowR sec1 freq
+slot 69  0.70710677  native   - - LowR sec1 Q
+slot 70  0           native   - - MidL sec0 enabled
+slot 71  2           native   - - MidL sec0 order
+slot 72  150         native   - - MidL sec0 freq
+slot 73  0.70710677  native   - - MidL sec0 Q
+slot 74  0           native   - - MidL sec1 enabled
+slot 75  2           native   - - MidL sec1 order
+slot 76  150         native   - - MidL sec1 freq
+slot 77  0.70710677  native   - - MidL sec1 Q
+slot 78  0           native   - - MidR sec0 enabled
+slot 79  2           native   - - MidR sec0 order
+slot 80  150         native   - - MidR sec0 freq
+slot 81  0.70710677  native   - - MidR sec0 Q
+slot 82  0           native   - - MidR sec1 enabled
+slot 83  2           native   - - MidR sec1 order
+slot 84  150         native   - - MidR sec1 freq
+slot 85  0.70710677  native   - - MidR sec1 Q
+
+section Independent-output schema marker (0 = seed from legacy on next load)
+slot 86  0           kotlin   INDEX_OUTPUT_SCHEMA_VERSION - 
+
+section Low Left output: XO Hz, crossoverType, subsonic on, subsonic Hz, mute, invert, compressor [enabled, threshold, ratio, knee, attack, release, makeup]
+slot 87  150         native   INDEX_OUTPUT_CONFIG kOutputConfigBase crossoverFreq
+slot 88  2           native   - - crossoverType (0=BW2, 1=BW3, 2=LR4)
+slot 89  1           native   - - subsonicEnabled
+slot 90  32          native   - - subsonicFreq
+slot 91  0           native   - - muted
+slot 92  0           native   - - polarityInverted
+slot 93  1           kotlin   - - comp enabled
+slot 94  -12         kotlin   - - comp threshold
+slot 95  2           kotlin   - - comp ratio
+slot 96  8           kotlin   - - comp knee
+slot 97  40          kotlin   - - comp attack
+slot 98  250         kotlin   - - comp release
+slot 99  1.5         kotlin   - - comp makeup
+
+section Low Right output
+slot 100 150         native   - - crossoverFreq
+slot 101 2           native   - - crossoverType
+slot 102 1           native   - - subsonicEnabled
+slot 103 32          native   - - subsonicFreq
+slot 104 0           native   - - muted
+slot 105 0           native   - - polarityInverted
+slot 106 1           kotlin   - - comp enabled
+slot 107 -12         kotlin   - - comp threshold
+slot 108 2           kotlin   - - comp ratio
+slot 109 8           kotlin   - - comp knee
+slot 110 40          kotlin   - - comp attack
+slot 111 250         kotlin   - - comp release
+slot 112 1.5         kotlin   - - comp makeup
+
+section Mid Left output (subsonic fields kept for a uniform block, ignored by native)
+slot 113 150         native   - - crossoverFreq
+slot 114 2           native   - - crossoverType
+slot 115 0           native   - - subsonicEnabled
+slot 116 32          native   - - subsonicFreq
+slot 117 0           native   - - muted
+slot 118 0           native   - - polarityInverted
+slot 119 0           kotlin   - - comp enabled
+slot 120 -10         kotlin   - - comp threshold
+slot 121 1.5         kotlin   - - comp ratio
+slot 122 6           kotlin   - - comp knee
+slot 123 10          kotlin   - - comp attack
+slot 124 180         kotlin   - - comp release
+slot 125 0           kotlin   - - comp makeup
+
+section Mid Right output
+slot 126 150         native   - - crossoverFreq
+slot 127 2           native   - - crossoverType
+slot 128 0           native   - - subsonicEnabled
+slot 129 32          native   - - subsonicFreq
+slot 130 0           native   - - muted
+slot 131 0           native   - - polarityInverted
+slot 132 0           kotlin   - - comp enabled
+slot 133 -10         kotlin   - - comp threshold
+slot 134 1.5         kotlin   - - comp ratio
+slot 135 6           kotlin   - - comp knee
+slot 136 10          kotlin   - - comp attack
+slot 137 180         kotlin   - - comp release
+slot 138 0           kotlin   - - comp makeup
+
+section Meas-mute stopband octaves; meas-mute migration marker (1 = seeded); 141/142 unused (was a Mid-band LPF, since removed)
+slot 139 1           native   INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES kMeasMuteStopbandOctaves measBusStopbandOctaves
+slot 140 2           kotlin   INDEX_MEAS_MUTE_STOPBAND_MIGRATED - 139..142 migration counter (Kotlin-only; 2 = fully migrated)
+slot 141 0           kotlin   INDEX_STAGE_DELAY_L kStageDelayLeftMs stageDelayL ms
+slot 142 0           kotlin   INDEX_STAGE_DELAY_R kStageDelayRightMs stageDelayR ms
+
+section Link L/R delay toggle (UI-only, never read natively)
+slot 143 0           kotlin   INDEX_DELAY_LINKED - 
+
+section Multiband compressor: enabled, mix %, crossover splits sub|warmth|body|air
+slot 144 0           native   INDEX_MBC_ENABLED kMbcEnabled mbcEnabled
+slot 145 100         native   INDEX_MBC_MIX kMbcMix mbcMix %
+slot 146 80          native   INDEX_MBC_XO_0 kMbcXo0 mbcXo0
+slot 147 500         native   INDEX_MBC_XO_1 kMbcXo1 mbcXo1
+slot 148 4000        native   INDEX_MBC_XO_2 kMbcXo2 mbcXo2
+
+section MBC bands 0..3, each [enabled, threshold dBFS, ratio, knee dB, attack ms, release ms, makeup dB, stereoLink]
+slot 149 0           native   INDEX_MBC_BANDS kMbcBandsBase band0 enabled
+slot 150 -24         native   - - band0 threshold
+slot 151 2           native   - - band0 ratio
+slot 152 6           native   - - band0 knee
+slot 153 15          native   - - band0 attack
+slot 154 150         native   - - band0 release
+slot 155 0           native   - - band0 makeup
+slot 156 1           native   - - band0 stereoLink
+slot 157 0           native   - - band1 enabled
+slot 158 -20         native   - - band1 threshold
+slot 159 2           native   - - band1 ratio
+slot 160 6           native   - - band1 knee
+slot 161 20          native   - - band1 attack
+slot 162 180         native   - - band1 release
+slot 163 0           native   - - band1 makeup
+slot 164 1           native   - - band1 stereoLink
+slot 165 0           native   - - band2 enabled
+slot 166 -18         native   - - band2 threshold
+slot 167 2           native   - - band2 ratio
+slot 168 6           native   - - band2 knee
+slot 169 15          native   - - band2 attack
+slot 170 150         native   - - band2 release
+slot 171 0           native   - - band2 makeup
+slot 172 1           native   - - band2 stereoLink
+slot 173 0           native   - - band3 enabled
+slot 174 -24         native   - - band3 threshold
+slot 175 2           native   - - band3 ratio
+slot 176 6           native   - - band3 knee
+slot 177 5           native   - - band3 attack
+slot 178 80          native   - - band3 release
+slot 179 0           native   - - band3 makeup
+slot 180 1           native   - - band3 stereoLink
+
+section MBC/limiter migration marker (0 = seed the block on next load)
+slot 181 0           kotlin   INDEX_MBC_MIGRATED - 
+
+section Per-bus output limiter -- Low bus [enabled, threshold dBFS, release ms], then Mid bus
+slot 182 0           native   INDEX_BUS_LIMITER_LOW_ENABLED kBusLimLowEnabled busLimLow enabled
+slot 183 -3          native   INDEX_BUS_LIMITER_LOW_THRESHOLD kBusLimLowThreshold busLimLow threshold
+slot 184 120         native   INDEX_BUS_LIMITER_LOW_RELEASE kBusLimLowRelease busLimLow release
+slot 185 0           native   INDEX_BUS_LIMITER_MID_ENABLED kBusLimMidEnabled busLimMid enabled
+slot 186 -3          native   INDEX_BUS_LIMITER_MID_THRESHOLD kBusLimMidThreshold busLimMid threshold
+slot 187 120         native   INDEX_BUS_LIMITER_MID_RELEASE kBusLimMidRelease busLimMid release
+
+section Legacy per-output-compressor-disabled marker (0 = force off on next load)
+slot 188 0           kotlin   INDEX_LEGACY_COMP_DISABLED_MIGRATED - 
+
+section Master limiter enabled, threshold dBFS, migrated marker
+slot 189 1           native   INDEX_MASTER_LIMITER_ENABLED kMasterLimiterEnabled masterLimiterEnabled
+slot 190 -1          native   INDEX_MASTER_LIMITER_THRESHOLD kMasterLimiterThreshold masterLimiterThreshold
+slot 191 1           kotlin   INDEX_MASTER_LIMITER_MIGRATED - masterLimiterMigrated
+
+section Measurement signal generator: type (0 off, 1 sweep, 2 pink), sweep start/end Hz, duration s, level dBFS, pink period s, pink level dBFS -- ships off
+slot 192 0           native   INDEX_MEAS_GEN_TYPE kMeasGenType measGenType
+slot 193 20          native   INDEX_MEAS_GEN_SWEEP_START_HZ kMeasGenSweepStartHz measGenSweepStartHz
+slot 194 20000       native   INDEX_MEAS_GEN_SWEEP_END_HZ kMeasGenSweepEndHz measGenSweepEndHz
+slot 195 10          native   INDEX_MEAS_GEN_SWEEP_DURATION_S kMeasGenSweepDurationS measGenSweepDurationS
+slot 196 -12         native   INDEX_MEAS_GEN_SWEEP_LEVEL_DB kMeasGenSweepLevelDb measGenSweepLevelDb
+slot 197 2           native   INDEX_MEAS_GEN_PINK_PERIOD_S kMeasGenPinkPeriodS measGenPinkPeriodS
+slot 198 -12         native   INDEX_MEAS_GEN_PINK_LEVEL_DB kMeasGenPinkLevelDb measGenPinkLevelDb
+
+section Measurement generator timing-reference: enable toggle, split-channels toggle, Mid-band start/end Hz, Low-band start/end Hz -- only meaningful while type == 1, ships off
+slot 199 0           native   INDEX_MEAS_GEN_TIMING_REF_ENABLED kMeasGenTimingRefEnabled measGenTimingRefEnabled
+slot 200 0           native   INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS kMeasGenTimingRefSplitChannels measGenTimingRefSplitChannels
+slot 201 100         native   INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ kMeasGenTimingRefMidStartHz measGenTimingRefMidStartHz
+slot 202 20000       native   INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ kMeasGenTimingRefMidEndHz measGenTimingRefMidEndHz
+slot 203 20          native   INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ kMeasGenTimingRefLowStartHz measGenTimingRefLowStartHz
+slot 204 400         native   INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ kMeasGenTimingRefLowEndHz measGenTimingRefLowEndHz
+
+section Mid's optional upper (Mid/High) bandpass corner -- freq/enabled per side, ships disabled. Only Mid has this field; Low/High don't.
+slot 205 3000        native   INDEX_MID_UPPER_XO kMidUpperXo midUpperXoLeftFreq
+slot 206 0           native   - - midUpperXoLeftEnabled
+slot 207 3000        native   - - midUpperXoRightFreq
+slot 208 0           native   - - midUpperXoRightEnabled
+slot 209 0           kotlin   INDEX_MID_UPPER_XO_MIGRATED kMidUpperXoMigrated midUpperXoMigrated (0 = seed the block disabled on next load)
+
+section High band -- a genuinely new third output. Ships MUTED (both highXoPass and the per-output mute field below).
+slot 210 1           native   INDEX_HIGH_XO_PASS kHighXoPass highXoPass
+slot 211 0           native   INDEX_HIGH_GAIN_L kHighGainL highGainL
+slot 212 0           native   INDEX_HIGH_GAIN_R kHighGainR highGainR
+slot 213 0           native   INDEX_HIGH_DELAY_L kHighDelayL highDelayL
+slot 214 0           native   INDEX_HIGH_DELAY_R kHighDelayR highDelayR
+
+section High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR] -- same identity default as Low/Mid.
+slot 215 1           native   INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT kHighRoutingBase routeHighLeftFrontLeft
+slot 216 0           native   INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT - routeHighLeftFrontRight
+slot 217 0           native   INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT - routeHighRightFrontLeft
+slot 218 1           native   INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT - routeHighRightFrontRight
+
+section High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
+slot 219 0           native   INDEX_HIGH_ALL_PASS kHighAllPassBase highLeft section0 enabled
+slot 220 2           native   - - highLeft section0 order
+slot 221 150         native   - - highLeft section0 freq
+slot 222 0.70710677  native   - - highLeft section0 q
+slot 223 0           native   - - highLeft section1 enabled
+slot 224 2           native   - - highLeft section1 order
+slot 225 150         native   - - highLeft section1 freq
+slot 226 0.70710677  native   - - highLeft section1 q
+slot 227 0           native   - - highRight section0 enabled
+slot 228 2           native   - - highRight section0 order
+slot 229 150         native   - - highRight section0 freq
+slot 230 0.70710677  native   - - highRight section0 q
+slot 231 0           native   - - highRight section1 enabled
+slot 232 2           native   - - highRight section1 order
+slot 233 150         native   - - highRight section1 freq
+slot 234 0.70710677  native   - - highRight section1 q
+
+section High output-config: 2 outputs x 13-wide, same layout as the Low/Mid block. XO Hz matches Mid's upper-corner default; sub fields retained for a uniform block but ignored by native (same as Mid); muted (1 = ships muted).
+slot 235 3000        native   INDEX_HIGH_OUTPUT_CONFIG kHighOutputConfigBase highLeft crossoverFreq
+slot 236 2           native   - - highLeft crossoverType (LR4)
+slot 237 0           native   - - highLeft subsonicEnabled
+slot 238 32          native   - - highLeft subsonicFreq
+slot 239 1           native   - - highLeft muted
+slot 240 0           native   - - highLeft invert
+slot 241 0           kotlin   - - highLeft compressorEnabled
+slot 242 -10         kotlin   - - highLeft compressorThreshold
+slot 243 1.5         kotlin   - - highLeft compressorRatio
+slot 244 6           kotlin   - - highLeft compressorKnee
+slot 245 10          kotlin   - - highLeft compressorAttack
+slot 246 180         kotlin   - - highLeft compressorRelease
+slot 247 0           kotlin   - - highLeft compressorMakeup
+slot 248 3000        native   - - highRight crossoverFreq
+slot 249 2           native   - - highRight crossoverType (LR4)
+slot 250 0           native   - - highRight subsonicEnabled
+slot 251 32          native   - - highRight subsonicFreq
+slot 252 1           native   - - highRight muted
+slot 253 0           native   - - highRight invert
+slot 254 0           kotlin   - - highRight compressorEnabled
+slot 255 -10         kotlin   - - highRight compressorThreshold
+slot 256 1.5         kotlin   - - highRight compressorRatio
+slot 257 6           kotlin   - - highRight compressorKnee
+slot 258 10          kotlin   - - highRight compressorAttack
+slot 259 180         kotlin   - - highRight compressorRelease
+slot 260 0           kotlin   - - highRight compressorMakeup
+slot 261 0           kotlin   INDEX_HIGH_BAND_MIGRATED kHighBandMigrated highBandMigrated (0 = seed the block muted on next load)
+
+section High-bus limiter [enabled, threshold dBFS, release ms], migration marker
+slot 262 0           native   INDEX_BUS_LIMITER_HIGH_ENABLED kBusLimHighEnabled busLimHigh enabled
+slot 263 -3          native   INDEX_BUS_LIMITER_HIGH_THRESHOLD kBusLimHighThreshold busLimHigh threshold
+slot 264 120         native   INDEX_BUS_LIMITER_HIGH_RELEASE kBusLimHighRelease busLimHigh release
+slot 265 0           kotlin   INDEX_BUS_LIMITER_HIGH_MIGRATED kBusLimHighMigrated busLimHighMigrated (0 = seed the limiter disabled on next load)
+
+section Virtual-source stage: the virtual centre and its per-side feeds (docs/NATIVE_BMW_VIRTUAL_CHANNELS.md)
+slot 266 0           native   INDEX_VIRTUAL_ENABLED kVirtualEnabled virtual stage enabled (ships off)
+slot 267 150         native   INDEX_VIRTUAL_DETECT_HPF kVirtualDetectHpf virtual detector HPF Hz
+slot 268 8000        native   INDEX_VIRTUAL_DETECT_LPF kVirtualDetectLpf virtual detector LPF Hz
+slot 269 10          native   INDEX_VIRTUAL_ATTACK kVirtualAttack virtual weight attack ms
+slot 270 200         native   INDEX_VIRTUAL_RELEASE kVirtualRelease virtual weight release ms
+slot 271 0           native   INDEX_VIRTUAL_CENTRE_LEVEL kVirtualCentreLevel virtual centre level dB
+slot 272 0           native   INDEX_VIRTUAL_SIDE_LEVEL kVirtualSideLevel virtual side (residual) level dB
+slot 273 0           native   INDEX_VIRTUAL_FEED - centre feed Left gain dB
+slot 274 0           native   - - centre feed Left delay ms
+slot 275 0           native   - - centre feed Left polarity
+slot 276 0           native   - - centre feed Left all-pass enabled
+slot 277 1000        native   - - centre feed Left all-pass freq Hz
+slot 278 0.70710677  native   - - centre feed Left all-pass Q
+slot 279 2           native   - - centre feed Left all-pass order (2 = 2nd)
+slot 280 0           native   - - centre feed Right gain dB
+slot 281 0           native   - - centre feed Right delay ms
+slot 282 0           native   - - centre feed Right polarity
+slot 283 0           native   - - centre feed Right all-pass enabled
+slot 284 1000        native   - - centre feed Right all-pass freq Hz
+slot 285 0.70710677  native   - - centre feed Right all-pass Q
+slot 286 2           native   - - centre feed Right all-pass order (2 = 2nd)
+slot 287 0           kotlin   INDEX_VIRTUAL_MIGRATED kVirtualMigrated virtualMigrated (0 = seed the stage off on next load)
+
+section Mid's upper (Mid/High) lowpass slope, Left/Right, migration marker
+slot 288 2           native   INDEX_MID_UPPER_XO_TYPE kMidUpperXoTypeLeft Mid Left upper (lowpass) slope (2 = LR4)
+slot 289 2           native   - kMidUpperXoTypeRight Mid Right upper (lowpass) slope (2 = LR4)
+slot 290 0           kotlin   INDEX_MID_UPPER_XO_TYPE_MIGRATED kMidUpperXoTypeMigrated midUpperXoTypeMigrated (0 = seed from Mid's own type on next load)
+
+section High crossover passthrough
+slot 291 0           native   INDEX_HIGH_PASS kHighPass highPass (High crossover passthrough off)
+
+section Master volume dB, mute
+slot 292 0           native   INDEX_MASTER_VOLUME_DB kMasterVolumeDb masterVolumeDb (0 dB = full)
+slot 293 0           native   INDEX_MASTER_MUTE kMasterMute masterMute (off)
+
+section Loudness compensation enabled, strength %
+slot 294 0           native   INDEX_LOUDNESS_ENABLED kLoudnessEnabled loudnessEnabled (off)
+slot 295 100         native   INDEX_LOUDNESS_STRENGTH kLoudnessStrength loudnessStrength (percent)
+
+section Automatic headroom (Kotlin computes the headroom and sends it in slot 5)
+slot 296 0           kotlin   INDEX_HEADROOM_AUTO kHeadroomAuto headroomAuto (0 = manual; Kotlin-only)
+
+section Mono Bass (added in the 297 -> 299 growth)
+slot 297 0           native   INDEX_MONO_BASS_ENABLED kMonoBassEnabled monoBassEnabled (off)
+slot 298 90          native   INDEX_MONO_BASS_FREQ kMonoBassFreq monoBassFreq (Hz, 60..120)
+
+section Virtual Bass (added in the 299 -> 303 growth)
+slot 299 0           native   INDEX_VIRTUAL_BASS_ENABLED kVirtualBassEnabled virtualBassEnabled (off)
+slot 300 40          native   INDEX_VIRTUAL_BASS_FREQ kVirtualBassFreq virtualBassFreq (woofer reach, Hz, 25..60)
+slot 301 50          native   INDEX_VIRTUAL_BASS_AMOUNT kVirtualBassAmount virtualBassAmount (harmonics level, percent)
+slot 302 0           native   INDEX_VIRTUAL_BASS_REMOVE_SUB kVirtualBassRemoveSub virtualBassRemoveSub (off)
+
+section Virtual Bass character (added in the 303 -> 304 growth)
+slot 303 50          native   INDEX_VIRTUAL_BASS_CHARACTER kVirtualBassCharacter virtualBassCharacter (Warm 0 .. Punchy 100 %)
+
+section Subsonic slope (added in the 304 -> 305 growth)
+slot 304 0           native   INDEX_SUBSONIC_SLOPE kSubsonicSlope subsonicSlope (0 = LR4, 1 = BW2)
+
+section Virtual Bass range and response (added in the 305 -> 307 growth)
+slot 305 5           native   INDEX_VIRTUAL_BASS_RANGE kVirtualBassRange virtualBassRange (harmonics kept up to x the reach, 3..8)
+slot 306 200         native   INDEX_VIRTUAL_BASS_RESPONSE kVirtualBassResponse virtualBassResponse (detector release, ms, 100..500)
+
+section Structure
+const kRoutingStride 2
+const kAllPassSectionWidth 4
+const kAllPassSectionsPerOutput 2
+const kOutputConfigWidth 13
+const kOutCrossoverFreq 0
+const kOutCrossoverType 1
+const kOutSubsonicEnabled 2
+const kOutSubsonicFreq 3
+const kOutMuted 4
+const kOutPolarityInverted 5
+const kOutCompressor 6 start of the 7-value compressor tuple
+const kMbcBandWidth 8
+const kMbcBandCount 4
+const kMbcBandEnabled 0
+const kMbcBandThreshold 1
+const kMbcBandRatio 2
+const kMbcBandKnee 3
+const kMbcBandAttack 4
+const kMbcBandRelease 5
+const kMbcBandMakeup 6
+const kMbcBandStereoLink 7
+const kMidUpperXoWidth 2
+const kMidUpperXoFreq 0
+const kMidUpperXoEnabled 1
+const kHighRoutingStride 2
+const kVirtualFeedBase 273
+const kVirtualFeedWidth 7
+const kVirtualFeedGain 0
+const kVirtualFeedDelay 1
+const kVirtualFeedPolarity 2
+const kVirtualFeedApEnabled 3
+const kVirtualFeedApFreq 4
+const kVirtualFeedApQ 5
+const kVirtualFeedApOrder 6

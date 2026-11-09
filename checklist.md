@@ -16,10 +16,10 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 
 | PR | Area | Branch | Status |
 |----|------|--------|--------|
-| 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | #577 — green, ready to merge |
-| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | #578 — green, ready to merge |
-| 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | in progress |
-| 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | — |
+| 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | #577 — merged |
+| 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | #578 — merged |
+| 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | #579 — merged |
+| 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 |
 | 5 | Graph curves from the native engine | `ccr-efec0dfc-native-curves` | — |
 | 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
 | 7 | Full Compose migration + Baseline Profile | `ccr-efec0dfc-compose` | — |
@@ -76,10 +76,12 @@ JamesDSP core.
 
 `NativeBmwDspValues.kt`, `NativeBmwDspSchema.h`, the processor's index comments, a generator.
 
-- [ ] 4.1 One schema file generates the Kotlin indices/defaults and the C++ schema header.
-- [ ] 4.2 Kotlin-only marker slots are flagged in the schema (array layout unchanged, so saved
+- [x] 4.1 One schema file generates the Kotlin indices/defaults and the C++ schema header.
+- [x] 4.2 Kotlin-only marker slots are flagged in the schema (array layout unchanged, so saved
       tunings stay compatible).
-- [ ] 4.3 The hand-kept index comments (already drifted) are replaced by the generated table.
+- [x] 4.3 The hand-kept index comments (already drifted) are replaced by the generated table.
+- [x] 4.4 A native test proves the schema's reader column: every slot marked native is the one
+      `configure()` validates (a NaN there rejects the update), every other slot is ignored.
 
 ## PR 5 — Graph curves from the native engine
 

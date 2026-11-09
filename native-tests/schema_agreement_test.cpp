@@ -2,6 +2,7 @@
 
 #include "NativeBmwDspSchema.h"
 
+#include <limits>
 #include <algorithm>
 
 using namespace nbtest;
@@ -747,4 +748,21 @@ TEST_CASE("kMeasGenTimingRefSplitChannels routes the chirp and sweep to differen
     INFO("split during sweep: ref(idx1)=", splitSweepRef, " sweep(idx0)=", splitSweepSweep);
     CHECK(splitSweepRef < 0.01f);   // reference channel is silent during the sweep
     CHECK(splitSweepSweep > 0.1f);  // sweep plays on the other channel
+}
+
+// The schema's reader column (app/src/main/schema/native_bmw_dsp.schema, generated into
+// nbschema::kReadByNative) is the truth about which slots configure() consumes: every slot it
+// reads goes through a finiteness check, so a NaN there rejects the whole update, and a NaN in a
+// slot it never reads changes nothing.
+TEST_CASE("Schema reader column: configure() reads exactly the slots marked native") {
+    const auto base = defaultConfig();
+    for (std::size_t i = 0; i < base.size(); ++i) {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        auto c = base;
+        c[i] = std::numeric_limits<float>::quiet_NaN();
+        const bool rejected = !proc.configure(c.data(), c.size());
+        INFO("slot ", i, " marked ", (nbschema::kReadByNative[i] ? "native" : "not native"));
+        CHECK(rejected == nbschema::kReadByNative[i]);
+    }
 }
