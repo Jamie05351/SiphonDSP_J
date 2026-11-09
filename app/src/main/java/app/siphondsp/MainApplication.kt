@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
 import android.util.Log
@@ -22,8 +21,6 @@ import com.pluto.plugins.rooms.db.PlutoRoomsDatabasePlugin
 import fr.bipi.treessence.file.FileLoggerTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import app.siphondsp.flavor.UpdateManager
-import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
 import app.siphondsp.receiver.MasterVolumeReceiver
@@ -47,7 +44,7 @@ import timber.log.Timber.DebugTree
 import java.io.File
 
 
-open class MainApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
+open class MainApplication : Application() {
     init {
         sdkAbove(Build.VERSION_CODES.P) {
             HiddenApiBypass.addHiddenApiExemptions("L")
@@ -128,7 +125,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
         val appModule = module {
             single { RoutingObserver(androidContext()) }
-            single { UpdateManager(androidContext()) }
             single { DumpManager(androidContext()) }
             single { Preferences(androidContext()).App() }
             single { Preferences(androidContext()).Var() }
@@ -154,8 +150,8 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             prefs.set(R.string.key_reset_proc_mode_fix_applied, true)
         }
 
-        onSharedPreferenceChanged(prefs.preferences, getString(R.string.key_appearance_theme_mode))
-        prefs.registerOnSharedPreferenceChangeListener(this)
+        // Every screen is the fixed dark dashboard; the leftover View screens follow it.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
 
         registerLocalReceiver(receiver, IntentFilter().apply {
             addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
@@ -175,7 +171,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
     }
 
     override fun onTerminate() {
-        prefs.unregisterOnSharedPreferenceChangeListener(this)
         unregisterReceiver(receiver)
         super.onTerminate()
     }
@@ -183,18 +178,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
     override fun onLowMemory() {
         Timber.w("onLowMemory: Running low on memory")
         super.onLowMemory()
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if(key == getString(R.string.key_appearance_theme_mode)) {
-            AppCompatDelegate.setDefaultNightMode(
-                when (ThemeMode.fromInt(prefs.get<String>(R.string.key_appearance_theme_mode).toIntOrNull() ?: 0)) {
-                    ThemeMode.Light -> AppCompatDelegate.MODE_NIGHT_NO
-                    ThemeMode.Dark -> AppCompatDelegate.MODE_NIGHT_YES
-                    ThemeMode.FollowSystem -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
-            )
-        }
     }
 
     private fun enableDebugTools() {

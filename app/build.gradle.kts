@@ -163,7 +163,6 @@ dependencies {
     implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("androidx.navigation:navigation-fragment-ktx:2.9.8")
     implementation("androidx.navigation:navigation-ui-ktx:2.9.8")
-    implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("androidx.databinding:databinding-runtime:9.2.1")
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")

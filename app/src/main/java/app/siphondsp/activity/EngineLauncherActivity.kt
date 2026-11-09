@@ -19,7 +19,6 @@ import timber.log.Timber
 class EngineLauncherActivity : BaseActivity() {
     private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
 
-    override val disableAppTheme: Boolean = true
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

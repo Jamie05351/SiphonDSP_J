@@ -1,14 +1,12 @@
 package app.siphondsp.utils.extensions
 
 import android.animation.ValueAnimator
-import android.os.Build
 import android.text.Html
 import android.text.Spanned
 import android.util.TypedValue
 import android.view.View
 import androidx.annotation.AttrRes
 import androidx.core.content.res.ResourcesCompat
-import com.google.android.material.color.DynamicColors
 import app.siphondsp.utils.SdkCheck
 import java.io.File
 import java.math.BigDecimal
@@ -70,14 +68,6 @@ val String.md5: ByteArray
     get() {
         return MessageDigest.getInstance("MD5").digest(this.toByteArray())
     }
-
-private val isSamsung by lazy {
-    Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-}
-
-val isDynamicColorAvailable by lazy {
-    DynamicColors.isDynamicColorAvailable() || (isSamsung && SdkCheck.isSnowCake)
-}
 
 fun View.setBackgroundFromAttribute(@AttrRes attrRes: Int) {
     val a = TypedValue()

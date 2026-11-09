@@ -247,6 +247,7 @@
 
     <!-- Settings -->
     <string name="title_activity_settings">Settings</string>
+    <string name="back">Back</string>
     <!-- Labels on the front-page tiles and the workspace rail tiles (they used to be baked into art). -->
     <string name="home_tile_peq">PEQ</string>
     <string name="home_tile_gains">Align</string>
@@ -348,18 +349,20 @@
     <string name="troubleshooting_notification_access">Allow notification access for better session detection</string>
     <string name="troubleshooting_notification_access_summary">Enables more reliable audio session detection</string>
     <string name="misc_settings">Miscellaneous</string>
-    <string name="misc_settings_summary">Crash reports, other actions</string>
+    <string name="misc_settings_summary">App behavior, permissions</string>
     <string name="misc_permission_skip_prompt">Skip capture permission prompt</string>
     <string name="misc_permission_auto_start">Auto-start effect engine on boot</string>
     <string name="misc_permission_restart_setup">Restart setup wizard</string>
     <string name="misc_permission_restart_setup_summary">Grant missing optional permissions</string>
     <string name="misc_permission_header">Optional permissions</string>
     <string name="about_settings">About</string>
-    <string name="about_settings_summary">Credits, support, updates</string>
+    <string name="about_settings_summary">Version, project page, credits</string>
     <string name="credits">Credits</string>
     <string name="translators">Translators</string>
     <string name="credits_app">App &amp; rootless implementation developed by</string>
     <string name="credits_dsp">Core DSP algorithm library developed by</string>
+    <string name="credits_capture">Rootless audio capture (RootlessJamesDSP) by</string>
+    <string name="credits_dsp_origin">Original JamesDSP by</string>
     <string name="credits_project_page">Visit project website on GitHub</string>
     <string name="credits_project_page_summary">Report issues, keep yourself updated, and read the source code</string>
     <string name="credits_project_play_page">Visit J_DSP on Google Play</string>
@@ -564,7 +567,7 @@
     <string name="backup_restore">Restore backup</string>
     <string name="backup_restore_summary">Restore settings from backup file</string>
     <string name="backup_automatic_backup">Automatic backup</string>
-    <string name="backup_compat_info">Backups only include impulse responses, scripts, VDC files, presets, and the current audio configuration for maximum compatibility with other versions.</string>
+    <string name="backup_compat_info">Backups include the DSP tuning (crossovers, gains, delays, compressor, tilt, PEQ) and the DSP preferences. The app blocklist is not included.</string>
     <string name="backup_restore_mode_title">Restore mode</string>
     <string name="backup_restore_mode_clean">Clean restore (delete all existing files)</string>
     <string name="backup_restore_mode_dirty">Dirty restore (overwrite only)</string>

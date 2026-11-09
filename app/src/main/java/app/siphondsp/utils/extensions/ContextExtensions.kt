@@ -17,7 +17,6 @@ import android.os.Process
 import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
-import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -35,12 +34,10 @@ import androidx.core.graphics.alpha
 import androidx.core.graphics.blue
 import androidx.core.graphics.green
 import androidx.core.graphics.red
-import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import app.siphondsp.R
-import app.siphondsp.databinding.DialogColorPickerBinding
 import app.siphondsp.databinding.DialogTextinputBinding
 import app.siphondsp.utils.Constants
 import app.siphondsp.utils.extensions.CompatExtensions.getApplicationInfoCompat
@@ -285,68 +282,6 @@ object ContextExtensions {
             }
             .create()
             .show()
-    }
-
-    /**
-     * Shows a hex color input dialog with a live preview swatch.
-     * @param initialColor the ARGB color to pre-fill the input with.
-     * @param callback invoked with the parsed ARGB color, or null if cancelled/left invalid.
-     */
-    fun Context.showColorPickerAlert(
-        layoutInflater: LayoutInflater,
-        @StringRes title: Int,
-        @ColorInt initialColor: Int,
-        callback: ((Int?) -> Unit)
-    ) {
-        val content = DialogColorPickerBinding.inflate(layoutInflater)
-        content.hexInput.text = Editable.Factory.getInstance().newEditable(String.format("#%08X", initialColor))
-        content.colorPreview.setCardBackgroundColor(initialColor)
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(content.root)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val color = content.hexInput.text?.toString()?.let(::parseHexColorOrNull)
-                callback.invoke(color)
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ ->
-                callback.invoke(null)
-            }
-            .create()
-
-        dialog.setOnShowListener {
-            val okButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-
-            fun validate() {
-                val color = content.hexInput.text?.toString()?.let(::parseHexColorOrNull)
-                okButton?.isEnabled = color != null
-                if (color != null) {
-                    content.colorPreview.setCardBackgroundColor(color)
-                    content.hexInputLayout.error = null
-                } else {
-                    content.hexInputLayout.error = getString(R.string.custom_theme_color_invalid)
-                }
-            }
-
-            content.hexInput.addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-                override fun afterTextChanged(s: Editable?) = validate()
-            })
-
-            validate()
-        }
-
-        dialog.show()
-    }
-
-    private fun parseHexColorOrNull(input: String): Int? {
-        val hex = input.trim().let { if (it.startsWith("#")) it else "#$it" }
-        return try {
-            hex.toColorInt()
-        } catch (e: IllegalArgumentException) {
-            null
-        }
     }
 
     fun Context.showChoiceAlert(

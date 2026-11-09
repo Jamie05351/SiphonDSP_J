@@ -218,11 +218,6 @@ class MainActivity : BaseActivity() {
             }
         }
 
-        // Load initial preference states
-        val initialPrefList = arrayOf(R.string.key_appearance_nav_hide, R.string.key_powered_on)
-        for (pref in initialPrefList)
-            this.onSharedPreferenceChanged(prefsApp.preferences, getString(pref))
-
         sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
 
         showAndroid15Alert()
