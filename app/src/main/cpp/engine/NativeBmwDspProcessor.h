@@ -208,9 +208,10 @@ public:
     // caller waits. While no audio is flowing (no buffer for kAudioIdleNs, or the call is on the
     // thread that ran the last buffer) the caller claims ownership itself and serves the request
     // on its own thread. Only then can a buffer that starts at that moment wait for it: a stream
-    // resuming, never one in progress. A sample-rate change served by the audio thread rebuilds
-    // everything (and the measurement generator) there; the pipeline changes rate before audio
-    // flows, so in practice the caller serves it.
+    // resuming, never one in progress. A sample-rate change is the exception: it rebuilds
+    // everything (and allocates), so the caller always serves it itself, between buffers. The
+    // pipeline changes rate before audio flows; were a live stream to change rate, its next
+    // buffer would wait out the rebuild, as it would have for the old lock.
     NativeBmwDspProcessor();
     ~NativeBmwDspProcessor();
     void setSampleRate(float sampleRate);

@@ -363,11 +363,14 @@ TEST_CASE("A capture can be restarted while audio runs, reusing its buffers") {
     CHECK(take->frames < static_cast<std::size_t>(kSampleRate * NativeBmwDspProcessor::kCaptureMaxSeconds));
 }
 
-TEST_CASE("A sample-rate change while audio runs takes effect on the audio thread") {
+TEST_CASE("A sample-rate change while audio runs is served by the caller and takes effect") {
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);
     RunningAudio audio(proc);
+    const auto servedBefore = NativeBmwDspProcessorTestAccess::audioServedRequests(proc);
     proc.setSampleRate(44100.f);
+    // The rebuild ran here, not on the audio thread.
+    CHECK(NativeBmwDspProcessorTestAccess::audioServedRequests(proc) == servedBefore);
     const auto snapshot = proc.captureTruthSnapshot();
     REQUIRE(!snapshot.empty());
     CHECK(snapshot[0] == doctest::Approx(44100.0));

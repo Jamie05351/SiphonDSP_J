@@ -662,7 +662,10 @@ void NativeBmwDspProcessor::serveRequest(ControlRequest& request) {
 void NativeBmwDspProcessor::runControlRequest() {
     const std::uint32_t seq = requestSeq_.load(std::memory_order_relaxed) + 1;
     const std::int64_t start = nowNs();
+    // A sample-rate change rebuilds everything (and allocates): never audio-thread work, so the
+    // caller always serves it, between buffers.
     const bool audioFlowing =
+        request_.kind != RequestKind::SetSampleRate &&
         start - lastBufferNs_.load(std::memory_order_relaxed) < kAudioIdleNs &&
         audioThread_.load(std::memory_order_relaxed) != std::this_thread::get_id();
     if (audioFlowing) {
@@ -678,8 +681,8 @@ void NativeBmwDspProcessor::runControlRequest() {
             return;
         }
     }
-    // Serve it here, as the owner. Waits out a buffer in progress (only a stream that stopped
-    // mid-request can be in one).
+    // Serve it here, as the owner. Waits out a buffer in progress (a stream that stopped
+    // mid-request, or a live stream changing rate).
     std::uint32_t expected = kOwnerFree;
     while (!ownership_.compare_exchange_weak(expected, kOwnerControl, std::memory_order_acquire,
                                              std::memory_order_relaxed)) {
