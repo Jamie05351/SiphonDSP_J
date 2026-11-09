@@ -16,7 +16,6 @@ import com.pluto.plugins.exceptions.PlutoExceptions
 import com.pluto.plugins.exceptions.PlutoExceptionsPlugin
 import com.pluto.plugins.logger.PlutoLoggerPlugin
 import com.pluto.plugins.logger.PlutoTimberTree
-import com.pluto.plugins.network.PlutoNetworkPlugin
 import com.pluto.plugins.preferences.PlutoSharePreferencesPlugin
 import com.pluto.plugins.rooms.db.PlutoRoomsDBWatcher
 import com.pluto.plugins.rooms.db.PlutoRoomsDatabasePlugin
@@ -228,7 +227,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         )
 
         Pluto.Installer(this)
-            .addPlugin(PlutoNetworkPlugin())
             .addPlugin(PlutoExceptionsPlugin())
             .addPlugin(PlutoLoggerPlugin())
             .addPlugin(PlutoSharePreferencesPlugin())

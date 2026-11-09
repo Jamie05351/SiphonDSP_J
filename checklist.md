@@ -103,9 +103,15 @@ can't disagree with what plays — comes from checking the two against each othe
 
 Gradle files.
 
-- [ ] 6.1 Remove unused dependencies (Retrofit, the `codeview` module, …).
-- [ ] 6.2 Gson → kotlinx.serialization (one library for JSON).
-- [ ] 6.3 Dependency-analysis plugin and detekt, wired into CI (report-only baseline).
+- [x] 6.1 Remove unused dependencies: Retrofit and both converters, Gson (its only user was the
+      dead AutoEQ search model), `kotlin-reflect` (only `KClass` is used, which is in the
+      standard library), the `codeview` module, Pluto's OkHttp interceptor and network plugin
+      (the app makes no HTTP calls). The libraries the remaining Views/Fragments use go with them
+      in PR 7.
+- [x] 6.2 One JSON library: kotlinx.serialization (Gson is gone with its only user).
+- [x] 6.3 detekt + Dependency Analysis Gradle Plugin in a report-only CI job
+      (`static-analysis.yml`, `scripts/static-analysis.sh`). The plugins are added to the build
+      only for that job's run, so the normal build never resolves them.
 
 ## PR 7 — Full Compose migration + Baseline Profile
 

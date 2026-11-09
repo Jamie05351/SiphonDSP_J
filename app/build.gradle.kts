@@ -150,7 +150,6 @@ composeCompiler {
 
 dependencies {
     // Kotlin extensions
-    implementation("org.jetbrains.kotlin:kotlin-reflect:${AndroidConfig.kotlinVersion}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
@@ -188,14 +187,6 @@ dependencies {
     implementation("io.insert-koin:koin-android:4.2.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
 
-    // Firebase
-
-    // Web API client
-    implementation("com.google.code.gson:gson:2.14.0")
-    implementation("com.squareup.retrofit2:retrofit:3.0.0")
-    implementation("com.squareup.retrofit2:converter-gson:3.0.0")
-    implementation("com.squareup.retrofit2:converter-scalars:3.0.0")
-
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
     implementation("com.github.bastienpaulfr:Treessence:1.1.2")
@@ -209,9 +200,6 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
     implementation("androidx.room:room-ktx:${roomVersion}")
-
-    // Script editor
-    implementation(project(":codeview"))
 
     // Shizuku
     implementation("dev.rikka.shizuku:api:${AndroidConfig.shizukuVersion}")
@@ -234,9 +222,6 @@ dependencies {
     debugImplementation("com.plutolib.plugins:bundle-core:2.2.2")
     "previewImplementation"("com.plutolib.plugins:bundle-core-no-op:2.2.2")
     releaseImplementation("com.plutolib.plugins:bundle-core-no-op:2.2.2")
-    debugImplementation("com.plutolib.plugins:network-interceptor-okhttp:2.2.2")
-    "previewImplementation"("com.plutolib.plugins:network-interceptor-okhttp-no-op:2.2.2")
-    releaseImplementation("com.plutolib.plugins:network-interceptor-okhttp-no-op:2.2.2")
 
     // Unit tests
     testImplementation("junit:junit:4.13.2")

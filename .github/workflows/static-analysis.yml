@@ -1,0 +1,78 @@
+name: Static analysis
+
+# Report-only: detekt (Kotlin) and the Dependency Analysis Gradle Plugin (unused / misdeclared
+# dependencies), via scripts/static-analysis.sh. The findings are uploaded as an artifact and
+# summarised on the run; they don't fail the PR. Once the backlog is worked down, drop
+# continue-on-error to start enforcing.
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyse:
+    name: detekt + dependency analysis (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Run detekt and dependency analysis
+        id: analyse
+        continue-on-error: true
+        run: scripts/static-analysis.sh
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Static analysis (report only)"
+            if [ "${{ steps.analyse.outcome }}" != "success" ]; then
+              echo "::warning::A tool failed to run; see the step log."
+              echo "A tool failed to run; see the step log."
+            fi
+            report=build/reports/dependency-analysis/build-health-report.txt
+            if [ -f "$report" ]; then
+              echo "### Dependency analysis"
+              echo '```'
+              head -n 200 "$report"
+              echo '```'
+            fi
+            for f in app/build/reports/detekt/*.md; do
+              if [ -f "$f" ]; then
+                echo "### detekt"
+                head -n 200 "$f"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: static-analysis-reports
+          path: |
+            build/reports/dependency-analysis/
+            app/build/reports/detekt/
+          if-no-files-found: ignore

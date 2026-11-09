@@ -19,7 +19,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "SiphonDSP"
 include ':app'
-include ':codeview'
 include ':hidden-api-stubs'
 include ':hidden-api-impl'
 include ':hidden-api-refined'
