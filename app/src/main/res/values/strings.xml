@@ -358,7 +358,6 @@
     <string name="about_settings">About</string>
     <string name="about_settings_summary">Version, project page, credits</string>
     <string name="credits">Credits</string>
-    <string name="translators">Translators</string>
     <string name="credits_app">App &amp; rootless implementation developed by</string>
     <string name="credits_dsp">Core DSP algorithm library developed by</string>
     <string name="credits_capture">Rootless audio capture (RootlessJamesDSP) by</string>
@@ -369,8 +368,6 @@
     <string name="credits_project_play_page_summary">Search for new updates</string>
     <string name="credits_project_check_update">Check for new updates…</string>
     <string name="credits_project_check_update_summary">Download and install updates if available</string>
-    <string name="credits_project_translate">Contribute translations</string>
-    <string name="credits_project_translate_summary">Help us to translate this app into your language</string>
     <string name="credits_version">Application version</string>
     <string name="credits_build_info">Build info</string>
     <string name="appearance_section_header">Appearance</string>
@@ -541,8 +538,6 @@
     <!-- File intent handler -->
 
     <!-- Translation notice box -->
-    <string name="translation_notice_summary">Please help us to translate this app into your language! Tap here to visit the project site on Crowdin.</string>
-    <string name="translation_notice">Contribute translations</string>
 
     <!-- Self-updates (Root) -->
     <string name="self_update_no_updates">No new updates available at the moment</string>

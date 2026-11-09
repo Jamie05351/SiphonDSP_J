@@ -32,20 +32,6 @@
         android:layout_marginHorizontal="16dp"
         android:orientation="vertical">
 
-        <app.siphondsp.view.Card
-            android:id="@+id/translation_notice"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="1dp"
-            android:layout_marginTop="4dp"
-            android:clickable="true"
-            app:bodyText="@string/translation_notice_summary"
-            app:titleText="@string/translation_notice"
-            app:cardBackground="?attr/colorSurfaceVariant"
-            app:cardMargin="0dp"
-            app:closeButtonVisible="true"
-            app:iconSrc="@drawable/ic_twotone_translate_24dp"
-            app:iconTint="?attr/colorOnSurfaceVariant" />
 
         <app.siphondsp.view.Card
             android:id="@+id/update_notice"

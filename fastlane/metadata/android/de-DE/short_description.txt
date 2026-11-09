@@ -1,1 +1,0 @@
-Systemweite SiphonDSP-Audioverarbeitung für Android-Geräte ohne Root.

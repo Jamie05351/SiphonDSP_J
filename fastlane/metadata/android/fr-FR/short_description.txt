@@ -1,1 +1,0 @@
-Moteur de traitement audio SiphonDSP pour appareils Android non rootés.

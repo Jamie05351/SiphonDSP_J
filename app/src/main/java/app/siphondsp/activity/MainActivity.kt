@@ -137,10 +137,6 @@ class MainActivity : BaseActivity() {
         actionBar?.setDisplayHomeAsUpEnabled(true)
         actionBar?.setHomeButtonEnabled(true)
         actionBar?.setDisplayShowTitleEnabled(true)
-        if(firstBoot) {
-            // Set timer for translation notice (+30m)
-            prefsVar.set(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 1800L)
-        }
 
         // Load main fragment
         dspFragment = DspFragment.newInstance()

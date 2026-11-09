@@ -26,11 +26,9 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
-import app.siphondsp.model.Translator
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.preferences.Preferences
 import com.hippo.unifile.UniFile
-import java.util.Locale
 
 /** The pages of the Settings screen, in the order the root lists them. */
 enum class SettingsPage(@StringRes val title: Int) {
@@ -395,10 +393,6 @@ private fun PermissionRow(title: String, allowed: Boolean) {
 
 @Composable
 private fun AboutPage(actions: SettingsActions) = SettingsColumn {
-    val context = LocalContext.current
-    val translators = remember { Translator.readLanguageMap(context) }
-    var chooseTranslator by remember { mutableStateOf<Pair<String, List<Translator>>?>(null) }
-
     SettingsItem(
         title = stringResource(R.string.credits_version),
         summary = BuildConfig.VERSION_NAME,
@@ -430,48 +424,6 @@ private fun AboutPage(actions: SettingsActions) = SettingsColumn {
         summary = "James Fung (@james34602)",
         onClick = { actions.openUrl("https://github.com/james34602") },
     )
-
-    if (translators.isNotEmpty()) {
-        SettingsCategory(stringResource(R.string.translators))
-        val locale = context.resources.configuration.locales[0]
-        translators.forEach { (cc, people) ->
-            val language = Locale.forLanguageTag(cc).getDisplayLanguage(locale)
-            val region = Locale.forLanguageTag(cc).getDisplayCountry(locale)
-            val title = if (region.isNullOrBlank()) language else "$language ($region)"
-            SettingsItem(
-                title = title,
-                summary = people.joinToString(", ") { it.name },
-                onClick = {
-                    if (people.size == 1) {
-                        actions.openUrl(crowdinProfile(people[0]))
-                    } else {
-                        chooseTranslator = title to people
-                    }
-                },
-            )
-        }
-    }
-
-    chooseTranslator?.let { (title, people) ->
-        AlertDialog(
-            onDismissRequest = { chooseTranslator = null },
-            title = { Text(title) },
-            text = {
-                Column {
-                    people.forEach { person ->
-                        TextButton(onClick = {
-                            chooseTranslator = null
-                            actions.openUrl(crowdinProfile(person))
-                        }) { Text(person.name) }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { chooseTranslator = null }) { Text(stringResource(android.R.string.cancel)) } },
-        )
-    }
 }
-
-private fun crowdinProfile(person: Translator) = "https://crowdin.com/profile/${person.username}"
 
 private const val PROJECT_URL = "https://github.com/Jamie05351/SiphonDSP_J"

@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <plurals name="unsupported_apps">
-        <item quantity="one">%d L\'application non prise en charge a été automatiquement exclues. Appuyez pour plus de détails.</item>
-        <item quantity="other">%d Les applications non prises en charge ont été automatiquement exclues. Appuyez pour plus de détails.</item>
-    </plurals>
-</resources>

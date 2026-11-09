@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <plurals name="unsupported_apps">
-        <item quantity="one">%d la aplicación no soportada ha sido excluida automáticamente. Pulse para más detalles.</item>
-        <item quantity="other">%d Las aplicaciones no soportadas han sido excluidas automáticamente. Pulse para más detalles.</item>
-    </plurals>
-</resources>

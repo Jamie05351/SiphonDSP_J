@@ -135,6 +135,10 @@ Too large for one review, so four stacked PRs.
       "hide navigation bar on scroll" switch (nothing read it), `UpdateManager` and the root
       shell (root builds don't exist), and the About page's Google Play and Crowdin links (no
       such listings). The project link now points at this repository.
+- [x] English only (owner's decision): the 41 translations, the translated store listings in
+      `fastlane/`, the translators credits and their data, and the home page's "contribute
+      translations" notice are removed; the build keeps only English resources, the libraries'
+      included.
 
 ### 7b — One Activity, Compose Navigation, Views removed
 
