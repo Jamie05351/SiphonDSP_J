@@ -69,8 +69,8 @@ fun ConvolverScreen(modifier: Modifier = Modifier) {
     val dsp = rememberBmwDspState()
     val context = LocalContext.current.applicationContext
     val ir = rememberIrState(context)
-    val controls: @Composable (GroupRow) -> Unit = { row -> ConvolverGroup(dsp, ir, row) }
-    val impulse: @Composable (GroupRow) -> Unit = { row -> IrGroup(ir, row) }
+    val controls: @Composable (ConvolverRow) -> Unit = { row -> ConvolverGroup(dsp, ir, row) }
+    val impulse: @Composable (ConvolverRow) -> Unit = { row -> IrGroup(ir, row) }
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
             WorkspaceArtBox(modifier.fillMaxSize()) {
@@ -84,10 +84,10 @@ fun ConvolverScreen(modifier: Modifier = Modifier) {
 }
 
 /** Where one row of a group goes: [y] dp down the group on the head unit, [h] tall. */
-private typealias GroupRow = (y: Int, h: Int) -> Modifier
+private typealias ConvolverRow = (y: Int, h: Int) -> Modifier
 
 /** The stored IR's name, the running engine's view of it, and the import/clear actions. */
-private class IrState(private val context: Context) {
+private class ConvolverIrUiState(private val context: Context) {
     var name by mutableStateOf<String?>(null)
     var status by mutableStateOf<ConvolverStatus?>(null)
     var message by mutableStateOf<String?>(null)
@@ -126,8 +126,8 @@ private class IrState(private val context: Context) {
 }
 
 @Composable
-private fun rememberIrState(context: Context): IrState {
-    val state = remember { IrState(context) }
+private fun rememberIrState(context: Context): ConvolverIrUiState {
+    val state = remember { ConvolverIrUiState(context) }
     var resumed by remember { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
         resumed = true
@@ -145,7 +145,7 @@ private fun rememberIrState(context: Context): IrState {
 }
 
 @Composable
-private fun ConvolverGroup(dsp: BmwDspState, ir: IrState, row: GroupRow) {
+private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: ConvolverRow) {
     ArtGroupHeader(
         title = "Convolver",
         accent = ConvolverAccent,
@@ -178,7 +178,7 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: IrState, row: GroupRow) {
 }
 
 @Composable
-private fun IrGroup(ir: IrState, row: GroupRow) {
+private fun IrGroup(ir: ConvolverIrUiState, row: ConvolverRow) {
     val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { scope.launch { ir.importIr(it) } }
@@ -232,12 +232,12 @@ private fun ActionChip(text: String, enabled: Boolean = true, onClick: () -> Uni
 /** Phone: the two groups side by side when they fit, else stacked; scrolls if too tall. */
 @Composable
 private fun PhoneConvolverPage(
-    left: @Composable (GroupRow) -> Unit,
-    right: @Composable (GroupRow) -> Unit,
+    left: @Composable (ConvolverRow) -> Unit,
+    right: @Composable (ConvolverRow) -> Unit,
     modifier: Modifier,
 ) {
-    val stack: GroupRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
-    val group: @Composable (@Composable (GroupRow) -> Unit) -> Unit = { content ->
+    val stack: ConvolverRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+    val group: @Composable (@Composable (ConvolverRow) -> Unit) -> Unit = { content ->
         Column(Modifier.width(GroupWidth.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content(stack) }
     }
     BoxWithConstraints(modifier.fillMaxSize()) {
