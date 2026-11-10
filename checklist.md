@@ -184,7 +184,8 @@ Too large for one review, so five stacked PRs.
       drives the app's new non-shrunk `benchmark` build type through start-up and the front page,
       with the setup permissions granted over shell. `baseline-profile.yml` runs it on an API 34
       x86_64 emulator (the app built with `-Psiphon.extraAbis=x86_64`; shipped APKs stay arm64)
-      and uploads the profile, to be copied over `app/src/main/baseline-prof.txt`. The app has
+      and uploads the profile; a manual run also commits it as `app/src/main/baseline-prof.txt`
+      on the branch `baseline-profile/update`, ready for a PR. The app has
       `profileinstaller`, so the profile applies on the head unit's sideloaded installs. The
       Baseline Profile Gradle plugin isn't used: its support for AGP 9 couldn't be confirmed.
 

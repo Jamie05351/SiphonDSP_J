@@ -1,8 +1,9 @@
 name: Baseline Profile
 
 # Generates the app's Baseline Profile on an x86_64 emulator (API 34) with :baselineprofile and
-# uploads it. To ship it, copy the artifact's *-baseline-prof.txt over
-# app/src/main/baseline-prof.txt. The app is built with x86_64 added for the emulator; the head
+# uploads it. A manual run (Actions -> Baseline Profile -> Run workflow) also commits it as
+# app/src/main/baseline-prof.txt on the branch baseline-profile/update, for a PR; PR runs only
+# check that generation works. The app is built with x86_64 added for the emulator; the head
 # unit's APK stays arm64 only.
 on:
   workflow_dispatch:
@@ -74,3 +75,52 @@ jobs:
             baselineprofile/build/outputs/connected_android_test_additional_output/**
             baselineprofile/build/outputs/androidTest-results/**
           if-no-files-found: warn
+
+  # Manual runs only: commit the new profile to its own branch, ready for a PR. PR runs stay
+  # read-only (this job doesn't run for them).
+  publish:
+    name: Push the profile to a branch (manual runs)
+    needs: generate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the profile
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: baseline-profile
+          path: profile-artifact
+
+      - name: Commit it to baseline-profile/update
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          profile="$(find profile-artifact -name '*-baseline-prof.txt' | head -n 1)"
+          if [ -z "$profile" ]; then
+            echo "::error::The artifact has no *-baseline-prof.txt"
+            exit 1
+          fi
+          target=app/src/main/baseline-prof.txt
+          cp "$profile" "$target"
+          if git ls-files --error-unmatch "$target" >/dev/null 2>&1 && git diff --quiet -- "$target"; then
+            echo "The profile hasn't changed; nothing to push." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch=baseline-profile/update
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add "$target"
+          git commit -m "Baseline Profile regenerated (run $RUN_ID)"
+          # A branch only this job writes: each run replaces the previous one.
+          git push --force origin "$branch"
+          echo "Profile pushed to \`$branch\`. Open a PR: https://github.com/$REPO/compare/$BASE...$branch" >> "$GITHUB_STEP_SUMMARY"

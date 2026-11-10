@@ -1,7 +1,7 @@
 // Generates the app's Baseline Profile (app/src/main/baseline-prof.txt) on a device or emulator:
 //   ./gradlew :baselineprofile:connectedBenchmarkAndroidTest -Psiphon.extraAbis=x86_64
-// (the ABI only for an x86_64 emulator). CI runs it in baseline-profile.yml and uploads the
-// profile; copy it over app/src/main/baseline-prof.txt to ship it.
+// (the ABI only for an x86_64 emulator). CI runs it in baseline-profile.yml; a manual run there
+// commits the profile as app/src/main/baseline-prof.txt on the branch baseline-profile/update.
 plugins {
     id("com.android.test")
 }
