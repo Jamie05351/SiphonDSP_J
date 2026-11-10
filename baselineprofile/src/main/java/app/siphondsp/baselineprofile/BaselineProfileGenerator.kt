@@ -20,7 +20,9 @@ class BaselineProfileGenerator {
     val rule = BaselineProfileRule()
 
     @Test
-    fun startup() = rule.collect(packageName = PACKAGE, includeInStartupProfile = true) {
+    // includeInStartupProfile stays off: with it, this Macrobenchmark writes only a startup
+    // profile (for dex layout) and no -baseline-prof.txt, which is the file the app ships.
+    fun startup() = rule.collect(packageName = PACKAGE, includeInStartupProfile = false) {
         grantSetupPermissions()
         pressHome()
         startActivityAndWait()
