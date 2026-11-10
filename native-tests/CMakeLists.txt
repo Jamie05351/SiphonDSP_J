@@ -12,7 +12,7 @@
 # and scripts/run-native-tests.sh.
 
 cmake_minimum_required(VERSION 3.22)
-project(siphondsp-native-tests LANGUAGES CXX)
+project(siphondsp-native-tests LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,9 +29,13 @@ add_compile_options(-Wno-misleading-indentation)
 
 set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/engine)
 
+include(${WRAPPER_DIR}/third_party/pffft/pffft.cmake)
+
 # The engine as it ships (everything but the JNI file), shared by every target here.
 set(ENGINE_SOURCES
     drwav_impl.cpp
+    ${PFFFT_DOUBLE_SOURCES}
+    ${WRAPPER_DIR}/NativeBmwConvolver.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessor.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessorConfig.cpp
     ${WRAPPER_DIR}/NativeBmwFilters.cpp
@@ -64,6 +68,7 @@ add_executable(native_tests
     flush_to_zero_test.cpp
     ramps_test.cpp
     output_guard_test.cpp
+    convolver_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.
@@ -79,6 +84,8 @@ target_include_directories(native_tests PRIVATE
 # defaultConfig(). Baked in so the binary finds it regardless of the working directory.
 target_compile_definitions(native_tests PRIVATE
     NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
+    # Scratch files (convolver_test.cpp's WAV IRs).
+    NBTEST_TMP_DIR="${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 # The engine's measured frequency response for the app's graph-model check (see

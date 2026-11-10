@@ -453,6 +453,17 @@ class DspEngine(val context: Context) : AutoCloseable {
         return result
     }
 
+    /** Loads the WAV IR at [path] into the convolver. Null on success, else why not. */
+    fun loadConvolverIr(path: String): String? =
+        withSharedHandle<String?>("DSP engine unavailable") { NativeDsp.loadConvolverIr(it, path) }
+
+    fun clearConvolverIr() = withSharedHandle { NativeDsp.clearConvolverIr(it) }
+
+    /** What the convolver is running; null with no native handle. */
+    fun convolverStatus(): ConvolverStatus? = withSharedHandle<ConvolverStatus?>(null) { handle ->
+        NativeDsp.getConvolverInfo(handle)?.let { ConvolverStatus.fromNative(it, NativeDsp.getConvolverError(handle)) }
+    }
+
     /** See [NativeDsp.readNativeBmwMeter]. */
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { NativeDsp.readNativeBmwMeter(it, kind, out) }

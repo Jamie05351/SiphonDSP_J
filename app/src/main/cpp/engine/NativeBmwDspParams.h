@@ -46,6 +46,9 @@ struct Params {
     // v[305]: harmonics kept up to this x the cut; v[306]: detector release, ms.
     float virtualBassRange = 5.f;
     float virtualBassResponseMs = 200.f;
+    // Convolver (v[307..308]): on/off (off is a crossfaded bypass) and the IR gain trim, dB.
+    bool convolverEnabled = false;
+    float convolverGainDb = 0.f;
     float highGainL = 0, highGainR = 0, highDelayL = 0, highDelayR = 0;
     float tiltAmount = 3, tiltFreq = 550;
     // Octaves to shift the measurement-mute bus brick-wall off the crossover, into the
