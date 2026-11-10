@@ -4,27 +4,7 @@
         <attr name="stacked" format="boolean" />
     </declare-styleable>
 
-    <declare-styleable name="MaterialSeekbarPreference">
-        <attr name="seekBarIncrement" />
-        <attr name="showSeekBarValue" />
-        <attr name="updatesContinuously" />
-        <attr name="seekBarStyle" format="reference" />
-        <attr name="minValue" format="float" />
-        <attr name="maxValue" format="float" />
-        <attr name="unit" format="string" />
-        <attr name="precision" format="integer" />
-        <attr name="labelMinWidth" format="dimension" />
-    </declare-styleable>
-
-    <declare-styleable name="DropDownPreference">
-        <attr name="isStatic" format="boolean" />
-    </declare-styleable>
-
     <attr name="iconTint" format="color" />
-
-    <declare-styleable name="IconPreference">
-        <attr name="iconTint" />
-    </declare-styleable>
 
     <declare-styleable name="Card">
         <attr name="titleText" format="string" />

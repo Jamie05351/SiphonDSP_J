@@ -10,7 +10,7 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 - Each PR is opened only after the previous one is green (Build APKs, NEON parity, review
   addressed) and only needs merging.
 - The PRs are **stacked**: each branch starts from the previous PR's branch, so they share no
-  conflicting hunks. **Merge them in order (1 → 7) with merge commits** (not squash). After a
+  conflicting hunks. **Merge them in order (1 → 7d) with merge commits** (not squash). After a
   PR merges, the next one's diff shrinks to just its own changes.
 - A box is ticked when its PR is green and ready to merge.
 
@@ -22,7 +22,10 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 |
 | 5 | Graphs checked against the native engine | `ccr-efec0dfc-native-curves` | in progress |
 | 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
-| 7 | Full Compose migration + Baseline Profile | `ccr-efec0dfc-compose` | — |
+| 7a | Compose: Settings and the app's own screens | `ccr-efec0dfc-compose` | — |
+| 7b | Compose: one Activity, Compose Navigation, Views removed | `ccr-efec0dfc-compose-nav` | — |
+| 7c | Settings in DataStore | `ccr-efec0dfc-datastore` | — |
+| 7d | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
 
 ## PR 1 — Engine core: JamesDSP removed
 
@@ -115,12 +118,40 @@ Gradle files.
 
 ## PR 7 — Full Compose migration + Baseline Profile
 
+Too large for one review, so four stacked PRs.
+
+### 7a — Settings and the app's own screens in Compose
+
+- [x] 7.2 Settings (every page), Onboarding, Blocklist (with its app picker), App
+      compatibility, Measurement capture (its response chart redrawn in Compose) and the
+      Limitations page are Compose screens, on shared setting rows that read the preferences
+      live.
+- [x] Removed with them: the Preference-library screens and the AndroidX Preference
+      dependency, the custom Preference widgets, the Fragments and RecyclerView adapters of
+      these screens, the blocklist `ViewModel`'s LiveData (the screen reads Room's Flow), and the
+      layouts.
+- [x] Removed, not ported: the Appearance page (app themes, pure black, custom colour and dark
+      mode only restyled the View screens; every screen is now the fixed dark dashboard), the
+      "hide navigation bar on scroll" switch (nothing read it), `UpdateManager` and the root
+      shell (root builds don't exist), and the About page's Google Play and Crowdin links (no
+      such listings). The project link now points at this repository.
+- [x] English only (owner's decision): the 41 translations, the translated store listings in
+      `fastlane/`, the translators credits and their data, and the home page's "contribute
+      translations" notice are removed; the build keeps only English resources, the libraries'
+      included.
+
+### 7b — One Activity, Compose Navigation, Views removed
+
 - [ ] 7.1 One Activity with Compose Navigation.
-- [ ] 7.2 Settings pages, Onboarding, Blocklist, App compatibility, Measurement capture and the
-      remaining screens in Compose.
+- [ ] 7.4 Remove Fragments, `ViewPager2`, view/data binding, LiveData, `LocalBroadcastManager`
+      and the hand-painted View drawables.
+
+### 7c — Settings in DataStore
+
 - [ ] 7.3 Settings stored in DataStore (migrated from SharedPreferences on first launch).
-- [ ] 7.4 Remove Fragments, `ViewPager2`, view/data binding, LiveData, `LocalBroadcastManager`,
-      the AndroidX Preference library and the hand-painted View drawables.
+
+### 7d — Baseline Profile
+
 - [ ] 7.5 Baseline Profile module and a CI job that generates it on an emulator.
 
 ## Deferred (not this round)

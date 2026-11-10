@@ -2,7 +2,6 @@
 <resources>
     <!-- Internal -->
     <string name="key_first_boot" translatable="false">first_boot</string>
-    <string name="key_snooze_translation_notice" translatable="false">snooze_translation_notice</string>
     <string name="key_android15_screenrecord_restriction_seen" translatable="false">android15_screenrecord_restriction_seen</string>
     <string name="key_update_check_timeout" translatable="false">update_check_timeout</string>
     <string name="key_update_check_skip" translatable="false">update_check_skip</string>
@@ -20,7 +19,6 @@
     <string name="key_misc" translatable="false">misc</string>
     <string name="key_backup" translatable="false">backup</string>
     <string name="key_about" translatable="false">about</string>
-    <string name="key_translators" translatable="false">translators</string>
 
     <!-- Settings -->
     <string name="key_session_exclude_restricted" translatable="false">session_exclude_restricted</string>
@@ -39,12 +37,6 @@
     <string name="key_device_profiles_enable" translatable="false">device_profiles_enable</string>
 
     <!-- Appearance -->
-    <string name="key_appearance_theme_mode" translatable="false">appearance_theme_mode</string>
-    <string name="key_appearance_pure_black" translatable="false">appearance_pure_black</string>
-    <string name="key_appearance_app_theme" translatable="false">appearance_app_theme</string>
-    <string name="key_appearance_custom_color" translatable="false">appearance_custom_color</string>
-    <string name="key_appearance_nav_hide" translatable="false">appearance_nav_hide</string>
-    <string name="key_appearance_show_icons" translatable="false">appearance_show_icons</string>
 
     <!-- Backups -->
     <string name="key_backup_frequency" translatable="false">backup_frequency</string>

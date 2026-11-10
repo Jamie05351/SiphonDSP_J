@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -59,7 +58,6 @@ import app.siphondsp.view.LevelReadout
 import app.siphondsp.view.StaticPagerAdapter
 import org.koin.android.ext.android.inject
 import timber.log.Timber
-import java.util.Locale
 
 class DspFragment : Fragment() {
     private val prefsVar: Preferences.Var by inject()
@@ -244,12 +242,6 @@ class DspFragment : Fragment() {
                 addAction(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
             },
         )
-        shortcutsBinding.translationNotice.setOnCloseClickListener(::hideTranslationNotice)
-        shortcutsBinding.translationNotice.setOnRootClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, "https://crowdin.com/project/siphondsp".toUri()))
-            hideTranslationNotice()
-        }
-
         shortcutsBinding.updateNotice.setOnCloseClickListener {
             updateNoticeOnCloseClick?.invoke()
         }
@@ -258,10 +250,6 @@ class DspFragment : Fragment() {
         }
 
         // Should show notice?
-        Timber.e(Locale.getDefault().language.toString())
-        shortcutsBinding.translationNotice.isVisible =
-           prefsVar.get<Long>(R.string.key_snooze_translation_notice) < (System.currentTimeMillis() / 1000L) &&
-                    !Locale.getDefault().language.equals("en")
         shortcutsBinding.updateNotice.isVisible = false
 
         val transition = LayoutTransition()
@@ -357,12 +345,6 @@ class DspFragment : Fragment() {
     private fun ComposeView.setHomeContent(content: @Composable () -> Unit) {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent { BmwDspTheme { content() } }
-    }
-
-    private fun hideTranslationNotice() {
-        shortcutsBinding.translationNotice.isVisible = false
-        // Set timer +1y
-        prefsVar.set<Long>(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 31536000L)
     }
 
     /**

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <plurals name="unsupported_apps">
-        <item quantity="one">%d nepodporovaná aplikace byla automaticky vyloučena. Klepněte pro podrobnosti.</item>
-        <item quantity="few">%d nepodporované aplikace byly automaticky vyloučeny. Klepněte pro podrobnosti.</item>
-        <item quantity="many">%d nepodporovaných aplikací bylo automaticky vyloučeno. Klepněte pro podrobnosti.</item>
-        <item quantity="other">%d nepodporovaných aplikací bylo automaticky vyloučeno. Klepněte pro podrobnosti.</item>
-    </plurals>
-</resources>

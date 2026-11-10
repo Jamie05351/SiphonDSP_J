@@ -106,8 +106,8 @@
          window so the workspace shows through, matching the 40% glass value/title boxes on those
          pages; the scrim is dropped to 0.2 so that translucency is actually visible. Title,
          field and buttons still resolve against fully-opaque on-surface colours; only the
-         panel is translucent. Not wired via alertDialogTheme because BaseActivity re-applies the
-         base Theme.SiphonDSP at runtime (ThemingDelegate), which would clobber it. -->
+         panel is translucent. Passed per dialog rather than wired via alertDialogTheme, which every
+         other dialog uses. -->
     <style name="AppTheme.AlertDialogTheme.Workspace" parent="@style/AppTheme.AlertDialogTheme">
         <item name="android:windowBackground">@drawable/bg_workspace_dialog</item>
         <item name="colorBackgroundFloating">@color/bmw_workspace_dialog_surface</item>

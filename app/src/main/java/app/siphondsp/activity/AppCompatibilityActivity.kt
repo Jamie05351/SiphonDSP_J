@@ -1,40 +1,86 @@
 package app.siphondsp.activity
 
-import android.annotation.SuppressLint
+import android.app.NotificationManager
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.getSystemService
+import androidx.lifecycle.lifecycleScope
 import app.siphondsp.R
-import app.siphondsp.databinding.ActivityAppCompatibilityBinding
-import app.siphondsp.fragment.AppCompatibilityFragment
+import app.siphondsp.compose.screens.AppCompatibilityScreen
+import app.siphondsp.compose.theme.BmwDspTheme
+import app.siphondsp.model.room.BlockedApp
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.utils.SdkCheck
 import app.siphondsp.utils.extensions.CompatExtensions.getParcelableAs
+import app.siphondsp.utils.extensions.ContextExtensions.getAppIcon
+import app.siphondsp.utils.extensions.ContextExtensions.getAppNameFromUidSafe
+import app.siphondsp.utils.extensions.ContextExtensions.getPackageNameFromUid
+import app.siphondsp.utils.notifications.Notifications
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import timber.log.Timber
 
+/**
+ * Opened from the "incompatible app" notification ([AppCompatibilityScreen]): retry the capture,
+ * or exclude the app that broke it and restart.
+ */
 class AppCompatibilityActivity : BaseActivity() {
-    @SuppressLint("InlinedApi")
+
+    private var busy by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val binding = ActivityAppCompatibilityBinding.inflate(layoutInflater)
-
-        setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
-
-        if (savedInstanceState == null) {
-            val uid = intent.extras?.getInt(RootlessAudioProcessorService.EXTRA_APP_UID, -1) ?: -1
-            val internalCall = intent.extras?.getBoolean(RootlessAudioProcessorService.EXTRA_APP_COMPAT_INTERNAL_CALL, false) ?: false
-            val projectIntent = intent.extras?.getParcelableAs<Intent>(RootlessAudioProcessorService.EXTRA_MEDIA_PROJECTION_DATA)
-            if(uid < 0) {
-                finish()
-                return
-            }
-
-            supportFragmentManager
-                .beginTransaction()
-                .replace(R.id.fragment, AppCompatibilityFragment.newInstance(uid, projectIntent, internalCall))
-                .commit()
+        val uid = intent.getIntExtra(RootlessAudioProcessorService.EXTRA_APP_UID, -1)
+        if (uid < 0) {
+            finish()
+            return
         }
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        val internalCall = intent.getBooleanExtra(RootlessAudioProcessorService.EXTRA_APP_COMPAT_INTERNAL_CALL, false)
+        val projection = intent.extras?.getParcelableAs<Intent>(RootlessAudioProcessorService.EXTRA_MEDIA_PROJECTION_DATA)
+
+        getSystemService<NotificationManager>()?.cancel(Notifications.ID_SERVICE_APPCOMPAT)
+
+        val appPackage = getPackageNameFromUid(uid) ?: getString(R.string.app_compat_unknown_pkg_name)
+        val appName = getAppNameFromUidSafe(uid)
+        val icon = getAppIcon(appPackage) ?: getAppIcon("android")
+
+        fun restartAndClose(afterMs: Long) {
+            busy = true
+            lifecycleScope.launch {
+                delay(afterMs)
+                if (projection != null && SdkCheck.isQ) RootlessAudioProcessorService.start(this@AppCompatibilityActivity, projection)
+                delay(CLOSE_DELAY_MS)
+                if (internalCall) startActivity(Intent(this@AppCompatibilityActivity, MainActivity::class.java))
+                finish()
+            }
+        }
+
+        setContent {
+            BmwDspTheme {
+                AppCompatibilityScreen(
+                    appName = appName,
+                    packageName = appPackage,
+                    icon = icon,
+                    busy = busy,
+                    onOpenApp = { packageManager.getLaunchIntentForPackage(appPackage)?.let { startActivity(it) } },
+                    onRetry = {
+                        Timber.d("Requesting retry")
+                        restartAndClose(afterMs = 0L)
+                    },
+                    onExclude = {
+                        Timber.d("Requesting exclude of $appPackage")
+                        lifecycleScope.launch { app.blockedAppRepository.insert(BlockedApp(uid, appPackage, appName)) }
+                        restartAndClose(afterMs = EXCLUDE_DELAY_MS)
+                    },
+                    onBack = ::finish,
+                )
+            }
+        }
     }
 
     override fun onPause() {
@@ -50,5 +96,11 @@ class AppCompatibilityActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         prefsVar.set(R.string.key_is_app_compat_activity_active, true)
+    }
+
+    private companion object {
+        // Exclude: give the blocklist insert a moment before the service restarts and reads it.
+        const val EXCLUDE_DELAY_MS = 100L
+        const val CLOSE_DELAY_MS = 300L
     }
 }

@@ -7,7 +7,7 @@ import kotlin.math.log10
  * Post-hoc frequency-response comparison for a finished measurement capture -- reads the two
  * exported WAV files back (the same bytes the user could inspect externally), Welch-averages
  * several windows' power spectra per side, and returns per-bin dB curves for
- * [app.siphondsp.view.MeasurementResponseView] to plot.
+ * [app.siphondsp.compose.screens.MeasurementResponseChart] to plot.
  */
 object MeasurementSpectrumAnalyzer {
     const val WINDOW_SIZE = 2048
