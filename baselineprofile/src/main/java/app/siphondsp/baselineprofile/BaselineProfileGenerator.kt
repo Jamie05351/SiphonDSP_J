@@ -8,6 +8,7 @@ import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.regex.Pattern
 
 /**
  * Records the classes and methods the app's start-up and front page use, for
@@ -44,14 +45,27 @@ class BaselineProfileGenerator {
         }
     }
 
+    /**
+     * Taps Cancel on SystemUI's MediaProjection dialog, if it showed up. The match is the dialog's
+     * own button, not just any SystemUI view: the status and navigation bars are SystemUI too,
+     * and a Back meant for the dialog would otherwise leave the app. Then waits for the front
+     * page to be the app's window again.
+     */
     private fun MacrobenchmarkScope.dismissCapturePrompt() {
-        // SystemUI's MediaProjection dialog; absent if the app didn't ask.
-        val prompt = device.wait(Until.findObject(By.pkg("com.android.systemui")), PROMPT_TIMEOUT_MS)
-        if (prompt != null) device.pressBack()
+        val cancel = device.wait(
+            Until.findObject(By.pkg(SYSTEM_UI).text(Pattern.compile("(?i)cancel"))),
+            PROMPT_TIMEOUT_MS,
+        )
+        cancel?.click()
+        check(device.wait(Until.hasObject(By.pkg(PACKAGE).depth(0)), APP_TIMEOUT_MS)) {
+            "The app's window isn't showing after the capture prompt"
+        }
     }
 
     private companion object {
         const val PACKAGE = "app.siphondsp"
+        const val SYSTEM_UI = "com.android.systemui"
         const val PROMPT_TIMEOUT_MS = 5_000L
+        const val APP_TIMEOUT_MS = 10_000L
     }
 }
