@@ -67,7 +67,8 @@ bool loadConvolverIrWav(const char* path, ConvolverIr& out, std::string& error);
 bool resampleConvolverIr(const ConvolverIr& in, double targetRate, ConvolverIr& out,
                          std::string& error);
 // Peak magnitude of the IR's frequency response across both channels, dB (0 = unity at its
-// loudest frequency). Off the audio thread; allocates.
+// loudest frequency; -200 for a silent IR). NaN if it couldn't be measured (allocation failed).
+// Off the audio thread; allocates.
 double convolverIrPeakGainDb(const ConvolverIr& ir);
 
 // An IR transformed into partition spectra plus the running convolution state for both

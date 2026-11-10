@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <new>
 #include "third_party/dr_wav.h"
 #include "third_party/pffft/pffft_double.h"
@@ -246,8 +247,11 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     // On the heap: with a null work buffer PFFFT puts n doubles of scratch on the stack -- 1 MiB
     // for a 65536-tap IR, an overflow on an Android control thread.
     double* work = allocAligned(static_cast<std::size_t>(n));
-    double peak = 0.0;
+    // NaN when it couldn't be measured (allocation failed): never mistaken for a quiet IR, whose
+    // -200 dB would lift the stage's unity cap.
+    double peak = std::numeric_limits<double>::quiet_NaN();
     if (setup != nullptr && buf != nullptr && spec != nullptr && work != nullptr) {
+        peak = 0.0;
         for (int c = 0; c < (ir.stereo() ? 2 : 1); ++c) {
             const auto& h = c == 0 ? ir.left : ir.right;
             std::memset(buf, 0, sizeof(double) * static_cast<std::size_t>(n));
@@ -265,6 +269,9 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     pffftd_aligned_free(buf);
     if (setup != nullptr) {
         pffftd_destroy_setup(setup);
+    }
+    if (std::isnan(peak)) {
+        return peak;
     }
     return peak > 0.0 ? 20.0 * std::log10(peak) : -200.0;
 }
@@ -339,6 +346,11 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
         }
     }
     k->peakGainDb_ = convolverIrPeakGainDb(ir);
+    if (std::isnan(k->peakGainDb_)) {
+        // Without the peak there is no unity cap: refuse rather than run uncapped after the limiter.
+        error = "Out of memory measuring the IR";
+        return nullptr;
+    }
     k->maxGain_ = std::pow(10.0, -k->peakGainDb_ / 20.0);
     k->reset();
     return k;
