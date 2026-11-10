@@ -72,6 +72,10 @@ jobs:
         run: |
           set -euo pipefail
           out=baselineprofile/build/outputs/connected_android_test_additional_output
+          if [ ! -d "$out" ]; then
+            echo "::error::The generator wrote no additional output at all ($out is missing)."
+            exit 1
+          fi
           profile="$(find "$out" -type f -name '*-baseline-prof*.txt' | sort | tail -n 1)"
           if [ -z "$profile" ]; then
             echo "::error::The generator wrote no *-baseline-prof*.txt. Its output:"
