@@ -226,6 +226,8 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
      * [commitPreview] saves once. Offline (no engine) it only updates the snapshot.
      */
     fun previewBandEdit(index: Int, source: String, transform: (ParametricEqBand) -> ParametricEqBand) {
+        // The state before this run of previews: what a failed [commitPreview] goes back to.
+        if (previewBase == null) previewBase = peqState
         val candidate = peqState.deepCopy()
         val list = PeqBandEditor.bandsFor(candidate, selectedScope)
         if (index !in list.indices) return
@@ -244,10 +246,24 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         peqState = previewed
     }
 
-    /** Saves the state [previewBandEdit] left (pushed again and persisted, as [applyCandidate]). */
+    /**
+     * Saves the state [previewBandEdit] left (pushed again and persisted, as [applyCandidate]). If
+     * that fails, goes back to the state from before the previews -- in the engine too, which was
+     * already running them -- so "previous state remains active" is true and no unsaved edit is
+     * left playing until a restart drops it.
+     */
     fun commitPreview(source: String) {
-        applyCandidate(peqState, source)
+        val base = previewBase
+        previewBase = null
+        if (applyCandidate(peqState, source) || base == null) return
+        if (RootlessAudioProcessorService.nativeBmwPeqHandleReady() == true) {
+            RootlessAudioProcessorService.previewNativeBmwPeq(base)
+        }
+        peqState = base
     }
+
+    // Set by the first [previewBandEdit] of a −/+ tap or hold, cleared by [commitPreview].
+    private var previewBase: BmwPeqState? = null
 
     fun setPreamp(preampDb: Float) {
         applyCandidate(peqState.deepCopy().copy(preampDb = preampDb), "preamp")
