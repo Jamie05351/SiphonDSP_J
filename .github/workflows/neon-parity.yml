@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - master
+      - head-unit
     paths:
       - app/src/main/cpp/engine/**
       - native-tests/**
@@ -17,6 +18,7 @@ on:
   push:
     branches:
       - master
+      - head-unit
     paths:
       - app/src/main/cpp/engine/**
       - native-tests/**

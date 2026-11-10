@@ -65,12 +65,13 @@ internal object ChainSweep {
  * all the same length ([gap]).
  *
  * The tiles take up the screen's width: with the lines at [ChainGap], they share what is left,
- * never narrower than [CardWidth] nor wider than [MaxCardWidth]. Past that the lines grow instead.
+ * never narrower than [CardWidth] nor wider than [maxCardWidth]. Past that the lines grow instead.
+ * The launcher passes [CardWidth] as [maxCardWidth], so its tiles keep the front page's exact shape.
  */
-internal class ChainLayout(val width: Float) {
+internal class ChainLayout(val width: Float, maxCardWidth: Float = MaxCardWidth) {
     private val tiles = HomeStage.entries.size
     private val room = width - 2 * ChainPad - NodeSize - OutSize
-    val cardWidth = ((room - (tiles + 1) * ChainGap) / tiles).coerceIn(CardWidth, MaxCardWidth)
+    val cardWidth = ((room - (tiles + 1) * ChainGap) / tiles).coerceIn(CardWidth, maxCardWidth)
     val gap = (room - tiles * cardWidth) / (tiles + 1)
     val powerX = ChainPad + NodeSize / 2
     val outX = width - ChainPad - OutSize / 2

@@ -50,6 +50,8 @@ internal object HomePalette {
     val Panel = Color(0xFF050506)
     val PanelEdge = Color(0xFF2A2C31)
     val TileBase = Color(0xFF0A0A0D)
+    // How opaque the fill of a launcher tile is, so the wallpaper shows through; edges stay solid.
+    const val TileFillAlpha = 0.65f
     val Label = Color(0xFF7A7F8A)
     val Dim = Color(0xFF5A5F6A)
     val Muted = Color(0xFF6B707A)

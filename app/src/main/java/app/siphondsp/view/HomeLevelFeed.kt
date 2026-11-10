@@ -10,9 +10,10 @@ import app.siphondsp.audio.SpectrumEngine
  * LED rows) and to [onReadout] every [READOUT_EVERY] frames (about 5 a second, slow enough for
  * numbers to be read); both get [LevelReadout.SILENT] when it stops.
  *
- * The analyzer thread only runs while something holds [SpectrumEngine.acquire]; this holds it
- * only while [running] is true, which the front page sets while it is resumed and on the artwork
- * page, so nothing extra runs once the user has moved on to a DSP screen or the settings page.
+ * The analyzer thread only runs while something holds it. This holds it for the levels alone
+ * ([SpectrumEngine.acquireLevels]: none of a graph's spectrum FFTs), and only while [running]
+ * is true, which the front page sets while it is resumed and on the artwork page, so nothing
+ * extra runs once the user has moved on to a DSP screen or the settings page.
  */
 class HomeLevelFeed(
     private val onFrame: (LevelReadout) -> Unit,
@@ -48,13 +49,13 @@ class HomeLevelFeed(
         }
 
     private fun start() {
-        SpectrumEngine.acquire()
+        SpectrumEngine.acquireLevels()
         handler.post(tick)
     }
 
     private fun stop() {
         handler.removeCallbacks(tick)
-        SpectrumEngine.release()
+        SpectrumEngine.releaseLevels()
         leftMeter.reset()
         rightMeter.reset()
         ticksSinceReadout = 0

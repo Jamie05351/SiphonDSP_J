@@ -64,7 +64,8 @@ object SpectrumEngine {
     // the consumer hasn't taken yet, as the old single-slot mailbox did.
     private const val SLOT_MASK = 0b011
     private const val FRESH = 0b100
-    // Allocated on the first acquire() (main thread), before any producer can see isActive.
+    // Allocated on the first acquire() or acquireLevels() (main thread), before any producer can
+    // see isActive.
     @Volatile private var frames: Array<Frame>? = null
     private val middle = AtomicInteger(1)
     private var back = 0   // producer (audio thread) only
@@ -74,7 +75,15 @@ object SpectrumEngine {
 
     @Volatile
     private var activationCount = 0
-    val isActive: Boolean get() = activationCount > 0
+
+    // Holders that only want the L/R levels (the home screen's meters): they need the feed and the
+    // analyzer thread, but not the two 16384-point FFTs a graph needs, which they'd otherwise run
+    // for as long as the home screen shows.
+    @Volatile
+    private var levelsOnlyCount = 0
+
+    /** Whether the audio thread should publish buffers: a graph or a level meter is showing. */
+    val isActive: Boolean get() = activationCount > 0 || levelsOnlyCount > 0
 
     /** Copies one buffer's dry (pre-DSP) interleaved samples; call before processing it. */
     fun captureDry(interleaved: FloatBuffer, length: Int) {
@@ -110,7 +119,8 @@ object SpectrumEngine {
     }
 
     private fun producerFrame(): Frame? {
-        if (activationCount <= 0) return null
+        // A graph or a level meter is showing (the meters need the buffers, not the FFTs).
+        if (!isActive) return null
         return frames?.get(back)
     }
 
@@ -143,6 +153,25 @@ object SpectrumEngine {
     fun acquire() {
         if (frames == null) frames = Array(3) { Frame() }
         activationCount++
+        startThread()
+    }
+
+    /** Like [acquire], for the L/R levels only ([channelLevelsInto]): no spectrum is analysed for it. */
+    @Synchronized
+    fun acquireLevels() {
+        if (frames == null) frames = Array(3) { Frame() }
+        levelsOnlyCount++
+        startThread()
+    }
+
+    @Synchronized
+    fun releaseLevels() {
+        if (levelsOnlyCount == 0) return
+        levelsOnlyCount--
+        stopThreadIfUnused()
+    }
+
+    private fun startThread() {
         if (thread == null) {
             running = true
             thread = Thread({ runLoop() }, "SiphonDSP-Spectrum").apply {
@@ -157,7 +186,11 @@ object SpectrumEngine {
     fun release() {
         if (activationCount == 0) return
         activationCount--
-        if (activationCount == 0) {
+        stopThreadIfUnused()
+    }
+
+    private fun stopThreadIfUnused() {
+        if (activationCount == 0 && levelsOnlyCount == 0) {
             running = false
             thread?.interrupt()
             // Wait for the loop to actually exit before returning: it only ever sleeps for 16ms
@@ -185,8 +218,10 @@ object SpectrumEngine {
         while (running) {
             val consumed = drainInto(dryDrain, wetDrain)
             if (consumed > 0) {
-                dryChannel.feed(dryDrain, consumed, fft)
-                wetChannel.feed(wetDrain, consumed, fft)
+                if (activationCount > 0) {
+                    dryChannel.feed(dryDrain, consumed, fft)
+                    wetChannel.feed(wetDrain, consumed, fft)
+                }
                 updateLevelsFromInterleaved(wetDrain, consumed)
             }
             try {

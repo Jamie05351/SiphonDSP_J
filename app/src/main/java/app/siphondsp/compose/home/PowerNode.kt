@@ -31,12 +31,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
 import app.siphondsp.R
+import app.siphondsp.compose.controls.knobFocusRing
 import app.siphondsp.compose.theme.BmwTheme
 
 /**
  * The DSP power button at the start of the signal chain, with its state and hint under it. Lit
  * purple and glowing while [powered], a dark grey button while bypassed, blending by
  * [globalActive]. The button is centred in the column's height, where the chain's line runs.
+ * Without [caption], the state and hint under it are left out (the launcher's dock).
  */
 @Composable
 fun PowerNode(
@@ -44,6 +46,7 @@ fun PowerNode(
     globalActive: Float,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    caption: Boolean = true,
 ) {
     val s = LocalHomeScale.current
     val g = globalActive
@@ -58,6 +61,7 @@ fun PowerNode(
                     // The glow: a soft purple halo past the rim, gone while bypassed.
                     drawNodeGlow(signal, g, s.dp(NodeGlow).toPx())
                 }
+                .knobFocusRing(s.dp(NodeSize / 2), grow = true)
                 .clip(CircleShape)
                 .toggleable(value = powered, role = Role.Switch, onValueChange = { onToggle() })
                 .semantics { contentDescription = description },
@@ -81,7 +85,7 @@ fun PowerNode(
             }
         }
         // The state and hint, under the button.
-        Column(
+        if (caption) Column(
             Modifier.align(Alignment.Center).offset(y = s.dp(NodeSize / 2 + 30f)),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
