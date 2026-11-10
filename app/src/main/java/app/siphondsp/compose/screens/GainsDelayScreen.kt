@@ -49,6 +49,7 @@ import app.siphondsp.compose.controls.BoxedValue
 import app.siphondsp.compose.controls.CarSpeakerDiagram
 import app.siphondsp.compose.controls.MinusPlusPill
 import app.siphondsp.compose.controls.SpeakerKind
+import app.siphondsp.compose.controls.StepMath
 import app.siphondsp.compose.controls.WorkspaceArtBox
 import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.controls.bmwFocusRing
@@ -338,7 +339,11 @@ private fun MonoBassFreqRow(dsp: BmwDspState, sizing: DelaySizing, headUnit: Boo
                     hz, NativeBmwDspValues.MONO_BASS_STEP_HZ, "Hz", commit,
                 )
             }
-            Stepper("Mono bass frequency", sizing) { dir -> commit(hz + dir * NativeBmwDspValues.MONO_BASS_STEP_HZ) }
+            Stepper(
+                "Mono bass frequency", sizing, dsp, NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
+                NativeBmwDspValues.MONO_BASS_STEP_HZ, NativeBmwDspValues.MONO_BASS_MIN_HZ..NativeBmwDspValues.MONO_BASS_MAX_HZ,
+                snap = ::snapMonoBassHz,
+            )
         }
         if (!enabled) {
             // Swallow taps while Mono Bass is off.
@@ -418,10 +423,9 @@ private fun DriverCard(
                         ) { dsp.commit(delayIndex, it, delayMirror) }
                     }
                 }
-                val step: (Int) -> Unit = { dir ->
-                    dsp.commit(delayIndex, stepped(dsp.get(delayIndex), dir * DelayStepMs, DelayRange), delayMirror)
+                BoxAndStepper(mirrored, box) { gapAfter ->
+                    Stepper("$cardName delay", sizing, dsp, delayIndex, DelayStepMs, DelayRange, gapAfter, delayMirror)
                 }
-                BoxAndStepper(mirrored, "$cardName delay", sizing, box, step)
             }
             CardRow("GAIN", sizing, mirrored) {
                 val box = @Composable {
@@ -431,8 +435,8 @@ private fun DriverCard(
                         ) { dsp.commit(gainIndex, snapGain(it)) }
                     }
                 }
-                BoxAndStepper(mirrored, "$cardName gain", sizing, box) { dir ->
-                    dsp.commit(gainIndex, snapGain(dsp.get(gainIndex) + dir * GainStep))
+                BoxAndStepper(mirrored, box) { gapAfter ->
+                    Stepper("$cardName gain", sizing, dsp, gainIndex, GainStep, GainRange, gapAfter, snap = ::snapGain)
                 }
             }
             CardRow("POLARITY", sizing, mirrored) {
@@ -465,17 +469,15 @@ private fun DriverCard(
 @Composable
 private fun RowScope.BoxAndStepper(
     mirrored: Boolean,
-    label: String,
-    sizing: DelaySizing,
     box: @Composable () -> Unit,
-    onStep: (Int) -> Unit,
+    stepper: @Composable (gapAfter: Boolean) -> Unit,
 ) {
     if (mirrored) {
-        Stepper(label, sizing, gapAfter = true, onStep = onStep)
+        stepper(true)
         box()
     } else {
         box()
-        Stepper(label, sizing, onStep = onStep)
+        stepper(false)
     }
 }
 
@@ -527,18 +529,62 @@ internal fun CardRow(
 }
 
 /**
- * The PEQ list's −/+ pill beside a value box; [onStep] gets -1 or +1. The gap to the box goes
- * before the pill, or after it with [gapAfter] (pill on the box's left).
+ * The app's −/+ pill ([MinusPlusPill]) beside a value box, stepping one DSP config slot. A tap
+ * moves [index] one [step] and saves; holding repeats and accelerates
+ * ([StepMath.holdMultiplier] over [range]), previewing live, and saves once on release. [snap]
+ * puts a stepped value on the control's grid; [mirrors] are written with it. The gap to the box
+ * goes before the pill, or after it with [gapAfter] (pill on the box's left).
  */
 @Composable
-internal fun Stepper(label: String, sizing: DelaySizing, gapAfter: Boolean = false, onStep: (Int) -> Unit) {
+internal fun Stepper(
+    label: String,
+    sizing: DelaySizing,
+    dsp: BmwDspState,
+    index: Int,
+    step: Float,
+    range: ClosedFloatingPointRange<Float>,
+    gapAfter: Boolean = false,
+    mirrors: IntArray = IntArray(0),
+    snap: (Float) -> Float = { it },
+) {
     if (!gapAfter) Spacer(Modifier.width(StepperGap))
     MinusPlusPill(
-        onMinus = { onStep(-1) },
-        onPlus = { onStep(1) },
+        // Every step previews (live in the engine, not saved); the pill commits once after a tap
+        // or at the end of a hold, so a long hold doesn't write the config file on every repeat.
+        onStep = { direction, times ->
+            dsp.preview(index, snap(stepped(dsp.get(index), direction * times * step, range)), mirrors)
+        },
+        onCommit = { dsp.commit(index, dsp.get(index), mirrors) },
         height = sizing.controlHeight,
         halfWidth = sizing.stepperHalfWidth,
         label = label,
+        holdMultiplier = { held -> StepMath.holdMultiplier(held, range, step, musical = false) },
+    )
+    if (gapAfter) Spacer(Modifier.width(StepperGap))
+}
+
+/**
+ * [Stepper] for a value that isn't a DSP config slot (a speaker path length): [onStep] gets the
+ * signed number of [step]s to move -- ±1 for a tap, more per repeat as a hold accelerates over
+ * [range] -- and applies (and saves) it itself.
+ */
+@Composable
+internal fun Stepper(
+    label: String,
+    sizing: DelaySizing,
+    range: ClosedFloatingPointRange<Float>,
+    step: Float,
+    gapAfter: Boolean = false,
+    onStep: (steps: Int) -> Unit,
+) {
+    if (!gapAfter) Spacer(Modifier.width(StepperGap))
+    MinusPlusPill(
+        onStep = { direction, times -> onStep(direction * times) },
+        onCommit = {},
+        height = sizing.controlHeight,
+        halfWidth = sizing.stepperHalfWidth,
+        label = label,
+        holdMultiplier = { held -> StepMath.holdMultiplier(held, range, step, musical = false) },
     )
     if (gapAfter) Spacer(Modifier.width(StepperGap))
 }

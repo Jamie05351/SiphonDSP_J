@@ -230,7 +230,9 @@ private fun AlignRow(
                 geometry.setDistanceCm(id, it)
             }
         }
-        Stepper("$name path", sizing) { dir -> geometry.setDistanceCm(id, stepped(cm, dir * PathStepCm, PathRangeCm)) }
+        Stepper("$name path", sizing, PathRangeCm, PathStepCm) { steps ->
+            geometry.setDistanceCm(id, stepped(cm, steps * PathStepCm, PathRangeCm))
+        }
         Spacer(Modifier.width(TableColumnGap))
         ValueBox(
             AlignFormat.format(alignmentFor(geometry, id)), "ms",

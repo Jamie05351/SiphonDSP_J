@@ -269,10 +269,11 @@ private val CapColor = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private const val StatusPollMs = 1000L
 private const val MaxIrSeconds = "1.36"
 
-// Head-unit layout, in the 1280x480 editor's dp: the Output page's two 333dp columns.
+// Head-unit layout, in the 1280x480 editor's dp: the Output page's two 333dp columns, starting
+// under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder).
 private const val GroupWidth = 333
 private const val LeftX = 317
 private const val RightX = 770
-private const val GroupTop = 44
+private const val GroupTop = 76
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp

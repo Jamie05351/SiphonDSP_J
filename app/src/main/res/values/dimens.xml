@@ -48,7 +48,8 @@
          touch target stays the same width it was before this widening. -->
     <dimen name="dsp_status_strip_margin_start">255dp</dimen>
     <!-- The widest the status strip may draw: from dsp_status_strip_margin_start to just short of
-         the widest page tabs (Compressor's five, WorkspaceArt.finder5, from ~666dp). DspStatusStrip
+         the earliest-starting page finder (WorkspaceArt.finder5 / finder6, from ~666dp). No finder
+         may start before 655dp (255 + 400) or it covers the strip's last cell. DspStatusStrip
          sizes its text to fit its longest possible readout in this. -->
     <dimen name="dsp_status_strip_max_width">400dp</dimen>
     <!-- DspPagerArrows sit on the toolbar's right side but inset this far from the true screen

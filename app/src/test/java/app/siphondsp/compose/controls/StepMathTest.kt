@@ -96,4 +96,15 @@ class StepMathTest {
         // Further steps then move whole grid steps from there.
         assertEquals(0.4f, StepMath.next(0.15f, -9f..9f, 0.1f, +1, musical = false, times = 3), 1e-4f)
     }
+
+    @Test
+    fun theDefaultHoldCurveAcceleratesOneTwoFour() {
+        // The PEQ list's gain and Q, which the pill steps without a range: 1, then 2, then 4.
+        assertEquals(1, StepMath.defaultHoldMultiplier(0L))
+        assertEquals(1, StepMath.defaultHoldMultiplier(999L))
+        assertEquals(2, StepMath.defaultHoldMultiplier(1_000L))
+        assertEquals(2, StepMath.defaultHoldMultiplier(2_499L))
+        assertEquals(4, StepMath.defaultHoldMultiplier(2_500L))
+        assertEquals(4, StepMath.defaultHoldMultiplier(60_000L))
+    }
 }
