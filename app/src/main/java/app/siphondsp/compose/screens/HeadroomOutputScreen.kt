@@ -71,7 +71,8 @@ private typealias GroupRow = (y: Int, h: Int) -> Modifier
  * - **Output**: the Pre EQ Preamp (blue), Headroom (purple) with its Auto switch, Post gain L and
  *   R (green), each a label + value box + −/+ row.
  * - **Limiter** (cyan): the master limiter's on/off switch in the group's header, its Threshold,
- *   and the live gain-reduction meter ([LimiterGrMeter]).
+ *   and the live gain-reduction meter ([LimiterGrMeter]); then **Volume** and **Loudness**, which
+ *   follows the volume in the chain.
  *
  * Each group lists its rows once against a [GroupRow] that the head unit ([HeadUnitOutputPage])
  * or the phone ([PhoneOutputPage]) turns into a position.
@@ -84,11 +85,11 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val headroom = stringResource(R.string.bmw_dsp_headroom)
     val output: @Composable (GroupRow) -> Unit = { row ->
         OutputGroup(dsp, peq, headroom, row)
-        LoudnessGroup(dsp, row)
     }
     val limiter: @Composable (GroupRow) -> Unit = { row ->
         LimiterGroup(dsp, row)
         VolumeGroup(dsp, row)
+        LoudnessGroup(dsp, row)
     }
 
     BmwDspTheme {
@@ -233,13 +234,13 @@ private fun LoudnessGroup(dsp: BmwDspState, row: GroupRow) {
     ArtGroupHeader(
         title = "Loudness",
         accent = LoudnessAccent,
-        modifier = row(332, HeaderHeight),
+        modifier = row(300, HeaderHeight),
         checked = dsp.isOn(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED),
         onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED, if (on) 1f else 0f) },
     )
     DspArtSlider(
         dsp, "Strength", NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH, 0f..100f, 5f, "%", LoudnessAccent,
-        row(384, 48),
+        row(352, 48),
     )
 }
 
@@ -256,7 +257,7 @@ private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
         dsp, "Threshold", NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD, -12f..0f, 0.5f, "dB", LimiterAccent,
         row(52, 48),
     )
-    Column(row(120, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(row(108, 64), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ArtLabel("Gain reduction")
         LimiterGrMeter(Modifier.fillMaxWidth().height(36.dp))
     }
@@ -272,14 +273,14 @@ private fun VolumeGroup(dsp: BmwDspState, row: GroupRow) {
     ArtGroupHeader(
         title = "Volume",
         accent = VolumeAccent,
-        modifier = row(200, HeaderHeight),
+        modifier = row(184, HeaderHeight),
         checked = !dsp.isOn(NativeBmwDspValues.INDEX_MASTER_MUTE),
         onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_MASTER_MUTE, if (on) 0f else 1f) },
     )
     DspArtSlider(
         dsp, "Master", NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
         NativeBmwDspValues.MASTER_VOLUME_MIN_DB..NativeBmwDspValues.MASTER_VOLUME_MAX_DB, 1f, "dB", VolumeAccent,
-        row(252, 48),
+        row(236, 48),
     )
 }
 
@@ -375,13 +376,14 @@ private val VolumeAccent = Color.White
 private val LoudnessAccent = Color(BmwDashboardSkin.SLIDER_TILT_COLOR)
 
 // Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
-// stepper) with 120dp between them, centred across the content area (x 190..1230), and centred
-// vertically on the taller group -- the Output + Loudness column, 432dp with the Preamp and Auto
-// headroom rows (rows 8dp apart instead of 12 to fit). It keeps the 260dp centre line the 340dp
-// column had at 90, so both columns now start at 44 and the Output column ends at 476 of 480.
+// stepper) with 120dp between them, centred across the content area (x 190..1230). Both columns
+// start at 70, just under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder), which
+// they used to run into from 44. To fit below it, Loudness moved from under Output (a 432dp
+// column) to under Volume: Output is 312dp, Limiter + Volume + Loudness 400dp, ending at 470,
+// inside the 8dp bezel. Rows stay 8dp apart.
 private const val GroupWidth = 333
 private const val OutputX = 317
 private const val LimiterX = 770
-private const val GroupTop = 44
+private const val GroupTop = 70
 private const val HeaderHeight = 40
 private val PhoneGroupGap = 60.dp

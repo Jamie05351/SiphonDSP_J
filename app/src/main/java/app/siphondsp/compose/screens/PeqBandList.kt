@@ -59,6 +59,10 @@ private val FreqFmt = DecimalFormat("0.#", DecimalFormatSymbols.getInstance())
 private val GainFmt = DecimalFormat("0.##", DecimalFormatSymbols.getInstance())
 private val QFmt = DecimalFormat("0.##", DecimalFormatSymbols.getInstance())
 
+// One −/+ step of a band's gain and Q (a hold repeats it, up to 4 at a time).
+private const val GainStepDb = 0.5
+private const val QStep = 0.1
+
 private const val WIndex = 0.5f
 private const val WPicker = 1.1f
 private const val WValue = 3.0f
@@ -142,10 +146,13 @@ fun PeqBandList(
                             holder.commitBandEdit(index, "edit_frequency") { it.withFrequency(v) }
                         }
                     },
-                    onFreqStep = { up ->
-                        holder.commitBandEdit(index, "edit_frequency_step") {
+                    // −/+ steps preview (live in the engine, not saved) and the pill commits once after
+                    // a tap or at the end of a hold, so holding doesn't save the PEQ on every repeat.
+                    onFreqStep = { direction, times ->
+                        holder.previewBandEdit(index, "edit_frequency_step") {
                             // Same round-number ladder as every other frequency control.
-                            val next = StepMath.nextFrequency(it.frequency, if (up) +1 else -1)
+                            var next = it.frequency
+                            repeat(times) { next = StepMath.nextFrequency(next, direction) }
                             it.withFrequency(next.coerceIn(20.0, 20000.0))
                         }
                     },
@@ -154,9 +161,9 @@ fun PeqBandList(
                             holder.commitBandEdit(index, "edit_gain") { it.withGain(v) }
                         }
                     },
-                    onGainStep = { delta ->
-                        holder.commitBandEdit(index, "edit_gain_step") {
-                            it.withGain((it.gain + delta).coerceIn(-30.0, 30.0))
+                    onGainStep = { direction, times ->
+                        holder.previewBandEdit(index, "edit_gain_step") {
+                            it.withGain((it.gain + direction * times * GainStepDb).coerceIn(-30.0, 30.0))
                         }
                     },
                     onQ = {
@@ -164,11 +171,12 @@ fun PeqBandList(
                             holder.commitBandEdit(index, "edit_q") { it.withQ(v) }
                         }
                     },
-                    onQStep = { delta ->
-                        holder.commitBandEdit(index, "edit_q_step") {
-                            it.withQ((it.q + delta).coerceIn(0.1, 30.0))
+                    onQStep = { direction, times ->
+                        holder.previewBandEdit(index, "edit_q_step") {
+                            it.withQ((it.q + direction * times * QStep).coerceIn(0.1, 30.0))
                         }
                     },
+                    onStepCommit = { holder.commitPreview("edit_step") },
                     onDelete = { holder.deleteBand(index) },
                 )
             }
@@ -222,11 +230,12 @@ private fun PeqBandRow(
     onChannel: () -> Unit,
     onType: () -> Unit,
     onFreq: () -> Unit,
-    onFreqStep: (Boolean) -> Unit,
+    onFreqStep: (direction: Int, times: Int) -> Unit,
     onGain: () -> Unit,
-    onGainStep: (Double) -> Unit,
+    onGainStep: (direction: Int, times: Int) -> Unit,
     onQ: () -> Unit,
-    onQStep: (Double) -> Unit,
+    onQStep: (direction: Int, times: Int) -> Unit,
+    onStepCommit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Row(
@@ -256,9 +265,9 @@ private fun PeqBandRow(
         )
         TapCell(band.channel.displayLabel, accent, WPicker, onChannel)
         TapCell(band.filterType.displayLabel, accent, WPicker, onType)
-        StepperCell(FreqFmt.format(band.frequency), accent, onFreq, { onFreqStep(false) }, { onFreqStep(true) })
-        StepperCell(GainFmt.format(band.gain), accent, onGain, { onGainStep(-0.5) }, { onGainStep(0.5) })
-        StepperCell(QFmt.format(band.q), accent, onQ, { onQStep(-0.1) }, { onQStep(0.1) })
+        StepperCell(FreqFmt.format(band.frequency), accent, onFreq, onFreqStep, onStepCommit)
+        StepperCell(GainFmt.format(band.gain), accent, onGain, onGainStep, onStepCommit)
+        StepperCell(QFmt.format(band.q), accent, onQ, onQStep, onStepCommit)
         Glyph("×", MRed, Modifier.padding(start = GroupGap).size(DeleteButtonSize), onDelete)
     }
 }
@@ -288,8 +297,8 @@ private fun RowScope.StepperCell(
     value: String,
     accent: Color,
     onValueClick: () -> Unit,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit,
+    onStep: (direction: Int, times: Int) -> Unit,
+    onCommit: () -> Unit,
 ) {
     // Value box on the left; the −/+ pair grouped together on the right as big, obvious hit
     // targets so stepping a value isn't a guessing game between three near-touching controls.
@@ -316,7 +325,8 @@ private fun RowScope.StepperCell(
                 .border(1.dp, accent, RoundedCornerShape(6.dp))
                 .padding(vertical = 12.dp),
         )
-        MinusPlusPill(onMinus, onPlus, height = RowControlHeight, glyphColor = StepperGlyphColor)
+        // Hold to repeat, accelerating (1, 2, then 4 steps a repeat).
+        MinusPlusPill(onStep, onCommit, height = RowControlHeight, glyphColor = StepperGlyphColor)
     }
 }
 

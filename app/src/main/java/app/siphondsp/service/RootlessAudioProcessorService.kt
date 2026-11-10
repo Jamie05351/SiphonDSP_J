@@ -1541,6 +1541,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             return service.engine.configureNativeBmwPeq(state)
         }
 
+        /** [applyNativeBmwPeq] without saving it: a −/+ hold's live steps (saved once on release). */
+        fun previewNativeBmwPeq(state: BmwPeqState): Boolean {
+            val service = activeInstance ?: return false
+            return service.engine.configureNativeBmwPeq(state, persistOnSuccess = false, source = "editor-preview")
+        }
+
         fun nativeBmwPeqSampleRate(): Float? = activeInstance?.engine?.sampleRate
 
         /** The automatic headroom the engine is running, or null in manual mode / with no service. */
