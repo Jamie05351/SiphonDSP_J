@@ -249,17 +249,18 @@ internal class NamespaceStore(context: Context, name: String) {
     }
 
     companion object {
-        private val stores = HashMap<String, NamespaceStore>()
+        // Lazy per name: one namespace's first load (and its migration) blocks only its own
+        // callers, never a thread opening the other namespace.
+        private val stores = HashMap<String, Lazy<NamespaceStore>>()
 
         /** Tests only: close and forget the stores, so the next use opens the files afresh. */
         @VisibleForTesting
         fun clearForTest() = synchronized(stores) {
-            stores.values.forEach { it.close() }
+            stores.values.filter { it.isInitialized() }.forEach { it.value.close() }
             stores.clear()
         }
 
-        fun forName(context: Context, name: String): NamespaceStore = synchronized(stores) {
-            stores.getOrPut(name) { NamespaceStore(context, name) }
-        }
+        fun forName(context: Context, name: String): NamespaceStore =
+            synchronized(stores) { stores.getOrPut(name) { lazy { NamespaceStore(context, name) } } }.value
     }
 }
