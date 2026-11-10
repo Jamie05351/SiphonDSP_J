@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspSidebarRail
 import app.siphondsp.compose.controls.DspWorkspaceBackdrop
+import app.siphondsp.compose.controls.cardStyle
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.DspRail
 
@@ -58,7 +59,7 @@ fun DspWorkspaceScaffold(
     val destinations = remember { DspDestination.entries.filter { it.showInPrimaryNav } }
 
     Box(Modifier.fillMaxSize()) {
-        DspWorkspaceBackdrop(railWidth)
+        DspWorkspaceBackdrop(railWidth, accent = current.cardStyle().first)
 
         DspSidebarRail(
             destinations = destinations,
