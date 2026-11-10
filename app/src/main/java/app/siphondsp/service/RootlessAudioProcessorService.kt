@@ -606,8 +606,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             if(!preferences.get<Boolean>(R.string.key_session_app_problem_ignore)) {
                 notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
-                if(preferencesVar.get<Boolean>(R.string.key_is_activity_active) ||
-                    preferencesVar.get<Boolean>(R.string.key_is_app_compat_activity_active)) {
+                // The app is open (MainActivity hosts the compatibility screen too): show it now.
+                if(preferencesVar.get<Boolean>(R.string.key_is_activity_active)) {
                     startActivity(
                         ServiceNotificationHelper.createAppTroubleshootIntent(
                             this@RootlessAudioProcessorService,

@@ -11,7 +11,6 @@
     <integer name="default_update_check_skip" translatable="false" tools:keep="@integer/default_update_check_skip">0</integer>
     <bool name="default_reset_proc_mode_fix_applied" translatable="false" tools:keep="@bool/default_reset_proc_mode_fix_applied">false</bool>
     <bool name="default_is_activity_active" translatable="false" tools:keep="@bool/default_is_activity_active">false</bool>
-    <bool name="default_is_app_compat_activity_active" translatable="false" tools:keep="@bool/default_is_app_compat_activity_active">false</bool>
 
     <!-- Internal DSP -->
     <bool name="default_powered_on" translatable="false" tools:keep="@bool/default_powered_on">true</bool>

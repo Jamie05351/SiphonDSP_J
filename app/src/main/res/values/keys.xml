@@ -7,7 +7,6 @@
     <string name="key_update_check_skip" translatable="false">update_check_skip</string>
     <string name="key_reset_proc_mode_fix_applied" translatable="false">reset_proc_mode_fix_applied</string>
     <string name="key_is_activity_active" translatable="false">is_activity_active</string>
-    <string name="key_is_app_compat_activity_active" translatable="false">is_app_compat_activity_active</string>
 
     <!-- Internal DSP -->
     <string name="key_powered_on" translatable="false">powered_on</string>

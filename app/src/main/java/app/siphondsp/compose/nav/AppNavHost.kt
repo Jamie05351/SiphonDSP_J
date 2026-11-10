@@ -8,6 +8,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,14 +47,20 @@ import app.siphondsp.compose.screens.PeqToolbarActions
 import app.siphondsp.compose.screens.SignalGeneratorScreen
 import app.siphondsp.compose.screens.SpeakerAlignScreen
 import app.siphondsp.compose.screens.VirtualCentreScreen
+import app.siphondsp.compose.onboarding.OnboardingRoute
+import app.siphondsp.compose.screens.AppCompatRequest
+import app.siphondsp.compose.screens.AppCompatibilityRoute
+import app.siphondsp.compose.screens.BlocklistRoute
+import app.siphondsp.compose.screens.MeasurementCaptureRoute
 import app.siphondsp.compose.settings.AppScreen
+import app.siphondsp.compose.settings.SettingsRoute
 import app.siphondsp.compose.state.PeqStateHolder
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.isHeadUnitDisplay
 import kotlinx.coroutines.launch
 
-/** The app's in-activity screens. The DSP workspaces' routes are [DspDestination.route]. */
+/** The app's screens, all in MainActivity. The DSP workspaces' routes are [DspDestination.route]. */
 object Routes {
     const val HOME = "home"
     const val BAND_ALIGN = "band-align"
@@ -67,6 +74,9 @@ object Routes {
     internal const val ONBOARDING = "onboarding"
     internal const val ARG_FIX_PERMS = "fixPerms"
     internal const val ARG_REDO_ADB_SETUP = "redoAdbSetup"
+
+    /** The wizard's route pattern (also the graph's start while setup is needed). */
+    const val ONBOARDING_ROUTE = "$ONBOARDING?$ARG_FIX_PERMS={$ARG_FIX_PERMS}&$ARG_REDO_ADB_SETUP={$ARG_REDO_ADB_SETUP}"
 
     /** The setup wizard; [redoAdbSetup] runs only the method choice and the ADB/Shizuku steps. */
     fun onboarding(fixPerms: Boolean = false, redoAdbSetup: Boolean = false) =
@@ -95,6 +105,9 @@ interface AppNavigator {
     fun openWorkspace(destination: DspDestination, page: Int = 0)
 
     fun back()
+
+    /** The front page, clearing everything above it (or replacing the setup wizard with it). */
+    fun home()
 }
 
 val LocalAppNavigator = staticCompositionLocalOf<AppNavigator> { error("No AppNavigator provided") }
@@ -116,20 +129,36 @@ private class NavControllerNavigator(private val nav: NavHostController, private
     override fun back() {
         if (!nav.popBackStack()) onExit()
     }
+
+    override fun home() {
+        nav.navigate(Routes.HOME) {
+            popUpTo(nav.graph.id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
 }
 
 /**
- * The one navigation graph: the front page and every DSP workspace. Screen changes don't animate:
- * a workspace opens over the front page's own morph into it, and the rail swaps workspaces
+ * The one navigation graph: the front page, every DSP workspace and the app's own screens
+ * (Settings, Blocklist, Measurement capture, App compatibility, the setup wizard). Screen
+ * changes don't animate: a workspace opens over the front page's own morph into it, and the rail swaps workspaces
  * cleanly (swiping is reserved for paging within one).
  */
 @Composable
-fun AppNavHost(nav: NavHostController, onExit: () -> Unit, home: @Composable () -> Unit) {
+fun AppNavHost(
+    nav: NavHostController,
+    startDestination: String,
+    appCompatRequest: AppCompatRequest?,
+    setupFixPerms: Boolean,
+    onExit: () -> Unit,
+    onSetupFinished: () -> Unit,
+    home: @Composable () -> Unit,
+) {
     val navigator = remember(nav) { NavControllerNavigator(nav, onExit) }
     CompositionLocalProvider(LocalAppNavigator provides navigator) {
         NavHost(
             navController = nav,
-            startDestination = Routes.HOME,
+            startDestination = startDestination,
             modifier = Modifier.fillMaxSize(),
             enterTransition = { EnterTransition.None },
             exitTransition = { ExitTransition.None },
@@ -153,6 +182,42 @@ fun AppNavHost(nav: NavHostController, onExit: () -> Unit, home: @Composable () 
             }
             composable(Routes.NATIVE_TRUTH) {
                 AppScreen(title = stringResource(R.string.title_activity_native_truth), onBack = navigator::back) { NativeTruthScreen() }
+            }
+            composable(Routes.SETTINGS) { SettingsRoute() }
+            composable(Routes.BLOCKLIST) { BlocklistRoute() }
+            composable(Routes.MEASUREMENT_CAPTURE) { MeasurementCaptureRoute() }
+            composable(Routes.APP_COMPATIBILITY) {
+                if (appCompatRequest == null) {
+                    LaunchedEffect(Unit) { navigator.back() }
+                } else {
+                    AppCompatibilityRoute(
+                        request = appCompatRequest,
+                        onBack = navigator::back,
+                        onDone = { internalCall ->
+                            // The app was in use: carry on to the front page. Otherwise close.
+                            if (internalCall) navigator.home() else onExit()
+                        },
+                    )
+                }
+            }
+            composable(
+                route = Routes.ONBOARDING_ROUTE,
+                arguments = listOf(
+                    // As the start destination, the wizard opens with these defaults.
+                    navArgument(Routes.ARG_FIX_PERMS) { type = NavType.BoolType; defaultValue = setupFixPerms },
+                    navArgument(Routes.ARG_REDO_ADB_SETUP) { type = NavType.BoolType; defaultValue = false },
+                ),
+            ) { entry ->
+                val redo = entry.arguments?.getBoolean(Routes.ARG_REDO_ADB_SETUP) ?: false
+                OnboardingRoute(
+                    fixPerms = entry.arguments?.getBoolean(Routes.ARG_FIX_PERMS) ?: false,
+                    redoAdbSetup = redo,
+                    onExit = navigator::back,
+                    onFinished = {
+                        // A re-run returns to Settings; the first setup goes on to the front page.
+                        if (redo) navigator.back() else onSetupFinished()
+                    },
+                )
             }
         }
     }

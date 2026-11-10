@@ -1,7 +1,6 @@
 package app.siphondsp.compose.home
 
 import android.animation.ValueAnimator
-import android.content.Intent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -29,9 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.R
-import app.siphondsp.activity.BlocklistActivity
-import app.siphondsp.activity.MeasurementCaptureActivity
-import app.siphondsp.activity.SettingsActivity
 import app.siphondsp.compose.nav.LocalAppNavigator
 import app.siphondsp.compose.nav.Routes
 import app.siphondsp.model.MasterVolume
@@ -141,7 +137,7 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit) {
                     }
                 }
             },
-            onSettings = { if (openingTile == null) context.startActivity(Intent(context, SettingsActivity::class.java)) },
+            onSettings = { if (openingTile == null) navigator.open(Routes.SETTINGS) },
             onMore = { bounds -> if (openingTile == null) moreAnchor = bounds },
             // The DSP master volume: the steering-wheel buttons' path, without their toast.
             onVolumeStep = { steps -> MasterVolume.step(context, steps) },
@@ -158,11 +154,11 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit) {
                     MoreItem(R.string.action_revert) { moreAnchor = null; confirmRevert = true }
                     MoreItem(R.string.action_blocked_apps) {
                         moreAnchor = null
-                        context.startActivity(Intent(context, BlocklistActivity::class.java))
+                        navigator.open(Routes.BLOCKLIST)
                     }
                     MoreItem(R.string.action_measurement) {
                         moreAnchor = null
-                        context.startActivity(Intent(context, MeasurementCaptureActivity::class.java))
+                        navigator.open(Routes.MEASUREMENT_CAPTURE)
                     }
                     MoreItem(R.string.action_signal_generator) { moreAnchor = null; navigator.open(Routes.SIGNAL_GENERATOR) }
                     MoreItem(R.string.action_native_truth) { moreAnchor = null; navigator.open(Routes.NATIVE_TRUTH) }

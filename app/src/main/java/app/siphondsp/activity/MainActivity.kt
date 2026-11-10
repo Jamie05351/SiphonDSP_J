@@ -24,11 +24,14 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.siphondsp.R
 import app.siphondsp.compose.home.HomeRoute
 import app.siphondsp.compose.nav.AppNavHost
+import app.siphondsp.compose.nav.Routes
+import app.siphondsp.compose.screens.AppCompatRequest
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.BaseAudioProcessorService
 import app.siphondsp.service.RootlessAudioProcessorService
@@ -86,14 +89,18 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
 
-        // Missing permissions: the setup wizard first.
-        if (SdkCheck.isQ && (!hasDumpPermission() || !hasRecordPermission())) {
-            val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
-            Timber.i("Launching onboarding (first boot: $firstBoot)")
-            startActivity(Intent(this, OnboardingActivity::class.java).putExtra(OnboardingActivity.EXTRA_FIX_PERMS, !firstBoot))
-            finish()
-            return
+        // Where the graph starts: the setup wizard while permissions are missing, the
+        // "incompatible app" screen when opened for it, otherwise the front page.
+        val appCompatRequest = AppCompatRequest.from(intent)
+        val needsSetup = SdkCheck.isQ && (!hasDumpPermission() || !hasRecordPermission())
+        val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
+        val startDestination = when {
+            needsSetup -> Routes.ONBOARDING_ROUTE.also { Timber.i("Launching onboarding (first boot: $firstBoot)") }
+            appCompatRequest != null -> Routes.APP_COMPATIBILITY
+            else -> Routes.HOME
         }
+        // Setup and the app-compatibility screen start the engine themselves (or not at all).
+        autoStartEngine = startDestination == Routes.HOME
 
         // Not Main.immediate: handled after the service's sending call returns.
         lifecycleScope.launch(Dispatchers.Main) {
@@ -117,18 +124,45 @@ class MainActivity : BaseActivity() {
                     setSystemBarsHidden(fullScreen)
                     onDispose {}
                 }
-                AppNavHost(nav = nav, onExit = ::finish) {
+                navController = nav
+                AppNavHost(
+                    nav = nav,
+                    startDestination = startDestination,
+                    appCompatRequest = appCompatRequest,
+                    setupFixPerms = !firstBoot,
+                    onExit = ::finish,
+                    onSetupFinished = ::onSetupFinished,
+                ) {
                     HomeRoute(powered = powerOn, onTogglePower = ::togglePower)
                 }
             }
         }
 
-        // From the setup wizard: ask for the capture permission straight away.
-        if (SdkCheck.isQ && intent.getBooleanExtra(EXTRA_FORCE_SHOW_CAPTURE_PROMPT, false)) {
-            requestCapturePermission()
-        }
+        if (startDestination == Routes.HOME) showAndroid15Alert()
+    }
 
-        showAndroid15Alert()
+    private var navController: NavHostController? = null
+
+    /** False while setup or the app-compatibility screen runs: no capture prompt on start. */
+    private var autoStartEngine = true
+
+    /** The first setup is done: on to the front page, and ask for the capture permission. */
+    private fun onSetupFinished() {
+        prefsVar.set(R.string.key_first_boot, false)
+        navController?.navigate(Routes.HOME) {
+            popUpTo(Routes.ONBOARDING_ROUTE) { inclusive = true }
+            launchSingleTop = true
+        }
+        autoStartEngine = true
+        if (SdkCheck.isQ) requestCapturePermission()
+    }
+
+    /** Back to the setup wizard (a permission it grants is gone), in place of the front page. */
+    private fun openSetup() {
+        autoStartEngine = false
+        navController?.navigate(Routes.onboarding()) {
+            popUpTo(Routes.HOME) { inclusive = true }
+        }
     }
 
     private var systemBarsHidden = false
@@ -200,7 +234,7 @@ class MainActivity : BaseActivity() {
         sdkAbove(Build.VERSION_CODES.Q) {
             val bound = bindService(Intent(this, RootlessAudioProcessorService::class.java), processorServiceConnection, 0)
             // Service not running.
-            if (!bound) requestCapturePermission()
+            if (!bound && autoStartEngine) requestCapturePermission()
         }
     }
 
@@ -237,10 +271,7 @@ class MainActivity : BaseActivity() {
                 .setTitle(R.string.android_15_screenshare_warning_title)
                 .setMessage(R.string.android_15_screenshare_keyguard_warning)
                 .setCancelable(false)
-                .setPositiveButton(R.string.continue_action) { _, _ ->
-                    startActivity(Intent(this, OnboardingActivity::class.java).putExtra(OnboardingActivity.EXTRA_FIX_PERMS, false))
-                    finish()
-                }
+                .setPositiveButton(R.string.continue_action) { _, _ -> openSetup() }
                 .show()
             return
         }
@@ -272,7 +303,4 @@ class MainActivity : BaseActivity() {
             .show()
     }
 
-    companion object {
-        const val EXTRA_FORCE_SHOW_CAPTURE_PROMPT = "ForceShowCapturePrompt"
-    }
 }

@@ -133,48 +133,6 @@
         </activity>
 
         <activity
-            android:name=".activity.SettingsActivity"
-            android:exported="false"
-            android:label="@string/title_activity_settings"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.BlocklistActivity"
-            android:exported="false"
-            android:label="@string/title_activity_blocklist"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.MeasurementCaptureActivity"
-            android:exported="false"
-            android:label="@string/title_activity_measurement_capture"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.AppCompatibilityActivity"
-            android:exported="false"
-            android:label="@string/title_activity_app_compat"
-            android:theme="@style/Theme.SiphonDSP" />
-
-        <activity
-            android:name=".activity.OnboardingActivity"
-            android:exported="false"
-            android:label="@string/title_activity_onboarding"
-            android:theme="@style/Theme.SiphonDSP" />
-
-        <activity
             android:name=".activity.EngineLauncherActivity"
             android:exported="false"
             android:excludeFromRecents="true"
