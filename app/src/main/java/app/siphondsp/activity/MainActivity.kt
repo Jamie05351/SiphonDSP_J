@@ -9,8 +9,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.view.HapticFeedbackConstants
-import android.widget.CheckBox
-import android.widget.LinearLayout
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -29,6 +27,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.siphondsp.R
 import app.siphondsp.compose.home.HomeRoute
+import app.siphondsp.compose.dialogs.AppDialog
+import app.siphondsp.compose.dialogs.AppDialogHost
+import app.siphondsp.compose.dialogs.AppDialogs
 import app.siphondsp.compose.nav.AppNavHost
 import app.siphondsp.compose.nav.Routes
 import app.siphondsp.compose.screens.AppCompatRequest
@@ -44,7 +45,6 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.view.DspDestination
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -135,6 +135,7 @@ class MainActivity : BaseActivity() {
                 ) {
                     HomeRoute(powered = powerOn, onTogglePower = ::togglePower)
                 }
+                AppDialogHost()
             }
         }
 
@@ -267,40 +268,38 @@ class MainActivity : BaseActivity() {
         if (!SdkCheck.isVanillaIceCream) return
 
         if (!hasProjectMediaAppOp()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.android_15_screenshare_warning_title)
-                .setMessage(R.string.android_15_screenshare_keyguard_warning)
-                .setCancelable(false)
-                .setPositiveButton(R.string.continue_action) { _, _ -> openSetup() }
-                .show()
+            AppDialogs.show(
+                AppDialog.Message(
+                    title = getString(R.string.android_15_screenshare_warning_title),
+                    message = getString(R.string.android_15_screenshare_keyguard_warning),
+                    confirm = getString(R.string.continue_action),
+                    onConfirm = { openSetup() },
+                    cancelable = false,
+                ),
+            )
             return
         }
 
         if (prefsVar.get<Boolean>(R.string.key_android15_screenrecord_restriction_seen)) return
 
-        val checkBox = CheckBox(this).apply {
-            text = getString(R.string.never_show_warning_again)
-            isChecked = false
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.android_15_screenshare_warning_title)
-            .setMessage(R.string.android_15_screenshare_warning)
-            .setView(
-                LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(48, 32, 48, 16)
-                    addView(checkBox)
+        AppDialogs.show(
+            AppDialog.Message(
+                title = getString(R.string.android_15_screenshare_warning_title),
+                message = getString(R.string.android_15_screenshare_warning),
+                checkbox = getString(R.string.never_show_warning_again),
+                confirm = getString(R.string.tutorial),
+                onConfirm = { neverAgain ->
+                    prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, neverAgain)
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, "https://youtu.be/rVM13aY2rwU?t=31".toUri()))
+                    } catch (_: ActivityNotFoundException) {
+                        toast(getString(R.string.no_activity_found))
+                    }
                 },
-            )
-            .setPositiveButton(R.string.tutorial) { _, _ ->
-                prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
-                startActivity(Intent(Intent.ACTION_VIEW, "https://youtu.be/rVM13aY2rwU?t=31".toUri()))
-            }
-            .setNegativeButton(R.string.close) { dialog, _ ->
-                prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
-                dialog.dismiss()
-            }
-            .show()
+                dismiss = getString(R.string.close),
+                onDismiss = { neverAgain -> prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, neverAgain) },
+            ),
+        )
     }
 
 }
