@@ -9,14 +9,11 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
-import app.siphondsp.R
 import app.siphondsp.compose.controls.FaciaColour
 import app.siphondsp.compose.controls.SidebarFacia
 import app.siphondsp.compose.controls.SidebarLayout
@@ -62,7 +59,6 @@ internal fun SidebarMorph(
     val art = styles.map { rememberVectorPainter(it.third) }
     val labels = destinations.map { stringResource(it.tileLabelRes()) }
     val measurer = rememberTextMeasurer()
-    val texture = ImageBitmap.imageResource(R.drawable.dsp_workspace_bg)
     val signal = SidebarSignal
     val count = minOf(destinations.size, tiles.size)
 
@@ -93,7 +89,7 @@ internal fun SidebarMorph(
                     )
 
                     drawRect(FaciaColour)
-                    drawContentWindow(window, texture, styles[selected.coerceIn(0, styles.lastIndex)].first, alpha = ((p - WindowStart) / (1f - WindowStart)).coerceIn(0f, 1f))
+                    drawContentWindow(window, styles[selected.coerceIn(0, styles.lastIndex)].first, alpha = ((p - WindowStart) / (1f - WindowStart)).coerceIn(0f, 1f))
                     drawChainScreen(screen, corner, signal)
 
                     // Each line leaves a tile's right-middle (then bottom-middle) and enters the next
