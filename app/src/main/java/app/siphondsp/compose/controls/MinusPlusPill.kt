@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -117,6 +118,24 @@ private fun HoldStepHalf(
     val holdingChange by rememberUpdatedState(onHoldingChange)
     // Whether this press has started repeating: its click is then not a tap, and its release commits.
     var repeated by remember { mutableStateOf(false) }
+    // Whether a hold is running right now (started repeating, not yet released). Not state: only
+    // the effects read it.
+    val holdActive = remember { booleanArrayOf(false) }
+    // Ends a running hold exactly once: clears the caller's holding flag and commits where it got to.
+    val endHold = {
+        if (holdActive[0]) {
+            holdActive[0] = false
+            holdingChange(false)
+            commit()
+        }
+    }
+
+    // Leaving composition mid-hold (a page swipe, the PEQ list rebuilding, the button going away)
+    // cancels the repeat with no Release or Cancel to end it: end it here, or the last previewed
+    // value would stay live in the engine unsaved and the caller's holding flag stuck on.
+    DisposableEffect(Unit) {
+        onDispose { endHold() }
+    }
 
     LaunchedEffect(source) {
         var repeat: Job? = null
@@ -128,6 +147,7 @@ private fun HoldStepHalf(
                     repeat = scope.launch {
                         delay(StepMath.HOLD_DELAY_MS)
                         repeated = true
+                        holdActive[0] = true
                         holdingChange(true)
                         val start = System.currentTimeMillis()
                         while (isActive) {
@@ -140,10 +160,7 @@ private fun HoldStepHalf(
                 is PressInteraction.Release, is PressInteraction.Cancel -> {
                     repeat?.cancel()
                     repeat = null
-                    if (repeated) {
-                        holdingChange(false)
-                        commit()
-                    }
+                    if (repeated) endHold()
                 }
             }
         }
