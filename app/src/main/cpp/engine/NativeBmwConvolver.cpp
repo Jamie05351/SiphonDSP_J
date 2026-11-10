@@ -84,7 +84,11 @@ void resampleChannel(const std::vector<double>& in, double ratio, const std::vec
     const double halfWidth = kZeroCrossings / cutoff;
     const double step = 1.0 / ratio;  // source samples per output sample
     const double scale = cutoff * static_cast<double>(kTablePerCrossing);  // source samples -> table index
-    const auto outFrames = static_cast<std::size_t>(std::ceil(static_cast<double>(in.size()) * ratio));
+    // Up to the last tap's ringing (halfWidth source samples past it), not just the source's own
+    // length: cutting there drops the band-limited tail of the final taps. The caller trims what
+    // falls below -120 dB.
+    const auto outFrames = static_cast<std::size_t>(
+        std::floor((static_cast<double>(in.size()) - 1.0 + halfWidth) * ratio)) + 1;
     out.assign(outFrames, 0.0);
     const auto n = static_cast<long long>(in.size());
     const auto last = static_cast<double>(table.size() - 2);
@@ -217,6 +221,14 @@ bool resampleConvolverIr(const ConvolverIr& in, double targetRate, ConvolverIr& 
     if (in.stereo()) {
         resampleChannel(in.right, ratio, table, out.right);
     }
+    // The ringing past the last tap, down to -120 dB, and never past the length limit (the check
+    // above held for the source's own duration; what the limit cuts is the far end of that ringing).
+    const std::size_t length = std::min<std::size_t>(std::max<std::size_t>(trimmedLength(out), 1),
+                                                     kConvolverMaxIrFrames);
+    out.left.resize(length);
+    if (out.stereo()) {
+        out.right.resize(length);
+    }
     return true;
 }
 
@@ -231,13 +243,16 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     PFFFTD_Setup* setup = pffftd_new_setup(n, PFFFT_REAL);
     double* buf = allocAligned(static_cast<std::size_t>(n));
     double* spec = allocAligned(static_cast<std::size_t>(n));
+    // On the heap: with a null work buffer PFFFT puts n doubles of scratch on the stack -- 1 MiB
+    // for a 65536-tap IR, an overflow on an Android control thread.
+    double* work = allocAligned(static_cast<std::size_t>(n));
     double peak = 0.0;
-    if (setup != nullptr && buf != nullptr && spec != nullptr) {
+    if (setup != nullptr && buf != nullptr && spec != nullptr && work != nullptr) {
         for (int c = 0; c < (ir.stereo() ? 2 : 1); ++c) {
             const auto& h = c == 0 ? ir.left : ir.right;
             std::memset(buf, 0, sizeof(double) * static_cast<std::size_t>(n));
             std::copy(h.begin(), h.end(), buf);
-            pffftd_transform_ordered(setup, buf, spec, nullptr, PFFFT_FORWARD);
+            pffftd_transform_ordered(setup, buf, spec, work, PFFFT_FORWARD);
             // Ordered real output: [DC, Nyquist, re1, im1, re2, im2, ...].
             peak = std::max({peak, std::fabs(spec[0]), std::fabs(spec[1])});
             for (int k = 1; k < n / 2; ++k) {
@@ -245,6 +260,7 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
             }
         }
     }
+    pffftd_aligned_free(work);
     pffftd_aligned_free(spec);
     pffftd_aligned_free(buf);
     if (setup != nullptr) {

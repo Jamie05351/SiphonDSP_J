@@ -5,6 +5,7 @@
 #include "third_party/dr_wav.h"
 
 #include <atomic>
+#include <pthread.h>
 #include <cstdio>
 #include <random>
 #include <thread>
@@ -285,8 +286,12 @@ TEST_CASE("convolver: an IR at another rate is resampled with its response kept"
     ConvolverIr resampled;
     std::string error;
     REQUIRE(NativeBmwDsp::resampleConvolverIr(ir, 48000.0, resampled, error));
-    CHECK(resampled.frames() == static_cast<std::size_t>(std::ceil(2000.0 * 48000.0 / 44100.0)));
-    for (const double f : {1500.0, 3000.0, 4500.0}) {
+    // The source's duration at 48 kHz, plus at most the filter's ringing, minus the silence trimmed
+    // after the Hann window's zero end.
+    const double sourceFrames = 2000.0 * 48000.0 / 44100.0;
+    CHECK(static_cast<double>(resampled.frames()) > sourceFrames - 8);
+    CHECK(static_cast<double>(resampled.frames()) < sourceFrames + 64 * 48000.0 / 44100.0 + 2);
+    for (const double f : {2500.0, 3000.0, 3500.0}) {
         CAPTURE(f);
         CHECK(linToDb(responseAt(resampled, f)) == doctest::Approx(linToDb(responseAt(ir, f))).epsilon(0.002));
     }
@@ -354,6 +359,44 @@ TEST_CASE("convolver: a load racing a sample-rate change ends at the current rat
         CHECK(info.streamRate == (round % 2 ? 44100.0 : 32000.0));
         CHECK(info.streamFrames > 0);
     }
+}
+
+TEST_CASE("convolver: a maximum-length IR loads on a small-stack thread") {
+    // Android control threads have ~1 MiB stacks: nothing on the load path may put the large
+    // FFT scratch (1 MiB for the peak-response transform of a 65536-tap IR) on the stack.
+    struct Job {
+        NativeBmwDspProcessor proc;
+        bool ok = false;
+    } job;
+    job.proc.setSampleRate(kSampleRate);
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 512 * 1024);
+    pthread_t thread;
+    REQUIRE(pthread_create(&thread, &attr, [](void* arg) -> void* {
+        auto* j = static_cast<Job*>(arg);
+        std::string error;
+        j->ok = j->proc.loadConvolverIr(randomIr(NativeBmwDsp::kConvolverMaxIrFrames, true, 77), error);
+        return nullptr;
+    }, &job) == 0);
+    pthread_join(thread, nullptr);
+    pthread_attr_destroy(&attr);
+    CHECK(job.ok);
+    CHECK(job.proc.convolverInfo().partitions == NativeBmwDsp::kConvolverMaxIrFrames / 64);
+}
+
+TEST_CASE("convolver: resampling keeps the filter's ringing past the last tap") {
+    // A tap at the very end of a 24 kHz IR: upsampled to 48 kHz its band-limited ringing runs on
+    // past the source's last sample, and cutting the output at the source length dropped it.
+    ConvolverIr ir = deltaIr(1.0, 999, 24000.0);
+    ConvolverIr out;
+    std::string error;
+    REQUIRE(NativeBmwDsp::resampleConvolverIr(ir, 48000.0, out, error));
+    CHECK(out.frames() > 2000);
+    double sum = 0.0;
+    for (double v : out.left) sum += v;
+    // Its DC gain is the tap's (1.0) up to the sinc's acausal half, which lies inside the IR here.
+    CHECK(sum == doctest::Approx(1.0).epsilon(1e-3));
 }
 
 TEST_CASE("convolver: a rejected IR leaves the current one running") {
