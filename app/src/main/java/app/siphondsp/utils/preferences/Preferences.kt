@@ -18,11 +18,15 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import app.siphondsp.utils.Constants
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import java.util.concurrent.CopyOnWriteArraySet
@@ -161,13 +165,15 @@ class Preferences(val context: Context) {
 
 /** One namespace's DataStore and its in-memory copy; one per file per process, as DataStore requires. */
 internal class NamespaceStore(context: Context, name: String) {
-    // One writer at a time, in call order: DataStore applies the edits in the order they arrive.
+    // One writer at a time, in the order the writes were queued (under [lock], the same order
+    // as the in-memory copy): DataStore applies the edits in the order they arrive.
     @Suppress("OPT_IN_USAGE")
     private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
+    private val dataStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dataStore: DataStore<StoredPreferences> = PreferenceDataStoreFactory.create(
         migrations = listOf(SharedPreferencesMigration(context, name)),
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        scope = dataStoreScope,
         produceFile = { context.preferencesDataStoreFile(name) },
     )
 
@@ -181,30 +187,76 @@ internal class NamespaceStore(context: Context, name: String) {
 
     fun <T : Any> read(key: StoredPreferences.Key<T>): T? = snapshot[key]
 
+    /**
+     * Applies [value] at once and saves it behind any write queued before it. If the save fails,
+     * the in-memory copy goes back to what is on disk (unless a later write replaced the value
+     * meanwhile), so the app never runs on a setting that would revert on the next launch.
+     * [async] = false returns once the save is done (or rolled back).
+     */
     fun <T : Any> write(key: StoredPreferences.Key<T>, value: T, name: String, async: Boolean) {
-        synchronized(lock) {
+        val saved = synchronized(lock) {
             // As SharedPreferences: writing the value already there changes nothing and tells no one.
             if (snapshot[key] == value) return
             snapshot = snapshot.toMutablePreferences().apply { this[key] = value }.toPreferences()
-        }
-        // Through the one writer either way, so a synchronous write can't overtake a queued one.
-        val job = writeScope.launch {
-            try {
-                dataStore.edit { it[key] = value }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to save setting $name")
+            // Queued inside the lock (queuing doesn't suspend), so disk order is snapshot order.
+            // async, not launch: a failure is handled here, never thrown into the app.
+            writeScope.async {
+                try {
+                    dataStore.edit { it[key] = value }
+                    true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to save setting $name")
+                    rollBack(key, value, name)
+                    false
+                }
             }
         }
-        if (!async) runBlocking { job.join() }
+        notify(name)
+        if (!async) runBlocking { saved.join() }
+    }
+
+    private suspend fun <T : Any> rollBack(key: StoredPreferences.Key<T>, failed: T, name: String) {
+        val onDisk = try {
+            dataStore.data.first()[key]
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val changed = synchronized(lock) {
+            if (snapshot[key] != failed) return@synchronized false
+            snapshot = snapshot.toMutablePreferences().apply {
+                if (onDisk == null) remove(key) else this[key] = onDisk
+            }.toPreferences()
+            true
+        }
+        if (changed) notify(name)
+    }
+
+    private fun notify(name: String) {
         mainHandler.post { listeners.forEach { it.onSharedPreferenceChanged(null, name) } }
+    }
+
+    /** Waits for queued saves, then closes the store (tests: DataStore allows one open instance per file). */
+    private fun close() = runBlocking {
+        writeScope.coroutineContext[Job]?.let { job ->
+            job.children.toList().joinAll()
+            job.cancelAndJoin()
+        }
+        dataStoreScope.coroutineContext[Job]?.cancelAndJoin()
     }
 
     companion object {
         private val stores = HashMap<String, NamespaceStore>()
 
-        /** Tests only: forget the stores, so the next use opens the (new) test app's files. */
+        /** Tests only: close and forget the stores, so the next use opens the files afresh. */
         @VisibleForTesting
-        fun clearForTest() = synchronized(stores) { stores.clear() }
+        fun clearForTest() = synchronized(stores) {
+            stores.values.forEach { it.close() }
+            stores.clear()
+        }
 
         fun forName(context: Context, name: String): NamespaceStore = synchronized(stores) {
             stores.getOrPut(name) { NamespaceStore(context, name) }
