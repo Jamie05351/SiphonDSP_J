@@ -111,4 +111,15 @@ internal object StepMath {
     }
 
     private const val FULL_RANGE_REPEATS = 120f
+
+    /**
+     * The acceleration for a −/+ whose range the pill doesn't know (a value with its own stepping
+     * rule, like the PEQ list's gain and Q): 1 step per repeat for the first second, then 2, then 4
+     * after 2.5 s -- the frequency ladder's curve.
+     */
+    fun defaultHoldMultiplier(heldMs: Long): Int = when {
+        heldMs < 1_000L -> 1
+        heldMs < 2_500L -> 2
+        else -> 4
+    }
 }

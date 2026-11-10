@@ -220,6 +220,35 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
         applyCandidate(candidate, source)
     }
 
+    /**
+     * [commitBandEdit] without the save: validated and pushed to the running engine (heard at
+     * once), but not persisted -- a held −/+ steps through here on every repeat, then
+     * [commitPreview] saves once. Offline (no engine) it only updates the snapshot.
+     */
+    fun previewBandEdit(index: Int, source: String, transform: (ParametricEqBand) -> ParametricEqBand) {
+        val candidate = peqState.deepCopy()
+        val list = PeqBandEditor.bandsFor(candidate, selectedScope)
+        if (index !in list.indices) return
+        val updated = transform(list[index])
+        list[index] = updated
+        selectedUuid = updated.uuid
+        val previewed = candidate.copy(enabled = true)
+        val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: MIN_ASSUMED_SAMPLE_RATE
+        // An invalid step (it can't be, the steps clamp) is dropped quietly: no toast per repeat.
+        if (previewed.validate(sampleRate) != null) return
+        if (RootlessAudioProcessorService.nativeBmwPeqHandleReady() == true &&
+            !RootlessAudioProcessorService.previewNativeBmwPeq(previewed)
+        ) {
+            return
+        }
+        peqState = previewed
+    }
+
+    /** Saves the state [previewBandEdit] left (pushed again and persisted, as [applyCandidate]). */
+    fun commitPreview(source: String) {
+        applyCandidate(peqState, source)
+    }
+
     fun setPreamp(preampDb: Float) {
         applyCandidate(peqState.deepCopy().copy(preampDb = preampDb), "preamp")
     }
