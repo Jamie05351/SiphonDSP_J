@@ -14,7 +14,6 @@ import androidx.core.content.getSystemService
 import androidx.core.graphics.drawable.IconCompat
 import app.siphondsp.BuildConfig
 import app.siphondsp.R
-import app.siphondsp.activity.AppCompatibilityActivity
 import app.siphondsp.activity.EngineLauncherActivity
 import app.siphondsp.activity.MainActivity
 import app.siphondsp.model.IEffectSession
@@ -244,7 +243,7 @@ object ServiceNotificationHelper: KoinComponent {
         appUid: Int,
         directLaunch: Boolean
     ): Intent {
-        return Intent(ctx, AppCompatibilityActivity::class.java).apply {
+        return Intent(ctx, MainActivity::class.java).apply {
             action = RootlessAudioProcessorService.ACTION_START
             putExtra(RootlessAudioProcessorService.EXTRA_MEDIA_PROJECTION_DATA, mediaProjectionData)
             putExtra(RootlessAudioProcessorService.EXTRA_APP_UID, appUid)

@@ -1,15 +1,14 @@
 package app.siphondsp.interop
 
 import android.content.Context
-import android.content.Intent
 import android.os.SystemClock
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
 import app.siphondsp.model.debug.parseNativeTruthSnapshot
 import app.siphondsp.model.preference.AudioEncoding
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import timber.log.Timber
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -114,7 +113,6 @@ class DspEngine(val context: Context) : AutoCloseable {
     var sampleRate: Float = 0.0f
         set(value) {
             field = value
-            reportSampleRate(value)
             handleLock.read {
                 val current = handle
                 if (current != 0L) {
@@ -132,7 +130,6 @@ class DspEngine(val context: Context) : AutoCloseable {
                     }
                 }
             }
-            context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
 
     /** False: the audio path passes buffers through unprocessed. */
@@ -292,16 +289,8 @@ class DspEngine(val context: Context) : AutoCloseable {
         return requestedPeqRevision
     }
 
-    private fun reportSampleRate(value: Float) {
-        context.sendLocalBroadcast(Intent(Constants.ACTION_REPORT_SAMPLE_RATE).apply {
-            putExtra(Constants.EXTRA_SAMPLE_RATE, value)
-        })
-    }
-
     override fun close() {
         Timber.d("Closing engine")
-        reportSampleRate(0f)
-
         // meterLock first (see its declaration): a meter read already in flight finishes before
         // the handle is freed, and any later one sees handle == 0.
         synchronized(meterLock) {
@@ -315,7 +304,7 @@ class DspEngine(val context: Context) : AutoCloseable {
                 BmwPeqState.clearActiveSession(context, this)
             }
         }
-        context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
+        AppEvents.send(AppEvent.ParametricEqChanged)
     }
 
     /**
@@ -425,7 +414,7 @@ class DspEngine(val context: Context) : AutoCloseable {
             } }
             result = false
         }
-        context.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
+        AppEvents.send(AppEvent.ParametricEqChanged)
         return result
     }
 

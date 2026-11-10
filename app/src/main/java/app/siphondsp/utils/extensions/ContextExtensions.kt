@@ -3,11 +3,8 @@ package app.siphondsp.utils.extensions
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.ActivityNotFoundException
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.DialogInterface
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Color
@@ -15,19 +12,13 @@ import android.graphics.drawable.Drawable
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
-import android.text.Editable
-import android.text.InputType
 import android.util.TypedValue
-import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.StringRes
-import androidx.annotation.StyleRes
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.graphics.alpha
@@ -35,11 +26,9 @@ import androidx.core.graphics.blue
 import androidx.core.graphics.green
 import androidx.core.graphics.red
 import androidx.core.net.toUri
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import app.siphondsp.R
-import app.siphondsp.databinding.DialogTextinputBinding
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.CompatExtensions.getApplicationInfoCompat
 import app.siphondsp.utils.extensions.CompatExtensions.getPackageInfoCompat
 import app.siphondsp.utils.isPlugin
@@ -172,177 +161,6 @@ object ContextExtensions {
     // renaming the app (return 2) or changing the applicationId (return 1). Neutered.
     fun Context.check(): Int = 0
 
-    fun Context.sendLocalBroadcast(intent: Intent) {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
-
-    fun Context.registerLocalReceiver(broadcastReceiver: BroadcastReceiver, intentFilter: IntentFilter) {
-        LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter)
-    }
-
-    fun Context.unregisterLocalReceiver(broadcastReceiver: BroadcastReceiver) {
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver)
-    }
-
-    fun Context.showAlert(@StringRes title: Int, @StringRes message: Int) {
-        showAlert(getString(title), getString(message))
-    }
-
-    fun Context.showAlert(title: CharSequence, message: CharSequence) {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(message)
-            .setTitle(title)
-            .setNegativeButton(android.R.string.ok, null)
-            .create()
-            .show()
-    }
-
-    fun Context.showYesNoAlert(title: String, message: String, callback: ((Boolean) -> Unit)) {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(message)
-            .setTitle(title)
-            .setNegativeButton(getString(R.string.no)) { _, _ ->
-                callback.invoke(false)
-            }
-            .setPositiveButton(getString(R.string.yes)) { _, _ ->
-                callback.invoke(true)
-            }
-            .create()
-            .show()
-    }
-
-    fun Context.showYesNoAlert(@StringRes title: Int, @StringRes message: Int, callback: ((Boolean) -> Unit)) {
-        showYesNoAlert(getString(title), getString(message), callback)
-    }
-
-    fun Context.showSingleChoiceAlert(
-        @StringRes title: Int,
-        choices: Array<CharSequence>,
-        checkedIndex: Int,
-        callback: ((Int?) -> Unit)
-    ) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(title))
-            .setSingleChoiceItems(choices, checkedIndex) { dialog, i ->
-                dialog.dismiss()
-                callback.invoke(i)
-            }
-            .setNegativeButton(getString(android.R.string.cancel)) { _, _ ->
-                callback.invoke(null)
-            }
-            .create()
-            .show()
-    }
-
-    fun Context.showInputAlert(
-        layoutInflater: LayoutInflater,
-        @StringRes title: Int,
-        @StringRes hint: Int,
-        value: String,
-        isNumberInput: Boolean,
-        suffix: String?,
-        @StyleRes dialogThemeResId: Int = 0,
-        callback: ((String?) -> Unit)
-    ) {
-        showInputAlert(
-            layoutInflater, getString(title), getString(hint), value, isNumberInput, suffix,
-            dialogThemeResId, callback,
-        )
-    }
-
-    fun Context.showInputAlert(
-        layoutInflater: LayoutInflater,
-        title: String?,
-        hint: String?,
-        value: String,
-        isNumberInput: Boolean,
-        suffix: String?,
-        @StyleRes dialogThemeResId: Int = 0,
-        callback: ((String?) -> Unit)
-    ) {
-        val content = DialogTextinputBinding.inflate(layoutInflater)
-        content.textInputLayout.hint = hint
-        content.text1.text = Editable.Factory.getInstance().newEditable(value)
-        if(isNumberInput)
-            content.text1.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-
-        content.textInputLayout.suffixText = suffix
-
-        val builder =
-            if (dialogThemeResId != 0) AlertDialog.Builder(this, dialogThemeResId) else AlertDialog.Builder(this)
-        builder
-            .setTitle(title)
-            .setView(content.root)
-            .setPositiveButton(android.R.string.ok) { inputDialog, _ ->
-                val input = (inputDialog as AlertDialog).findViewById<TextView>(android.R.id.text1)
-                callback.invoke(input?.text?.toString())
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ ->
-                callback.invoke(null)
-            }
-            .create()
-            .show()
-    }
-
-    fun Context.showChoiceAlert(
-        entries: Array<CharSequence>,
-        @StringRes titleRes: Int,
-        @StringRes positiveRes: Int,
-        @StringRes negativeRes: Int = android.R.string.cancel,
-        onConfirm: (index: Int) -> Unit
-    ) {
-        var selected = -1
-        MaterialAlertDialogBuilder(this)
-            .setSingleChoiceItems(
-                entries,
-                -1
-            ) { _, which: Int ->
-                selected = which
-            }
-            .setTitle(getString(titleRes))
-            .setNegativeButton(getString(negativeRes)){ _, _ -> }
-            .setPositiveButton(getString(positiveRes)){ _, _ ->
-                selected.let {
-                    if(it >= 0)
-                        onConfirm(it)
-                }
-            }
-            .create()
-            .show()
-    }
-
-    fun <T> Context.showMultipleChoiceAlert(
-        entries: Array<CharSequence>,
-        entryValues: Array<T>,
-        @StringRes titleRes: Int,
-        @StringRes positiveRes: Int,
-        @StringRes negativeRes: Int = android.R.string.cancel,
-        onConfirm: (selected: List<T>) -> Unit
-    ) {
-        val selected = arrayListOf<T>()
-        MaterialAlertDialogBuilder(this)
-            .setMultiChoiceItems(
-                entries,
-                null
-            ) { _: DialogInterface, which: Int, isChecked: Boolean ->
-                entryValues.getOrNull(which)?.let {
-                    if(isChecked)
-                        selected.add(it)
-                    else if(selected.contains(it))
-                        selected.remove(it)
-                }
-            }
-            .setTitle(getString(titleRes))
-            .setNegativeButton(getString(negativeRes)){ _, _ -> }
-            .setPositiveButton(getString(positiveRes)){ _, _ ->
-                selected.let {
-                    if(it.isNotEmpty())
-                        onConfirm(it)
-                }
-            }
-            .create()
-            .show()
-    }
 
     fun Context.toast(message: String, long: Boolean = true) = Toast.makeText(this, message,
         if(long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
@@ -457,7 +275,6 @@ object ContextExtensions {
     }
 
     fun Context.broadcastPresetLoadEvent() {
-        sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
-        sendLocalBroadcast(Intent(Constants.ACTION_PRESET_LOADED))
+        AppEvents.send(AppEvent.PresetLoaded)
     }
 }

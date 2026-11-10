@@ -1,7 +1,6 @@
 package app.siphondsp.compose.screens
 
 import app.siphondsp.compose.controls.StepMath
-import android.view.LayoutInflater
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,7 +79,7 @@ private val StepperGlyphColor = IndexColor
 /**
  * Compose port of the Parametric EQ filter list (roadmap Phase 10b) -- a keyed [LazyColumn] of
  * band rows under a fixed column header, plus a trailing "Add filter" row while the scope has
- * room. Channel / Type open [PeqDialogs] choice pickers (interop); Hz / dB / Q each open the
+ * room. Channel / Type open [PeqDialogs] choice pickers; Hz / dB / Q each open the
  * numeric dialog and carry inline -/+ steppers; every edit funnels through [PeqStateHolder].
  *
  * No drag-to-reorder (filter tools' Move up/down is the reorder path -- see
@@ -93,7 +92,7 @@ fun PeqBandList(
     listState: LazyListState = rememberLazyListState(),
 ) {
     val context = LocalContext.current
-    val dialogs = remember(context) { PeqDialogs(context, LayoutInflater.from(context)) }
+    val dialogs = remember(context) { PeqDialogs(context) }
     val accent = Color(holder.scopeAccentArgb)
     val bands = holder.visibleBands
     val selectedUuid = holder.selectedUuid

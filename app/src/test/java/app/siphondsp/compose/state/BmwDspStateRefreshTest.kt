@@ -1,15 +1,11 @@
 package app.siphondsp.compose.state
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Looper
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.test.core.app.ApplicationProvider
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.DspUpdateRecorder
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -35,22 +31,11 @@ class BmwDspStateRefreshTest {
         state.preview(index, 1f)
         shadowOf(Looper.getMainLooper()).idle()
 
-        var broadcastValue: Float? = null
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                broadcastValue = intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.get(index)
-            }
-        }
-        val broadcasts = LocalBroadcastManager.getInstance(context)
-        broadcasts.registerReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
-        try {
+        DspUpdateRecorder().use { updates ->
             state.refreshFromDisk()
-            shadowOf(Looper.getMainLooper()).idle()
 
             assertEquals(0f, state.get(index), 0f)
-            assertEquals(0f, broadcastValue)
-        } finally {
-            broadcasts.unregisterReceiver(receiver)
+            assertEquals(0f, updates.received.last().values[index])
         }
     }
 }

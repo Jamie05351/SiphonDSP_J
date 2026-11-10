@@ -2,25 +2,27 @@ package app.siphondsp.service
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import app.siphondsp.MainApplication
 import app.siphondsp.R
-import app.siphondsp.utils.Constants
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.EngineUtils.toggleEnginePower
 import app.siphondsp.utils.SdkCheck
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
 import org.koin.core.component.KoinComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class QuickTileService : TileService(),
     SharedPreferences.OnSharedPreferenceChangeListener, KoinComponent {
@@ -30,14 +32,8 @@ class QuickTileService : TileService(),
 
     private val preferences: Preferences.App by inject()
 
-    private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                Constants.ACTION_SERVICE_STARTED -> updateState()
-                Constants.ACTION_SERVICE_STOPPED -> updateState()
-            }
-        }
-    }
+    // While the tile is listening: the engine starting or stopping.
+    private var listening: CoroutineScope? = null
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
@@ -49,10 +45,14 @@ class QuickTileService : TileService(),
     override fun onStartListening() {
         updateState()
 
-        registerLocalReceiver(broadcastReceiver, IntentFilter().apply {
-            addAction(Constants.ACTION_SERVICE_STARTED)
-            addAction(Constants.ACTION_SERVICE_STOPPED)
-        })
+        listening?.cancel()
+        listening = CoroutineScope(SupervisorJob() + Dispatchers.Main).apply {
+            launch {
+                AppEvents.flow.collect { event ->
+                    if (event == AppEvent.ServiceStarted || event == AppEvent.ServiceStopped) updateState()
+                }
+            }
+        }
         preferences.registerOnSharedPreferenceChangeListener(this)
 
         super.onStartListening()
@@ -61,7 +61,8 @@ class QuickTileService : TileService(),
     // Called when your app can no longer update your tile.
     override fun onStopListening() {
         preferences.unregisterOnSharedPreferenceChangeListener(this)
-        unregisterLocalReceiver(broadcastReceiver)
+        listening?.cancel()
+        listening = null
         super.onStopListening()
     }
 

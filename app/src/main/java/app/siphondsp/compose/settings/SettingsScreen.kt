@@ -57,8 +57,8 @@ interface SettingsActions {
 }
 
 /**
- * The whole Settings screen. Pages are plain state here; the one-Activity navigation graph
- * replaces this in a later step.
+ * The whole Settings screen ([SettingsRoute] in the app's graph). Its pages are a small stack of
+ * their own, so back steps through them before leaving Settings.
  *
  * @param pendingRestore a backup file the user just picked; the restore-mode question is asked
  *        for it, then [onRestoreHandled] clears it.

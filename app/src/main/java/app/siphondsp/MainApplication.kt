@@ -1,8 +1,6 @@
 package app.siphondsp
 
 import android.app.Application
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -25,10 +23,7 @@ import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
 import app.siphondsp.receiver.MasterVolumeReceiver
 import app.siphondsp.session.dump.DumpManager
-import app.siphondsp.utils.Constants
 import app.siphondsp.utils.RoutingObserver
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
@@ -59,27 +54,6 @@ open class MainApplication : Application() {
 
     /* Rootless: Media projection auth token */
     var mediaProjectionStartIntent: Intent? = null
-
-    var engineSampleRate = 0f
-        private set
-
-    private val receiver by lazy {
-        object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when(intent?.action) {
-                    Constants.ACTION_REPORT_SAMPLE_RATE -> {
-                        engineSampleRate = intent.getFloatExtra(Constants.EXTRA_SAMPLE_RATE, 0f)
-                    }
-                    Constants.ACTION_DISCARD_AUTHORIZATION -> {
-                        if(isRootless()) {
-                            Timber.i("mediaProjectionStartIntent discarded")
-                            mediaProjectionStartIntent = null
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     override fun onCreate() {
         instance = this
@@ -150,13 +124,9 @@ open class MainApplication : Application() {
             prefs.set(R.string.key_reset_proc_mode_fix_applied, true)
         }
 
-        // Every screen is the fixed dark dashboard; the leftover View screens follow it.
+        // Every screen is the fixed dark dashboard: the configuration says night, for the theme
+        // attributes the graphs read and for the system dialogs.
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-
-        registerLocalReceiver(receiver, IntentFilter().apply {
-            addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
-            addAction(Constants.ACTION_DISCARD_AUTHORIZATION)
-        })
 
         // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
         // Never unregistered on purpose: it lives exactly as long as the process. Main process only,
@@ -168,11 +138,6 @@ open class MainApplication : Application() {
             )
         }
         super.onCreate()
-    }
-
-    override fun onTerminate() {
-        unregisterReceiver(receiver)
-        super.onTerminate()
     }
 
     override fun onLowMemory() {

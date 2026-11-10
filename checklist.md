@@ -10,7 +10,7 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 - Each PR is opened only after the previous one is green (Build APKs, NEON parity, review
   addressed) and only needs merging.
 - The PRs are **stacked**: each branch starts from the previous PR's branch, so they share no
-  conflicting hunks. **Merge them in order (1 → 7d) with merge commits** (not squash). After a
+  conflicting hunks. **Merge them in order (1 → 7e) with merge commits** (not squash). After a
   PR merges, the next one's diff shrinks to just its own changes.
 - A box is ticked when its PR is green and ready to merge.
 
@@ -22,10 +22,11 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 |
 | 5 | Graphs checked against the native engine | `ccr-efec0dfc-native-curves` | in progress |
 | 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
-| 7a | Compose: Settings and the app's own screens | `ccr-efec0dfc-compose` | — |
-| 7b | Compose: one Activity, Compose Navigation, Views removed | `ccr-efec0dfc-compose-nav` | — |
-| 7c | Settings in DataStore | `ccr-efec0dfc-datastore` | — |
-| 7d | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
+| 7a | Compose: Settings and the app's own screens; English only | `ccr-efec0dfc-compose` | #584 |
+| 7b | Compose Navigation: front page and DSP workspaces in one Activity | `ccr-efec0dfc-compose-nav` | — |
+| 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `claude/checklist-md-continuation-q7x4mo` | not built yet |
+| 7d | Settings in DataStore | `ccr-efec0dfc-datastore` | — |
+| 7e | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
 
 ## PR 1 — Engine core: JamesDSP removed
 
@@ -118,7 +119,7 @@ Gradle files.
 
 ## PR 7 — Full Compose migration + Baseline Profile
 
-Too large for one review, so four stacked PRs.
+Too large for one review, so five stacked PRs.
 
 ### 7a — Settings and the app's own screens in Compose
 
@@ -140,17 +141,41 @@ Too large for one review, so four stacked PRs.
       translations" notice are removed; the build keeps only English resources, the libraries'
       included.
 
-### 7b — One Activity, Compose Navigation, Views removed
+### 7b — Front page and DSP workspaces in one Activity (Compose Navigation)
 
-- [ ] 7.1 One Activity with Compose Navigation.
-- [ ] 7.4 Remove Fragments, `ViewPager2`, view/data binding, LiveData, `LocalBroadcastManager`
-      and the hand-painted View drawables.
+- [x] 7.1 `MainActivity` hosts one Compose Navigation graph: the front page and the five DSP
+      workspaces, plus Band Align, the signal generator and native truth. The rail swaps
+      workspaces, back returns to the front page, the front page's tile morph opens its
+      workspace, and the workspaces still hide the system bars.
+- [x] The workspace chrome is one composable (`DspWorkspaceScaffold`) instead of
+      `activity_parametric_eq.xml`, using the same dimens.
+- [x] Removed: the eight workspace/tool Activities, their seven Fragments, `ViewPager2`,
+      `navigation-fragment`/`-ui`, ConstraintLayout and RecyclerView, the workspace and front-page
+      layouts, the front page's never-reached load-error screen, and dead Views (`Card`,
+      `ProgressDialog`, `NumberInputBox`, `PowerHotspot`, `PowerLed`, `HomeArt*`,
+      `PagerChildSwipeGate`, `StaticPagerAdapter`).
 
-### 7c — Settings in DataStore
+### 7c — Last Views, LiveData and LocalBroadcastManager
+
+- [x] 7.1 Settings, Blocklist, Measurement capture, App compatibility and Onboarding become routes
+      of the same graph. The graph starts on the setup wizard while permissions are missing and
+      on App compatibility when the "incompatible app" notification opens the app; the five
+      activities are gone. Blocklist and Measurement capture run on ViewModels.
+- [x] 7.4 LiveData and `LocalBroadcastManager` replaced by flows (`AppEvents`, one in-process
+      event flow; Room's Flow for the blocklist); the last Views (the toolbar status strip, the
+      PEQ choice and number dialogs, the APO import and Android 15 dialogs) in Compose, through
+      one dialog host; view/data binding and the View theme palettes removed.
+- [x] Fixed from the PR 584 review: a backup job left scheduled with no folder, a 0 ms session
+      polling interval, a capture lost to a recreation, Back disabled on a re-run setup's first
+      page, an App-compatibility restart cancelled by a recreation, and a blocklist picker that
+      never reloaded the installed apps.
+- Not built here (no Android SDK in the session): the PR's CI run is the first build.
+
+### 7d — Settings in DataStore
 
 - [ ] 7.3 Settings stored in DataStore (migrated from SharedPreferences on first launch).
 
-### 7d — Baseline Profile
+### 7e — Baseline Profile
 
 - [ ] 7.5 Baseline Profile module and a CI job that generates it on an emulator.
 
