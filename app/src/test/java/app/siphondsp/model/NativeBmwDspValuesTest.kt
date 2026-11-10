@@ -911,6 +911,14 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun convolverShipsOffAtUnityGain() {
+        // A save from before the 307 -> 309 growth loads these defaults: the chain sounds as before.
+        assertEquals(309, NativeBmwDspValues.SIZE)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED], 0f)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CONVOLVER_GAIN], 0f)
+    }
+
+    @Test
     fun virtualBassRangeAndResponseDefaultToTheFixedValuesTheyReplace() {
         val values = NativeBmwDspValues.DEFAULTS.copyOf()
         // 5x the reach and a 200 ms release: what the engine used before they were adjustable.

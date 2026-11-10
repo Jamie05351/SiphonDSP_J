@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.22.1)
 
-project(siphondsp-native LANGUAGES CXX)
+project(siphondsp-native LANGUAGES C CXX)
 
 # -O3, NOT -Ofast. -Ofast implies -ffast-math, and in particular -ffinite-math-only, under
 # which the compiler is free to assume no value is ever NaN/Inf and fold away std::isfinite()

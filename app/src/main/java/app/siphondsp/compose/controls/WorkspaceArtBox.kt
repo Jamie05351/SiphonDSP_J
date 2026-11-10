@@ -21,6 +21,9 @@ object WorkspaceArt {
 
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
 
+    /** A 2-segment page finder (Output: OUTPUT, CONVOLVER). Ends where the others do. */
+    val finder2 = Frac(0.72f, 0.048f, 0.25f, 0.0693f)
+
     /** The 3-segment page finder (Xovers). */
     val finder3 = Frac(0.629f, 0.048f, 0.341f, 0.0693f)
 

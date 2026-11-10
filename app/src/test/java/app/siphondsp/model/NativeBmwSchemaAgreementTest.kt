@@ -175,6 +175,8 @@ class NativeBmwSchemaAgreementTest {
         "kSubsonicSlope" to NativeBmwDspValues.INDEX_SUBSONIC_SLOPE,
         "kVirtualBassRange" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE,
         "kVirtualBassResponse" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_RESPONSE,
+        "kConvolverEnabled" to NativeBmwDspValues.INDEX_CONVOLVER_ENABLED,
+        "kConvolverGain" to NativeBmwDspValues.INDEX_CONVOLVER_GAIN,
     )
 
     @Test

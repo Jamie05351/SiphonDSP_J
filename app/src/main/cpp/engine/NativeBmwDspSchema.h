@@ -16,7 +16,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 307;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 309;  // == NativeBmwDspValues.SIZE
 
 // --- Enabled, lpfPass, hpfPass, channelMute, measurementMute
 inline constexpr int kEnabled = 0;
@@ -143,6 +143,9 @@ inline constexpr int kSubsonicSlope = 304;
 // --- Virtual Bass range and response (added in the 305 -> 307 growth)
 inline constexpr int kVirtualBassRange = 305;
 inline constexpr int kVirtualBassResponse = 306;
+// --- Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
+inline constexpr int kConvolverEnabled = 307;
+inline constexpr int kConvolverGain = 308;
 
 // --- structure: block widths, strides and field offsets
 inline constexpr int kRoutingStride = 2;
@@ -181,7 +184,7 @@ inline constexpr int kVirtualFeedApQ = 5;
 inline constexpr int kVirtualFeedApOrder = 6;
 
 // Whether configure() reads each slot (see the reader column of the schema).
-inline constexpr std::array<bool, kSize> kReadByNative{{true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true}};
+inline constexpr std::array<bool, kSize> kReadByNative{{true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true}};
 
 // Pinned to the processor's own copies, so a drift is a build break.
 static_assert(kSize == NativeBmwDspProcessor::kConfigSize);

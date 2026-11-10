@@ -31,10 +31,12 @@ import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.dsp.AutoHeadroom
 import app.siphondsp.dsp.AutoHeadroomCalculator
+import app.siphondsp.interop.ConvolverStatus
 import app.siphondsp.interop.DspEngine
 import app.siphondsp.interop.NativeDsp
 import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.ConvolverIrStore
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
@@ -299,6 +301,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // The engine pushed its saved config itself, with the manual headroom; in auto mode,
         // replace it with the computed one.
         if (AutoHeadroom.isAuto(savedDspValues)) submitNativeBmwDspValues(savedDspValues)
+        // The convolver's stored IR: read, resampled and transformed off the main thread.
+        dspConfigHandler.post { loadStoredConvolverIr() }
 
         mainScope.launch {
             AppEvents.flow.collect { event ->
@@ -465,6 +469,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         submitNativeBmwDspValues(NativeBmwDspValues.load(this))
         if (!engine.configureNativeBmwPeq(BmwPeqState.loadPersisted(this), persistOnSuccess = false, source = "preset-restore")) {
             Timber.e("Failed to apply native BMW PEQ configuration after preset/profile load")
+        }
+    }
+
+    /** Loads the stored IR into the engine, or unloads it when none is stored. Null on success. */
+    private fun loadStoredConvolverIr(): String? {
+        val file = ConvolverIrStore.irFile(this)
+        if (!file.isFile) {
+            engine.clearConvolverIr()
+            return null
+        }
+        return engine.loadConvolverIr(file.absolutePath)?.also {
+            Timber.e("Convolver IR rejected by the engine: $it")
         }
     }
 
@@ -1560,6 +1576,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
 
         fun nativeBmwCaptureFrameCount(): Long? = activeInstance?.engine?.nativeBmwCaptureFrameCount()
+
+        /**
+         * Reloads the convolver from [ConvolverIrStore] (after an import or a clear) on the running
+         * engine. Blocking: call off the main thread. Null on success or with no service running
+         * (the next start loads it); otherwise why the engine rejected it.
+         */
+        fun reloadConvolverIr(): String? = activeInstance?.loadStoredConvolverIr()
+
+        /** What the running engine's convolver holds, or null with no service. */
+        fun convolverStatus(): ConvolverStatus? = activeInstance?.engine?.convolverStatus()
 
         /**
          * Live rootless-pipeline runtime state for the native-truth debug screen. Every field is

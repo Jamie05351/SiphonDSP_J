@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -55,6 +56,8 @@ std::array<float, kConfigSize> everythingOn() {
     c[sch::kLoudnessEnabled] = 1.f;
     c[sch::kMasterVolumeDb] = -20.f;
     c[sch::kHighXoPass] = 0.f;
+    c[sch::kConvolverEnabled] = 1.f;
+    c[sch::kConvolverGain] = -3.f;
     return c;
 }
 }  // namespace
@@ -104,6 +107,30 @@ int main() {
         proc.configure(on.data(), on.size());
         waitBuffers(16);
     }
+
+    // Convolver IRs loaded, swapped (crossfaded on the audio thread), toggled and unloaded: the
+    // kernels are built here and freed here, never on the audio thread.
+    for (int i = 0; i < 6; ++i) {
+        NativeBmwDsp::ConvolverIr ir;
+        ir.sampleRate = (i % 2 == 0) ? 48000.0 : 44100.0;  // odd loads go through the resampler
+        ir.channels = 1 + i % 2;
+        ir.left.assign(500 + 700 * static_cast<std::size_t>(i), 0.0);
+        ir.left[0] = 0.5;
+        if (ir.channels == 2) {
+            ir.right = ir.left;
+        }
+        std::string error;
+        if (!proc.loadConvolverIr(std::move(ir), error)) {
+            std::printf("convolver IR rejected: %s\n", error.c_str());
+            return 2;
+        }
+        waitBuffers(12);
+        on[sch::kConvolverEnabled] = (i % 3 == 2) ? 0.f : 1.f;
+        proc.configure(on.data(), on.size());
+        waitBuffers(12);
+    }
+    proc.clearConvolverIr();
+    waitBuffers(12);
 
     // Control requests the audio thread serves.
     for (int i = 0; i < 3; ++i) {
