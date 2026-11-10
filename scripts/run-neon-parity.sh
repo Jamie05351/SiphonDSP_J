@@ -26,6 +26,7 @@ trap 'rm -rf "$OUT"' EXIT
 
 if [ -n "${HOST:-}" ]; then
     CXX="${HOST_CXX:-c++}"
+    CC="${HOST_CC:-cc}"
     TARGET_FLAGS=()
 else
     SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
@@ -33,6 +34,8 @@ else
     BIN="$(ls -d "$NDK"/toolchains/llvm/prebuilt/*/bin | head -1)"
     CXX="$BIN/clang++"
     [ -x "$CXX" ] || CXX="$BIN/clang++.exe"
+    CC="$BIN/clang"
+    [ -x "$CC" ] || CC="$BIN/clang.exe"
     TARGET_FLAGS=(--target=aarch64-linux-android26 -static-libstdc++)
     ADB="${ADB:-adb}"
 fi
@@ -50,9 +53,25 @@ build() {  # <output> <wrapper dir> [extra flags...]
     for f in "$src"/NativeBmw*.cpp; do
         [ "$(basename "$f")" = NativeBmwDspJni.cpp ] || sources+=("$f")
     done
+    # The convolver's FFT (third_party/pffft, C) where the revision has it: built with the C
+    # compiler, linked in as objects. SIPHON_DISABLE_NEON also turns off pffft's own SIMD.
+    local objects=()
+    if [ -d "$src/third_party/pffft" ]; then
+        local cflags=(-O3 -I"$src/third_party/pffft")
+        case "$(uname -m)" in aarch64|arm64) cflags+=(-DPFFFT_ENABLE_NEON) ;; esac
+        [ -z "${HOST:-}" ] && cflags+=(-DPFFFT_ENABLE_NEON)
+        for flag in "$@"; do
+            [ "$flag" = -DSIPHON_DISABLE_NEON ] && cflags+=(-DPFFFT_SIMD_DISABLE)
+        done
+        for c in pffft_double pffft_common; do
+            "$CC" "${TARGET_FLAGS[@]}" "${cflags[@]}" -c "$src/third_party/pffft/$c.c" \
+                -o "$out.$c.o" 2>"$out.$c.log" || { cat "$out.$c.log"; return 1; }
+            objects+=("$out.$c.o")
+        done
+    fi
     "$CXX" "${TARGET_FLAGS[@]}" -std=c++17 -O3 -ftree-vectorize -I"$src" "$@" -o "$out" \
         "$ROOT/native-tests/neon_parity/neon_parity.cpp" "${sources[@]}" \
-        "$ROOT/native-tests/drwav_impl.cpp" -I"$ROOT/native-tests/third_party"
+        "$ROOT/native-tests/drwav_impl.cpp" -I"$ROOT/native-tests/third_party" "${objects[@]}"
 }
 
 echo "building current + scalar"

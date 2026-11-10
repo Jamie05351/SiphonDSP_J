@@ -9,7 +9,9 @@
 #include <mutex>
 #include <thread>
 #include <memory>
+#include <string>
 #include <vector>
+#include "NativeBmwConvolver.h"
 #include "NativeBmwCrossovers.h"
 #include "NativeBmwDelayGain.h"
 #include "NativeBmwDspParams.h"
@@ -28,6 +30,7 @@
 //   NativeBmwDynamics     per-output compressor, master + bus limiters, multiband compressor
 //   NativeBmwDelayGain    delay lines, DC-blocking input stage
 //   NativeBmwMeasurement  measurement-mute bus, signal generator hookup, capture
+//   NativeBmwConvolver    the stereo FIR convolver, last in the chain
 //   NativeBmwDspMath      shared pure math (ftz, clamps, dB, SVF step, NEON helpers)
 
 class NativeBmwDspProcessor {
@@ -36,7 +39,7 @@ public:
     // generated from app/src/main/schema/native_bmw_dsp.schema into NativeBmwDspSchema.h (with the
     // Kotlin side and docs/NATIVE_BMW_DSP_SCHEMA.md). kConfigSize is pinned to it by a static_assert
     // there. Slots are append-only: saves are stored by index.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 307 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 309 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -186,6 +189,31 @@ public:
     // The take is consumed; startCapture() allocates fresh buffers for the next take.
     std::unique_ptr<CaptureSnapshot> takeCaptureSnapshot();
 
+    // ---- Convolver IR (see NativeBmwConvolver.h) ----
+    // Control calls, one at a time (convolverMutex_), never on the audio thread. A load reads
+    // the WAV, resamples it to the stream rate when the rates differ, builds the kernel and hands
+    // it to the audio thread lock-free; the stage crossfades to it. The decoded source is kept so
+    // a later sample-rate change rebuilds the kernel without reading the file again. The
+    // enable/bypass and gain are ordinary config slots (v[307..308]).
+    struct ConvolverInfo {
+        bool loaded = false;
+        int channels = 0;
+        double sourceRate = 0.0;
+        std::size_t sourceFrames = 0;   // after trailing-silence trim, at sourceRate
+        double streamRate = 0.0;
+        std::size_t streamFrames = 0;   // what the kernel runs, at streamRate
+        std::size_t partitions = 0;
+        double peakGainDb = -200.0;     // the IR's loudest frequency, dB
+        std::string error;              // why the last load / rebuild failed ("" when it didn't)
+    };
+    // False with a user-facing message in error; the previous IR (if any) keeps running.
+    bool loadConvolverIr(const char* wavPath, std::string& error);
+    bool loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::string& error);
+    void clearConvolverIr();
+    ConvolverInfo convolverInfo();
+    // Lock-free: a kernel is installed on the audio side (it lands at the next buffer).
+    bool convolverKernelActive() const { return convolver_.kernelActive(); }
+
 private:
     enum Dirty : uint32_t {
         DirtyNone = 0,
@@ -259,6 +287,11 @@ private:
     std::array<float, 2 * kChunkFrames> chunkInt_{};
     // Each chunk frame's raw input, for the capture's input/output pairs.
     std::array<float, 2 * kChunkFrames> chunkRawIn_{};
+    // The chunk's logical L/R after processFrameBack(), the convolver's input and output.
+    static_assert(static_cast<std::size_t>(kChunkFrames) ==
+                      static_cast<std::size_t>(NativeBmwDsp::kConvolverBlockFrames),
+                  "the convolver's partition is the chunk, so it adds no latency");
+    std::array<float, kChunkFrames> chunkConvL_{}, chunkConvR_{};
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
     // gain, then the band's stereo-linked bus limiter.
     void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);
@@ -465,6 +498,20 @@ private:
     // Capture state -- see startCapture()/stopCapture()/takeCaptureSnapshot(). Touched only by
     // the owner; captureFrameCount() is the lock-free exception, see CaptureRecorder.
     NativeBmwDsp::CaptureRecorder capture_;
+
+    // Convolver: the stage is the owner's; the source IR and info are the control side's.
+    NativeBmwDsp::ConvolverStage convolver_;
+    std::mutex convolverMutex_;
+    NativeBmwDsp::ConvolverIr convolverSource_;
+    ConvolverInfo convolverInfo_;
+    // Bumped by every commit, load and clear: a kernel built outside the lock from an older
+    // source or rate is dropped instead of published.
+    std::uint64_t convolverGeneration_ = 0;
+    // convolverMutex_ held: publishes kernel (null = can't run at rate) and records it in the info.
+    void commitConvolverLocked(std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel, float rate,
+                               std::size_t streamFrames, const std::string& error);
+    // After a sample-rate change: rebuilds the kernel from convolverSource_ outside the lock.
+    void rebuildConvolverForRate();
 
     // ---- Ownership and control requests (see the threading comment above the constructor) ----
     enum : std::uint32_t { kOwnerFree = 0, kOwnerAudio = 1, kOwnerControl = 2 };

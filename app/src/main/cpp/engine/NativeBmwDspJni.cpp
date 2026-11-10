@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <new>
+#include <string>
 
 #include "NativeBmwDspProcessor.h"
 #include "ScopedFlushToZero.h"
@@ -393,4 +394,104 @@ Java_app_siphondsp_interop_NativeDsp_exportNativeBmwCaptureWav(JNIEnv* env, jobj
         env->SetFloatArrayRegion(resultArray, 0, 3, values);
     }
     return resultArray;
+}
+
+// ---- Convolver IR ---------------------------------------------------------------------------
+// Control calls (never the audio thread): see NativeBmwDspProcessor::loadConvolverIr().
+
+namespace {
+// A Java string from UTF-8 that may be odd: messages are built from ASCII here, so this is a
+// plain NewStringUTF.
+jstring toJava(JNIEnv* env, const std::string& text) { return env->NewStringUTF(text.c_str()); }
+}  // namespace
+
+// Null on success, else why the IR was rejected (the previous IR keeps running).
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_loadConvolverIr(JNIEnv* env, jobject, jlong self, jstring pathObj) {
+    if (env == nullptr || self == 0 || pathObj == nullptr) {
+        return env != nullptr ? toJava(env, "Engine unavailable") : nullptr;
+    }
+    const char* path = env->GetStringUTFChars(pathObj, nullptr);
+    if (path == nullptr) {
+        return toJava(env, "Bad path");
+    }
+    std::string error;
+    bool ok = false;
+    try {
+        ok = fromHandle(self)->processor.loadConvolverIr(path, error);
+    } catch (const std::bad_alloc&) {
+        error = "Out of memory loading the IR";
+    }
+    env->ReleaseStringUTFChars(pathObj, path);
+    return ok ? nullptr : toJava(env, error);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_clearConvolverIr(JNIEnv*, jobject, jlong self) {
+    if (self != 0) {
+        fromHandle(self)->processor.clearConvolverIr();
+    }
+}
+
+// NativeDsp.CONVOLVER_* order: loaded (0/1), channels, sourceRate, sourceFrames, streamRate,
+// streamFrames, partitions, peakGainDb, kernelActive (0/1). Null for a gone handle.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    auto& processor = fromHandle(self)->processor;
+    const auto info = processor.convolverInfo();
+    const jdouble values[] = {
+        info.loaded ? 1.0 : 0.0,
+        static_cast<double>(info.channels),
+        info.sourceRate,
+        static_cast<double>(info.sourceFrames),
+        info.streamRate,
+        static_cast<double>(info.streamFrames),
+        static_cast<double>(info.partitions),
+        info.peakGainDb,
+        processor.convolverKernelActive() ? 1.0 : 0.0,
+    };
+    constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+    jdoubleArray result = env->NewDoubleArray(count);
+    if (result != nullptr) {
+        env->SetDoubleArrayRegion(result, 0, count, values);
+    }
+    return result;
+}
+
+// The last load / rebuild failure, or null.
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverError(JNIEnv* env, jobject, jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    const auto info = fromHandle(self)->processor.convolverInfo();
+    return info.error.empty() ? nullptr : toJava(env, info.error);
+}
+
+// Validates a WAV as an IR without an engine (the import, while the service is stopped): null
+// when it would load at sampleRate, else why not.
+extern "C" JNIEXPORT jstring JNICALL
+Java_app_siphondsp_interop_NativeDsp_checkConvolverIr(JNIEnv* env, jobject, jstring pathObj,
+                                                      jfloat sampleRate) {
+    if (env == nullptr || pathObj == nullptr) {
+        return nullptr;
+    }
+    const char* path = env->GetStringUTFChars(pathObj, nullptr);
+    if (path == nullptr) {
+        return toJava(env, "Bad path");
+    }
+    std::string error;
+    bool ok = false;
+    try {
+        NativeBmwDsp::ConvolverIr ir, atRate;
+        ok = NativeBmwDsp::loadConvolverIrWav(path, ir, error) &&
+             NativeBmwDsp::resampleConvolverIr(ir, sampleRate, atRate, error);
+    } catch (const std::bad_alloc&) {
+        error = "Out of memory reading the IR";
+    }
+    env->ReleaseStringUTFChars(pathObj, path);
+    return ok ? nullptr : toJava(env, error);
 }

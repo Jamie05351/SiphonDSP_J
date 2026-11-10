@@ -8,7 +8,7 @@ package app.siphondsp.model
  * slot-by-slot reference is docs/NATIVE_BMW_DSP_SCHEMA.md.
  */
 object NativeBmwDspSchema {
-    const val SIZE = 307
+    const val SIZE = 309
 
     // Enabled, lpfPass, hpfPass, channelMute, measurementMute
     const val INDEX_ENABLED = 0
@@ -184,6 +184,9 @@ object NativeBmwDspSchema {
     // Virtual Bass range and response (added in the 305 -> 307 growth)
     const val INDEX_VIRTUAL_BASS_RANGE = 305
     const val INDEX_VIRTUAL_BASS_RESPONSE = 306
+    // Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
+    const val INDEX_CONVOLVER_ENABLED = 307
+    const val INDEX_CONVOLVER_GAIN = 308
 
     /** The canonical default config, one value per slot. */
     val DEFAULTS = floatArrayOf(
@@ -494,6 +497,8 @@ object NativeBmwDspSchema {
         0f, // 304 subsonicSlope (0 = LR4, 1 = BW2)
         5f, // 305 virtualBassRange (harmonics kept up to x the reach, 3..8)
         200f, // 306 virtualBassResponse (detector release, ms, 100..500)
+        0f, // 307 convolverEnabled (off = bypass, crossfaded)
+        0f, // 308 convolverGain (IR gain / headroom trim, dB, -30..+12)
     )
 
     /** Whether the native engine reads each slot; the rest are Kotlin-only or reserved. */
@@ -536,6 +541,6 @@ object NativeBmwDspSchema {
         true, true, true, true, true, true, true, false,
         true, true, false, true, true, true, true, true,
         false, true, true, true, true, true, true, true,
-        true, true, true,
+        true, true, true, true, true,
     )
 }

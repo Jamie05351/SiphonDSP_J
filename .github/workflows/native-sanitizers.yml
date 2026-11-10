@@ -51,6 +51,8 @@ jobs:
           - name: libFuzzer (config)
             kind: fuzz
     env:
+      # C too: the convolver's FFT (pffft) is C, and the RTSan/fuzz targets pass clang-only flags.
+      CC: clang-20
       CXX: clang++-20
     steps:
       - name: Checkout

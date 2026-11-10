@@ -77,6 +77,28 @@ object NativeDsp {
     external fun freeNativeBmwCaptureSnapshot(snapshot: Long)
     external fun exportNativeBmwCaptureWav(snapshot: Long, rawInPath: String, outPath: String): FloatArray?
 
+    // ---- Convolver IR (NativeBmwConvolver.h) -- control calls, never from the audio thread ----
+    // Reads, resamples (if the rates differ) and installs the WAV IR at [path]; the stage
+    // crossfades to it. Null on success, else why it was rejected (the previous IR keeps running).
+    external fun loadConvolverIr(self: NativeDspHandle, path: String): String?
+    external fun clearConvolverIr(self: NativeDspHandle)
+    // CONVOLVER_COUNT doubles indexed by CONVOLVER_*; null for a gone handle.
+    external fun getConvolverInfo(self: NativeDspHandle): DoubleArray?
+    // The last load / sample-rate rebuild failure, or null.
+    external fun getConvolverError(self: NativeDspHandle): String?
+    // Validates a WAV as an IR at [sampleRate] without an engine. Null when it would load.
+    external fun checkConvolverIr(path: String, sampleRate: Float): String?
+    const val CONVOLVER_LOADED = 0
+    const val CONVOLVER_CHANNELS = 1
+    const val CONVOLVER_SOURCE_RATE = 2
+    const val CONVOLVER_SOURCE_FRAMES = 3
+    const val CONVOLVER_STREAM_RATE = 4
+    const val CONVOLVER_STREAM_FRAMES = 5
+    const val CONVOLVER_PARTITIONS = 6
+    const val CONVOLVER_PEAK_GAIN_DB = 7
+    const val CONVOLVER_KERNEL_ACTIVE = 8
+    const val CONVOLVER_COUNT = 9
+
     init {
         System.loadLibrary("siphondsp-engine")
     }

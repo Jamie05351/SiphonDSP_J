@@ -410,6 +410,10 @@ section Virtual Bass range and response (added in the 305 -> 307 growth)
 slot 305 5           native   INDEX_VIRTUAL_BASS_RANGE kVirtualBassRange virtualBassRange (harmonics kept up to x the reach, 3..8)
 slot 306 200         native   INDEX_VIRTUAL_BASS_RESPONSE kVirtualBassResponse virtualBassResponse (detector release, ms, 100..500)
 
+section Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
+slot 307 0           native   INDEX_CONVOLVER_ENABLED kConvolverEnabled convolverEnabled (off = bypass, crossfaded)
+slot 308 0           native   INDEX_CONVOLVER_GAIN kConvolverGain convolverGain (IR gain / headroom trim, dB, -30..+12)
+
 section Structure
 const kRoutingStride 2
 const kAllPassSectionWidth 4

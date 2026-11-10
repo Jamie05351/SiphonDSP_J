@@ -129,6 +129,10 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
                                     NativeBmwDsp::VirtualBass::kMaxRange);
     next.virtualBassResponseMs = clampIn(v[nbschema::kVirtualBassResponse], NativeBmwDsp::VirtualBass::kMinResponseMs,
                                          NativeBmwDsp::VirtualBass::kMaxResponseMs);
+    // v[307..308]: the convolver's enable and IR gain trim. The IR is loaded separately
+    // (loadConvolverIr()), not through the flat config.
+    next.convolverEnabled = flagIn(v[nbschema::kConvolverEnabled]);
+    next.convolverGainDb = clampIn(v[nbschema::kConvolverGain], -30, 12);
     next.highGainL = clampIn(v[211], -6, 6);
     next.highGainR = clampIn(v[212], -6, 6);
     next.highDelayL = clampIn(v[213], 0, 2.8f);

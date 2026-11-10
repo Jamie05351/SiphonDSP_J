@@ -56,12 +56,12 @@ jobs:
 
       - name: NEON vs scalar output parity
         shell: bash
-        run: HOST=1 HOST_CXX=clang++ bash scripts/run-neon-parity.sh
+        run: HOST=1 HOST_CXX=clang++ HOST_CC=clang bash scripts/run-neon-parity.sh
 
       - name: Native DSP unit tests (NEON path)
         shell: bash
         run: |
           set -euo pipefail
-          cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++
+          cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           cmake --build build/native-tests --parallel
           ctest --test-dir build/native-tests --output-on-failure
