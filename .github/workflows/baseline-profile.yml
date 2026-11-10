@@ -66,6 +66,24 @@ jobs:
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
 
+      # Fails here, PR runs included, if the generator passed without writing the profile.
+      - name: Check the profile was written
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=baselineprofile/build/outputs/connected_android_test_additional_output
+          if [ ! -d "$out" ]; then
+            echo "::error::The generator wrote no additional output at all ($out is missing)."
+            exit 1
+          fi
+          profile="$(find "$out" -type f -name '*-baseline-prof*.txt' | sort | tail -n 1)"
+          if [ -z "$profile" ]; then
+            echo "::error::The generator wrote no *-baseline-prof*.txt. Its output:"
+            find "$out" -type f | sort
+            exit 1
+          fi
+          echo "$profile: $(wc -l < "$profile") rules"
+
       - name: Upload the profile
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
