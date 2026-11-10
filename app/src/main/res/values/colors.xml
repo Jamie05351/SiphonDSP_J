@@ -1,38 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="divider_default">@color/md_black_1000_12</color>
-
-    <!-- BMW ///M Motorsport stripe colors (fixed brand colors, independent of the selected
-         app palette; see view_m_stripe_divider.xml). -->
-    <color name="bmw_m_blue">#008AC9</color>
-    <color name="bmw_m_purple">#2B115A</color>
-    <color name="bmw_m_red">#F11A22</color>
-
-    <!-- Sampled from the front-page backdrop's (dsp_home_backdrop.jpg) own panel facia, so the
-         bottom bar's body color reads as part of the same glossy black chrome rather than the
-         app theme's own (lighter, warmer) surface color. -->
-    <color name="dsp_home_banner_gloss_black">#0A0C10</color>
-
-    <!-- Elevated panel surface for the bespoke PEQ glass value/choice dialogs (see
-         ThemeOverlay.SiphonDSP.GlassDialog): a touch lighter than the near-black value box so
-         the dialog reads as a raised sheet, and the grey inner input field
-         (bmw_glass_dialog_field) sits one step above that again. -->
-    <color name="bmw_glass_dialog_surface">#1B1B21</color>
-    <color name="bmw_glass_dialog_field">#33333C</color>
-    <!-- 40%-alpha panel fill for alert dialogs on the DSP workspaces (see
-         AppTheme.AlertDialogTheme.Workspace); base RGB is siphon_surface (#141418). -->
-    <color name="bmw_workspace_dialog_surface">#66141418</color>
-    <!-- Sampled from dsp_workspace_backdrop_*.png's content-pane fill (all 5 average to within a
-         couple of RGB values of each other, ~rgb(32,32,32)), so the toolbar above the tri-colour
-         stripe reads as the same material as the workspace backdrop below it instead of a
-         different flat tone (was ?attr/colorSurface / siphon_surface, #141418, distinctly
-         darker/bluer). See the toolbar in activity_parametric_eq.xml. -->
-
-    <!-- AMOLED Mode -->
-    <color name="surface_amoled">#000001</color>
-    <color name="background_amoled">#000000</color>
-
-    <!-- Material Design Colors -->
-    <color name="md_black_1000_12">#1F000000</color>
-    <color name="md_white_1000_12">#1FFFFFFF</color>
+    <!-- The screens' own background (see ScreenBackground in SettingsWidgets.kt). -->
+    <color name="window_background">#101014</color>
+    <color name="accent">#4FC3F7</color>
 </resources>

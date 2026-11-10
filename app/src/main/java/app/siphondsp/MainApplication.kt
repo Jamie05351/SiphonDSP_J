@@ -124,7 +124,8 @@ open class MainApplication : Application() {
             prefs.set(R.string.key_reset_proc_mode_fix_applied, true)
         }
 
-        // Every screen is the fixed dark dashboard; the leftover View screens follow it.
+        // Every screen is the fixed dark dashboard: the configuration says night, for the theme
+        // attributes the graphs read and for the system dialogs.
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
 
         // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
