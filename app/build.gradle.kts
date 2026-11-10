@@ -18,7 +18,10 @@ plugins {
 
 android {
 
-    val SUPPORTED_ABIS = setOf("arm64-v8a")
+    // The head unit is arm64. CI's Baseline Profile job runs an x86_64 emulator and adds that ABI
+    // with -Psiphon.extraAbis=x86_64 (the engine has a scalar path for non-arm64).
+    val SUPPORTED_ABIS = setOf("arm64-v8a") +
+        (findProperty("siphon.extraAbis") as String?).orEmpty().split(',').map(String::trim).filter(String::isNotEmpty)
     compileSdk = AndroidConfig.compileSdk
     project.extensions.configure<BasePluginExtension>("base") {
         archivesName.set("SiphonDSP-v${AndroidConfig.versionName}")
@@ -89,6 +92,16 @@ android {
 
             val debugType = getByName("debug")
             versionNameSuffix = debugType.versionNameSuffix
+            matchingFallbacks.add("release")
+        }
+        // What :baselineprofile drives to generate src/main/baseline-prof.txt: release, but not
+        // shrunk, so the profile names the classes and methods as they are in the source (R8
+        // rewrites the profile when it shrinks a real release). Profileable via the manifest.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks.add("release")
         }
     }
@@ -165,6 +178,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.8")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // Applies src/main/baseline-prof.txt on installs that don't come from Play (the head unit).
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.mediarouter:mediarouter:1.8.1")
 
     // Material
@@ -217,9 +232,11 @@ dependencies {
     debugImplementation("com.plutolib:pluto:2.2.2")
     "previewImplementation"("com.plutolib:pluto-no-op:2.2.2")
     releaseImplementation("com.plutolib:pluto-no-op:2.2.2")
+    "benchmarkImplementation"("com.plutolib:pluto-no-op:2.2.2")
     debugImplementation("com.plutolib.plugins:bundle-core:2.2.2")
     "previewImplementation"("com.plutolib.plugins:bundle-core-no-op:2.2.2")
     releaseImplementation("com.plutolib.plugins:bundle-core-no-op:2.2.2")
+    "benchmarkImplementation"("com.plutolib.plugins:bundle-core-no-op:2.2.2")
 
     // Unit tests
     testImplementation("junit:junit:4.13.2")

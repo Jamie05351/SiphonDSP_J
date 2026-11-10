@@ -25,8 +25,8 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 7a | Compose: Settings and the app's own screens; English only | `ccr-efec0dfc-compose` | #584 — merged |
 | 7b | Compose Navigation: front page and DSP workspaces in one Activity | `ccr-efec0dfc-compose-nav` | in #585 — merged |
 | 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `claude/checklist-md-continuation-q7x4mo` | #585 — merged |
-| 7d | Settings in DataStore | `claude/checklist-md-continuation-q7x4mo` | in progress |
-| 7e | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
+| 7d | Settings in DataStore | `claude/checklist-md-continuation-q7x4mo` | #586 — merged |
+| 7e | Baseline Profile + emulator CI job | `claude/checklist-md-continuation-q7x4mo` | in progress |
 
 ## PR 1 — Engine core: JamesDSP removed
 
@@ -179,7 +179,15 @@ Too large for one review, so five stacked PRs.
 
 ### 7e — Baseline Profile
 
-- [ ] 7.5 Baseline Profile module and a CI job that generates it on an emulator.
+- [x] 7.5 Baseline Profile module and a CI job that generates it on an emulator.
+      `:baselineprofile` (a `com.android.test` module with Macrobenchmark's `BaselineProfileRule`)
+      drives the app's new non-shrunk `benchmark` build type through start-up and the front page,
+      with the setup permissions granted over shell. `baseline-profile.yml` runs it on an API 34
+      x86_64 emulator (the app built with `-Psiphon.extraAbis=x86_64`; shipped APKs stay arm64)
+      and uploads the profile; a manual run also commits it as `app/src/main/baseline-prof.txt`
+      on the branch `baseline-profile/update`, ready for a PR. The app has
+      `profileinstaller`, so the profile applies on the head unit's sideloaded installs. The
+      Baseline Profile Gradle plugin isn't used: its support for AGP 9 couldn't be confirmed.
 
 ## Deferred (not this round)
 
