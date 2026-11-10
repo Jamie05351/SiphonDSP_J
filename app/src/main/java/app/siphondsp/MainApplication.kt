@@ -57,6 +57,8 @@ open class MainApplication : Application() {
 
     override fun onCreate() {
         instance = this
+        // Settings load off the main thread while the rest of start-up runs (see Preferences).
+        Preferences.warmUp(this)
         // A fresh process after a head-unit reset shows up in the audio health log, so a missing
         // "PIPELINE START" after this line means the engine was never started.
         app.siphondsp.service.AudioHealthLog.record(this, "APP PROCESS START")

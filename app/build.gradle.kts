@@ -164,6 +164,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.navigation:navigation-compose:2.9.8")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("androidx.mediarouter:mediarouter:1.8.1")
 
     // Material

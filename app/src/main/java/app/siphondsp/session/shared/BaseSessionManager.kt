@@ -105,6 +105,8 @@ abstract class BaseSessionManager(protected val context: Context) : DumpManager.
         Timber.d("Destroying SessionDumpManager")
 
         dumpManager.unregisterOnDumpMethodChangeListener(this)
+        // Held strongly by the settings store: without this, every destroyed manager lived on.
+        preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener)
 
         audioPlaybackCallback?.let { audioManager.unregisterAudioPlaybackCallback(it) }
 
