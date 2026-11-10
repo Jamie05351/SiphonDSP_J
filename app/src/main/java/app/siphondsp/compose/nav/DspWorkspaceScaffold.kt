@@ -21,13 +21,11 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspSidebarRail
 import app.siphondsp.compose.controls.DspWorkspaceBackdrop
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.DspRail
-import app.siphondsp.view.DspStatusStrip
 
 /**
  * The chrome every DSP workspace shares (was `activity_parametric_eq.xml`), full screen on the
@@ -98,9 +96,8 @@ fun DspWorkspaceScaffold(
                 )
             }
             if (showStatusStrip) {
-                AndroidView(
-                    factory = { ctx -> DspStatusStrip(ctx).apply { onOpen = { navigator.openWorkspace(it) } } },
-                    update = { it.onOpen = { dest -> navigator.openWorkspace(dest) } },
+                DspStatusStrip(
+                    onOpen = { navigator.openWorkspace(it) },
                     modifier = Modifier
                         .padding(start = actionsStart)
                         .fillMaxHeight()

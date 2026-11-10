@@ -132,7 +132,6 @@ android {
     }
 
     buildFeatures {
-        viewBinding = true
         buildConfig = true
         compose = true
         // Disable unused features
@@ -164,7 +163,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.navigation:navigation-compose:2.9.8")
-    implementation("androidx.databinding:databinding-runtime:9.2.1")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("androidx.mediarouter:mediarouter:1.8.1")
 
