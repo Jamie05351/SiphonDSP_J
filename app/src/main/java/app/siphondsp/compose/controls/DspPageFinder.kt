@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,11 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -39,12 +43,19 @@ private val FinderText = Color(0xFFBDDFF1)
 private val FinderSelectedFill = Color(0x597327A5)
 private val FinderBorder = 2.5.dp
 private val FinderShape = RoundedCornerShape(3.dp)
+// Label size: the mockup's 16sp, scaled down (to no less than 12sp) when the longest label
+// wouldn't fit its segment -- the 6-segment Dynamics finder's OVERVIEW / LIMITERS.
+private const val LabelMaxSp = 16f
+private const val LabelMinSp = 12f
+private val LabelLetterSpacing = 0.16.em
+private val LabelInset = 6.dp
 
 /**
  * The v4 head-unit page finder: one labelled segment per sub-page, replacing the generic prev/next
  * arrows ([DspPagerArrows]) so any sub-page is one tap away. Purple outline, dividers and label
  * colour follow James's mockup; the current segment gets a purple tint. Fills the box it is given
- * (placed over the art by [WorkspaceArtBox]) and splits it evenly between [labels].
+ * (placed over the art by [WorkspaceArtBox]) and splits it evenly between [labels]; the labels
+ * shrink together (16sp down to 12sp) when the longest wouldn't fit its segment.
  */
 @Composable
 fun DspPageFinder(
@@ -53,39 +64,52 @@ fun DspPageFinder(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier
-            .fillMaxSize()
-            .clip(FinderShape)
-            .background(FinderFill)
-            .border(FinderBorder, FinderPurple, FinderShape),
-    ) {
-        labels.forEachIndexed { index, label ->
-            if (index > 0) Box(Modifier.width(FinderBorder).fillMaxHeight().background(FinderPurple))
-            val isSelected = index == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(if (isSelected) FinderSelectedFill else Color.Transparent)
-                    .semantics { this.selected = isSelected }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(color = FinderPurple),
-                        role = Role.Tab,
-                        onClick = { if (!isSelected) onSelect(index) },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    color = if (isSelected) Color.White else FinderText,
-                    fontSize = 16.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    letterSpacing = 0.16.em,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // One size for every segment, from the widest label (in its bold, selected form) at full size.
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val segmentWidth = (maxWidth - FinderBorder * (labels.size - 1)) / labels.size.coerceAtLeast(1) - LabelInset * 2
+        val labelSp = remember(labels, segmentWidth, density) {
+            val style = TextStyle(fontSize = LabelMaxSp.sp, fontWeight = FontWeight.Bold, letterSpacing = LabelLetterSpacing)
+            val widest = labels.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
+            val room = with(density) { segmentWidth.toPx() }
+            if (widest <= 0 || room <= 0f) LabelMaxSp
+            else (LabelMaxSp * (room / widest).coerceAtMost(1f)).coerceAtLeast(LabelMinSp)
+        }
+        Row(
+            Modifier
+                .fillMaxSize()
+                .clip(FinderShape)
+                .background(FinderFill)
+                .border(FinderBorder, FinderPurple, FinderShape),
+        ) {
+            labels.forEachIndexed { index, label ->
+                if (index > 0) Box(Modifier.width(FinderBorder).fillMaxHeight().background(FinderPurple))
+                val isSelected = index == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(if (isSelected) FinderSelectedFill else Color.Transparent)
+                        .semantics { this.selected = isSelected }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(color = FinderPurple),
+                            role = Role.Tab,
+                            onClick = { if (!isSelected) onSelect(index) },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        color = if (isSelected) Color.White else FinderText,
+                        fontSize = labelSp.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        letterSpacing = LabelLetterSpacing,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
