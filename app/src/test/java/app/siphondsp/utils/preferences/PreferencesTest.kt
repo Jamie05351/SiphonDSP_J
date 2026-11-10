@@ -3,6 +3,7 @@ package app.siphondsp.utils.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Looper
+import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.test.core.app.ApplicationProvider
 import app.siphondsp.R
 import app.siphondsp.utils.Constants
@@ -57,6 +58,22 @@ class PreferencesTest {
         // A new process: the value comes from the file, not the in-memory copy.
         NamespaceStore.clearForTest()
         assertEquals("750", Preferences(context).App().get<String>(R.string.key_session_continuous_polling_rate))
+    }
+
+    @Test
+    fun aCorruptFileFallsBackToDefaultsAndCanBeWrittenAgain() {
+        // Power lost mid-write: garbage where the protobuf should be.
+        context.preferencesDataStoreFile(Constants.PREF_APP).apply {
+            parentFile?.mkdirs()
+            writeBytes(byteArrayOf(0x7f, 0x01, 0x02, 0x03, 0x04))
+        }
+
+        val prefs = Preferences(context).App()
+        assertEquals(true, prefs.get<Boolean>(R.string.key_powersave_suspend))
+
+        prefs.set(R.string.key_powersave_suspend, false, async = false)
+        NamespaceStore.clearForTest()
+        assertEquals(false, Preferences(context).App().get<Boolean>(R.string.key_powersave_suspend))
     }
 
     @Test

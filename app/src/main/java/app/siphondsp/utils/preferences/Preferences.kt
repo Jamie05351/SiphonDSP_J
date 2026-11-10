@@ -8,10 +8,12 @@ import android.os.Looper
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.SharedPreferencesMigration
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
+import java.io.IOException
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.reflect.KClass
 import androidx.datastore.preferences.core.Preferences as StoredPreferences
@@ -49,8 +52,14 @@ class Preferences(val context: Context) {
         fun warmUp(context: Context) {
             val app = context.applicationContext
             Thread({
-                NamespaceStore.forName(app, Constants.PREF_APP)
-                NamespaceStore.forName(app, Constants.PREF_VAR)
+                // Never takes the process down: a store that fails here fails again, and is
+                // reported, on the read that needs it.
+                try {
+                    NamespaceStore.forName(app, Constants.PREF_APP)
+                    NamespaceStore.forName(app, Constants.PREF_VAR)
+                } catch (e: Exception) {
+                    Timber.e(e, "Settings warm-up failed")
+                }
             }, "settings-warm-up").start()
         }
     }
@@ -187,6 +196,12 @@ internal class NamespaceStore(context: Context, name: String) {
 
     private val dataStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dataStore: DataStore<StoredPreferences> = PreferenceDataStoreFactory.create(
+        // A corrupt file (power lost mid-write) is replaced with an empty one: the settings fall
+        // back to their defaults, as SharedPreferences did, instead of failing every launch.
+        corruptionHandler = ReplaceFileCorruptionHandler {
+            Timber.e(it, "Settings file $name was corrupt; starting from defaults")
+            emptyPreferences()
+        },
         migrations = listOf(SharedPreferencesMigration(context, name)),
         scope = dataStoreScope,
         produceFile = { context.preferencesDataStoreFile(name) },
@@ -194,7 +209,13 @@ internal class NamespaceStore(context: Context, name: String) {
 
     // Loaded on first use (the migration runs then), like SharedPreferences' first read.
     @Volatile
-    private var snapshot: StoredPreferences = runBlocking { dataStore.data.first() }
+    private var snapshot: StoredPreferences = try {
+        runBlocking { dataStore.data.first() }
+    } catch (e: IOException) {
+        // Unreadable (not corrupt): run on the defaults for now; writes still try to save.
+        Timber.e(e, "Settings file $name could not be read; using defaults")
+        emptyPreferences()
+    }
     private val lock = Any()
 
     val listeners = CopyOnWriteArraySet<SharedPreferences.OnSharedPreferenceChangeListener>()
