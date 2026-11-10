@@ -114,7 +114,7 @@ fun DspStatusStrip(onOpen: (DspDestination) -> Unit, modifier: Modifier = Modifi
         val style = TextStyle(fontSize = MAX_TEXT_SP.sp)
         val textPx = WorstCaseCells.sumOf { measurer.measure(it, style).size.width.toDouble() }.toFloat() +
             (WorstCaseCells.size - 1) * measurer.measure("·", style).size.width
-        val paddingPx = with(density) { (WorstCaseCells.size * 12.dp + (WorstCaseCells.size - 1) * 4.dp).toPx() }
+        val paddingPx = with(density) { (12.dp * WorstCaseCells.size + 4.dp * (WorstCaseCells.size - 1)).toPx() }
         val roomPx = with(density) { maxWidth.toPx() } - paddingPx
         (MAX_TEXT_SP * (roomPx / textPx).coerceAtMost(1f)).coerceAtLeast(MIN_TEXT_SP).sp
     }

@@ -23,6 +23,7 @@ import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.AppEvent
 import app.siphondsp.utils.AppEvents
+import app.siphondsp.utils.Constants
 import app.siphondsp.view.BmwDashboardSkin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
