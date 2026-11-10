@@ -237,8 +237,11 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     if (ir.frames() == 0) {
         return -200.0;
     }
+    // 8x zero-padded: the response is sampled finely enough that a sharp resonance between bins
+    // is read within a few hundredths of a dB (2x under-read it by up to ~1 dB, loosening the
+    // unity cap that 1 / peak sets). A one-off transform on the control thread.
     int n = 1024;
-    while (static_cast<std::size_t>(n) < 2 * ir.frames()) {
+    while (static_cast<std::size_t>(n) < 8 * ir.frames()) {
         n *= 2;
     }
     PFFFTD_Setup* setup = pffftd_new_setup(n, PFFFT_REAL);

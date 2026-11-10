@@ -399,6 +399,30 @@ TEST_CASE("convolver: resampling keeps the filter's ringing past the last tap") 
     CHECK(sum == doctest::Approx(1.0).epsilon(1e-3));
 }
 
+TEST_CASE("convolver: the measured IR peak catches a resonance between FFT bins") {
+    // A 1000-tap tone burst whose frequency sits half-way between the bins of a 2x-padded FFT:
+    // the cap is 1 / peak, so an under-read peak lets the stage lift that frequency above unity.
+    // The true peak, from a dense direct scan around the tone, must be read within 0.1 dB.
+    ConvolverIr ir;
+    ir.sampleRate = 48000.0;
+    ir.channels = 1;
+    ir.left.resize(1000);
+    const double f0 = 48000.0 * 21.5 / 2048.0;
+    for (std::size_t n = 0; n < ir.left.size(); ++n) ir.left[n] = 0.01 * std::sin(2.0 * kPi * f0 * n / 48000.0);
+    double truePeak = 0.0;
+    for (double f = f0 - 60.0; f <= f0 + 60.0; f += 0.05) {
+        double re = 0.0, im = 0.0;
+        for (std::size_t n = 0; n < ir.left.size(); ++n) {
+            re += ir.left[n] * std::cos(2.0 * kPi * f * n / 48000.0);
+            im -= ir.left[n] * std::sin(2.0 * kPi * f * n / 48000.0);
+        }
+        truePeak = std::max(truePeak, std::hypot(re, im));
+    }
+    CHECK(NativeBmwDsp::convolverIrPeakGainDb(ir) == doctest::Approx(linToDb(truePeak)).epsilon(0.1 / std::fabs(linToDb(truePeak))));
+    CHECK(NativeBmwDsp::convolverIrPeakGainDb(ir) <= linToDb(truePeak) + 1e-9);
+    CHECK(NativeBmwDsp::convolverIrPeakGainDb(ir) > linToDb(truePeak) - 0.1);
+}
+
 TEST_CASE("convolver: a rejected IR leaves the current one running") {
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);
