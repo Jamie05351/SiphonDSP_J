@@ -51,15 +51,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 /**
  * The Output workspace's CONVOLVER page: the stereo FIR convolver at the very end of the chain.
  *
  * - **Convolver**: the header switch turns it on, or off as a bypass (the engine crossfades over
- *   20 ms either way); Gain trims the IR's level -- convolution runs after the master limiter, so
- *   an IR with gain above 0 dB needs this headroom. "Match gain" sets it to the IR's loudest
- *   frequency, so the IR never lifts anything above unity.
+ *   20 ms either way); Gain trims the IR's level. Convolution runs after the master limiter, so
+ *   the engine caps the gain at the IR's peak response: an IR never lifts any frequency above
+ *   unity (a boosting IR is brought down to 0 dB at its loudest frequency). The page shows the
+ *   gain actually applied.
  * - **Impulse response**: load a mono or stereo WAV (copied into app storage; a mono IR runs on
  *   both channels, a stereo one L on L and R on R), what the engine made of it -- rates, length,
  *   whether it was resampled to the stream -- and clear.
@@ -159,13 +159,18 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         ConvolverAccent, row(52, 48),
     )
     val peak = ir.status?.takeIf { it.loaded && it.streamFrames > 0 }?.peakGainDb
-    val matched = peak?.let { roundToHalfDb(-it) }
-    Row(row(112, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ActionChip(
-            text = if (matched != null) "Match gain (${formatDb(matched)})" else "Match gain",
-            enabled = matched != null,
-        ) { matched?.let { dsp.commit(NativeBmwDspValues.INDEX_CONVOLVER_GAIN, it) } }
-    }
+    // What the engine applies: the trim, capped so the IR's loudest frequency stays at or below
+    // unity (NativeBmwDsp::ConvolverStage::process()).
+    val trim = dsp.get(NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
+    InfoLine(
+        when {
+            peak == null -> "Gain is capped so the IR never lifts above unity"
+            trim > -peak -> "Applied: ${formatDb((-peak).toFloat())} (capped at the IR's peak, ${formatDb(peak.toFloat())})"
+            else -> "Applied: ${formatDb(trim)}, the IR's loudest frequency at ${formatDb((peak + trim).toFloat())}"
+        },
+        row(112, 28),
+        color = if (peak != null && trim > -peak) CapColor else InfoColor,
+    )
     InfoLine(
         when {
             !dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED) -> "Off: bypassed, the chain's output untouched"
@@ -255,14 +260,12 @@ private fun PhoneConvolverPage(
     }
 }
 
-private fun roundToHalfDb(db: Double): Float =
-    ((db * 2).roundToInt() / 2f).coerceIn(NativeBmwDspValues.CONVOLVER_MIN_GAIN_DB, NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB)
-
 private fun formatDb(db: Float): String = "%+.1f dB".format(db)
 
 private val ConvolverAccent = Color(BmwDashboardSkin.LIGHT_BLUE_BRIGHT)
 private val InfoColor = Color(0xFF969EA8)
 private val ErrorColor = Color(0xFFFF6B6B)
+private val CapColor = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private const val StatusPollMs = 1000L
 private const val MaxIrSeconds = "1.36"
 

@@ -55,6 +55,10 @@ enum : std::size_t {
     kConvolverMaxSourceFrames = 1u << 20,
 };
 
+// Highest IR file rate accepted. Bounds the resampler's work (its taps per output sample grow
+// with source / stream rate).
+constexpr double kConvolverMaxSourceRate = 384000.0;
+
 // Reads a 1- or 2-channel WAV (any PCM/float format dr_wav decodes) into out and trims trailing
 // silence (below -120 dB re. the IR's peak). False with a user-facing message in error.
 bool loadConvolverIrWav(const char* path, ConvolverIr& out, std::string& error);
@@ -82,6 +86,10 @@ public:
     void process(const double* inL, const double* inR, double* outL, double* outR,
                  std::size_t frames);
     std::size_t partitions() const { return partitions_; }
+    // The IR's loudest frequency, dB, and the largest linear gain the stage applies to it
+    // (1 / peak: the gain that brings that frequency to unity). See ConvolverStage::process().
+    double peakGainDb() const { return peakGainDb_; }
+    double maxGain() const { return maxGain_; }
 
 private:
     ConvolverKernel() = default;
@@ -107,6 +115,8 @@ private:
     // Delay-line slots holding real history (0 after reset(), up to partitions_).
     std::size_t validPartitions_ = 0;
     bool stereo_ = false;
+    double peakGainDb_ = 0.0;
+    double maxGain_ = 1.0;
 };
 
 // The stage the processor runs: the current kernel, the one it is fading away from, the IR
@@ -117,7 +127,10 @@ public:
     // unload. Frees whatever kernels the audio thread has retired since the last call.
     void publish(std::unique_ptr<ConvolverKernel> kernel);
     // Audio thread: one chunk (frames <= kConvolverBlockFrames) of logical L/R, in place.
-    // enabled/gainDb are the stage's settings (p_.convolverEnabled / convolverGainDb).
+    // enabled/gainDb are the stage's settings (p_.convolverEnabled / convolverGainDb). The gain
+    // applied is min(gainDb, -kernel peak dB): the stage runs after the master limiter, so it
+    // never lifts any frequency above unity -- an IR that boosts somewhere is brought down to
+    // 0 dB at its loudest frequency, and the trim can only go below that.
     void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb);
     // Sample-rate dependent ramp constants.
     void setSampleRate(float sampleRate);

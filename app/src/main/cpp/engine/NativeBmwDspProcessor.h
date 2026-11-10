@@ -504,8 +504,14 @@ private:
     std::mutex convolverMutex_;
     NativeBmwDsp::ConvolverIr convolverSource_;
     ConvolverInfo convolverInfo_;
-    // convolverMutex_ held: (re)builds the kernel from convolverSource_ at rate and publishes it.
-    bool rebuildConvolverLocked(float rate, std::string& error);
+    // Bumped by every commit, load and clear: a kernel built outside the lock from an older
+    // source or rate is dropped instead of published.
+    std::uint64_t convolverGeneration_ = 0;
+    // convolverMutex_ held: publishes kernel (null = can't run at rate) and records it in the info.
+    void commitConvolverLocked(std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel, float rate,
+                               std::size_t streamFrames, const std::string& error);
+    // After a sample-rate change: rebuilds the kernel from convolverSource_ outside the lock.
+    void rebuildConvolverForRate();
 
     // ---- Ownership and control requests (see the threading comment above the constructor) ----
     enum : std::uint32_t { kOwnerFree = 0, kOwnerAudio = 1, kOwnerControl = 2 };

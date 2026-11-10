@@ -28,8 +28,11 @@ Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line.
 - WAV, **mono** (applied to both channels) or **stereo / dual mono** (L on L, R on R, no
   cross-feed). Any PCM / float format dr_wav decodes. More channels are rejected.
 - An IR whose rate differs from the stream's is **resampled** (Kaiser-windowed sinc, 64 zero
-  crossings, β = 10, cut at the lower Nyquist) with its level kept. The decoded source is kept,
-  so a stream-rate change rebuilds the kernel without reading the file again.
+  crossings, β = 10, cut at the lower Nyquist, tabulated at 1024 points per crossing) with its
+  level kept. Source files up to 384 kHz; the worst case (384 kHz → 48 kHz, 65,536 taps, stereo)
+  takes ~0.3 s on an x86-64 host. The decoded source is kept, so a stream-rate change rebuilds
+  the kernel without reading the file again — outside the convolver's lock, with a generation
+  check so a load or clear that lands meanwhile wins.
 - Everything that allocates — decoding, resampling, transforming partitions, the delay line —
   runs on the calling (control) thread. The finished kernel reaches the audio thread through a
   lock-free triple buffer; the audio thread hands the retired one back through the same buffer,
@@ -46,6 +49,8 @@ IR gain trim, −30..+12 dB. Toggling, loading, swapping or unloading an IR **cr
 20 ms**; the gain follows a 10 ms one-pole. Fully off, or with no IR loaded, the stage is skipped
 and the output is bit-identical to the chain without it (the parity check covers this).
 
-Because the convolver runs after the limiter, an IR with gain above 0 dB at some frequency can
-push peaks past it; the page shows the IR's peak response and **Match gain** sets the trim to
-cancel it. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).
+Because the convolver runs after the limiter, the stage **caps its gain at the IR's peak
+response**: the gain applied is `min(trim, −peak dB)`, so the IR never lifts any frequency above
+unity. A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
+can only go below that. The page shows the gain actually applied and flags when the cap is in
+effect. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).

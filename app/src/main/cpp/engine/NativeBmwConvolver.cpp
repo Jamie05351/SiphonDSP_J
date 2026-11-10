@@ -53,32 +53,55 @@ double besselI0(double x) {
     return sum;
 }
 
-void resampleChannel(const std::vector<double>& in, double ratio, std::vector<double>& out) {
+// The resampler's kernel, k(u) = sinc(u) * kaiser(u / kZeroCrossings), u in zero crossings of
+// the cutoff, tabulated once per resample at kTablePerCrossing points per crossing and linearly
+// interpolated: a table lookup per tap instead of a Bessel series and a sine. Interpolation
+// error ~(pi / 1024)^2 / 8 ~ -120 dB, below the window's own ~-100 dB sidelobes.
+constexpr double kZeroCrossings = 64.0, kBeta = 10.0;
+constexpr std::size_t kTablePerCrossing = 1024;
+
+std::vector<double> resampleKernelTable() {
+    const std::size_t size = static_cast<std::size_t>(kZeroCrossings) * kTablePerCrossing + 2;
+    std::vector<double> table(size, 0.0);
+    const double i0Beta = besselI0(kBeta);
+    for (std::size_t i = 0; i < size; ++i) {
+        const double u = static_cast<double>(i) / kTablePerCrossing;
+        if (u >= kZeroCrossings) {
+            break;  // window edge and the guard point past it stay 0
+        }
+        const double sinc = i == 0 ? 1.0 : std::sin(kPi * u) / (kPi * u);
+        const double r = u / kZeroCrossings;
+        table[i] = sinc * besselI0(kBeta * std::sqrt(1.0 - r * r)) / i0Beta;
+    }
+    return table;
+}
+
+void resampleChannel(const std::vector<double>& in, double ratio, const std::vector<double>& table,
+                     std::vector<double>& out) {
     // ratio = target / source. Kaiser-windowed sinc, 64 zero crossings of the (lower) cutoff each
-    // side, beta 10 (~-100 dB sidelobes); cutoff at the lower Nyquist so a downsample can't alias.
-    constexpr double kZeroCrossings = 64.0, kBeta = 10.0;
+    // side, beta 10; cutoff at the lower Nyquist so a downsample can't alias.
     const double cutoff = std::min(1.0, ratio);
     const double halfWidth = kZeroCrossings / cutoff;
-    const double i0Beta = besselI0(kBeta);
     const double step = 1.0 / ratio;  // source samples per output sample
+    const double scale = cutoff * static_cast<double>(kTablePerCrossing);  // source samples -> table index
     const auto outFrames = static_cast<std::size_t>(std::ceil(static_cast<double>(in.size()) * ratio));
     out.assign(outFrames, 0.0);
     const auto n = static_cast<long long>(in.size());
+    const auto last = static_cast<double>(table.size() - 2);
     for (std::size_t o = 0; o < outFrames; ++o) {
         const double t = static_cast<double>(o) * step;
         const auto first = std::max<long long>(0, static_cast<long long>(std::ceil(t - halfWidth)));
-        const auto last = std::min<long long>(n - 1, static_cast<long long>(std::floor(t + halfWidth)));
+        const auto end = std::min<long long>(n - 1, static_cast<long long>(std::floor(t + halfWidth)));
         double acc = 0.0;
-        for (long long m = first; m <= last; ++m) {
-            const double d = t - static_cast<double>(m);
-            const double x = cutoff * d;
-            const double sinc = std::fabs(x) < 1e-12 ? 1.0 : std::sin(kPi * x) / (kPi * x);
-            const double r = d / halfWidth;
-            const double window = besselI0(kBeta * std::sqrt(std::max(0.0, 1.0 - r * r))) / i0Beta;
-            acc += in[static_cast<std::size_t>(m)] * cutoff * sinc * window;
+        for (long long m = first; m <= end; ++m) {
+            const double pos = std::min(last, std::fabs(t - static_cast<double>(m)) * scale);
+            const auto i = static_cast<std::size_t>(pos);
+            const double frac = pos - static_cast<double>(i);
+            acc += in[static_cast<std::size_t>(m)] * (table[i] + frac * (table[i + 1] - table[i]));
         }
-        // h'[n] = g(n / fs2) / fs2 = (fs1 / fs2) * g(n / fs2) / fs1: keeps the response's level.
-        out[o] = acc * step;
+        // x cutoff for the band limit; h'[n] = g(n / fs2) / fs2 = (fs1 / fs2) * g(n / fs2) / fs1
+        // keeps the response's level.
+        out[o] = acc * cutoff * step;
     }
 }
 
@@ -104,7 +127,7 @@ bool loadConvolverIrWav(const char* path, ConvolverIr& out, std::string& error) 
                 " channels)";
         return false;
     }
-    if (rate < 8000.0 || rate > 768000.0) {
+    if (rate < 8000.0 || rate > kConvolverMaxSourceRate) {
         drwav_uninit(&wav);
         error = "Unsupported sample rate " + std::to_string(wav.sampleRate) + " Hz";
         return false;
@@ -169,6 +192,10 @@ bool resampleConvolverIr(const ConvolverIr& in, double targetRate, ConvolverIr& 
         error = "No IR to resample";
         return false;
     }
+    if (in.sampleRate > kConvolverMaxSourceRate) {
+        error = "Unsupported IR sample rate " + std::to_string(static_cast<long long>(in.sampleRate)) + " Hz";
+        return false;
+    }
     const double ratio = targetRate / in.sampleRate;
     const double outFrames = std::ceil(static_cast<double>(in.frames()) * ratio);
     if (outFrames > static_cast<double>(kConvolverMaxIrFrames)) {
@@ -185,9 +212,10 @@ bool resampleConvolverIr(const ConvolverIr& in, double targetRate, ConvolverIr& 
         out.right = in.right;
         return true;
     }
-    resampleChannel(in.left, ratio, out.left);
+    const std::vector<double> table = resampleKernelTable();
+    resampleChannel(in.left, ratio, table, out.left);
     if (in.stereo()) {
-        resampleChannel(in.right, ratio, out.right);
+        resampleChannel(in.right, ratio, table, out.right);
     }
     return true;
 }
@@ -294,6 +322,8 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
             pffftd_transform(k->setup_, buf, k->ch_[c].spectra + p * N, k->fftWork_, PFFFT_FORWARD);
         }
     }
+    k->peakGainDb_ = convolverIrPeakGainDb(ir);
+    k->maxGain_ = std::pow(10.0, -k->peakGainDb_ / 20.0);
     k->reset();
     return k;
 }
@@ -449,10 +479,10 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
                                          : std::max(target, enableMix_ - fadeStep_);
         for (int c = 0; c < 2; ++c) {
             const double dry = dry_[c][i];
-            const double cur = active_ ? gain_ * wet_[c][i] : dry;
+            const double cur = active_ ? std::min(gain_, active_->maxGain()) * wet_[c][i] : dry;
             double mixed = cur;
             if (fadingSwap) {
-                const double prev = previous_ ? gain_ * old_[c][i] : dry;
+                const double prev = previous_ ? std::min(gain_, previous_->maxGain()) * old_[c][i] : dry;
                 mixed = swapMix_ * prev + (1.0 - swapMix_) * cur;
             }
             const double y = enableMix_ * mixed + (1.0 - enableMix_) * dry;

@@ -151,9 +151,10 @@ TEST_CASE("convolver: off, or on with no IR, is bit-identical to the chain witho
     CHECK(a == c);
 }
 
-TEST_CASE("convolver adds no latency and applies the gain trim") {
+TEST_CASE("convolver adds no latency and applies the gain trim, capped at unity peak") {
     // A single tap at 0: the convolved chain is the plain chain times the tap, sample for sample.
-    for (const float gainDb : {0.f, -6.f, 6.f}) {
+    // The tap is 0.5 (-6 dB), so the trim can lift it back to unity (+6 dB) but no further.
+    for (const float gainDb : {0.f, -6.f, 6.f, 12.f}) {
         NativeBmwDspProcessor plain, convolved;
         plain.setSampleRate(kSampleRate);
         convolved.setSampleRate(kSampleRate);
@@ -164,7 +165,7 @@ TEST_CASE("convolver adds no latency and applies the gain trim") {
         auto a = noise(24000, 0.1, 21), b = a;
         processInBuffers(plain, a, 480);
         processInBuffers(convolved, b, 480);
-        const double expected = 0.5 * std::pow(10.0, gainDb / 20.0);
+        const double expected = std::min(1.0, 0.5 * std::pow(10.0, gainDb / 20.0));
         // After the 20 ms fade-in and the 10 ms gain ramp have settled.
         double maxErr = 0.0;
         for (std::size_t i = 2 * 12000; i < a.size(); ++i) {
@@ -173,6 +174,24 @@ TEST_CASE("convolver adds no latency and applies the gain trim") {
         CAPTURE(gainDb);
         CHECK(maxErr < 1e-6);
     }
+}
+
+TEST_CASE("convolver: an IR that boosts is brought down to unity at its loudest frequency") {
+    // It runs after the master limiter: a +6 dB IR at 0 dB trim must not drive the output guard.
+    NativeBmwDspProcessor plain, convolved;
+    plain.setSampleRate(kSampleRate);
+    convolved.setSampleRate(kSampleRate);
+    REQUIRE(plain.configure(config(false).data(), kConfigSize));
+    REQUIRE(convolved.configure(config(true, 0.f).data(), kConfigSize));
+    std::string error;
+    REQUIRE(convolved.loadConvolverIr(deltaIr(2.0), error));
+    CHECK(convolved.convolverInfo().peakGainDb == doctest::Approx(linToDb(2.0)));
+    auto a = noise(24000, 0.1, 41), b = a;
+    processInBuffers(plain, a, 480);
+    processInBuffers(convolved, b, 480);
+    double maxErr = 0.0;
+    for (std::size_t i = 2 * 12000; i < a.size(); ++i) maxErr = std::max(maxErr, static_cast<double>(std::fabs(b[i] - a[i])));
+    CHECK(maxErr < 1e-6);
 }
 
 TEST_CASE("convolver: the IR's left channel is the car's left, through the hardware swap") {
@@ -286,6 +305,55 @@ TEST_CASE("convolver: an IR at another rate is resampled with its response kept"
     CHECK(info.streamRate == 44100.0);
     CHECK(info.streamFrames == 2000);
     CHECK(info.error.empty());
+}
+
+TEST_CASE("convolver: resampling stays accurate across ratios, up to the highest source rate") {
+    // A 1 kHz windowed tone burst at each source rate: its response at 1 kHz survives the trip to
+    // 48 kHz (downsampling 8x from 384 kHz included), within the resampler's table accuracy.
+    for (const double rate : {22050.0, 44100.0, 96000.0, 192000.0, 384000.0}) {
+        ConvolverIr ir;
+        ir.sampleRate = rate;
+        ir.channels = 1;
+        ir.left.resize(static_cast<std::size_t>(rate * 0.02));
+        const std::size_t n = ir.left.size();
+        for (std::size_t i = 0; i < n; ++i) {
+            const double hann = 0.5 - 0.5 * std::cos(2.0 * kPi * i / (n - 1));
+            ir.left[i] = 0.001 * hann * std::sin(2.0 * kPi * 1000.0 * i / rate);
+        }
+        auto response = [](const ConvolverIr& h, double f) {
+            double re = 0.0, im = 0.0;
+            for (std::size_t i = 0; i < h.left.size(); ++i) {
+                re += h.left[i] * std::cos(2.0 * kPi * f * i / h.sampleRate);
+                im -= h.left[i] * std::sin(2.0 * kPi * f * i / h.sampleRate);
+            }
+            return std::hypot(re, im);
+        };
+        ConvolverIr out;
+        std::string error;
+        REQUIRE(NativeBmwDsp::resampleConvolverIr(ir, 48000.0, out, error));
+        CAPTURE(rate);
+        CHECK(linToDb(response(out, 1000.0)) == doctest::Approx(linToDb(response(ir, 1000.0))).epsilon(0.001));
+    }
+    ConvolverIr tooFast = deltaIr(1.0, 0, 768000.0);
+    ConvolverIr out;
+    std::string error;
+    CHECK_FALSE(NativeBmwDsp::resampleConvolverIr(tooFast, 48000.0, out, error));
+}
+
+TEST_CASE("convolver: a load racing a sample-rate change ends at the current rate") {
+    for (int round = 0; round < 20; ++round) {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(48000.f);
+        std::string error;
+        std::thread loader([&] { proc.loadConvolverIr(randomIr(4000, true, round, 44100.0), error); });
+        proc.setSampleRate(round % 2 ? 44100.f : 32000.f);
+        loader.join();
+        const auto info = proc.convolverInfo();
+        CAPTURE(round);
+        REQUIRE(info.loaded);
+        CHECK(info.streamRate == (round % 2 ? 44100.0 : 32000.0));
+        CHECK(info.streamFrames > 0);
+    }
 }
 
 TEST_CASE("convolver: a rejected IR leaves the current one running") {
