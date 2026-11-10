@@ -40,6 +40,21 @@ import androidx.datastore.preferences.core.Preferences as StoredPreferences
  */
 class Preferences(val context: Context) {
 
+    companion object {
+        /**
+         * Loads both namespaces (running the one-time migration) on a background thread, so the
+         * first read on the main thread usually finds them in memory. Called first thing in
+         * Application.onCreate; a read that arrives sooner waits for the load in progress.
+         */
+        fun warmUp(context: Context) {
+            val app = context.applicationContext
+            Thread({
+                NamespaceStore.forName(app, Constants.PREF_APP)
+                NamespaceStore.forName(app, Constants.PREF_VAR)
+            }, "settings-warm-up").start()
+        }
+    }
+
     inner class App : AbstractPreferences(context) {
         override fun namespace() = Constants.PREF_APP
     }
