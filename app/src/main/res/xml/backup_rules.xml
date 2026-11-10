@@ -8,4 +8,6 @@
 <full-backup-content>
     <include domain="sharedpref" path="."/>
     <exclude domain="sharedpref" path="variable.xml" />
+    <!-- The app settings (Preferences.App); the runtime flags (variable) stay out. -->
+    <include domain="file" path="datastore/application.preferences_pb" />
 </full-backup-content>

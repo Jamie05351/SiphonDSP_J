@@ -367,13 +367,12 @@ fun <T : Any> Preferences.AbstractPreferences.collectAsState(@StringRes key: Int
     val keyName = remember(key) { context.getString(key) }
     val state = remember(key) { mutableStateOf(get(key, null, type)) }
     DisposableEffect(this, key) {
-        // Held here, strongly: SharedPreferences only keeps a weak reference to its listeners.
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, changed ->
             if (changed == null || changed == keyName) state.value = get(key, null, type)
         }
-        preferences.registerOnSharedPreferenceChangeListener(listener)
+        registerOnSharedPreferenceChangeListener(listener)
         state.value = get(key, null, type)
-        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+        onDispose { unregisterOnSharedPreferenceChangeListener(listener) }
     }
     return state
 }

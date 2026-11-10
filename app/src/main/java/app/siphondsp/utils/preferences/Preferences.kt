@@ -3,11 +3,37 @@ package app.siphondsp.utils.preferences
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.StringRes
-import app.siphondsp.BuildConfig
+import androidx.annotation.VisibleForTesting
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStoreFile
 import app.siphondsp.utils.Constants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import timber.log.Timber
+import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.reflect.KClass
+import androidx.datastore.preferences.core.Preferences as StoredPreferences
 
+/**
+ * The app's settings ([App]) and its runtime flags ([Var]), each kept in a Preferences DataStore
+ * (`files/datastore/<namespace>.preferences_pb`). The first launch after the move copies the old
+ * SharedPreferences file of the same name in and deletes it.
+ */
 class Preferences(val context: Context) {
 
     inner class App : AbstractPreferences(context) {
@@ -18,12 +44,16 @@ class Preferences(val context: Context) {
         override fun namespace() = Constants.PREF_VAR
     }
 
+    /**
+     * Synchronous reads and writes over a DataStore, as SharedPreferences had: an in-memory copy,
+     * loaded once, answers every read; a write changes it at once and goes to disk in order
+     * behind it (or before returning, for `async = false`). This process is the store's only
+     * writer, so the copy never falls behind the file. Change listeners run on the main thread.
+     */
     abstract class AbstractPreferences(val context: Context) {
         abstract fun namespace(): String
 
-        val preferences: SharedPreferences by lazy {
-            context.getSharedPreferences(namespace(), Context.MODE_PRIVATE)
-        }
+        private val store: NamespaceStore by lazy { NamespaceStore.forName(context.applicationContext, namespace()) }
 
         private val defaultCache: HashMap<String, Any> = hashMapOf()
 
@@ -37,16 +67,8 @@ class Preferences(val context: Context) {
         @Suppress("UNCHECKED_CAST")
         fun <T : Any> get(@StringRes nameRes: Int, default: T? = null, type: KClass<T>): T {
             val key = context.getString(nameRes)
-            val defValue = default ?: getDefault(nameRes, type)
-
-            return when(type) {
-                Boolean::class -> preferences.getBoolean(key, defValue as Boolean) as T
-                String::class -> preferences.getString(key, defValue as String) as T
-                Int::class -> preferences.getInt(key, defValue as Int) as T
-                Long::class -> preferences.getLong(key, defValue as Long) as T
-                Float::class -> preferences.getFloat(key, defValue as Float) as T
-                else -> throw IllegalArgumentException("Unknown type ${type.qualifiedName}")
-            }
+            val stored = store.read(storedKey(key, type))
+            return stored ?: (default ?: getDefault(nameRes, type))
         }
 
         inline fun <reified T : Any> get(@StringRes nameRes: Int): T {
@@ -96,7 +118,6 @@ class Preferences(val context: Context) {
             return getDefault(nameRes, T::class)
         }
 
-        @SuppressLint("ApplySharedPref")
         fun <T : Any> reset(@StringRes nameRes: Int, async: Boolean = true, type: KClass<T>) {
             set(nameRes, getDefault(nameRes, type), async, type)
         }
@@ -105,36 +126,88 @@ class Preferences(val context: Context) {
             return reset(nameRes, async, T::class)
         }
 
-        @SuppressLint("ApplySharedPref")
         fun <T : Any> set(@StringRes nameRes: Int, value: T, async: Boolean = true, type: KClass<T>) {
             val key = context.getString(nameRes)
-            val edit = preferences.edit()
-
-            when(type) {
-                Boolean::class -> edit.putBoolean(key, value as Boolean)
-                String::class -> edit.putString(key, value as String)
-                Int::class -> edit.putInt(key, value as Int)
-                Long::class -> edit.putLong(key, value as Long)
-                Float::class -> edit.putFloat(key, value as Float)
-                else -> throw IllegalArgumentException("Unknown type ${type.qualifiedName}")
-            }.run {
-                if(async)
-                    apply()
-                else
-                    commit()
-            }
+            store.write(storedKey(key, type), value, key, async)
         }
 
         inline fun <reified T : Any> set(@StringRes nameRes: Int, value: T, async: Boolean = true) {
             set(nameRes, value, async, T::class)
         }
 
+        /**
+         * [listener] gets the changed key (its SharedPreferences argument is always null). Held
+         * strongly, unlike SharedPreferences' listeners: unregister it.
+         */
         open fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
-            preferences.registerOnSharedPreferenceChangeListener(listener)
+            listener?.let(store.listeners::add)
         }
 
         open fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {
-            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+            listener?.let(store.listeners::remove)
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        private fun <T : Any> storedKey(key: String, type: KClass<T>): StoredPreferences.Key<T> = when (type) {
+            Boolean::class -> booleanPreferencesKey(key)
+            String::class -> stringPreferencesKey(key)
+            Int::class -> intPreferencesKey(key)
+            Long::class -> longPreferencesKey(key)
+            Float::class -> floatPreferencesKey(key)
+            else -> throw IllegalArgumentException("Unknown type ${type.qualifiedName}")
+        } as StoredPreferences.Key<T>
+    }
+}
+
+/** One namespace's DataStore and its in-memory copy; one per file per process, as DataStore requires. */
+internal class NamespaceStore(context: Context, name: String) {
+    // One writer at a time, in call order: DataStore applies the edits in the order they arrive.
+    @Suppress("OPT_IN_USAGE")
+    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    private val dataStore: DataStore<StoredPreferences> = PreferenceDataStoreFactory.create(
+        migrations = listOf(SharedPreferencesMigration(context, name)),
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        produceFile = { context.preferencesDataStoreFile(name) },
+    )
+
+    // Loaded on first use (the migration runs then), like SharedPreferences' first read.
+    @Volatile
+    private var snapshot: StoredPreferences = runBlocking { dataStore.data.first() }
+    private val lock = Any()
+
+    val listeners = CopyOnWriteArraySet<SharedPreferences.OnSharedPreferenceChangeListener>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun <T : Any> read(key: StoredPreferences.Key<T>): T? = snapshot[key]
+
+    fun <T : Any> write(key: StoredPreferences.Key<T>, value: T, name: String, async: Boolean) {
+        synchronized(lock) {
+            // As SharedPreferences: writing the value already there changes nothing and tells no one.
+            if (snapshot[key] == value) return
+            snapshot = snapshot.toMutablePreferences().apply { this[key] = value }.toPreferences()
+        }
+        // Through the one writer either way, so a synchronous write can't overtake a queued one.
+        val job = writeScope.launch {
+            try {
+                dataStore.edit { it[key] = value }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to save setting $name")
+            }
+        }
+        if (!async) runBlocking { job.join() }
+        mainHandler.post { listeners.forEach { it.onSharedPreferenceChanged(null, name) } }
+    }
+
+    companion object {
+        private val stores = HashMap<String, NamespaceStore>()
+
+        /** Tests only: forget the stores, so the next use opens the (new) test app's files. */
+        @VisibleForTesting
+        fun clearForTest() = synchronized(stores) { stores.clear() }
+
+        fun forName(context: Context, name: String): NamespaceStore = synchronized(stores) {
+            stores.getOrPut(name) { NamespaceStore(context, name) }
         }
     }
 }
