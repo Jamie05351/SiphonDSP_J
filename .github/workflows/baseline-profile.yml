@@ -104,11 +104,15 @@ jobs:
           BASE: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          profile="$(find profile-artifact -name '*-baseline-prof.txt' | head -n 1)"
+          # Macrobenchmark names it <Class>_<test>-baseline-prof[-<timestamp>].txt (newer versions
+          # add the timestamp); the -startup-prof file beside it is a different profile.
+          profile="$(find profile-artifact -type f -name '*-baseline-prof*.txt' | sort | tail -n 1)"
           if [ -z "$profile" ]; then
-            echo "::error::The artifact has no *-baseline-prof.txt"
+            echo "::error::The artifact has no *-baseline-prof*.txt. It contains:"
+            find profile-artifact -type f | sort
             exit 1
           fi
+          echo "Using $profile ($(wc -l < "$profile") rules)"
           target=app/src/main/baseline-prof.txt
           cp "$profile" "$target"
           if git ls-files --error-unmatch "$target" >/dev/null 2>&1 && git diff --quiet -- "$target"; then
