@@ -1,324 +1,173 @@
 package app.siphondsp.activity
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
-import android.content.BroadcastReceiver
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.ServiceConnection
-import android.content.SharedPreferences
 import android.media.projection.MediaProjectionManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.os.PersistableBundle
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
-import android.widget.CheckBox
-import android.widget.LinearLayout
-import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
-import androidx.core.content.edit
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.getSystemService
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.net.toUri
-import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.Preference
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import app.siphondsp.BuildConfig
-import app.siphondsp.MainApplication
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import app.siphondsp.R
-import app.siphondsp.databinding.ActivityDspMainBinding
-import app.siphondsp.databinding.ContentMainBinding
-import app.siphondsp.flavor.UpdateManager
-import app.siphondsp.fragment.DspFragment
-import app.siphondsp.fragment.FileLibraryDialogFragment
-import app.siphondsp.fragment.LibraryLoadErrorFragment
-import app.siphondsp.interop.JamesDspRemoteEngine
-import app.siphondsp.interop.JamesDspWrapper
-import app.siphondsp.model.ProcessorMessage
-import app.siphondsp.preference.FileLibraryPreference
+import app.siphondsp.compose.home.HomeRoute
+import app.siphondsp.compose.launcher.LauncherHost
+import app.siphondsp.compose.dialogs.AppDialog
+import app.siphondsp.compose.dialogs.AppDialogHost
+import app.siphondsp.compose.dialogs.AppDialogs
+import app.siphondsp.compose.nav.AppNavHost
+import app.siphondsp.compose.nav.Routes
+import app.siphondsp.compose.screens.AppCompatRequest
+import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.service.BaseAudioProcessorService
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.Result
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.SdkCheck
-import app.siphondsp.utils.extensions.AssetManagerExtensions.installPrivateAssets
-import app.siphondsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
-import app.siphondsp.utils.extensions.ContextExtensions.check
-import app.siphondsp.utils.extensions.ContextExtensions.getAppName
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.requestIgnoreBatteryOptimizations
-import app.siphondsp.utils.extensions.ContextExtensions.restoreDspSettings
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
-import app.siphondsp.utils.extensions.ContextExtensions.showAlert
-import app.siphondsp.utils.extensions.ContextExtensions.showSingleChoiceAlert
-import app.siphondsp.utils.extensions.ContextExtensions.showYesNoAlert
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
 import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
-import app.siphondsp.utils.isPlugin
-import app.siphondsp.utils.isRoot
-import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.sdkAbove
-import app.siphondsp.utils.storage.StorageUtils
-import app.siphondsp.view.isHeadUnitDisplay
-import app.siphondsp.view.isHeadUnitDisplay
-import org.koin.core.component.inject
+import app.siphondsp.view.DspDestination
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.io.File
-import java.util.Timer
-import kotlin.concurrent.schedule
-import kotlin.math.abs
 
-
+/**
+ * The app's one main activity: the front page and every DSP workspace, as Compose Navigation
+ * destinations ([AppNavHost]). It owns the engine: the processor service binding, the capture
+ * permission, and the power state the front page shows.
+ */
 class MainActivity : BaseActivity() {
-    /* UI bindings */
-    lateinit var binding: ActivityDspMainBinding
-    private lateinit var bindingContent: ContentMainBinding
-    private lateinit var dspFragment: DspFragment
 
-    /* Rootless version */
     private lateinit var mediaProjectionManager: MediaProjectionManager
-    private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
-
-    /* Root version */
-    private var hasLoadFailed = false
-    private lateinit var runtimePermissionLauncher: ActivityResultLauncher<Array<String>>
-    private val updateManager: UpdateManager by inject()
 
     private var processorService: BaseAudioProcessorService? = null
-    private var processorServiceBound: Boolean = false
+    private var powerOn by mutableStateOf(false)
 
-    private val processorServiceConnection by lazy {
-        object : ServiceConnection {
-            override fun onServiceConnected(className: ComponentName, service: IBinder) {
-                Timber.d("Service connected")
-
-                processorService = (service as BaseAudioProcessorService.LocalBinder).service
-                processorServiceBound = true
-
-                if (isRootless())
-                    setPowerUi(true)
-            }
-
-            override fun onServiceDisconnected(arg0: ComponentName) {
-                Timber.d("Service disconnected")
-
-                processorService = null
-                processorServiceBound = false
-            }
+    private val capturePermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && SdkCheck.isQ) {
+            app.mediaProjectionStartIntent = result.data
+            powerOn = true
+            RootlessAudioProcessorService.start(this, result.data)
+        } else {
+            powerOn = false
         }
     }
 
-    private var broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                Constants.ACTION_SERVICE_STOPPED -> {
-                    if(isRootless())
-                        setPowerUi(false)
-                }
-                Constants.ACTION_SERVICE_STARTED -> {
-                    if(isRootless())
-                        setPowerUi(true)
-                }
-            }
+    private val processorServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(className: ComponentName, service: IBinder) {
+            Timber.d("Service connected")
+            processorService = (service as BaseAudioProcessorService.LocalBinder).service
+            powerOn = true
+        }
+
+        override fun onServiceDisconnected(arg0: ComponentName) {
+            Timber.d("Service disconnected")
+            processorService = null
         }
     }
 
-    @SuppressLint("BatteryLife")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        savedInstanceState?.let {
-            hasLoadFailed = it.getBoolean(STATE_LOAD_FAILED)
-        }
-
-        val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
-        assets.installPrivateAssets(this, force = firstBoot)
-
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
-        binding = ActivityDspMainBinding.inflate(layoutInflater)
-        bindingContent = ContentMainBinding.inflate(layoutInflater)
 
-        val check = applicationContext.check()
-        if(check != 0) {
-            toast("($check) Cannot launch application. Please re-download the latest version from the Google Play or the official GitHub project site.")
-            Timber.e(UnsupportedOperationException("Launch error $check; package=${packageName}; app_name=${getAppName()}"))
-            quitGracefully()
-            return
+        // Where the graph starts: the setup wizard while permissions are missing, the
+        // "incompatible app" screen when opened for it, otherwise the front page.
+        val appCompatRequest = AppCompatRequest.from(intent)
+        val needsSetup = SdkCheck.isQ && (!hasDumpPermission() || !hasRecordPermission())
+        val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
+        val startDestination = when {
+            needsSetup -> Routes.ONBOARDING_ROUTE.also { Timber.i("Launching onboarding (first boot: $firstBoot)") }
+            appCompatRequest != null -> Routes.APP_COMPATIBILITY
+            else -> Routes.HOME
         }
+        // Setup and the app-compatibility screen start the engine themselves (or not at all).
+        autoStartEngine = startDestination == Routes.HOME
 
-        // Setup views
-        setContentView(binding.root)
-        // Both arts draw their own power button (PowerHotspot paints its lit patch); no LED dot.
-        binding.powerLed.isVisible = false
-        setSupportActionBar(binding.toolbar)
-
-        actionBar?.setDisplayHomeAsUpEnabled(true)
-        actionBar?.setHomeButtonEnabled(true)
-        actionBar?.setDisplayShowTitleEnabled(true)
-        if(firstBoot) {
-            // Set timer for translation notice (+30m)
-            prefsVar.set(R.string.key_snooze_translation_notice, (System.currentTimeMillis() / 1000L) + 1800L)
-        }
-
-        // Load main fragment
-        dspFragment = DspFragment.newInstance()
-        // The power / cog / overflow overlay belongs to the artwork page only: it slides with that
-        // page during a swipe (the head unit's power-on patch is opaque, so a fixed overlay would
-        // paint over the incoming settings page) and is hidden once the page is fully off screen.
-        dspFragment.onHomePageOffset = { offset ->
-            binding.homeChrome.translationX = offset
-            binding.homeChrome.isVisible = abs(offset) < binding.homeChrome.width.coerceAtLeast(1)
-        }
-        dspFragment.onSettingsClick = {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        dspFragment.onMoreClick = { anchor ->
-            showOverflowMenu(anchor)
-        }
-        if(!hasLoadFailed)
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.dsp_fragment_container, dspFragment)
-                .commit()
-        else
-            showLibraryLoadError()
-
-        // Rootless: Check permissions and launch onboarding if required
-        if(SdkCheck.isQ && isRootless() && (!hasDumpPermission() || !hasRecordPermission())) {
-            Timber.i("Launching onboarding (first boot: $firstBoot)")
-
-            startActivity(Intent(this, OnboardingActivity::class.java).apply {
-                putExtra(OnboardingActivity.EXTRA_FIX_PERMS, !firstBoot)
-            })
-            this.finish()
-            return
-        }
-
-        // The front page is one piece of artwork (see fragment_dsp_page_shortcuts.xml). PEQ /
-        // Gains & Delay / Compressor / Crossovers / All-pass are touch areas on it; the settings
-        // cog and the "more" overflow (revert / blocklist / measurement / signal generator /
-        // native truth) are transparent-backed icons in the overlay, and the power button is a
-        // hotspot over the artwork's own button.
-        // Settings and More are now proper seventh-row home tiles. Keep the legacy overlay
-        // views in the XML for binding/source compatibility, but make them non-visual/non-clickable.
-        binding.actionSettings.isVisible = false
-        binding.actionOverflow.isVisible = false
-
-        IntentFilter(Constants.ACTION_SERVICE_STOPPED).apply {
-            addAction(Constants.ACTION_SERVICE_STARTED)
-            addAction(Constants.ACTION_PRESET_LOADED)
-            registerLocalReceiver(broadcastReceiver, this)
-        }
-        registerLocalReceiver(processorMessageReceiver, IntentFilter(Constants.ACTION_PROCESSOR_MESSAGE))
-
-        // The power button is the home screen's PowerNode (Compose). PowerHotspot stays as the
-        // power state's holder (isToggled) but is no longer drawn or tapped.
-        binding.powerToggle.toggleOnClick = false
-        binding.powerToggle.isVisible = false
-        dspFragment.onPowerClick = ::togglePower
-
-        if (SdkCheck.isQ && isRootless()) {
-            capturePermissionLauncher = registerForActivityResult(
-                ActivityResultContracts.StartActivityForResult()
-            ) { result ->
-                if (result.resultCode == RESULT_OK && isRootless()) {
-                    app.mediaProjectionStartIntent = result.data
-                    setPowerUi(true)
-                    RootlessAudioProcessorService.start(this, result.data)
-                } else {
-                    setPowerUi(false)
+        // Not Main.immediate: handled after the service's sending call returns.
+        lifecycleScope.launch(Dispatchers.Main) {
+            AppEvents.flow.collect { event ->
+                when (event) {
+                    AppEvent.ServiceStarted -> powerOn = true
+                    AppEvent.ServiceStopped -> powerOn = false
+                    else -> Unit
                 }
             }
         }
 
-        // Rootless: request capture permission instantly, if redirected from onboarding
-        if (SdkCheck.isQ && isRootless()) {
-            if (intent.getBooleanExtra(EXTRA_FORCE_SHOW_CAPTURE_PROMPT, false)) {
-                requestCapturePermission()
-            }
-        }
-
-        // Root: show error if plugin unavailable
-        if(isRoot()) {
-            when(JamesDspRemoteEngine.isPluginInstalled()) {
-                JamesDspRemoteEngine.PluginState.Unavailable -> showLibraryLoadError()
-                JamesDspRemoteEngine.PluginState.Unsupported -> {
-                    prefsApp.set(R.string.key_powered_on, false)
-                    showYesNoAlert(
-                        getString(R.string.version_mismatch_root),
-                        getString(R.string.version_mismatch_root_description)
-                    ) {
-                        if(it) {
-                            startActivity(Intent(Intent.ACTION_VIEW, "https://zackptg5.com/android.php".toUri()))
-                        }
-                    }
+        setContent {
+            BmwDspTheme {
+                val nav = rememberNavController()
+                val entry by nav.currentBackStackEntryAsState()
+                val route = entry?.destination?.route
+                // The workspaces are laid out for the head unit's full screen, with no system bars.
+                val fullScreen = route != null && DspDestination.entries.any { route.startsWith(it.route) }
+                DisposableEffect(fullScreen) {
+                    setSystemBarsHidden(fullScreen)
+                    onDispose {}
                 }
-                else -> {}
+                navController = nav
+                AppNavHost(
+                    nav = nav,
+                    startDestination = startDestination,
+                    appCompatRequest = appCompatRequest,
+                    setupFixPerms = !firstBoot,
+                    onExit = ::finish,
+                    onSetupFinished = ::onSetupFinished,
+                ) {
+                    HomeRoute(powered = powerOn, onTogglePower = ::togglePower, launcherHost = launcherHost)
+                }
+                AppDialogHost()
             }
         }
 
-        /* Root: require battery optimizations turned off when legacy mode is disabled,
-           otherwise, the service will be block from launching from background */
-        if (isRoot() && !(application as MainApplication).isLegacyMode) {
-            requestIgnoreBatteryOptimizations()
+        if (startDestination == Routes.HOME) showAndroid15Alert()
+    }
+
+    private var navController: NavHostController? = null
+
+    /** The knob and Home button reach the head unit's launcher home screen through this. */
+    private val launcherHost = LauncherHost()
+
+    /** False while setup or the app-compatibility screen runs: no capture prompt on start. */
+    private var autoStartEngine = true
+
+    /** The first setup is done: on to the front page, and ask for the capture permission. */
+    private fun onSetupFinished() {
+        prefsVar.set(R.string.key_first_boot, false)
+        navController?.navigate(Routes.HOME) {
+            popUpTo(Routes.ONBOARDING_ROUTE) { inclusive = true }
+            launchSingleTop = true
         }
+        autoStartEngine = true
+        if (SdkCheck.isQ) requestCapturePermission()
+    }
 
-        // Root: request notification permission on Android 13 because the onboarding is not used for root
-        if (isRoot() && SdkCheck.isTiramisu) {
-            runtimePermissionLauncher = registerForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { isGranted ->
-                if (isGranted.all { it.value })
-                    Timber.d("All requested runtime permissions granted")
-            }
-            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
-        }
-
-        // Load initial preference states
-        val initialPrefList = arrayOf(R.string.key_appearance_nav_hide, R.string.key_powered_on)
-        for (pref in initialPrefList)
-            this.onSharedPreferenceChanged(prefsApp.preferences, getString(pref))
-
-        sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
-
-        if(isRoot() && app.isEnhancedProcessing) {
-            if(!hasDumpPermission()) {
-                Timber.e("Dump permission for enhanced processing lost")
-                toast(getString(R.string.enhanced_processing_missing_perm))
-                prefsApp.set(R.string.key_audioformat_enhanced_processing, false)
-            }
-            else {
-                Timber.d("Launching service due to enhanced processing")
-                RootAudioProcessorService.startServiceEnhanced(this)
-            }
-        }
-
-        showAndroid15Alert()
-
-        dspFragment.setUpdateCardOnClick { updateManager.installUpdate(this) }
-        dspFragment.setUpdateCardOnCloseClick(::dismissUpdate)
-        checkForUpdates()
-
-        // Handle potential incoming file intent
-        if(intent?.action == Intent.ACTION_VIEW) {
-            intent.data?.let { handleFileIntent(it) }
+    /** Back to the setup wizard (a permission it grants is gone), in place of the front page. */
+    private fun openSetup() {
+        autoStartEngine = false
+        navController?.navigate(Routes.onboarding()) {
+            popUpTo(Routes.HOME) { inclusive = true }
         }
     }
 
@@ -328,87 +177,52 @@ class MainActivity : BaseActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val knob = event.keyCode in KNOB_KEYS
-        if (knob && event.action == KeyEvent.ACTION_DOWN && ::dspFragment.isInitialized && dspFragment.enterKnobFocus()) {
-            return true
-        }
+        if (knob && event.action == KeyEvent.ACTION_DOWN && launcherHost.enterKnobFocus()) return true
         return super.dispatchKeyEvent(event)
     }
 
     /**
-     * MainActivity is singleTask (it is the home screen), so later launches arrive here: the Home
-     * button (MENU, short press) goes back to the plain home screen, and a file opened from a file
-     * manager is imported as it would be on a fresh start.
+     * MainActivity is singleTask (it is the home screen), so later launches arrive here. The Home
+     * button (MENU, short press) goes back to the plain home screen from wherever the app is (a
+     * workspace, Settings); [ACTION_FIX_PERMISSIONS] opens the setup wizard over it.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         when {
-            intent.hasCategory(Intent.CATEGORY_HOME) -> if (::dspFragment.isInitialized) dspFragment.onHomePressed()
-            intent.action == Intent.ACTION_VIEW -> intent.data?.let { handleFileIntent(it) }
-        }
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
-            setPowerUi(prefsApp.get(R.string.key_powered_on))
-        }
-
-        super.onSharedPreferenceChanged(sharedPreferences, key)
-    }
-
-    /** The front page's 3-dot menu: same items and actions the old bottom bar's overflow had. */
-    private fun showOverflowMenu(anchor: android.view.View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menuInflater.inflate(R.menu.menu_main_bottom, popup.menu)
-
-        if(isPlugin() || (isRoot() && !app.isEnhancedProcessing))
-            popup.menu.removeItem(R.id.action_blocklist)
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.action_blocklist -> {
-                    if(!app.isEnhancedProcessing && isRoot()) {
-                        showAlert(
-                            R.string.enhanced_processing_feature_unavailable,
-                            R.string.enhanced_processing_feature_unavailable_content
-                        )
-                    }
-                    else
-                        startActivity(Intent(this, BlocklistActivity::class.java))
-                    true
-                }
-                R.id.action_revert -> {
-                    this.showYesNoAlert(
-                        R.string.revert_confirmation_title,
-                        R.string.revert_confirmation
-                    ) {
-                        if(it)
-                            restoreDspSettings()
-                    }
-                    true
-                }
-                R.id.action_measurement -> {
-                    startActivity(Intent(this, MeasurementCaptureActivity::class.java))
-                    true
-                }
-                R.id.action_signal_generator -> {
-                    startActivity(Intent(this, SignalGeneratorActivity::class.java))
-                    true
-                }
-                R.id.action_native_truth -> {
-                    startActivity(Intent(this, NativeTruthActivity::class.java))
-                    true
-                }
-                else -> false
+            intent.hasCategory(Intent.CATEGORY_HOME) -> {
+                val nav = navController
+                if (nav != null && nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)
+                launcherHost.onHomePressed()
+            }
+            intent.action == ACTION_FIX_PERMISSIONS -> {
+                autoStartEngine = false
+                navController?.navigate(Routes.onboarding(fixPerms = true)) { launchSingleTop = true }
             }
         }
-        popup.show()
     }
 
-    override fun onSaveInstanceState(outState: Bundle, outPersistentState: PersistableBundle) {
-        super.onSaveInstanceState(outState, outPersistentState.apply {
-            putBoolean(STATE_LOAD_FAILED, hasLoadFailed)
-        })
+    private var systemBarsHidden = false
+
+    private fun setSystemBarsHidden(hidden: Boolean) {
+        systemBarsHidden = hidden
+        WindowCompat.setDecorFitsSystemWindows(window, !hidden)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            if (hidden) {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // A dialog or the shade can bring the bars back; a workspace hides them again.
+        if (hasFocus && systemBarsHidden) {
+            WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     override fun onStart() {
@@ -421,384 +235,115 @@ class MainActivity : BaseActivity() {
         unbindProcessorService()
     }
 
+    override fun onResume() {
+        super.onResume()
+        prefsVar.set(R.string.key_is_activity_active, true)
+        powerOn = processorService != null
+    }
+
     override fun onPause() {
         super.onPause()
         prefsVar.set(R.string.key_is_activity_active, false)
     }
 
     override fun onDestroy() {
-        unregisterLocalReceiver(broadcastReceiver)
-        unregisterLocalReceiver(processorMessageReceiver)
-
-        try {
-            if (processorService != null && processorServiceBound)
-                unbindService(processorServiceConnection)
-        }
-        catch (_: Exception) {}
-
-        processorService = null
-        processorServiceBound = false
-
         prefsVar.set(R.string.key_is_activity_active, false)
         super.onDestroy()
     }
 
-    override fun onResume() {
-        super.onResume()
-        prefsVar.set(R.string.key_is_activity_active, true)
-
-        if(isRootless())
-            setPowerUi(processorService != null)
-    }
-
-    /** The power node was tapped: start or stop the engine for this build flavour. */
+    /** The power node was tapped: start or stop the engine. */
     private fun togglePower() {
         sdkAbove(Build.VERSION_CODES.R) {
-            binding.root.performHapticFeedback(
-                if(binding.powerToggle.isToggled)
-                    HapticFeedbackConstants.CONFIRM
-                else
-                    HapticFeedbackConstants.REJECT
+            window.decorView.performHapticFeedback(
+                if (powerOn) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.REJECT,
             )
         }
-
-        if(SdkCheck.isQ && isRootless()) {
-            if (binding.powerToggle.isToggled) {
-                // Currently on, let's turn it off
-                RootlessAudioProcessorService.stop(this@MainActivity)
-                setPowerUi(false)
-            } else {
-                // Currently off, let's turn it on
-                requestCapturePermission()
-            }
+        if (!SdkCheck.isQ) return
+        if (powerOn) {
+            RootlessAudioProcessorService.stop(this)
+            powerOn = false
+        } else {
+            requestCapturePermission()
         }
-        else if (isRoot()) {
-            when(JamesDspRemoteEngine.isPluginInstalled()) {
-                JamesDspRemoteEngine.PluginState.Available -> {
-                    val next = !binding.powerToggle.isToggled
-                    setPowerUi(next)
-                    prefsApp.set(R.string.key_powered_on, next)
-                }
-                JamesDspRemoteEngine.PluginState.Unsupported -> {
-                    toast(getString(R.string.version_mismatch_root_toast))
-                }
-                JamesDspRemoteEngine.PluginState.Unavailable -> {
-                    toast(getString(R.string.load_fail_header))
-                }
-            }
-        }
-        else if(isPlugin()) {
-            val next = !binding.powerToggle.isToggled
-            setPowerUi(next)
-            prefsApp.set(R.string.key_powered_on, next)
-        }
-    }
-
-    /** Updates the physical-looking power control, and greys the front page out while off. */
-    private fun setPowerUi(on: Boolean) {
-        binding.powerToggle.isToggled = on
-        if (::dspFragment.isInitialized) {
-            dspFragment.setPowerState(on)
-        }
-    }
-
-    private fun showAndroid15Alert() {
-        if(!isRootless() || !SdkCheck.isVanillaIceCream)
-            return
-
-        if(!hasProjectMediaAppOp()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.android_15_screenshare_warning_title)
-                .setMessage(R.string.android_15_screenshare_keyguard_warning)
-                .setCancelable(false)
-                .setPositiveButton(R.string.continue_action) { _, _ ->
-                    startActivity(Intent(this, OnboardingActivity::class.java).apply {
-                        putExtra(OnboardingActivity.EXTRA_FIX_PERMS, false)
-                    })
-                    this.finish()
-                }
-                .show()
-            return
-        }
-
-        if(prefsVar.get<Boolean>(R.string.key_android15_screenrecord_restriction_seen))
-            return
-
-        val checkBox = CheckBox(this).apply {
-            text = getString(R.string.never_show_warning_again)
-            isChecked = false
-        }
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.android_15_screenshare_warning_title)
-            .setMessage(R.string.android_15_screenshare_warning)
-            .setView(
-                LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(48, 32, 48, 16)
-                    addView(checkBox)
-                }
-            )
-            .setPositiveButton(R.string.tutorial) { dialog, _ ->
-                prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
-                startActivity(Intent(Intent.ACTION_VIEW, "https://youtu.be/rVM13aY2rwU?t=31".toUri()))
-            }
-            .setNegativeButton(R.string.close) { dialog, _ ->
-                prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, checkBox.isChecked)
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun checkForUpdates() {
-        if(!isRoot() ||
-            prefsVar.get<Long>(R.string.key_update_check_timeout) > (System.currentTimeMillis() / 1000L)) {
-            Timber.d("Update check rejected due to flavor or timeout")
-            return
-        }
-
-        lifecycleScope.launch(Dispatchers.Default) {
-            updateManager.isUpdateAvailable().collect {
-                when(it) {
-                    is Result.Error -> {
-                        Timber.e("Update check failed")
-                        Timber.d(it.exception)
-                        // Set timeout to +30min
-                        prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 1800L)
-                        false
-                    }
-                    is Result.Success -> {
-                        Timber.d("Is update available? ${it.data}")
-                        if(!it.data) {
-                            // Set timeout to +4h
-                            prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 14400L)
-                        }
-                        it.data
-                    }
-                    else -> false
-                }.let {
-                    withContext(Dispatchers.Main) {
-                        val info = updateManager.getUpdateVersionInfo()
-                        val skipUpdate = info?.second == prefsVar.get<Int>(R.string.key_update_check_skip)
-                        Timber.d("Should skip update ${info?.second}?: $skipUpdate")
-                        if(skipUpdate) {
-                            // Set timeout to +4h
-                            prefsVar.set(R.string.key_update_check_timeout, (System.currentTimeMillis() / 1000L) + 14400L)
-                        }
-                        dspFragment.setUpdateCardTitle(getString(R.string.self_update_notice, info?.first ?: "..."))
-                        dspFragment.setUpdateCardVisible(it && !skipUpdate)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun dismissUpdate() {
-        if(!isRoot())
-            return
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.actions))
-            .setItems(R.array.update_dismiss_dialog) { dialogInterface, i ->
-                when(i) {
-                    0 -> updateManager.installUpdate(this)
-                    1 -> {
-                        prefsVar.set(R.string.key_update_check_skip, updateManager.getUpdateVersionInfo()?.second ?: 0)
-                        dspFragment.setUpdateCardVisible(false)
-                    }
-                    2 -> {
-                        prefsVar.set(
-                            R.string.key_update_check_timeout,
-                            (System.currentTimeMillis() / 1000L) + 43200L /* +12h snooze */
-                        )
-                        dspFragment.setUpdateCardVisible(false)
-                    }
-                }
-                dialogInterface.dismiss()
-            }
-            .setNegativeButton(getString(android.R.string.cancel)){ _, _ -> }
-            .create()
-            .show()
-    }
-
-    private fun showLibraryLoadError() {
-        if(DEBUG_IGNORE_MISSING_LIBRARY)
-            return
-
-        hasLoadFailed = true
-
-        supportFragmentManager
-            .beginTransaction()
-            .replace(R.id.dsp_fragment_container, LibraryLoadErrorFragment.newInstance())
-            .commit()
-
-        setPowerUi(false)
-        binding.toolbar.isVisible = false
-        // No artwork page behind the overlay in the load-error state.
-        binding.homeChrome.isVisible = false
     }
 
     private fun bindProcessorService() {
-        if (isRootless()) {
-            sdkAbove(Build.VERSION_CODES.Q) {
-                Intent(this, RootlessAudioProcessorService::class.java).also { intent ->
-                    val ret = bindService(intent, processorServiceConnection, 0)
-                    // Service not active
-                    if (!ret)
-                        requestCapturePermission()
-                }
-            }
-        }
-        else if (isRoot()) {
-            Intent(this, RootAudioProcessorService::class.java).also { intent ->
-                bindService(intent, processorServiceConnection, 0)
-            }
+        sdkAbove(Build.VERSION_CODES.Q) {
+            val bound = bindService(Intent(this, RootlessAudioProcessorService::class.java), processorServiceConnection, 0)
+            // Service not running.
+            if (!bound && autoStartEngine) requestCapturePermission()
         }
     }
 
     private fun unbindProcessorService() {
         try {
             unbindService(processorServiceConnection)
-        }
-        catch (ex: IllegalArgumentException) {
+        } catch (ex: IllegalArgumentException) {
             Timber.d("Failed to unbind service connection. Not registered?")
             Timber.i(ex)
         }
+        processorService = null
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
     fun requestCapturePermission() {
-        if(app.mediaProjectionStartIntent != null && isRootless() && !SdkCheck.isVanillaIceCream) {
-            setPowerUi(true)
+        if (app.mediaProjectionStartIntent != null && !SdkCheck.isVanillaIceCream) {
+            powerOn = true
             RootlessAudioProcessorService.start(this, app.mediaProjectionStartIntent)
             return
         }
         try {
             capturePermissionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
-        }
-        catch (ex: ActivityNotFoundException) {
+        } catch (ex: ActivityNotFoundException) {
             toast(getString(R.string.error_projection_api_missing))
             Timber.e(ex)
         }
     }
 
-    private var processorMessageReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+    private fun showAndroid15Alert() {
+        if (!SdkCheck.isVanillaIceCream) return
 
-        override fun onReceive(context: Context, intent: Intent) {
-            when (ProcessorMessage.Type.fromInt(intent.getIntExtra(ProcessorMessage.TYPE, 0))) {
-                ProcessorMessage.Type.VdcParseError -> {
-                    makeSnackbar(getString(R.string.message_vdc_corrupt)).show()
-                }
-                ProcessorMessage.Type.ConvolverParseError -> {
-                    when(ProcessorMessage.ConvolverErrorCode.fromInt(
-                        intent.getIntExtra(ProcessorMessage.Param.ConvolverErrorCode.name, 0)
-                    )) {
-                        ProcessorMessage.ConvolverErrorCode.Corrupted -> R.string.message_irs_corrupt
-                        ProcessorMessage.ConvolverErrorCode.AdvParamsInvalid -> R.string.message_convolver_advimp_invalid
-                        else -> null
-                    }?.let {
-                        makeSnackbar(getString(it)).show()
-                    }
-                }
-                ProcessorMessage.Type.LiveprogOutput -> {}
-                ProcessorMessage.Type.LiveprogExec -> {}
-                ProcessorMessage.Type.LiveprogResult -> {
-                    val ret = intent.getIntExtra(ProcessorMessage.Param.LiveprogResultCode.name, 1)
-                    if(ret <= 0)
-                    {
-                        val msg = JamesDspWrapper.eelErrorCodeToString(ret)
-                        makeSnackbar(getString(R.string.message_liveprog_compile_fail) + " ($msg)").show()
-                    }
-                }
-                else -> {}
-            }
-        }
-    }
-
-    private fun handleFileIntent(uri: Uri) {
-        val name = StorageUtils.queryName(this, uri)
-        if (name == null) {
-            toast(getString(R.string.intent_import_error_file_uri))
+        if (!hasProjectMediaAppOp()) {
+            AppDialogs.show(
+                AppDialog.Message(
+                    title = getString(R.string.android_15_screenshare_warning_title),
+                    message = getString(R.string.android_15_screenshare_keyguard_warning),
+                    confirm = getString(R.string.continue_action),
+                    onConfirm = { openSetup() },
+                    cancelable = false,
+                ),
+            )
             return
         }
 
-        val choices = arrayOf<CharSequence>(
-            getString(R.string.intent_import_mode_add),
-            getString(R.string.intent_import_mode_select)
-        )
+        if (prefsVar.get<Boolean>(R.string.key_android15_screenrecord_restriction_seen)) return
 
-        val titleRes: Int
-        val subDir: String
-        val namespace: String
-        val key: Int
-        val keyEnable: Int
-        when {
-            name.endsWith(".irs") || name.endsWith(".wav") -> {
-                titleRes = R.string.intent_import_irs
-                subDir = "Convolver"
-                namespace = Constants.PREF_CONVOLVER
-                key = R.string.key_convolver_file
-                keyEnable = R.string.key_convolver_enable
-            }
-            else -> return
-        }
-
-        showSingleChoiceAlert(titleRes, choices, -1) { idx ->
-            idx ?: return@showSingleChoiceAlert
-            if (idx < 0 || idx > 1)
-                return@showSingleChoiceAlert
-
-            val file = StorageUtils.importFile(
-                this,
-                File(getExternalFilesDir(null), subDir).absolutePath,
-                uri
-            )
-
-            if (file == null) {
-                Timber.w("Failed to import file '$uri'")
-                makeSnackbar(getString(R.string.intent_import_fail, name)).show()
-                return@showSingleChoiceAlert
-            }
-
-            when (idx) {
-                0 -> makeSnackbar(getString(R.string.intent_import_success, name)).show()
-                1 -> {
-                    lifecycleScope.launch(Dispatchers.Default) {
-                        delay(250L)
-
-                        @Suppress("DEPRECATION")
-                        getSharedPreferences(namespace, MODE_MULTI_PROCESS).edit {
-                            putBoolean(getString(keyEnable), true)
-                            putString(getString(key), file.absolutePath)
-                        }
-
-                        delay(250L)
-                        broadcastPresetLoadEvent()
-
-                        makeSnackbar(getString(R.string.intent_import_select_success, name)).show()
+        AppDialogs.show(
+            AppDialog.Message(
+                title = getString(R.string.android_15_screenshare_warning_title),
+                message = getString(R.string.android_15_screenshare_warning),
+                checkbox = getString(R.string.never_show_warning_again),
+                confirm = getString(R.string.tutorial),
+                onConfirm = { neverAgain ->
+                    prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, neverAgain)
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, "https://youtu.be/rVM13aY2rwU?t=31".toUri()))
+                    } catch (_: ActivityNotFoundException) {
+                        toast(getString(R.string.no_activity_found))
                     }
-                }
-            }
-        }
+                },
+                dismiss = getString(R.string.close),
+                onDismiss = { neverAgain -> prefsVar.set(R.string.key_android15_screenrecord_restriction_seen, neverAgain) },
+            ),
+        )
     }
-
-    private fun makeSnackbar(text: String, duration: Int = Snackbar.LENGTH_SHORT): Snackbar {
-        return Snackbar.make(findViewById(android.R.id.content), text, duration)
-    }
-
-    private fun quitGracefully() {
-        Timer().schedule(2000){
-            this@MainActivity.finishAndRemoveTask()
-        }
-    }
-
-
 
     companion object {
-        const val EXTRA_FORCE_SHOW_CAPTURE_PROMPT = "ForceShowCapturePrompt"
-
-        private val DEBUG_IGNORE_MISSING_LIBRARY = BuildConfig.DEBUG
-        private const val STATE_LOAD_FAILED = "LoadFailed"
+        /**
+         * Opens the setup wizard over the front page, with the "fix permissions" notice (the home
+         * screen's Spotify / Waze swipe asks for this when DUMP is missing; see AppSwipe).
+         */
+        const val ACTION_FIX_PERMISSIONS = "app.siphondsp.action.FIX_PERMISSIONS"
 
         /** The keys the iDrive knob sends: the D-pad directions and press, and Tab. */
         private val KNOB_KEYS = setOf(

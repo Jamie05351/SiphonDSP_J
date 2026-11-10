@@ -3,10 +3,8 @@ package app.siphondsp.service
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.NotificationManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
@@ -23,20 +21,19 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
+import android.os.Trace
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
-import androidx.lifecycle.Observer
-import androidx.lifecycle.asLiveData
 import app.siphondsp.BuildConfig
+import app.siphondsp.MainApplication
 import app.siphondsp.R
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.dsp.AutoHeadroom
 import app.siphondsp.dsp.AutoHeadroomCalculator
-import app.siphondsp.interop.JamesDspWrapper
-import app.siphondsp.interop.JamesDspLocalEngine
+import app.siphondsp.interop.DspEngine
+import app.siphondsp.interop.NativeDsp
 import app.siphondsp.interop.NativeConfigRevisionStatus
-import app.siphondsp.interop.ProcessorMessageHandler
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.IEffectSession
 import app.siphondsp.model.NativeBmwDspValues
@@ -52,30 +49,25 @@ import app.siphondsp.session.rootless.OnRootlessSessionChangeListener
 import app.siphondsp.session.rootless.RootlessSessionDatabase
 import app.siphondsp.session.rootless.RootlessSessionManager
 import app.siphondsp.session.rootless.SessionRecordingPolicyManager
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.Constants.ACTION_NATIVE_BMW_DSP_UPDATED
-import app.siphondsp.utils.Constants.ACTION_PREFERENCES_UPDATED
-import app.siphondsp.utils.Constants.ACTION_PRESET_LOADED
-import app.siphondsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
-import app.siphondsp.utils.Constants.ACTION_SERVICE_HARD_REBOOT_CORE
-import app.siphondsp.utils.Constants.ACTION_SERVICE_RELOAD_LIVEPROG
-import app.siphondsp.utils.Constants.ACTION_SERVICE_SOFT_REBOOT_CORE
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.CompatExtensions.getParcelableAs
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.utils.extensions.ContextExtensions.toast
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.notifications.ServiceNotificationHelper
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 @RequiresApi(Build.VERSION_CODES.Q)
 class RootlessAudioProcessorService : BaseAudioProcessorService() {
@@ -105,7 +97,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var activeTrack: AudioTrack? = null
 
-    private lateinit var engine: JamesDspLocalEngine
+    private lateinit var engine: DspEngine
     private val workerAlive: Boolean
         get() = recorderThread?.isAlive == true
 
@@ -238,12 +230,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val applicationScope = CoroutineScope(SupervisorJob())
     private val blockedAppDatabase by lazy { AppBlocklistDatabase.getDatabase(this, applicationScope) }
     private val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
-    private val blockedApps by lazy { blockedAppRepository.blocklist.asLiveData() }
-    private val blockedAppObserver = Observer<List<BlockedApp>?> {
-        Timber.d("blockedAppObserver: Database changed; ignored=${!workerAlive}")
-        if(workerAlive)
-            exclusionRecheckGate.request("Excluded apps list changed")
-    }
+    // Main-thread work: the excluded-apps list and the app's events. Not Main.immediate, so an
+    // event sent from the main thread is handled after the sender returns (as the local
+    // broadcasts it replaces were).
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // The excluded apps, as last read from the database (null until the first read).
+    @Volatile
+    private var blockedApps: List<BlockedApp>? = null
 
     // The exclusions the live AudioRecord was built with (null before the first build). Written
     // by buildAudioRecord() on the worker, read by recheckExclusions() on the main thread.
@@ -273,7 +267,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // Called as early as onCreate() can manage -- right after the trivial getSystemService()
         // lookups above, before any of the slower setup below (session-manager/database wiring,
-        // and especially JamesDspLocalEngine's construction, which does synchronous disk I/O to
+        // and especially DspEngine's construction, which does synchronous disk I/O to
         // load the persisted PEQ/DSP config). Android budgets a limited window for a foreground
         // service to actually call startForeground() after starting; on slow/contended storage,
         // that disk I/O finishing first could push this call past the window
@@ -293,8 +287,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         sessionManager.sessionDatabase.registerOnSessionChangeListener(onSessionChangeListener)
         sessionManager.sessionPolicyDatabase.registerOnRestrictedSessionChangeListener(onSessionPolicyChangeListener)
 
-        engine = JamesDspLocalEngine(this, ProcessorMessageHandler())
-        engine.syncWithPreferences()
+        engine = DspEngine(this)
         val savedDspValues = NativeBmwDspValues.load(this)
         measGenActive = isMeasGenActive(savedDspValues)
         latestDspValues = savedDspValues
@@ -307,21 +300,28 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // replace it with the computed one.
         if (AutoHeadroom.isAuto(savedDspValues)) submitNativeBmwDspValues(savedDspValues)
 
-        val filter = IntentFilter()
-        filter.addAction(ACTION_PREFERENCES_UPDATED)
-        filter.addAction(ACTION_SAMPLE_RATE_UPDATED)
-        filter.addAction(ACTION_SERVICE_RELOAD_LIVEPROG)
-        filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
-        filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
-        filter.addAction(ACTION_NATIVE_BMW_DSP_UPDATED)
-        filter.addAction(ACTION_PRESET_LOADED)
-        registerLocalReceiver(broadcastReceiver, filter)
+        mainScope.launch {
+            AppEvents.flow.collect { event ->
+                when (event) {
+                    AppEvent.RestartCapture -> restartRecording()
+                    is AppEvent.NativeBmwDspUpdated -> submitNativeBmwDspValues(event.values)
+                    AppEvent.PresetLoaded -> resyncNativeBmwStateFromDisk()
+                    else -> Unit
+                }
+            }
+        }
 
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
         loadFromPreferences(getString(R.string.key_powersave_suspend))
         loadFromPreferences(getString(R.string.key_session_exclude_restricted))
 
-        blockedApps.observeForever(blockedAppObserver)
+        mainScope.launch {
+            blockedAppRepository.blocklist.collect {
+                blockedApps = it
+                Timber.d("Excluded apps changed; ignored=${!workerAlive}")
+                if (workerAlive) exclusionRecheckGate.request("Excluded apps list changed")
+            }
+        }
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
         recreateRecorderRequested = false
     }
@@ -359,7 +359,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
             catch (ex: Exception) {
                 Timber.e("Failed to acquire media projection")
-                sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
+                discardAuthorization()
                 Timber.e(ex)
                 null
             }
@@ -368,7 +368,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         if (mediaProjection != null) {
             startRecording()
-            sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STARTED))
+            AppEvents.send(AppEvent.ServiceStarted)
         }
         else {
             StartupAudioDiagnostics.logImmediateFailure(
@@ -408,10 +408,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (closeEngineNow) engine.close()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
-        sendLocalBroadcast(Intent(Constants.ACTION_SERVICE_STOPPED))
+        AppEvents.send(AppEvent.ServiceStopped)
 
-        blockedApps.removeObserver(blockedAppObserver)
-        unregisterLocalReceiver(broadcastReceiver)
+        mainScope.cancel()
         mediaProjection?.unregisterCallback(projectionCallback)
         mediaProjection?.stop()
         mediaProjection = null
@@ -438,7 +437,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 return
 
             Timber.w("Capture permission revoked. Stopping service.")
-            sendLocalBroadcast(Intent(Constants.ACTION_DISCARD_AUTHORIZATION))
+            discardAuthorization()
 
             if(!preferencesVar.get<Boolean>(R.string.key_is_activity_active))
                 this@RootlessAudioProcessorService.toast(getString(R.string.capture_permission_revoked_toast))
@@ -448,31 +447,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                ACTION_SAMPLE_RATE_UPDATED -> engine.syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
-                ACTION_PREFERENCES_UPDATED -> engine.syncWithPreferences()
-                ACTION_SERVICE_RELOAD_LIVEPROG -> engine.syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG))
-                ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
-                ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
-                ACTION_NATIVE_BMW_DSP_UPDATED -> {
-                    intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                        submitNativeBmwDspValues(it)
-                    }
-                }
-                ACTION_PRESET_LOADED -> resyncNativeBmwStateFromDisk()
-            }
-        }
+    /** The saved capture permission is no good any more: the next start asks again. */
+    private fun discardAuthorization() {
+        Timber.i("mediaProjectionStartIntent discarded")
+        (application as MainApplication).mediaProjectionStartIntent = null
     }
 
     private fun isMeasGenActive(values: FloatArray) =
         values.getOrElse(NativeBmwDspValues.INDEX_MEAS_GEN_TYPE) { 0f } != 0f
 
-    // Backup restores broadcast ACTION_PREFERENCES_UPDATED/ACTION_PRESET_LOADED, neither of
-    // which otherwise reaches the BMW DSP/PEQ engine state (syncWithPreferences() only knows
-    // about the legacy dsp_*.xml namespaces). Re-read both stores from disk and push them to
-    // the running engine so a restored backup actually takes effect.
+    // Backup restores send AppEvent.PresetLoaded, which otherwise doesn't reach the BMW
+    // DSP/PEQ engine state. Re-read both stores from disk and push them to the running engine so
+    // a restored backup actually takes effect.
     private fun resyncNativeBmwStateFromDisk() {
         // Through the same pusher as the broadcasts, so a drag preview still queued there can't
         // land after (and overwrite) the restored config.
@@ -620,8 +606,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             if(!preferences.get<Boolean>(R.string.key_session_app_problem_ignore)) {
                 notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
-                if(preferencesVar.get<Boolean>(R.string.key_is_activity_active) ||
-                    preferencesVar.get<Boolean>(R.string.key_is_app_compat_activity_active)) {
+                // The app is open (MainActivity hosts the compatibility screen too): show it now.
+                if(preferencesVar.get<Boolean>(R.string.key_is_activity_active)) {
                     startActivity(
                         ServiceNotificationHelper.createAppTroubleshootIntent(
                             this@RootlessAudioProcessorService,
@@ -700,7 +686,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // What the next AudioRecord should exclude, from the current settings and capture-policy log.
     private fun computeExclusions(): ExclusionSet = ExclusionSet(
         restricted = if (excludeRestrictedSessions) sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet() else emptySet(),
-        blocked = blockedApps.value?.map { it.uid }?.toSet().orEmpty(),
+        blocked = blockedApps?.map { it.uid }?.toSet().orEmpty(),
         self = Process.myUid(),
         excludeRestricted = excludeRestrictedSessions,
     )
@@ -789,7 +775,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private fun realtimeDiagnostics(): RealtimeDiagnostics? {
         val stats = audioStats
         if (!::engine.isInitialized || (stats.processCallCount == 0L && stats.readCallCount == 0L)) return null
-        val counters = LongArray(JamesDspWrapper.REALTIME_COUNT)
+        val counters = LongArray(NativeDsp.REALTIME_COUNT)
         val countersRead = engine.readRealtimeCounters(counters)
         val (underrunsTotal, underrunsLastMinute) = stats.underruns(SystemClock.elapsedRealtime())
         return RealtimeDiagnostics(
@@ -981,10 +967,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             Timber.w(e, "runRecorderLoop: platform refused THREAD_PRIORITY_URGENT_AUDIO, continuing at default priority")
         }
         audioStats.reset()
-        // Size the native work buffers and convolvers for this pipeline's buffer now, before any
-        // audio flows, so no buffer ever reallocates or rebuilds them on this thread.
-        if (!engine.prepareBlockSize(bufferSamples / CHANNEL_COUNT))
-            Timber.w("runRecorderLoop: native engine not prepared for %d-frame blocks", bufferSamples / CHANNEL_COUNT)
 
         var recorder: AudioRecord? = null
         var track: AudioTrack? = null
@@ -1002,12 +984,16 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
             ServiceNotificationHelper.pushServiceNotification(applicationContext, arrayOf())
 
-            val floatBuffer = FloatArray(bufferSamples)
-            val floatOutBuffer = FloatArray(bufferSamples)
-            val shortBuffer = ShortArray(bufferSamples)
-            val shortOutBuffer = ShortArray(bufferSamples)
-            val spectrumScratchDry = FloatArray(bufferSamples)
-            val spectrumScratch = FloatArray(bufferSamples)
+            // One direct buffer carries each block from AudioRecord through the native DSP (in
+            // place) to AudioTrack: no Java array is pinned or copied on the way. The views share
+            // its memory, for the diagnostics and the spectrum feed.
+            val bytesPerSample = bufferSizeBytes / bufferSamples
+            val audio = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
+            val audioShorts = audio.asShortBuffer()
+            val audioFloats = audio.asFloatBuffer()
+            // All zeros (allocateDirect clears it): the start-up priming block and the input
+            // while the measurement generator runs.
+            val silence = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
 
             while (!isProcessorDisposing && !isServiceDisposing) {
                 if (diagnostics?.isFinished == true) diagnostics = null
@@ -1122,13 +1108,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // keeps a block in hand from then on, the slack a late process() draws on instead of
                 // underrunning (see TRACK_BUFFER_BLOCKS). The track has room, so this doesn't block.
                 if (primeTrack) {
-                    if (encoding == AudioEncoding.PcmShort) {
-                        shortOutBuffer.fill(0)
-                        writeFully(currentTrack, shortOutBuffer, bufferSamples, diagnostics)
-                    } else {
-                        floatOutBuffer.fill(0f)
-                        writeFully(currentTrack, floatOutBuffer, bufferSamples, diagnostics)
-                    }
+                    writeFully(currentTrack, silence, bufferSizeBytes, bytesPerSample, diagnostics)
                 }
 
                 // The measurement generator fully replaces whatever's captured (see
@@ -1143,12 +1123,23 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // real-time pacing since the output device drains at its own clock regardless.
                 val generatedInput = measGenActive
                 val readCount = if (generatedInput) {
-                    if (encoding == AudioEncoding.PcmShort) shortBuffer.fill(0) else floatBuffer.fill(0f)
+                    audio.clear()
+                    silence.clear()
+                    audio.put(silence)
+                    audio.clear()
                     bufferSamples
-                } else if(encoding == AudioEncoding.PcmShort)
-                    currentRecorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
-                else
-                    currentRecorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
+                } else {
+                    // Bytes from AudioRecord (written at position 0, which read() leaves as it
+                    // is); a negative value is an error code, passed through.
+                    audio.clear()
+                    Trace.beginSection("SiphonDSP read")
+                    val bytes = try {
+                        currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_BLOCKING)
+                    } finally {
+                        Trace.endSection()
+                    }
+                    if (bytes > 0) bytes / bytesPerSample else bytes
+                }
 
                 diagnostics?.recordRead(readCount, generatedInput)
                 if(readCount < 0) {
@@ -1185,44 +1176,33 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val nativeReady = engine.isNativeHandleReady()
                 diagnostics?.recordDspStart(nativeReady, !engine.enabled || !nativeReady)
 
-                if(encoding == AudioEncoding.PcmShort) {
-                    diagnostics?.recordShortInput(shortBuffer, processCount)
-                    val processStart = System.nanoTime()
-                    try {
-                        engine.processInt16(shortBuffer, shortOutBuffer, 0, processCount)
-                    } catch (e: Throwable) {
-                        diagnostics?.recordDspFailure(e)
-                        throw e
-                    }
-                    audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
-                    lastSuccessfulProcess = SystemClock.elapsedRealtime()
-                    diagnostics?.recordDspSuccess(processCount)
-                    diagnostics?.recordShortOutput(shortOutBuffer, processCount)
-                    if(SpectrumEngine.isActive) {
-                        for(i in 0 until processCount) {
-                            spectrumScratchDry[i] = shortBuffer[i] / 32768f
-                            spectrumScratch[i] = shortOutBuffer[i] / 32768f
-                        }
-                        SpectrumEngine.publish(spectrumScratchDry, spectrumScratch, processCount, sampleRate)
-                    }
-                    writeFully(currentTrack, shortOutBuffer, processCount, diagnostics)
+                val spectrum = SpectrumEngine.isActive
+                if (encoding == AudioEncoding.PcmShort) {
+                    diagnostics?.recordShortInput(audioShorts, processCount)
+                    if (spectrum) SpectrumEngine.captureDry(audioShorts, processCount)
+                } else {
+                    diagnostics?.recordFloatInput(audioFloats, processCount)
+                    if (spectrum) SpectrumEngine.captureDry(audioFloats, processCount)
                 }
-                else {
-                    diagnostics?.recordFloatInput(floatBuffer, processCount)
-                    val processStart = System.nanoTime()
-                    try {
-                        engine.processFloat(floatBuffer, floatOutBuffer, 0, processCount)
-                    } catch (e: Throwable) {
-                        diagnostics?.recordDspFailure(e)
-                        throw e
-                    }
-                    audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
-                    lastSuccessfulProcess = SystemClock.elapsedRealtime()
-                    diagnostics?.recordDspSuccess(processCount)
-                    diagnostics?.recordFloatOutput(floatOutBuffer, processCount)
-                    if(SpectrumEngine.isActive) SpectrumEngine.publish(floatBuffer, floatOutBuffer, processCount, sampleRate)
-                    writeFully(currentTrack, floatOutBuffer, processCount, diagnostics)
+                val processStart = System.nanoTime()
+                try {
+                    // In place; a bypassed or refused buffer is left as it was read and played as is.
+                    engine.processDirect(audio, processCount, encoding)
+                } catch (e: Throwable) {
+                    diagnostics?.recordDspFailure(e)
+                    throw e
                 }
+                audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
+                lastSuccessfulProcess = SystemClock.elapsedRealtime()
+                diagnostics?.recordDspSuccess(processCount)
+                if (encoding == AudioEncoding.PcmShort) {
+                    diagnostics?.recordShortOutput(audioShorts, processCount)
+                    if (spectrum) SpectrumEngine.publishWet(audioShorts, sampleRate)
+                } else {
+                    diagnostics?.recordFloatOutput(audioFloats, processCount)
+                    if (spectrum) SpectrumEngine.publishWet(audioFloats, sampleRate)
+                }
+                writeFully(currentTrack, audio, processCount * bytesPerSample, bytesPerSample, diagnostics)
             }
         }
         catch (e: IOException) {
@@ -1266,35 +1246,31 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
+    /**
+     * Writes [lengthBytes] of [buffer] from position 0, blocking until the track took all of it
+     * (or the pipeline is being stopped or recreated). AudioTrack advances the position as it
+     * goes; it's left cleared for the next block.
+     */
     private fun writeFully(
         track: AudioTrack,
-        buffer: ShortArray,
-        length: Int,
+        buffer: ByteBuffer,
+        lengthBytes: Int,
+        bytesPerSample: Int,
         diagnostics: StartupAudioDiagnostics?,
     ) {
-        var offset = 0
-        while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
-            val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
-            diagnostics?.recordWrite(written)
-            if (!recordWriteResult(written))
-                continue
-            offset += written
-        }
-    }
-
-    private fun writeFully(
-        track: AudioTrack,
-        buffer: FloatArray,
-        length: Int,
-        diagnostics: StartupAudioDiagnostics?,
-    ) {
-        var offset = 0
-        while(offset < length && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
-            val written = track.write(buffer, offset, length - offset, AudioTrack.WRITE_BLOCKING)
-            diagnostics?.recordWrite(written)
-            if (!recordWriteResult(written))
-                continue
-            offset += written
+        buffer.clear()
+        buffer.limit(lengthBytes)
+        Trace.beginSection("SiphonDSP write")
+        try {
+            while(buffer.hasRemaining() && !isProcessorDisposing && !isServiceDisposing && !recreateRecorderRequested) {
+                val written = track.write(buffer, buffer.remaining(), AudioTrack.WRITE_BLOCKING)
+                val writtenSamples = if (written > 0) written / bytesPerSample else written
+                diagnostics?.recordWrite(writtenSamples)
+                recordWriteResult(written)
+            }
+        } finally {
+            Trace.endSection()
+            buffer.clear()
         }
     }
 
@@ -1562,7 +1538,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeTruthSnapshot(): NativeDspTruthSnapshot? =
             activeInstance?.engine?.nativeTruthSnapshot()
 
-        /** Fills [out] from one native meter (see [JamesDspWrapper.readNativeBmwMeter]); false
+        /** Fills [out] from one native meter (see [NativeDsp.readNativeBmwMeter]); false
          *  while no service or engine is running. */
         fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
             activeInstance?.engine?.readNativeBmwMeter(kind, out) ?: false
@@ -1631,7 +1607,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     pcmFloat = service.activePcmFloat,
                     bufferSamples = service.activeBufferSamples,
                     playbackSessions = service.sessionDatabaseOrNull()?.sessionList?.size ?: 0,
-                    excludedApps = service.blockedApps.value?.map { it.packageName }.orEmpty(),
+                    excludedApps = service.blockedApps?.map { it.packageName }.orEmpty(),
                     autoExcludedApps = service.autoExcludedPackages(),
                     excludedPlaying = service.sessionDatabaseOrNull()?.excludedPlayingPackages.orEmpty(),
                 )

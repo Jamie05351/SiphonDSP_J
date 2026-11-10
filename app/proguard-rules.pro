@@ -41,12 +41,6 @@
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
-# Native code calls back into these by name (JamesDspWrapper.cpp, EelVmVariable.cpp). Covered by
-# the interop keep above; repeated here so the dependency is explicit.
--keep class app.siphondsp.interop.structure.EelVmVariable { *; }
-
-# Gson fills these by field name.
--keep class app.siphondsp.model.api.** { *; }
 -keepattributes Signature, *Annotation*
 
 # Passed through Bundles/Intents as java.io.Serializable.

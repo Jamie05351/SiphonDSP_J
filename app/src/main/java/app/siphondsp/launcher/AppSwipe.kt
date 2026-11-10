@@ -20,7 +20,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import app.siphondsp.R
-import app.siphondsp.activity.OnboardingActivity
+import app.siphondsp.activity.MainActivity
 import app.siphondsp.session.dump.utils.DumpUtils
 import app.siphondsp.utils.extensions.PermissionExtensions.hasDumpPermission
 import app.siphondsp.utils.isRootless
@@ -89,7 +89,7 @@ object AppSwipe {
         !Settings.canDrawOverlays(context) ->
             Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
         !context.hasDumpPermission() ->
-            if (isRootless()) Intent(context, OnboardingActivity::class.java).putExtra(OnboardingActivity.EXTRA_FIX_PERMS, true) else null
+            if (isRootless()) Intent(context, MainActivity::class.java).setAction(MainActivity.ACTION_FIX_PERMISSIONS) else null
         else -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
     }
 

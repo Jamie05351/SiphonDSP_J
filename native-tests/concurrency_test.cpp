@@ -2,6 +2,7 @@
 #include <atomic>
 #include <chrono>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 using namespace nbtest;
@@ -74,22 +75,35 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
     CHECK(std::fabs(measuredDb - kGainDb) < 0.5);
 }
 
+// Reaches the processor's ownership, so a test can hold it the way process() does for a whole
+// buffer (declared a friend in NativeBmwDspProcessor.h).
+struct NativeBmwDspProcessorTestAccess {
+    static void claimAudio(NativeBmwDspProcessor& proc) { proc.claimAudioOwnership(); }
+    static void releaseAudio(NativeBmwDspProcessor& proc) {
+        proc.ownership_.store(NativeBmwDspProcessor::kOwnerFree, std::memory_order_release);
+    }
+    static std::uint32_t audioServedRequests(const NativeBmwDspProcessor& proc) {
+        return proc.audioServedRequests_.load();
+    }
+};
+
 namespace {
-// A host stage that parks the audio thread inside process() -- while it holds the audio lock --
-// until the test releases it, or gives up after a few seconds.
+// Holds ownership on its own thread -- as the audio thread does mid-buffer -- until the test
+// releases it, or gives up after a few seconds.
 struct ParkedBuffer {
     std::atomic<bool> entered{false}, released{false}, timedOut{false};
-    static void hook(void* context, float*, std::size_t) {
-        auto* self = static_cast<ParkedBuffer*>(context);
-        self->entered.store(true);
+    void hold(NativeBmwDspProcessor& proc) {
+        NativeBmwDspProcessorTestAccess::claimAudio(proc);
+        entered.store(true);
         const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-        while (!self->released.load()) {
+        while (!released.load()) {
             if (std::chrono::steady_clock::now() > giveUp) {
-                self->timedOut.store(true);
-                return;
+                timedOut.store(true);
+                break;
             }
             std::this_thread::yield();
         }
+        NativeBmwDspProcessorTestAccess::releaseAudio(proc);
     }
 };
 
@@ -126,8 +140,7 @@ TEST_CASE("Config pushes return while the audio thread is mid-buffer") {
     REQUIRE(proc.configure(cfg.data(), cfg.size()));
 
     ParkedBuffer parked;
-    std::vector<float> buffer = stereoSine(1000.0, 0.05, 256, kSampleRate);
-    std::thread audio([&] { proc.process(buffer.data(), buffer.size(), &ParkedBuffer::hook, &parked); });
+    std::thread audio([&] { parked.hold(proc); });
     while (!parked.entered.load()) {
         std::this_thread::yield();
     }
@@ -276,4 +289,89 @@ TEST_CASE("Superseded generator pushes never install a stale generator") {
     const double rmsDb = linToDb(std::sqrt(sum / static_cast<double>(out.size())));
     INFO("Sweep RMS: ", rmsDb, " dBFS (want about -9, not about -43)");
     CHECK(rmsDb > -15.0);
+}
+
+namespace {
+// Runs process() back to back on its own thread, like the audio pipeline, until stopped.
+struct RunningAudio {
+    NativeBmwDspProcessor& proc;
+    std::atomic<bool> stop{false};
+    std::atomic<std::uint64_t> buffers{0};
+    std::thread thread;
+    explicit RunningAudio(NativeBmwDspProcessor& p) : proc(p) {
+        thread = std::thread([this] {
+            std::vector<float> buf = stereoSine(440.0, 0.1, 256, kSampleRate);
+            while (!stop.load()) {
+                proc.process(buf.data(), buf.size());
+                buffers.fetch_add(1);
+                std::this_thread::sleep_for(std::chrono::microseconds(200));
+            }
+        });
+        while (buffers.load() < 4) {
+            std::this_thread::yield();
+        }
+    }
+    ~RunningAudio() {
+        stop.store(true);
+        thread.join();
+    }
+};
+}  // namespace
+
+TEST_CASE("Control requests are served by a running audio thread") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto cfg = flatConfig();
+    REQUIRE(proc.configure(cfg.data(), cfg.size()));
+    const double band[5] = {1000.0, 6.0, 2.0, 0.0, 0.0};
+    REQUIRE(proc.configurePeq(true, -2.f, band, 5, nullptr, 0, nullptr, 0, nullptr, 0));
+
+    RunningAudio audio(proc);
+    const auto servedBefore = NativeBmwDspProcessorTestAccess::audioServedRequests(proc);
+
+    const auto snapshot = proc.captureTruthSnapshot();
+    REQUIRE(snapshot.size() > 3);
+    CHECK(snapshot[0] == doctest::Approx(kSampleRate));
+    CHECK(snapshot[2] == doctest::Approx(-2.0));
+
+    proc.startCapture();
+    while (proc.captureFrameCount() < 1024) {
+        std::this_thread::yield();
+    }
+    proc.stopCapture();
+    const auto take = proc.takeCaptureSnapshot();
+    REQUIRE(take != nullptr);
+    CHECK(take->frames >= 1024);
+    CHECK(take->rawInL.size() >= take->frames);
+    CHECK(take->sampleRate == doctest::Approx(kSampleRate));
+
+    // Snapshot, start (twice: the first finds no buffers), stop, take -- all on the audio thread.
+    CHECK(NativeBmwDspProcessorTestAccess::audioServedRequests(proc) - servedBefore >= 5);
+}
+
+TEST_CASE("A capture can be restarted while audio runs, reusing its buffers") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    RunningAudio audio(proc);
+    proc.startCapture();
+    while (proc.captureFrameCount() < 256) {
+        std::this_thread::yield();
+    }
+    proc.startCapture();  // same size: restarts in place
+    const auto take = proc.takeCaptureSnapshot();
+    REQUIRE(take != nullptr);
+    CHECK(take->frames < static_cast<std::size_t>(kSampleRate * NativeBmwDspProcessor::kCaptureMaxSeconds));
+}
+
+TEST_CASE("A sample-rate change while audio runs is served by the caller and takes effect") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    RunningAudio audio(proc);
+    const auto servedBefore = NativeBmwDspProcessorTestAccess::audioServedRequests(proc);
+    proc.setSampleRate(44100.f);
+    // The rebuild ran here, not on the audio thread.
+    CHECK(NativeBmwDspProcessorTestAccess::audioServedRequests(proc) == servedBefore);
+    const auto snapshot = proc.captureTruthSnapshot();
+    REQUIRE(!snapshot.empty());
+    CHECK(snapshot[0] == doctest::Approx(44100.0));
 }

@@ -42,7 +42,7 @@ import app.siphondsp.view.isHeadUnitDisplay
 
 /**
  * Measurement signal generator controls (native sweep/pink noise, PRs #344/#345) -- a standalone
- * screen, deliberately separate from `MeasurementCaptureActivity` (that one captures/exports raw
+ * screen, deliberately separate from the Measurement capture screen (that one captures/exports raw
  * input+output WAVs; this one drives what's playing in the first place). Reachable from the main
  * overflow menu, same as Measurement Capture.
  *

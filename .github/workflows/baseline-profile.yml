@@ -1,0 +1,148 @@
+name: Baseline Profile
+
+# Generates the app's Baseline Profile on an x86_64 emulator (API 34) with :baselineprofile and
+# uploads it. A manual run (Actions -> Baseline Profile -> Run workflow) also commits it as
+# app/src/main/baseline-prof.txt on the branch baseline-profile/update, for a PR; PR runs only
+# check that generation works. The app is built with x86_64 added for the emulator; the head
+# unit's APK stays arm64 only.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - baselineprofile/**
+      - .github/workflows/baseline-profile.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate Baseline Profile (emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # The emulator needs hardware acceleration; let the runner's user open /dev/kvm.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Built before the emulator starts, so its boot doesn't wait on the compile.
+      - name: Build the benchmark app and generator
+        run: ./gradlew :app:assembleBenchmark :baselineprofile:assembleBenchmark -Psiphon.extraAbis=x86_64
+
+      - name: Generate on the emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: >-
+            ./gradlew :baselineprofile:connectedBenchmarkAndroidTest -Psiphon.extraAbis=x86_64
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
+
+      # Fails here, PR runs included, if the generator passed without writing the profile.
+      - name: Check the profile was written
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=baselineprofile/build/outputs/connected_android_test_additional_output
+          if [ ! -d "$out" ]; then
+            echo "::error::The generator wrote no additional output at all ($out is missing)."
+            exit 1
+          fi
+          profile="$(find "$out" -type f -name '*-baseline-prof*.txt' | sort | tail -n 1)"
+          if [ -z "$profile" ]; then
+            echo "::error::The generator wrote no *-baseline-prof*.txt. Its output:"
+            find "$out" -type f | sort
+            exit 1
+          fi
+          echo "$profile: $(wc -l < "$profile") rules"
+
+      - name: Upload the profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baseline-profile
+          path: |
+            baselineprofile/build/outputs/connected_android_test_additional_output/**
+            baselineprofile/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+
+  # Manual runs only: commit the new profile to its own branch, ready for a PR. PR runs stay
+  # read-only (this job doesn't run for them).
+  publish:
+    name: Push the profile to a branch (manual runs)
+    needs: generate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the profile
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: baseline-profile
+          path: profile-artifact
+
+      - name: Commit it to baseline-profile/update
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Macrobenchmark names it <Class>_<test>-baseline-prof[-<timestamp>].txt (newer versions
+          # add the timestamp); the -startup-prof file beside it is a different profile.
+          profile="$(find profile-artifact -type f -name '*-baseline-prof*.txt' | sort | tail -n 1)"
+          if [ -z "$profile" ]; then
+            echo "::error::The artifact has no *-baseline-prof*.txt. It contains:"
+            find profile-artifact -type f | sort
+            exit 1
+          fi
+          echo "Using $profile ($(wc -l < "$profile") rules)"
+          target=app/src/main/baseline-prof.txt
+          cp "$profile" "$target"
+          if git ls-files --error-unmatch "$target" >/dev/null 2>&1 && git diff --quiet -- "$target"; then
+            echo "The profile hasn't changed; nothing to push." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch=baseline-profile/update
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add "$target"
+          git commit -m "Baseline Profile regenerated (run $RUN_ID)"
+          # A branch only this job writes: each run replaces the previous one.
+          git push --force origin "$branch"
+          echo "Profile pushed to \`$branch\`. Open a PR: https://github.com/$REPO/compare/$BASE...$branch" >> "$GITHUB_STEP_SUMMARY"

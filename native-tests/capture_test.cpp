@@ -1,5 +1,5 @@
 #include "test_support.h"
-#include "../app/src/main/cpp/libjdspimptoolbox/dr_wav.h"
+#include "../app/src/main/cpp/engine/third_party/dr_wav.h"
 
 #include <chrono>
 #include <filesystem>

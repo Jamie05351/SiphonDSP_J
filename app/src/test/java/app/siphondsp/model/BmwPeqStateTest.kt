@@ -241,7 +241,7 @@ class BmwPeqStateTest {
         assertTrue(restored.midBandBands.isEmpty())
 
         // Constants.PREF_PEQ is the live store for the separate, non-BMW Parametric EQ
-        // feature (JamesDspBaseEngine reads it directly). Migrating into BMW PEQ must
+        // feature. Migrating into BMW PEQ must
         // never delete the user's actual general-EQ settings out from under it.
         assertTrue(generalPeqPrefs.contains("peq_bands"))
         assertTrue(generalPeqPrefs.getBoolean("peq_enable", false))

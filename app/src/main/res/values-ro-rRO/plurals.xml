@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <plurals name="unsupported_apps">
-        <item quantity="one">%d aplicație nesuportată a fost exclusă automat. Atingeți pentru detalii.</item>
-        <item quantity="few">%d aplicațiile nesuportate au fost excluse automat. Atingeți pentru detalii.</item>
-        <item quantity="other">%d aplicațiile nesuportate au fost excluse automat. Atingeți pentru detalii.</item>
-    </plurals>
-</resources>

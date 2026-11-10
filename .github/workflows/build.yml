@@ -153,6 +153,12 @@ jobs:
         if: github.event_name == 'pull_request'
         run: ./gradlew :app:testDebugUnitTest :app:lintPreview
 
+      # The flat-config layout is generated from app/src/main/schema/native_bmw_dsp.schema; fails
+      # if a generated file (C++ header, Kotlin indices/defaults, default_config.txt, the schema
+      # doc) was edited by hand or not regenerated after a schema edit.
+      - name: Generated DSP schema is up to date
+        run: python3 scripts/gen-dsp-schema.py --check
+
       - name: Run native DSP unit tests
         shell: bash
         run: |

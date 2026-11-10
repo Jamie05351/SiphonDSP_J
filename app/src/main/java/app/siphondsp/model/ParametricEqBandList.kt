@@ -1,7 +1,7 @@
 package app.siphondsp.model
 
 import android.os.Bundle
-import androidx.databinding.ObservableArrayList
+
 import app.siphondsp.interop.ParametricBiquadProcessor
 import app.siphondsp.utils.extensions.CompatExtensions.getSerializableAs
 import timber.log.Timber
@@ -23,7 +23,7 @@ data class ApoImportResult(
     val preampInFileDb: Double? = null,
 )
 
-class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
+class ParametricEqBandList : ArrayList<ParametricEqBand>() {
     private val dfFreq = DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
     private val dfGain = DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH))
     private val dfQ = DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH))

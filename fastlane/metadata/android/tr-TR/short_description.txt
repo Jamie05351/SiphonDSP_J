@@ -1,1 +1,0 @@
-Root'suz Android cihazlar için sistem çapında SiphonDSP ses işleme motoru.

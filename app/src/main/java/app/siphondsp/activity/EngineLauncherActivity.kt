@@ -7,10 +7,8 @@ import android.os.Bundle
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.getSystemService
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.service.RootlessAudioProcessorService
 import app.siphondsp.utils.SdkCheck
-import app.siphondsp.utils.isRoot
 import app.siphondsp.utils.sdkAbove
 import timber.log.Timber
 
@@ -21,16 +19,8 @@ import timber.log.Timber
 class EngineLauncherActivity : BaseActivity() {
     private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
 
-    override val disableAppTheme: Boolean = true
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (isRoot()) {
-            // Root
-            RootAudioProcessorService.startServiceEnhanced(this)
-            finish()
-            return
-        }
 
         sdkAbove(Build.VERSION_CODES.Q) {
             // If projection token available, start immediately

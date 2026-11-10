@@ -1,5 +1,7 @@
 package app.siphondsp.compose.screens
 
+import app.siphondsp.compose.nav.LocalAppNavigator
+import app.siphondsp.compose.nav.Routes
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,7 +43,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import app.siphondsp.activity.BandAlignActivity
 import app.siphondsp.compose.controls.BmwSegmentedControl
 import app.siphondsp.compose.controls.BmwSwitch
 import app.siphondsp.compose.controls.BoxedValue
@@ -225,9 +226,9 @@ private fun PhoneDelayPage(
 /** Opens Band Align, which solves each side's Low delay and polarity against Mid from REW measurements. */
 @Composable
 private fun BandAlignLink(modifier: Modifier) {
-    val context = LocalContext.current
+    val navigator = LocalAppNavigator.current
     Box(
-        modifier.clickable { context.startActivity(android.content.Intent(context, BandAlignActivity::class.java)) },
+        modifier.clickable { navigator.open(Routes.BAND_ALIGN) },
         contentAlignment = Alignment.Center,
     ) {
         Text(

@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <plurals name="unsupported_apps">
-        <item quantity="other">已自動排除 %d 個不支援的程式。瞭解詳情。</item>
-    </plurals>
-</resources>

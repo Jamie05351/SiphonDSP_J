@@ -1,7 +1,6 @@
 package app.siphondsp.compose.state
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -22,8 +21,9 @@ import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.service.RootlessAudioProcessorService
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
 import app.siphondsp.view.BmwDashboardSkin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -170,7 +170,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             return false
         }
         peqState = candidate
-        appContext.sendLocalBroadcast(Intent(Constants.ACTION_PARAMETRIC_EQ_CHANGED))
+        AppEvents.send(AppEvent.ParametricEqChanged)
         return true
     }
 

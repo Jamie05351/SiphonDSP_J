@@ -1,11 +1,8 @@
 package app.siphondsp
 
 import android.app.Application
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.os.Build
 import android.os.StrictMode
 import android.util.Log
@@ -16,26 +13,17 @@ import com.pluto.plugins.exceptions.PlutoExceptions
 import com.pluto.plugins.exceptions.PlutoExceptionsPlugin
 import com.pluto.plugins.logger.PlutoLoggerPlugin
 import com.pluto.plugins.logger.PlutoTimberTree
-import com.pluto.plugins.network.PlutoNetworkPlugin
 import com.pluto.plugins.preferences.PlutoSharePreferencesPlugin
 import com.pluto.plugins.rooms.db.PlutoRoomsDBWatcher
 import com.pluto.plugins.rooms.db.PlutoRoomsDatabasePlugin
 import fr.bipi.treessence.file.FileLoggerTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import app.siphondsp.flavor.UpdateManager
-import app.siphondsp.model.preference.ThemeMode
 import app.siphondsp.model.room.AppBlocklistDatabase
 import app.siphondsp.model.room.AppBlocklistRepository
 import app.siphondsp.receiver.MasterVolumeReceiver
-import app.siphondsp.service.RootAudioProcessorService
 import app.siphondsp.session.dump.DumpManager
-import app.siphondsp.session.root.RootSessionDatabase
-import app.siphondsp.utils.Constants
 import app.siphondsp.utils.RoutingObserver
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.isRoot
-import app.siphondsp.utils.isRootless
 import app.siphondsp.utils.notifications.Notifications
 import app.siphondsp.utils.preferences.Preferences
 import app.siphondsp.utils.sdkAbove
@@ -51,7 +39,7 @@ import timber.log.Timber.DebugTree
 import java.io.File
 
 
-open class MainApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
+open class MainApplication : Application() {
     init {
         sdkAbove(Build.VERSION_CODES.P) {
             HiddenApiBypass.addHiddenApiExemptions("L")
@@ -60,13 +48,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
     private val prefs: Preferences.App by inject()
 
-    val rootSessionDatabase by lazy { RootSessionDatabase(this) }
-    val isLegacyMode
-        get() = prefs.get<Boolean>(R.string.key_audioformat_processing)
-    val isEnhancedProcessing
-        get() = !isLegacyMode &&
-                prefs.get<Boolean>(R.string.key_audioformat_enhanced_processing)
-
     private val applicationScope = CoroutineScope(SupervisorJob())
     private val blockedAppDatabase by lazy { AppBlocklistDatabase.getDatabase(this, applicationScope) }
     val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
@@ -74,29 +55,10 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
     /* Rootless: Media projection auth token */
     var mediaProjectionStartIntent: Intent? = null
 
-    var engineSampleRate = 0f
-        private set
-
-    private val receiver by lazy {
-        object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when(intent?.action) {
-                    Constants.ACTION_REPORT_SAMPLE_RATE -> {
-                        engineSampleRate = intent.getFloatExtra(Constants.EXTRA_SAMPLE_RATE, 0f)
-                    }
-                    Constants.ACTION_DISCARD_AUTHORIZATION -> {
-                        if(isRootless()) {
-                            Timber.i("mediaProjectionStartIntent discarded")
-                            mediaProjectionStartIntent = null
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     override fun onCreate() {
         instance = this
+        // Settings load off the main thread while the rest of start-up runs (see Preferences).
+        Preferences.warmUp(this)
         // A fresh process after a head-unit reset shows up in the audio health log, so a missing
         // "PIPELINE START" after this line means the engine was never started.
         app.siphondsp.service.AudioHealthLog.record(this, "APP PROCESS START")
@@ -139,7 +101,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
         val appModule = module {
             single { RoutingObserver(androidContext()) }
-            single { UpdateManager(androidContext()) }
             single { DumpManager(androidContext()) }
             single { Preferences(androidContext()).App() }
             single { Preferences(androidContext()).Var() }
@@ -165,13 +126,9 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             prefs.set(R.string.key_reset_proc_mode_fix_applied, true)
         }
 
-        onSharedPreferenceChanged(prefs.preferences, getString(R.string.key_appearance_theme_mode))
-        prefs.registerOnSharedPreferenceChangeListener(this)
-
-        registerLocalReceiver(receiver, IntentFilter().apply {
-            addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
-            addAction(Constants.ACTION_DISCARD_AUTHORIZATION)
-        })
+        // Every screen is the fixed dark dashboard: the configuration says night, for the theme
+        // attributes the graphs read and for the system dialogs.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
 
         // The DSP master volume from Tasker, for as long as this process runs: see MasterVolumeReceiver.
         // Never unregistered on purpose: it lives exactly as long as the process. Main process only,
@@ -182,43 +139,12 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
                 ContextCompat.RECEIVER_EXPORTED,
             )
         }
-
-        try {
-            if (isRoot() && isLegacyMode)
-                RootAudioProcessorService.updateLegacyMode(applicationContext, true)
-        }
-        catch(ex: Exception) {
-            /* Throws ForegroundServiceStartNotAllowedException on Android 13 if
-             * the service cannot be started from this point and battery optimizations were not
-             * disabled. BootCompletedReceiver handles auto-start after boot.
-             */
-            Timber.e("Failed to launch service in legacy mode on startup")
-            Timber.i(ex)
-        }
         super.onCreate()
-    }
-
-    override fun onTerminate() {
-        prefs.unregisterOnSharedPreferenceChangeListener(this)
-        unregisterReceiver(receiver)
-        super.onTerminate()
     }
 
     override fun onLowMemory() {
         Timber.w("onLowMemory: Running low on memory")
         super.onLowMemory()
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if(key == getString(R.string.key_appearance_theme_mode)) {
-            AppCompatDelegate.setDefaultNightMode(
-                when (ThemeMode.fromInt(prefs.get<String>(R.string.key_appearance_theme_mode).toIntOrNull() ?: 0)) {
-                    ThemeMode.Light -> AppCompatDelegate.MODE_NIGHT_NO
-                    ThemeMode.Dark -> AppCompatDelegate.MODE_NIGHT_YES
-                    ThemeMode.FollowSystem -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
-            )
-        }
     }
 
     private fun enableDebugTools() {
@@ -251,7 +177,6 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         )
 
         Pluto.Installer(this)
-            .addPlugin(PlutoNetworkPlugin())
             .addPlugin(PlutoExceptionsPlugin())
             .addPlugin(PlutoLoggerPlugin())
             .addPlugin(PlutoSharePreferencesPlugin())

@@ -3,7 +3,7 @@ package app.siphondsp.model.debug
 import java.lang.Double.doubleToLongBits
 
 /**
- * Kotlin mirror of the flat array [app.siphondsp.interop.JamesDspWrapper.getNativeTruthSnapshot]
+ * Kotlin mirror of the flat array [app.siphondsp.interop.NativeDsp.getNativeTruthSnapshot]
  * returns. Every field here is copied verbatim (or trivially relabeled -- e.g. an ordinal to its
  * enum) from that array; nothing is reconstructed from SharedPreferences, cached Kotlin state, UI
  * state, or broadcasts. See [parseNativeTruthSnapshot] and
@@ -224,7 +224,7 @@ data class RealtimeDiagnostics(
     /** AudioTrack underruns since the worker started (across recreated tracks), and in the last minute. */
     val underrunsTotal: Long,
     val underrunsLastMinute: Long,
-    /** Native counters, indexed by JamesDspWrapper.REALTIME_*; null when the handle is gone. */
+    /** Native counters, indexed by NativeDsp.REALTIME_*; null when the handle is gone. */
     val nativeCounters: List<Long>?,
 ) {
     val overruns: Long get() = budgetBuckets.lastOrNull() ?: 0L
@@ -238,7 +238,7 @@ private val OUTPUT_ORDER = listOf(
 )
 
 /**
- * Parses the flat array [app.siphondsp.interop.JamesDspWrapper.getNativeTruthSnapshot] returns.
+ * Parses the flat array [app.siphondsp.interop.NativeDsp.getNativeTruthSnapshot] returns.
  * Returns null on a malformed/short array (should not happen against a matching native build --
  * treated as "unavailable" rather than crashing the debug screen on a schema mismatch).
  */

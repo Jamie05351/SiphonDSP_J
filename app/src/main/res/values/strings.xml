@@ -154,18 +154,7 @@
     <string name="bmw_dsp_tilt_amount">Tilt amount</string>
     <string name="bmw_dsp_tilt_pivot">Tilt pivot</string>
 
-    <string name="convolver_enable">Convolver</string>
-    <string name="convolver_impulse">Impulse response</string>
-    <string name="convolver_advanced_editing">Advanced waveform editing</string>
-    <string name="convolver_convolution_mode">Impulse response optimization</string>
-    <string name="convolver_convolution_mode_original">Original</string>
-    <string name="convolver_convolution_mode_shrink">Shrink</string>
-    <string name="convolver_convolution_mode_minimum_phase_shrink">Minimum phase transform and shrink</string>
 
-    <string name="output_control_header">Output control</string>
-    <string name="output_limiter_threshold">Limiter threshold</string>
-    <string name="output_limiter_release">Limiter release</string>
-    <string name="output_control_postgain">Post gain</string>
 
     <!-- Onboarding -->
     <string name="title_activity_onboarding">Onboarding</string>
@@ -196,7 +185,6 @@
     <string name="onboarding_root_shell_fail_title">No root access</string>
     <string name="onboarding_root_shell_fail">No root access available. Please use another setup method.</string>
     <string name="onboarding_root_shell_fail_unknown">Failed to grant permission via root. Please use another setup method.</string>
-    <string name="onboarding_root_enhanced_processing_setup_success">Enhanced processing is set-up</string>
 
     <string name="onboarding_adb_shizuku_title">Shizuku setup</string>
     <string name="onboarding_adb_adb_title">ADB setup</string>
@@ -259,6 +247,7 @@
 
     <!-- Settings -->
     <string name="title_activity_settings">Settings</string>
+    <string name="back">Back</string>
     <!-- Labels on the front-page tiles and the workspace rail tiles (they used to be baked into art). -->
     <string name="home_tile_peq">PEQ</string>
     <string name="home_tile_gains">Align</string>
@@ -324,16 +313,6 @@
     <string name="session_loss_ignore_warning">Enabling this setting can cause duplicated audio when another audio effects app takes control of an audio session.\nPlease keep this setting disabled unless you encounter false-positive session loss events.</string>
     <string name="audio_format_header">Audio processing</string>
     <string name="audio_format_section_header">Preferred audio format</string>
-    <string name="audio_format_processing_header">Audio processing options</string>
-    <string name="audio_format_processing_legacy">Legacy mode</string>
-    <string name="audio_format_processing_legacy_on">Attach globally to session 0 (deprecated)</string>
-    <string name="audio_format_processing_legacy_off">Attach to each app individually</string>
-    <string name="audio_format_enhanced_processing">Enhanced processing</string>
-    <string name="audio_format_enhanced_processing_on">Per-app control and enhanced support for apps enabled</string>
-    <string name="audio_format_enhanced_processing_off">Enhanced processing disabled</string>
-    <string name="audio_format_enhanced_processing_info_title">What is enhanced processing?</string>
-    <string name="audio_format_enhanced_processing_info">Tap to view documentation</string>
-    <string name="audio_format_enhanced_processing_info_content">When enhanced processing is enabled, you can selectively exclude certain apps from being processed by J_DSP. Use the 3-dot menu on the bottom right corner and select \'Excluded apps\' to access this feature.\n\nWhile legacy mode is disabled, J_DSP relies on media apps to send a system broadcast when they start playback. This is an advantage over legacy mode because each app gets its own J_DSP effect engine assigned to it, which allows for more fine-grained control. Otherwise, with legacy mode turned on, all apps would share a single processing engine, which Android deprecates and should not be used anymore.\n\nUnfortunately, not all media apps do this correctly and, therefore, would not function correctly with legacy mode disabled. To solve this issue, you can enable enhanced processing. Instead of relying on system broadcasts about new media sessions, J_DSP will proactively scan for media sessions by itself and allow proper support for uncooperative media apps.</string>
     <string name="audio_format_media_apps_need_restart">You need to restart all active media apps after changing this setting to resume audio processing.</string>
     <string name="audio_format_summary">Preferred audio encoding, buffer size</string>
     <string name="audio_format_summary_root">Legacy mode, enhanced processing</string>
@@ -344,11 +323,6 @@
     <string name="audio_format_buffer_size">Buffer size</string>
     <string name="audio_format_buffer_size_unit">&#xa0;samples</string>
     <string name="audio_format_buffer_size_warning_low_value">Warning: Low buffer sizes may cause audio issues such as clipping!</string>
-    <string name="audio_format_optimization_header">Convolver module optimizations</string>
-    <string name="audio_format_optimization_refresh">Refresh benchmarking data</string>
-    <string name="audio_format_optimization_benchmark">Use benchmarks to optimize performance</string>
-    <string name="audio_format_optimization_benchmark_summary">Increases performance of effects that use convolver modules</string>
-    <string name="audio_format_optimization_benchmark_ongoing">Benchmark in progress…</string>
     <string name="app_behavior">App behavior</string>
     <string name="exclude_app_from_recents">Exclude app from recents</string>
     <string name="exclude_app_from_recents_off">Don\'t exclude app from recent tasks list</string>
@@ -374,31 +348,26 @@
     <string name="troubleshooting_view_limitations_summary">Show details about the limitations of this app</string>
     <string name="troubleshooting_notification_access">Allow notification access for better session detection</string>
     <string name="troubleshooting_notification_access_summary">Enables more reliable audio session detection</string>
-    <string name="troubleshooting_repair_assets">Restore bundled IRS, DDC, and scripts</string>
-    <string name="troubleshooting_repair_assets_summary">Unpack preloaded assets if you lost them</string>
-    <string name="troubleshooting_repair_assets_success">Bundled assets have been restored</string>
     <string name="misc_settings">Miscellaneous</string>
-    <string name="misc_settings_summary">Crash reports, other actions</string>
+    <string name="misc_settings_summary">App behavior, permissions</string>
     <string name="misc_permission_skip_prompt">Skip capture permission prompt</string>
     <string name="misc_permission_auto_start">Auto-start effect engine on boot</string>
     <string name="misc_permission_restart_setup">Restart setup wizard</string>
     <string name="misc_permission_restart_setup_summary">Grant missing optional permissions</string>
     <string name="misc_permission_header">Optional permissions</string>
-    <string name="assets">Assets</string>
     <string name="about_settings">About</string>
-    <string name="about_settings_summary">Credits, support, updates</string>
+    <string name="about_settings_summary">Version, project page, credits</string>
     <string name="credits">Credits</string>
-    <string name="translators">Translators</string>
     <string name="credits_app">App &amp; rootless implementation developed by</string>
     <string name="credits_dsp">Core DSP algorithm library developed by</string>
+    <string name="credits_capture">Rootless audio capture (RootlessJamesDSP) by</string>
+    <string name="credits_dsp_origin">Original JamesDSP by</string>
     <string name="credits_project_page">Visit project website on GitHub</string>
     <string name="credits_project_page_summary">Report issues, keep yourself updated, and read the source code</string>
     <string name="credits_project_play_page">Visit J_DSP on Google Play</string>
     <string name="credits_project_play_page_summary">Search for new updates</string>
     <string name="credits_project_check_update">Check for new updates…</string>
     <string name="credits_project_check_update_summary">Download and install updates if available</string>
-    <string name="credits_project_translate">Contribute translations</string>
-    <string name="credits_project_translate_summary">Help us to translate this app into your language</string>
     <string name="credits_version">Application version</string>
     <string name="credits_build_info">Build info</string>
     <string name="appearance_section_header">Appearance</string>
@@ -464,10 +433,6 @@
     <string name="filelibrary_deleted">\'%1$s\' deleted</string>
 
     <!-- J_DSP engine messages -->
-    <string name="message_vdc_corrupt">Selected VDC file is corrupt. Please choose another one.</string>
-    <string name="message_irs_corrupt">Selected impulse response is corrupt. Please choose another one.</string>
-    <string name="message_convolver_advimp_invalid">Convolver: Advanced waveform editing contains invalid values.</string>
-    <string name="message_liveprog_compile_fail">Liveprog execution failed. Selected script is damaged. Please use the script editor for debugging.</string>
 
     <!-- GraphicEQ editor -->
 
@@ -551,9 +516,6 @@
     <string name="load_fail_arch_card">If you already installed the magisk module, you may have chosen the wrong settings during installation. Please re-install and try to enable Huawei compatibility (even if your phone is not from that manufacturer).</string>
 
     <!-- Enhanced processing -->
-    <string name="enhanced_processing_feature_unavailable">Feature unavailable</string>
-    <string name="enhanced_processing_feature_unavailable_content">This feature is only available when \'enhanced processing\' is enabled in the settings. Please go to \'Settings > Audio processing > Enhanced processing\' and enable that option to access this menu.\n\nNote: \'Enhanced processing\' can not be used while legacy mode is enabled.</string>
-    <string name="enhanced_processing_missing_perm">Enhanced processing has been disabled due to a missing permission. Please re-setup it in settings.</string>
 
     <!-- App list -->
     <string name="app_list_loading">Loading apps…</string>
@@ -574,17 +536,8 @@
     <string name="revert_confirmation">Do you want to reset your current J_DSP preset to the default values?</string>
 
     <!-- File intent handler -->
-    <string name="intent_import_irs">Import impulse response</string>
-    <string name="intent_import_mode_add">Import only</string>
-    <string name="intent_import_mode_select">Import and activate</string>
-    <string name="intent_import_fail">Failed to import file \'%1$s\'</string>
-    <string name="intent_import_success">File \'%1$s\' imported</string>
-    <string name="intent_import_select_success">File \'%1$s\' imported and activated</string>
-    <string name="intent_import_error_file_uri">Failed to import file. Unsupported file URI.</string>
 
     <!-- Translation notice box -->
-    <string name="translation_notice_summary">Please help us to translate this app into your language! Tap here to visit the project site on Crowdin.</string>
-    <string name="translation_notice">Contribute translations</string>
 
     <!-- Self-updates (Root) -->
     <string name="self_update_no_updates">No new updates available at the moment</string>
@@ -609,7 +562,7 @@
     <string name="backup_restore">Restore backup</string>
     <string name="backup_restore_summary">Restore settings from backup file</string>
     <string name="backup_automatic_backup">Automatic backup</string>
-    <string name="backup_compat_info">Backups only include impulse responses, scripts, VDC files, presets, and the current audio configuration for maximum compatibility with other versions.</string>
+    <string name="backup_compat_info">Backups include the DSP tuning (crossovers, gains, delays, compressor, tilt, PEQ) and the DSP preferences. The app blocklist is not included.</string>
     <string name="backup_restore_mode_title">Restore mode</string>
     <string name="backup_restore_mode_clean">Clean restore (delete all existing files)</string>
     <string name="backup_restore_mode_dirty">Dirty restore (overwrite only)</string>
@@ -624,9 +577,6 @@
     <string name="group_unknown">Unknown</string>
 
     <!-- Root version check -->
-    <string name="version_mismatch_root">J_DSP magisk package requires an update</string>
-    <string name="version_mismatch_root_description">The J_DSP magisk package installed on your device is outdated and not supported by this app anymore.\n\nPlease retrieve the latest J_DSP magisk package ZIP and install it via Magisk.\nNote that the magisk package may replace this app with the official J_DSP app.\n\nDo you want to visit the download website for the Magisk packages now?</string>
-    <string name="version_mismatch_root_toast">Failed to start. The installed J_DSP magisk package is too old and not supported by this app anymore.</string>
 
     <!-- Android 15 screenshare restriction warning -->
     <string name="android_15_screenshare_warning_title">Android 15 compatibility notice</string>

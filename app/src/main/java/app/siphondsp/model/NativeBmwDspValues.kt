@@ -1,10 +1,9 @@
 package app.siphondsp.model
 
 import android.content.Context
-import android.content.Intent
 import androidx.core.content.edit
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import timber.log.Timber
 
 object NativeBmwDspValues {
@@ -13,135 +12,68 @@ object NativeBmwDspValues {
     const val PREFS = "native_bmw_dsp"
     const val KEY = "values"
 
-    // 0..85 are the original/native four-output config. 86 is a schema marker and
-    // 87..138 are the independent per-output settings described below. 139..142 were the
-    // Pultec-style bass boost/cut stage (global, post-routing); the feature was unused and has
-    // been removed. The trailing slots stay put rather than being renumbered (same as
-    // OUTPUT_CONFIG_WIDTH's FIELD_CROSSOVER_TYPE):
-    //   139 -> INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES (read natively)
-    //   140 -> INDEX_MEAS_MUTE_STOPBAND_MIGRATED, a one-time migration marker (Kotlin-only)
-    //   141, 142 -> unused. Briefly a Mid-band independent LPF; that feature was removed
-    //               (wrong fix). Not read natively; a leftover value from an older save is
-    //               ignored, and DEFAULTS ships them 0.
-    // 143 is the Gains & Delay "Link L/R Delay" toggle -- UI-only, never read natively (see
-    // INDEX_DELAY_LINKED), stored here anyway so it persists/syncs the same way every other
-    // toggle in this array does.
-    //
-    // 144..191 are the pre-crossover multiband compressor (MBC) + per-bus output limiter block,
-    // added in the 144 -> 192 growth. The store keys entries by index, so an older 144-value
-    // save just leaves 144..191 at their DEFAULTS; migrateMbcIfNeeded() claims the marker and
-    // force-clears the enables. See the INDEX_MBC_* / INDEX_BUS_LIMITER_* section lower down.
-    //
-    // 192..204 are the measurement signal generator (log sweep + pink periodic noise, plus a
-    // REW Acoustic Timing Reference sequence mode for the sweep), added in the
-    // 192 -> 197 -> 199 -> 200 -> 205 growths. No migration marker needed -- same as the
-    // 144 -> 192 growth, an older save simply leaves the new trailing slots at their DEFAULTS
-    // (type off / timing reference off).
-    //
-    // 205..209 are Mid's optional upper (Mid/High) bandpass corner, added in the 205 -> 210
-    // growth (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md) -- Phase 2 of the 2-way -> 3-way output
-    // crossover work. Only Mid has this field; Low/High don't. 209 is a one-time migration
-    // marker: migrateMidUpperCrossoverIfNeeded() seeds it disabled for existing saves, same
-    // pattern as migrateMbcIfNeeded().
-    //
-    // 210..261 are the High band -- Phase 3 of the same work, a genuinely new third output.
-    // Kept in its own tail sub-blocks (routing/all-pass/output-config) rather than growing the
-    // legacy per-output block, same reasoning as the offset-freeze in NativeBmwDspProcessor.h.
-    // Ships muted/disabled. 261 is a one-time migration marker: migrateHighBandIfNeeded() seeds
-    // the whole block muted for existing saves, same pattern as migrateMbcIfNeeded().
-    //
-    // 262..265 are the High-bus brick-wall limiter, added in the 262 -> 266 growth (Phase 6
-    // of the same work) -- the High counterpart of the Low/Mid bus limiters at 182..187.
-    // Ships disabled; 265 is a one-time migration marker, see migrateHighBusLimiterIfNeeded().
-    //
-    // 266..287 are the virtual-source stage (the virtual centre and its per-side feeds), added
-    // in the 266 -> 288 growth. Ships disabled; 287 is a one-time migration marker, see
-    // migrateVirtualIfNeeded() and docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
-    //
-    // 288..290 are Mid's upper (Mid/High) lowpass slope, Left/Right, added in the 288 -> 291
-    // growth; 290 is a one-time migration marker, see migrateMidUpperXoTypeIfNeeded().
-    //
-    // 291 is High's crossover passthrough, added in the 291 -> 292 growth. Defaults off, so an
-    // older save padded with it behaves exactly as before -- no migration needed.
-    //
-    // 292..293 are the master volume (dB, mute), added in the 292 -> 294 growth. Default 0 dB /
-    // unmuted, so older saves are unchanged; see MasterVolume.
-    //
-    // 294..295 are loudness compensation (enabled, strength %), added in the 294 -> 296 growth.
-    // Default off, so older saves -- backfilled from DEFAULTS by index -- are unchanged.
-    //
-    // 296 is the automatic-headroom switch, added in the 296 -> 297 growth. Kotlin-only (native
-    // never reads it): with it on, the service sends a computed headroom in place of index 5's
-    // manual one (see AutoHeadroom). Default off, so older saves keep their manual headroom.
-    //
-    // 297..298 are Mono Bass (enabled, split Hz), added in the 297 -> 299 growth -- new slots,
-    // not the reclaimed 42..45 an earlier mono bass used. Default off, so older saves are
-    // unchanged.
-    //
-    // 299..302 are Virtual Bass (enabled, cut Hz, amount %, remove sub), added in the 299 -> 303
-    // growth. Default off, so older saves are unchanged.
-    //
-    // 303 is Virtual Bass's character (Warm 0 .. Punchy 100 %), added in the 303 -> 304 growth.
-    // Default 50; inert while Virtual Bass is off.
-    //
-    // 304 is the Low subsonic high-pass's slope (0 = LR4, 1 = BW2), added in the 304 -> 305
-    // growth. Default LR4, so older saves are unchanged.
-    const val SIZE = 307
+    // The slot layout -- every index, its default, and whether native or only Kotlin reads it --
+    // is generated from app/src/main/schema/native_bmw_dsp.schema into NativeBmwDspSchema (and the
+    // C++ header, native-tests/default_config.txt and docs/NATIVE_BMW_DSP_SCHEMA.md). The INDEX_*
+    // constants here re-export it so call sites keep their names; change the layout in the schema.
+    // Slots are append-only: saves are stored by index, and the migrate*IfNeeded() functions below
+    // seed each newer block for an older save.
+    const val SIZE = NativeBmwDspSchema.SIZE
 
-    const val INDEX_ENABLED = 0
-    const val INDEX_LPF_PASS = 1
-    const val INDEX_HPF_PASS = 2
-    const val INDEX_CHANNEL_MUTE = 3
-    const val INDEX_MEASUREMENT_MUTE = 4
-    const val INDEX_HEADROOM = 5
-    const val INDEX_LOW_GAIN_L = 6
-    const val INDEX_LOW_GAIN_R = 7
-    const val INDEX_MID_GAIN_L = 8
-    const val INDEX_MID_GAIN_R = 9
-    const val INDEX_POST_GAIN_L = 10
-    const val INDEX_POST_GAIN_R = 11
+    const val INDEX_ENABLED = NativeBmwDspSchema.INDEX_ENABLED
+    const val INDEX_LPF_PASS = NativeBmwDspSchema.INDEX_LPF_PASS
+    const val INDEX_HPF_PASS = NativeBmwDspSchema.INDEX_HPF_PASS
+    const val INDEX_CHANNEL_MUTE = NativeBmwDspSchema.INDEX_CHANNEL_MUTE
+    const val INDEX_MEASUREMENT_MUTE = NativeBmwDspSchema.INDEX_MEASUREMENT_MUTE
+    const val INDEX_HEADROOM = NativeBmwDspSchema.INDEX_HEADROOM
+    const val INDEX_LOW_GAIN_L = NativeBmwDspSchema.INDEX_LOW_GAIN_L
+    const val INDEX_LOW_GAIN_R = NativeBmwDspSchema.INDEX_LOW_GAIN_R
+    const val INDEX_MID_GAIN_L = NativeBmwDspSchema.INDEX_MID_GAIN_L
+    const val INDEX_MID_GAIN_R = NativeBmwDspSchema.INDEX_MID_GAIN_R
+    const val INDEX_POST_GAIN_L = NativeBmwDspSchema.INDEX_POST_GAIN_L
+    const val INDEX_POST_GAIN_R = NativeBmwDspSchema.INDEX_POST_GAIN_R
 
     // Legacy shared-band settings retained for migration/backward compatibility. The native
     // engine now consumes the independent per-output block at INDEX_OUTPUT_CONFIG.
-    const val INDEX_SUBSONIC_ENABLED = 12
-    const val INDEX_SUBSONIC_FREQ = 13
-    const val INDEX_LOW_MUTE = 14
-    const val INDEX_LOW_CROSSOVER_FREQ = 15
-    const val INDEX_LOW_LR4 = 16
-    const val INDEX_MID_MUTE = 17
-    const val INDEX_MID_CROSSOVER_FREQ = 18
-    const val INDEX_LOW_INVERT = 19
-    const val INDEX_MID_INVERT = 20
+    const val INDEX_SUBSONIC_ENABLED = NativeBmwDspSchema.INDEX_SUBSONIC_ENABLED
+    const val INDEX_SUBSONIC_FREQ = NativeBmwDspSchema.INDEX_SUBSONIC_FREQ
+    const val INDEX_LOW_MUTE = NativeBmwDspSchema.INDEX_LOW_MUTE
+    const val INDEX_LOW_CROSSOVER_FREQ = NativeBmwDspSchema.INDEX_LOW_CROSSOVER_FREQ
+    const val INDEX_LOW_LR4 = NativeBmwDspSchema.INDEX_LOW_LR4
+    const val INDEX_MID_MUTE = NativeBmwDspSchema.INDEX_MID_MUTE
+    const val INDEX_MID_CROSSOVER_FREQ = NativeBmwDspSchema.INDEX_MID_CROSSOVER_FREQ
+    const val INDEX_LOW_INVERT = NativeBmwDspSchema.INDEX_LOW_INVERT
+    const val INDEX_MID_INVERT = NativeBmwDspSchema.INDEX_MID_INVERT
 
-    const val INDEX_MID_DELAY_L = 21
-    const val INDEX_MID_DELAY_R = 22
-    const val INDEX_LOW_DELAY_L = 23
-    const val INDEX_LOW_DELAY_R = 24
-    const val INDEX_TILT_ENABLED = 25
-    const val INDEX_TILT_AMOUNT = 26
+    const val INDEX_MID_DELAY_L = NativeBmwDspSchema.INDEX_MID_DELAY_L
+    const val INDEX_MID_DELAY_R = NativeBmwDspSchema.INDEX_MID_DELAY_R
+    const val INDEX_LOW_DELAY_L = NativeBmwDspSchema.INDEX_LOW_DELAY_L
+    const val INDEX_LOW_DELAY_R = NativeBmwDspSchema.INDEX_LOW_DELAY_R
+    const val INDEX_TILT_ENABLED = NativeBmwDspSchema.INDEX_TILT_ENABLED
+    const val INDEX_TILT_AMOUNT = NativeBmwDspSchema.INDEX_TILT_AMOUNT
     // The tilt runs two low shelves and two high shelves at the pivot, each at 0.75 x the stored
     // amount (Tilt::rebuild), so each end of the response moves 1.5 x the stored amount: a saved
     // 3 dB is +4.5 dB of bass and -4.5 dB of treble. The stored value keeps that meaning (every
     // saved tune sounds the same); the UI shows and edits the real end gain.
     const val TILT_END_GAIN_PER_AMOUNT = 1.5f
-    const val INDEX_TILT_FREQ = 27
+    const val INDEX_TILT_FREQ = NativeBmwDspSchema.INDEX_TILT_FREQ
 
     // Legacy band-linked compressor settings, used as migration seeds.
-    const val INDEX_LOW_COMPRESSOR_ENABLED = 28
-    const val INDEX_LOW_COMPRESSOR_THRESHOLD = 29
-    const val INDEX_LOW_COMPRESSOR_RATIO = 30
-    const val INDEX_LOW_COMPRESSOR_KNEE = 31
-    const val INDEX_LOW_COMPRESSOR_ATTACK = 32
-    const val INDEX_LOW_COMPRESSOR_RELEASE = 33
-    const val INDEX_LOW_COMPRESSOR_MAKEUP = 34
+    const val INDEX_LOW_COMPRESSOR_ENABLED = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_ENABLED
+    const val INDEX_LOW_COMPRESSOR_THRESHOLD = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_THRESHOLD
+    const val INDEX_LOW_COMPRESSOR_RATIO = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_RATIO
+    const val INDEX_LOW_COMPRESSOR_KNEE = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_KNEE
+    const val INDEX_LOW_COMPRESSOR_ATTACK = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_ATTACK
+    const val INDEX_LOW_COMPRESSOR_RELEASE = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_RELEASE
+    const val INDEX_LOW_COMPRESSOR_MAKEUP = NativeBmwDspSchema.INDEX_LOW_COMPRESSOR_MAKEUP
 
-    const val INDEX_MID_COMPRESSOR_ENABLED = 35
-    const val INDEX_MID_COMPRESSOR_THRESHOLD = 36
-    const val INDEX_MID_COMPRESSOR_RATIO = 37
-    const val INDEX_MID_COMPRESSOR_KNEE = 38
-    const val INDEX_MID_COMPRESSOR_ATTACK = 39
-    const val INDEX_MID_COMPRESSOR_RELEASE = 40
-    const val INDEX_MID_COMPRESSOR_MAKEUP = 41
+    const val INDEX_MID_COMPRESSOR_ENABLED = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_ENABLED
+    const val INDEX_MID_COMPRESSOR_THRESHOLD = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_THRESHOLD
+    const val INDEX_MID_COMPRESSOR_RATIO = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_RATIO
+    const val INDEX_MID_COMPRESSOR_KNEE = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_KNEE
+    const val INDEX_MID_COMPRESSOR_ATTACK = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_ATTACK
+    const val INDEX_MID_COMPRESSOR_RELEASE = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_RELEASE
+    const val INDEX_MID_COMPRESSOR_MAKEUP = NativeBmwDspSchema.INDEX_MID_COMPRESSOR_MAKEUP
 
     // 42..45 were the Mono Bass enable/freq/blend/makeup (a frequency-dependent mono/stereo
     // blend for the low paths). The feature was removed (disabled by default, never proven
@@ -149,33 +81,33 @@ object NativeBmwDspValues {
     // rationale as 139..142 below. 43..45 are still not read natively; a leftover value from an
     // older save there is simply ignored. 42 is now INDEX_CROSSOVER_TYPE_MIGRATED, a Kotlin-only
     // migration marker (see migrateCrossoverTypeIfNeeded) -- same pattern as 140/181/188/191.
-    const val INDEX_CROSSOVER_TYPE_MIGRATED = 42
+    const val INDEX_CROSSOVER_TYPE_MIGRATED = NativeBmwDspSchema.INDEX_CROSSOVER_TYPE_MIGRATED
     // Distinct from the legacy Mono Bass enable boolean (0/1) that used to live in slot 42 -- see
     // migrateCrossoverTypeIfNeeded.
     const val CROSSOVER_TYPE_MIGRATED_MARKER = 2f
 
     // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
-    const val INDEX_ROUTING = 46
+    const val INDEX_ROUTING = NativeBmwDspSchema.INDEX_ROUTING
     const val ROUTING_VALUE_COUNT = 8
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = 46
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT = 47
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT = 48
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT = 49
-    const val INDEX_ROUTE_MID_LEFT_FRONT_LEFT = 50
-    const val INDEX_ROUTE_MID_LEFT_FRONT_RIGHT = 51
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = 52
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = 53
+    const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT
+    const val INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT
+    const val INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT
+    const val INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT
+    const val INDEX_ROUTE_MID_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_MID_LEFT_FRONT_LEFT
+    const val INDEX_ROUTE_MID_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT
+    const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT
+    const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT
 
     // Two all-pass sections per exact output: [enabled, order(1|2), frequencyHz, Q].
-    const val INDEX_ALL_PASS = 54
+    const val INDEX_ALL_PASS = NativeBmwDspSchema.INDEX_ALL_PASS
     const val ALL_PASS_SECTIONS_PER_OUTPUT = 2
     const val ALL_PASS_SECTION_WIDTH = 4
     const val ALL_PASS_VALUE_COUNT = 32
 
     // Versioned independent-output block. Output order matches NativeBmwRouting::OutputId.
-    const val INDEX_OUTPUT_SCHEMA_VERSION = 86
+    const val INDEX_OUTPUT_SCHEMA_VERSION = NativeBmwDspSchema.INDEX_OUTPUT_SCHEMA_VERSION
     const val OUTPUT_SCHEMA_VERSION = 1f
-    const val INDEX_OUTPUT_CONFIG = 87
+    const val INDEX_OUTPUT_CONFIG = NativeBmwDspSchema.INDEX_OUTPUT_CONFIG
     const val OUTPUT_CONFIG_WIDTH = 13
     const val OUTPUT_COUNT = 4
 
@@ -218,14 +150,14 @@ object NativeBmwDspValues {
     // Measurement-mute bus brick-wall: octaves to walk the LR8 corner off the opposite band's
     // crossover and into the stopband, so the band still playing keeps its own transition region
     // for measurement. 0 == original on-crossover behaviour. Consumed natively (v[139]).
-    const val INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES = 139
+    const val INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES = NativeBmwDspSchema.INDEX_MEASUREMENT_MUTE_STOPBAND_OCTAVES
     const val DEFAULT_MEAS_MUTE_STOPBAND_OCTAVES = 1f
 
     // One-time migration counter for the reclaimed 139..142 block. Kotlin-only -- native never
     // reads index 140. 0 = unseeded; >=1 = slot 139 seeded to the meas-mute default;
     // >=2 = slots 141/142 zeroed for the stage-delay reclaim (a leftover Mid-LPF corner value
     // there would otherwise clamp to a several-ms stage delay). See load()'s migrate* calls.
-    const val INDEX_MEAS_MUTE_STOPBAND_MIGRATED = 140
+    const val INDEX_MEAS_MUTE_STOPBAND_MIGRATED = NativeBmwDspSchema.INDEX_MEAS_MUTE_STOPBAND_MIGRATED
 
     // 141, 142: stage-centering L/R alignment delay in ms -- an independent post-sum correction
     // layer for L/R stage imaging, downstream of the per-output crossover/driver-alignment
@@ -233,14 +165,14 @@ object NativeBmwDspValues {
     // limiter, the last stage before the hardware L/R swap. Clamped to [0, STAGE_DELAY_MAX_MS].
     // Reclaimed from a removed Mid-band LPF; migrateStageDelayReclaimIfNeeded() zeroes any
     // leftover value once.
-    const val INDEX_STAGE_DELAY_L = 141
-    const val INDEX_STAGE_DELAY_R = 142
+    const val INDEX_STAGE_DELAY_L = NativeBmwDspSchema.INDEX_STAGE_DELAY_L
+    const val INDEX_STAGE_DELAY_R = NativeBmwDspSchema.INDEX_STAGE_DELAY_R
     const val STAGE_DELAY_MAX_MS = 10f
 
     // UI-only: links Low Left/Right and Mid Left/Right delay editing together on the Gains &
     // Delay page. Native never reads this index -- see NativeBmwDspProcessor::configure(), which
     // consumes 0..139 and 144..191.
-    const val INDEX_DELAY_LINKED = 143
+    const val INDEX_DELAY_LINKED = NativeBmwDspSchema.INDEX_DELAY_LINKED
 
     // ---------------------------------------------------------------------------------------
     // Pre-crossover multiband compressor (MBC) -- indices 144..181. New in the 144 -> 192
@@ -249,13 +181,13 @@ object NativeBmwDspValues {
     // split by three Linkwitz-Riley 24 dB/oct crossovers and reconstructed flat via all-pass
     // compensation on the already-split lower bands -- same principle as the mono-bass
     // all-pass fix. Ships DISABLED; the metering JNI and the UI land in later PRs.
-    const val INDEX_MBC_ENABLED = 144
-    const val INDEX_MBC_MIX = 145 // dry/wet blend, percent 0..100 (100 = fully processed)
-    const val INDEX_MBC_XO_0 = 146 // band 0 | band 1 split, Hz
-    const val INDEX_MBC_XO_1 = 147 // band 1 | band 2 split, Hz
-    const val INDEX_MBC_XO_2 = 148 // band 2 | band 3 split, Hz
+    const val INDEX_MBC_ENABLED = NativeBmwDspSchema.INDEX_MBC_ENABLED
+    const val INDEX_MBC_MIX = NativeBmwDspSchema.INDEX_MBC_MIX // dry/wet blend, percent 0..100 (100 = fully processed)
+    const val INDEX_MBC_XO_0 = NativeBmwDspSchema.INDEX_MBC_XO_0 // band 0 | band 1 split, Hz
+    const val INDEX_MBC_XO_1 = NativeBmwDspSchema.INDEX_MBC_XO_1 // band 1 | band 2 split, Hz
+    const val INDEX_MBC_XO_2 = NativeBmwDspSchema.INDEX_MBC_XO_2 // band 2 | band 3 split, Hz
 
-    const val INDEX_MBC_BANDS = 149
+    const val INDEX_MBC_BANDS = NativeBmwDspSchema.INDEX_MBC_BANDS
     const val MBC_BAND_COUNT = 4
     const val MBC_BAND_WIDTH = 8
     const val MBC_FIELD_ENABLED = 0
@@ -277,75 +209,75 @@ object NativeBmwDspValues {
     // (144..191) seeded to its shipped-disabled defaults. Lets the block ship without a schema
     // *version* bump and guarantees the feature stays off for existing users even if a later
     // build flips a default on. Kotlin-only -- native never reads index 181.
-    const val INDEX_MBC_MIGRATED = 181
+    const val INDEX_MBC_MIGRATED = NativeBmwDspSchema.INDEX_MBC_MIGRATED
 
     // Per-bus output limiter (Low bus, Mid bus) -- indices 182..187. Ships DISABLED. Threshold in
     // dBFS, release in ms; native uses a short lookahead and an infinite (brick-wall) ratio.
-    const val INDEX_BUS_LIMITER_LOW_ENABLED = 182
-    const val INDEX_BUS_LIMITER_LOW_THRESHOLD = 183
-    const val INDEX_BUS_LIMITER_LOW_RELEASE = 184
-    const val INDEX_BUS_LIMITER_MID_ENABLED = 185
-    const val INDEX_BUS_LIMITER_MID_THRESHOLD = 186
-    const val INDEX_BUS_LIMITER_MID_RELEASE = 187
+    const val INDEX_BUS_LIMITER_LOW_ENABLED = NativeBmwDspSchema.INDEX_BUS_LIMITER_LOW_ENABLED
+    const val INDEX_BUS_LIMITER_LOW_THRESHOLD = NativeBmwDspSchema.INDEX_BUS_LIMITER_LOW_THRESHOLD
+    const val INDEX_BUS_LIMITER_LOW_RELEASE = NativeBmwDspSchema.INDEX_BUS_LIMITER_LOW_RELEASE
+    const val INDEX_BUS_LIMITER_MID_ENABLED = NativeBmwDspSchema.INDEX_BUS_LIMITER_MID_ENABLED
+    const val INDEX_BUS_LIMITER_MID_THRESHOLD = NativeBmwDspSchema.INDEX_BUS_LIMITER_MID_THRESHOLD
+    const val INDEX_BUS_LIMITER_MID_RELEASE = NativeBmwDspSchema.INDEX_BUS_LIMITER_MID_RELEASE
 
     // One-time marker: 1 once the legacy per-output compressor (INDEX_LOW/MID_COMPRESSOR_* and
     // the per-output FIELD_COMPRESSOR_* slots) has been force-disabled. The multiband compressor +
     // per-bus limiters replaced it and its editing UI was retired. Native no longer has the stage
     // at all and ignores those slots; they stay in the schema so no later index moves. Kotlin-only
     // -- this marker just gates the one-time flip. See migrateDisableLegacyCompressorIfNeeded.
-    const val INDEX_LEGACY_COMP_DISABLED_MIGRATED = 188
+    const val INDEX_LEGACY_COMP_DISABLED_MIGRATED = NativeBmwDspSchema.INDEX_LEGACY_COMP_DISABLED_MIGRATED
 
     // Master brick-wall limiter on the summed output (indices 189..191). Was a fixed -1 dBFS
     // ceiling with no controls; now enable + threshold. enable == 0 is a TRUE bypass -- nothing
     // constrains the output. Native reads 189/190; 191 is the one-time seed marker.
-    const val INDEX_MASTER_LIMITER_ENABLED = 189
-    const val INDEX_MASTER_LIMITER_THRESHOLD = 190
-    const val INDEX_MASTER_LIMITER_MIGRATED = 191
+    const val INDEX_MASTER_LIMITER_ENABLED = NativeBmwDspSchema.INDEX_MASTER_LIMITER_ENABLED
+    const val INDEX_MASTER_LIMITER_THRESHOLD = NativeBmwDspSchema.INDEX_MASTER_LIMITER_THRESHOLD
+    const val INDEX_MASTER_LIMITER_MIGRATED = NativeBmwDspSchema.INDEX_MASTER_LIMITER_MIGRATED
     const val DEFAULT_MASTER_LIMITER_THRESHOLD_DB = -1f
 
     // Measurement signal generator (192..199). type: 0 off, 1 log sweep, 2 pink periodic noise.
     // Nonzero replaces the real DSP input entirely, pre-crossover -- see
     // NativeBmwDspProcessor::processFrame(). Native reads all eight; no migration marker.
-    const val INDEX_MEAS_GEN_TYPE = 192
-    const val INDEX_MEAS_GEN_SWEEP_START_HZ = 193
-    const val INDEX_MEAS_GEN_SWEEP_END_HZ = 194
-    const val INDEX_MEAS_GEN_SWEEP_DURATION_S = 195
-    const val INDEX_MEAS_GEN_SWEEP_LEVEL_DB = 196
-    const val INDEX_MEAS_GEN_PINK_PERIOD_S = 197
-    const val INDEX_MEAS_GEN_PINK_LEVEL_DB = 198
+    const val INDEX_MEAS_GEN_TYPE = NativeBmwDspSchema.INDEX_MEAS_GEN_TYPE
+    const val INDEX_MEAS_GEN_SWEEP_START_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_SWEEP_START_HZ
+    const val INDEX_MEAS_GEN_SWEEP_END_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_SWEEP_END_HZ
+    const val INDEX_MEAS_GEN_SWEEP_DURATION_S = NativeBmwDspSchema.INDEX_MEAS_GEN_SWEEP_DURATION_S
+    const val INDEX_MEAS_GEN_SWEEP_LEVEL_DB = NativeBmwDspSchema.INDEX_MEAS_GEN_SWEEP_LEVEL_DB
+    const val INDEX_MEAS_GEN_PINK_PERIOD_S = NativeBmwDspSchema.INDEX_MEAS_GEN_PINK_PERIOD_S
+    const val INDEX_MEAS_GEN_PINK_LEVEL_DB = NativeBmwDspSchema.INDEX_MEAS_GEN_PINK_LEVEL_DB
     // Only meaningful while INDEX_MEAS_GEN_TYPE == 1 (sweep): wraps it in REW's Acoustic Timing
     // Reference cycle (Mid sweep, Low sweep, Mid sweep, bracketed by timing chirps) instead of
     // the bare continuously-looping single sweep -- see
     // NativeBmwMeasurementGenerator::configureTimingRef()/nextTimingRefSample().
-    const val INDEX_MEAS_GEN_TIMING_REF_ENABLED = 199
+    const val INDEX_MEAS_GEN_TIMING_REF_ENABLED = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_ENABLED
     // 0 = combined (chirp+sweep share both channels), 1 = split (chirp-only left / sweep-only
     // right). Only meaningful while INDEX_MEAS_GEN_TIMING_REF_ENABLED is set.
-    const val INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS = 200
-    const val INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ = 201
-    const val INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ = 202
-    const val INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ = 203
-    const val INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ = 204
+    const val INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_SPLIT_CHANNELS
+    const val INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_MID_START_HZ
+    const val INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_MID_END_HZ
+    const val INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_LOW_START_HZ
+    const val INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ = NativeBmwDspSchema.INDEX_MEAS_GEN_TIMING_REF_LOW_END_HZ
 
     // Mid's optional upper (Mid/High) bandpass corner (205..209) -- turns Mid from HPF-only into
     // a true bandpass. Only Mid has this; Low/High don't. A 2-slot (Left/Right) tail block, not
     // folded into the per-output INDEX_OUTPUT_CONFIG block above -- growing that block's width in
     // place would shift every index from 139 onward for every output, not just Mid. Use
     // midUpperXoIndex(OUTPUT_MID_LEFT/RIGHT, field) rather than these base constants directly.
-    const val INDEX_MID_UPPER_XO = 205
+    const val INDEX_MID_UPPER_XO = NativeBmwDspSchema.INDEX_MID_UPPER_XO
     const val MID_UPPER_XO_WIDTH = 2
     const val MID_UPPER_XO_FIELD_FREQ = 0
     const val MID_UPPER_XO_FIELD_ENABLED = 1
     // One-time marker: 1 once an existing saved config has had the Mid upper-corner block seeded
     // disabled. Kotlin-only -- native never reads this index. See migrateMidUpperCrossoverIfNeeded.
-    const val INDEX_MID_UPPER_XO_MIGRATED = 209
+    const val INDEX_MID_UPPER_XO_MIGRATED = NativeBmwDspSchema.INDEX_MID_UPPER_XO_MIGRATED
     const val DEFAULT_MID_UPPER_XO_FREQ = 3000f
 
     // Mid's upper-corner lowpass slope (288..290), independent of Mid's own FIELD_CROSSOVER_TYPE,
     // which now shapes only Mid's highpass. Same 0..4 encoding. Use midUpperXoTypeIndex().
-    const val INDEX_MID_UPPER_XO_TYPE = 288
+    const val INDEX_MID_UPPER_XO_TYPE = NativeBmwDspSchema.INDEX_MID_UPPER_XO_TYPE
     // One-time marker: 1 once an existing saved config has had both upper slopes seeded from Mid's
     // own type. Kotlin-only -- native never reads this index. See migrateMidUpperXoTypeIfNeeded.
-    const val INDEX_MID_UPPER_XO_TYPE_MIGRATED = 290
+    const val INDEX_MID_UPPER_XO_TYPE_MIGRATED = NativeBmwDspSchema.INDEX_MID_UPPER_XO_TYPE_MIGRATED
 
     fun midUpperXoTypeIndex(output: Int): Int {
         require(output == OUTPUT_MID_LEFT || output == OUTPUT_MID_RIGHT) {
@@ -378,30 +310,30 @@ object NativeBmwDspValues {
     const val OUTPUT_HIGH_LEFT = 4
     const val OUTPUT_HIGH_RIGHT = 5
 
-    const val INDEX_HIGH_XO_PASS = 210
+    const val INDEX_HIGH_XO_PASS = NativeBmwDspSchema.INDEX_HIGH_XO_PASS
     // High's own crossover passthrough (291): the INDEX_LPF_PASS/INDEX_HPF_PASS contract for High
     // -- its chain skipped, the raw routed signal through. INDEX_HIGH_XO_PASS still wins.
-    const val INDEX_HIGH_PASS = 291
+    const val INDEX_HIGH_PASS = NativeBmwDspSchema.INDEX_HIGH_PASS
 
     // Master volume: the DSP as the car's volume, applied last (after the limiter). -80..0 dB.
-    const val INDEX_MASTER_VOLUME_DB = 292
-    const val INDEX_MASTER_MUTE = 293
+    const val INDEX_MASTER_VOLUME_DB = NativeBmwDspSchema.INDEX_MASTER_VOLUME_DB
+    const val INDEX_MASTER_MUTE = NativeBmwDspSchema.INDEX_MASTER_MUTE
     const val MASTER_VOLUME_MIN_DB = -80f
     const val MASTER_VOLUME_MAX_DB = 0f
 
     // Loudness compensation: bass/treble lift that follows the master volume (none at full volume).
-    const val INDEX_LOUDNESS_ENABLED = 294
-    const val INDEX_LOUDNESS_STRENGTH = 295 // percent, 0..100
+    const val INDEX_LOUDNESS_ENABLED = NativeBmwDspSchema.INDEX_LOUDNESS_ENABLED
+    const val INDEX_LOUDNESS_STRENGTH = NativeBmwDspSchema.INDEX_LOUDNESS_STRENGTH // percent, 0..100
     // Automatic headroom on (1) or manual (0). Kotlin-only -- native never reads this index; the
     // manual value stays in INDEX_HEADROOM either way, so switching back to manual restores it.
-    const val INDEX_HEADROOM_AUTO = 296
+    const val INDEX_HEADROOM_AUTO = NativeBmwDspSchema.INDEX_HEADROOM_AUTO
     // Headroom's range, here and in native configure().
     const val HEADROOM_MIN_DB = -30f
     const val HEADROOM_MAX_DB = 0f
     // Mono Bass: both channels carry (L+R)/2 below the split, stereo above it (complementary
     // LR4, right after the input DC blocker). Range mirrors native MonoBass.
-    const val INDEX_MONO_BASS_ENABLED = 297
-    const val INDEX_MONO_BASS_FREQ = 298 // Hz
+    const val INDEX_MONO_BASS_ENABLED = NativeBmwDspSchema.INDEX_MONO_BASS_ENABLED
+    const val INDEX_MONO_BASS_FREQ = NativeBmwDspSchema.INDEX_MONO_BASS_FREQ // Hz
     const val MONO_BASS_MIN_HZ = 60f
     const val MONO_BASS_MAX_HZ = 120f
     const val MONO_BASS_DEFAULT_HZ = 90f
@@ -416,21 +348,21 @@ object NativeBmwDspValues {
     // Virtual Bass: the sub below the cut rebuilt as harmonics the woofers can play (native
     // VirtualBass, right after Mono Bass); optionally the original sub high-passed away (LR4 at the
     // cut). Ranges mirror native VirtualBass.
-    const val INDEX_VIRTUAL_BASS_ENABLED = 299
-    const val INDEX_VIRTUAL_BASS_FREQ = 300 // cut, Hz
-    const val INDEX_VIRTUAL_BASS_AMOUNT = 301 // harmonics level, percent
-    const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
-    const val INDEX_VIRTUAL_BASS_CHARACTER = 303 // Warm 0 .. Punchy 100, percent
+    const val INDEX_VIRTUAL_BASS_ENABLED = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_ENABLED
+    const val INDEX_VIRTUAL_BASS_FREQ = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_FREQ // cut, Hz
+    const val INDEX_VIRTUAL_BASS_AMOUNT = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_AMOUNT // harmonics level, percent
+    const val INDEX_VIRTUAL_BASS_REMOVE_SUB = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_REMOVE_SUB
+    const val INDEX_VIRTUAL_BASS_CHARACTER = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_CHARACTER // Warm 0 .. Punchy 100, percent
     // The subsonic high-pass's slope, both sides: LR4 (24 dB/oct) or BW2 (12 dB/oct, half the
     // phase turn through the bass).
-    const val INDEX_SUBSONIC_SLOPE = 304
+    const val INDEX_SUBSONIC_SLOPE = NativeBmwDspSchema.INDEX_SUBSONIC_SLOPE
     const val SUBSONIC_SLOPE_LR4 = 0f
     const val SUBSONIC_SLOPE_BW2 = 1f
     // Virtual Bass Range: the harmonics are kept from the reach up to this x the reach (native
     // VirtualBass::kMinRange..kMaxRange). Response: the detector's release, ms (native
     // kMinResponseMs..kMaxResponseMs) -- faster is punchier, slower smoother.
-    const val INDEX_VIRTUAL_BASS_RANGE = 305
-    const val INDEX_VIRTUAL_BASS_RESPONSE = 306
+    const val INDEX_VIRTUAL_BASS_RANGE = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_RANGE
+    const val INDEX_VIRTUAL_BASS_RESPONSE = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_RESPONSE
     const val VIRTUAL_BASS_MIN_RANGE = 3f
     const val VIRTUAL_BASS_MAX_RANGE = 8f
     const val VIRTUAL_BASS_DEFAULT_RANGE = 5f
@@ -521,45 +453,45 @@ object NativeBmwDspValues {
     const val LOUDNESS_TREBLE_PER_DB = 0.1
     const val LOUDNESS_BASS_MAX_DB = 12.0
     const val LOUDNESS_TREBLE_MAX_DB = 4.0
-    const val INDEX_HIGH_GAIN_L = 211
-    const val INDEX_HIGH_GAIN_R = 212
-    const val INDEX_HIGH_DELAY_L = 213
-    const val INDEX_HIGH_DELAY_R = 214
+    const val INDEX_HIGH_GAIN_L = NativeBmwDspSchema.INDEX_HIGH_GAIN_L
+    const val INDEX_HIGH_GAIN_R = NativeBmwDspSchema.INDEX_HIGH_GAIN_R
+    const val INDEX_HIGH_DELAY_L = NativeBmwDspSchema.INDEX_HIGH_DELAY_L
+    const val INDEX_HIGH_DELAY_R = NativeBmwDspSchema.INDEX_HIGH_DELAY_R
 
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT = 215
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT = 216
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT = 217
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT = 218
+    const val INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT
+    const val INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT
+    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT
+    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT
 
-    const val INDEX_HIGH_ALL_PASS = 219
-    const val INDEX_HIGH_OUTPUT_CONFIG = 235
+    const val INDEX_HIGH_ALL_PASS = NativeBmwDspSchema.INDEX_HIGH_ALL_PASS
+    const val INDEX_HIGH_OUTPUT_CONFIG = NativeBmwDspSchema.INDEX_HIGH_OUTPUT_CONFIG
     // One-time marker: 1 once an existing saved config has had the whole High block (210..260)
     // seeded muted/disabled. Kotlin-only -- native never reads this index. See
     // migrateHighBandIfNeeded.
-    const val INDEX_HIGH_BAND_MIGRATED = 261
+    const val INDEX_HIGH_BAND_MIGRATED = NativeBmwDspSchema.INDEX_HIGH_BAND_MIGRATED
 
     // High-bus brick-wall limiter (262..264) -- same contract as INDEX_BUS_LIMITER_LOW_*/MID_*:
     // threshold in dBFS, release in ms, fixed-fast attack, stereo-linked. Ships DISABLED.
-    const val INDEX_BUS_LIMITER_HIGH_ENABLED = 262
-    const val INDEX_BUS_LIMITER_HIGH_THRESHOLD = 263
-    const val INDEX_BUS_LIMITER_HIGH_RELEASE = 264
+    const val INDEX_BUS_LIMITER_HIGH_ENABLED = NativeBmwDspSchema.INDEX_BUS_LIMITER_HIGH_ENABLED
+    const val INDEX_BUS_LIMITER_HIGH_THRESHOLD = NativeBmwDspSchema.INDEX_BUS_LIMITER_HIGH_THRESHOLD
+    const val INDEX_BUS_LIMITER_HIGH_RELEASE = NativeBmwDspSchema.INDEX_BUS_LIMITER_HIGH_RELEASE
     // One-time marker: 1 once an existing saved config has had the High-bus limiter seeded
     // disabled. Kotlin-only -- native never reads this index. See
     // migrateHighBusLimiterIfNeeded.
-    const val INDEX_BUS_LIMITER_HIGH_MIGRATED = 265
+    const val INDEX_BUS_LIMITER_HIGH_MIGRATED = NativeBmwDspSchema.INDEX_BUS_LIMITER_HIGH_MIGRATED
 
     // Virtual-source stage (266..286): the virtual centre, extracted from L/R and fed back into
     // each internal side with its own level/delay/polarity/all-pass, ahead of routing. Ships
     // DISABLED. See docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
-    const val INDEX_VIRTUAL_ENABLED = 266
-    const val INDEX_VIRTUAL_DETECT_HPF = 267
-    const val INDEX_VIRTUAL_DETECT_LPF = 268
-    const val INDEX_VIRTUAL_ATTACK = 269
-    const val INDEX_VIRTUAL_RELEASE = 270
-    const val INDEX_VIRTUAL_CENTRE_LEVEL = 271
-    const val INDEX_VIRTUAL_SIDE_LEVEL = 272
+    const val INDEX_VIRTUAL_ENABLED = NativeBmwDspSchema.INDEX_VIRTUAL_ENABLED
+    const val INDEX_VIRTUAL_DETECT_HPF = NativeBmwDspSchema.INDEX_VIRTUAL_DETECT_HPF
+    const val INDEX_VIRTUAL_DETECT_LPF = NativeBmwDspSchema.INDEX_VIRTUAL_DETECT_LPF
+    const val INDEX_VIRTUAL_ATTACK = NativeBmwDspSchema.INDEX_VIRTUAL_ATTACK
+    const val INDEX_VIRTUAL_RELEASE = NativeBmwDspSchema.INDEX_VIRTUAL_RELEASE
+    const val INDEX_VIRTUAL_CENTRE_LEVEL = NativeBmwDspSchema.INDEX_VIRTUAL_CENTRE_LEVEL
+    const val INDEX_VIRTUAL_SIDE_LEVEL = NativeBmwDspSchema.INDEX_VIRTUAL_SIDE_LEVEL
     // Centre feed into each internal side, Left (273..279) then Right (280..286).
-    const val INDEX_VIRTUAL_FEED = 273
+    const val INDEX_VIRTUAL_FEED = NativeBmwDspSchema.INDEX_VIRTUAL_FEED
     const val VIRTUAL_FEED_WIDTH = 7
     const val VIRTUAL_FEED_GAIN = 0
     const val VIRTUAL_FEED_DELAY = 1
@@ -572,7 +504,7 @@ object NativeBmwDspValues {
     const val VIRTUAL_SIDE_RIGHT = 1
     // One-time marker: 1 once an existing saved config has had the virtual stage seeded off.
     // Kotlin-only -- native never reads this index. See migrateVirtualIfNeeded.
-    const val INDEX_VIRTUAL_MIGRATED = 287
+    const val INDEX_VIRTUAL_MIGRATED = NativeBmwDspSchema.INDEX_VIRTUAL_MIGRATED
 
     /** The flat index of [field] (a VIRTUAL_FEED_* constant) of the centre feed into [side]. */
     fun virtualFeedIndex(side: Int, field: Int): Int {
@@ -608,128 +540,7 @@ object NativeBmwDspValues {
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_RELEASE = INDEX_LOW_COMPRESSOR_RELEASE
     @Deprecated("Use per-output compressor indices") const val INDEX_COMPRESSOR_MAKEUP = INDEX_LOW_COMPRESSOR_MAKEUP
 
-    val DEFAULTS = floatArrayOf(
-        1f, 0f, 0f, 0f, 0f,
-        -6f, 0f, 0f, -1f, -1f, 0f, 0f,
-        1f, 32f,
-        0f, 150f, 0f,
-        0f, 150f,
-        0f, 0f,
-        0f, 0f, 0f, 0f,
-        1f, 3f, 550f,
-        1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // 42..45: reclaimed from the removed Mono Bass feature. 42 is now
-        // INDEX_CROSSOVER_TYPE_MIGRATED (0 = unmigrated, CROSSOVER_TYPE_MIGRATED_MARKER once
-        // done); 43..45 are still unused/unread.
-        0f, 80f, 100f, 0f,
-        // Low L, Low R, Mid L, Mid R: [Front L, Front R].
-        1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f,
-        // Two disabled second-order all-pass sections per output.
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        // Schema marker. Zero means "seed the independent output block from legacy settings".
-        0f,
-        // Low Left: XO Hz, crossoverType (2=LR4), sub on/Hz, mute, invert, compressor 7-tuple.
-        150f, 2f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        // Low Right.
-        150f, 2f, 1f, 32f, 0f, 0f, 1f, -12f, 2f, 8f, 40f, 250f, 1.5f,
-        // Mid Left: subsonic fields are retained for a uniform block but ignored by native.
-        // XO Hz matches Low (both hand off at 150) -- the old 125 default left a 25 Hz gap.
-        150f, 2f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // Mid Right.
-        150f, 2f, 0f, 32f, 0f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // 139: meas-mute stopband octaves. 140: 139..142 migration counter (2 = fully migrated
-        // on a fresh install). 141/142: stage-centering L/R alignment delay ms (default 0).
-        // 139..142 were originally the Pultec stage, then a removed Mid-band LPF at 141/142.
-        1f, 2f, 0f, 0f,
-        // Link L/R Delay (UI-only).
-        0f,
-        // --- Multiband compressor (144..181), ships DISABLED ---
-        0f, // 144 enabled
-        100f, // 145 dry/wet mix %
-        80f, 500f, 4000f, // 146..148 crossover splits: sub|warmth|body|air
-        // Per band: enabled, threshold dBFS, ratio, knee dB, attack ms, release ms, makeup dB, stereoLink.
-        0f, -24f, 2f, 6f, 15f, 150f, 0f, 1f, // 149..156 band 0 -- sub / boom (< 80 Hz)
-        0f, -20f, 2f, 6f, 20f, 180f, 0f, 1f, // 157..164 band 1 -- warmth / boxiness (80..500)
-        0f, -18f, 2f, 6f, 15f, 150f, 0f, 1f, // 165..172 band 2 -- body / honk (500..4k)
-        0f, -24f, 2f, 6f, 5f, 80f, 0f, 1f, // 173..180 band 3 -- presence / air (> 4k)
-        0f, // 181 MBC/limiter migration marker (0 = seed the block on next load)
-        // --- Per-bus output limiter (182..187), ships DISABLED ---
-        0f, -3f, 120f, // 182..184 Low bus: enabled, threshold dBFS, release ms
-        0f, -3f, 120f, // 185..187 Mid bus: enabled, threshold dBFS, release ms
-        // 188: legacy-per-output-compressor-disabled marker (0 = force it off on next load).
-        // 189..191: master limiter enabled, threshold dBFS, migrated marker.
-        0f, 1f, -1f, 1f,
-        // --- Measurement signal generator (192..204), ships OFF ---
-        0f, 20f, 20000f, 10f, -12f, // type, sweep start/end Hz, duration s, level dBFS
-        2f, -12f, // pink noise period s, level dBFS
-        0f, // timing reference off
-        0f, 100f, 20000f, 20f, 400f, // timing ref: split channels off, Mid Hz, Low Hz
-        // --- Mid upper (Mid/High) bandpass corner (205..209), ships DISABLED ---
-        DEFAULT_MID_UPPER_XO_FREQ, 0f, // 205..206 Mid Left: freq, enabled
-        DEFAULT_MID_UPPER_XO_FREQ, 0f, // 207..208 Mid Right: freq, enabled
-        0f, // 209 migration marker (0 = seed the block disabled on next load)
-        // --- High band (210..261), ships silent via per-output mute below ---
-        1f, // 210 highXoPass -- true fully silences High (not just the crossover filter)
-        0f, 0f, // 211..212 highGainL, highGainR
-        0f, 0f, // 213..214 highDelayL, highDelayR
-        // High Left, High Right: [Front L, Front R] -- same identity default as Low/Mid.
-        1f, 0f, 0f, 1f,
-        // Two disabled second-order all-pass sections per High output.
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        0f, 2f, 150f, 0.70710677f, 0f, 2f, 150f, 0.70710677f,
-        // High Left: XO Hz (same default as Mid's upper corner), crossoverType (2=LR4), sub
-        // fields retained for a uniform block but ignored by native (same as Mid), muted, invert,
-        // compressor 7-tuple.
-        DEFAULT_MID_UPPER_XO_FREQ, 2f, 0f, 32f, 1f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        // High Right.
-        DEFAULT_MID_UPPER_XO_FREQ, 2f, 0f, 32f, 1f, 0f, 0f, -10f, 1.5f, 6f, 10f, 180f, 0f,
-        0f, // 261 migration marker (0 = seed the block muted on next load)
-        // --- High-bus limiter (262..265), ships DISABLED ---
-        0f, -3f, 120f, // 262..264 High bus: enabled, threshold dBFS, release ms
-        0f, // 265 migration marker (0 = seed the limiter disabled on next load)
-        // --- Virtual-source stage (266..287), ships DISABLED ---
-        0f, // 266 enabled
-        150f, 8000f, // 267..268 detector HPF / LPF Hz
-        10f, 200f, // 269..270 centre-weight attack / release ms
-        0f, 0f, // 271..272 centre level dB, side (residual) level dB
-        // Centre feed Left, then Right: gain dB, delay ms, polarity, all-pass enabled, freq Hz,
-        // Q, order (2 = second).
-        0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
-        0f, 0f, 0f, 0f, 1000f, 0.70710677f, 2f,
-        0f, // 287 migration marker (0 = seed the stage off on next load)
-        // --- Mid upper-corner slope (288..290) ---
-        2f, 2f, // 288..289 Mid Left / Right upper slope (LR4)
-        0f, // 290 migration marker (0 = seed from Mid's own type on next load)
-        // --- High crossover passthrough (291) ---
-        0f, // 291 High passthrough (off)
-        // --- Master volume (292..293) ---
-        0f, // 292 master volume dB (0 = full)
-        0f, // 293 master mute (off)
-        // --- Loudness compensation (294..295), ships off ---
-        0f, // 294 loudness enabled (off)
-        100f, // 295 loudness strength %
-        // --- Automatic headroom (296), ships off ---
-        0f, // 296 headroom auto (off = manual)
-        // --- Mono Bass (297..298), ships off ---
-        0f, // 297 mono bass enabled (off)
-        MONO_BASS_DEFAULT_HZ, // 298 mono bass split Hz
-        // --- Virtual Bass (299..302), ships off ---
-        0f, // 299 virtual bass enabled (off)
-        VIRTUAL_BASS_DEFAULT_HZ, // 300 virtual bass cut Hz
-        VIRTUAL_BASS_DEFAULT_AMOUNT, // 301 virtual bass amount %
-        0f, // 302 virtual bass remove sub (off)
-        // --- Virtual Bass character (303) ---
-        VIRTUAL_BASS_DEFAULT_CHARACTER, // 303 virtual bass character % (Warm 0 .. Punchy 100)
-        // --- Subsonic slope (304) ---
-        SUBSONIC_SLOPE_LR4, // 304 subsonic slope (LR4)
-        // --- Virtual Bass range and response (305..306) ---
-        VIRTUAL_BASS_DEFAULT_RANGE, // 305 virtual bass range (x the reach)
-        VIRTUAL_BASS_DEFAULT_RESPONSE_MS, // 306 virtual bass response (release, ms)
-    )
+    val DEFAULTS = NativeBmwDspSchema.DEFAULTS
 
     init {
         check(DEFAULTS.size == SIZE) { "BMW DSP defaults size=${DEFAULTS.size}, expected=$SIZE" }
@@ -1082,11 +893,8 @@ object NativeBmwDspValues {
         DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
 
-    /** [origin], when given, tags the broadcast so its sender can recognise its own echo. */
-    fun broadcast(context: Context, values: FloatArray, origin: String? = null) {
-        val intent = Intent(Constants.ACTION_NATIVE_BMW_DSP_UPDATED)
-            .putExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES, values)
-        if (origin != null) intent.putExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN, origin)
-        context.sendLocalBroadcast(intent)
+    /** Tells the engine and every screen; [origin], when given, lets the sender recognise its own echo. */
+    fun broadcast(values: FloatArray, origin: String? = null) {
+        AppEvents.send(AppEvent.NativeBmwDspUpdated(values, origin))
     }
 }

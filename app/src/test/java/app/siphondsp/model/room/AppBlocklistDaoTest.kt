@@ -6,7 +6,6 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import app.siphondsp.fragment.resolveBlockedAppIcons
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After

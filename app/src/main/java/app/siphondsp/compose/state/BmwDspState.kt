@@ -1,11 +1,9 @@
 package app.siphondsp.compose.state
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,9 +11,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.model.NativeBmwDspValues
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.utils.extensions.ContextExtensions.toast
 import java.util.UUID
 
@@ -103,7 +100,7 @@ internal class BmwDspRepository private constructor(private val appContext: Cont
         }
     }
 
-    private fun publish(array: FloatArray) = NativeBmwDspValues.broadcast(appContext, array, origin)
+    private fun publish(array: FloatArray) = NativeBmwDspValues.broadcast(array, origin)
 
     fun onExternalUpdate(incoming: FloatArray, sender: String?) = synchronized(lock) {
         // Our own echo: whatever we hold is at least as new. A drag in flight keeps its own value
@@ -190,7 +187,7 @@ class BmwDspState internal constructor(context: Context) {
 
 /**
  * Remembers a [BmwDspState] for the calling composable, keeps it fresh against the
- * `ACTION_NATIVE_BMW_DSP_UPDATED` local broadcast that every DSP edit (from any screen, a
+ * [AppEvent.NativeBmwDspUpdated] event that every DSP edit (from any screen, a
  * restored preset/profile/backup, etc.) sends, and reloads from disk on resume (covering edits
  * made while this composition was stopped, when the receiver may have been disposed).
  */
@@ -199,17 +196,11 @@ fun rememberBmwDspState(): BmwDspState {
     val context = LocalContext.current
     val state = remember(context) { BmwDspState(context.applicationContext) }
 
+    LaunchedEffect(state) {
+        AppEvents.of<AppEvent.NativeBmwDspUpdated>().collect { state.onExternalUpdate(it.values, it.origin) }
+    }
     DisposableEffect(state) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                intent.getFloatArrayExtra(Constants.EXTRA_NATIVE_BMW_DSP_VALUES)?.let {
-                    state.onExternalUpdate(it, intent.getStringExtra(Constants.EXTRA_NATIVE_BMW_DSP_ORIGIN))
-                }
-            }
-        }
-        context.registerLocalReceiver(receiver, IntentFilter(Constants.ACTION_NATIVE_BMW_DSP_UPDATED))
         onDispose {
-            context.unregisterLocalReceiver(receiver)
             // A screen leaving mid-drag must not leave the shared repository ignoring updates.
             state.editing = false
         }

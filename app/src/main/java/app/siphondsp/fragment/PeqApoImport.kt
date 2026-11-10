@@ -1,8 +1,9 @@
 package app.siphondsp.fragment
 
+import app.siphondsp.compose.dialogs.AppDialog
+import app.siphondsp.compose.dialogs.AppDialogs
 import android.content.Context
 import android.net.Uri
-import androidx.appcompat.app.AlertDialog
 import app.siphondsp.R
 import app.siphondsp.model.ApoImportResult
 import app.siphondsp.model.BmwPeqState
@@ -96,13 +97,17 @@ class PeqApoImport(private val host: Host) {
                 "${ApoImportRouter.NO_PREAMP_ON_REPLACE}."
         } ?: ""
 
-        AlertDialog.Builder(host.context)
-            .setTitle("Import REW filter set")
-            .setMessage("$lines$skippedNote$preampNote\n\nReplace clears each affected bank first; Append adds to it.")
-            .setPositiveButton("Replace") { _, _ -> applyApoImport(routed.values.toList(), append = false) }
-            .setNeutralButton("Append") { _, _ -> applyApoImport(routed.values.toList(), append = true) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        AppDialogs.show(
+            AppDialog.Message(
+                title = "Import REW filter set",
+                message = "$lines$skippedNote$preampNote\n\nReplace clears each affected bank first; Append adds to it.",
+                confirm = "Replace",
+                onConfirm = { applyApoImport(routed.values.toList(), append = false) },
+                neutral = "Append",
+                onNeutral = { applyApoImport(routed.values.toList(), append = true) },
+                dismiss = host.context.getString(android.R.string.cancel),
+            ),
+        )
     }
 
     private fun promptSingleScopeImport(imported: ParametricEqBandList, result: ApoImportResult) {
@@ -117,17 +122,17 @@ class PeqApoImport(private val host: Host) {
             "\n\n" + if (summary != null) "$summary, applied on Replace, ignored on Append." else
                 "${ApoImportRouter.NO_PREAMP_ON_REPLACE}."
         }
-        AlertDialog.Builder(host.context)
-            .setTitle("Import into ${host.activeScope.label}")
-            .setMessage("$detail Choose how to apply the previewed filters.$preampNote")
-            .setPositiveButton("Replace") { _, _ ->
-                applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters)
-            }
-            .setNeutralButton("Append") { _, _ ->
-                applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        AppDialogs.show(
+            AppDialog.Message(
+                title = "Import into ${host.activeScope.label}",
+                message = "$detail Choose how to apply the previewed filters.$preampNote",
+                confirm = "Replace",
+                onConfirm = { applyScopeImport(imported, result.preampDb.toFloat(), append = false, result.skippedFilters) },
+                neutral = "Append",
+                onNeutral = { applyScopeImport(imported, result.preampDb.toFloat(), append = true, result.skippedFilters) },
+                dismiss = host.context.getString(android.R.string.cancel),
+            ),
+        )
     }
 
     private fun applyApoImport(routed: List<RoutedApoImport>, append: Boolean) {

@@ -90,47 +90,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.CATEGORY_CONTENT_MUSIC" />
             </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="content" />
-                <data android:mimeType="*/*" />
-
-                <!--
-                    Work around Android's ugly primitive PatternMatcher
-                    implementation that can't cope with finding a . early in
-                    the path unless it's explicitly matched.
-                -->
-                <data android:host="*" />
-                <data android:pathPattern=".*\\.irs" />
-                <data android:pathPattern=".*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.irs" />
-                <data android:pathPattern=".*\\.wav" />
-                <data android:pathPattern=".*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.wav" />
-                <data android:pathPattern=".*\\.tar" />
-                <data android:pathPattern=".*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\..*\\..*\\.tar" />
-            </intent-filter>
         </activity>
 
         <!-- DSP master volume shortcuts for the steering-wheel remapper (KSW Toolkit "Start App"):
@@ -192,127 +151,6 @@
         </activity>
 
         <activity
-            android:name=".activity.SettingsActivity"
-            android:exported="false"
-            android:label="@string/title_activity_settings"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.BlocklistActivity"
-            android:exported="false"
-            android:label="@string/title_activity_blocklist"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.MeasurementCaptureActivity"
-            android:exported="false"
-            android:label="@string/title_activity_measurement_capture"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.SignalGeneratorActivity"
-            android:exported="false"
-            android:label="@string/title_activity_signal_generator"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.NativeTruthActivity"
-            android:exported="false"
-            android:label="@string/title_activity_native_truth"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.ParametricEqualizerActivity"
-            android:exported="false"
-            android:label="@string/title_activity_peq"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.NativeBmwCompressorActivity"
-            android:exported="false"
-            android:label="@string/action_compressor"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.BandAlignActivity"
-            android:exported="false"
-            android:label="@string/title_activity_band_align"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-        <activity
-            android:name=".activity.GainLimiterActivity"
-            android:exported="false"
-            android:label="@string/title_activity_gain_limiter"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.OutputActivity"
-            android:exported="false"
-            android:label="@string/title_activity_output"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.CrossoverTiltActivity"
-            android:exported="false"
-            android:label="@string/title_activity_crossover_tilt"
-            android:theme="@style/Theme.SiphonDSP">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value=".activity.MainActivity" />
-        </activity>
-
-        <activity
-            android:name=".activity.AppCompatibilityActivity"
-            android:exported="false"
-            android:label="@string/title_activity_app_compat"
-            android:theme="@style/Theme.SiphonDSP" />
-
-        <activity
-            android:name=".activity.OnboardingActivity"
-            android:exported="false"
-            android:label="@string/title_activity_onboarding"
-            android:theme="@style/Theme.SiphonDSP" />
-
-        <activity
             android:name=".activity.EngineLauncherActivity"
             android:exported="false"
             android:excludeFromRecents="true"
@@ -325,14 +163,6 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
-
-        <!-- Root only: FGS service permission is granted in root/AndroidManifest.xml -->
-        <service
-            android:name=".service.RootAudioProcessorService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:ignore="ForegroundServicePermission" />
 
         <service
             android:name=".service.NotificationListenerService"

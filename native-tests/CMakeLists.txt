@@ -27,10 +27,10 @@ add_compile_options(-O2 -g -Wall -Wextra -fno-fast-math)
 # it here so a test run's output is about the tests.
 add_compile_options(-Wno-misleading-indentation)
 
-set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/libjamesdsp-wrapper)
+set(WRAPPER_DIR ${CMAKE_CURRENT_LIST_DIR}/../app/src/main/cpp/engine)
 
-add_executable(native_tests
-    test_main.cpp
+# The engine as it ships (everything but the JNI file), shared by every target here.
+set(ENGINE_SOURCES
     drwav_impl.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessor.cpp
     ${WRAPPER_DIR}/NativeBmwDspProcessorConfig.cpp
@@ -40,8 +40,12 @@ add_executable(native_tests
     ${WRAPPER_DIR}/NativeBmwDelayGain.cpp
     ${WRAPPER_DIR}/NativeBmwMeasurement.cpp
     ${WRAPPER_DIR}/NativeBmwVirtual.cpp
+)
+
+add_executable(native_tests
+    test_main.cpp
+    ${ENGINE_SOURCES}
     concurrency_test.cpp
-    convolver_hook_test.cpp
     capture_test.cpp
     crossover_test.cpp
     default_config_test.cpp
@@ -59,6 +63,7 @@ add_executable(native_tests
     virtual_bass_test.cpp
     flush_to_zero_test.cpp
     ramps_test.cpp
+    output_guard_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.
@@ -76,5 +81,44 @@ target_compile_definitions(native_tests PRIVATE
     NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
 )
 
+# The engine's measured frequency response for the app's graph-model check (see
+# response_golden.cpp). --check runs as a test; --write regenerates the committed file.
+add_executable(response_golden response_golden.cpp ${ENGINE_SOURCES})
+target_include_directories(response_golden PRIVATE
+    ${WRAPPER_DIR} ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
+target_compile_definitions(response_golden PRIVATE
+    NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt"
+    NBTEST_GOLDEN_RESPONSE_PATH="${CMAKE_CURRENT_LIST_DIR}/golden/response_curves.txt")
+
 enable_testing()
 add_test(NAME native_tests COMMAND native_tests)
+add_test(NAME response_golden COMMAND response_golden --check)
+
+# ---- Optional verification targets (Clang 20+; see native-tests/README.md and
+# .github/workflows/native-sanitizers.yml) ---------------------------------------------------
+
+# RealtimeSanitizer: runs process() as a [[clang::nonblocking]] function on an audio thread while
+# another thread pushes configs and control requests, and fails on any allocation, lock or
+# blocking call made on the audio thread.
+option(SIPHON_RTSAN "Build the RealtimeSanitizer check (rtsan_check)" OFF)
+if(SIPHON_RTSAN)
+    add_executable(rtsan_check rtsan/rtsan_check.cpp ${ENGINE_SOURCES})
+    target_include_directories(rtsan_check PRIVATE ${WRAPPER_DIR} ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
+    target_compile_definitions(rtsan_check PRIVATE
+        NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt")
+    target_compile_options(rtsan_check PRIVATE -fsanitize=realtime)
+    target_link_options(rtsan_check PRIVATE -fsanitize=realtime)
+    target_link_libraries(rtsan_check PRIVATE Threads::Threads)
+endif()
+
+# libFuzzer over configure() / configurePeq(): every input, accepted or not, must leave the
+# processor producing finite output within full scale.
+option(SIPHON_FUZZ "Build the libFuzzer config harness (fuzz_config)" OFF)
+if(SIPHON_FUZZ)
+    add_executable(fuzz_config fuzz/fuzz_config.cpp ${ENGINE_SOURCES})
+    target_include_directories(fuzz_config PRIVATE ${WRAPPER_DIR} ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
+    target_compile_definitions(fuzz_config PRIVATE
+        NBTEST_DEFAULT_CONFIG_PATH="${CMAKE_CURRENT_LIST_DIR}/default_config.txt")
+    target_compile_options(fuzz_config PRIVATE -fsanitize=fuzzer,address,undefined)
+    target_link_options(fuzz_config PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()

@@ -1,156 +1,52 @@
 package app.siphondsp.view
 
-import android.content.Intent
-import android.view.View
-import android.view.ViewGroup
+import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.unit.dp
-import androidx.core.view.updateLayoutParams
-import androidx.fragment.app.FragmentActivity
 import app.siphondsp.R
-import app.siphondsp.activity.CrossoverTiltActivity
-import app.siphondsp.activity.GainLimiterActivity
-import app.siphondsp.activity.NativeBmwCompressorActivity
-import app.siphondsp.activity.OutputActivity
-import app.siphondsp.activity.ParametricEqualizerActivity
-import app.siphondsp.compose.controls.DspSidebarRail
-import app.siphondsp.compose.controls.DspWorkspaceBackdrop
-import app.siphondsp.compose.theme.BmwDspTheme
-import kotlin.math.roundToInt
-import kotlin.reflect.KClass
 
+/**
+ * The five DSP workspaces, in display order: the front page's chain (PEQ, Alignment, Xovers,
+ * Dynamics, Output), which is also the sidebar rail's order. [route] is the workspace's
+ * destination in the app's navigation graph (see `compose/nav/AppNavHost.kt`).
+ */
 enum class DspDestination(
     @StringRes val labelRes: Int,
     @StringRes val sidebarLabelRes: Int,
     @DrawableRes val icon: Int,
-    val activityClass: KClass<out AppCompatActivity>,
-    val workspaceMode: String? = null,
+    val route: String,
     val showInPrimaryNav: Boolean = true,
 ) {
-    // Declaration order is display order (used directly by DspCrossNavBar.populate()) --
-    // matches the front page's chain: PEQ, Alignment, Xovers, Dynamics, Output -- so the sidebar
-    // doesn't present a different sequence than the page the user navigated in from.
-    //
-    // The workspace's faceplate (background, bezel, rail housing) and each rail tile's glyph are
-    // drawn live by DspWorkspaceBackdrop / DspSidebarRail (Compose); there is no per-destination art.
-    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, ParametricEqualizerActivity::class),
-    ALIGNMENT(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, GainLimiterActivity::class),
-    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, CrossoverTiltActivity::class, CrossoverTiltActivity.MODE_CROSSOVER),
-    DYNAMICS(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, NativeBmwCompressorActivity::class),
-    // 5th tile: the end of the chain -- headroom, post gains, master limiter, master volume.
-    // It replaced the per-output all-pass menu, which is now the Alignment pager's ALLPASS page.
-    OUTPUT(R.string.action_output, R.string.sidebar_label_output, R.drawable.ic_twotone_gain_knob_28dp, OutputActivity::class),
+    PARAMETRIC_EQ(R.string.action_parametric_eq, R.string.sidebar_label_parametric_eq, R.drawable.ic_twotone_peq_sliders_28dp, "peq"),
+    ALIGNMENT(R.string.action_gain_limiter, R.string.sidebar_label_gains_delay, R.drawable.ic_twotone_gain_knob_28dp, "alignment"),
+    CROSSOVER_TILT(R.string.action_crossover_tilt, R.string.sidebar_label_crossover_tilt, R.drawable.ic_twotone_crossover_tilt_28dp, "crossover"),
+    DYNAMICS(R.string.action_compressor, R.string.sidebar_label_compressor, R.drawable.ic_twotone_compressor_pulse_28dp, "dynamics"),
+    // The end of the chain: headroom, post gains, master limiter, master volume.
+    OUTPUT(R.string.action_output, R.string.sidebar_label_output, R.drawable.ic_twotone_gain_knob_28dp, "output"),
 }
 
-object DspCrossNavBar {
-    // The workspace's faceplate is drawn live: DspWorkspaceBackdrop (Compose) fills R.id.dsp_workspace_
-    // backdrop with the facia and the content window cut into it, and DspSidebarRail (Compose) draws
-    // the sidebar screen and the five tiles, hosted in the dsp_cross_nav ComposeView over dsp_sidebar's
-    // reserved column (see that column's own comment in activity_parametric_eq.xml). populate() sets
-    // both and pushes this destination's state into the rail.
+/** Geometry of the workspace sidebar rail, shared by the workspaces and the front page's morph. */
+object DspRail {
+    // The head unit is a fixed 1280x480 mdpi display with its own authored dimens; a phone gets a
+    // narrower rail (124dp is too wide on a ~832dp phone). The buffers past the rail (43dp to the
+    // back arrow, +72dp to the status strip) are touch-target spacing and stay the same.
+    private const val PHONE_RAIL_WIDTH_DP = 118f
+    private const val NAV_INSET_DP = 43f
+    private const val STATUS_STRIP_GAP_DP = 72f
 
-    // The head unit is explicitly authored/documented (activity_parametric_eq.xml) as a fixed
-    // 1280x480 mdpi display, i.e. screenWidthDp ~= 1280 exactly (mdpi is 1px == 1dp). No real
-    // phone gets remotely close to that in landscape at any density, so a wide margin below it
-    // (1100dp) reliably tells the two apart without needing an exact resolution/density match.
-    private fun isHeadUnitDisplay(activity: FragmentActivity): Boolean = activity.isHeadUnitDisplay()
-
-    // Phone only (populate() never calls this on the head unit, whose fixed dp dimens --
-    // dsp_sidebar_width, dsp_toolbar_nav_inset, dsp_status_strip_margin_start -- stay exactly as
-    // authored). The sidebar column and the toolbar insets built on it use a phone-sized rail:
-    // the head unit's fixed 124dp is too wide on a ~832dp phone. The dp buffers past the rail
-    // (43dp to the back arrow, +72dp to the status strip) are touch-target spacing, so they're
-    // kept as-is.
-    private const val PHONE_RAIL_WIDTH_DP = 118
-    private const val NAV_INSET_BUFFER_DP = 43
-    private const val STATUS_STRIP_GAP_DP = 72
-
-    /**
-     * The sidebar column's width in dp: the head unit's fixed dsp_sidebar_width, or the phone rail.
-     * The front page's tile-to-sidebar morph lands on a sidebar this wide.
-     */
-    fun sidebarWidthDp(activity: FragmentActivity): Float =
-        if (isHeadUnitDisplay(activity)) {
-            activity.resources.getDimension(R.dimen.dsp_sidebar_width) / activity.resources.displayMetrics.density
+    /** The rail's width in dp: the head unit's dsp_sidebar_width, or the phone rail. */
+    fun sidebarWidthDp(context: Context): Float =
+        if (context.isHeadUnitDisplay()) {
+            context.resources.getDimension(R.dimen.dsp_sidebar_width) / context.resources.displayMetrics.density
         } else {
-            PHONE_RAIL_WIDTH_DP.toFloat()
+            PHONE_RAIL_WIDTH_DP
         }
 
-    private fun applyPhoneRailGeometry(activity: FragmentActivity) {
-        val sidebar = activity.findViewById<View>(R.id.dsp_sidebar) ?: return
-        // Posted: layoutParams changes made mid-layout were sometimes swallowed (sidebar stayed
-        // 140dp while the toolbar margin took effect); posting runs the update after that pass.
-        sidebar.post { applyRailGeometry(activity) }
-    }
-
-    private fun applyRailGeometry(activity: FragmentActivity) {
-        val density = activity.resources.displayMetrics.density
-        val railPx = (PHONE_RAIL_WIDTH_DP * density).roundToInt()
-        val stripStart = railPx + ((NAV_INSET_BUFFER_DP + STATUS_STRIP_GAP_DP) * density).roundToInt()
-
-        activity.findViewById<View>(R.id.dsp_sidebar)?.updateLayoutParams { width = railPx }
-        // The toolbar starts at the rail's edge (its own 43dp padding is the gap to the arrow).
-        activity.findViewById<Toolbar>(R.id.toolbar)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = railPx }
-        for (id in intArrayOf(R.id.dsp_status_strip, R.id.dsp_toolbar_actions)) {
-            activity.findViewById<View>(id)?.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = stripStart }
+    /** Where the status strip and the toolbar actions start, from the screen's left edge, in dp. */
+    fun toolbarActionsStartDp(context: Context): Float =
+        if (context.isHeadUnitDisplay()) {
+            context.resources.getDimension(R.dimen.dsp_status_strip_margin_start) / context.resources.displayMetrics.density
+        } else {
+            PHONE_RAIL_WIDTH_DP + NAV_INSET_DP + STATUS_STRIP_GAP_DP
         }
-    }
-
-    fun populate(
-        activity: FragmentActivity,
-        container: ComposeView,
-        current: DspDestination,
-        canNavigate: () -> Boolean = { true },
-    ) {
-        val destinations = DspDestination.entries.filter { it.showInPrimaryNav }
-        val headUnit = isHeadUnitDisplay(activity)
-
-        // The screen faceplate: the facia with the content window cut into it, behind everything.
-        val sidebarWidth = sidebarWidthDp(activity).dp
-        activity.findViewById<ComposeView>(R.id.dsp_workspace_backdrop)?.let { backdrop ->
-            backdrop.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            backdrop.setContent { DspWorkspaceBackdrop(sidebarWidth) }
-        }
-        if (!headUnit) applyPhoneRailGeometry(activity)
-
-        container.setContent {
-            BmwDspTheme {
-                DspSidebarRail(
-                    destinations = destinations,
-                    current = current,
-                    // Fills the column; the rail insets its own screen by SidebarFacia.
-                    modifier = Modifier.fillMaxSize(),
-                    canNavigate = canNavigate,
-                    onNavigate = { destination ->
-                        // Rail navigation is a clean cut, not a transition: picking another DSP
-                        // menu from the sidebar should just swap the screen. The platform default
-                        // slides the new activity in from the right (and the old one out left),
-                        // which reads like a page swipe -- and swiping is reserved for paging
-                        // *within* a menu. FLAG_ACTIVITY_NO_ANIMATION suppresses both the enter
-                        // and exit animation for this launch; overridePendingTransition(0, 0)
-                        // covers the finishing activity on API levels where the flag alone leaves
-                        // a close animation.
-                        val intent = Intent(activity, destination.activityClass.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                        destination.workspaceMode?.let { intent.putExtra(CrossoverTiltActivity.EXTRA_WORKSPACE_MODE, it) }
-                        activity.startActivity(intent)
-                        @Suppress("DEPRECATION")
-                        activity.overridePendingTransition(0, 0)
-                        activity.finish()
-                        @Suppress("DEPRECATION")
-                        activity.overridePendingTransition(0, 0)
-                    },
-                )
-            }
-        }
-
-        container.visibility = View.VISIBLE
-    }
 }

@@ -1,9 +1,6 @@
 package app.siphondsp.compose.screens
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
@@ -52,9 +49,8 @@ import app.siphondsp.dsp.AutoHeadroom
 import app.siphondsp.dsp.AutoHeadroomCalculator
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.Constants
-import app.siphondsp.utils.extensions.ContextExtensions.registerLocalReceiver
-import app.siphondsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
+import app.siphondsp.utils.AppEvent
+import app.siphondsp.utils.AppEvents
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.MbcBandGrMeter
 import app.siphondsp.view.isHeadUnitDisplay
@@ -110,23 +106,16 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
  */
 @Composable
 private fun TrackPeqState(peq: PeqStateHolder) {
-    val context = LocalContext.current
     LifecycleResumeEffect(peq) {
         peq.refreshFromDisk()
         onPauseOrDispose { }
     }
-    DisposableEffect(peq) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) = peq.refreshFromDisk()
+    LaunchedEffect(peq) {
+        AppEvents.flow.collect { event ->
+            if (event == AppEvent.ParametricEqChanged || event == AppEvent.PresetLoaded || event == AppEvent.BackupRestored) {
+                peq.refreshFromDisk()
+            }
         }
-        context.registerLocalReceiver(
-            receiver,
-            IntentFilter(Constants.ACTION_PARAMETRIC_EQ_CHANGED).apply {
-                addAction(Constants.ACTION_PRESET_LOADED)
-                addAction(Constants.ACTION_BACKUP_RESTORED)
-            },
-        )
-        onDispose { context.unregisterLocalReceiver(receiver) }
     }
 }
 
