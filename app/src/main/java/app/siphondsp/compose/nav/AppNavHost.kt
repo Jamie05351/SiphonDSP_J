@@ -59,6 +59,18 @@ object Routes {
     const val BAND_ALIGN = "band-align"
     const val SIGNAL_GENERATOR = "signal-generator"
     const val NATIVE_TRUTH = "native-truth"
+    const val SETTINGS = "settings"
+    const val BLOCKLIST = "blocklist"
+    const val MEASUREMENT_CAPTURE = "measurement-capture"
+    const val APP_COMPATIBILITY = "app-compatibility"
+
+    internal const val ONBOARDING = "onboarding"
+    internal const val ARG_FIX_PERMS = "fixPerms"
+    internal const val ARG_REDO_ADB_SETUP = "redoAdbSetup"
+
+    /** The setup wizard; [redoAdbSetup] runs only the method choice and the ADB/Shizuku steps. */
+    fun onboarding(fixPerms: Boolean = false, redoAdbSetup: Boolean = false) =
+        "$ONBOARDING?$ARG_FIX_PERMS=$fixPerms&$ARG_REDO_ADB_SETUP=$redoAdbSetup"
 
     /** Alignment's pages, a finder segment each. */
     const val ALIGNMENT_PAGE_COUNT = 4
