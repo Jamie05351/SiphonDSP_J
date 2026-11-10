@@ -24,7 +24,7 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
 | 7a | Compose: Settings and the app's own screens; English only | `ccr-efec0dfc-compose` | #584 |
 | 7b | Compose Navigation: front page and DSP workspaces in one Activity | `ccr-efec0dfc-compose-nav` | — |
-| 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `ccr-efec0dfc-compose-final` | — |
+| 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `claude/checklist-md-continuation-q7x4mo` | not built yet |
 | 7d | Settings in DataStore | `ccr-efec0dfc-datastore` | — |
 | 7e | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
 
@@ -157,11 +157,19 @@ Too large for one review, so five stacked PRs.
 
 ### 7c — Last Views, LiveData and LocalBroadcastManager
 
-- [ ] 7.1 Settings, Blocklist, Measurement capture, App compatibility and Onboarding become routes
-      of the same graph.
-- [ ] 7.4 LiveData and `LocalBroadcastManager` replaced by flows; the last Views (the toolbar
-      status strip, the PEQ choice and text-input dialogs) in Compose; view/data binding and the
-      View theme palettes removed.
+- [x] 7.1 Settings, Blocklist, Measurement capture, App compatibility and Onboarding become routes
+      of the same graph. The graph starts on the setup wizard while permissions are missing and
+      on App compatibility when the "incompatible app" notification opens the app; the five
+      activities are gone. Blocklist and Measurement capture run on ViewModels.
+- [x] 7.4 LiveData and `LocalBroadcastManager` replaced by flows (`AppEvents`, one in-process
+      event flow; Room's Flow for the blocklist); the last Views (the toolbar status strip, the
+      PEQ choice and number dialogs, the APO import and Android 15 dialogs) in Compose, through
+      one dialog host; view/data binding and the View theme palettes removed.
+- [x] Fixed from the PR 584 review: a backup job left scheduled with no folder, a 0 ms session
+      polling interval, a capture lost to a recreation, Back disabled on a re-run setup's first
+      page, an App-compatibility restart cancelled by a recreation, and a blocklist picker that
+      never reloaded the installed apps.
+- Not built here (no Android SDK in the session): the PR's CI run is the first build.
 
 ### 7d — Settings in DataStore
 
