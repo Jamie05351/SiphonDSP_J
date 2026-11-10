@@ -19,13 +19,13 @@ missing tools). Decisions taken with the owner: **remove the convolver** (no rew
 | 1 | Engine core: JamesDSP removed | `ccr-efec0dfc-bhwizi` | #577 — merged |
 | 2 | Native processor: real-time safety, block processing | `ccr-efec0dfc-rt-block` | #578 — merged |
 | 3 | Native verification tooling | `ccr-efec0dfc-native-tooling` | #579 — merged |
-| 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 |
-| 5 | Graphs checked against the native engine | `ccr-efec0dfc-native-curves` | in progress |
-| 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | — |
-| 7a | Compose: Settings and the app's own screens; English only | `ccr-efec0dfc-compose` | #584 |
-| 7b | Compose Navigation: front page and DSP workspaces in one Activity | `ccr-efec0dfc-compose-nav` | — |
-| 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `claude/checklist-md-continuation-q7x4mo` | not built yet |
-| 7d | Settings in DataStore | `ccr-efec0dfc-datastore` | — |
+| 4 | Config schema single source of truth | `ccr-efec0dfc-schema-gen` | #580 — merged |
+| 5 | Graphs checked against the native engine | `ccr-efec0dfc-native-curves` | #583 — merged |
+| 6 | Dependencies and static analysis | `ccr-efec0dfc-deps` | #582 — merged |
+| 7a | Compose: Settings and the app's own screens; English only | `ccr-efec0dfc-compose` | #584 — merged |
+| 7b | Compose Navigation: front page and DSP workspaces in one Activity | `ccr-efec0dfc-compose-nav` | in #585 — merged |
+| 7c | Last Views and LiveData/LocalBroadcastManager removed; app screens as routes | `claude/checklist-md-continuation-q7x4mo` | #585 — merged |
+| 7d | Settings in DataStore | `claude/checklist-md-continuation-q7x4mo` | in progress |
 | 7e | Baseline Profile + emulator CI job | `ccr-efec0dfc-baseline` | — |
 
 ## PR 1 — Engine core: JamesDSP removed
@@ -169,11 +169,13 @@ Too large for one review, so five stacked PRs.
       polling interval, a capture lost to a recreation, Back disabled on a re-run setup's first
       page, an App-compatibility restart cancelled by a recreation, and a blocklist picker that
       never reloaded the installed apps.
-- Not built here (no Android SDK in the session): the PR's CI run is the first build.
 
 ### 7d — Settings in DataStore
 
-- [ ] 7.3 Settings stored in DataStore (migrated from SharedPreferences on first launch).
+- [x] 7.3 Settings stored in DataStore (migrated from SharedPreferences on first launch).
+      `Preferences.App` / `Var` keep their API over a Preferences DataStore per namespace: an
+      in-memory copy for synchronous reads, writes applied at once and saved in order, change
+      listeners on the main thread. Android backup includes the new settings file.
 
 ### 7e — Baseline Profile
 
