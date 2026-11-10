@@ -93,7 +93,7 @@ internal fun SidebarMorph(
                     )
 
                     drawRect(FaciaColour)
-                    drawContentWindow(window, texture, alpha = ((p - WindowStart) / (1f - WindowStart)).coerceIn(0f, 1f))
+                    drawContentWindow(window, texture, styles[selected.coerceIn(0, styles.lastIndex)].first, alpha = ((p - WindowStart) / (1f - WindowStart)).coerceIn(0f, 1f))
                     drawChainScreen(screen, corner, signal)
 
                     // Each line leaves a tile's right-middle (then bottom-middle) and enters the next

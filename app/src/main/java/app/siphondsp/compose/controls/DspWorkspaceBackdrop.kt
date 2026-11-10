@@ -38,34 +38,66 @@ import kotlin.math.roundToInt
  * (average about 29/255, neutral grey; it replaced the old navy one), saved lossless: a lossy
  * re-encode once flattened an earlier texture to near solid black.
  *
+ * The window's rim, from the outside in: [RimEdge] of [RimGrey], then a [RimNeon] line in
+ * [accent] (the workspace's tile colour on the front page's DSP bar) with a faint glow inwards.
+ *
  * The content container's right and bottom margin (dsp_workspace_bezel_inset, 8dp) is
  * [SidebarFacia], so the content sits inside the window.
  */
 @Composable
-fun DspWorkspaceBackdrop(sidebarWidth: Dp, modifier: Modifier = Modifier) {
+fun DspWorkspaceBackdrop(sidebarWidth: Dp, accent: Color, modifier: Modifier = Modifier) {
     val background = ImageBitmap.imageResource(R.drawable.dsp_workspace_bg)
     Spacer(
         modifier
             .fillMaxSize()
             .drawBehind {
                 drawRect(FaciaColour)
-                drawContentWindow(contentWindowRect(size, sidebarWidth.toPx(), SidebarFacia.toPx()), background)
+                drawContentWindow(contentWindowRect(size, sidebarWidth.toPx(), SidebarFacia.toPx()), background, accent)
             },
     )
 }
 
 /**
  * The content window in [window]: the texture cover-cropped into it, shaded at its edges so it
- * reads as set into the facia. [alpha] fades it as a whole.
+ * reads as set into the facia, inside its grey-then-[accent] rim. [alpha] fades it as a whole.
  */
-internal fun DrawScope.drawContentWindow(window: Rect, image: ImageBitmap, alpha: Float = 1f) {
+internal fun DrawScope.drawContentWindow(window: Rect, image: ImageBitmap, accent: Color, alpha: Float = 1f) {
     if (alpha <= 0f) return
     val corner = ContentWindowCorner.toPx()
     translate(window.left, window.top) {
         drawCoverImage(image, corner, window.size, alpha)
         drawInsetShadow(corner, depth = 9.5.dp.toPx(), window.size, alpha)
+        drawRim(corner, window.size, accent, alpha)
     }
 }
+
+/** The window's rim over [area]: the grey edge outermost, the neon line inside it, then its glow. */
+private fun DrawScope.drawRim(corner: Float, area: Size, accent: Color, alpha: Float) {
+    /** A stroke [width] wide whose outer edge is [inset] in from the window's edge. */
+    fun ring(colour: Color, inset: Float, width: Float) = drawRoundRect(
+        color = colour,
+        topLeft = Offset(inset + width / 2f, inset + width / 2f),
+        size = Size(area.width - 2 * inset - width, area.height - 2 * inset - width),
+        cornerRadius = CornerRadius(max(0f, corner - inset - width / 2f)),
+        style = Stroke(width = width),
+    )
+    val edge = RimEdge.toPx()
+    val neon = RimNeon.toPx()
+    ring(RimGrey.copy(alpha = alpha), 0f, edge)
+    ring(accent.copy(alpha = alpha), edge, neon)
+    // The glow: three fading bands just inside the line, as the tiles' halo but turned inwards.
+    val glow = RimGlow.toPx() / 3f
+    for (step in 1..3) {
+        ring(accent.copy(alpha = RimGlowAlpha * alpha / step), edge + neon + glow * (step - 1), glow)
+    }
+}
+
+/** The rim's grey edge, its neon line and the line's inward glow. */
+private val RimEdge = 2.dp
+private val RimNeon = 2.dp
+private val RimGlow = 6.dp
+private const val RimGlowAlpha = 0.14f
+private val RimGrey = Color(0xFF3A3D44)
 
 /** Cover-crops [image] to [area] at the origin, clipped to a rounded rect of radius [corner]. */
 private fun DrawScope.drawCoverImage(image: ImageBitmap, corner: Float, area: Size, alpha: Float) {
