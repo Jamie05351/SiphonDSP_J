@@ -292,6 +292,33 @@ std::size_t convolverIrLatencyFrames(const ConvolverIr& ir) {
     return at;
 }
 
+void convolverIrResponse(const std::vector<double>& h, double sampleRate, std::size_t latencyFrames,
+                         const double* freqs, std::size_t count, double* out) {
+    for (std::size_t i = 0; i < count; ++i) {
+        const double w = 2.0 * kPi * freqs[i] / sampleRate;
+        // H(w) e^(jwL) = sum_n h[n] e^(-jw(n - L)): a unit phasor rotated tap by tap, renormalised
+        // every 1024 taps so rounding never grows its length over a 65536-tap IR.
+        const double stepRe = std::cos(w), stepIm = -std::sin(w);
+        const double start = w * static_cast<double>(latencyFrames);
+        double pr = std::cos(start), pi = std::sin(start);
+        double re = 0.0, im = 0.0;
+        for (std::size_t n = 0; n < h.size(); ++n) {
+            re += h[n] * pr;
+            im += h[n] * pi;
+            const double nr = pr * stepRe - pi * stepIm;
+            pi = pr * stepIm + pi * stepRe;
+            pr = nr;
+            if ((n & 1023u) == 1023u) {
+                const double len = std::hypot(pr, pi);
+                pr /= len;
+                pi /= len;
+            }
+        }
+        out[2 * i] = re;
+        out[2 * i + 1] = im;
+    }
+}
+
 // ---- ConvolverKernel -----------------------------------------------------------------------
 
 ConvolverKernel::~ConvolverKernel() {

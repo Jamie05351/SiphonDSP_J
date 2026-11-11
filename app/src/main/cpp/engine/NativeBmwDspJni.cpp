@@ -7,8 +7,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <limits>
 #include <new>
 #include <string>
+#include <vector>
 
 #include "NativeBmwDspProcessor.h"
 #include "ScopedFlushToZero.h"
@@ -461,6 +463,58 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlon
     if (result != nullptr) {
         env->SetDoubleArrayRegion(result, 0, count, values);
     }
+    return result;
+}
+
+// The convolver's generation: bumped by every IR load, sample-rate rebuild and clear, so the app
+// refetches getConvolverResponse() only when it moves. -1 for a gone handle.
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverGeneration(JNIEnv*, jobject, jlong self) {
+    if (self == 0) {
+        return -1;
+    }
+    return static_cast<jlong>(fromHandle(self)->processor.convolverGeneration());
+}
+
+// The running IR's complex response at freqs (Hz), bulk latency taken out, for the graphs:
+// NativeDsp.CONVOLVER_RESPONSE_* header (generation, sampleRate, latencyFrames, peakGainDb), then
+// left re/im per frequency, then right re/im. Null with no IR running or a gone handle. A DTFT of
+// the whole IR per frequency: call it off the main thread, and only when the generation moved.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverResponse(JNIEnv* env, jobject, jlong self,
+                                                          jdoubleArray freqsObj) {
+    if (env == nullptr || self == 0 || freqsObj == nullptr) {
+        return nullptr;
+    }
+    const jsize count = env->GetArrayLength(freqsObj);
+    constexpr jsize kHeader = 4;
+    if (count <= 0 || count > (std::numeric_limits<jsize>::max() - kHeader) / 4) {
+        return nullptr;
+    }
+    std::vector<double> freqs(static_cast<std::size_t>(count));
+    env->GetDoubleArrayRegion(freqsObj, 0, count, freqs.data());
+    NativeBmwDspProcessor::ConvolverResponse response;
+    try {
+        if (!fromHandle(self)->processor.convolverResponse(freqs.data(), freqs.size(), response)) {
+            return nullptr;
+        }
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+    const jsize total = kHeader + 4 * count;
+    jdoubleArray result = env->NewDoubleArray(total);
+    if (result == nullptr) {
+        return nullptr;
+    }
+    const jdouble header[kHeader] = {
+        static_cast<double>(response.generation),
+        response.sampleRate,
+        static_cast<double>(response.latencyFrames),
+        response.peakGainDb,
+    };
+    env->SetDoubleArrayRegion(result, 0, kHeader, header);
+    env->SetDoubleArrayRegion(result, kHeader, 2 * count, response.left.data());
+    env->SetDoubleArrayRegion(result, kHeader + 2 * count, 2 * count, response.right.data());
     return result;
 }
 

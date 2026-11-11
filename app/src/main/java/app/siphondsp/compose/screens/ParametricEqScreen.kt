@@ -96,6 +96,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     var graphMode by remember { mutableStateOf(graphPrefs.responseMode) }
     var channelDisplay by remember { mutableStateOf(graphPrefs.channelDisplay) }
     var showOverlays by remember { mutableStateOf(graphPrefs.showIndividualFilters) }
+    val showConvolver = rememberShowConvolverInGraphs()
 
     fun reloadEverything() {
         holder.refreshFromDisk()
@@ -185,6 +186,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                     mode = graphMode,
                     channelDisplay = channelDisplay,
                     showIndividualFilters = showOverlays,
+                    showConvolver = showConvolver,
                     showTiltHandles = true,
                     showGainMeters = true,
                     sampleRate = (RootlessAudioProcessorService.nativeBmwPeqSampleRate() ?: 48_000f).toDouble(),
@@ -193,6 +195,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                         onModeChange = { graphMode = it; graphPrefs.responseMode = it },
                         onChannelDisplayChange = { channelDisplay = it; graphPrefs.channelDisplay = it },
                         onShowIndividualFiltersChange = { showOverlays = it; graphPrefs.showIndividualFilters = it },
+                        onShowConvolverChange = { graphPrefs.showConvolverInGraphs = it },
                     ),
                     carBaseline = holder.graphBaseline,
                 )

@@ -464,6 +464,19 @@ class DspEngine(val context: Context) : AutoCloseable {
         NativeDsp.getConvolverInfo(handle)?.let { ConvolverStatus.fromNative(it, NativeDsp.getConvolverError(handle)) }
     }
 
+    /** The convolver's generation ([NativeDsp.getConvolverGeneration]); null with no native handle. */
+    fun convolverGeneration(): Long? = withSharedHandle<Long?>(null) { handle ->
+        NativeDsp.getConvolverGeneration(handle).takeIf { it >= 0 }
+    }
+
+    /** The running IR's response on [frequencies], or null (no IR / no handle). Blocking: off main. */
+    fun convolverResponse(frequencies: DoubleArray): app.siphondsp.dsp.ConvolverResponse? =
+        withSharedHandle<app.siphondsp.dsp.ConvolverResponse?>(null) { handle ->
+            NativeDsp.getConvolverResponse(handle, frequencies)?.let {
+                app.siphondsp.dsp.ConvolverResponse.fromNative(it, frequencies)
+            }
+        }
+
     /** See [NativeDsp.readNativeBmwMeter]. */
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { NativeDsp.readNativeBmwMeter(it, kind, out) }

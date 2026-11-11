@@ -61,3 +61,17 @@ so the IR never lifts any frequency above unity (the limiter after it catches th
 peaks a phase-only change raises; the cap keeps magnitude boost from driving it). A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
 can only go below that. The page shows the gain actually applied and flags when the cap is in
 effect. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).
+
+## Response graphs
+
+With **Show convolver in graphs** on (the PEQ graph's ⋮ menu; `PeqGraphPreferences.
+showConvolverInGraphs`, off by default), the PEQ and crossover graphs multiply the running IR's
+complex response into the sum, per logical channel, at the gain the stage applies
+(`min(trim, −peak dB)`). The convolver off, or no IR running, contributes nothing either way.
+
+The graphs' grids differ (point count, top frequency), so the app passes its frequency array in:
+`NativeDsp.getConvolverResponse()` evaluates the stream-rate taps kept from the last kernel build
+(a direct DTFT, on the caller's thread, never the audio thread) with the bulk latency taken out,
+so the phase shows the correction rather than a pure delay wrapping. `getConvolverGeneration()`
+moves on every load, rate rebuild and clear; the graphs poll it once a second and refetch only
+when it moves.

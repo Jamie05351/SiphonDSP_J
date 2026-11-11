@@ -611,3 +611,76 @@ TEST_CASE("convolver: the IR's bulk latency is its largest sample, at the stream
     CHECK(info.latencyFrames == 0);
     CHECK(info.latencyMs == 0.0);
 }
+
+TEST_CASE("convolver: the graphs' response takes the bulk latency out, per channel") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    const std::vector<double> freqs = {20.0, 100.0, 1000.0, 5000.0, 19000.0};
+    NativeBmwDspProcessor::ConvolverResponse r;
+    const auto g0 = proc.convolverGeneration();
+    CHECK_FALSE(proc.convolverResponse(freqs.data(), freqs.size(), r));
+    // L: a tap at 200 (the latency), R: the same tap plus an echo at 201 -- once the 200-frame
+    // delay is out, L is flat with zero phase and R is 1 + 0.5 e^(-jw).
+    ConvolverIr ir = deltaIr(0.8, 200);
+    ir.left.resize(400, 0.0);
+    ir.right.assign(400, 0.0);
+    ir.right[200] = 0.8;
+    ir.right[201] = 0.4;
+    ir.channels = 2;
+    std::string error;
+    REQUIRE(proc.loadConvolverIr(ir, error));
+    const auto g1 = proc.convolverGeneration();
+    CHECK(g1 > g0);
+    REQUIRE(proc.convolverResponse(freqs.data(), freqs.size(), r));
+    CHECK(r.generation == g1);
+    CHECK(r.latencyFrames == 200);
+    CHECK(r.sampleRate == 48000.0);
+    REQUIRE(r.left.size() == 2 * freqs.size());
+    REQUIRE(r.right.size() == 2 * freqs.size());
+    for (std::size_t i = 0; i < freqs.size(); ++i) {
+        CAPTURE(freqs[i]);
+        CHECK(r.left[2 * i] == doctest::Approx(0.8).epsilon(1e-9));
+        CHECK(std::fabs(r.left[2 * i + 1]) < 1e-9);
+        const double w = 2.0 * kPi * freqs[i] / 48000.0;
+        CHECK(r.right[2 * i] == doctest::Approx(0.8 + 0.4 * std::cos(w)).epsilon(1e-9));
+        CHECK(r.right[2 * i + 1] == doctest::Approx(-0.4 * std::sin(w)).epsilon(1e-9));
+    }
+    // A mono IR: the right channel is the left one.
+    REQUIRE(proc.loadConvolverIr(deltaIr(0.5, 10), error));
+    REQUIRE(proc.convolverResponse(freqs.data(), freqs.size(), r));
+    CHECK(r.right == r.left);
+    CHECK(r.generation > g1);
+    // A rate rebuild and a clear both move the generation; cleared, there's no response.
+    const auto g2 = proc.convolverGeneration();
+    proc.setSampleRate(44100.f);
+    const auto g3 = proc.convolverGeneration();
+    CHECK(g3 > g2);
+    REQUIRE(proc.convolverResponse(freqs.data(), freqs.size(), r));
+    CHECK(r.sampleRate == 44100.0);
+    proc.clearConvolverIr();
+    CHECK(proc.convolverGeneration() > g3);
+    CHECK_FALSE(proc.convolverResponse(freqs.data(), freqs.size(), r));
+}
+
+TEST_CASE("convolver: the response DTFT stays accurate over a maximum-length IR") {
+    // The rotated phasor is renormalised as it runs: over 65536 taps it must agree with a direct
+    // cos/sin sum to well below what a graph can show.
+    std::vector<double> h(NativeBmwDsp::kConvolverMaxIrFrames);
+    std::mt19937 rng(5);
+    std::uniform_real_distribution<double> u(-1.0, 1.0);
+    for (auto& v : h) v = u(rng) * 1e-3;
+    const double freqs[] = {31.0, 997.0, 15000.0};
+    double out[6];
+    NativeBmwDsp::convolverIrResponse(h, 48000.0, 1234, freqs, 3, out);
+    for (int i = 0; i < 3; ++i) {
+        double re = 0.0, im = 0.0;
+        const double w = 2.0 * kPi * freqs[i] / 48000.0;
+        for (std::size_t n = 0; n < h.size(); ++n) {
+            const double a = -w * (static_cast<double>(n) - 1234.0);
+            re += h[n] * std::cos(a);
+            im += h[n] * std::sin(a);
+        }
+        CHECK(std::fabs(out[2 * i] - re) < 1e-9);
+        CHECK(std::fabs(out[2 * i + 1] - im) < 1e-9);
+    }
+}

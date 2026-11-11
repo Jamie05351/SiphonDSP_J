@@ -214,6 +214,21 @@ public:
     bool loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::string& error);
     void clearConvolverIr();
     ConvolverInfo convolverInfo();
+    // The running IR's complex response, for the app's graphs. generation is the convolver's
+    // generation (bumped by every load, rebuild and clear), so the app refetches only when it
+    // moves. left / right: re, im per frequency, the IR's bulk latency taken out (see
+    // convolverIrResponse()); a mono IR's right is a copy of its left.
+    struct ConvolverResponse {
+        std::uint64_t generation = 0;
+        double sampleRate = 0.0;
+        std::size_t latencyFrames = 0;
+        double peakGainDb = -200.0;
+        std::vector<double> left, right;
+    };
+    std::uint64_t convolverGeneration();
+    // Control thread, never the audio thread (allocates; O(IR length x count)). The DTFT runs
+    // outside convolverMutex_. False when no IR is running (out.generation still set).
+    bool convolverResponse(const double* freqs, std::size_t count, ConvolverResponse& out);
     // Lock-free: a kernel is installed on the audio side (it lands at the next buffer).
     bool convolverKernelActive() const { return convolver_.kernelActive(); }
 
@@ -508,11 +523,14 @@ private:
     std::mutex convolverMutex_;
     NativeBmwDsp::ConvolverIr convolverSource_;
     ConvolverInfo convolverInfo_;
+    // The running kernel's taps at the stream rate (null when none), for convolverResponse().
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr> convolverStreamIr_;
     // Bumped by every commit, load and clear: a kernel built outside the lock from an older
     // source or rate is dropped instead of published.
     std::uint64_t convolverGeneration_ = 0;
     // convolverMutex_ held: publishes kernel (null = can't run at rate) and records it in the info.
-    void commitConvolverLocked(std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel, float rate,
+    void commitConvolverLocked(std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel,
+                               std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr, float rate,
                                std::size_t streamFrames, const std::string& error);
     // After a sample-rate change: rebuilds the kernel from convolverSource_ outside the lock.
     void rebuildConvolverForRate();

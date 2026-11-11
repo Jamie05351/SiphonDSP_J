@@ -75,6 +75,12 @@ double convolverIrPeakGainDb(const ConvolverIr& ir);
 // The IR's bulk latency: the index of its largest-magnitude sample across both channels (the
 // first, on a tie), in frames at the IR's own rate. 0 for an empty IR.
 std::size_t convolverIrLatencyFrames(const ConvolverIr& ir);
+// The response of taps h (at sampleRate) at each of count frequencies (Hz), with latencyFrames of
+// bulk delay taken out so the phase shows the correction rather than a pure delay wrapping:
+// out[2i], out[2i+1] = re, im of H(f_i) * e^(+j 2 pi f_i latencyFrames / sampleRate). A direct
+// DTFT, O(taps x count): off the audio thread only.
+void convolverIrResponse(const std::vector<double>& h, double sampleRate, std::size_t latencyFrames,
+                         const double* freqs, std::size_t count, double* out);
 
 // An IR transformed into partition spectra plus the running convolution state for both
 // channels. Built off the audio thread; process() and reset() are allocation-free.
