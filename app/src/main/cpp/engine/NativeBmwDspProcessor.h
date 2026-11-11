@@ -226,8 +226,21 @@ public:
         std::vector<double> left, right;
     };
     std::uint64_t convolverGeneration();
-    // Control thread, never the audio thread (allocates; O(IR length x count)). The DTFT runs
-    // outside convolverMutex_. False when no IR is running (out.generation still set).
+    // What the response needs, taken under convolverMutex_ in O(1) (the taps are shared, not
+    // copied): the app takes one under its engine-handle lock and evaluates it after letting go,
+    // so the DTFT never holds up teardown or other control calls.
+    struct ConvolverSnapshot {
+        std::uint64_t generation = 0;
+        std::shared_ptr<const NativeBmwDsp::ConvolverIr> ir;  // null with no IR running
+        std::size_t latencyFrames = 0;
+        double peakGainDb = -200.0;
+    };
+    ConvolverSnapshot convolverSnapshot();
+    // Evaluates a snapshot at freqs. Any thread but the audio thread (allocates; O(IR length x
+    // count)); needs no processor. False when the snapshot holds no IR (out.generation still set).
+    static bool convolverResponse(const ConvolverSnapshot& snapshot, const double* freqs,
+                                  std::size_t count, ConvolverResponse& out);
+    // convolverSnapshot() then convolverResponse(), for callers that hold nothing else.
     bool convolverResponse(const double* freqs, std::size_t count, ConvolverResponse& out);
     // Lock-free: a kernel is installed on the audio side (it lands at the next buffer).
     bool convolverKernelActive() const { return convolver_.kernelActive(); }

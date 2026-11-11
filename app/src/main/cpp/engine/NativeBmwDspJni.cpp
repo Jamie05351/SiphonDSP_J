@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <new>
 #include <string>
 #include <vector>
@@ -467,7 +468,7 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlon
 }
 
 // The convolver's generation: bumped by every IR load, sample-rate rebuild and clear, so the app
-// refetches getConvolverResponse() only when it moves. -1 for a gone handle.
+// refetches getConvolverSnapshotResponse() only when it moves. -1 for a gone handle.
 extern "C" JNIEXPORT jlong JNICALL
 Java_app_siphondsp_interop_NativeDsp_getConvolverGeneration(JNIEnv*, jobject, jlong self) {
     if (self == 0) {
@@ -476,26 +477,56 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverGeneration(JNIEnv*, jobject, jl
     return static_cast<jlong>(fromHandle(self)->processor.convolverGeneration());
 }
 
-// The running IR's complex response at freqs (Hz), bulk latency taken out, for the graphs:
+// A snapshot of the running IR for freeConvolverSnapshot() / getConvolverSnapshotResponse():
+// O(1) (the taps are shared, not copied), so the app can take it under its engine-handle lock and
+// run the DTFT after releasing it. 0 with no IR running or a gone handle. Free it with
+// freeConvolverSnapshot().
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_takeConvolverSnapshot(JNIEnv*, jobject, jlong self) {
+    if (self == 0) {
+        return 0;
+    }
+    try {
+        auto snapshot = std::make_unique<NativeBmwDspProcessor::ConvolverSnapshot>(
+            fromHandle(self)->processor.convolverSnapshot());
+        if (!snapshot->ir) {
+            return 0;
+        }
+        return reinterpret_cast<jlong>(snapshot.release());
+    } catch (const std::bad_alloc&) {
+        return 0;
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_freeConvolverSnapshot(JNIEnv*, jobject, jlong snapshot) {
+    delete reinterpret_cast<NativeBmwDspProcessor::ConvolverSnapshot*>(snapshot);
+}
+
+// The snapshot IR's complex response at freqs (Hz), bulk latency taken out, for the graphs:
 // NativeDsp.CONVOLVER_RESPONSE_* header (generation, sampleRate, latencyFrames, peakGainDb), then
-// left re/im per frequency, then right re/im. Null with no IR running or a gone handle. A DTFT of
-// the whole IR per frequency: call it off the main thread, and only when the generation moved.
+// left re/im per frequency, then right re/im. Null for a null snapshot. Needs no engine handle. A
+// DTFT of the whole IR per frequency: call it off the main thread, and only when the generation
+// moved.
 extern "C" JNIEXPORT jdoubleArray JNICALL
-Java_app_siphondsp_interop_NativeDsp_getConvolverResponse(JNIEnv* env, jobject, jlong self,
-                                                          jdoubleArray freqsObj) {
-    if (env == nullptr || self == 0 || freqsObj == nullptr) {
+Java_app_siphondsp_interop_NativeDsp_getConvolverSnapshotResponse(JNIEnv* env, jobject,
+                                                                  jlong snapshotHandle,
+                                                                  jdoubleArray freqsObj) {
+    if (env == nullptr || snapshotHandle == 0 || freqsObj == nullptr) {
         return nullptr;
     }
+    const auto& snapshot =
+        *reinterpret_cast<const NativeBmwDspProcessor::ConvolverSnapshot*>(snapshotHandle);
     const jsize count = env->GetArrayLength(freqsObj);
     constexpr jsize kHeader = 4;
     if (count <= 0 || count > (std::numeric_limits<jsize>::max() - kHeader) / 4) {
         return nullptr;
     }
-    std::vector<double> freqs(static_cast<std::size_t>(count));
-    env->GetDoubleArrayRegion(freqsObj, 0, count, freqs.data());
     NativeBmwDspProcessor::ConvolverResponse response;
     try {
-        if (!fromHandle(self)->processor.convolverResponse(freqs.data(), freqs.size(), response)) {
+        std::vector<double> freqs(static_cast<std::size_t>(count));
+        env->GetDoubleArrayRegion(freqsObj, 0, count, freqs.data());
+        if (!NativeBmwDspProcessor::convolverResponse(snapshot, freqs.data(), freqs.size(), response)) {
             return nullptr;
         }
     } catch (const std::bad_alloc&) {

@@ -90,11 +90,15 @@ object NativeDsp {
     external fun checkConvolverIr(path: String, sampleRate: Float): String?
     // Bumped by every IR load, sample-rate rebuild and clear; -1 for a gone handle.
     external fun getConvolverGeneration(self: NativeDspHandle): Long
-    // The running IR's complex response at [frequencies] (Hz), bulk latency taken out:
-    // CONVOLVER_RESPONSE_HEADER doubles, then left re/im per frequency, then right re/im. Null
-    // with no IR running. A DTFT of the whole IR per frequency: off the main thread, and only
-    // when the generation moved.
-    external fun getConvolverResponse(self: NativeDspHandle, frequencies: DoubleArray): DoubleArray?
+    // An O(1) snapshot of the running IR (0 with none): take it under the handle lock, evaluate it
+    // with getConvolverSnapshotResponse() after releasing the lock, then freeConvolverSnapshot().
+    external fun takeConvolverSnapshot(self: NativeDspHandle): Long
+    external fun freeConvolverSnapshot(snapshot: Long)
+    // The snapshot IR's complex response at [frequencies] (Hz), bulk latency taken out:
+    // CONVOLVER_RESPONSE_HEADER doubles, then left re/im per frequency, then right re/im. Needs no
+    // engine handle. A DTFT of the whole IR per frequency: off the main thread, and only when the
+    // generation moved.
+    external fun getConvolverSnapshotResponse(snapshot: Long, frequencies: DoubleArray): DoubleArray?
     const val CONVOLVER_RESPONSE_GENERATION = 0
     const val CONVOLVER_RESPONSE_SAMPLE_RATE = 1
     const val CONVOLVER_RESPONSE_LATENCY_FRAMES = 2

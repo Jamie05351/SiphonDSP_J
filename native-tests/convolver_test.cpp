@@ -684,3 +684,25 @@ TEST_CASE("convolver: the response DTFT stays accurate over a maximum-length IR"
         CHECK(std::fabs(out[2 * i + 1] - im) < 1e-9);
     }
 }
+
+TEST_CASE("convolver: a response snapshot is evaluated without the processor, even after a clear") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    CHECK_FALSE(proc.convolverSnapshot().ir);
+    std::string error;
+    REQUIRE(proc.loadConvolverIr(deltaIr(0.5, 30), error));
+    const auto snapshot = proc.convolverSnapshot();
+    REQUIRE(snapshot.ir);
+    CHECK(snapshot.generation == proc.convolverGeneration());
+    CHECK(snapshot.latencyFrames == 30);
+    // The snapshot shares the taps: unloading the IR doesn't invalidate it.
+    proc.clearConvolverIr();
+    const double freqs[] = {50.0, 5000.0};
+    NativeBmwDspProcessor::ConvolverResponse r;
+    REQUIRE(NativeBmwDspProcessor::convolverResponse(snapshot, freqs, 2, r));
+    CHECK(r.generation == snapshot.generation);
+    for (int i = 0; i < 2; ++i) {
+        CHECK(r.left[2 * i] == doctest::Approx(0.5).epsilon(1e-9));
+        CHECK(std::fabs(r.left[2 * i + 1]) < 1e-9);
+    }
+}

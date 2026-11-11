@@ -4,7 +4,7 @@ import app.siphondsp.interop.NativeDsp
 
 /**
  * The running convolver IR's complex response on one frequency grid, as the engine computed it
- * ([NativeDsp.getConvolverResponse]): per logical channel ([BmwOutputChannel.ordinal]; the IR's
+ * ([NativeDsp.getConvolverSnapshotResponse]): per logical channel ([BmwOutputChannel.ordinal]; the IR's
  * left is the car's left), with the IR's bulk latency taken out so the phase shows the correction
  * rather than a pure delay. [BmwResponseCalculator] multiplies the sum by it, at the gain the
  * engine applies ([appliedGainDb]).
@@ -33,7 +33,7 @@ class ConvolverResponse(
          */
         fun appliedGainDb(trimDb: Double, peakGainDb: Double): Double = minOf(trimDb, -peakGainDb)
 
-        /** Parses [NativeDsp.getConvolverResponse]'s array for [frequencies]; null if malformed. */
+        /** Parses [NativeDsp.getConvolverSnapshotResponse]'s array for [frequencies]; null if malformed. */
         fun fromNative(values: DoubleArray, frequencies: DoubleArray): ConvolverResponse? {
             val n = frequencies.size
             if (n == 0 || values.size != NativeDsp.CONVOLVER_RESPONSE_HEADER + 4 * n) return null

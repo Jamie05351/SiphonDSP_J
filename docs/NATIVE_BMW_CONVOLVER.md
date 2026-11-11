@@ -70,8 +70,9 @@ complex response into the sum, per logical channel, at the gain the stage applie
 (`min(trim, −peak dB)`). The convolver off, or no IR running, contributes nothing either way.
 
 The graphs' grids differ (point count, top frequency), so the app passes its frequency array in:
-`NativeDsp.getConvolverResponse()` evaluates the stream-rate taps kept from the last kernel build
-(a direct DTFT, on the caller's thread, never the audio thread) with the bulk latency taken out,
+`NativeDsp.takeConvolverSnapshot()` shares out the stream-rate taps kept from the last kernel
+build in O(1) under the engine-handle lock, and `getConvolverSnapshotResponse()` evaluates them
+after it is released (a direct DTFT, on the caller's thread, never the audio thread) with the bulk latency taken out,
 so the phase shows the correction rather than a pure delay wrapping. `getConvolverGeneration()`
 moves on every load, rate rebuild and clear; the graphs poll it once a second and refetch only
 when it moves.

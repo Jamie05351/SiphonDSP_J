@@ -750,17 +750,23 @@ std::uint64_t NativeBmwDspProcessor::convolverGeneration() {
     return convolverGeneration_;
 }
 
-bool NativeBmwDspProcessor::convolverResponse(const double* freqs, std::size_t count,
-                                              ConvolverResponse& out) {
-    std::shared_ptr<const NativeBmwDsp::ConvolverIr> ir;
-    {
-        std::lock_guard<std::mutex> lock(convolverMutex_);
-        out = ConvolverResponse{};
-        out.generation = convolverGeneration_;
-        ir = convolverStreamIr_;
-        out.latencyFrames = convolverInfo_.latencyFrames;
-        out.peakGainDb = convolverInfo_.peakGainDb;
-    }
+NativeBmwDspProcessor::ConvolverSnapshot NativeBmwDspProcessor::convolverSnapshot() {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    ConvolverSnapshot snapshot;
+    snapshot.generation = convolverGeneration_;
+    snapshot.ir = convolverStreamIr_;
+    snapshot.latencyFrames = convolverInfo_.latencyFrames;
+    snapshot.peakGainDb = convolverInfo_.peakGainDb;
+    return snapshot;
+}
+
+bool NativeBmwDspProcessor::convolverResponse(const ConvolverSnapshot& snapshot, const double* freqs,
+                                              std::size_t count, ConvolverResponse& out) {
+    out = ConvolverResponse{};
+    out.generation = snapshot.generation;
+    out.latencyFrames = snapshot.latencyFrames;
+    out.peakGainDb = snapshot.peakGainDb;
+    const auto& ir = snapshot.ir;
     if (!ir || ir->frames() == 0 || ir->sampleRate <= 0.0 || (count > 0 && freqs == nullptr)) {
         return false;
     }
@@ -777,6 +783,11 @@ bool NativeBmwDspProcessor::convolverResponse(const double* freqs, std::size_t c
         out.right = out.left;
     }
     return true;
+}
+
+bool NativeBmwDspProcessor::convolverResponse(const double* freqs, std::size_t count,
+                                              ConvolverResponse& out) {
+    return convolverResponse(convolverSnapshot(), freqs, count, out);
 }
 
 // ---- Ownership and control requests --------------------------------------------------------
