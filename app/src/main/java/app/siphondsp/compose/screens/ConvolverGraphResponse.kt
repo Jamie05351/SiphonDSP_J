@@ -63,14 +63,17 @@ fun rememberConvolverResponse(show: Boolean, grid: DoubleArray): ConvolverRespon
                 } else {
                     withContext(Dispatchers.IO) { RootlessAudioProcessorService.convolverResponse(grid) }
                 }
-                response = next
                 // A null response is final only when there's nothing to fetch (no service, or no
                 // IR running); otherwise it failed (handle swap, allocation) and the next poll
-                // retries rather than leaving the graph without the IR until the generation moves.
+                // retries (keeping the last curve meanwhile) rather than leaving the graph without the
+                // IR until the generation moves.
                 val settled = next != null || generation == null ||
                     withContext(Dispatchers.IO) { RootlessAudioProcessorService.convolverStatus() }
                         ?.let { it.streamFrames == 0 } ?: true
-                if (settled) fetched = next?.generation ?: generation
+                if (settled) {
+                    response = next
+                    fetched = next?.generation ?: generation
+                }
             }
             delay(CONVOLVER_POLL_MS)
         }
