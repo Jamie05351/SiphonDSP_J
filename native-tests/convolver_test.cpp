@@ -583,3 +583,31 @@ TEST_CASE("convolver: an IR that raises peaks through phase alone is held by the
     CHECK(limited <= threshold * 1.001f);
     CHECK(limited > 0.5f * threshold);  // still limiting, not gating to silence
 }
+
+TEST_CASE("convolver: the IR's bulk latency is its largest sample, at the stream rate") {
+    // Largest on the right channel, at 300: the latency is taken across both channels.
+    ConvolverIr ir = deltaIr(0.5, 100);
+    ir.left.resize(1000, 0.0);
+    ir.right.assign(1000, 0.0);
+    ir.right[300] = -0.9;
+    ir.channels = 2;
+    CHECK(NativeBmwDsp::convolverIrLatencyFrames(ir) == 300);
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    std::string error;
+    REQUIRE(proc.loadConvolverIr(ir, error));
+    auto info = proc.convolverInfo();
+    CHECK(info.latencyFrames == 300);
+    CHECK(info.latencyMs == doctest::Approx(300.0 * 1000.0 / 48000.0));
+    // A 24 kHz stream: the kernel is rebuilt at half the rate, the peak lands at ~150.
+    proc.setSampleRate(24000.f);
+    info = proc.convolverInfo();
+    CHECK(info.streamRate == 24000.0);
+    CHECK(info.latencyFrames >= 149);
+    CHECK(info.latencyFrames <= 151);
+    CHECK(info.latencyMs == doctest::Approx(1000.0 * info.latencyFrames / 24000.0));
+    proc.clearConvolverIr();
+    info = proc.convolverInfo();
+    CHECK(info.latencyFrames == 0);
+    CHECK(info.latencyMs == 0.0);
+}

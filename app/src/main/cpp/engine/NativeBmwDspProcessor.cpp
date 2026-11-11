@@ -628,6 +628,8 @@ void NativeBmwDspProcessor::commitConvolverLocked(std::unique_ptr<NativeBmwDsp::
         // at the wrong rate. The source is kept; the next rate change tries again.
         convolverInfo_.streamFrames = 0;
         convolverInfo_.partitions = 0;
+        convolverInfo_.latencyFrames = 0;
+        convolverInfo_.latencyMs = 0.0;
         convolverInfo_.error = error;
         convolver_.publish(nullptr);
         return;
@@ -635,6 +637,8 @@ void NativeBmwDspProcessor::commitConvolverLocked(std::unique_ptr<NativeBmwDsp::
     convolverInfo_.streamFrames = streamFrames;
     convolverInfo_.partitions = kernel->partitions();
     convolverInfo_.peakGainDb = kernel->peakGainDb();
+    convolverInfo_.latencyFrames = kernel->latencyFrames();
+    convolverInfo_.latencyMs = rate > 0.f ? 1000.0 * static_cast<double>(kernel->latencyFrames()) / rate : 0.0;
     convolverInfo_.error.clear();
     convolver_.publish(std::move(kernel));
 }

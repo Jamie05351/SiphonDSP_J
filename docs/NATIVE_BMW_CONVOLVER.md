@@ -41,6 +41,10 @@ Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line.
   lock-free triple buffer; the audio thread hands the retired one back through the same buffer,
   and it is freed by the next publish, on the control thread. A rejected file leaves the current
   IR running.
+- Each kernel build (load or stream-rate rebuild) records the IR's **bulk latency**: the index
+  of its largest-magnitude sample across both channels, in frames at the stream rate, and in ms
+  (`ConvolverInfo::latencyFrames` / `latencyMs`, cleared on unload). The CONVOLVER page shows it.
+  This is the IR's own delay; the convolution adds none on top.
 - App side: `ConvolverIrStore` copies the picked file to `files/convolver/ir.wav` once
   `NativeDsp.checkConvolverIr()` accepts it; the service loads it at start and after every
   import or clear.

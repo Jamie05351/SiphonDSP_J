@@ -97,7 +97,9 @@ object NativeDsp {
     const val CONVOLVER_PARTITIONS = 6
     const val CONVOLVER_PEAK_GAIN_DB = 7
     const val CONVOLVER_KERNEL_ACTIVE = 8
-    const val CONVOLVER_COUNT = 9
+    const val CONVOLVER_LATENCY_FRAMES = 9
+    const val CONVOLVER_LATENCY_MS = 10
+    const val CONVOLVER_COUNT = 11
 
     init {
         System.loadLibrary("siphondsp-engine")

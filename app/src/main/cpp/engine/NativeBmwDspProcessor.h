@@ -204,6 +204,9 @@ public:
         std::size_t streamFrames = 0;   // what the kernel runs, at streamRate
         std::size_t partitions = 0;
         double peakGainDb = -200.0;     // the IR's loudest frequency, dB
+        // The IR's bulk latency (its largest-magnitude sample) at streamRate; 0 when not running.
+        std::size_t latencyFrames = 0;
+        double latencyMs = 0.0;
         std::string error;              // why the last load / rebuild failed ("" when it didn't)
     };
     // False with a user-facing message in error; the previous IR (if any) keeps running.

@@ -434,7 +434,8 @@ Java_app_siphondsp_interop_NativeDsp_clearConvolverIr(JNIEnv*, jobject, jlong se
 }
 
 // NativeDsp.CONVOLVER_* order: loaded (0/1), channels, sourceRate, sourceFrames, streamRate,
-// streamFrames, partitions, peakGainDb, kernelActive (0/1). Null for a gone handle.
+// streamFrames, partitions, peakGainDb, kernelActive (0/1), latencyFrames, latencyMs. Null for a
+// gone handle.
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
@@ -452,6 +453,8 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlon
         static_cast<double>(info.partitions),
         info.peakGainDb,
         processor.convolverKernelActive() ? 1.0 : 0.0,
+        static_cast<double>(info.latencyFrames),
+        info.latencyMs,
     };
     constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
     jdoubleArray result = env->NewDoubleArray(count);

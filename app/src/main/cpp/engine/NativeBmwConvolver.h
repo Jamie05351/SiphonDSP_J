@@ -72,6 +72,9 @@ bool resampleConvolverIr(const ConvolverIr& in, double targetRate, ConvolverIr& 
 // loudest frequency; -200 for a silent IR). NaN if it couldn't be measured (allocation failed).
 // Off the audio thread; allocates.
 double convolverIrPeakGainDb(const ConvolverIr& ir);
+// The IR's bulk latency: the index of its largest-magnitude sample across both channels (the
+// first, on a tie), in frames at the IR's own rate. 0 for an empty IR.
+std::size_t convolverIrLatencyFrames(const ConvolverIr& ir);
 
 // An IR transformed into partition spectra plus the running convolution state for both
 // channels. Built off the audio thread; process() and reset() are allocation-free.
@@ -93,6 +96,8 @@ public:
     // (1 / peak: the gain that brings that frequency to unity). See ConvolverStage::process().
     double peakGainDb() const { return peakGainDb_; }
     double maxGain() const { return maxGain_; }
+    // The IR's bulk latency in frames at the stream rate (convolverIrLatencyFrames()).
+    std::size_t latencyFrames() const { return latencyFrames_; }
 
 private:
     ConvolverKernel() = default;
@@ -120,6 +125,7 @@ private:
     bool stereo_ = false;
     double peakGainDb_ = 0.0;
     double maxGain_ = 1.0;
+    std::size_t latencyFrames_ = 0;
 };
 
 // The stage the processor runs: the current kernel, the one it is fading away from, the IR

@@ -62,7 +62,8 @@ import kotlinx.coroutines.withContext
  *   at its loudest frequency). The page shows the gain actually applied.
  * - **Impulse response**: load a mono or stereo WAV (copied into app storage; a mono IR runs on
  *   both channels, a stereo one L on L and R on R), what the engine made of it -- rates, length,
- *   whether it was resampled to the stream -- and clear.
+ *   whether it was resampled to the stream, its bulk latency (where its largest sample sits) --
+ *   and clear.
  */
 @Composable
 fun ConvolverScreen(modifier: Modifier = Modifier) {
@@ -203,13 +204,14 @@ private fun IrGroup(ir: ConvolverIrUiState, row: ConvolverRow) {
                     else "At the stream rate: ${s.streamRate} Hz",
                 )
                 add("${"%.0f".format(s.lengthMs)} ms, ${s.partitions} partitions, peak ${formatDb(s.peakGainDb.toFloat())}")
+                add("Latency ${"%.1f".format(s.latencyMs)} ms (${s.latencyFrames} samples)")
             }
         }
     }
     lines.forEachIndexed { i, text -> InfoLine(text, row(84 + 30 * i, 28)) }
     val error = ir.message ?: ir.status?.error
-    if (error != null) InfoLine(error, row(176, 28), color = ErrorColor)
-    Row(row(212, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    if (error != null) InfoLine(error, row(206, 28), color = ErrorColor)
+    Row(row(242, 48), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ActionChip(if (ir.busy) "Loading…" else "Load IR…", enabled = !ir.busy) {
             picker.launch(arrayOf("audio/wav", "audio/x-wav", "audio/wave", "audio/*", "application/octet-stream"))
         }

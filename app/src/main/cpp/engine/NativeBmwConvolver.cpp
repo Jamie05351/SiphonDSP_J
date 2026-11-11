@@ -279,6 +279,19 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     return peak > 0.0 ? 20.0 * std::log10(peak) : -200.0;
 }
 
+std::size_t convolverIrLatencyFrames(const ConvolverIr& ir) {
+    std::size_t at = 0;
+    double peak = -1.0;
+    for (std::size_t i = 0; i < ir.frames(); ++i) {
+        const double m = std::max(std::fabs(ir.left[i]), ir.stereo() ? std::fabs(ir.right[i]) : 0.0);
+        if (m > peak) {
+            peak = m;
+            at = i;
+        }
+    }
+    return at;
+}
+
 // ---- ConvolverKernel -----------------------------------------------------------------------
 
 ConvolverKernel::~ConvolverKernel() {
@@ -355,6 +368,7 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
         return nullptr;
     }
     k->maxGain_ = std::pow(10.0, -k->peakGainDb_ / 20.0);
+    k->latencyFrames_ = convolverIrLatencyFrames(ir);
     k->reset();
     return k;
 }
