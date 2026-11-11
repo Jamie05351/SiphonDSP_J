@@ -47,6 +47,7 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.isHeadUnitDisplay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -89,6 +90,11 @@ class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Landscape-locked on the 1280x480 head unit only (it is already landscape, so this never
+        // recreates there); phones keep portrait. Not in the manifest, which every build shares.
+        if (isHeadUnitDisplay()) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
 
         // Where the graph starts: the setup wizard while permissions are missing, the
