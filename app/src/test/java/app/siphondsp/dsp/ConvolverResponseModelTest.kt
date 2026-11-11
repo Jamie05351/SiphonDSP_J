@@ -10,6 +10,7 @@ import org.junit.Test
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 
 /** The convolver stage of [BmwResponseCalculator]: the IR's response times the engine's gain. */
@@ -53,8 +54,8 @@ class ConvolverResponseModelTest {
     @Test
     fun convolverMultipliesTheSumPerLogicalChannelAtTheAppliedGain() {
         val freqs = grid()
-        // Left 0.5 (-6 dB) with a +6 dB trim: the peak cap (-peak = +6 dB) allows all of it.
-        val conv = response(freqs, leftGain = 0.5, rightGain = 0.5, peakDb = linToDb(0.5))
+        // An IR at exactly -6 dB with a +6 dB trim: the peak cap (-peak = +6 dB) allows all of it.
+        val conv = response(freqs, leftGain = MINUS_6_DB, rightGain = MINUS_6_DB, peakDb = -6.0)
         val (plainDb, plainPhase) = sums(values(enabled = true, trimDb = 6f), null)
         val (convDb, convPhase) = sums(values(enabled = true, trimDb = 6f), conv)
         for (i in freqs.indices) {
@@ -71,7 +72,7 @@ class ConvolverResponseModelTest {
     fun theGainIsCappedAtTheIrPeakAsTheEngineCapsIt() {
         val freqs = grid()
         // A +6 dB IR at 0 dB trim: capped at -6 dB, so the IR's boost is cancelled exactly.
-        val conv = response(freqs, leftGain = 2.0, rightGain = 2.0, peakDb = linToDb(2.0))
+        val conv = response(freqs, leftGain = PLUS_6_DB, rightGain = PLUS_6_DB, peakDb = 6.0)
         val (plainDb, _) = sums(values(enabled = true, trimDb = 0f), null)
         val (convDb, _) = sums(values(enabled = true, trimDb = 0f), conv)
         for (i in freqs.indices) assertEquals(plainDb[0][i], convDb[0][i], 1e-6)
@@ -121,5 +122,9 @@ class ConvolverResponseModelTest {
     private companion object {
         const val POINTS = 96
         const val SAMPLE_RATE = 48_000.0
+        // Exactly -6 / +6 dB (not 0.5 / 2.0, which are -6.02 / +6.02 dB), so the expected offsets
+        // are exact.
+        val MINUS_6_DB = 10.0.pow(-6.0 / 20.0)
+        val PLUS_6_DB = 10.0.pow(6.0 / 20.0)
     }
 }
