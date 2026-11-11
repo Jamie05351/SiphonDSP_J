@@ -16,6 +16,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <uses-permission android:name="android.permission.DUMP" tools:ignore="ProtectedPermissions" />
+    <!-- Usage access: which app is in front, for the Spotify / Waze swipe (AppSwipe). The activity
+         manager also wants it, with DUMP, before it hands out its dump. Granted under Settings >
+         Usage access. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <permission
         android:name="${applicationId}.permission.SET_POWER_STATE"
@@ -25,6 +29,11 @@
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
+
+        <!-- The KSW head unit's own screens, opened from the home screen's car menu. -->
+        <package android:name="com.wits.ksw" />
+        <package android:name="com.wits.ksw.bt" />
+        <package android:name="com.wits.csp.eq" />
 
         <!-- Needed to see other apps' names/icons (app exclusion list, audio session
              attribution) despite Android 11+ package visibility filtering. -->
@@ -55,12 +64,21 @@
             android:exported="true"
             android:icon="@mipmap/ic_dsp_launcher"
             android:label="${label}"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.SiphonDSP"
             android:windowSoftInputMode="adjustPan">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- The front page is also a home screen: pick J_DSP under Settings > Home app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
             <intent-filter>
