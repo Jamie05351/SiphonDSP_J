@@ -7,8 +7,11 @@
 
 #include <atomic>
 #include <cstdint>
+#include <limits>
+#include <memory>
 #include <new>
 #include <string>
+#include <vector>
 
 #include "NativeBmwDspProcessor.h"
 #include "ScopedFlushToZero.h"
@@ -434,7 +437,8 @@ Java_app_siphondsp_interop_NativeDsp_clearConvolverIr(JNIEnv*, jobject, jlong se
 }
 
 // NativeDsp.CONVOLVER_* order: loaded (0/1), channels, sourceRate, sourceFrames, streamRate,
-// streamFrames, partitions, peakGainDb, kernelActive (0/1). Null for a gone handle.
+// streamFrames, partitions, peakGainDb, kernelActive (0/1), latencyFrames, latencyMs. Null for a
+// gone handle.
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlong self) {
     if (env == nullptr || self == 0) {
@@ -452,12 +456,96 @@ Java_app_siphondsp_interop_NativeDsp_getConvolverInfo(JNIEnv* env, jobject, jlon
         static_cast<double>(info.partitions),
         info.peakGainDb,
         processor.convolverKernelActive() ? 1.0 : 0.0,
+        static_cast<double>(info.latencyFrames),
+        info.latencyMs,
     };
     constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
     jdoubleArray result = env->NewDoubleArray(count);
     if (result != nullptr) {
         env->SetDoubleArrayRegion(result, 0, count, values);
     }
+    return result;
+}
+
+// The convolver's generation: bumped by every IR load, sample-rate rebuild and clear, so the app
+// refetches getConvolverSnapshotResponse() only when it moves. -1 for a gone handle.
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverGeneration(JNIEnv*, jobject, jlong self) {
+    if (self == 0) {
+        return -1;
+    }
+    return static_cast<jlong>(fromHandle(self)->processor.convolverGeneration());
+}
+
+// A snapshot of the running IR for freeConvolverSnapshot() / getConvolverSnapshotResponse():
+// O(1) (the taps are shared, not copied), so the app can take it under its engine-handle lock and
+// run the DTFT after releasing it. 0 with no IR running or a gone handle. Free it with
+// freeConvolverSnapshot().
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_takeConvolverSnapshot(JNIEnv*, jobject, jlong self) {
+    if (self == 0) {
+        return 0;
+    }
+    try {
+        auto snapshot = std::make_unique<NativeBmwDspProcessor::ConvolverSnapshot>(
+            fromHandle(self)->processor.convolverSnapshot());
+        if (!snapshot->ir) {
+            return 0;
+        }
+        return reinterpret_cast<jlong>(snapshot.release());
+    } catch (const std::bad_alloc&) {
+        return 0;
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_freeConvolverSnapshot(JNIEnv*, jobject, jlong snapshot) {
+    delete reinterpret_cast<NativeBmwDspProcessor::ConvolverSnapshot*>(snapshot);
+}
+
+// The snapshot IR's complex response at freqs (Hz), bulk latency taken out, for the graphs:
+// NativeDsp.CONVOLVER_RESPONSE_* header (generation, sampleRate, latencyFrames, peakGainDb), then
+// left re/im per frequency, then right re/im. Null for a null snapshot. Needs no engine handle. A
+// DTFT of the whole IR per frequency: call it off the main thread, and only when the generation
+// moved.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getConvolverSnapshotResponse(JNIEnv* env, jobject,
+                                                                  jlong snapshotHandle,
+                                                                  jdoubleArray freqsObj) {
+    if (env == nullptr || snapshotHandle == 0 || freqsObj == nullptr) {
+        return nullptr;
+    }
+    const auto& snapshot =
+        *reinterpret_cast<const NativeBmwDspProcessor::ConvolverSnapshot*>(snapshotHandle);
+    const jsize count = env->GetArrayLength(freqsObj);
+    constexpr jsize kHeader = 4;
+    if (count <= 0 || count > (std::numeric_limits<jsize>::max() - kHeader) / 4) {
+        return nullptr;
+    }
+    NativeBmwDspProcessor::ConvolverResponse response;
+    try {
+        std::vector<double> freqs(static_cast<std::size_t>(count));
+        env->GetDoubleArrayRegion(freqsObj, 0, count, freqs.data());
+        if (!NativeBmwDspProcessor::convolverResponse(snapshot, freqs.data(), freqs.size(), response)) {
+            return nullptr;
+        }
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+    const jsize total = kHeader + 4 * count;
+    jdoubleArray result = env->NewDoubleArray(total);
+    if (result == nullptr) {
+        return nullptr;
+    }
+    const jdouble header[kHeader] = {
+        static_cast<double>(response.generation),
+        response.sampleRate,
+        static_cast<double>(response.latencyFrames),
+        response.peakGainDb,
+    };
+    env->SetDoubleArrayRegion(result, 0, kHeader, header);
+    env->SetDoubleArrayRegion(result, kHeader, 2 * count, response.left.data());
+    env->SetDoubleArrayRegion(result, kHeader + 2 * count, 2 * count, response.right.data());
     return result;
 }
 

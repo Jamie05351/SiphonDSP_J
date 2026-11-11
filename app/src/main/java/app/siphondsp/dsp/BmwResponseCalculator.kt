@@ -17,6 +17,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
 
     enum class Stage { FULL_BANK, LOW_BRANCH, MID_BRANCH, HIGH_BRANCH, TILT }
 
+    /**
+     * The convolver IR's response (see [ConvolverResponse]), or null for none. Applied to the sum
+     * only when it was computed on this calculator's grid ([axisFrequencies]) and the config has
+     * the convolver on; otherwise the stage contributes nothing, as native's bypass.
+     */
+    var convolver: ConvolverResponse? = null
+
     var includeDcBlocker: Boolean = true
         set(value) {
             if (field == value) return
@@ -84,14 +91,16 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         }
     }
 
+    /** The grid [compute] evaluates on for the current axis (a copy). */
+    fun axisFrequencies(): DoubleArray {
+        rebuildAxisIfNeeded()
+        return frequencies.copyOf()
+    }
+
     private fun rebuildAxisIfNeeded() {
         if (!axisDirty) return
-        val logMin = log10(minFrequency)
-        val logMax = log10(maxFrequency.coerceAtMost(sampleRate * 0.5 * 0.999))
-        val span = logMax - logMin
         for (i in 0 until pointCount) {
-            val fraction = if (pointCount == 1) 0.0 else i.toDouble() / (pointCount - 1)
-            val f = 10.0.pow(logMin + fraction * span)
+            val f = axisFrequency(i, pointCount, sampleRate, minFrequency, maxFrequency)
             frequencies[i] = f
             val w = 2.0 * PI * f / sampleRate
             val cw = cos(w)
@@ -394,6 +403,19 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         if (Stage.TILT in dirty) rebuildTiltCascade(values)
         dirty.clear()
 
+        // The convolver, after the band sum and ahead of the master limiter as in native
+        // processChunk(): the IR's response for the logical channel times the gain the stage
+        // applies. Off, no IR, or computed on another grid: nothing, as native's true bypass.
+        val conv = convolver?.takeIf {
+            values[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED] >= .5f && it.matches(frequencies)
+        }
+        val convGain = conv?.let {
+            val trim = values[NativeBmwDspValues.INDEX_CONVOLVER_GAIN].toDouble().coerceIn(
+                NativeBmwDspValues.CONVOLVER_MIN_GAIN_DB.toDouble(), NativeBmwDspValues.CONVOLVER_MAX_GAIN_DB.toDouble(),
+            )
+            dbToLinear(ConvolverResponse.appliedGainDb(trim, it.peakGainDb))
+        } ?: 1.0
+
         var anyLowActive = false
         var anyMidActive = false
         var anyHighActive = false
@@ -511,6 +533,10 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 tiltCascade.accumulate(cosW[i], sinW[i], cos2W[i], sin2W[i], sumAcc)
                 sumAcc.scale(dbToLinear(postGainDb.toDouble()))
                 if (muteThisOutput) sumAcc.setZero()
+                if (conv != null) {
+                    sumAcc.mul(conv.re[ch][i], conv.im[ch][i])
+                    sumAcc.scale(convGain)
+                }
                 out.sumDb[ch][i] = sumAcc.magnitudeDb()
                 out.sumPhase[ch][i] = sumAcc.phase()
             }
@@ -532,6 +558,17 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private fun dbToLinear(db: Double): Double = 10.0.pow(db / 20.0)
 
     companion object {
+        /**
+         * Point [i] of a [pointCount]-point log grid from [minFrequency] to [maxFrequency] (capped
+         * just under Nyquist at [sampleRate]): the grid every calculator evaluates on.
+         */
+        fun axisFrequency(i: Int, pointCount: Int, sampleRate: Double, minFrequency: Double, maxFrequency: Double): Double {
+            val logMin = log10(minFrequency)
+            val logMax = log10(maxFrequency.coerceAtMost(sampleRate * 0.5 * 0.999))
+            val fraction = if (pointCount == 1) 0.0 else i.toDouble() / (pointCount - 1)
+            return 10.0.pow(logMin + fraction * (logMax - logMin))
+        }
+
         private const val BUTTERWORTH_Q = .7071067812
         // Q of the BW3 crossover's 2nd-order stage -- see NativeBmwDspProcessor.cpp's
         // kButterworth3Q for the derivation (exact factor of the 3rd-order Butterworth

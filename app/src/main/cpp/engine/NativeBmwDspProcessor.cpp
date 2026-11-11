@@ -334,26 +334,26 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     processBandStage(Band::Low, frames);
     processBandStage(Band::Mid, frames);
     processBandStage(Band::High, frames);
-    // Sum and the master stages, frame by frame.
+    // (a) The band sum and the output stages, frame by frame, into logical L/R.
     for (std::size_t i = 0; i < frames; ++i) {
         std::array<float, NativeBmwRouting::kOutputCount> logical;
         for (std::size_t o = 0; o < logical.size(); ++o) {
             logical[o] = chunkLanes_[o][i];
         }
-        float l, r;
-        processOutputStages(logical, l, r);
-        processFrameBack(l, r);
-        // processFrameBack() ends with the deliberate hardware L/R swap: r now carries logical L.
-        chunkConvL_[i] = r;
-        chunkConvR_[i] = l;
+        processOutputStages(logical, chunkConvL_[i], chunkConvR_[i]);
     }
-    // The convolver, last: logical L/R in, so the IR's left channel is the car's left. A true
-    // bypass (untouched samples) while off or with no IR loaded.
+    // (b) The convolver, over the chunk, right after the band sum and ahead of the master
+    // limiter: an IR that corrects phase raises the crest factor without raising the magnitude,
+    // so its peaks must still pass through the limiter. Logical L/R in (the hardware swap comes
+    // later, in processFrameBack()), so the IR's left channel is the car's left. A true bypass
+    // (untouched samples) while off or with no IR loaded.
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
-    // The output guard and the capture tap, frame by frame.
+    // (c) The master limiter, volume, loudness and the hardware swap, then the output guard and
+    // the capture tap, frame by frame.
     for (std::size_t i = 0; i < frames; ++i) {
-        float l = chunkConvR_[i], r = chunkConvL_[i];
+        float l = chunkConvL_[i], r = chunkConvR_[i];
+        processFrameBack(l, r);
         l = NativeBmwDsp::outputGuard(l);
         r = NativeBmwDsp::outputGuard(r);
         capture_.tapIn(chunkRawIn_[2 * i], chunkRawIn_[2 * i + 1]);
@@ -605,29 +605,39 @@ NativeBmwDspProcessor::takeCaptureSnapshot() {
 
 // ---- Convolver IR ----------------------------------------------------------------------------
 namespace {
-// Pure: the source IR at rate, built into a kernel. Allocates; never on the audio thread.
-std::unique_ptr<NativeBmwDsp::ConvolverKernel> buildConvolverKernel(const NativeBmwDsp::ConvolverIr& source,
-                                                                    float rate, std::size_t& streamFrames,
-                                                                    std::string& error) {
-    NativeBmwDsp::ConvolverIr atRate;
-    if (!NativeBmwDsp::resampleConvolverIr(source, rate, atRate, error)) {
+// Pure: the source IR at rate, built into a kernel; streamIr gets the taps at rate (for the
+// graphs' response). Allocates; never on the audio thread.
+std::unique_ptr<NativeBmwDsp::ConvolverKernel> buildConvolverKernel(
+    const NativeBmwDsp::ConvolverIr& source, float rate, std::size_t& streamFrames,
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr>& streamIr, std::string& error) {
+    streamIr.reset();
+    auto atRate = std::make_shared<NativeBmwDsp::ConvolverIr>();
+    if (!NativeBmwDsp::resampleConvolverIr(source, rate, *atRate, error)) {
         return nullptr;
     }
-    streamFrames = atRate.frames();
-    return NativeBmwDsp::ConvolverKernel::build(atRate, error);
+    streamFrames = atRate->frames();
+    auto kernel = NativeBmwDsp::ConvolverKernel::build(*atRate, error);
+    if (kernel) {
+        streamIr = std::move(atRate);
+    }
+    return kernel;
 }
 }  // namespace
 
-void NativeBmwDspProcessor::commitConvolverLocked(std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel,
-                                                  float rate, std::size_t streamFrames,
-                                                  const std::string& error) {
+void NativeBmwDspProcessor::commitConvolverLocked(
+    std::unique_ptr<NativeBmwDsp::ConvolverKernel> kernel,
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr, float rate, std::size_t streamFrames,
+    const std::string& error) {
     ++convolverGeneration_;
     convolverInfo_.streamRate = rate;
+    convolverStreamIr_ = kernel ? std::move(streamIr) : nullptr;
     if (!kernel) {
         // Can't run at this rate (e.g. too long once resampled up): unload rather than convolve
         // at the wrong rate. The source is kept; the next rate change tries again.
         convolverInfo_.streamFrames = 0;
         convolverInfo_.partitions = 0;
+        convolverInfo_.latencyFrames = 0;
+        convolverInfo_.latencyMs = 0.0;
         convolverInfo_.error = error;
         convolver_.publish(nullptr);
         return;
@@ -635,6 +645,8 @@ void NativeBmwDspProcessor::commitConvolverLocked(std::unique_ptr<NativeBmwDsp::
     convolverInfo_.streamFrames = streamFrames;
     convolverInfo_.partitions = kernel->partitions();
     convolverInfo_.peakGainDb = kernel->peakGainDb();
+    convolverInfo_.latencyFrames = kernel->latencyFrames();
+    convolverInfo_.latencyMs = rate > 0.f ? 1000.0 * static_cast<double>(kernel->latencyFrames()) / rate : 0.0;
     convolverInfo_.error.clear();
     convolver_.publish(std::move(kernel));
 }
@@ -657,11 +669,12 @@ void NativeBmwDspProcessor::rebuildConvolverForRate() {
         }
         std::string error;
         std::size_t frames = 0;
-        auto kernel = buildConvolverKernel(source, rate, frames, error);
+        std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr;
+        auto kernel = buildConvolverKernel(source, rate, frames, streamIr, error);
         std::lock_guard<std::mutex> lock(convolverMutex_);
         if (generation == convolverGeneration_ &&
             std::fabs(configSampleRate_.load(std::memory_order_relaxed) - rate) <= .5f) {
-            commitConvolverLocked(std::move(kernel), rate, frames, error);
+            commitConvolverLocked(std::move(kernel), std::move(streamIr), rate, frames, error);
             return;
         }
     }
@@ -689,7 +702,8 @@ bool NativeBmwDspProcessor::loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::s
     // current IR playing; outside the lock, like a rate change.
     float rate = configSampleRate_.load(std::memory_order_relaxed);
     std::size_t frames = 0;
-    auto kernel = buildConvolverKernel(ir, rate, frames, error);
+    std::shared_ptr<const NativeBmwDsp::ConvolverIr> streamIr;
+    auto kernel = buildConvolverKernel(ir, rate, frames, streamIr, error);
     if (!kernel) {
         std::lock_guard<std::mutex> lock(convolverMutex_);
         convolverInfo_.error = error;
@@ -701,7 +715,7 @@ bool NativeBmwDspProcessor::loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::s
     const float now = configSampleRate_.load(std::memory_order_relaxed);
     if (std::fabs(now - rate) > .5f) {
         rate = now;
-        kernel = buildConvolverKernel(ir, rate, frames, error);
+        kernel = buildConvolverKernel(ir, rate, frames, streamIr, error);
         if (!kernel) {
             convolverInfo_.error = error;
             return false;
@@ -713,7 +727,7 @@ bool NativeBmwDspProcessor::loadConvolverIr(NativeBmwDsp::ConvolverIr ir, std::s
     convolverInfo_.sourceRate = ir.sampleRate;
     convolverInfo_.sourceFrames = ir.frames();
     convolverSource_ = std::move(ir);
-    commitConvolverLocked(std::move(kernel), rate, frames, error);
+    commitConvolverLocked(std::move(kernel), std::move(streamIr), rate, frames, error);
     return true;
 }
 
@@ -722,12 +736,58 @@ void NativeBmwDspProcessor::clearConvolverIr() {
     ++convolverGeneration_;
     convolverSource_ = NativeBmwDsp::ConvolverIr{};
     convolverInfo_ = ConvolverInfo{};
+    convolverStreamIr_.reset();
     convolver_.publish(nullptr);
 }
 
 NativeBmwDspProcessor::ConvolverInfo NativeBmwDspProcessor::convolverInfo() {
     std::lock_guard<std::mutex> lock(convolverMutex_);
     return convolverInfo_;
+}
+
+std::uint64_t NativeBmwDspProcessor::convolverGeneration() {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    return convolverGeneration_;
+}
+
+NativeBmwDspProcessor::ConvolverSnapshot NativeBmwDspProcessor::convolverSnapshot() {
+    std::lock_guard<std::mutex> lock(convolverMutex_);
+    ConvolverSnapshot snapshot;
+    snapshot.generation = convolverGeneration_;
+    snapshot.ir = convolverStreamIr_;
+    snapshot.latencyFrames = convolverInfo_.latencyFrames;
+    snapshot.peakGainDb = convolverInfo_.peakGainDb;
+    return snapshot;
+}
+
+bool NativeBmwDspProcessor::convolverResponse(const ConvolverSnapshot& snapshot, const double* freqs,
+                                              std::size_t count, ConvolverResponse& out) {
+    out = ConvolverResponse{};
+    out.generation = snapshot.generation;
+    out.latencyFrames = snapshot.latencyFrames;
+    out.peakGainDb = snapshot.peakGainDb;
+    const auto& ir = snapshot.ir;
+    if (!ir || ir->frames() == 0 || ir->sampleRate <= 0.0 || (count > 0 && freqs == nullptr)) {
+        return false;
+    }
+    // The taps' own rate: the stream rate they were built at.
+    out.sampleRate = ir->sampleRate;
+    out.left.resize(2 * count);
+    NativeBmwDsp::convolverIrResponse(ir->left, ir->sampleRate, out.latencyFrames, freqs, count,
+                                      out.left.data());
+    if (ir->stereo()) {
+        out.right.resize(2 * count);
+        NativeBmwDsp::convolverIrResponse(ir->right, ir->sampleRate, out.latencyFrames, freqs, count,
+                                          out.right.data());
+    } else {
+        out.right = out.left;
+    }
+    return true;
+}
+
+bool NativeBmwDspProcessor::convolverResponse(const double* freqs, std::size_t count,
+                                              ConvolverResponse& out) {
+    return convolverResponse(convolverSnapshot(), freqs, count, out);
 }
 
 // ---- Ownership and control requests --------------------------------------------------------

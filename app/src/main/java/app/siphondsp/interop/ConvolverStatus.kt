@@ -17,6 +17,10 @@ data class ConvolverStatus(
     val kernelActive: Boolean,
     /** Why the last load or sample-rate rebuild failed, or null. */
     val error: String?,
+    /** The IR's bulk latency: its largest-magnitude sample, in frames at [streamRate]. */
+    val latencyFrames: Int = 0,
+    /** [latencyFrames] in ms at [streamRate]. */
+    val latencyMs: Double = 0.0,
 ) {
     val resampled: Boolean get() = loaded && sourceRate != streamRate
     val lengthMs: Double get() = if (streamRate > 0) streamFrames * 1000.0 / streamRate else 0.0
@@ -35,6 +39,8 @@ data class ConvolverStatus(
                 peakGainDb = values[NativeDsp.CONVOLVER_PEAK_GAIN_DB],
                 kernelActive = values[NativeDsp.CONVOLVER_KERNEL_ACTIVE] != 0.0,
                 error = error,
+                latencyFrames = values[NativeDsp.CONVOLVER_LATENCY_FRAMES].toInt(),
+                latencyMs = values[NativeDsp.CONVOLVER_LATENCY_MS],
             )
         }
     }

@@ -298,10 +298,15 @@ fun CrossoverResponseGraph(
     val curves = remember { BmwResponseCurves(POINT_COUNT) }
     val valuesKey = ValuesKey(systemValues)
     val morph = remember { MagnitudeMorph(POINT_COUNT) }
-    val generation = remember(valuesKey, peqState) {
+    // The convolver IR in the sum, when the graph preference asks for it (nothing while it is off
+    // or no IR is running).
+    val convolverGrid = remember { responseGrid(POINT_COUNT, SAMPLE_RATE, 20.0, 20_000.0) }
+    val convolver = rememberConvolverResponse(rememberShowConvolverInGraphs(), convolverGrid)
+    val generation = remember(valuesKey, peqState, convolver) {
         if (systemValues.size == BmwSignalChain.VALUE_COUNT) {
             morph.freeze()
             calculator.configureAxis(SAMPLE_RATE, 20.0, 20_000.0)
+            calculator.convolver = convolver
             calculator.invalidateAll()
             calculator.compute(autoHeadroom.effectiveValues(systemValues, peqState, SAMPLE_RATE), peqState, curves)
             // Only new curves start a morph. (Like the compute itself, this runs while composing; a

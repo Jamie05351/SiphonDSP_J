@@ -25,6 +25,13 @@ class PeqGraphPreferences(context: Context) {
             prefs.edit { putBoolean(KEY_SHOW_OVERLAYS, value) }
         }
 
+    /** Include the convolver IR's response in the response graphs. Off by default. */
+    var showConvolverInGraphs: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_CONVOLVER, false)
+        set(value) {
+            prefs.edit { putBoolean(KEY_SHOW_CONVOLVER, value) }
+        }
+
     var channelDisplay: PeqChannelDisplay
         get() = runCatching {
             PeqChannelDisplay.valueOf(prefs.getString(KEY_CHANNEL, PeqChannelDisplay.BOTH.name)!!)
@@ -65,6 +72,7 @@ class PeqGraphPreferences(context: Context) {
     companion object {
         const val PREFS = "peq_graph_display"
         private const val KEY_SHOW_OVERLAYS = "show_individual_filters"
+        const val KEY_SHOW_CONVOLVER = "show_convolver_in_graphs"
         private const val KEY_CHANNEL = "channel_display"
         private const val KEY_LIST_MODE = "peq_display_mode"
         // Unrelated to KEY_LIST_MODE above (that's the Graph/List toggle) -- this persists the
