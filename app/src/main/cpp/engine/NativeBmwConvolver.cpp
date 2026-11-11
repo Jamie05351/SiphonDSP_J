@@ -350,7 +350,7 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
     }
     k->peakGainDb_ = convolverIrPeakGainDb(ir);
     if (std::isnan(k->peakGainDb_)) {
-        // Without the peak there is no unity cap: refuse rather than run uncapped after the limiter.
+        // Without the peak there is no unity cap: refuse rather than run uncapped.
         error = "Out of memory measuring the IR";
         return nullptr;
     }

@@ -17,7 +17,7 @@ using NativeBmwDsp::ConvolverIr;
 using NativeBmwDsp::ConvolverKernel;
 using NativeBmwDsp::ConvolverStage;
 
-// The stereo convolver, last in the chain: UPOLS with the chunk as its partition (no added
+// The stereo convolver, after the band sum and ahead of the master limiter: UPOLS with the chunk as its partition (no added
 // latency), double precision, IR load/resample off the audio thread, lock-free kernel swap,
 // gain trim and a crossfaded bypass.
 
@@ -178,7 +178,7 @@ TEST_CASE("convolver adds no latency and applies the gain trim, capped at unity 
 }
 
 TEST_CASE("convolver: an IR that boosts is brought down to unity at its loudest frequency") {
-    // It runs after the master limiter: a +6 dB IR at 0 dB trim must not drive the output guard.
+    // A +6 dB IR at 0 dB trim is capped back to unity rather than driving the limiter.
     NativeBmwDspProcessor plain, convolved;
     plain.setSampleRate(kSampleRate);
     convolved.setSampleRate(kSampleRate);
@@ -196,7 +196,8 @@ TEST_CASE("convolver: an IR that boosts is brought down to unity at its loudest 
 }
 
 TEST_CASE("convolver: the IR's left channel is the car's left, through the hardware swap") {
-    // processFrameBack() swaps L/R for the reversed harness: logical L leaves on output index 1.
+    // The convolver sees logical L/R; processFrameBack() then swaps L/R for the reversed harness,
+    // so logical L leaves on output index 1.
     NativeBmwDspProcessor plain, convolved;
     plain.setSampleRate(kSampleRate);
     convolved.setSampleRate(kSampleRate);
@@ -509,4 +510,76 @@ TEST_CASE("convolver: IR loads on a control thread while audio runs") {
     stop = true;
     loader.join();
     CHECK(finite);
+}
+
+TEST_CASE("convolver: an IR that raises peaks through phase alone is held by the master limiter") {
+    // A chirp all-pass FIR: flat magnitude (so the unity cap leaves it alone), group delay swept
+    // 0 .. N/2 across the band. The input is that chirp time-reversed, repeated: the IR folds it
+    // back into a train of clicks, raising the crest factor by more than 20 dB without raising
+    // the magnitude anywhere. Ahead of the master limiter, those peaks must still be held at its
+    // threshold.
+    constexpr std::size_t N = 2048;
+    ConvolverIr ir;
+    ir.sampleRate = kSampleRate;
+    ir.channels = 1;
+    ir.left.assign(N, 0.0);
+    for (std::size_t n = 0; n < N; ++n) {
+        double acc = 1.0;  // DC, phase 0
+        for (std::size_t k = 1; k < N / 2; ++k) {
+            const double phase = -kPi * static_cast<double>(k * k) / static_cast<double>(N);
+            acc += 2.0 * std::cos(2.0 * kPi * static_cast<double>(k * n) / N + phase);
+        }
+        acc += std::cos(kPi * static_cast<double>(n) - kPi * N / 4.0);  // Nyquist bin, real
+        ir.left[n] = acc / N;
+    }
+    double tapPeak = 0.0, energy = 0.0;
+    for (double v : ir.left) {
+        tapPeak = std::max(tapPeak, std::fabs(v));
+        energy += v * v;
+    }
+    CHECK(energy == doctest::Approx(1.0).epsilon(1e-6));
+    // Flat to within the ripple between the DFT bins (the cap takes ~2 dB off), while folding
+    // the reversed chirp back up raises its peak by energy / tap peak: over 20 dB.
+    CHECK(std::fabs(NativeBmwDsp::convolverIrPeakGainDb(ir)) < 3.0);
+    CHECK(linToDb(energy / tapPeak) > 20.0);
+
+    // The time-reversed chirp, every 4096 frames, at ~-12 dBFS sample peak.
+    constexpr std::size_t period = 4096, frames = 24 * period;
+    const double scale = 0.25 / tapPeak;
+    std::vector<float> input(2 * frames, 0.f);
+    for (std::size_t f = 0; f < frames; ++f) {
+        const std::size_t m = f % period;
+        const float s = m < N ? static_cast<float>(scale * ir.left[N - 1 - m]) : 0.f;
+        input[2 * f] = s;
+        input[2 * f + 1] = s;
+    }
+    auto run = [&](bool limiter) {
+        auto c = config(true, 0.f);
+        c[5] = 0.f;                               // headroom 0 dB
+        c[8] = c[9] = 0.f;                        // mid gain 0 dB
+        c[25] = 0.f;                              // tilt off
+        c[28] = c[35] = 0.f;                      // legacy global compressors off
+        c[93] = c[106] = c[119] = c[132] = 0.f;  // legacy per-output compressors off
+        c[sch::kMasterLimiterEnabled] = limiter ? 1.f : 0.f;
+        c[sch::kMasterLimiterThreshold] = -1.f;
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), kConfigSize));
+        std::string error;
+        REQUIRE(proc.loadConvolverIr(ir, error));
+        auto buf = input;
+        processInBuffers(proc, buf, 480);
+        float peak = 0.f;
+        for (float v : buf) peak = std::max(peak, std::fabs(v));
+        return peak;
+    };
+    const float threshold = static_cast<float>(std::pow(10.0, -1.0 / 20.0));
+    const float unlimited = run(false);
+    const float limited = run(true);
+    INFO("peak, limiter off = ", unlimited, "  on = ", limited, "  threshold = ", threshold);
+    // The IR really does raise the peaks past the threshold (the guard clips them at 1.0)...
+    CHECK(unlimited > threshold * 1.1f);
+    // ...and with the limiter on, nothing gets over it.
+    CHECK(limited <= threshold * 1.001f);
+    CHECK(limited > 0.5f * threshold);  // still limiting, not gating to silence
 }

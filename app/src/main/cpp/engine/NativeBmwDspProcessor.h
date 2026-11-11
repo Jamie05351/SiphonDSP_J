@@ -30,7 +30,7 @@
 //   NativeBmwDynamics     per-output compressor, master + bus limiters, multiband compressor
 //   NativeBmwDelayGain    delay lines, DC-blocking input stage
 //   NativeBmwMeasurement  measurement-mute bus, signal generator hookup, capture
-//   NativeBmwConvolver    the stereo FIR convolver, last in the chain
+//   NativeBmwConvolver    the stereo FIR convolver, after the band sum, ahead of the limiter
 //   NativeBmwDspMath      shared pure math (ftz, clamps, dB, SVF step, NEON helpers)
 
 class NativeBmwDspProcessor {
@@ -287,7 +287,8 @@ private:
     std::array<float, 2 * kChunkFrames> chunkInt_{};
     // Each chunk frame's raw input, for the capture's input/output pairs.
     std::array<float, 2 * kChunkFrames> chunkRawIn_{};
-    // The chunk's logical L/R after processFrameBack(), the convolver's input and output.
+    // The chunk's logical L/R after processOutputStages(): the convolver's input and output, and
+    // processFrameBack()'s input.
     static_assert(static_cast<std::size_t>(kChunkFrames) ==
                       static_cast<std::size_t>(NativeBmwDsp::kConvolverBlockFrames),
                   "the convolver's partition is the chunk, so it adds no latency");

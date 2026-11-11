@@ -53,13 +53,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The Output workspace's CONVOLVER page: the stereo FIR convolver at the very end of the chain.
+ * The Output workspace's CONVOLVER page: the stereo FIR convolver, after the band sum and ahead
+ * of the master limiter.
  *
  * - **Convolver**: the header switch turns it on, or off as a bypass (the engine crossfades over
- *   20 ms either way); Gain trims the IR's level. Convolution runs after the master limiter, so
- *   the engine caps the gain at the IR's peak response: an IR never lifts any frequency above
- *   unity (a boosting IR is brought down to 0 dB at its loudest frequency). The page shows the
- *   gain actually applied.
+ *   20 ms either way); Gain trims the IR's level. The engine caps the gain at the IR's peak
+ *   response: an IR never lifts any frequency above unity (a boosting IR is brought down to 0 dB
+ *   at its loudest frequency). The page shows the gain actually applied.
  * - **Impulse response**: load a mono or stereo WAV (copied into app storage; a mono IR runs on
  *   both channels, a stereo one L on L and R on R), what the engine made of it -- rates, length,
  *   whether it was resampled to the stream -- and clear.
@@ -175,7 +175,7 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         when {
             !dsp.isOn(NativeBmwDspValues.INDEX_CONVOLVER_ENABLED) -> "Off: bypassed, the chain's output untouched"
             peak == null -> "On, but no IR loaded: passing through"
-            else -> "On: after the limiter and volume, last in the chain"
+            else -> "On: after the band sum, ahead of the limiter"
         },
         row(172, 28),
     )

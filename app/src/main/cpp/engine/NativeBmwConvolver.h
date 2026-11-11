@@ -1,8 +1,10 @@
 #ifndef SIPHONDSP_NATIVE_BMW_CONVOLVER_H
 #define SIPHONDSP_NATIVE_BMW_CONVOLVER_H
 
-// Stereo FIR convolver: the last stage of the chain, after the master limiter, volume and
-// loudness (see NativeBmwDspProcessor::processChunk()).
+// Stereo FIR convolver: right after the band sum (polarity/mute, tilt, post gain, channel mute,
+// measurement bus) and ahead of the master limiter, volume, loudness and the hardware swap (see
+// NativeBmwDspProcessor::processChunk()). Ahead of the limiter because a phase-correcting IR
+// raises the crest factor without raising the magnitude: its peaks must pass through the limiter.
 //
 // Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line, partition size
 // kBlockFrames == the processor's chunk (kChunkFrames, 64 frames), FFT size 2 * kBlockFrames.
@@ -129,9 +131,11 @@ public:
     void publish(std::unique_ptr<ConvolverKernel> kernel);
     // Audio thread: one chunk (frames <= kConvolverBlockFrames) of logical L/R, in place.
     // enabled/gainDb are the stage's settings (p_.convolverEnabled / convolverGainDb). The gain
-    // applied is min(gainDb, -kernel peak dB): the stage runs after the master limiter, so it
-    // never lifts any frequency above unity -- an IR that boosts somewhere is brought down to
-    // 0 dB at its loudest frequency, and the trim can only go below that.
+    // applied is min(gainDb, -kernel peak dB), so the stage never lifts any frequency above unity
+    // -- an IR that boosts somewhere is brought down to 0 dB at its loudest frequency, and the
+    // trim can only go below that. The master limiter after it catches the time-domain peaks a
+    // phase-only change raises; the cap keeps the IR from eating into the limiter's headroom (or
+    // driving it hard) through magnitude boost.
     void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb);
     // Sample-rate dependent ramp constants.
     void setSampleRate(float sampleRate);

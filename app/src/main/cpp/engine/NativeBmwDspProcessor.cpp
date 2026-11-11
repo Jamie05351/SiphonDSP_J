@@ -334,26 +334,26 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     processBandStage(Band::Low, frames);
     processBandStage(Band::Mid, frames);
     processBandStage(Band::High, frames);
-    // Sum and the master stages, frame by frame.
+    // (a) The band sum and the output stages, frame by frame, into logical L/R.
     for (std::size_t i = 0; i < frames; ++i) {
         std::array<float, NativeBmwRouting::kOutputCount> logical;
         for (std::size_t o = 0; o < logical.size(); ++o) {
             logical[o] = chunkLanes_[o][i];
         }
-        float l, r;
-        processOutputStages(logical, l, r);
-        processFrameBack(l, r);
-        // processFrameBack() ends with the deliberate hardware L/R swap: r now carries logical L.
-        chunkConvL_[i] = r;
-        chunkConvR_[i] = l;
+        processOutputStages(logical, chunkConvL_[i], chunkConvR_[i]);
     }
-    // The convolver, last: logical L/R in, so the IR's left channel is the car's left. A true
-    // bypass (untouched samples) while off or with no IR loaded.
+    // (b) The convolver, over the chunk, right after the band sum and ahead of the master
+    // limiter: an IR that corrects phase raises the crest factor without raising the magnitude,
+    // so its peaks must still pass through the limiter. Logical L/R in (the hardware swap comes
+    // later, in processFrameBack()), so the IR's left channel is the car's left. A true bypass
+    // (untouched samples) while off or with no IR loaded.
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
-    // The output guard and the capture tap, frame by frame.
+    // (c) The master limiter, volume, loudness and the hardware swap, then the output guard and
+    // the capture tap, frame by frame.
     for (std::size_t i = 0; i < frames; ++i) {
-        float l = chunkConvR_[i], r = chunkConvL_[i];
+        float l = chunkConvL_[i], r = chunkConvR_[i];
+        processFrameBack(l, r);
         l = NativeBmwDsp::outputGuard(l);
         r = NativeBmwDsp::outputGuard(r);
         capture_.tapIn(chunkRawIn_[2 * i], chunkRawIn_[2 * i + 1]);

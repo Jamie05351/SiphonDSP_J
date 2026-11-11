@@ -1,8 +1,11 @@
 # Convolver
 
-A stereo FIR convolver, the **last** stage of the native chain: after the master limiter, the
-master volume, loudness and the deliberate hardware L/R swap, just ahead of the output guard
-(`NativeBmwDspProcessor::processChunk()`). Code: `app/src/main/cpp/engine/NativeBmwConvolver.{h,cpp}`.
+A stereo FIR convolver, right after the band sum (per-output polarity/mute, tilt, post gain,
+channel mute, measurement bus) and **ahead of the master limiter**, master volume, loudness, the
+deliberate hardware L/R swap and the output guard (`NativeBmwDspProcessor::processChunk()`). It
+runs on logical L/R, so the IR's left channel is the car's left. It sits ahead of the limiter
+because a phase-correcting IR raises the crest factor without raising the magnitude: those peaks
+must pass through the limiter. Code: `app/src/main/cpp/engine/NativeBmwConvolver.{h,cpp}`.
 
 ## Algorithm
 
@@ -49,8 +52,8 @@ IR gain trim, −30..+12 dB. Toggling, loading, swapping or unloading an IR **cr
 20 ms**; the gain follows a 10 ms one-pole. Fully off, or with no IR loaded, the stage is skipped
 and the output is bit-identical to the chain without it (the parity check covers this).
 
-Because the convolver runs after the limiter, the stage **caps its gain at the IR's peak
-response**: the gain applied is `min(trim, −peak dB)`, so the IR never lifts any frequency above
-unity. A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
+The stage **caps its gain at the IR's peak response**: the gain applied is `min(trim, −peak dB)`,
+so the IR never lifts any frequency above unity (the limiter after it catches the time-domain
+peaks a phase-only change raises; the cap keeps magnitude boost from driving it). A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
 can only go below that. The page shows the gain actually applied and flags when the cap is in
 effect. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).
