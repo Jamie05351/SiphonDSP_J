@@ -1,8 +1,11 @@
 # Convolver
 
-A stereo FIR convolver, the **last** stage of the native chain: after the master limiter, the
-master volume, loudness and the deliberate hardware L/R swap, just ahead of the output guard
-(`NativeBmwDspProcessor::processChunk()`). Code: `app/src/main/cpp/engine/NativeBmwConvolver.{h,cpp}`.
+A stereo FIR convolver, right after the band sum (per-output polarity/mute, tilt, post gain,
+channel mute, measurement bus) and **ahead of the master limiter**, master volume, loudness, the
+deliberate hardware L/R swap and the output guard (`NativeBmwDspProcessor::processChunk()`). It
+runs on logical L/R, so the IR's left channel is the car's left. It sits ahead of the limiter
+because a phase-correcting IR raises the crest factor without raising the magnitude: those peaks
+must pass through the limiter. Code: `app/src/main/cpp/engine/NativeBmwConvolver.{h,cpp}`.
 
 ## Algorithm
 
@@ -38,6 +41,10 @@ Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line.
   lock-free triple buffer; the audio thread hands the retired one back through the same buffer,
   and it is freed by the next publish, on the control thread. A rejected file leaves the current
   IR running.
+- Each kernel build (load or stream-rate rebuild) records the IR's **bulk latency**: the index
+  of its largest-magnitude sample across both channels, in frames at the stream rate, and in ms
+  (`ConvolverInfo::latencyFrames` / `latencyMs`, cleared on unload). The CONVOLVER page shows it.
+  This is the IR's own delay; the convolution adds none on top.
 - App side: `ConvolverIrStore` copies the picked file to `files/convolver/ir.wav` once
   `NativeDsp.checkConvolverIr()` accepts it; the service loads it at start and after every
   import or clear.
@@ -49,8 +56,26 @@ IR gain trim, −30..+12 dB. Toggling, loading, swapping or unloading an IR **cr
 20 ms**; the gain follows a 10 ms one-pole. Fully off, or with no IR loaded, the stage is skipped
 and the output is bit-identical to the chain without it (the parity check covers this).
 
-Because the convolver runs after the limiter, the stage **caps its gain at the IR's peak
-response**: the gain applied is `min(trim, −peak dB)`, so the IR never lifts any frequency above
-unity. A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
+The stage **caps its gain at the IR's peak response**: the gain applied is `min(trim, −peak dB)`,
+so the IR never lifts any frequency above unity (the limiter after it catches the time-domain
+peaks a phase-only change raises; the cap keeps magnitude boost from driving it). With the master
+limiter **off**, nothing holds those peaks: a phase-correcting IR's raised crest factor reaches
+the output guard, which clips at ±1.0. That was already so when the convolver ran last (every
+stage between the two positions is linear), so keep the limiter on when running such an IR. A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
 can only go below that. The page shows the gain actually applied and flags when the cap is in
 effect. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).
+
+## Response graphs
+
+With **Show convolver in graphs** on (the PEQ graph's ⋮ menu; `PeqGraphPreferences.
+showConvolverInGraphs`, off by default), the PEQ and crossover graphs multiply the running IR's
+complex response into the sum, per logical channel, at the gain the stage applies
+(`min(trim, −peak dB)`). The convolver off, or no IR running, contributes nothing either way.
+
+The graphs' grids differ (point count, top frequency), so the app passes its frequency array in:
+`NativeDsp.takeConvolverSnapshot()` shares out the stream-rate taps kept from the last kernel
+build in O(1) under the engine-handle lock, and `getConvolverSnapshotResponse()` evaluates them
+after it is released (a direct DTFT, on the caller's thread, never the audio thread) with the bulk latency taken out,
+so the phase shows the correction rather than a pure delay wrapping. `getConvolverGeneration()`
+moves on every load, rate rebuild and clear; the graphs poll it once a second and refetch only
+when it moves.

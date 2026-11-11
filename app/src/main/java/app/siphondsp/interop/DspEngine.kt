@@ -464,6 +464,28 @@ class DspEngine(val context: Context) : AutoCloseable {
         NativeDsp.getConvolverInfo(handle)?.let { ConvolverStatus.fromNative(it, NativeDsp.getConvolverError(handle)) }
     }
 
+    /** The convolver's generation ([NativeDsp.getConvolverGeneration]); null with no native handle. */
+    fun convolverGeneration(): Long? = withSharedHandle<Long?>(null) { handle ->
+        NativeDsp.getConvolverGeneration(handle).takeIf { it >= 0 }
+    }
+
+    /**
+     * The running IR's response on [frequencies], or null (no IR / no handle). Blocking: off main.
+     * Only the O(1) snapshot is taken under the handle lock; the DTFT runs after it is released,
+     * so it never holds up teardown or other control calls.
+     */
+    fun convolverResponse(frequencies: DoubleArray): app.siphondsp.dsp.ConvolverResponse? {
+        val snapshot = withSharedHandle(0L) { NativeDsp.takeConvolverSnapshot(it) }
+        if (snapshot == 0L) return null
+        return try {
+            NativeDsp.getConvolverSnapshotResponse(snapshot, frequencies)?.let {
+                app.siphondsp.dsp.ConvolverResponse.fromNative(it, frequencies)
+            }
+        } finally {
+            NativeDsp.freeConvolverSnapshot(snapshot)
+        }
+    }
+
     /** See [NativeDsp.readNativeBmwMeter]. */
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { NativeDsp.readNativeBmwMeter(it, kind, out) }

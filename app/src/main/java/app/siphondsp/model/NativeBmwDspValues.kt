@@ -370,7 +370,7 @@ object NativeBmwDspValues {
     const val VIRTUAL_BASS_MIN_RESPONSE_MS = 100f
     const val VIRTUAL_BASS_MAX_RESPONSE_MS = 500f
     const val VIRTUAL_BASS_DEFAULT_RESPONSE_MS = 200f
-    // Convolver, last in the chain: on/off (off is a crossfaded bypass) and the IR gain trim, dB
+    // Convolver, after the band sum and ahead of the master limiter: on/off (off is a crossfaded bypass) and the IR gain trim, dB
     // (native clamps to CONVOLVER_MIN_GAIN_DB..CONVOLVER_MAX_GAIN_DB). The IR itself is a WAV in
     // app storage, see ConvolverIrStore -- not part of this array.
     const val INDEX_CONVOLVER_ENABLED = NativeBmwDspSchema.INDEX_CONVOLVER_ENABLED

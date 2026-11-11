@@ -68,6 +68,7 @@ import app.siphondsp.dsp.CarBaseline
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.ComplexAcc
+import app.siphondsp.dsp.ConvolverResponse
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
@@ -234,6 +235,8 @@ class PeqGraphOptions(
     val onModeChange: (PeqGraphMode) -> Unit,
     val onChannelDisplayChange: (PeqChannelDisplay) -> Unit,
     val onShowIndividualFiltersChange: (Boolean) -> Unit,
+    /** Null = no "Show convolver in graphs" item. */
+    val onShowConvolverChange: ((Boolean) -> Unit)? = null,
 )
 
 /**
@@ -261,6 +264,9 @@ fun PeqGraph(
     mode: PeqGraphMode = PeqGraphMode.MAGNITUDE,
     channelDisplay: PeqChannelDisplay = PeqChannelDisplay.BOTH,
     showIndividualFilters: Boolean = true,
+    // Multiply the convolver IR's response into the sum (PeqGraphPreferences.showConvolverInGraphs).
+    // Contributes nothing while the convolver is off or no IR is running.
+    showConvolver: Boolean = false,
     showSpectrum: Boolean = true,
     showTiltHandles: Boolean = false,
     showGainMeters: Boolean = false,
@@ -281,8 +287,12 @@ fun PeqGraph(
     // the contents (a copy), so it works even when the fragment mutates the same FloatArray in
     // place (it does, on the native-DSP broadcast). configureAxis() inside is a no-op when the
     // axis is unchanged.
-    remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline) {
-        model.recompute(systemValues, peqState, sampleRate, carBaseline)
+    val convolverGrid = remember(sampleRate) {
+        responseGrid(SYSTEM_POINT_COUNT, sampleRate, 20.0, min(20_000.0, sampleRate * 0.5 * 0.999))
+    }
+    val convolver = rememberConvolverResponse(showConvolver, convolverGrid)
+    remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline, convolver) {
+        model.recompute(systemValues, peqState, sampleRate, carBaseline, convolver)
     }
 
     // Spectrum + gain-meter poll, scoped to composition. Acquire/release bracket SpectrumEngine;
@@ -442,6 +452,7 @@ fun PeqGraph(
                 mode = mode,
                 channelDisplay = channelDisplay,
                 showIndividualFilters = showIndividualFilters,
+                showConvolver = showConvolver,
                 options = opts,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
@@ -1424,6 +1435,7 @@ private fun PeqGraphOptionsButton(
     mode: PeqGraphMode,
     channelDisplay: PeqChannelDisplay,
     showIndividualFilters: Boolean,
+    showConvolver: Boolean,
     options: PeqGraphOptions,
     modifier: Modifier = Modifier,
 ) {
@@ -1443,6 +1455,12 @@ private fun PeqGraphOptionsButton(
                 text = { Text("Show individual filters" + if (showIndividualFilters) "  ✓" else "") },
                 onClick = { options.onShowIndividualFiltersChange(!showIndividualFilters); expanded = false },
             )
+            options.onShowConvolverChange?.let { onChange ->
+                DropdownMenuItem(
+                    text = { Text("Show convolver in graphs" + if (showConvolver) "  ✓" else "") },
+                    onClick = { onChange(!showConvolver); expanded = false },
+                )
+            }
             MenuSectionLabel("Display channel")
             PeqChannelDisplay.entries.forEach { option ->
                 DropdownMenuItem(
@@ -1575,12 +1593,20 @@ private class PeqResponseModel {
     var version = 0
         private set
 
-    /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]). */
-    fun recompute(values: FloatArray, peq: BmwPeqState, sampleRate: Double, baseline: CarBaseline? = null) {
+    /** [baseline], when given, is added to every magnitude curve (see [CarBaseline]); [convolver]
+     *  is multiplied into the sum when it was computed on this grid (see BmwResponseCalculator). */
+    fun recompute(
+        values: FloatArray,
+        peq: BmwPeqState,
+        sampleRate: Double,
+        baseline: CarBaseline? = null,
+        convolver: ConvolverResponse? = null,
+    ) {
         version++
         if (values.size != BmwSignalChain.VALUE_COUNT) return
         val maxFreq = min(20_000.0, sampleRate * 0.5 * 0.999)
         calculator.configureAxis(sampleRate, 20.0, maxFreq)
+        calculator.convolver = convolver
         calculator.invalidateAll()
         calculator.compute(autoHeadroom.effectiveValues(values, peq, sampleRate), peq, curves)
         baseline?.applyTo(curves)

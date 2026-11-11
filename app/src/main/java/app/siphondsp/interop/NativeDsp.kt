@@ -88,6 +88,22 @@ object NativeDsp {
     external fun getConvolverError(self: NativeDspHandle): String?
     // Validates a WAV as an IR at [sampleRate] without an engine. Null when it would load.
     external fun checkConvolverIr(path: String, sampleRate: Float): String?
+    // Bumped by every IR load, sample-rate rebuild and clear; -1 for a gone handle.
+    external fun getConvolverGeneration(self: NativeDspHandle): Long
+    // An O(1) snapshot of the running IR (0 with none): take it under the handle lock, evaluate it
+    // with getConvolverSnapshotResponse() after releasing the lock, then freeConvolverSnapshot().
+    external fun takeConvolverSnapshot(self: NativeDspHandle): Long
+    external fun freeConvolverSnapshot(snapshot: Long)
+    // The snapshot IR's complex response at [frequencies] (Hz), bulk latency taken out:
+    // CONVOLVER_RESPONSE_HEADER doubles, then left re/im per frequency, then right re/im. Needs no
+    // engine handle. A DTFT of the whole IR per frequency: off the main thread, and only when the
+    // generation moved.
+    external fun getConvolverSnapshotResponse(snapshot: Long, frequencies: DoubleArray): DoubleArray?
+    const val CONVOLVER_RESPONSE_GENERATION = 0
+    const val CONVOLVER_RESPONSE_SAMPLE_RATE = 1
+    const val CONVOLVER_RESPONSE_LATENCY_FRAMES = 2
+    const val CONVOLVER_RESPONSE_PEAK_GAIN_DB = 3
+    const val CONVOLVER_RESPONSE_HEADER = 4
     const val CONVOLVER_LOADED = 0
     const val CONVOLVER_CHANNELS = 1
     const val CONVOLVER_SOURCE_RATE = 2
@@ -97,7 +113,9 @@ object NativeDsp {
     const val CONVOLVER_PARTITIONS = 6
     const val CONVOLVER_PEAK_GAIN_DB = 7
     const val CONVOLVER_KERNEL_ACTIVE = 8
-    const val CONVOLVER_COUNT = 9
+    const val CONVOLVER_LATENCY_FRAMES = 9
+    const val CONVOLVER_LATENCY_MS = 10
+    const val CONVOLVER_COUNT = 11
 
     init {
         System.loadLibrary("siphondsp-engine")

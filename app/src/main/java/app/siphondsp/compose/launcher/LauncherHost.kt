@@ -8,7 +8,18 @@ package app.siphondsp.compose.launcher
  */
 class LauncherHost {
     internal var knobFocus: (() -> Boolean)? = null
+    // Set by HomeRoute on resume, cleared on pause. A Home press that lands while it is null (home
+    // paused behind another app or a workspace being popped) is queued and delivered as soon as the
+    // handler is registered, so Home always ends on the plain home screen.
     internal var homePressed: (() -> Unit)? = null
+        set(value) {
+            field = value
+            if (value != null && homePending) {
+                homePending = false
+                value()
+            }
+        }
+    private var homePending = false
 
     /**
      * A knob (D-pad) key went down: true when the home screen took it to bring focus onto itself,
@@ -16,8 +27,12 @@ class LauncherHost {
      */
     fun enterKnobFocus(): Boolean = knobFocus?.invoke() ?: false
 
-    /** The Home button while home is already showing: back to the plain home screen. */
+    /**
+     * The Home button: back to the plain home screen -- now if home is the resumed screen, else as
+     * soon as it resumes.
+     */
     fun onHomePressed() {
-        homePressed?.invoke()
+        val handler = homePressed
+        if (handler != null) handler() else homePending = true
     }
 }

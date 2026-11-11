@@ -279,6 +279,46 @@ double convolverIrPeakGainDb(const ConvolverIr& ir) {
     return peak > 0.0 ? 20.0 * std::log10(peak) : -200.0;
 }
 
+std::size_t convolverIrLatencyFrames(const ConvolverIr& ir) {
+    std::size_t at = 0;
+    double peak = -1.0;
+    for (std::size_t i = 0; i < ir.frames(); ++i) {
+        const double m = std::max(std::fabs(ir.left[i]), ir.stereo() ? std::fabs(ir.right[i]) : 0.0);
+        if (m > peak) {
+            peak = m;
+            at = i;
+        }
+    }
+    return at;
+}
+
+void convolverIrResponse(const std::vector<double>& h, double sampleRate, std::size_t latencyFrames,
+                         const double* freqs, std::size_t count, double* out) {
+    for (std::size_t i = 0; i < count; ++i) {
+        const double w = 2.0 * kPi * freqs[i] / sampleRate;
+        // H(w) e^(jwL) = sum_n h[n] e^(-jw(n - L)): a unit phasor rotated tap by tap, renormalised
+        // every 1024 taps so rounding never grows its length over a 65536-tap IR.
+        const double stepRe = std::cos(w), stepIm = -std::sin(w);
+        const double start = w * static_cast<double>(latencyFrames);
+        double pr = std::cos(start), pi = std::sin(start);
+        double re = 0.0, im = 0.0;
+        for (std::size_t n = 0; n < h.size(); ++n) {
+            re += h[n] * pr;
+            im += h[n] * pi;
+            const double nr = pr * stepRe - pi * stepIm;
+            pi = pr * stepIm + pi * stepRe;
+            pr = nr;
+            if ((n & 1023u) == 1023u) {
+                const double len = std::hypot(pr, pi);
+                pr /= len;
+                pi /= len;
+            }
+        }
+        out[2 * i] = re;
+        out[2 * i + 1] = im;
+    }
+}
+
 // ---- ConvolverKernel -----------------------------------------------------------------------
 
 ConvolverKernel::~ConvolverKernel() {
@@ -350,11 +390,12 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
     }
     k->peakGainDb_ = convolverIrPeakGainDb(ir);
     if (std::isnan(k->peakGainDb_)) {
-        // Without the peak there is no unity cap: refuse rather than run uncapped after the limiter.
+        // Without the peak there is no unity cap: refuse rather than run uncapped.
         error = "Out of memory measuring the IR";
         return nullptr;
     }
     k->maxGain_ = std::pow(10.0, -k->peakGainDb_ / 20.0);
+    k->latencyFrames_ = convolverIrLatencyFrames(ir);
     k->reset();
     return k;
 }

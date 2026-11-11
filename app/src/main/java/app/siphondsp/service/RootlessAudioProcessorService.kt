@@ -1593,6 +1593,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         /** What the running engine's convolver holds, or null with no service. */
         fun convolverStatus(): ConvolverStatus? = activeInstance?.engine?.convolverStatus()
 
+        /** The running engine's convolver generation, or null with no service. */
+        fun convolverGeneration(): Long? = activeInstance?.engine?.convolverGeneration()
+
+        /** The running IR's response on [frequencies], or null. Blocking: off the main thread. */
+        fun convolverResponse(frequencies: DoubleArray): app.siphondsp.dsp.ConvolverResponse? =
+            activeInstance?.engine?.convolverResponse(frequencies)
+
         /**
          * Live rootless-pipeline runtime state for the native-truth debug screen. Every field is
          * read directly off the running service/AudioRecord/AudioTrack -- recorder/track "active"
