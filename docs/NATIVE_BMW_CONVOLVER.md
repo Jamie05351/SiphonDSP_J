@@ -58,7 +58,10 @@ and the output is bit-identical to the chain without it (the parity check covers
 
 The stage **caps its gain at the IR's peak response**: the gain applied is `min(trim, −peak dB)`,
 so the IR never lifts any frequency above unity (the limiter after it catches the time-domain
-peaks a phase-only change raises; the cap keeps magnitude boost from driving it). A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
+peaks a phase-only change raises; the cap keeps magnitude boost from driving it). With the master
+limiter **off**, nothing holds those peaks: a phase-correcting IR's raised crest factor reaches
+the output guard, which clips at ±1.0. That was already so when the convolver ran last (every
+stage between the two positions is linear), so keep the limiter on when running such an IR. A boosting IR is brought down to 0 dB at its loudest frequency even at 0 dB trim; the trim
 can only go below that. The page shows the gain actually applied and flags when the cap is in
 effect. UI: Output workspace → CONVOLVER page (`ConvolverScreen.kt`).
 
