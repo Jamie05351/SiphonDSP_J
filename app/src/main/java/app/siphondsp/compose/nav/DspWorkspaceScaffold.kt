@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspSidebarRail
 import app.siphondsp.compose.controls.DspWorkspaceBackdrop
+import app.siphondsp.compose.controls.cardStyle
 import app.siphondsp.view.DspDestination
 import app.siphondsp.view.DspRail
 
@@ -35,7 +36,7 @@ import app.siphondsp.view.DspRail
  * - a transparent toolbar line over the top of the content window: the back arrow, then the
  *   bypass-state strip, or this workspace's own [toolbarActions] (page finder / arrows, or the
  *   PEQ's scope row) at the same x;
- * - [content] in the window below the toolbar line, short of the bezel on the right and bottom.
+ * - [content] in the window below the toolbar line, out to the screen's right and bottom edges.
  *
  * @param showStatusStrip false on the PEQ, whose scope row takes the whole toolbar line.
  */
@@ -54,11 +55,10 @@ fun DspWorkspaceScaffold(
     val actionsStart = remember(context) { DspRail.toolbarActionsStartDp(context).dp }
     val toolbarHeight = dimensionResource(R.dimen.dsp_workspace_toolbar_height)
     val navInset = dimensionResource(R.dimen.dsp_toolbar_nav_inset)
-    val bezel = dimensionResource(R.dimen.dsp_workspace_bezel_inset)
     val destinations = remember { DspDestination.entries.filter { it.showInPrimaryNav } }
 
     Box(Modifier.fillMaxSize()) {
-        DspWorkspaceBackdrop(railWidth)
+        DspWorkspaceBackdrop(railWidth, accent = current.cardStyle().first)
 
         DspSidebarRail(
             destinations = destinations,
@@ -73,7 +73,7 @@ fun DspWorkspaceScaffold(
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(start = railWidth, top = toolbarHeight, end = bezel, bottom = bezel),
+                .padding(start = railWidth, top = toolbarHeight),
         ) { content() }
 
         // The toolbar line, drawn last so it sits above the content.

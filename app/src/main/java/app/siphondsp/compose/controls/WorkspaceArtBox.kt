@@ -97,7 +97,7 @@ fun WorkspaceArtBox(
         originY = originY ?: dimensionResource(R.dimen.dsp_workspace_toolbar_height),
         // A content page (default origin) gets the stretch; an explicitly placed host doesn't.
         contentRight = if (originX == null) {
-            WorkspaceArt.SCREEN_WIDTH_DP.dp - dimensionResource(R.dimen.dsp_workspace_bezel_inset)
+            WorkspaceArt.SCREEN_WIDTH_DP.dp
         } else {
             null
         },

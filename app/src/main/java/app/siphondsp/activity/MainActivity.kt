@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -27,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.siphondsp.R
 import app.siphondsp.compose.home.HomeRoute
+import app.siphondsp.compose.launcher.LauncherHost
 import app.siphondsp.compose.dialogs.AppDialog
 import app.siphondsp.compose.dialogs.AppDialogHost
 import app.siphondsp.compose.dialogs.AppDialogs
@@ -45,6 +47,7 @@ import app.siphondsp.utils.extensions.PermissionExtensions.hasProjectMediaAppOp
 import app.siphondsp.utils.extensions.PermissionExtensions.hasRecordPermission
 import app.siphondsp.utils.sdkAbove
 import app.siphondsp.view.DspDestination
+import app.siphondsp.view.isHeadUnitDisplay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -87,6 +90,11 @@ class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Landscape-locked on the 1280x480 head unit only (it is already landscape, so this never
+        // recreates there); phones keep portrait. Not in the manifest, which every build shares.
+        if (isHeadUnitDisplay()) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
 
         // Where the graph starts: the setup wizard while permissions are missing, the
@@ -133,7 +141,7 @@ class MainActivity : BaseActivity() {
                     onExit = ::finish,
                     onSetupFinished = ::onSetupFinished,
                 ) {
-                    HomeRoute(powered = powerOn, onTogglePower = ::togglePower)
+                    HomeRoute(powered = powerOn, onTogglePower = ::togglePower, launcherHost = launcherHost)
                 }
                 AppDialogHost()
             }
@@ -143,6 +151,9 @@ class MainActivity : BaseActivity() {
     }
 
     private var navController: NavHostController? = null
+
+    /** The knob and Home button reach the head unit's launcher home screen through this. */
+    private val launcherHost = LauncherHost()
 
     /** False while setup or the app-compatibility screen runs: no capture prompt on start. */
     private var autoStartEngine = true
@@ -163,6 +174,37 @@ class MainActivity : BaseActivity() {
         autoStartEngine = false
         navController?.navigate(Routes.onboarding()) {
             popUpTo(Routes.HOME) { inclusive = true }
+        }
+    }
+
+    /**
+     * The iDrive knob arrives as D-pad keys. Until something on the home screen has focus they
+     * would go to the views around it, so the first one brings focus into the home screen.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val knob = event.keyCode in KNOB_KEYS
+        if (knob && event.action == KeyEvent.ACTION_DOWN && launcherHost.enterKnobFocus()) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * MainActivity is singleTask (it is the home screen), so later launches arrive here. The Home
+     * button (MENU, short press) goes back to the plain home screen from wherever the app is (a
+     * workspace, Settings); [ACTION_FIX_PERMISSIONS] opens the setup wizard over it.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        when {
+            intent.hasCategory(Intent.CATEGORY_HOME) -> {
+                val nav = navController
+                if (nav != null && nav.currentDestination?.route != Routes.HOME) nav.popBackStack(Routes.HOME, inclusive = false)
+                launcherHost.onHomePressed()
+            }
+            intent.action == ACTION_FIX_PERMISSIONS -> {
+                autoStartEngine = false
+                navController?.navigate(Routes.onboarding(fixPerms = true)) { launchSingleTop = true }
+            }
         }
     }
 
@@ -302,4 +344,17 @@ class MainActivity : BaseActivity() {
         )
     }
 
+    companion object {
+        /**
+         * Opens the setup wizard over the front page, with the "fix permissions" notice (the home
+         * screen's Spotify / Waze swipe asks for this when DUMP is missing; see AppSwipe).
+         */
+        const val ACTION_FIX_PERMISSIONS = "app.siphondsp.action.FIX_PERMISSIONS"
+
+        /** The keys the iDrive knob sends: the D-pad directions and press, and Tab. */
+        private val KNOB_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_TAB,
+        )
+    }
 }
