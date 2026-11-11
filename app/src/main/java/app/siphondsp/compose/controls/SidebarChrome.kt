@@ -27,8 +27,8 @@ import kotlin.math.min
 /**
  * The workspace chrome, drawn to match the front page (Figma "SiphonDSP · Faceplate Sidebar"):
  * the whole screen is the front page's facia ([FaciaColour]), with two windows cut into it, the
- * sidebar screen on the left and the content window on the right, [SidebarFacia] apart and in from
- * the screen edges. The sidebar screen is the front page's chain screen turned on its side: black
+ * sidebar screen on the left, [SidebarFacia] in from its column's edges, and the content window on
+ * the right, running from the column to the screen's other three edges. The sidebar screen is the front page's chain screen turned on its side: black
  * glass, a grey hairline, a purple ring with a glow inwards, and the five tiles joined top to
  * bottom by the purple signal line. Power and OUT are left out; their lines fade out as the
  * front page's morph lands (the stubs are drawn at [StubAlpha], now 0).
@@ -84,9 +84,9 @@ internal class SidebarLayout(columnWidth: Float, height: Float, facia: Float, pr
     }
 }
 
-/** The content window: from the sidebar column's edge to [facia] in from the other three edges. */
-internal fun contentWindowRect(size: Size, columnWidth: Float, facia: Float) =
-    Rect(columnWidth, facia, size.width - facia, size.height - facia)
+/** The content window: from the sidebar column's edge to the screen's other three edges. */
+internal fun contentWindowRect(size: Size, columnWidth: Float) =
+    Rect(columnWidth, 0f, size.width, size.height)
 
 /**
  * The chain screen in [rect]: black glass with the grey hairline, a purple ring just inside it and

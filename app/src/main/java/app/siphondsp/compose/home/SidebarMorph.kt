@@ -71,7 +71,7 @@ internal fun SidebarMorph(
                 val layout = SidebarLayout(sidebarWidth.toPx(), size.height, facia, count)
                 val rail = List(count) { layout.tileRect(it) }
                 val text = labels.map { measureTileLabel(measurer, it, layout.tile, this) }
-                val window = contentWindowRect(size, sidebarWidth.toPx(), facia)
+                val window = contentWindowRect(size, sidebarWidth.toPx())
                 val corner = SidebarScreenCorner.toPx()
                 val pad = 12f * density
                 onDrawBehind {
