@@ -341,6 +341,19 @@ private fun RealtimeSection(realtime: RealtimeDiagnostics?, cpu: List<CpuFrequen
                     KeyValueRow("Last block", "${n[NativeDsp.REALTIME_LAST_BLOCK_FRAMES]} frames")
                     val changes = n[NativeDsp.REALTIME_BLOCK_SIZE_CHANGES]
                     KeyValueRow("Block size changes", changes.toString(), if (changes > 0) BmwYellow else Color.White)
+                    val nonFinite = n[NativeDsp.REALTIME_GUARD_NON_FINITE]
+                    val overRange = n[NativeDsp.REALTIME_GUARD_OVER_RANGE]
+                    KeyValueRow(
+                        "Guard resets, NaN/Inf / over-range",
+                        "$nonFinite / $overRange",
+                        if (nonFinite + overRange > 0) BmwRed else BmwGreen,
+                    )
+                    val clipped = n[NativeDsp.REALTIME_GUARD_CLIPPED]
+                    KeyValueRow("Clipped samples (±1.0)", clipped.toString(), if (clipped > 0) BmwYellow else Color.White)
+                    KeyValueRow(
+                        "Stream starts / fade-ins",
+                        "${n[NativeDsp.REALTIME_STREAM_STARTS]} / ${n[NativeDsp.REALTIME_FADE_INS]}",
+                    )
                 }
             }
             if (cpu.isEmpty()) {

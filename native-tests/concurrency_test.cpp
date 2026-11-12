@@ -77,16 +77,6 @@ TEST_CASE("setSampleRate() to a genuinely different rate does not deadlock and r
 
 // Reaches the processor's ownership, so a test can hold it the way process() does for a whole
 // buffer (declared a friend in NativeBmwDspProcessor.h).
-struct NativeBmwDspProcessorTestAccess {
-    static void claimAudio(NativeBmwDspProcessor& proc) { proc.claimAudioOwnership(); }
-    static void releaseAudio(NativeBmwDspProcessor& proc) {
-        proc.ownership_.store(NativeBmwDspProcessor::kOwnerFree, std::memory_order_release);
-    }
-    static std::uint32_t audioServedRequests(const NativeBmwDspProcessor& proc) {
-        return proc.audioServedRequests_.load();
-    }
-};
-
 namespace {
 // Holds ownership on its own thread -- as the audio thread does mid-buffer -- until the test
 // releases it, or gives up after a few seconds.

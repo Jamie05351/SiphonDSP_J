@@ -9,7 +9,10 @@
 #include "NativeBmwDspSchema.h"
 
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <cstddef>
 #include <fstream>
 #include <stdexcept>
@@ -129,3 +132,21 @@ inline std::vector<float> renderSteadyState(NativeBmwDspProcessor& proc,
 }
 
 }  // namespace nbtest
+
+// Test-only access to the processor's internals (it's a friend): ownership for
+// concurrency_test.cpp, and poisoning a ramp state for stream_start_guard_test.cpp. One
+// definition here, shared by every test file.
+struct NativeBmwDspProcessorTestAccess {
+    static void claimAudio(NativeBmwDspProcessor& proc) { proc.claimAudioOwnership(); }
+    static void releaseAudio(NativeBmwDspProcessor& proc) {
+        proc.ownership_.store(NativeBmwDspProcessor::kOwnerFree, std::memory_order_release);
+    }
+    static std::uint32_t audioServedRequests(const NativeBmwDspProcessor& proc) {
+        return proc.audioServedRequests_.load();
+    }
+    // A non-finite master-volume ramp state: no audio can put one there, so this stands in for
+    // any ramp gone bad.
+    static void poisonMasterGain(NativeBmwDspProcessor& proc) {
+        proc.masterGain_ = std::numeric_limits<float>::quiet_NaN();
+    }
+};
