@@ -58,7 +58,24 @@ object NativeDsp {
     const val REALTIME_LAST_BLOCK_FRAMES = 0
     // Buffers whose length differed from the one before.
     const val REALTIME_BLOCK_SIZE_CHANGES = 1
-    const val REALTIME_COUNT = 2
+    // Output guard (after the master limiter): faults from a NaN/Inf sample, and from a finite
+    // sample far beyond full scale (a runaway stage) -- each clears the whole chain and fades it
+    // back in.
+    const val REALTIME_GUARD_NON_FINITE = 2
+    const val REALTIME_GUARD_OVER_RANGE = 3
+    // Finite samples the final clamp to +-1.0 cut.
+    const val REALTIME_GUARD_CLIPPED = 4
+    // Stream starts served (notifyStreamStart): chain cleared.
+    const val REALTIME_STREAM_STARTS = 5
+    // 50 ms output fade-ins begun (guard fault, IR load while the convolver plays).
+    const val REALTIME_FADE_INS = 6
+    const val REALTIME_COUNT = 7
+
+    // A stream is (re)starting: the next buffer starts the chain from silence (every filter,
+    // delay, limiter and convolver history cleared; settings and the IR kept). No fade: the
+    // output is then exactly what a freshly started engine plays, so a REW sweep played into
+    // the stream is untouched. One atomic store; safe from any thread.
+    external fun notifyStreamStart(self: NativeDspHandle)
 
     // 1 float: [masterLimiterGrDb] -- master brick-wall limiter gain reduction; 0 while bypassed.
     external fun getNativeBmwMasterLimiterMeter(self: NativeDspHandle): FloatArray?

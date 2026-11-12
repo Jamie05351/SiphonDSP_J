@@ -69,6 +69,7 @@ add_executable(native_tests
     ramps_test.cpp
     output_guard_test.cpp
     convolver_test.cpp
+    stream_start_guard_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.

@@ -42,6 +42,14 @@ public:
     }
     // Only call while active().
     void process(float& left, float& right);
+    // Forgets the filters' history (coefficients kept). Allocation-free.
+    void clear() {
+        for (auto* bank : {&busL_, &busR_, &upperL_, &upperR_}) {
+            for (auto& b : *bank) {
+                b.clear();
+            }
+        }
+    }
 
 private:
     std::array<Biquad, kSections> busL_{}, busR_{};
