@@ -1124,6 +1124,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // keeps a block in hand from then on, the slack a late process() draws on instead of
                 // underrunning (see TRACK_BUFFER_BLOCKS). The track has room, so this doesn't block.
                 if (primeTrack) {
+                    // The track just (re)started: a new stream. Start the DSP chain from silence
+                    // rather than whatever the last stream left in its filters, delays, limiters
+                    // and convolver. No fade, so a measurement sweep plays untouched.
+                    engine.notifyStreamStart()
                     writeFully(currentTrack, silence, bufferSizeBytes, bytesPerSample, diagnostics)
                 }
 

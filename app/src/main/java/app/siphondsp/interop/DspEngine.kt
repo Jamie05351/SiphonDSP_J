@@ -486,6 +486,9 @@ class DspEngine(val context: Context) : AutoCloseable {
         }
     }
 
+    /** See [NativeDsp.notifyStreamStart]: call as a stream (re)starts, before its first buffer. */
+    fun notifyStreamStart() = withSharedHandle { NativeDsp.notifyStreamStart(it) }
+
     /** See [NativeDsp.readNativeBmwMeter]. */
     fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =
         withMeterHandle(false) { NativeDsp.readNativeBmwMeter(it, kind, out) }

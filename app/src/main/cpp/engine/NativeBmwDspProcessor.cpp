@@ -72,6 +72,8 @@ void NativeBmwDspProcessor::applySampleRate(float sr) {
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
         monoBassFadeStep_ = 1.f / (kMonoBassFadeSeconds * sr);
+        fadeInStep_ = 1.f / (kFadeInSeconds * sr);
+        fadeOutStep_ = 1.f / (kFadeOutSeconds * sr);
         convolver_.setSampleRate(sr);
         rebuildAll();
     }
@@ -349,11 +351,42 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     // (untouched samples) while off or with no IR loaded.
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
-    // (c) The master limiter, volume, loudness and the hardware swap, then the output guard and
-    // the capture tap, frame by frame.
+    // A new IR (or the same one rebuilt at a new rate) just took over: fade the output in after
+    // it, down first if it is playing.
+    if (convolver_.takeKernelArrived()) {
+        startFadeIn(/*fromSilence=*/false);
+    }
+    // (c) The master limiter, volume, loudness and the hardware swap, then the fault check, the
+    // output fade, the output guard and the capture tap, frame by frame.
+    bool nonFinite = false, overRange = false;
+    std::int64_t clipped = 0;
     for (std::size_t i = 0; i < frames; ++i) {
         float l = chunkConvL_[i], r = chunkConvR_[i];
         processFrameBack(l, r);
+        if (!nonFinite && !overRange) {
+            // fabs(NaN) <= x is false, so a NaN fails the range test too; told apart for the count.
+            if (!(std::fabs(l) <= kFaultLevel) || !(std::fabs(r) <= kFaultLevel)) {
+                nonFinite = !std::isfinite(l) || !std::isfinite(r);
+                overRange = !nonFinite;
+            }
+        }
+        if (nonFinite || overRange) {
+            // The chain's state is bad from here on: silence the rest of the chunk.
+            l = r = 0.f;
+        } else {
+            if (fadeDown_) {
+                fadeGain_ -= fadeOutStep_;
+                if (fadeGain_ <= 0.f) {
+                    fadeGain_ = 0.f;
+                    fadeDown_ = false;
+                }
+            } else if (fadeGain_ < 1.f) {
+                fadeGain_ = std::min(1.f, fadeGain_ + fadeInStep_);
+            }
+            l *= fadeGain_;
+            r *= fadeGain_;
+            clipped += (std::fabs(l) > 1.f) + (std::fabs(r) > 1.f);
+        }
         l = NativeBmwDsp::outputGuard(l);
         r = NativeBmwDsp::outputGuard(r);
         capture_.tapIn(chunkRawIn_[2 * i], chunkRawIn_[2 * i + 1]);
@@ -361,9 +394,79 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
         w[2 * i] = l;
         w[2 * i + 1] = r;
     }
+    if (clipped > 0) {
+        bump(guard_.clippedSamples, clipped);
+    }
+    if (nonFinite || overRange) {
+        bump(nonFinite ? guard_.nonFiniteFaults : guard_.overRangeFaults);
+        clearChainState();
+        startFadeIn(/*fromSilence=*/true);
+    }
+}
+
+void NativeBmwDspProcessor::beginBuffer() {
+    if (streamStartPending_.load(std::memory_order_relaxed) &&
+        streamStartPending_.exchange(false, std::memory_order_acquire)) {
+        bump(guard_.streamStarts);
+        // Clean state only, no fade: from here the output is sample-for-sample what a freshly
+        // started engine would play, so a measurement sweep (REW's, played into the stream) is
+        // never shaped by it.
+        clearChainState();
+    }
+}
+
+void NativeBmwDspProcessor::startFadeIn(bool fromSilence) {
+    bump(guard_.fadeIns);
+    if (fromSilence) {
+        fadeGain_ = 0.f;
+        fadeDown_ = false;
+    } else {
+        fadeDown_ = fadeGain_ > 0.f;
+    }
+}
+
+void NativeBmwDspProcessor::clearChainState() {
+    // Every stage that keeps history, front to back. Coefficients, settings, ramps (volume,
+    // mutes, mixes) and the convolver's kernel stay as they are: only what the audio left behind
+    // goes. Nothing here allocates.
+    inputDcL_.clear();
+    inputDcR_.clear();
+    monoBass_.clear();
+    virtualBass_.clear();
+    inputPeq_.clear();
+    lowPeq_.clear();
+    midPeq_.clear();
+    highPeq_.clear();
+    mbc_.resetState();
+    virtual_.clear();
+    for (auto& out : outputs_) {
+        out.clearState();
+    }
+    for (auto& line : bypassLatency_) {
+        line.clear();
+    }
+    for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
+        b->clear();
+    }
+    tilt_.clear();
+    measBus_.clear();
+    convolver_.clearHistory();
+    limiter_.clear();
+    loudness_.clear();
+}
+
+NativeBmwDspProcessor::GuardCounters NativeBmwDspProcessor::guardCounters() const {
+    GuardCounters c;
+    c.nonFiniteFaults = guard_.nonFiniteFaults.load(std::memory_order_relaxed);
+    c.overRangeFaults = guard_.overRangeFaults.load(std::memory_order_relaxed);
+    c.clippedSamples = guard_.clippedSamples.load(std::memory_order_relaxed);
+    c.streamStarts = guard_.streamStarts.load(std::memory_order_relaxed);
+    c.fadeIns = guard_.fadeIns.load(std::memory_order_relaxed);
+    return c;
 }
 
 void NativeBmwDspProcessor::processBlock(float* w, std::size_t n) {
+    beginBuffer();
     const std::size_t frames = n / 2;
     for (std::size_t done = 0; done < frames;) {
         const std::size_t count = std::min<std::size_t>(frames - done, kChunkFrames);
@@ -386,6 +489,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
 
 template <class Sample>
 void NativeBmwDspProcessor::processInt(Sample* w, std::size_t n, float scale) {
+    beginBuffer();
     const float invScale = 1.f / scale;
     const std::size_t frames = n / 2;
     for (std::size_t done = 0; done < frames;) {

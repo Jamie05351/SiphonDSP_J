@@ -110,8 +110,18 @@ Java_app_siphondsp_interop_NativeDsp_processDirect(JNIEnv* env, jobject, jlong s
     return JNI_TRUE;
 }
 
+// A stream is (re)starting: see NativeBmwDspProcessor::notifyStreamStart(). One atomic store.
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_notifyStreamStart(JNIEnv*, jobject, jlong self) {
+    if (self != 0) {
+        fromHandle(self)->processor.notifyStreamStart();
+    }
+}
+
 // Fills [out] with the audio-path counters, in NativeDsp.REALTIME_* order: lastBlockFrames,
-// blockSizeChanges. Atomics only, so it takes no lock. False for a gone handle or a short array.
+// blockSizeChanges, then the output guard's (NativeBmwDspProcessor::GuardCounters) nonFinite
+// faults, over-range faults, clipped samples, stream-start resets and fade-ins. Atomics only, so
+// it takes no lock. False for a gone handle or a short array.
 extern "C" JNIEXPORT jboolean JNICALL
 Java_app_siphondsp_interop_NativeDsp_getRealtimeCounters(JNIEnv* env, jobject, jlong self,
                                                           jlongArray out) {
@@ -119,9 +129,15 @@ Java_app_siphondsp_interop_NativeDsp_getRealtimeCounters(JNIEnv* env, jobject, j
         return JNI_FALSE;
     }
     const auto* engine = fromHandle(self);
+    const auto guard = engine->processor.guardCounters();
     const jlong values[] = {
         engine->lastBlockFrames.load(std::memory_order_relaxed),
         engine->blockSizeChanges.load(std::memory_order_relaxed),
+        guard.nonFiniteFaults,
+        guard.overRangeFaults,
+        guard.clippedSamples,
+        guard.streamStarts,
+        guard.fadeIns,
     };
     constexpr jsize count = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
     if (env->GetArrayLength(out) < count) {

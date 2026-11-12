@@ -127,6 +127,32 @@ public:
     const int16_t* process(const int16_t* samples, std::size_t sampleCount);
     const int32_t* process(const int32_t* samples, std::size_t sampleCount);
     const float* process(const float* samples, std::size_t sampleCount);
+    // Any thread, lock-free: a stream is (re)starting. The next processed buffer starts the whole
+    // chain from silence -- every filter, delay, limiter and convolver history cleared; settings,
+    // coefficients and the IR kept. Deliberately no fade: from then on the output is exactly what
+    // a freshly started engine plays, so a measurement sweep played into the stream is untouched.
+    // Without it a resumed stream carries on from whatever state the last one left behind.
+    void notifyStreamStart() { streamStartPending_.store(true, std::memory_order_release); }
+
+    // The output guard after the limiter (see processChunk()). Per sample, ahead of the clamp to
+    // +-1: a NaN/Inf, or a finite sample beyond kFaultLevel (+36 dBFS: no setting gets there,
+    // only a stage whose state has run away), is a fault -- the rest of that chunk is silenced,
+    // the whole chain cleared as for a stream start, and the output faded back in. Without the
+    // reset a runaway stage would play on as full-scale noise through the clamp.
+    static constexpr float kFaultLevel = 64.f;
+    static constexpr float kFadeInSeconds = 0.05f;
+    // Ahead of an IR's fade-in while audio is playing, so the dip doesn't click.
+    static constexpr float kFadeOutSeconds = 0.005f;
+    struct GuardCounters {
+        std::int64_t nonFiniteFaults = 0;  // faults caused by a NaN/Inf sample
+        std::int64_t overRangeFaults = 0;  // faults caused by a sample beyond kFaultLevel
+        std::int64_t clippedSamples = 0;   // finite samples the clamp to +-1 cut
+        std::int64_t streamStarts = 0;     // notifyStreamStart() resets served
+        std::int64_t fadeIns = 0;          // fade-ins started (guard fault, IR load)
+    };
+    // Lock-free (relaxed atomics written by the audio thread).
+    GuardCounters guardCounters() const;
+
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. All-idle (-60/-60/0)
     // while the multiband compressor is disabled. Lock-free: reads atomics published by
     // MultibandCompressor::process().
@@ -309,6 +335,27 @@ private:
     void processFrameBack(float& l, float& r);
     // The float processing for one buffer.
     void processBlock(float* interleaved, std::size_t sampleCount);
+    // Owner only, at the start of each processed buffer: serves notifyStreamStart().
+    void beginBuffer();
+    // Owner only, allocation-free: every stage's running history cleared (stream start or guard
+    // fault). Coefficients, settings, ramps and the convolver kernel are kept.
+    void clearChainState();
+    // Owner only: restart the output fade-in -- from silence (fromSilence: the chain was just
+    // cleared, nothing to fade down from), or down over kFadeOutSeconds first.
+    void startFadeIn(bool fromSilence);
+    // Output fade (see kFadeInSeconds): fadeGain_ multiplies the output ahead of the guard.
+    float fadeGain_ = 1.f;
+    bool fadeDown_ = false;
+    float fadeInStep_ = 1.f / (kFadeInSeconds * 48000.f);
+    float fadeOutStep_ = 1.f / (kFadeOutSeconds * 48000.f);
+    std::atomic<bool> streamStartPending_{false};
+    struct GuardAtomics {
+        std::atomic<std::int64_t> nonFiniteFaults{0}, overRangeFaults{0}, clippedSamples{0},
+            streamStarts{0}, fadeIns{0};
+    } guard_;
+    static void bump(std::atomic<std::int64_t>& counter, std::int64_t by = 1) {
+        counter.store(counter.load(std::memory_order_relaxed) + by, std::memory_order_relaxed);
+    }
     // The integer formats: each chunk converted to float, processed and converted back.
     template <class Sample>
     void processInt(Sample* samples, std::size_t sampleCount, float scale);

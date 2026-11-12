@@ -491,6 +491,15 @@ void ConvolverStage::setSampleRate(float sampleRate) {
     gainCoef_ = 1.0 - std::exp(-1.0 / (static_cast<double>(kGainRampSeconds) * sampleRate));
 }
 
+void ConvolverStage::clearHistory() {
+    if (active_) {
+        active_->reset();
+    }
+    // The previous kernel's history is as suspect as the active one's: drop the swap fade rather
+    // than keep convolving with it.
+    swapMix_ = 0.0;
+}
+
 void ConvolverStage::snap(bool enabled, float gainDb) {
     enableMix_ = enabled ? 1.0 : 0.0;
     gain_ = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
@@ -509,6 +518,8 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
             kernelActive_.store(active_ != nullptr, std::memory_order_relaxed);
             if (active_) {
                 active_->reset();
+                // Only audible while the stage is switched on; a bypassed load changes nothing.
+                kernelArrived_ = enabled;
             }
             swapMix_ = (enableMix_ > 0.0 && !needsReset_) ? 1.0 : 0.0;
         }

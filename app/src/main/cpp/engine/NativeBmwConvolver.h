@@ -155,6 +155,17 @@ public:
     void snap(bool enabled, float gainDb);
     // True while a kernel is installed on the audio side (relaxed; diagnostics only).
     bool kernelActive() const { return kernelActive_.load(std::memory_order_relaxed); }
+    // Audio thread: forgets the running kernel's input history and ends any kernel-swap fade
+    // (the processor clearing the whole chain). The kernel itself stays. O(1) per channel.
+    void clearHistory();
+    // Audio thread: true once after process() swapped in a new (non-null) kernel while the stage
+    // is switched on -- an IR load or a rebuild at a new rate -- so the processor can fade the
+    // output in after it.
+    bool takeKernelArrived() {
+        const bool arrived = kernelArrived_;
+        kernelArrived_ = false;
+        return arrived;
+    }
 
     static constexpr float kFadeSeconds = 0.02f;
     static constexpr float kGainRampSeconds = 0.01f;
@@ -172,6 +183,7 @@ private:
     double fadeStep_ = 1.0 / (0.02 * 48000.0);
     double gainCoef_ = 0.0020811617;  // 1 - exp(-1 / (10 ms * 48 kHz))
     bool needsReset_ = false;  // the stage sat fully bypassed: history is stale
+    bool kernelArrived_ = false;  // see takeKernelArrived()
     std::atomic<bool> kernelActive_{false};
     double dry_[2][kConvolverBlockFrames]{};
     double wet_[2][kConvolverBlockFrames]{};
