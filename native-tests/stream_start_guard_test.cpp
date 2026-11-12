@@ -94,6 +94,42 @@ TEST_CASE("After a stream start the output matches a fresh engine sample for sam
     }
 }
 
+TEST_CASE("A stream start ends a fade still running from the last stream") {
+    auto c = limiterOff();
+    NativeBmwDspProcessor used, fresh;
+    for (auto* p : {&used, &fresh}) {
+        p->setSampleRate(kSampleRate);
+        REQUIRE(p->configure(c.data(), c.size()));
+    }
+    auto music = stereoSine(220.0, 0.5, 9600);
+    music[2 * 9000] = 1e6f;  // a fault right at the end: its fade-in is still running
+    used.process(music.data(), music.size());
+    REQUIRE(used.guardCounters().overRangeFaults == 1);
+
+    used.notifyStreamStart();
+    auto sweep = stereoSine(1000.0, 0.5, 4800), reference = sweep;
+    used.process(sweep.data(), sweep.size());
+    fresh.process(reference.data(), reference.size());
+    for (std::size_t i = 0; i < sweep.size(); ++i) {
+        REQUIRE(sweep[i] == reference[i]);
+    }
+}
+
+TEST_CASE("A bad ramp state is cleared by the fault reset, not tripped on forever") {
+    NativeBmwDspProcessor proc;
+    proc.setSampleRate(kSampleRate);
+    auto c = defaultConfig();
+    REQUIRE(proc.configure(c.data(), c.size()));
+    auto warm = stereoSine(220.0, 0.5, 4800);
+    proc.process(warm.data(), warm.size());
+
+    NativeBmwDspProcessorTestAccess::poisonMasterGain(proc);
+    auto buf = stereoSine(220.0, 0.5, 2 * kFadeFrames + 4800);
+    proc.process(buf.data(), buf.size());
+    CHECK(proc.guardCounters().nonFiniteFaults == 1);  // one fault, then recovered
+    CHECK(rms(buf, 2 * kFadeFrames, 2 * kFadeFrames + 4800) > 0.1);
+}
+
 TEST_CASE("Without a stream start nothing fades: the output is untouched") {
     NativeBmwDspProcessor a, b;
     for (auto* p : {&a, &b}) {

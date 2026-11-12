@@ -338,7 +338,8 @@ private:
     // Owner only, at the start of each processed buffer: serves notifyStreamStart().
     void beginBuffer();
     // Owner only, allocation-free: every stage's running history cleared (stream start or guard
-    // fault). Coefficients, settings, ramps and the convolver kernel are kept.
+    // fault), and every smoothed gain/mix snapped to its setting. Coefficients, settings and the
+    // convolver kernel are kept.
     void clearChainState();
     // Owner only: restart the output fade-in -- from silence (fromSilence: the chain was just
     // cleared, nothing to fade down from), or down over kFadeOutSeconds first.

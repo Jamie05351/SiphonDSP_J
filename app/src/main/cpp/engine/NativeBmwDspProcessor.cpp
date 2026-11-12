@@ -410,8 +410,11 @@ void NativeBmwDspProcessor::beginBuffer() {
         bump(guard_.streamStarts);
         // Clean state only, no fade: from here the output is sample-for-sample what a freshly
         // started engine would play, so a measurement sweep (REW's, played into the stream) is
-        // never shaped by it.
+        // never shaped by it. That includes ending a fade still running from the last stream (an
+        // IR dip or a fault's fade-in).
         clearChainState();
+        fadeGain_ = 1.f;
+        fadeDown_ = false;
     }
 }
 
@@ -426,9 +429,20 @@ void NativeBmwDspProcessor::startFadeIn(bool fromSilence) {
 }
 
 void NativeBmwDspProcessor::clearChainState() {
-    // Every stage that keeps history, front to back. Coefficients, settings, ramps (volume,
-    // mutes, mixes) and the convolver's kernel stay as they are: only what the audio left behind
-    // goes. Nothing here allocates.
+    // The smoothed gains and mixes land on their settings (where a running stream normally has
+    // them anyway): a bad value in one would otherwise survive the clear and trip the guard
+    // again on every chunk.
+    headroom_ = headroomTarget_;
+    masterGain_ = masterGainTarget_;
+    rebuildPolarityAndMute(/*snap=*/true);
+    loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+    retuneLoudness();
+    monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
+    snapVirtualBass();
+    mbc_.snapMix();
+    convolver_.snap(p_.convolverEnabled, p_.convolverGainDb);
+    // Every stage that keeps history, front to back. Coefficients, settings and the convolver's
+    // kernel stay as they are: only what the audio left behind goes. Nothing here allocates.
     inputDcL_.clear();
     inputDcR_.clear();
     monoBass_.clear();
