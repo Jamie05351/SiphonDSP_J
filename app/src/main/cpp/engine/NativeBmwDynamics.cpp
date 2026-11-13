@@ -56,6 +56,7 @@ TruePeakDetector::TruePeakDetector() {
     // x[n - (kTaps-1) + k], so tap kDelay - 1 is x[n - kDelay] and the point sits frac past it.
     constexpr double kPi = 3.14159265358979323846, kBeta = 5.0;
     const double halfSpan = kTaps / 2.0, norm = besselI0(kBeta);
+    double bound = 0;
     for (unsigned p = 1; p < kPhases; ++p) {
         const double frac = static_cast<double>(p) / kPhases;
         double sum = 0;
@@ -67,11 +68,16 @@ TruePeakDetector::TruePeakDetector() {
             h[k] = std::sin(kPi * d) / (kPi * d) * window;
             sum += h[k];
         }
+        double l1 = 0;
         for (unsigned k = 0; k < kTaps; ++k) {
             coeffs_[p - 1][k] = static_cast<float>(h[k] / sum);
+            l1 += std::fabs(static_cast<double>(coeffs_[p - 1][k]));
         }
+        bound = std::max(bound, l1);
     }
     marginLin_ = dbToLin(kMarginDb);
+    // Rounded up well past the float rounding of dot()'s accumulation (~kTaps ulps).
+    boundGain_ = static_cast<float>(std::max(1.0, bound) * (1 + 1e-4));
 }
 void TruePeakDetector::clear() {
     for (auto& channel : history_) {
@@ -79,15 +85,35 @@ void TruePeakDetector::clear() {
     }
     pos_ = 0;
 }
-float TruePeakDetector::process(float left, float right) {
+float TruePeakDetector::process(float left, float right, float limit) {
     const float in[2] = {left, right};
-    float peak = 0;
+    // Gate: every interpolated point is at most boundGain_ times the window's largest |sample|,
+    // so when that bound (with the margin) is at or under the limit, the true peak is too, and a
+    // caller acting only on readings above the limit can't tell the bound from the exact value.
+    // On normal programme material most frames are well under the limiter's ceiling, and this
+    // costs 2 x kTaps compares instead of 2 x 7 x kTaps multiply-adds. NaN fails the test and
+    // takes the exact path.
+    float windowMax = 0;
     for (unsigned c = 0; c < 2; ++c) {
         auto& h = history_[c];
         h[pos_] = in[c];
         h[pos_ + kTaps] = in[c];
-        // Oldest..newest of the last kTaps samples, contiguous.
         const float* x = h.data() + pos_ + 1;
+        float m = 0;
+        for (unsigned k = 0; k < kTaps; ++k) {
+            m = std::max(m, std::fabs(x[k]));
+        }
+        windowMax = std::max(windowMax, m);
+    }
+    const float bound = windowMax * boundGain_ * marginLin_;
+    if (bound <= limit) {
+        pos_ = pos_ + 1 == kTaps ? 0 : pos_ + 1;
+        return bound;
+    }
+    float peak = 0;
+    for (unsigned c = 0; c < 2; ++c) {
+        // Oldest..newest of the last kTaps samples, contiguous.
+        const float* x = history_[c].data() + pos_ + 1;
         peak = std::max(peak, std::fabs(x[kTaps - 1 - kDelay]));
         for (const auto& phase : coeffs_) {
             peak = std::max(peak, std::fabs(dot(phase.data(), x)));
@@ -138,7 +164,9 @@ void MasterLimiter::clear() {
     meterCounter_ = 0;
 }
 void MasterLimiter::process(float& l, float& r) {
-    float pk = truePeak_.process(l, r);
+    // Readings at or under the ceiling all mean "no reduction", so the detector may skip
+    // interpolating them (an exact upper bound under the ceiling is returned instead).
+    float pk = truePeak_.process(l, r, ceilingLin_);
     float need = pk > ceilingLin_ ? ceilingLin_ / pk : 1.f;
 
     // Peak hold over this reading and the lookahead_ + 1 before it -- every sample still in the

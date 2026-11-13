@@ -40,8 +40,10 @@ public:
     TruePeakDetector();
     void clear();
     // Feeds one stereo frame and returns the true-peak estimate (max over both channels),
-    // margin included.
-    float process(float left, float right);
+    // margin included. With a limit: when even an upper bound of the estimate is at or under it,
+    // that bound is returned instead, without interpolating (see process()) -- for a caller that
+    // only acts on readings above the limit, the result is the same.
+    float process(float left, float right, float limit = 3.4e38f);
 
 private:
     // coeffs_[p - 1] interpolates the point p/8 of the way from x[n - kDelay] to the next sample.
@@ -50,6 +52,9 @@ private:
     alignas(16) std::array<std::array<float, 2 * kTaps>, 2> history_{};
     unsigned pos_ = 0;
     float marginLin_ = 1.f;
+    // The largest sum of |coefficient| over any phase, rounded up: no interpolated point exceeds
+    // it times the largest |sample| in the window.
+    float boundGain_ = 1.f;
 };
 
 // ---- Master brick-wall limiter (summed stereo output) ------------------------------------------

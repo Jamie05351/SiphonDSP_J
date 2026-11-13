@@ -369,8 +369,13 @@ private:
     void processBandStages(std::size_t frames);
     void processOutputStages(std::size_t frames, bool bandsRun);
     void processBackStages(std::size_t frames);
-    // Every band chain's running state (filters, all-pass, delays, band EQ, bus limiters).
+    // Every band chain's running state (filters, all-pass, delays, band EQ, bus limiters), or
+    // one band's.
     void clearBandState();
+    void clearBandState(NativeBmwRouting::Band band);
+    // Per band (Low, Mid, High): muted on both outputs, so its chain is skipped (see
+    // processBandStages()).
+    std::array<bool, 3> bandMuted_{};
     // The float processing for one buffer.
     void processBlock(float* interleaved, std::size_t sampleCount);
     // Owner only, at the start of each processed buffer: serves notifyStreamStart().

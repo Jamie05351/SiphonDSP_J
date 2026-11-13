@@ -221,7 +221,24 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
     // speaker-damage risk, and the 3-way master-off switch's single write for High) plays zeros
     // and only keeps its bus limiter at rest.
     constexpr Band kBands[] = {Band::Low, Band::Mid, Band::High};
-    auto silent = [this](Band band) { return band == Band::High && p_.highXoPass; };
+    // A band muted on both outputs (its per-output gain ramped all the way to 0 and staying
+    // there: a band mute, or measurement mute isolating another band) is summed as 0 anyway, so
+    // its chain isn't run either; it starts clean when it is unmuted, as its gain ramps up from 0.
+    for (Band band : kBands) {
+        const BandOutputs ids = bandOutputs(band);
+        const auto& l = output(ids.left);
+        const auto& r = output(ids.right);
+        const bool muted = l.outputGain == 0.f && l.outputGainTarget == 0.f && r.outputGain == 0.f &&
+                           r.outputGainTarget == 0.f;
+        const auto bi = static_cast<std::size_t>(band);
+        if (bandMuted_[bi] && !muted) {
+            clearBandState(band);
+        }
+        bandMuted_[bi] = muted;
+    }
+    auto silent = [this](Band band) {
+        return (band == Band::High && p_.highXoPass) || bandMuted_[static_cast<std::size_t>(band)];
+    };
     auto lanes = [this](Band band, float*& xl, float*& xr) {
         const BandOutputs ids = bandOutputs(band);
         xl = chunkLanes_[static_cast<std::size_t>(ids.left)].data();
@@ -346,15 +363,18 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
 }
 
 void NativeBmwDspProcessor::clearBandState() {
-    for (auto& out : outputs_) {
-        out.clearState();
+    for (auto band : {NativeBmwRouting::Band::Low, NativeBmwRouting::Band::Mid, NativeBmwRouting::Band::High}) {
+        clearBandState(band);
     }
-    lowPeq_.clear();
-    midPeq_.clear();
-    highPeq_.clear();
-    for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
-        b->clear();
-    }
+}
+
+void NativeBmwDspProcessor::clearBandState(NativeBmwRouting::Band band) {
+    using Band = NativeBmwRouting::Band;
+    const BandOutputs ids = bandOutputs(band);
+    output(ids.left).clearState();
+    output(ids.right).clearState();
+    (band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_).clear();
+    (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).clear();
 }
 
 void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRun) {

@@ -70,3 +70,32 @@ TEST_CASE("stage profiler: the output is the same with it on") {
     b.process(y.data(), y.size());
     CHECK(std::memcmp(x.data(), y.data(), x.size() * sizeof(float)) == 0);
 }
+
+TEST_CASE("a band muted on both outputs isn't run, and restarts clean when unmuted") {
+    // Low muted: its chain is skipped (no crossover time charged to it), the output is Mid alone,
+    // exactly as with the chain running and multiplied by 0.
+    auto c = defaultConfig();
+    for (int o = 0; o < 2; ++o) {
+        c[nbschema::kOutputConfigBase + o * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 1.f;
+    }
+    NativeBmwDspProcessor p;
+    p.setSampleRate(kSampleRate);
+    REQUIRE(p.configure(c.data(), c.size()));
+    auto low = stereoSine(60.0, 0.5, 24000, kSampleRate);
+    p.process(low.data(), low.size());
+    // 60 Hz sits far below Mid's high-pass: with Low muted almost nothing comes through.
+    std::vector<float> tail(low.end() - 4096, low.end());
+    CHECK(peakAbs(tail) < 0.05f);
+    // Unmuted: Low comes back from a clean state, under its gain ramp -- no burst above the
+    // steady level it then settles at.
+    for (int o = 0; o < 2; ++o) {
+        c[nbschema::kOutputConfigBase + o * nbschema::kOutputConfigWidth + nbschema::kOutMuted] = 0.f;
+    }
+    REQUIRE(p.configure(c.data(), c.size()));
+    auto back = stereoSine(60.0, 0.5, 24000, kSampleRate);
+    p.process(back.data(), back.size());
+    std::vector<float> settled(back.end() - 4096, back.end());
+    std::vector<float> onset(back.begin(), back.begin() + 2 * 2400);
+    CHECK(peakAbs(settled) > 0.1f);
+    CHECK(peakAbs(onset) <= peakAbs(settled) * 1.05f);
+}
