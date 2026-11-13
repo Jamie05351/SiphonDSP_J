@@ -98,6 +98,7 @@ fun DspWorkspaceScaffold(
             if (showStatusStrip) {
                 DspStatusStrip(
                     onOpen = { navigator.openWorkspace(it) },
+                    onOpenTruth = { navigator.open(Routes.NATIVE_TRUTH) },
                     modifier = Modifier
                         .padding(start = actionsStart)
                         .fillMaxHeight()

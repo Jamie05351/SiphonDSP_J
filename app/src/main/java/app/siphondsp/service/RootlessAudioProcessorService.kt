@@ -1564,6 +1564,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         fun nativeTruthSnapshot(): NativeDspTruthSnapshot? =
             activeInstance?.engine?.nativeTruthSnapshot()
 
+        /** What the running engine reports it is running; null with no service or engine. */
+        fun engineStatus(): app.siphondsp.model.debug.EngineStatus? = activeInstance?.engine?.engineStatus()
+
+        /** The measurement self-test on the running engine; null with no service. Blocking: off main. */
+        fun runSelfTest(): app.siphondsp.model.debug.SelfTestReport? = activeInstance?.engine?.runSelfTest()
+
         /** Fills [out] from one native meter (see [NativeDsp.readNativeBmwMeter]); false
          *  while no service or engine is running. */
         fun readNativeBmwMeter(kind: Int, out: FloatArray): Boolean =

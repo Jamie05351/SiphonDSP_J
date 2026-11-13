@@ -22,39 +22,21 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.siphondsp.R
 import app.siphondsp.activity.EngineLauncherActivity
 import app.siphondsp.compose.dialogs.AppDialog
 import app.siphondsp.compose.dialogs.AppDialogs
-import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.compose.state.SelfTestState
+import app.siphondsp.compose.state.rememberEngineStatus
+import app.siphondsp.compose.state.rememberSelfTestState
+import app.siphondsp.model.DspStage
 import app.siphondsp.service.AudioHealthLog
 import app.siphondsp.service.DspHealthBadge
 import app.siphondsp.service.RootlessAudioProcessorService
-import app.siphondsp.utils.AppEvent
-import app.siphondsp.utils.AppEvents
 import app.siphondsp.view.BmwDashboardSkin
 import app.siphondsp.view.DspDestination
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
-
-private class Segment(
-    val label: String,
-    val enabledIndex: Int,
-    val target: DspDestination,
-    /** When set, the label reads "<label> <value> dB" instead of "<label> on/off". */
-    val valueIndex: Int? = null,
-)
-
-private val Segments = listOf(
-    Segment("Tilt", NativeBmwDspValues.INDEX_TILT_ENABLED, DspDestination.CROSSOVER_TILT),
-    Segment("MBC", NativeBmwDspValues.INDEX_MBC_ENABLED, DspDestination.DYNAMICS),
-    // The master limiter lives on the Output workspace.
-    Segment(
-        "Limiter", NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED, DspDestination.OUTPUT,
-        valueIndex = NativeBmwDspValues.INDEX_MASTER_LIMITER_THRESHOLD,
-    ),
-)
 
 // Active stages read in the app's "lit" green (the ON/OFF switch's neon); inactive a dim grey.
 private val OnColor = Color(BmwDashboardSkin.TOGGLE_ON_GREEN)
@@ -69,35 +51,33 @@ private const val LOG_LINES_SHOWN = 12
 private const val MAX_TEXT_SP = 18f
 private const val MIN_TEXT_SP = 14f
 
-/** The widest each cell gets: stages off, a two-digit limiter threshold, the longest health label. */
-private val WorstCaseCells = listOf("Tilt off", "MBC off", "Limiter -12.5 dB", "● DSP recovering")
+/** The widest each cell gets: the longest of each cell's labels, the neutral cell included. */
+private val WorstCaseCells = listOf(
+    "Xover 3-way", "Tilt off", "MBC off", "Limiter -12.5 dB", "Neutral ✗", "● DSP recovering",
+)
 
 /**
- * The bypass-state readout on the DSP workspace toolbar line, after the back arrow: the on/off
- * state of the global stages otherwise only visible on their own screen -- Tilt, MBC and the
- * master limiter (with its threshold) -- each tappable to open the workspace that owns it.
+ * The bypass-state readout on the DSP workspace toolbar line, after the back arrow: the state of
+ * the global stages otherwise only visible on their own screen -- the crossover (2-way, 3-way or
+ * "Xover off" for the full-range bypass), Tilt, MBC and the master limiter (with its threshold) --
+ * each tappable to open the workspace that owns it. While measurement neutral is on, a Neutral
+ * cell shows the self-test's verdict (✓ verified, ✗ something still alters the signal, … testing)
+ * and opens Native DSP Truth.
  *
- * A fourth cell shows the audio path's health (DSP ok / idle / starting / recovering / NO AUDIO /
+ * Every one of those is what the native engine reports it is running ([rememberEngineStatus]),
+ * never the saved settings: with no engine running they read "—".
+ *
+ * A last cell shows the audio path's health (DSP ok / idle / starting / recovering / NO AUDIO /
  * DSP off), polled once a second; tapping it opens the details -- reason, underruns, recoveries,
  * the saved event log -- with a Restart button. The log outlives a head-unit reset.
- *
- * Refreshes on resume and on every [AppEvent.NativeBmwDspUpdated] edit.
  */
 @Composable
-fun DspStatusStrip(onOpen: (DspDestination) -> Unit, modifier: Modifier = Modifier) {
+fun DspStatusStrip(onOpen: (DspDestination) -> Unit, onOpenTruth: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var values by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
+    val status by rememberEngineStatus()
+    val selfTest by rememberSelfTestState()
     var badge by remember { mutableStateOf(DspHealthBadge.evaluate(RootlessAudioProcessorService.pipelineRuntimeSnapshot())) }
 
-    LaunchedEffect(Unit) {
-        AppEvents.of<AppEvent.NativeBmwDspUpdated>().collect { event ->
-            values = event.values.takeIf { it.size == NativeBmwDspValues.SIZE } ?: NativeBmwDspValues.load(context)
-        }
-    }
-    LifecycleResumeEffect(Unit) {
-        values = NativeBmwDspValues.load(context)
-        onPauseOrDispose {}
-    }
     LaunchedEffect(Unit) {
         while (true) {
             badge = DspHealthBadge.evaluate(RootlessAudioProcessorService.pipelineRuntimeSnapshot())
@@ -120,25 +100,56 @@ fun DspStatusStrip(onOpen: (DspDestination) -> Unit, modifier: Modifier = Modifi
     }
 
     Row(modifier.padding(top = 25.dp), verticalAlignment = Alignment.CenterVertically) {
-        Segments.forEachIndexed { index, segment ->
-            if (index > 0) Separator(fontSize.value)
-            val on = values[segment.enabledIndex] >= 0.5f
-            val text = if (segment.valueIndex != null) {
-                "${segment.label} ${formatDb(values[segment.valueIndex])} dB"
-            } else {
-                "${segment.label} ${if (on) "on" else "off"}"
-            }
-            Cell(text, if (on) OnColor else OffColor, fontSize.value) { onOpen(segment.target) }
+        val engine = status
+        val sp = fontSize.value
+        val xover = when (val ways = engine?.crossoverWays) {
+            null -> "Xover —"
+            0 -> "Xover off"
+            else -> "Xover $ways-way"
         }
-        Separator(fontSize.value)
+        // Off is the notable state here (a measurement setup), so it is the one lit.
+        Cell(xover, if (engine?.crossoverWays == 0) WarnColor else if (engine != null) OnColor else OffColor, sp) {
+            onOpen(DspDestination.CROSSOVER_TILT)
+        }
+        Separator(sp)
+        StageCell("Tilt", engine?.let { it.isActive(DspStage.TILT) }, null, sp) { onOpen(DspDestination.CROSSOVER_TILT) }
+        Separator(sp)
+        StageCell("MBC", engine?.let { it.isActive(DspStage.MBC) }, null, sp) { onOpen(DspDestination.DYNAMICS) }
+        Separator(sp)
+        // The master limiter lives on the Output workspace.
+        StageCell(
+            "Limiter", engine?.let { it.isActive(DspStage.MASTER_LIMITER) },
+            engine?.limiterThresholdDb?.let { "${formatDb(it)} dB" }, sp,
+        ) { onOpen(DspDestination.OUTPUT) }
+        if (engine?.measurementNeutral == true) {
+            Separator(sp)
+            val (mark, color) = when (val t = selfTest) {
+                SelfTestState.Running -> "…" to OffColor
+                is SelfTestState.Done -> if (t.report.verified) "✓" to OnColor else "✗" to WarnColor
+                else -> "?" to WarnColor
+            }
+            Cell("Neutral $mark", color, sp, onOpenTruth)
+        }
+        Separator(sp)
         val healthColor = when (badge.level) {
             DspHealthBadge.Level.OK -> OnColor
             DspHealthBadge.Level.IDLE -> OffColor
             DspHealthBadge.Level.WARN -> WarnColor
             DspHealthBadge.Level.BAD -> Color(BmwDashboardSkin.M_RED)
         }
-        Cell("● ${badge.label}", healthColor, fontSize.value) { showHealthDialog(context) }
+        Cell("● ${badge.label}", healthColor, sp) { showHealthDialog(context) }
     }
+}
+
+/** "<label> on/off", or "<label> <value>" while on with a [value]; "<label> —" while the engine is unknown ([on] null). */
+@Composable
+private fun StageCell(label: String, on: Boolean?, value: String?, sp: Float, onClick: () -> Unit) {
+    val text = when (on) {
+        null -> "$label —"
+        true -> if (value != null) "$label $value" else "$label on"
+        false -> "$label off"
+    }
+    Cell(text, if (on == true) OnColor else OffColor, sp, onClick)
 }
 
 @Composable

@@ -241,15 +241,6 @@ private fun IsolationColumn(dsp: BmwDspState, accent: Color) {
 @Composable
 private fun RoutingColumn(dsp: BmwDspState, accent: Color) {
     ArtGroupHeader(stringResource(R.string.signal_generator_section_routing), accent, Modifier.fillMaxWidth().height(40.dp))
-    RoutingSwitch(stringResource(R.string.signal_generator_lpf_passthrough), dsp.isOn(NativeBmwDspValues.INDEX_LPF_PASS)) {
-        dsp.commit(NativeBmwDspValues.INDEX_LPF_PASS, if (it) 1f else 0f)
-    }
-    RoutingSwitch(stringResource(R.string.signal_generator_hpf_passthrough), dsp.isOn(NativeBmwDspValues.INDEX_HPF_PASS)) {
-        dsp.commit(NativeBmwDspValues.INDEX_HPF_PASS, if (it) 1f else 0f)
-    }
-    RoutingSwitch(stringResource(R.string.signal_generator_high_passthrough), dsp.isOn(NativeBmwDspValues.INDEX_HIGH_PASS)) {
-        dsp.commit(NativeBmwDspValues.INDEX_HIGH_PASS, if (it) 1f else 0f)
-    }
     RoutingSwitch(stringResource(R.string.signal_generator_mute_low_band), dsp.isOn(NativeBmwDspValues.INDEX_LOW_MUTE)) {
         dsp.commit(
             NativeBmwDspValues.INDEX_LOW_MUTE, if (it) 1f else 0f,

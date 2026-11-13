@@ -61,16 +61,17 @@ class CrossoverPairingTest {
         assertTrue(bw4.lowMidCorrected)
         assertFalse(bw4.midInverted)
 
-        // Mismatched slopes, or a bypassed crossover, aren't a pair.
+        // Mismatched slopes aren't a pair.
         val mixed = twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW2).also {
             it[NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_TYPE)] =
                 NativeBmwDspValues.CROSSOVER_TYPE_LR4
         }
         assertFalse(CrossoverPairing.of(mixed, left = true).lowMidCorrected)
+        // The crossover bypass leaves the pairing alone (as native): the split comes back as it was.
         val bypassed = twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW2).also {
-            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
+            it[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] = 1f
         }
-        assertFalse(CrossoverPairing.of(bypassed, left = true).lowMidCorrected)
+        assertTrue(CrossoverPairing.of(bypassed, left = true).lowMidCorrected)
         // A deliberate gap (Low 80 Hz, Mid 200 Hz) isn't one boundary: left alone.
         val gap = twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW2).also {
             for (output in 0 until 2) it[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_CROSSOVER_FREQ)] = 80f

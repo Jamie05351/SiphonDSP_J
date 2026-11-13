@@ -3,28 +3,37 @@
 
 // The processor's parsed scalar config (everything configure() reads that isn't per-output).
 
+#include <cstdint>
+
 #include "NativeBmwDynamics.h"
 #include "NativeBmwVirtual.h"
 
 namespace NativeBmwDsp {
 
 struct Params {
-    bool enabled = true, lpfPass = false, hpfPass = false, tilt = true;
+    bool enabled = true, tilt = true;
     int channelMute = 0, measurementMute = 0;
     float headroom = -6, lowGainL = 0, lowGainR = 0, midGainL = -1, midGainR = -1,
           postGainL = 0, postGainR = 0;
     float midDelayL = 0, midDelayR = 0, lowDelayL = 0, lowDelayR = 0;
-    // High band (v[210..214], added in the 210 -> 262 growth). Unlike lpfPass/hpfPass
-    // (which only bypass the crossover *filter*, letting the raw routed signal through --
-    // see processFrame()'s own comment on this for Low/Mid), highXoPass=true fully silences
-    // High: a tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass,
-    // not just an audio-quality one, so this flag alone is sufficient to silence it, with no
-    // reliance on outputConfigs_[High*].muted also being set correctly. See
-    // docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
+    // High band (v[210..214], added in the 210 -> 262 growth). highXoPass=true fully silences
+    // High: a tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass, so this
+    // flag alone is sufficient to silence it, with no reliance on outputConfigs_[High*].muted
+    // also being set correctly. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
     bool highXoPass = false;
-    // v[291]: High's own crossover passthrough -- the lpfPass/hpfPass contract for High (its
-    // chain skipped, the raw routed signal through). Only audible while highXoPass is off.
-    bool highPass = false;
+    // v[309]: the band split removed -- the input stages feed the summed-bus stages directly as
+    // one full-range stereo path: no routing, crossovers, band EQ, all-pass, delay, gain,
+    // polarity, mute or bus limiter, and no added latency. (Retired v[1], v[2] and v[291] were
+    // per-band passthroughs that still split, delayed and summed the bands.) Effective value:
+    // measurement neutral forces it on unless the crossover is allowed.
+    bool crossoverBypass = false;
+    // v[310..311]: measurement neutral and the stages kept running under it (kStage* bits).
+    // Neutral is applied to a copy of the config before parsing (see neutralConfig()), so the
+    // fields above already hold the effective, neutralised values; these three cover the stages
+    // that are not config slots.
+    bool measurementNeutral = false;
+    std::uint32_t neutralAllow = 0;
+    bool preEqOn = true, bandEqOn = true, dcBlockerOn = true;
     // v[292..293]: master volume -- the DSP as the car's volume control. Applied last, after
     // the limiter, ramped so a step never clicks.
     float masterVolumeDb = 0.f;

@@ -28,7 +28,7 @@ class BmwResponseCurves(val pointCount: Int) {
     var lowBranchActive = true
     var midBranchActive = true
     var highBranchActive = true
-    var bothCrossoversBypassed = false
+    var crossoverBypassed = false
 
     fun sumDbFor(channel: BmwOutputChannel): DoubleArray = sumDb[channel.ordinal]
     fun lowBranchDbFor(channel: BmwOutputChannel): DoubleArray = lowBranchDb[channel.ordinal]

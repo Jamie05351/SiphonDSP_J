@@ -4,7 +4,9 @@ import android.content.Context
 import android.os.SystemClock
 import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.debug.EngineStatus
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
+import app.siphondsp.model.debug.SelfTestReport
 import app.siphondsp.model.debug.parseNativeTruthSnapshot
 import app.siphondsp.model.preference.AudioEncoding
 import app.siphondsp.utils.AppEvent
@@ -256,6 +258,20 @@ class DspEngine(val context: Context) : AutoCloseable {
             )
         }
         return snapshot
+    }
+
+    /** What the engine reports it is running (see [EngineStatus]); null with no handle or before its first config. */
+    fun engineStatus(): EngineStatus? =
+        EngineStatus.parse(withMeterHandle<FloatArray?>(null) { NativeDsp.getEngineStatus(it) })
+
+    /**
+     * Runs the measurement self-test on an offline copy of the running chain. Blocking (about a
+     * second): off the main thread. Only the source copy is taken under the handle lock.
+     */
+    fun runSelfTest(): SelfTestReport? {
+        val source = withSharedHandle(0L) { NativeDsp.takeSelfTestSource(it) }
+        if (source == 0L) return null
+        return SelfTestReport.parse(NativeDsp.runSelfTest(source))
     }
 
     fun requestedNativeBmwDspRevision(): Long = requestedDspRevision
