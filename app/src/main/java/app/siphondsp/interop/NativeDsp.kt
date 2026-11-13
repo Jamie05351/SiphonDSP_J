@@ -96,6 +96,14 @@ object NativeDsp {
     // of the processor, about a second of work: never on the main or audio thread. runSelfTest()
     // frees the source and returns SelfTestReport.SIZE doubles (SelfTestReport.parse()).
     external fun takeSelfTestSource(self: NativeDspHandle): Long
+    // Per-stage timing (NativeBmwProfiler.h): on only while Native DSP Truth shows it (switching
+    // on starts the counts from zero). getStageProfile: StageProfile.SIZE doubles, lock-free.
+    external fun setStageProfiling(self: NativeDspHandle, on: Boolean)
+    // Pins the calling thread to the fastest CPU cluster it is allowed on (NativeAudioThread.cpp):
+    // [result (AudioThreadTuning.PIN_*), allowed mask, pinned mask, fast-cluster mask, fast max kHz].
+    // On any failure the affinity is left as it was. Needs no engine handle.
+    external fun pinCurrentThreadToFastCores(): LongArray?
+    external fun getStageProfile(self: NativeDspHandle): DoubleArray?
     external fun runSelfTest(source: Long): DoubleArray?
     external fun startNativeBmwCapture(self: NativeDspHandle)
     external fun stopNativeBmwCapture(self: NativeDspHandle)

@@ -101,153 +101,248 @@ BandOutputs bandOutputs(NativeBmwRouting::Band band) {
 }
 }  // namespace
 
-void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float& xl, float& xr) {
-    using Band = NativeBmwRouting::Band;
-    const BandOutputs ids = bandOutputs(band);
-    auto& left = output(ids.left);
-    auto& right = output(ids.right);
-    // Filter stages run L and R together (NEON pairs on arm64); see NativeBmwCrossovers.h.
-    if (band == Band::Low) {
-        NativeBmwDsp::processLowCrossover(left, outputConfig(ids.left), right,
-                                          outputConfig(ids.right), xl, xr);
-    } else if (band == Band::Mid) {
-        NativeBmwDsp::processMidCrossover(left, right, xl, xr);
-    } else {
-        NativeBmwDsp::processHighCrossover(left, right, xl, xr);
-    }
-    // Band EQ, crossfaded on/off (measurement neutral) like the Pre EQ: see stepMix().
-    const auto bi = static_cast<std::size_t>(band);
-    float& eqMix = bandEqMix_[bi];
-    PeqBank& bank = band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_;
-    if (eqMix == 0.f && bandEqTarget_ > 0.f) {
-        bank.clear();  // it hasn't run since it went off: start clean, not from stale state
-    }
-    eqMix = stepMix(eqMix, bandEqTarget_);
-    if (eqMix > 0.f) {
-        float wl = xl, wr = xr;
-        bank.process(wl, wr);
-        if (eqMix < 1.f) {
-            wl = xl + (wl - xl) * eqMix;
-            wr = xr + (wr - xr) * eqMix;
-        }
-        xl = wl;
-        xr = wr;
-    }
-    OutputRuntime::processAllPassPair(left, right, xl, xr);
-    xl = left.delay.run(xl);
-    xr = right.delay.run(xr);
-    xl *= left.gain;
-    xr *= right.gain;
-    // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
-    // bounds the actual level reaching the driver regardless of how much gain is dialed in.
-    // Disabled, it still delays the band by its lookahead so every band keeps the same latency.
-    BusLimiter& limiter = band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_;
-    const bool limiterEnabled = band == Band::Low   ? p_.busLimLowEnabled
-                                : band == Band::Mid ? p_.busLimMidEnabled
-                                                    : p_.busLimHighEnabled;
-    const float limiterThreshDb = band == Band::Low   ? p_.busLimLowThreshDb
-                                  : band == Band::Mid ? p_.busLimMidThreshDb
-                                                      : p_.busLimHighThreshDb;
-    if (limiterEnabled) {
-        limiter.process(xl, xr, limiterThreshDb);
-    } else {
-        limiter.passThrough(xl, xr, limiterThreshDb);
-    }
-}
-void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
-    using Band = NativeBmwRouting::Band;
-    (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).reset();
-}
+// ---- The chain, stage by stage over a chunk ------------------------------------------------------
+// Every stage runs over the whole chunk before the next one starts. A stage's state (filters,
+// ramps, detectors) is its own, and it sees exactly the samples it saw frame by frame, in the same
+// order, so this is bit-identical to running each frame through every stage -- and each stage
+// keeps its coefficients and state hot, and costs one clock read per chunk to time (profiler_).
 
-std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::processInputStages(
-    float l, float r, float& fullL, float& fullR) {
+void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
+    using P = NativeBmwDsp::StageProfiler;
+    float* L = chunkFullL_.data();
+    float* R = chunkFullR_.data();
     // The 3 Hz DC blocker, crossfaded out under measurement neutral (it turns the phase by ~8.5
     // degrees at 20 Hz) and back in from a clean state.
-    float sL = l, sR = r;
-    if (dcMix_ == 0.f && dcTarget_ > 0.f) {
-        inputDcL_.clear();
-        inputDcR_.clear();
-    }
-    dcMix_ = stepMix(dcMix_, dcTarget_);
-    if (dcMix_ > 0.f) {
-        const float bl = inputDcL_.run(l, dcR_), br = inputDcR_.run(r, dcR_);
-        sL = dcMix_ == 1.f ? bl : l + (bl - l) * dcMix_;
-        sR = dcMix_ == 1.f ? br : r + (br - r) * dcMix_;
-    }
-    if (p_.monoBassEnabled) {
-        monoBassMix_ = std::min(1.f, monoBassMix_ + monoBassFadeStep_);
-    } else if (monoBassMix_ > 0.f) {
-        monoBassMix_ = std::max(0.f, monoBassMix_ - monoBassFadeStep_);
-    }
-    if (monoBassMix_ > 0.f) {
-        monoBass_.process(sL, sR, monoBassMix_);
-    }
-    if (p_.virtualBassEnabled) {
-        virtualBassMix_ = std::min(1.f, virtualBassMix_ + monoBassFadeStep_);
-    } else if (virtualBassMix_ > 0.f) {
-        virtualBassMix_ = std::max(0.f, virtualBassMix_ - monoBassFadeStep_);
-    }
-    if (virtualBassMix_ > 0.f) {
-        virtualBassRemoveMix_ = p_.virtualBassRemoveSub
-                                    ? std::min(1.f, virtualBassRemoveMix_ + monoBassFadeStep_)
-                                    : std::max(0.f, virtualBassRemoveMix_ - monoBassFadeStep_);
-        virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, loudnessRampCoef_);
-        virtualBassCharacter_ =
-            NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, loudnessRampCoef_);
-        virtualBass_.process(sL, sR, virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_, virtualBassCharacter_);
-    }
-    // Pre EQ (the full-range bank and its preamp), crossfaded on/off: the PEQ switch and
-    // measurement neutral both land here.
-    if (preEqMix_ == 0.f && preEqTarget_ > 0.f) {
-        inputPeq_.clear();
-    }
-    preEqMix_ = stepMix(preEqMix_, preEqTarget_);
-    if (preEqMix_ > 0.f) {
-        float wl = sL * peqPreamp_, wr = sR * peqPreamp_;
-        inputPeq_.process(wl, wr);
-        if (preEqMix_ < 1.f) {
-            wl = sL + (wl - sL) * preEqMix_;
-            wr = sR + (wr - sR) * preEqMix_;
+    if (dcMix_ > 0.f || dcTarget_ > 0.f) {
+        for (std::size_t i = 0; i < frames; ++i) {
+            if (dcMix_ == 0.f && dcTarget_ > 0.f) {
+                inputDcL_.clear();
+                inputDcR_.clear();
+            }
+            dcMix_ = stepMix(dcMix_, dcTarget_);
+            if (dcMix_ > 0.f) {
+                const float l = L[i], r = R[i];
+                const float bl = inputDcL_.run(l, dcR_), br = inputDcR_.run(r, dcR_);
+                L[i] = dcMix_ == 1.f ? bl : l + (bl - l) * dcMix_;
+                R[i] = dcMix_ == 1.f ? br : r + (br - r) * dcMix_;
+            }
         }
-        sL = wl;
-        sR = wr;
     }
-    headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
-    sL *= headroom_;
-    sR *= headroom_;
+    profiler_.lap(P::DcBlocker);
+    if (p_.monoBassEnabled || monoBassMix_ > 0.f) {
+        for (std::size_t i = 0; i < frames; ++i) {
+            if (p_.monoBassEnabled) {
+                monoBassMix_ = std::min(1.f, monoBassMix_ + monoBassFadeStep_);
+            } else if (monoBassMix_ > 0.f) {
+                monoBassMix_ = std::max(0.f, monoBassMix_ - monoBassFadeStep_);
+            }
+            if (monoBassMix_ > 0.f) {
+                monoBass_.process(L[i], R[i], monoBassMix_);
+            }
+        }
+    }
+    profiler_.lap(P::MonoBass);
+    if (p_.virtualBassEnabled || virtualBassMix_ > 0.f) {
+        for (std::size_t i = 0; i < frames; ++i) {
+            if (p_.virtualBassEnabled) {
+                virtualBassMix_ = std::min(1.f, virtualBassMix_ + monoBassFadeStep_);
+            } else if (virtualBassMix_ > 0.f) {
+                virtualBassMix_ = std::max(0.f, virtualBassMix_ - monoBassFadeStep_);
+            }
+            if (virtualBassMix_ > 0.f) {
+                virtualBassRemoveMix_ = p_.virtualBassRemoveSub
+                                            ? std::min(1.f, virtualBassRemoveMix_ + monoBassFadeStep_)
+                                            : std::max(0.f, virtualBassRemoveMix_ - monoBassFadeStep_);
+                virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, loudnessRampCoef_);
+                virtualBassCharacter_ =
+                    NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, loudnessRampCoef_);
+                virtualBass_.process(L[i], R[i], virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_,
+                                     virtualBassCharacter_);
+            }
+        }
+    }
+    profiler_.lap(P::VirtualBass);
+    // Pre EQ (the full-range bank and its preamp), crossfaded on/off: the PEQ switch and
+    // measurement neutral both land here. Then the headroom gain.
+    for (std::size_t i = 0; i < frames; ++i) {
+        if (preEqMix_ == 0.f && preEqTarget_ > 0.f) {
+            inputPeq_.clear();
+        }
+        preEqMix_ = stepMix(preEqMix_, preEqTarget_);
+        float sL = L[i], sR = R[i];
+        if (preEqMix_ > 0.f) {
+            float wl = sL * peqPreamp_, wr = sR * peqPreamp_;
+            inputPeq_.process(wl, wr);
+            if (preEqMix_ < 1.f) {
+                wl = sL + (wl - sL) * preEqMix_;
+                wr = sR + (wr - sR) * preEqMix_;
+            }
+            sL = wl;
+            sR = wr;
+        }
+        headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
+        L[i] = sL * headroom_;
+        R[i] = sR * headroom_;
+    }
+    profiler_.lap(P::PreEq);
     // Pre-crossover multiband compressor: full-range stereo, before any band split. Skipped
     // entirely while disabled (how it ships).
     if (p_.mbcEnabled) {
-        mbc_.process(sL, sR, p_.mbcBand, detector_);
+        for (std::size_t i = 0; i < frames; ++i) {
+            mbc_.process(L[i], R[i], p_.mbcBand, detector_);
+        }
     }
+    profiler_.lap(P::Mbc);
     // Virtual-source stage: extracts the virtual centre and feeds it back into the internal L/R
     // with its own per-side level/delay/polarity/all-pass, ahead of routing so it then runs
     // through every band chain. Skipped entirely while disabled (how it ships).
     if (p_.virtualStage.enabled) {
-        virtual_.process(sL, sR);
-    }
-    fullL = sL;
-    fullR = sR;
-    return routing_.process({sL, sR});
-}
-
-void NativeBmwDspProcessor::processBandStage(NativeBmwRouting::Band band, std::size_t frames) {
-    using Band = NativeBmwRouting::Band;
-    const BandOutputs ids = bandOutputs(band);
-    float* xl = chunkLanes_[static_cast<std::size_t>(ids.left)].data();
-    float* xr = chunkLanes_[static_cast<std::size_t>(ids.right)].data();
-    // A band runs its chain, or plays silence (highXoPass: a tweeter with no HPF ahead of it is
-    // a speaker-damage risk, and the 3-way master-off switch's single write for High).
-    const bool silent = band == Band::High && p_.highXoPass;
-    for (std::size_t i = 0; i < frames; ++i) {
-        if (silent) {
-            xl[i] = 0.f;
-            xr[i] = 0.f;
-            idleBandChain(band);
-        } else {
-            processBandChain(band, xl[i], xr[i]);
+        for (std::size_t i = 0; i < frames; ++i) {
+            virtual_.process(L[i], R[i]);
         }
     }
+    profiler_.lap(P::VirtualCentre);
+    // L/R as they stand here are also the crossover bypass's full-range path.
+    for (std::size_t i = 0; i < frames; ++i) {
+        const auto routed = routing_.process({L[i], R[i]});
+        for (std::size_t o = 0; o < routed.size(); ++o) {
+            chunkLanes_[o][i] = routed[o];
+        }
+    }
+    profiler_.lap(P::Routing);
+}
+
+void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
+    using Band = NativeBmwRouting::Band;
+    using P = NativeBmwDsp::StageProfiler;
+    // Each sub-stage over every band, then the next: the bands share no state, so the order
+    // across bands doesn't matter, and within a band each sub-stage sees its samples in order.
+    // A band whose chain is silenced (highXoPass: a tweeter with no HPF ahead of it is a
+    // speaker-damage risk, and the 3-way master-off switch's single write for High) plays zeros
+    // and only keeps its bus limiter at rest.
+    constexpr Band kBands[] = {Band::Low, Band::Mid, Band::High};
+    auto silent = [this](Band band) { return band == Band::High && p_.highXoPass; };
+    auto lanes = [this](Band band, float*& xl, float*& xr) {
+        const BandOutputs ids = bandOutputs(band);
+        xl = chunkLanes_[static_cast<std::size_t>(ids.left)].data();
+        xr = chunkLanes_[static_cast<std::size_t>(ids.right)].data();
+    };
+    for (Band band : kBands) {
+        if (silent(band)) {
+            continue;
+        }
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        const BandOutputs ids = bandOutputs(band);
+        auto& left = output(ids.left);
+        auto& right = output(ids.right);
+        // Filter stages run L and R together (NEON pairs on arm64); see NativeBmwCrossovers.h.
+        if (band == Band::Low) {
+            const auto& cfgL = outputConfig(ids.left);
+            const auto& cfgR = outputConfig(ids.right);
+            for (std::size_t i = 0; i < frames; ++i) {
+                NativeBmwDsp::processLowCrossover(left, cfgL, right, cfgR, xl[i], xr[i]);
+            }
+        } else if (band == Band::Mid) {
+            for (std::size_t i = 0; i < frames; ++i) {
+                NativeBmwDsp::processMidCrossover(left, right, xl[i], xr[i]);
+            }
+        } else {
+            for (std::size_t i = 0; i < frames; ++i) {
+                NativeBmwDsp::processHighCrossover(left, right, xl[i], xr[i]);
+            }
+        }
+    }
+    profiler_.lap(P::Crossovers);
+    // Band EQ, crossfaded on/off (measurement neutral) like the Pre EQ: see stepMix().
+    for (Band band : kBands) {
+        if (silent(band)) {
+            continue;
+        }
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        float& eqMix = bandEqMix_[static_cast<std::size_t>(band)];
+        if (eqMix == 0.f && bandEqTarget_ == 0.f) {
+            continue;
+        }
+        PeqBank& bank = band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_;
+        for (std::size_t i = 0; i < frames; ++i) {
+            if (eqMix == 0.f && bandEqTarget_ > 0.f) {
+                bank.clear();  // it hasn't run since it went off: start clean, not from stale state
+            }
+            eqMix = stepMix(eqMix, bandEqTarget_);
+            if (eqMix > 0.f) {
+                float wl = xl[i], wr = xr[i];
+                bank.process(wl, wr);
+                if (eqMix < 1.f) {
+                    wl = xl[i] + (wl - xl[i]) * eqMix;
+                    wr = xr[i] + (wr - xr[i]) * eqMix;
+                }
+                xl[i] = wl;
+                xr[i] = wr;
+            }
+        }
+    }
+    profiler_.lap(P::BandEq);
+    for (Band band : kBands) {
+        if (silent(band)) {
+            continue;
+        }
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        const BandOutputs ids = bandOutputs(band);
+        auto& left = output(ids.left);
+        auto& right = output(ids.right);
+        for (std::size_t i = 0; i < frames; ++i) {
+            OutputRuntime::processAllPassPair(left, right, xl[i], xr[i]);
+        }
+    }
+    profiler_.lap(P::AllPass);
+    for (Band band : kBands) {
+        if (silent(band)) {
+            continue;
+        }
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        const BandOutputs ids = bandOutputs(band);
+        auto& left = output(ids.left);
+        auto& right = output(ids.right);
+        for (std::size_t i = 0; i < frames; ++i) {
+            xl[i] = left.delay.run(xl[i]) * left.gain;
+            xr[i] = right.delay.run(xr[i]) * right.gain;
+        }
+    }
+    profiler_.lap(P::DelayGain);
+    // Per-bus brick-wall limiter (stereo-linked), right after the driver gain so its threshold
+    // bounds the actual level reaching the driver regardless of how much gain is dialed in.
+    // Disabled, it still delays the band by its lookahead so every band keeps the same latency.
+    for (Band band : kBands) {
+        BusLimiter& limiter = band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_;
+        float *xl, *xr;
+        lanes(band, xl, xr);
+        if (silent(band)) {
+            for (std::size_t i = 0; i < frames; ++i) {
+                xl[i] = 0.f;
+                xr[i] = 0.f;
+            }
+            limiter.reset();
+            continue;
+        }
+        const bool limiterEnabled = band == Band::Low   ? p_.busLimLowEnabled
+                                    : band == Band::Mid ? p_.busLimMidEnabled
+                                                        : p_.busLimHighEnabled;
+        const float limiterThreshDb = band == Band::Low   ? p_.busLimLowThreshDb
+                                      : band == Band::Mid ? p_.busLimMidThreshDb
+                                                          : p_.busLimHighThreshDb;
+        for (std::size_t i = 0; i < frames; ++i) {
+            if (limiterEnabled) {
+                limiter.process(xl[i], xr[i], limiterThreshDb);
+            } else {
+                limiter.passThrough(xl[i], xr[i], limiterThreshDb);
+            }
+        }
+    }
+    profiler_.lap(P::BusLimiters);
 }
 
 void NativeBmwDspProcessor::clearBandState() {
@@ -262,150 +357,154 @@ void NativeBmwDspProcessor::clearBandState() {
     }
 }
 
-void NativeBmwDspProcessor::sumBands(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l,
-                                     float& r) {
-    // Per-output polarity and mute, as one ramped multiplier (see OutputRuntime::outputGain).
-    // Indexed in OutputId order. The sum always uses the routed lanes, so the routing matrix and
-    // the per-output polarity/mute always apply to it.
-    for (std::size_t i = 0; i < logical.size(); ++i) {
-        auto& out = outputs_[i];
-        out.outputGain = NativeBmwDsp::rampToward(out.outputGain, out.outputGainTarget, outputRampCoef_);
-        logical[i] *= out.outputGain;
+void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRun) {
+    using P = NativeBmwDsp::StageProfiler;
+    float* L = chunkConvL_.data();
+    float* R = chunkConvR_.data();
+    // The band sum (per-output polarity and mute as one ramped multiplier, see
+    // OutputRuntime::outputGain; the routed lanes, so the routing matrix and per-output
+    // polarity/mute always apply), or the full-range path (crossover bypass), crossfaded between
+    // the two over kCrossoverFadeSeconds.
+    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    for (std::size_t i = 0; i < frames; ++i) {
+        float oL = chunkFullL_[i], oR = chunkFullR_[i];
+        if (bandsRun) {
+            std::array<float, NativeBmwRouting::kOutputCount> logical;
+            for (std::size_t o = 0; o < logical.size(); ++o) {
+                auto& out = outputs_[o];
+                out.outputGain = NativeBmwDsp::rampToward(out.outputGain, out.outputGainTarget, outputRampCoef_);
+                logical[o] = chunkLanes_[o][i] * out.outputGain;
+            }
+            const auto stereo = NativeBmwRouting::sumToStereo(logical);
+            xoverMix_ = stepMix(xoverMix_, xoverTarget, xoverFadeStep_);
+            if (xoverMix_ == 0.f) {
+                oL = stereo.left;
+                oR = stereo.right;
+            } else if (xoverMix_ < 1.f) {
+                oL = stereo.left + (oL - stereo.left) * xoverMix_;
+                oR = stereo.right + (oR - stereo.right) * xoverMix_;
+            }
+        }
+        L[i] = oL;
+        R[i] = oR;
     }
-    const auto stereo = NativeBmwRouting::sumToStereo(logical);
-    l = stereo.left;
-    r = stereo.right;
-}
-
-void NativeBmwDspProcessor::processOutputStages(float& l, float& r) {
-    float oL = l, oR = r;
+    profiler_.lap(P::BandSum);
     if (p_.tilt) {
-        tilt_.process(oL, oR);
+        for (std::size_t i = 0; i < frames; ++i) {
+            tilt_.process(L[i], R[i]);
+        }
     }
-    oL *= postGainL_;
-    oR *= postGainR_;
-    // Channel mute, ramped like the per-output mute above.
-    channelGainL_ = NativeBmwDsp::rampToward(channelGainL_, p_.channelMute == 1 ? 0.f : 1.f, outputRampCoef_);
-    channelGainR_ = NativeBmwDsp::rampToward(channelGainR_, p_.channelMute == 2 ? 0.f : 1.f, outputRampCoef_);
-    oL *= channelGainL_;
-    oR *= channelGainR_;
-    oL = NativeBmwDsp::ftz(oL);
-    oR = NativeBmwDsp::ftz(oR);
-    // Option A measurement-mute bus brick-wall. Operates on logical L/R, AFTER the band sum,
-    // tilt, post-gain and ch_mute, but BEFORE the master limiter and BEFORE the deliberate L/R
-    // hardware swap below -- the left bus always filters the LowLeft/MidLeft chain. Fully
-    // bypassed (single branch, no state advanced) whenever measurement mute is off.
-    if (measBus_.active()) {
-        measBus_.process(oL, oR);
+    profiler_.lap(P::Tilt);
+    // Post gain, then channel mute (ramped like the per-output mute), then the measurement-mute
+    // bus brick-wall: on logical L/R, after the band sum, tilt, post-gain and ch_mute, but before
+    // the master limiter and before the deliberate L/R hardware swap -- the left bus always
+    // filters the LowLeft/MidLeft chain. Fully bypassed (no state advanced) while it is off.
+    const float channelTargetL = p_.channelMute == 1 ? 0.f : 1.f;
+    const float channelTargetR = p_.channelMute == 2 ? 0.f : 1.f;
+    const bool measBus = measBus_.active();
+    for (std::size_t i = 0; i < frames; ++i) {
+        float oL = L[i] * postGainL_, oR = R[i] * postGainR_;
+        channelGainL_ = NativeBmwDsp::rampToward(channelGainL_, channelTargetL, outputRampCoef_);
+        channelGainR_ = NativeBmwDsp::rampToward(channelGainR_, channelTargetR, outputRampCoef_);
+        oL = NativeBmwDsp::ftz(oL * channelGainL_);
+        oR = NativeBmwDsp::ftz(oR * channelGainR_);
+        if (measBus) {
+            measBus_.process(oL, oR);
+        }
+        L[i] = oL;
+        R[i] = oR;
     }
-    l = oL;
-    r = oR;
+    profiler_.lap(P::OutputGains);
 }
 
-void NativeBmwDspProcessor::processFrameBack(float& l, float& r) {
-    float oL = l, oR = r;
+void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
+    using P = NativeBmwDsp::StageProfiler;
+    float* L = chunkConvL_.data();
+    float* R = chunkConvR_.data();
     // Master brick-wall limiter. enabled == false is a true bypass: the stage is skipped
-    // entirely and nothing constrains the summed output level.
-    if (p_.limiterEnabled) {
-        limiter_.process(oL, oR);
+    // entirely and nothing constrains the summed output level. Then the last clean-up before the
+    // output gains: with the limiter off, nothing else between the front of the chain and the
+    // output would catch a denormal.
+    const bool limiter = p_.limiterEnabled;
+    for (std::size_t i = 0; i < frames; ++i) {
+        if (limiter) {
+            limiter_.process(L[i], R[i]);
+        }
+        L[i] = NativeBmwDsp::ftz(L[i]);
+        R[i] = NativeBmwDsp::ftz(R[i]);
     }
-    // Last clean-up before the output gains: with the limiter off, nothing else between the
-    // front of the chain and the output would catch a denormal.
-    oL = NativeBmwDsp::ftz(oL);
-    oR = NativeBmwDsp::ftz(oR);
+    profiler_.lap(P::MasterLimiter);
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
-    // ramped toward its target so a steering-wheel step never clicks.
-    masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
-    oL *= masterGain_;
-    oR *= masterGain_;
-    // Loudness compensation follows the volume, after it: its lift is always less than the cut.
-    // The switch and strength ramp the effective strength (so on/off fades, no thump), and while
-    // that or the volume is moving the lift is retuned every 8 samples (see retuneLoudness()), so
-    // it never runs ahead of the attenuation. Fully off, the stage is skipped.
+    // ramped toward its target so a steering-wheel step never clicks. Loudness compensation
+    // follows the volume, after it: its lift is always less than the cut. The switch and strength
+    // ramp the effective strength (so on/off fades, no thump), and while that or the volume is
+    // moving the lift is retuned every 8 samples (see retuneLoudness()), so it never runs ahead
+    // of the attenuation. Fully off, the stage is skipped.
     const float strengthTarget = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
-    const bool loudnessMoving = loudnessStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
-    loudnessStrength_ = NativeBmwDsp::rampToward(loudnessStrength_, strengthTarget, loudnessRampCoef_);
-    if (loudnessMoving && (++loudnessRetuneCounter_ & 7u) == 0) {
-        retuneLoudness();
+    for (std::size_t i = 0; i < frames; ++i) {
+        masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
+        float oL = L[i] * masterGain_, oR = R[i] * masterGain_;
+        const bool loudnessMoving = loudnessStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
+        loudnessStrength_ = NativeBmwDsp::rampToward(loudnessStrength_, strengthTarget, loudnessRampCoef_);
+        if (loudnessMoving && (++loudnessRetuneCounter_ & 7u) == 0) {
+            retuneLoudness();
+        }
+        if (loudnessStrength_ > 0.f) {
+            loudness_.process(oL, oR);
+        }
+        // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
+        // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
+        // at the amp/speaker connectors, not something this DSP can see or control). This swap
+        // cancels that physical fault: oL (built from the LowLeft/MidLeft chain) is written to
+        // output param r, and oR (LowRight/MidRight) to output param l. Because of this, every
+        // "Left"/"Right"-labeled control elsewhere in the app (gains, routing, delay, PEQ, and the
+        // BmwSignalChain preview-graph mapping) is correct as a direct, unswapped index -- they all
+        // rely on this line already correcting the physical fault. If a future review flags this as
+        // "controls wired backwards", the bug is almost certainly elsewhere; do not add a
+        // compensating swap here or anywhere downstream in response to that.
+        L[i] = oR;
+        R[i] = oL;
     }
-    if (loudnessStrength_ > 0.f) {
-        loudness_.process(oL, oR);
-    }
-    // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
-    // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
-    // at the amp/speaker connectors, not something this DSP can see or control). This swap
-    // cancels that physical fault: oL (built from the LowLeft/MidLeft chain) is written to
-    // output param r, and oR (LowRight/MidRight) to output param l. Because of this, every
-    // "Left"/"Right"-labeled control elsewhere in the app (gains, routing, delay, PEQ, and the
-    // BmwSignalChain preview-graph mapping) is correct as a direct, unswapped index -- they all
-    // rely on this line already correcting the physical fault. If a future review flags this as
-    // "controls wired backwards", the bug is almost certainly elsewhere; do not add a
-    // compensating swap here or anywhere downstream in response to that.
-    l = oR;
-    r = oL;
+    profiler_.lap(P::VolumeLoudness);
 }
 
 void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
-    using Band = NativeBmwRouting::Band;
-    // Front of the chain, frame by frame, up to the routing matrix: into one lane per output.
+    using P = NativeBmwDsp::StageProfiler;
+    profiler_.startChunk();
+    // Input: the measurement generator, and the raw input the capture records in pairs with the
+    // output (it advances on tapOut), so it waits here until the frame's output is known.
     for (std::size_t i = 0; i < frames; ++i) {
         float& l = w[2 * i];
         float& r = w[2 * i + 1];
         NativeBmwDsp::applyMeasurementGenerator(measGen_, p_, l, r);
-        // The capture records input and output in pairs (it advances on tapOut), so the raw
-        // input waits here until the frame's output is known.
         chunkRawIn_[2 * i] = l;
         chunkRawIn_[2 * i + 1] = r;
-        const auto routed = processInputStages(l, r, chunkFullL_[i], chunkFullR_[i]);
-        for (std::size_t o = 0; o < routed.size(); ++o) {
-            chunkLanes_[o][i] = routed[o];
-        }
+        chunkFullL_[i] = l;
+        chunkFullR_[i] = r;
     }
+    profiler_.lap(P::Input);
+    // Front of the chain up to the routing matrix: into one lane per output, and the full-range
+    // stereo signal ahead of routing (the crossover bypass's path).
+    processInputStages(frames);
     // The band split, or the full-range path (crossover bypass), crossfaded between the two over
     // kCrossoverFadeSeconds. Fully bypassed, the bands don't run at all: the output is the input
     // stages' stereo signal itself, with no routing, filter, delay or latency of any kind. They
-    // start clean when the split comes back. Each band's chain runs over the whole chunk: the
-    // bands share no state, so this is the same arithmetic, in the same order per band, as
-    // running them frame by frame -- bit-identical -- with each band's state kept hot.
+    // start clean when the split comes back.
     const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
     const bool bandsRun = xoverMix_ < 1.f || xoverTarget < 1.f;
     if (bandsRun) {
         if (xoverMix_ == 1.f) {
             clearBandState();
         }
-        processBandStage(Band::Low, frames);
-        processBandStage(Band::Mid, frames);
-        processBandStage(Band::High, frames);
+        processBandStages(frames);
     }
-    // (a) The band sum (or the full-range path) and the output stages, frame by frame, into
-    // logical L/R.
-    for (std::size_t i = 0; i < frames; ++i) {
-        float oL = chunkFullL_[i], oR = chunkFullR_[i];
-        if (bandsRun) {
-            std::array<float, NativeBmwRouting::kOutputCount> logical;
-            for (std::size_t o = 0; o < logical.size(); ++o) {
-                logical[o] = chunkLanes_[o][i];
-            }
-            float bL, bR;
-            sumBands(logical, bL, bR);
-            xoverMix_ = stepMix(xoverMix_, xoverTarget, xoverFadeStep_);
-            if (xoverMix_ == 0.f) {
-                oL = bL;
-                oR = bR;
-            } else if (xoverMix_ < 1.f) {
-                oL = bL + (oL - bL) * xoverMix_;
-                oR = bR + (oR - bR) * xoverMix_;
-            }
-        }
-        processOutputStages(oL, oR);
-        chunkConvL_[i] = oL;
-        chunkConvR_[i] = oR;
-    }
-    // (b) The convolver, over the chunk, right after the band sum and ahead of the master
+    // The band sum (or the full-range path) and the output stages, into logical L/R.
+    processOutputStages(frames, bandsRun);
+    // The convolver, over the chunk, right after the band sum and ahead of the master
     // limiter: an IR that corrects phase raises the crest factor without raising the magnitude,
     // so its peaks must still pass through the limiter. Logical L/R in (the hardware swap comes
-    // later, in processFrameBack()), so the IR's left channel is the car's left. A true bypass
-    // (untouched samples) while off or with no IR loaded.
+    // later), so the IR's left channel is the car's left. A true bypass (untouched samples) while
+    // off or with no IR loaded.
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
     // A new IR (or the same one rebuilt at a new rate) just took over: fade the output in after
@@ -413,13 +512,14 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     if (convolver_.takeKernelArrived()) {
         startFadeIn(/*fromSilence=*/false);
     }
-    // (c) The master limiter, volume, loudness and the hardware swap, then the fault check, the
-    // output fade, the output guard and the capture tap, frame by frame.
+    profiler_.lap(P::Convolver);
+    // The master limiter, volume, loudness and the hardware swap.
+    processBackStages(frames);
+    // The fault check, the output fade, the output guard and the capture tap.
     bool nonFinite = false, overRange = false;
     std::int64_t clipped = 0;
     for (std::size_t i = 0; i < frames; ++i) {
         float l = chunkConvL_[i], r = chunkConvR_[i];
-        processFrameBack(l, r);
         if (!nonFinite && !overRange) {
             // fabs(NaN) <= x is false, so a NaN fails the range test too; told apart for the count.
             if (!(std::fabs(l) <= kFaultLevel) || !(std::fabs(r) <= kFaultLevel)) {
@@ -459,6 +559,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
         clearChainState();
         startFadeIn(/*fromSilence=*/true);
     }
+    profiler_.lap(P::OutputGuard);
 }
 
 void NativeBmwDspProcessor::beginBuffer() {
@@ -535,6 +636,7 @@ NativeBmwDspProcessor::GuardCounters NativeBmwDspProcessor::guardCounters() cons
 }
 
 void NativeBmwDspProcessor::processBlock(float* w, std::size_t n) {
+    profiler_.beginBuffer();
     beginBuffer();
     const std::size_t frames = n / 2;
     for (std::size_t done = 0; done < frames;) {
@@ -542,6 +644,7 @@ void NativeBmwDspProcessor::processBlock(float* w, std::size_t n) {
         processChunk(w + 2 * done, count);
         done += count;
     }
+    profiler_.endBuffer(frames);
 }
 
 const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
@@ -558,6 +661,7 @@ const float* NativeBmwDspProcessor::process(const float* s, std::size_t n) {
 
 template <class Sample>
 void NativeBmwDspProcessor::processInt(Sample* w, std::size_t n, float scale) {
+    profiler_.beginBuffer();
     beginBuffer();
     const float invScale = 1.f / scale;
     const std::size_t frames = n / 2;
@@ -573,6 +677,7 @@ void NativeBmwDspProcessor::processInt(Sample* w, std::size_t n, float scale) {
         }
         done += count;
     }
+    profiler_.endBuffer(frames);
 }
 
 const int16_t* NativeBmwDspProcessor::process(const int16_t* s, std::size_t n) {
