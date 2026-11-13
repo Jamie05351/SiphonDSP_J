@@ -58,13 +58,18 @@ internal class AudioThreadTuning private constructor(private val hint: Hint?) : 
 
     /** Only ever created on Android 12+ (see [createHint]). */
     private class Hint(private val session: PerformanceHintManager.Session) {
+        // Set once a report throws (the system dropped the session): no more reports, so a dead
+        // session never throws, logs or allocates on the audio thread again.
+        @Volatile private var failed = false
+
         fun report(nanos: Long) {
-            if (nanos <= 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+            if (failed || nanos <= 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
             try {
                 session.reportActualWorkDuration(nanos)
             } catch (e: RuntimeException) {
-                // A session the system has dropped: stop reporting rather than throw on every buffer.
-                Timber.w(e, "Performance hint report failed")
+                failed = true
+                status = status.copy(hint = "failed: session dropped by the system")
+                Timber.w(e, "Performance hint report failed; no further reports this pipeline")
             }
         }
 

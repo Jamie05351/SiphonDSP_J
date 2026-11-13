@@ -91,8 +91,9 @@ float TruePeakDetector::process(float left, float right, float limit) {
     // so when that bound (with the margin) is at or under the limit, the true peak is too, and a
     // caller acting only on readings above the limit can't tell the bound from the exact value.
     // On normal programme material most frames are well under the limiter's ceiling, and this
-    // costs 2 x kTaps compares instead of 2 x 7 x kTaps multiply-adds. NaN fails the test and
-    // takes the exact path.
+    // costs 2 x kTaps compares instead of 2 x 7 x kTaps multiply-adds. A NaN sample is ignored
+    // by the window maximum (std::max keeps m), as the exact path's std::max ignored it before;
+    // the output guard after the limiter silences non-finite samples either way.
     float windowMax = 0;
     for (unsigned c = 0; c < 2; ++c) {
         auto& h = history_[c];
