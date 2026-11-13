@@ -11,20 +11,26 @@ must pass through the limiter. Code: `app/src/main/cpp/engine/NativeBmwConvolver
 
 Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line.
 
-- Partition = the processor's chunk, **64 frames** (`kChunkFrames`, pinned by a `static_assert`);
-  FFT size 128.
-- **No added latency.** Every call transforms `[previous block | block so far, zero-padded]`, so a
-  sample's output is ready in the call that delivered it. The processor's full 64-frame chunks
-  complete one block per call (one forward + one inverse FFT per channel, then the partition
-  sums); a short trailing chunk costs one extra FFT pair, never extra delay.
+- Partition = **1024 frames** (`kConvolverPartitionFrames`), FFT size 2048.
+- **One partition of latency while convolving** (`kConvolverLatencyFrames`, 21.3 ms at 48 kHz):
+  each completed block of input is transformed once, convolved with every partition and played
+  out during the next block. This replaced 64-frame, zero-latency partitions: per sample it is
+  about 6x less work for an 8192-tap IR and 13x at the maximum length (the convolver was the
+  third most expensive stage of a full chain before; see Native DSP Truth's Processing time).
+  The latency is fine for music, and kept out of measurements:
+  - **Off, or with no IR, the stage is a true bypass with no latency**, so measurement neutral and
+    the crossover bypass stay a wire.
+  - **Switching on or off, loading an IR while on and unloading one** dips the output to silence
+    (5 ms), switches path, and fades back in (20 ms) -- after the convolved path's first block
+    when switching to it -- so the delayed and direct signals never mix out of step.
+  - **Swapping one IR for another while on** has no dip: the old IR plays on until the new one's
+    first block is out, then they crossfade (20 ms); both are one partition late, so in step.
 - **Double precision throughout**: IR spectra, delay line, FFTs and the gain/crossfade maths.
   The FFT is [PFFFT](https://github.com/marton78/pffft) v1.1.0's double build (vendored in
   `engine/third_party/pffft`, FFTPACK/BSD-style licence; NEON on arm64, SSE2 on x86-64 hosts).
   The chain's float samples are widened on the way in and narrowed once on the way out.
-- Cost grows linearly with IR length. The limit is **65,536 taps at the stream rate** (1,024
+- Cost grows linearly with IR length. The limit is **65,536 taps at the stream rate** (64
   partitions, ~1.37 s at 48 kHz), after trailing silence (below −120 dB re. peak) is trimmed.
-  On an x86-64 host the maximum length costs about 15 % of one core at 48 kHz; typical
-  room-correction IRs (4–16 k taps) cost a small fraction of that.
 
 ## IR loading
 

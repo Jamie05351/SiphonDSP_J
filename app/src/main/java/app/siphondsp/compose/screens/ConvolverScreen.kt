@@ -180,7 +180,7 @@ private fun ConvolverGroup(dsp: BmwDspState, ir: ConvolverIrUiState, row: Convol
         },
         row(172, 28),
     )
-    InfoLine("Zero added latency: 64-sample partitions", row(204, 28))
+    InfoLine("21 ms latency while on (1024-sample partitions); none when off", row(204, 28))
 }
 
 @Composable

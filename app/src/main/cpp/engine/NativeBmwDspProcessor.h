@@ -415,7 +415,7 @@ private:
     // processBackStages()'s working buffer.
     static_assert(static_cast<std::size_t>(kChunkFrames) ==
                       static_cast<std::size_t>(NativeBmwDsp::kConvolverBlockFrames),
-                  "the convolver's partition is the chunk, so it adds no latency");
+                  "the convolver stage takes at most one chunk per call");
     std::array<float, kChunkFrames> chunkConvL_{}, chunkConvR_{};
     // The chunk's stereo signal through the input stages, left as the full-range path ahead of
     // routing (see processInputStages()).

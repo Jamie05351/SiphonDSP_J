@@ -186,7 +186,7 @@ TEST_CASE("A loud but legitimate setting is clamped, counted as clipping, never 
     CHECK(g.clippedSamples > 0);
 }
 
-TEST_CASE("Loading an IR while the convolver plays dips and fades the output back in") {
+TEST_CASE("Swapping the IR while the convolver plays crossfades, without a dip or an output fade") {
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);
     auto c = defaultConfig();
@@ -204,12 +204,13 @@ TEST_CASE("Loading an IR while the convolver plays dips and fades the output bac
     REQUIRE(proc.loadConvolverIr(deltaIr(0.5, 10), error));
     auto buf = stereoSine(1000.0, 0.5, 2 * kFadeFrames + 4800);
     proc.process(buf.data(), buf.size());
-    CHECK(proc.guardCounters().fadeIns == fadesBefore + 1);
-    // Down within ~5 ms, then rising: the stretch just after the dip is well below steady.
-    const std::size_t dip = static_cast<std::size_t>(NativeBmwDspProcessor::kFadeOutSeconds * kSampleRate);
-    CHECK(rms(buf, dip, dip + kFadeFrames / 10) < 0.3 * steadyRms);
-    CHECK(rms(buf, dip + 2 * kFadeFrames, dip + 2 * kFadeFrames + 2400) ==
-          doctest::Approx(steadyRms).epsilon(0.05));
+    CHECK(proc.guardCounters().fadeIns == fadesBefore);
+    // Same level throughout: the old IR plays through the new one's first block, then they
+    // crossfade (a 10-sample shift of a 1 kHz tone barely changes the sum's level).
+    for (std::size_t from = 0; from + 480 <= buf.size() / 2; from += 480) {
+        CAPTURE(from);
+        CHECK(rms(buf, from, from + 480) > 0.8 * steadyRms);
+    }
 }
 
 TEST_CASE("Loading an IR while the convolver is off changes nothing") {

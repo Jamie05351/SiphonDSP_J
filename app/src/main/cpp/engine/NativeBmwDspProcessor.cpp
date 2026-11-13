@@ -520,18 +520,15 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     }
     // The band sum (or the full-range path) and the output stages, into logical L/R.
     processOutputStages(frames, bandsRun);
-    // The convolver, over the chunk, right after the band sum and ahead of the master
+    // The convolver, over the chunk (one partition late while it convolves), right after the band sum and ahead of the master
     // limiter: an IR that corrects phase raises the crest factor without raising the magnitude,
     // so its peaks must still pass through the limiter. Logical L/R in (the hardware swap comes
     // later), so the IR's left channel is the car's left. A true bypass (untouched samples) while
     // off or with no IR loaded.
+    // (Its own dip / crossfade covers switching it, loading and swapping IRs: see
+    // ConvolverStage::process().)
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
-    // A new IR (or the same one rebuilt at a new rate) just took over: fade the output in after
-    // it, down first if it is playing.
-    if (convolver_.takeKernelArrived()) {
-        startFadeIn(/*fromSilence=*/false);
-    }
     profiler_.lap(P::Convolver);
     // The master limiter, volume, loudness and the hardware swap.
     processBackStages(frames);

@@ -17,9 +17,11 @@ using NativeBmwDsp::ConvolverIr;
 using NativeBmwDsp::ConvolverKernel;
 using NativeBmwDsp::ConvolverStage;
 
-// The stereo convolver, after the band sum and ahead of the master limiter: UPOLS with the chunk as its partition (no added
-// latency), double precision, IR load/resample off the audio thread, lock-free kernel swap,
-// gain trim and a crossfaded bypass.
+// The stereo convolver, after the band sum and ahead of the master limiter: UPOLS with
+// kConvolverPartitionFrames partitions (one partition of latency while it convolves), double
+// precision, IR load/resample off the audio thread, lock-free kernel swap, gain trim, and a
+// zero-latency true bypass reached through a dip.
+constexpr std::size_t kLatency = NativeBmwDsp::kConvolverLatencyFrames;
 
 namespace {
 
@@ -83,14 +85,14 @@ void processInBuffers(NativeBmwDspProcessor& proc, std::vector<float>& buf, std:
 }  // namespace
 
 TEST_CASE("convolver kernel matches direct convolution, any chunking, mono and stereo IRs") {
-    for (const std::size_t len : {1u, 63u, 64u, 65u, 700u, 3000u}) {
+    for (const std::size_t len : {1u, 63u, 64u, 65u, 700u, 1023u, 1024u, 1025u, 3000u}) {
         for (const bool stereo : {false, true}) {
             const ConvolverIr ir = randomIr(len, stereo, static_cast<unsigned>(len));
             std::string error;
             auto kernel = ConvolverKernel::build(ir, error);
             REQUIRE(kernel);
-            CHECK(kernel->partitions() == (len + 63) / 64);
-            const std::size_t n = 6000;
+            CHECK(kernel->partitions() == (len + kLatency - 1) / kLatency);
+            const std::size_t n = 9000;
             std::mt19937 rng(7);
             std::uniform_real_distribution<double> u(-1.0, 1.0);
             std::vector<double> xl(n), xr(n), yl(n), yr(n);
@@ -106,9 +108,12 @@ TEST_CASE("convolver kernel matches direct convolution, any chunking, mono and s
             }
             const auto refL = directConvolve(ir.left, xl);
             const auto refR = directConvolve(stereo ? ir.right : ir.left, xr);
+            // Exactly one partition late, silent before that.
             double maxErr = 0.0;
             for (std::size_t i = 0; i < n; ++i) {
-                maxErr = std::max(maxErr, std::max(std::fabs(refL[i] - yl[i]), std::fabs(refR[i] - yr[i])));
+                const double el = i < kLatency ? yl[i] : refL[i - kLatency] - yl[i];
+                const double er = i < kLatency ? yr[i] : refR[i - kLatency] - yr[i];
+                maxErr = std::max(maxErr, std::max(std::fabs(el), std::fabs(er)));
             }
             CAPTURE(len);
             CAPTURE(stereo);
@@ -152,8 +157,8 @@ TEST_CASE("convolver: off, or on with no IR, is bit-identical to the chain witho
     CHECK(a == c);
 }
 
-TEST_CASE("convolver adds no latency and applies the gain trim, capped at unity peak") {
-    // A single tap at 0: the convolved chain is the plain chain times the tap, sample for sample.
+TEST_CASE("convolver adds exactly one partition of latency and applies the gain trim, capped at unity peak") {
+    // A single tap at 0: the convolved chain is the plain chain times the tap, one partition late.
     // The tap is 0.5 (-6 dB), so the trim can lift it back to unity (+6 dB) but no further.
     for (const float gainDb : {0.f, -6.f, 6.f, 12.f}) {
         NativeBmwDspProcessor plain, convolved;
@@ -170,7 +175,7 @@ TEST_CASE("convolver adds no latency and applies the gain trim, capped at unity 
         // After the 20 ms fade-in and the 10 ms gain ramp have settled.
         double maxErr = 0.0;
         for (std::size_t i = 2 * 12000; i < a.size(); ++i) {
-            maxErr = std::max(maxErr, std::fabs(b[i] - expected * a[i]));
+            maxErr = std::max(maxErr, std::fabs(b[i] - expected * a[i - 2 * kLatency]));
         }
         CAPTURE(gainDb);
         CHECK(maxErr < 1e-6);
@@ -191,7 +196,7 @@ TEST_CASE("convolver: an IR that boosts is brought down to unity at its loudest 
     processInBuffers(plain, a, 480);
     processInBuffers(convolved, b, 480);
     double maxErr = 0.0;
-    for (std::size_t i = 2 * 12000; i < a.size(); ++i) maxErr = std::max(maxErr, static_cast<double>(std::fabs(b[i] - a[i])));
+    for (std::size_t i = 2 * 12000; i < a.size(); ++i) maxErr = std::max(maxErr, static_cast<double>(std::fabs(b[i] - a[i - 2 * kLatency])));
     CHECK(maxErr < 1e-6);
 }
 
@@ -213,14 +218,14 @@ TEST_CASE("convolver: the IR's left channel is the car's left, through the hardw
     processInBuffers(convolved, b, 480);
     double physicalLeftErr = 0.0, physicalRightPeak = 0.0;
     for (std::size_t f = 6000; f < 12000; ++f) {
-        physicalLeftErr = std::max(physicalLeftErr, static_cast<double>(std::fabs(b[2 * f + 1] - a[2 * f + 1])));
+        physicalLeftErr = std::max(physicalLeftErr, static_cast<double>(std::fabs(b[2 * f + 1] - a[2 * (f - kLatency) + 1])));
         physicalRightPeak = std::max(physicalRightPeak, static_cast<double>(std::fabs(b[2 * f])));
     }
     CHECK(physicalLeftErr < 1e-6);
     CHECK(physicalRightPeak < 1e-6);
 }
 
-TEST_CASE("convolver stage: bypass and kernel swaps crossfade, never step") {
+TEST_CASE("convolver stage: switching dips and fades, kernel swaps crossfade, never step") {
     ConvolverStage stage;
     stage.setSampleRate(kSampleRate);
     std::string error;
@@ -234,35 +239,57 @@ TEST_CASE("convolver stage: bypass and kernel swaps crossfade, never step") {
             trace.insert(trace.end(), l.begin(), l.end());
         }
     };
-    std::vector<float> trace;
-    run(true, 40, trace);
-    CHECK(trace.back() == doctest::Approx(0.25f));  // faded in: 0.5 x the tap
-    trace.clear();
-    run(false, 40, trace);  // bypass: back to the dry 0.5
-    CHECK(trace.back() == doctest::Approx(0.5f));
+    const float dipFrames = ConvolverStage::kDipSeconds * kSampleRate;
     const float fadeFrames = ConvolverStage::kFadeSeconds * kSampleRate;
-    float maxStep = 0.f;
-    for (std::size_t i = 1; i < trace.size(); ++i) maxStep = std::max(maxStep, std::fabs(trace[i] - trace[i - 1]));
-    CHECK(maxStep <= 0.25f / fadeFrames * 1.05f);
+    auto maxStep = [](const std::vector<float>& t) {
+        float m = 0.f;
+        for (std::size_t i = 1; i < t.size(); ++i) m = std::max(m, std::fabs(t[i] - t[i - 1]));
+        return m;
+    };
+    // Off with an IR loaded: untouched.
+    std::vector<float> trace;
+    run(false, 4, trace);
+    CHECK(trace.back() == 0.5f);
+    // On: the dry 0.5 dips to silence, stays silent through the convolved path's first block,
+    // then fades in to 0.5 x the tap.
+    trace.clear();
+    run(true, 60, trace);
+    CHECK(stage.convolving());
+    CHECK(trace.back() == doctest::Approx(0.25f));
+    CHECK(maxStep(trace) <= 0.5f / dipFrames * 1.05f);
+    const auto silentFrom = static_cast<std::size_t>(dipFrames) + 1;
+    for (std::size_t i = silentFrom; i < silentFrom + kLatency - 64; ++i) {
+        REQUIRE(trace[i] == 0.f);
+    }
+    // Off again: dips to silence, switches back to direct (no latency), fades in to the dry 0.5.
+    trace.clear();
+    run(false, 30, trace);
+    CHECK_FALSE(stage.convolving());
+    CHECK(trace.back() == doctest::Approx(0.5f));
+    CHECK(maxStep(trace) <= 0.5f / dipFrames * 1.05f);
     CHECK(trace.front() < 0.26f);  // started from the convolved level, not a jump to dry
 
+    // A kernel swap while convolving: no dip -- the old IR plays on through the new one's first
+    // block, then they crossfade from 0.25 to 0.5.
     trace.clear();
-    run(true, 40, trace);
-    stage.publish(ConvolverKernel::build(deltaIr(1.0), error));  // swap while running
+    run(true, 60, trace);
+    stage.publish(ConvolverKernel::build(deltaIr(1.0), error));
     trace.clear();
-    run(true, 40, trace);
-    CHECK(trace.front() < 0.26f);
+    run(true, 60, trace);
+    CHECK(trace.front() == doctest::Approx(0.25f));
     CHECK(trace.back() == doctest::Approx(0.5f));
-    maxStep = 0.f;
-    for (std::size_t i = 1; i < trace.size(); ++i) maxStep = std::max(maxStep, std::fabs(trace[i] - trace[i - 1]));
-    CHECK(maxStep <= 0.25f / fadeFrames * 1.05f);
+    CHECK(*std::min_element(trace.begin(), trace.end()) >= 0.25f - 1e-6f);
+    CHECK(maxStep(trace) <= 0.25f / fadeFrames * 1.05f);
 
-    stage.publish(nullptr);  // unload while running: fades to dry
+    // Unloaded while convolving: dips to silence and comes back up dry.
+    stage.publish(nullptr);
     trace.clear();
-    run(true, 40, trace);
+    run(true, 30, trace);
     CHECK(trace.front() > 0.49f);
     CHECK(trace.back() == doctest::Approx(0.5f));
+    CHECK(maxStep(trace) <= 0.5f / dipFrames * 1.05f);
     CHECK_FALSE(stage.kernelActive());
+    CHECK_FALSE(stage.convolving());
 }
 
 TEST_CASE("convolver: an IR at another rate is resampled with its response kept") {
@@ -383,7 +410,7 @@ TEST_CASE("convolver: a maximum-length IR loads on a small-stack thread") {
     pthread_join(thread, nullptr);
     pthread_attr_destroy(&attr);
     CHECK(job.ok);
-    CHECK(job.proc.convolverInfo().partitions == NativeBmwDsp::kConvolverMaxIrFrames / 64);
+    CHECK(job.proc.convolverInfo().partitions == NativeBmwDsp::kConvolverMaxIrFrames / NativeBmwDsp::kConvolverPartitionFrames);
 }
 
 TEST_CASE("convolver: resampling keeps the filter's ringing past the last tap") {

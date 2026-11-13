@@ -7,11 +7,17 @@
 // raises the crest factor without raising the magnitude: its peaks must pass through the limiter.
 //
 // Uniformly partitioned overlap-save (UPOLS) with a frequency-domain delay line, partition size
-// kBlockFrames == the processor's chunk (kChunkFrames, 64 frames), FFT size 2 * kBlockFrames.
-// Zero added latency: every call transforms the block in progress (the samples received so far,
-// zero-padded) together with the previous block, so the output for a sample is ready in the same
-// call that delivered it. With the processor's full 64-frame chunks each call completes exactly
-// one block, so nothing is transformed twice; a short trailing chunk costs one extra FFT pair.
+// kConvolverPartitionFrames (1024), FFT size twice that. The convolved signal is one partition
+// late (kConvolverLatencyFrames, 21.3 ms at 48 kHz): each completed block of input is transformed
+// once, convolved with every partition at once and played out during the next block. Larger
+// partitions trade that latency (fine for music) for far less work per sample than the 64-frame,
+// zero-latency partitions this replaced -- about 6x less for an 8192-tap IR, 13x at the maximum
+// length. The processor feeds it any chunk size (up to kConvolverBlockFrames per call).
+//
+// The stage keeps the latency out of everything else: switched off it is a true, zero-latency
+// bypass (so measurement neutral and the crossover bypass stay a wire), and every change between
+// the convolved and the direct path dips the output to silence, switches, and fades back in, so
+// the two never mix out of step (see ConvolverStage::process()).
 //
 // Double precision throughout: the IR spectra, the delay line, the FFTs (PFFFT's double build:
 // NEON on arm64, SSE2 on x86-64 hosts) and the gain/crossfade arithmetic. The chain's float
@@ -47,8 +53,12 @@ struct ConvolverIr {
 };
 
 enum : std::size_t {
+    // Most frames one ConvolverStage::process() / ConvolverKernel::process() call takes: the
+    // processor's chunk.
     kConvolverBlockFrames = 64,
-    kConvolverFftSize = 2 * kConvolverBlockFrames,
+    kConvolverPartitionFrames = 1024,
+    kConvolverLatencyFrames = kConvolverPartitionFrames,
+    kConvolverFftSize = 2 * kConvolverPartitionFrames,
     // Longest IR accepted, in frames at the stream rate, after trailing silence is trimmed:
     // 1024 partitions, ~1.37 s at 48 kHz. The per-block cost grows linearly with it.
     kConvolverMaxIrFrames = 65536,
@@ -91,10 +101,12 @@ public:
     ConvolverKernel& operator=(const ConvolverKernel&) = delete;
     // ir must already be at the stream rate. Null with error set on failure.
     static std::unique_ptr<ConvolverKernel> build(const ConvolverIr& ir, std::string& error);
-    // Forgets the input history in O(1): the delay line's spectra are treated as silent until
-    // they are overwritten (validPartitions_), so no memset of the whole line on the audio thread.
+    // Forgets the input history: the delay line's spectra are treated as silent until they are
+    // overwritten (validPartitions_), so no memset of the whole line on the audio thread. The
+    // first kConvolverLatencyFrames of output after it are silent.
     void reset();
-    // Convolves frames (<= kConvolverBlockFrames) of each channel; in and out may alias.
+    // Convolves any number of frames of each channel, kConvolverLatencyFrames late; in and out
+    // may alias.
     void process(const double* inL, const double* inR, double* outL, double* outR,
                  std::size_t frames);
     std::size_t partitions() const { return partitions_; }
@@ -111,18 +123,17 @@ private:
         double* spectra = nullptr;  // partitions_ x kConvolverFftSize: H_k, pre-scaled by 1/N
         double* fdl = nullptr;      // partitions_ x kConvolverFftSize: past input spectra (ring)
         double* input = nullptr;    // kConvolverFftSize: [previous block | block in progress]
-        double* tail = nullptr;     // kConvolverFftSize: sum over k >= 1 of H_k X_(t-k)
-        double* work = nullptr;     // kConvolverFftSize: the current block's input spectrum X
+        double* output = nullptr;   // kConvolverPartitionFrames: the last block's result, playing
     };
-    void processChannel(Channel& c, const double* in, double* out, std::size_t frames,
-                        bool completesBlock);
-    void accumulateTail(Channel& c);
+    // The block in progress is complete: transform it, convolve, queue its result.
+    void completeBlock();
     Channel ch_[2];
     double* fftWork_ = nullptr;
-    double* spectrum_ = nullptr;  // kConvolverFftSize: Y = tail + H_0 X, then its inverse
+    double* spectrum_ = nullptr;  // kConvolverFftSize: the block's input spectrum X
+    double* sum_ = nullptr;       // kConvolverFftSize: Y = sum over k of H_k X_(t-k), then its inverse
     PFFFTD_Setup* setup_ = nullptr;
     std::size_t partitions_ = 0;
-    // Samples of the block in progress received so far (0 .. kConvolverBlockFrames - 1).
+    // Samples of the block in progress received so far (0 .. kConvolverPartitionFrames - 1).
     std::size_t fill_ = 0;
     // Ring position of the newest complete block's spectrum.
     std::size_t head_ = 0;
@@ -142,7 +153,9 @@ public:
     // unload. Frees whatever kernels the audio thread has retired since the last call.
     void publish(std::unique_ptr<ConvolverKernel> kernel);
     // Audio thread: one chunk (frames <= kConvolverBlockFrames) of logical L/R, in place.
-    // enabled/gainDb are the stage's settings (p_.convolverEnabled / convolverGainDb). The gain
+    // enabled/gainDb are the stage's settings (p_.convolverEnabled / convolverGainDb). Off (or
+    // with no IR) the samples pass untouched, with no latency; on, the convolved signal is
+    // kConvolverLatencyFrames late. The gain
     // applied is min(gainDb, -kernel peak dB), so the stage never lifts any frequency above unity
     // -- an IR that boosts somewhere is brought down to 0 dB at its loudest frequency, and the
     // trim can only go below that. The master limiter after it catches the time-domain peaks a
@@ -151,22 +164,22 @@ public:
     void process(float* left, float* right, std::size_t frames, bool enabled, float gainDb);
     // Sample-rate dependent ramp constants.
     void setSampleRate(float sampleRate);
-    // Snap the enable mix and gain to their targets (start-up / full rebuild).
+    // Snap the gain to its target, and the path to the one the setting asks for when that needs
+    // no history (start-up / full rebuild / a cleared chain).
     void snap(bool enabled, float gainDb);
     // True while a kernel is installed on the audio side (relaxed; diagnostics only).
     bool kernelActive() const { return kernelActive_.load(std::memory_order_relaxed); }
     // Audio thread: forgets the running kernel's input history and ends any kernel-swap fade
-    // (the processor clearing the whole chain). The kernel itself stays. O(1) per channel.
+    // (the processor clearing the whole chain). The kernel itself stays. Like a fresh start, the
+    // convolved path is then silent for its first kConvolverLatencyFrames.
     void clearHistory();
-    // Audio thread: true once after process() swapped in a new (non-null) kernel while the stage
-    // is switched on -- an IR load or a rebuild at a new rate -- so the processor can fade the
-    // output in after it.
-    bool takeKernelArrived() {
-        const bool arrived = kernelArrived_;
-        kernelArrived_ = false;
-        return arrived;
-    }
+    // True while the stage plays the convolved (latent) path. Audio thread.
+    bool convolving() const { return path_ == Path::Convolved; }
 
+    // A path change: down to silence over kDipSeconds, switch, then up over kFadeSeconds (after
+    // the convolved path's first block when switching to it). A kernel swap: crossfade over
+    // kFadeSeconds once the new kernel's first block is out.
+    static constexpr float kDipSeconds = 0.005f;
     static constexpr float kFadeSeconds = 0.02f;
     static constexpr float kGainRampSeconds = 0.01f;
 
@@ -176,14 +189,17 @@ private:
     };
     TripleBuffer<Update> handoff_;
     // Audio-thread state.
+    enum class Path : std::uint8_t { Direct, Convolved };
     std::unique_ptr<ConvolverKernel> active_, previous_;
-    double enableMix_ = 0.0;   // 0 = dry, 1 = convolved; linear ramp over kFadeSeconds
-    double swapMix_ = 0.0;     // weight of previous_ during a kernel swap, 1 -> 0
-    double gain_ = 1.0;        // linear IR gain, one-pole toward the setting
+    Path path_ = Path::Direct;
+    double level_ = 1.0;        // the output level through a path change (dip, switch, fade in)
+    std::size_t hold_ = 0;      // frames to stay silent: the convolved path's first block
+    double swapMix_ = 0.0;      // weight of previous_ during a kernel swap, 1 -> 0
+    std::size_t swapHold_ = 0;  // frames previous_ stays alone: the new kernel's first block
+    double gain_ = 1.0;         // linear IR gain, one-pole toward the setting
     double fadeStep_ = 1.0 / (0.02 * 48000.0);
+    double dipStep_ = 1.0 / (0.005 * 48000.0);
     double gainCoef_ = 0.0020811617;  // 1 - exp(-1 / (10 ms * 48 kHz))
-    bool needsReset_ = false;  // the stage sat fully bypassed: history is stale
-    bool kernelArrived_ = false;  // see takeKernelArrived()
     std::atomic<bool> kernelActive_{false};
     double dry_[2][kConvolverBlockFrames]{};
     double wet_[2][kConvolverBlockFrames]{};
