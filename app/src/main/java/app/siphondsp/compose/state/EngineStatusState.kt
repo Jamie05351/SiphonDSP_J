@@ -112,13 +112,28 @@ object SelfTestRunner {
                         }
                     }
                 }
-                val measuring = synchronized(this@SelfTestRunner) { latestValues?.copyOf() }
-                val report = RootlessAudioProcessorService.runSelfTest()
+                // The engine copies its state inside runSelfTest(), after this snapshot: an edit
+                // landing in between would be measured but not recorded. So a result counts only
+                // if the config didn't change (master volume aside) while it ran; otherwise
+                // measure again, a few times at most, before giving up on a moving config.
+                repeat(MAX_ATTEMPTS) {
+                    val measuring = synchronized(this@SelfTestRunner) { latestValues?.copyOf() }
+                    val report = RootlessAudioProcessorService.runSelfTest()
+                    synchronized(this@SelfTestRunner) {
+                        // A newer run (or a clear) took over while this one measured: not its result.
+                        if (!isActive) return@launch
+                        val latest = latestValues
+                        val unchanged = measuring == null && latest == null ||
+                            latest != null && sameButVolume(measuring, latest)
+                        if (report == null || unchanged) {
+                            measuredValues = measuring
+                            _state.value = report?.let { SelfTestState.Done(it) } ?: SelfTestState.Unavailable
+                            return@launch
+                        }
+                    }
+                }
                 synchronized(this@SelfTestRunner) {
-                    // A newer run (or a clear) took over while this one measured: not its result.
-                    if (!isActive) return@launch
-                    measuredValues = measuring
-                    _state.value = report?.let { SelfTestState.Done(it) } ?: SelfTestState.Unavailable
+                    if (isActive) _state.value = SelfTestState.Idle
                 }
             }
         }
@@ -161,3 +176,5 @@ const val ENGINE_STATUS_POLL_MS = 500L
 private const val FAST_READS = 4
 private const val FAST_READ_MS = 60L
 private const val ENGINE_CONFIRM_TIMEOUT_MS = 3_000L
+// Self-test attempts while the config keeps changing under it.
+private const val MAX_ATTEMPTS = 3
