@@ -70,8 +70,12 @@ void CentreExtractor::rebuild(const VirtualConfig& cfg, float sampleRate, bool k
 }
 
 float CentreExtractor::run(float l, float r) {
-    const double dl = lpL.run(hpL.run(l));
-    const double dr = lpR.run(hpR.run(r));
+    // L and R through their detector filters together (one NEON pass on arm64, bit-identical to
+    // running them one by one).
+    float fl = l, fr = r;
+    Biquad::runPair(hpL, hpR, fl, fr);
+    Biquad::runPair(lpL, lpR, fl, fr);
+    const double dl = fl, dr = fr;
     const double a = powerCoef, b = 1.0 - powerCoef;
     powerLL = NativeBmwRouting::flushDenormal(a * powerLL + b * dl * dl);
     powerRR = NativeBmwRouting::flushDenormal(a * powerRR + b * dr * dr);

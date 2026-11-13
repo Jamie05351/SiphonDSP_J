@@ -56,6 +56,7 @@ TruePeakDetector::TruePeakDetector() {
     // x[n - (kTaps-1) + k], so tap kDelay - 1 is x[n - kDelay] and the point sits frac past it.
     constexpr double kPi = 3.14159265358979323846, kBeta = 5.0;
     const double halfSpan = kTaps / 2.0, norm = besselI0(kBeta);
+    double bound = 0;
     for (unsigned p = 1; p < kPhases; ++p) {
         const double frac = static_cast<double>(p) / kPhases;
         double sum = 0;
@@ -67,11 +68,16 @@ TruePeakDetector::TruePeakDetector() {
             h[k] = std::sin(kPi * d) / (kPi * d) * window;
             sum += h[k];
         }
+        double l1 = 0;
         for (unsigned k = 0; k < kTaps; ++k) {
             coeffs_[p - 1][k] = static_cast<float>(h[k] / sum);
+            l1 += std::fabs(static_cast<double>(coeffs_[p - 1][k]));
         }
+        bound = std::max(bound, l1);
     }
     marginLin_ = dbToLin(kMarginDb);
+    // Rounded up well past the float rounding of dot()'s accumulation (~kTaps ulps).
+    boundGain_ = static_cast<float>(std::max(1.0, bound) * (1 + 1e-4));
 }
 void TruePeakDetector::clear() {
     for (auto& channel : history_) {
@@ -79,15 +85,36 @@ void TruePeakDetector::clear() {
     }
     pos_ = 0;
 }
-float TruePeakDetector::process(float left, float right) {
+float TruePeakDetector::process(float left, float right, float limit) {
     const float in[2] = {left, right};
-    float peak = 0;
+    // Gate: every interpolated point is at most boundGain_ times the window's largest |sample|,
+    // so when that bound (with the margin) is at or under the limit, the true peak is too, and a
+    // caller acting only on readings above the limit can't tell the bound from the exact value.
+    // On normal programme material most frames are well under the limiter's ceiling, and this
+    // costs 2 x kTaps compares instead of 2 x 7 x kTaps multiply-adds. A NaN sample is ignored
+    // by the window maximum (std::max keeps m), as the exact path's std::max ignored it before;
+    // the output guard after the limiter silences non-finite samples either way.
+    float windowMax = 0;
     for (unsigned c = 0; c < 2; ++c) {
         auto& h = history_[c];
         h[pos_] = in[c];
         h[pos_ + kTaps] = in[c];
-        // Oldest..newest of the last kTaps samples, contiguous.
         const float* x = h.data() + pos_ + 1;
+        float m = 0;
+        for (unsigned k = 0; k < kTaps; ++k) {
+            m = std::max(m, std::fabs(x[k]));
+        }
+        windowMax = std::max(windowMax, m);
+    }
+    const float bound = windowMax * boundGain_ * marginLin_;
+    if (bound <= limit) {
+        pos_ = pos_ + 1 == kTaps ? 0 : pos_ + 1;
+        return bound;
+    }
+    float peak = 0;
+    for (unsigned c = 0; c < 2; ++c) {
+        // Oldest..newest of the last kTaps samples, contiguous.
+        const float* x = history_[c].data() + pos_ + 1;
         peak = std::max(peak, std::fabs(x[kTaps - 1 - kDelay]));
         for (const auto& phase : coeffs_) {
             peak = std::max(peak, std::fabs(dot(phase.data(), x)));
@@ -138,7 +165,9 @@ void MasterLimiter::clear() {
     meterCounter_ = 0;
 }
 void MasterLimiter::process(float& l, float& r) {
-    float pk = truePeak_.process(l, r);
+    // Readings at or under the ceiling all mean "no reduction", so the detector may skip
+    // interpolating them (an exact upper bound under the ceiling is returned instead).
+    float pk = truePeak_.process(l, r, ceilingLin_);
     float need = pk > ceilingLin_ ? ceilingLin_ / pk : 1.f;
 
     // Peak hold over this reading and the lookahead_ + 1 before it -- every sample still in the
@@ -396,9 +425,12 @@ void MultibandCompressor::resetState() {
             c.rms = 0;
             c.peak = 0;
             c.gain = 1;
+            c.target = 1;
             c.lastDetectorDb = -60.f;
         }
     }
+    controlCountdown_ = 0;
+    dryStale_ = false;
     for (auto& m : meter_) {
         m.inputDb.store(-60.f);
         m.outputDb.store(-60.f);
@@ -407,16 +439,18 @@ void MultibandCompressor::resetState() {
     meterCounter_ = 0;
 }
 float MultibandCompressor::bandGain(float peakAbs, const MbcBandParams& p, Cell& s, int band,
-                                    const DetectorTiming& detector) {
+                                    const DetectorTiming& detector, bool control) {
     s.rms = ftz(s.rms + (peakAbs * peakAbs - s.rms) * detector.rmsMix);
     s.peak = peakAbs > s.peak ? peakAbs : ftz(s.peak * detector.peakRelease);
-    float det = std::max(std::sqrt(std::max(0.f, s.rms)), s.peak * .5f);
-    float db = 20 * std::log10(std::max(det, 1e-12f));
-    s.lastDetectorDb = db;
-    float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
-    // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
-    float target = gr == 0 ? 1.f : dbToLin(gr),
-          mix = target < s.gain ? attackMix_[band] : releaseMix_[band];
+    if (control) {
+        const float det = std::max(std::sqrt(std::max(0.f, s.rms)), s.peak * .5f);
+        const float db = 20 * std::log10(std::max(det, 1e-12f));
+        s.lastDetectorDb = db;
+        const float gr = softKneeGainReductionDb(db - p.threshold, p.ratio, p.knee);
+        // Below the knee gr is +/-0 and dbToLin(+/-0) = pow(10, +/-0) is exactly 1 -- skip the pow.
+        s.target = gr == 0 ? 1.f : dbToLin(gr);
+    }
+    const float target = s.target, mix = target < s.gain ? attackMix_[band] : releaseMix_[band];
     s.gain = std::min(1.f, ftz(s.gain + (target - s.gain) * mix));
     return s.gain;
 }
@@ -450,10 +484,22 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         t.apB0X1.run(low0L, low0R);
         t.apB0X2.run(low0L, low0R);
         t.apB1X2.run(low1L, low1R);
-        // Run every sample, mix or not, so the dry path is never stale when Mix moves.
-        t.apDry0.run(dryL, dryR);
-        t.apDry1.run(dryL, dryR);
-        t.apDry2.run(dryL, dryR);
+        // The dry path is only heard below 100% Mix: settled there it isn't run, and it starts
+        // clean when Mix leaves 100% (its weight then rises from 0, so the clean start is masked).
+        const bool dryHeard = !(mix_ == 1.f && mixTarget_ == 1.f);
+        if (dryHeard) {
+            if (dryStale_) {
+                t.apDry0.clear();
+                t.apDry1.clear();
+                t.apDry2.clear();
+                dryStale_ = false;
+            }
+            t.apDry0.run(dryL, dryR);
+            t.apDry1.run(dryL, dryR);
+            t.apDry2.run(dryL, dryR);
+        } else {
+            dryStale_ = true;
+        }
         band[0][0] = low0L;
         band[1][0] = low0R;
         band[0][1] = low1L;
@@ -464,6 +510,8 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         band[1][3] = high2R;
     }
     const bool publishMeter = (++meterCounter_ & 255u) == 0;
+    const bool control = controlCountdown_ == 0;
+    controlCountdown_ = control ? kControlInterval - 1 : controlCountdown_ - 1;
     float wetL = 0, wetR = 0;
     for (int b = 0; b < kMbcBandCount; ++b) {
         const auto& bp = bands[b];
@@ -472,13 +520,13 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         if (bp.enabled) {
             if (bp.stereoLink) {
                 const float g =
-                    bandGain(std::max(std::fabs(sL), std::fabs(sR)), bp, cell_[0][b], b, detector);
+                    bandGain(std::max(std::fabs(sL), std::fabs(sR)), bp, cell_[0][b], b, detector, control);
                 sL *= g;
                 sR *= g;
                 gWorst = g;
             } else {
-                const float gL = bandGain(std::fabs(sL), bp, cell_[0][b], b, detector);
-                const float gR = bandGain(std::fabs(sR), bp, cell_[1][b], b, detector);
+                const float gL = bandGain(std::fabs(sL), bp, cell_[0][b], b, detector, control);
+                const float gR = bandGain(std::fabs(sR), bp, cell_[1][b], b, detector, control);
                 sL *= gL;
                 sR *= gR;
                 gWorst = std::min(gL, gR);

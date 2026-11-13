@@ -15,6 +15,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,8 @@ import app.siphondsp.model.debug.NativePeqBand
 import app.siphondsp.model.debug.NativePeqBank
 import app.siphondsp.model.debug.RealtimeDiagnostics
 import app.siphondsp.model.debug.RootlessPipelineRuntimeSnapshot
+import app.siphondsp.model.debug.StageProfile
+import app.siphondsp.service.AudioThreadTuning
 import app.siphondsp.service.RootlessAudioProcessorService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -59,6 +62,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val REFRESH_INTERVAL_MS = 500L
+private const val TIMING_WINDOW_MS = 3_000L
 
 /**
  * Developer/debug screen proving what NativeBmwDspProcessor and the native PEQ engine are
@@ -87,11 +91,34 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
     var handleReady by remember { mutableStateOf<Boolean?>(null) }
     var engineSampleRate by remember { mutableStateOf<Float?>(null) }
     var cpu by remember { mutableStateOf<List<CpuFrequencies.Policy>>(emptyList()) }
+    var timing by remember { mutableStateOf<StageProfile.Summary?>(null) }
+    var timingCoreKhz by remember { mutableStateOf<Long?>(null) }
+    var tuning by remember { mutableStateOf(AudioThreadTuning.status) }
+    // Per-stage timing runs only while this screen is open.
+    DisposableEffect(Unit) {
+        RootlessAudioProcessorService.setStageProfiling(true)
+        onDispose { RootlessAudioProcessorService.setStageProfiling(false) }
+    }
     var lastRefreshedAtMs by remember { mutableLongStateOf(0L) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
+        // Readings of the last few seconds: the averages are over the oldest one to now.
+        val readings = ArrayDeque<Pair<Long, StageProfile>>()
         while (true) {
+            // Again every poll: an engine started (or rebuilt) since the screen opened gets it too.
+            RootlessAudioProcessorService.setStageProfiling(true)
+            val profile = StageProfile.parse(RootlessAudioProcessorService.stageProfile())
+            val now = System.currentTimeMillis()
+            if (profile == null || !profile.enabled || (readings.lastOrNull()?.second?.buffers ?: 0) > profile.buffers) {
+                readings.clear()
+            }
+            if (profile != null) readings.addLast(now to profile)
+            while (readings.size > 2 && now - readings[1].first >= TIMING_WINDOW_MS) readings.removeFirst()
+            tuning = AudioThreadTuning.status
+            val rate = RootlessAudioProcessorService.engineStatus()?.sampleRate?.toDouble() ?: 0.0
+            timing = profile?.summarize(readings.firstOrNull()?.second?.takeIf { readings.size > 1 }, rate)
+            timingCoreKhz = timing?.lastCpu?.takeIf { it >= 0 }?.let { core -> withContext(Dispatchers.IO) { CpuFrequencies.currentKhz(core) } }
             revision = RootlessAudioProcessorService.nativeConfigRevisionStatus()
             truth = RootlessAudioProcessorService.nativeTruthSnapshot()
             pipeline = RootlessAudioProcessorService.pipelineRuntimeSnapshot()
@@ -118,6 +145,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
                 fontSize = 14.sp,
             )
         }
+        item { ProcessingTimeSection(timing, timingCoreKhz, cpu, tuning) }
         item { MeasurementSection() }
         item { EngineSection(handleReady, engineSampleRate, truth) }
         item { PipelineSection(pipeline) }
@@ -182,6 +210,88 @@ private fun fmt(value: Double, decimals: Int = 2): String {
     return ((value * scale).roundToInt() / scale).toString()
 }
 
+
+/**
+ * Where the audio thread's time goes: per buffer, the wall time inside the engine against the
+ * thread's own CPU time (the difference is time it was off the CPU), the core it ran on, and each
+ * stage of the chain, most expensive first. Averages over the last few seconds; maxima since the
+ * screen opened.
+ */
+@Composable
+private fun ProcessingTimeSection(
+    timing: StageProfile.Summary?,
+    coreKhz: Long?,
+    cpu: List<CpuFrequencies.Policy>,
+    tuning: AudioThreadTuning.Status,
+) {
+    Column {
+        SectionHeader("PROCESSING TIME")
+        DebugCard {
+            KeyValueRow(
+                "Audio thread",
+                if (tuning.tid == 0) "not started" else "tid ${tuning.tid}: ${tuning.pinSummary}",
+                if (tuning.pinResult == AudioThreadTuning.PIN_PINNED) BmwGreen else BmwYellow,
+            )
+            KeyValueRow(
+                "Performance hint",
+                if (tuning.hint == "active") "active, target ${fmt(tuning.hintTargetMs)} ms" else tuning.hint,
+                if (tuning.hint == "active") BmwGreen else BmwYellow,
+            )
+            if (timing == null) {
+                KeyValueRow("Stage timing", "waiting for audio", BmwYellow)
+                return@DebugCard
+            }
+            fun ms(us: Double) = "${fmt(us / 1000.0)} ms"
+            fun budgetColor(us: Double) = when {
+                timing.budgetUs <= 0 -> Color.White
+                us >= timing.budgetUs -> BmwRed
+                us >= timing.budgetUs * 0.75 -> BmwYellow
+                else -> Color.White
+            }
+            KeyValueRow("Budget per buffer", ms(timing.budgetUs))
+            KeyValueRow(
+                "Engine time, mean",
+                "${ms(timing.avgWallUs)} (${fmt(timing.ofBudgetPercent(timing.avgWallUs), 0)}%)",
+                budgetColor(timing.avgWallUs),
+            )
+            KeyValueRow("Engine time, max", ms(timing.maxWallUs), budgetColor(timing.maxWallUs))
+            KeyValueRow("of which on the CPU, mean", ms(timing.avgCpuUs))
+            KeyValueRow(
+                "of which off the CPU (preempted), mean",
+                ms(timing.avgOffCpuUs),
+                if (timing.avgOffCpuUs > timing.avgWallUs * 0.2) BmwYellow else Color.White,
+            )
+            val core = timing.lastCpu
+            val policy = cpu.firstOrNull { core >= 0 && CpuFrequencies.covers(it.cpus, core) }
+            KeyValueRow(
+                "Core (last buffer)",
+                if (core < 0) "unknown" else buildString {
+                    append("cpu$core")
+                    coreKhz?.let { append(" @ ${it / 1000} MHz") }
+                    policy?.hardwareMaxKhz?.let { append(" (max ${it / 1000})") }
+                },
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Text("Stage", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text("mean   share   max", color = Color.Gray, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            }
+            for (stage in timing.stages) {
+                if (stage.avgUs < 0.05 && stage.maxUs < 0.05) continue
+                Row(Modifier.fillMaxWidth()) {
+                    Text(stage.name, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(
+                        "%6.2f %5.1f%% %6.2f".format(stage.avgUs / 1000.0, stage.sharePercent, stage.maxUs / 1000.0),
+                        color = if (stage.sharePercent >= 20) BmwYellow else Color.White,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+            Text("ms per buffer; share of the engine's time", color = Color.Gray, fontSize = 12.sp)
+        }
+    }
+}
 
 /**
  * Measurement neutral, the engine's own list of the stages it is running, and the self-test.

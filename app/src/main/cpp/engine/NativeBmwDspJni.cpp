@@ -682,3 +682,28 @@ Java_app_siphondsp_interop_NativeDsp_runSelfTest(JNIEnv* env, jobject, jlong sou
     }
     return result;
 }
+
+// Per-stage timing (NativeBmwProfiler.h): switched on only while Native DSP Truth shows it.
+extern "C" JNIEXPORT void JNICALL
+Java_app_siphondsp_interop_NativeDsp_setStageProfiling(JNIEnv*, jobject, jlong self, jboolean on) {
+    if (self != 0) {
+        fromHandle(self)->processor.setStageProfiling(on == JNI_TRUE);
+    }
+}
+
+// StageProfiler::kSize doubles (header, then [total ns, max ns] per stage); lock-free. Null for a
+// gone handle.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getStageProfile(JNIEnv* env, jobject, jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    constexpr auto kSize = static_cast<jsize>(NativeBmwDsp::StageProfiler::kSize);
+    double values[NativeBmwDsp::StageProfiler::kSize];
+    fromHandle(self)->processor.readStageProfile(values, NativeBmwDsp::StageProfiler::kSize);
+    jdoubleArray result = env->NewDoubleArray(kSize);
+    if (result != nullptr) {
+        env->SetDoubleArrayRegion(result, 0, kSize, values);
+    }
+    return result;
+}

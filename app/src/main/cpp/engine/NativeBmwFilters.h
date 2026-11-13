@@ -168,6 +168,12 @@ struct PeqBank {
     //  3. Anything else (a new band, a changed type) starts clean.
     void inheritState(const PeqBank& previous);
     void process(float& left, float& right);
+    // process() over frames samples of each channel, in place -- bit-identical to calling it
+    // frame by frame, and several times faster: each section's coefficients and state stay in
+    // registers for the whole run, and sections go through in groups of up to three with a
+    // one-sample skew (section k on sample n while section k+1 is on n-1), so the core has six
+    // independent recurrences to overlap instead of one section waiting on the last.
+    void processBlock(float* left, float* right, std::size_t frames);
     void clear();
 };
 

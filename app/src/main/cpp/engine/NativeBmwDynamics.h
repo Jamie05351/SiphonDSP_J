@@ -40,8 +40,10 @@ public:
     TruePeakDetector();
     void clear();
     // Feeds one stereo frame and returns the true-peak estimate (max over both channels),
-    // margin included.
-    float process(float left, float right);
+    // margin included. With a limit: when even an upper bound of the estimate is at or under it,
+    // that bound is returned instead, without interpolating (see process()) -- for a caller that
+    // only acts on readings above the limit, the result is the same.
+    float process(float left, float right, float limit = 3.4e38f);
 
 private:
     // coeffs_[p - 1] interpolates the point p/8 of the way from x[n - kDelay] to the next sample.
@@ -50,6 +52,9 @@ private:
     alignas(16) std::array<std::array<float, 2 * kTaps>, 2> history_{};
     unsigned pos_ = 0;
     float marginLin_ = 1.f;
+    // The largest sum of |coefficient| over any phase, rounded up: no interpolated point exceeds
+    // it times the largest |sample| in the window.
+    float boundGain_ = 1.f;
 };
 
 // ---- Master brick-wall limiter (summed stereo output) ------------------------------------------
@@ -242,8 +247,18 @@ private:
         void clear();
     };
     struct Cell {
-        float rms = 0, peak = 0, gain = 1, lastDetectorDb = -60.f;
+        // target: the gain computer's latest reading (see kControlInterval).
+        float rms = 0, peak = 0, gain = 1, target = 1, lastDetectorDb = -60.f;
     };
+    // The detectors (RMS and peak) and the gain follower run every sample; the gain computer --
+    // sqrt, log10, the soft knee and the dB-to-gain -- every kControlInterval samples (6 kHz at
+    // 48 kHz), its target held in between. The fastest attack (1 ms) spans 48 samples, so the
+    // target is at most 7 samples (0.15 ms) late, inside the attack's own smoothing; it was most
+    // of the stage's cost.
+    static constexpr unsigned kControlInterval = 8;
+    unsigned controlCountdown_ = 0;
+    // The dry path's all-passes sat unused (Mix settled at 100%): cleared before they run again.
+    bool dryStale_ = false;
     // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMeter() can
     // be polled from the UI thread.
     struct BandMeter {
@@ -254,7 +269,7 @@ private:
     // RMS+peak detector and soft-knee gain computer, factored out so a stereo-linked band can
     // feed it one combined level. Returns the smoothed gain (<=1).
     float bandGain(float peakAbs, const MbcBandParams& p, Cell& cell, int band,
-                   const DetectorTiming& detector);
+                   const DetectorTiming& detector, bool control);
 
     // cell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band] is
     // used (fed by max(|L|,|R|)); unlinked uses [0]=left, [1]=right.
