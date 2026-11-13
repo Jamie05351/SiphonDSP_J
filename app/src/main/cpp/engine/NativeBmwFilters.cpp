@@ -143,6 +143,141 @@ void PeqBank::inheritState(const PeqBank& previous) {
         }
     }
 }
+
+namespace {
+// K consecutive paired sections over a block, skewed by one sample each, in place (see
+// PeqBank::processBlock()). Position i goes through section 0 at step i, section 1 at step i + 1
+// and so on, so every section sees exactly the samples it would frame by frame, in order.
+template <std::size_t K>
+void runPairedGroup(SvfPair* sec, float* left, float* right, std::size_t n) {
+#if SIPHON_NEON
+    float64x2_t a1[K], a2[K], a3[K], m0[K], m1[K], m2[K], ic1[K], ic2[K];
+    for (std::size_t k = 0; k < K; ++k) {
+        a1[k] = vld1q_f64(sec[k].a1);
+        a2[k] = vld1q_f64(sec[k].a2);
+        a3[k] = vld1q_f64(sec[k].a3);
+        m0[k] = vld1q_f64(sec[k].m0);
+        m1[k] = vld1q_f64(sec[k].m1);
+        m2[k] = vld1q_f64(sec[k].m2);
+        ic1[k] = vld1q_f64(sec[k].ic1eq);
+        ic2[k] = vld1q_f64(sec[k].ic2eq);
+    }
+    for (std::size_t t = 0; t < n + K - 1; ++t) {
+        for (std::size_t kk = K; kk-- > 0;) {
+            if (t < kk || t - kk >= n) {
+                continue;
+            }
+            const std::size_t i = t - kk;
+            const float32x2_t y = svf2StepX2(lanes(left[i], right[i]), a1[kk], a2[kk], a3[kk], m0[kk],
+                                             m1[kk], m2[kk], ic1[kk], ic2[kk]);
+            left[i] = vget_lane_f32(y, 0);
+            right[i] = vget_lane_f32(y, 1);
+        }
+    }
+    for (std::size_t k = 0; k < K; ++k) {
+        vst1q_f64(sec[k].ic1eq, ic1[k]);
+        vst1q_f64(sec[k].ic2eq, ic2[k]);
+    }
+#else
+    double c[K][2][6], st[K][2][2];
+    for (std::size_t k = 0; k < K; ++k) {
+        for (std::size_t lane = 0; lane < 2; ++lane) {
+            c[k][lane][0] = sec[k].a1[lane];
+            c[k][lane][1] = sec[k].a2[lane];
+            c[k][lane][2] = sec[k].a3[lane];
+            c[k][lane][3] = sec[k].m0[lane];
+            c[k][lane][4] = sec[k].m1[lane];
+            c[k][lane][5] = sec[k].m2[lane];
+            st[k][lane][0] = sec[k].ic1eq[lane];
+            st[k][lane][1] = sec[k].ic2eq[lane];
+        }
+    }
+    float* io[2] = {left, right};
+    for (std::size_t t = 0; t < n + K - 1; ++t) {
+        for (std::size_t kk = K; kk-- > 0;) {
+            if (t < kk || t - kk >= n) {
+                continue;
+            }
+            const std::size_t i = t - kk;
+            for (std::size_t lane = 0; lane < 2; ++lane) {
+                const double* q = c[kk][lane];
+                io[lane][i] = static_cast<float>(svf2Step(static_cast<double>(io[lane][i]), q[0], q[1], q[2],
+                                                          q[3], q[4], q[5], st[kk][lane][0], st[kk][lane][1]));
+            }
+        }
+    }
+    for (std::size_t k = 0; k < K; ++k) {
+        for (std::size_t lane = 0; lane < 2; ++lane) {
+            sec[k].ic1eq[lane] = st[k][lane][0];
+            sec[k].ic2eq[lane] = st[k][lane][1];
+        }
+    }
+#endif
+}
+
+// The same for one lane's unpaired sections (the longer channel's remainder), K at a time.
+template <std::size_t K>
+void runLaneGroup(SvfPair* sec, std::size_t lane, float* x, std::size_t n) {
+    double c[K][6], st[K][2];
+    for (std::size_t k = 0; k < K; ++k) {
+        c[k][0] = sec[k].a1[lane];
+        c[k][1] = sec[k].a2[lane];
+        c[k][2] = sec[k].a3[lane];
+        c[k][3] = sec[k].m0[lane];
+        c[k][4] = sec[k].m1[lane];
+        c[k][5] = sec[k].m2[lane];
+        st[k][0] = sec[k].ic1eq[lane];
+        st[k][1] = sec[k].ic2eq[lane];
+    }
+    for (std::size_t t = 0; t < n + K - 1; ++t) {
+        for (std::size_t kk = K; kk-- > 0;) {
+            if (t < kk || t - kk >= n) {
+                continue;
+            }
+            const std::size_t i = t - kk;
+            const double* q = c[kk];
+            x[i] = static_cast<float>(svf2Step(static_cast<double>(x[i]), q[0], q[1], q[2], q[3], q[4], q[5],
+                                               st[kk][0], st[kk][1]));
+        }
+    }
+    for (std::size_t k = 0; k < K; ++k) {
+        sec[k].ic1eq[lane] = st[k][0];
+        sec[k].ic2eq[lane] = st[k][1];
+    }
+}
+}  // namespace
+
+void PeqBank::processBlock(float* left, float* right, std::size_t frames) {
+    if (frames == 0) {
+        return;
+    }
+    // The sections both channels have, as pairs, three at a time.
+    const std::size_t paired = std::min(leftCount, rightCount);
+    std::size_t i = 0;
+    for (; i + 3 <= paired; i += 3) {
+        runPairedGroup<3>(&sections[i], left, right, frames);
+    }
+    if (paired - i == 2) {
+        runPairedGroup<2>(&sections[i], left, right, frames);
+    } else if (paired - i == 1) {
+        runPairedGroup<1>(&sections[i], left, right, frames);
+    }
+    // The longer channel's remaining sections on its own lane.
+    auto lane = [this, paired, frames](std::size_t ln, std::size_t count, float* x) {
+        std::size_t j = paired;
+        for (; j + 3 <= count; j += 3) {
+            runLaneGroup<3>(&sections[j], ln, x, frames);
+        }
+        if (count - j == 2) {
+            runLaneGroup<2>(&sections[j], ln, x, frames);
+        } else if (count - j == 1) {
+            runLaneGroup<1>(&sections[j], ln, x, frames);
+        }
+    };
+    lane(kLeftLane, leftCount, left);
+    lane(kRightLane, rightCount, right);
+}
+
 void PeqBank::process(float& left, float& right) {
     std::size_t i = 0;
 #if SIPHON_NEON

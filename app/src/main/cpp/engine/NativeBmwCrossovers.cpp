@@ -289,20 +289,22 @@ void VirtualBass::rebuild(float cutHz, float range, float responseMs, float samp
     constexpr float kButterworthQ = 0.70710678f;
     // 4th-order Butterworth as two sections; squared, an LR8.
     constexpr float kBw4QA = 0.54119610f, kBw4QB = 1.30656296f;
+    // The sub band and the harmonics run at half rate (see the members).
+    const float half = sampleRate * .5f;
     // Its own floor: at a 25 Hz reach the octave below starts at 12.5 Hz, not 20.
-    makeHighPass(inHp_, fc * kInputHpRatio, kButterworthQ, sampleRate, kMinHz * kInputHpRatio);
+    makeHighPass(inHp_, fc * kInputHpRatio, kButterworthQ, half, kMinHz * kInputHpRatio);
     const float inFc = fc * kInputRatio;
-    makeLowPass(inLpA1_, inFc, kBw4QA, sampleRate);
-    makeLowPass(inLpB1_, inFc, kBw4QB, sampleRate);
-    makeLowPass(inLpA2_, inFc, kBw4QA, sampleRate);
-    makeLowPass(inLpB2_, inFc, kBw4QB, sampleRate);
-    makeHighPass(outHp1_, fc, kButterworthQ, sampleRate);
-    makeHighPass(outHp2_, fc, kButterworthQ, sampleRate);
-    makeLowPass(outLp1_, top, kButterworthQ, sampleRate);
-    makeLowPass(outLp2_, top, kButterworthQ, sampleRate);
+    makeLowPass(inLpA1_, inFc, kBw4QA, half);
+    makeLowPass(inLpB1_, inFc, kBw4QB, half);
+    makeLowPass(inLpA2_, inFc, kBw4QA, half);
+    makeLowPass(inLpB2_, inFc, kBw4QB, half);
+    makeHighPass(outHp1_, fc, kButterworthQ, half);
+    makeHighPass(outHp2_, fc, kButterworthQ, half);
+    makeLowPass(outLp1_, top, kButterworthQ, half);
+    makeLowPass(outLp2_, top, kButterworthQ, half);
     makeHighPass(cutL_, fc * kRemovalRatio, kButterworthQ, sampleRate);
     makeHighPass(cutR_, fc * kRemovalRatio, kButterworthQ, sampleRate);
-    release_ = std::exp(-1.f / (clampf(responseMs, kMinResponseMs, kMaxResponseMs) * .001f * sampleRate));
+    release_ = std::exp(-1.f / (clampf(responseMs, kMinResponseMs, kMaxResponseMs) * .001f * half));
     peakRelease_ = std::exp(-1.f / (kPeakReleaseSeconds * sampleRate));
     capRecovery_ = 1.f - std::exp(-1.f / (kCapRecoverySeconds * sampleRate));
 }
@@ -314,6 +316,9 @@ void VirtualBass::clear() {
     env_ = 0.f;
     peak_ = 0.f;
     capGain_ = 1.f;
+    oddFrame_ = false;
+    subInPrev_ = 0.f;
+    harmPrev_ = harmLast_ = 0.f;
 }
 void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
     // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
@@ -322,27 +327,41 @@ void VirtualBass::process(float& l, float& r, float onMix, float removeMix, floa
         l = std::isfinite(l) ? l : 0.f;
         r = std::isfinite(r) ? r : 0.f;
     }
-    // The sub band, and its envelope (instant attack, so |u| <= 1 without clipping a rising edge).
-    const float sub = inLpB2_.run(inLpA2_.run(inLpB1_.run(inLpA1_.run(inHp_.run((l + r) * .5f)))));
-    const float mag = std::fabs(sub);
-    env_ = mag > env_ * release_ ? mag : env_ * release_;
-    float harmonics = 0.f;
-    // Below ~-120 dBFS there's nothing to extend (and dividing by it would only amplify noise).
-    if (env_ > 1e-6f) {
-        const float u = clampf(sub / env_, -1.f, 1.f);
-        const float u2 = u * u;
-        const float t2 = 2.f * u2 - 1.f;
-        const float t3 = u * (4.f * u2 - 3.f);
-        const float t4 = 8.f * u2 * (u2 - 1.f) + 1.f;
-        const float c = clampf(character, 0.f, 1.f);
-        const float w2 = kWarmW2 + (kPunchyW2 - kWarmW2) * c;
-        const float w3 = kWarmW3 + (kPunchyW3 - kWarmW3) * c;
-        const float w4 = kWarmW4 + (kPunchyW4 - kWarmW4) * c;
-        harmonics = env_ * (w2 * t2 + w3 * t3 + w4 * t4);
+    // The sub band and its harmonics, at half rate (see the members): every second frame.
+    const float subIn = (l + r) * .5f;
+    float harmonics;
+    if (oddFrame_) {
+        // The sub band, and its envelope (instant attack, so |u| <= 1 without clipping a rising
+        // edge).
+        const float sub = inLpB2_.run(inLpA2_.run(inLpB1_.run(inLpA1_.run(inHp_.run((subIn + subInPrev_) * .5f)))));
+        const float mag = std::fabs(sub);
+        env_ = mag > env_ * release_ ? mag : env_ * release_;
+        float h = 0.f;
+        // Below ~-120 dBFS there's nothing to extend (and dividing by it would only amplify noise).
+        if (env_ > 1e-6f) {
+            const float u = clampf(sub / env_, -1.f, 1.f);
+            const float u2 = u * u;
+            const float t2 = 2.f * u2 - 1.f;
+            const float t3 = u * (4.f * u2 - 3.f);
+            const float t4 = 8.f * u2 * (u2 - 1.f) + 1.f;
+            const float c = clampf(character, 0.f, 1.f);
+            const float w2 = kWarmW2 + (kPunchyW2 - kWarmW2) * c;
+            const float w3 = kWarmW3 + (kPunchyW3 - kWarmW3) * c;
+            const float w4 = kWarmW4 + (kPunchyW4 - kWarmW4) * c;
+            h = env_ * (w2 * t2 + w3 * t3 + w4 * t4);
+        }
+        // Keep only what the woofers can play: the T2 / T4 offsets and anything left below the
+        // cut go, as does the top of the series.
+        harmPrev_ = harmLast_;
+        harmLast_ = outLp2_.run(outLp1_.run(outHp2_.run(outHp1_.run(h))));
+        // Halfway from the previous half-rate sample to this one, then (next frame) this one:
+        // linear interpolation, one stream sample late.
+        harmonics = (harmPrev_ + harmLast_) * .5f;
+    } else {
+        harmonics = harmLast_;
     }
-    // Keep only what the woofers can play: the T2 / T4 offsets and anything left below the cut go,
-    // as does the top of the series.
-    harmonics = outLp2_.run(outLp1_.run(outHp2_.run(outHp1_.run(harmonics))));
+    subInPrev_ = subIn;
+    oddFrame_ = !oddFrame_;
 
     float baseL = l, baseR = r;
     float hl = l, hr = r;

@@ -982,6 +982,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         } catch (e: SecurityException) {
             Timber.w(e, "runRecorderLoop: platform refused THREAD_PRIORITY_URGENT_AUDIO, continuing at default priority")
         }
+        // On the fast cores, with a performance hint session asking for clocks that keep each
+        // buffer's engine time under half its budget (see AudioThreadTuning).
+        val tuning = AudioThreadTuning.start(applicationContext, bufferSamples / CHANNEL_COUNT, sampleRate)
         audioStats.reset()
 
         var recorder: AudioRecord? = null
@@ -1212,7 +1215,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     diagnostics?.recordDspFailure(e)
                     throw e
                 }
-                audioStats.recordProcess(System.nanoTime() - processStart, processCount / CHANNEL_COUNT, sampleRate)
+                val processNanos = System.nanoTime() - processStart
+                audioStats.recordProcess(processNanos, processCount / CHANNEL_COUNT, sampleRate)
+                tuning.reportWork(processNanos)
                 lastSuccessfulProcess = SystemClock.elapsedRealtime()
                 diagnostics?.recordDspSuccess(processCount)
                 if (encoding == AudioEncoding.PcmShort) {
@@ -1240,6 +1245,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
         }
         finally {
+            tuning.close()
             diagnostics?.finishIfDue(force = true)
             healthHandler.removeCallbacks(startupDiagnosticsFinisher)
             // Null the shared references under the lock before releasing so an
@@ -1563,6 +1569,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         fun nativeTruthSnapshot(): NativeDspTruthSnapshot? =
             activeInstance?.engine?.nativeTruthSnapshot()
+
+        /** Per-stage timing on the running engine (see [app.siphondsp.model.debug.StageProfile]). */
+        fun setStageProfiling(on: Boolean) {
+            activeInstance?.engine?.setStageProfiling(on)
+        }
+
+        fun stageProfile(): DoubleArray? = activeInstance?.engine?.stageProfile()
 
         /** What the running engine reports it is running; null with no service or engine. */
         fun engineStatus(): app.siphondsp.model.debug.EngineStatus? = activeInstance?.engine?.engineStatus()

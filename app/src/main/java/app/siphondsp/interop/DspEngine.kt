@@ -274,6 +274,12 @@ class DspEngine(val context: Context) : AutoCloseable {
         return SelfTestReport.parse(NativeDsp.runSelfTest(source))
     }
 
+    /** See [NativeDsp.setStageProfiling]. An atomic flag, so the meter lock suffices. */
+    fun setStageProfiling(on: Boolean) = withMeterHandle(Unit) { NativeDsp.setStageProfiling(it, on) }
+
+    /** The raw per-stage counters (see [app.siphondsp.model.debug.StageProfile]); null with no handle. */
+    fun stageProfile(): DoubleArray? = withMeterHandle<DoubleArray?>(null) { NativeDsp.getStageProfile(it) }
+
     fun requestedNativeBmwDspRevision(): Long = requestedDspRevision
     fun requestedNativeBmwPeqRevision(): Long = requestedPeqRevision
     fun nativeActiveBmwDspRevision(): Long =

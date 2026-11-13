@@ -328,11 +328,11 @@ ConvolverKernel::~ConvolverKernel() {
         }
         pffftd_aligned_free(ch_[c].fdl);
         pffftd_aligned_free(ch_[c].input);
-        pffftd_aligned_free(ch_[c].tail);
-        pffftd_aligned_free(ch_[c].work);
+        pffftd_aligned_free(ch_[c].output);
     }
     pffftd_aligned_free(fftWork_);
     pffftd_aligned_free(spectrum_);
+    pffftd_aligned_free(sum_);
     if (setup_ != nullptr) {
         pffftd_destroy_setup(setup_);
     }
@@ -352,22 +352,22 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
         error = "Out of memory building the convolver";
         return nullptr;
     }
-    constexpr std::size_t N = kConvolverFftSize, B = kConvolverBlockFrames;
+    constexpr std::size_t N = kConvolverFftSize, B = kConvolverPartitionFrames;
     k->stereo_ = ir.stereo();
     k->partitions_ = (ir.frames() + B - 1) / B;
     k->setup_ = pffftd_new_setup(static_cast<int>(N), PFFFT_REAL);
     k->fftWork_ = allocAligned(N);
     k->spectrum_ = allocAligned(N);
-    bool ok = k->setup_ != nullptr && k->fftWork_ != nullptr && k->spectrum_ != nullptr;
+    k->sum_ = allocAligned(N);
+    bool ok = k->setup_ != nullptr && k->fftWork_ != nullptr && k->spectrum_ != nullptr && k->sum_ != nullptr;
     const std::size_t lineSize = k->partitions_ * N;
     for (int c = 0; c < 2 && ok; ++c) {
         Channel& ch = k->ch_[c];
         ch.spectra = (c == 0 || k->stereo_) ? allocAligned(lineSize) : k->ch_[0].spectra;
         ch.fdl = allocAligned(lineSize);
         ch.input = allocAligned(N);
-        ch.tail = allocAligned(N);
-        ch.work = allocAligned(N);
-        ok = ch.spectra && ch.fdl && ch.input && ch.tail && ch.work;
+        ch.output = allocAligned(B);
+        ok = ch.spectra && ch.fdl && ch.input && ch.output;
     }
     if (!ok) {
         error = "Out of memory building the convolver";
@@ -375,7 +375,7 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
     }
     // Partition k of the IR in the first half, zeros in the second: overlap-save then keeps the
     // second half of each inverse transform. The 1/N of the inverse FFT is folded in here.
-    double* buf = k->ch_[0].work;
+    double* buf = k->sum_;
     for (int c = 0; c < (k->stereo_ ? 2 : 1); ++c) {
         const auto& h = c == 0 ? ir.left : ir.right;
         for (std::size_t p = 0; p < k->partitions_; ++p) {
@@ -401,70 +401,55 @@ std::unique_ptr<ConvolverKernel> ConvolverKernel::build(const ConvolverIr& ir, s
 }
 
 void ConvolverKernel::reset() {
-    constexpr std::size_t N = kConvolverFftSize;
+    constexpr std::size_t N = kConvolverFftSize, B = kConvolverPartitionFrames;
     for (auto& c : ch_) {
         std::memset(c.input, 0, N * sizeof(double));
-        std::memset(c.tail, 0, N * sizeof(double));
+        std::memset(c.output, 0, B * sizeof(double));
     }
     fill_ = 0;
     head_ = 0;
     validPartitions_ = 0;
 }
 
-void ConvolverKernel::accumulateTail(Channel& c) {
-    constexpr std::size_t N = kConvolverFftSize;
-    std::memset(c.tail, 0, N * sizeof(double));
-    // Y_(t+1) = H_0 X_(t+1) + sum_(k>=1) H_k X_(t+1-k); X_t sits at head_, older blocks behind it.
-    const std::size_t count = std::min(validPartitions_, partitions_ - 1);
-    std::size_t slot = head_;
-    for (std::size_t k = 1; k <= count; ++k) {
-        pffftd_zconvolve_accumulate(setup_, c.fdl + slot * N, c.spectra + k * N, c.tail, 1.0);
-        slot = slot == 0 ? partitions_ - 1 : slot - 1;
+void ConvolverKernel::completeBlock() {
+    constexpr std::size_t N = kConvolverFftSize, B = kConvolverPartitionFrames;
+    const std::size_t next = head_ + 1 == partitions_ ? 0 : head_ + 1;
+    const std::size_t count = std::min(validPartitions_ + 1, partitions_);
+    for (auto& c : ch_) {
+        // X_t: [previous block | this block]. Kept in the delay line's next slot for the blocks
+        // after it.
+        pffftd_transform(setup_, c.input, c.fdl + next * N, fftWork_, PFFFT_FORWARD);
+        // Y_t = sum over k of H_k X_(t-k): X_t at next, older blocks behind it.
+        std::memset(sum_, 0, N * sizeof(double));
+        std::size_t slot = next;
+        for (std::size_t k = 0; k < count; ++k) {
+            pffftd_zconvolve_accumulate(setup_, c.fdl + slot * N, c.spectra + k * N, sum_, 1.0);
+            slot = slot == 0 ? partitions_ - 1 : slot - 1;
+        }
+        pffftd_transform(setup_, sum_, spectrum_, fftWork_, PFFFT_BACKWARD);
+        std::memcpy(c.output, spectrum_ + B, B * sizeof(double));
+        std::memcpy(c.input, c.input + B, B * sizeof(double));
     }
-}
-
-void ConvolverKernel::processChannel(Channel& c, const double* in, double* out,
-                                     std::size_t frames, bool completesBlock) {
-    constexpr std::size_t N = kConvolverFftSize, B = kConvolverBlockFrames;
-    std::memcpy(c.input + B + fill_, in, frames * sizeof(double));
-    // X: [previous block | block so far, zero-padded]. Kept in work until the block completes.
-    pffftd_transform(setup_, c.input, c.work, fftWork_, PFFFT_FORWARD);
-    // A completing block's spectrum is kept in the delay line's next slot (accumulateTail()
-    // reads it from there for the following blocks).
-    if (completesBlock) {
-        const std::size_t next = head_ + 1 == partitions_ ? 0 : head_ + 1;
-        std::memcpy(c.fdl + next * N, c.work, N * sizeof(double));
-    }
-    // Y = tail + H_0 X, in a separate buffer: pffft's convolve routines declare their pointers
-    // restrict, so never alias them.
-    std::memcpy(spectrum_, c.tail, N * sizeof(double));
-    pffftd_zconvolve_accumulate(setup_, c.work, c.spectra, spectrum_, 1.0);
-    pffftd_transform(setup_, spectrum_, spectrum_, fftWork_, PFFFT_BACKWARD);
-    for (std::size_t i = 0; i < frames; ++i) {
-        out[i] = spectrum_[B + fill_ + i];
-    }
+    head_ = next;
+    validPartitions_ = count;
 }
 
 void ConvolverKernel::process(const double* inL, const double* inR, double* outL, double* outR,
                               std::size_t frames) {
-    constexpr std::size_t B = kConvolverBlockFrames;
+    constexpr std::size_t B = kConvolverPartitionFrames;
     while (frames > 0) {
         const std::size_t count = std::min(frames, B - fill_);
-        const bool completes = fill_ + count == B;
-        processChannel(ch_[0], inL, outL, count, completes);
-        processChannel(ch_[1], inR, outR, count, completes);
-        if (completes) {
-            head_ = head_ + 1 == partitions_ ? 0 : head_ + 1;
-            validPartitions_ = std::min(validPartitions_ + 1, partitions_);
-            for (auto& c : ch_) {
-                std::memcpy(c.input, c.input + B, B * sizeof(double));
-                std::memset(c.input + B, 0, B * sizeof(double));
-            }
+        const double* in[2] = {inL, inR};
+        double* out[2] = {outL, outR};
+        for (int c = 0; c < 2; ++c) {
+            // In before out: they may alias. Out is the previous block's result, one block late.
+            std::memcpy(ch_[c].input + B + fill_, in[c], count * sizeof(double));
+            std::memcpy(out[c], ch_[c].output + fill_, count * sizeof(double));
+        }
+        fill_ += count;
+        if (fill_ == B) {
+            completeBlock();
             fill_ = 0;
-            accumulateTail(ch_[0]);
-            accumulateTail(ch_[1]);
-        } else {
-            fill_ += count;
         }
         inL += count;
         inR += count;
@@ -488,6 +473,7 @@ void ConvolverStage::setSampleRate(float sampleRate) {
         return;
     }
     fadeStep_ = 1.0 / (static_cast<double>(kFadeSeconds) * sampleRate);
+    dipStep_ = 1.0 / (static_cast<double>(kDipSeconds) * sampleRate);
     gainCoef_ = 1.0 - std::exp(-1.0 / (static_cast<double>(kGainRampSeconds) * sampleRate));
 }
 
@@ -498,17 +484,28 @@ void ConvolverStage::clearHistory() {
     // The previous kernel's history is as suspect as the active one's: drop the swap fade rather
     // than keep convolving with it.
     swapMix_ = 0.0;
+    swapHold_ = 0;
 }
 
 void ConvolverStage::snap(bool enabled, float gainDb) {
-    enableMix_ = enabled ? 1.0 : 0.0;
     gain_ = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
+    // Wherever it was, it lands on the path the setting asks for at full level; the convolved
+    // path starts from silence, as after reset().
+    path_ = enabled && active_ ? Path::Convolved : Path::Direct;
+    if (active_) {
+        active_->reset();
+    }
+    level_ = 1.0;
+    hold_ = 0;
+    swapMix_ = 0.0;
+    swapHold_ = 0;
 }
 
 void ConvolverStage::process(float* left, float* right, std::size_t frames, bool enabled,
                              float gainDb) {
-    // A kernel swap waits until the previous one has faded out.
-    if (swapMix_ <= 0.0) {
+    constexpr std::size_t L = kConvolverLatencyFrames;
+    // A new kernel (or an unload) is taken when no swap is in progress.
+    if (swapMix_ <= 0.0 && swapHold_ == 0) {
         if (Update* update = handoff_.take()) {
             std::unique_ptr<ConvolverKernel> incoming = std::move(update->kernel);
             // The kernel retired two swaps ago goes back to the writer, which frees it.
@@ -518,60 +515,81 @@ void ConvolverStage::process(float* left, float* right, std::size_t frames, bool
             kernelActive_.store(active_ != nullptr, std::memory_order_relaxed);
             if (active_) {
                 active_->reset();
-                // Only audible while the stage is switched on; a bypassed load changes nothing.
-                kernelArrived_ = enabled;
             }
-            swapMix_ = (enableMix_ > 0.0 && !needsReset_) ? 1.0 : 0.0;
+            if (path_ == Path::Convolved && previous_ && active_) {
+                // IR to IR while convolving: the old one plays on alone until the new one's first
+                // block is out, then they crossfade (both are one block late, so in step).
+                swapMix_ = 1.0;
+                swapHold_ = L;
+            } else if (path_ == Path::Convolved && previous_ && !active_) {
+                // Unloaded while convolving: the old one plays out through the dip to direct.
+                swapMix_ = 1.0;
+            }
+            // previous_ is never freed here (the audio thread): it goes back to the writer with
+            // the next swap.
         }
     }
     const double targetGain = std::pow(10.0, static_cast<double>(gainDb) / 20.0);
-    const double target = enabled ? 1.0 : 0.0;
-    // Fully bypassed, or nothing to convolve with: the chain's samples pass untouched.
-    if ((enableMix_ <= 0.0 && target <= 0.0) || (!active_ && swapMix_ <= 0.0)) {
-        // With no kernel the stage is dry either way; holding the mix at 0 makes a kernel that
-        // arrives while enabled fade in rather than cut in.
-        if (!active_) {
-            enableMix_ = 0.0;
-        }
+    const bool wantConvolved = enabled && active_ != nullptr;
+    // Direct and staying direct at full level: a true bypass, the chain's samples untouched.
+    if (path_ == Path::Direct && !wantConvolved && level_ >= 1.0) {
         gain_ = targetGain;
-        needsReset_ = true;
         return;
-    }
-    if (needsReset_) {
-        // Coming out of bypass: the delay lines hold stale history.
-        if (active_) {
-            active_->reset();
-        }
-        swapMix_ = 0.0;
-        needsReset_ = false;
     }
     for (std::size_t i = 0; i < frames; ++i) {
         dry_[0][i] = left[i];
         dry_[1][i] = right[i];
     }
-    if (active_) {
-        active_->process(dry_[0], dry_[1], wet_[0], wet_[1], frames);
-    }
-    const bool fadingSwap = swapMix_ > 0.0;
-    if (fadingSwap && previous_) {
-        previous_->process(dry_[0], dry_[1], old_[0], old_[1], frames);
+    if (path_ == Path::Convolved) {
+        if (active_) {
+            active_->process(dry_[0], dry_[1], wet_[0], wet_[1], frames);
+        }
+        if (swapMix_ > 0.0 && previous_) {
+            previous_->process(dry_[0], dry_[1], old_[0], old_[1], frames);
+        }
     }
     for (std::size_t i = 0; i < frames; ++i) {
         gain_ += (targetGain - gain_) * gainCoef_;
-        enableMix_ = target > enableMix_ ? std::min(target, enableMix_ + fadeStep_)
-                                         : std::max(target, enableMix_ - fadeStep_);
-        for (int c = 0; c < 2; ++c) {
-            const double dry = dry_[c][i];
-            const double cur = active_ ? std::min(gain_, active_->maxGain()) * wet_[c][i] : dry;
-            double mixed = cur;
-            if (fadingSwap) {
-                const double prev = previous_ ? std::min(gain_, previous_->maxGain()) * old_[c][i] : dry;
-                mixed = swapMix_ * prev + (1.0 - swapMix_) * cur;
+        const bool onWantedPath = (path_ == Path::Convolved) == wantConvolved;
+        if (!onWantedPath) {
+            // Down to silence on the path playing now, then switch. The new path starts clean;
+            // the convolved one stays silent until its first block is out.
+            level_ = std::max(0.0, level_ - dipStep_);
+            if (level_ <= 0.0) {
+                path_ = wantConvolved ? Path::Convolved : Path::Direct;
+                if (path_ == Path::Convolved) {
+                    // It sat unused: its history is stale. It is fed from the next call on, so
+                    // the hold covers the rest of this chunk and then its first full block.
+                    hold_ = L + (frames - i - 1);
+                    active_->reset();
+                    for (int c = 0; c < 2; ++c) {
+                        wet_[c][i] = 0.0;
+                    }
+                } else {
+                    swapMix_ = 0.0;
+                    swapHold_ = 0;
+                }
             }
-            const double y = enableMix_ * mixed + (1.0 - enableMix_) * dry;
-            (c == 0 ? left : right)[i] = static_cast<float>(y);
+        } else if (hold_ > 0) {
+            --hold_;
+        } else {
+            level_ = std::min(1.0, level_ + fadeStep_);
         }
-        if (fadingSwap) {
+        for (int c = 0; c < 2; ++c) {
+            double y = dry_[c][i];
+            if (path_ == Path::Convolved) {
+                const double cur = active_ ? std::min(gain_, active_->maxGain()) * wet_[c][i] : 0.0;
+                y = cur;
+                if (swapMix_ > 0.0) {
+                    const double prev = previous_ ? std::min(gain_, previous_->maxGain()) * old_[c][i] : 0.0;
+                    y = swapMix_ * prev + (1.0 - swapMix_) * cur;
+                }
+            }
+            (c == 0 ? left : right)[i] = static_cast<float>(level_ * y);
+        }
+        if (swapHold_ > 0) {
+            --swapHold_;
+        } else if (swapMix_ > 0.0 && active_) {
             swapMix_ = std::max(0.0, swapMix_ - fadeStep_);
         }
     }

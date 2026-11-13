@@ -20,6 +20,7 @@
 #include "NativeBmwHandoff.h"
 #include "NativeBmwMeasurement.h"
 #include "NativeBmwMeasurementGenerator.h"
+#include "NativeBmwProfiler.h"
 #include "NativeBmwRouting.h"
 
 // Thin orchestrator over the NativeBmwDsp modules: parses/validates config (configure(),
@@ -152,6 +153,12 @@ public:
     };
     // Lock-free (relaxed atomics written by the audio thread).
     GuardCounters guardCounters() const;
+
+    // Per-stage timing for Native DSP Truth (NativeBmwProfiler.h). Any thread: switches it on or
+    // off from the next buffer (on starts the counts from zero). read: StageProfiler::kSize
+    // values, lock-free.
+    void setStageProfiling(bool on) { profiler_.request(on); }
+    void readStageProfile(double* values, std::size_t count) const { profiler_.read(values, count); }
 
     // 12 floats: 4 MBC bands x [inputDb, outputDb, gainReductionDb]. All-idle (-60/-60/0)
     // while the multiband compressor is disabled. Lock-free: reads atomics published by
@@ -353,20 +360,22 @@ private:
     // frame-by-frame loop, so bit-identical to it.
     enum : std::size_t { kChunkFrames = 64 };
     void processChunk(float* interleaved, std::size_t frames);
-    // DC blocker through the routing matrix: one input frame to the six routed outputs, and the
-    // full-range stereo signal ahead of routing (fullL/fullR: the crossover bypass's path).
-    std::array<float, NativeBmwRouting::kOutputCount> processInputStages(float l, float r, float& fullL,
-                                                                         float& fullR);
-    // One band's lanes over the chunk: its chain, or silence.
-    void processBandStage(NativeBmwRouting::Band band, std::size_t frames);
-    // Every band chain's running state (filters, all-pass, delays, band EQ, bus limiters).
+    // The chain, each stage over the whole chunk before the next (see processChunk()):
+    // the input stages from chunkFullL_/R_ (left there as the full-range path) through routing
+    // into chunkLanes_; every band's sub-stages in place on chunkLanes_; the band sum (or the
+    // full-range path), tilt, post gain, channel mute and measurement bus into chunkConvL_/R_;
+    // then the master limiter, volume, loudness and the hardware swap in place there.
+    void processInputStages(std::size_t frames);
+    void processBandStages(std::size_t frames);
+    void processOutputStages(std::size_t frames, bool bandsRun);
+    void processBackStages(std::size_t frames);
+    // Every band chain's running state (filters, all-pass, delays, band EQ, bus limiters), or
+    // one band's.
     void clearBandState();
-    // Per-output polarity/mute and the sum: the six band outputs of one frame to logical L / R.
-    void sumBands(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l, float& r);
-    // Tilt, post gain, channel mute and measurement bus on logical L / R, in place.
-    void processOutputStages(float& l, float& r);
-    // The master limiter, master volume, loudness and the hardware swap.
-    void processFrameBack(float& l, float& r);
+    void clearBandState(NativeBmwRouting::Band band);
+    // Per band (Low, Mid, High): muted on both outputs, so its chain is skipped (see
+    // processBandStages()).
+    std::array<bool, 3> bandMuted_{};
     // The float processing for one buffer.
     void processBlock(float* interleaved, std::size_t sampleCount);
     // Owner only, at the start of each processed buffer: serves notifyStreamStart().
@@ -384,6 +393,8 @@ private:
     float fadeInStep_ = 1.f / (kFadeInSeconds * 48000.f);
     float fadeOutStep_ = 1.f / (kFadeOutSeconds * 48000.f);
     std::atomic<bool> streamStartPending_{false};
+    // Per-stage timing (see NativeBmwProfiler.h); off unless requested.
+    NativeBmwDsp::StageProfiler profiler_;
     struct GuardAtomics {
         std::atomic<std::int64_t> nonFiniteFaults{0}, overRangeFaults{0}, clippedSamples{0},
             streamStarts{0}, fadeIns{0};
@@ -401,18 +412,14 @@ private:
     // Each chunk frame's raw input, for the capture's input/output pairs.
     std::array<float, 2 * kChunkFrames> chunkRawIn_{};
     // The chunk's logical L/R after processOutputStages(): the convolver's input and output, and
-    // processFrameBack()'s input.
+    // processBackStages()'s working buffer.
     static_assert(static_cast<std::size_t>(kChunkFrames) ==
                       static_cast<std::size_t>(NativeBmwDsp::kConvolverBlockFrames),
-                  "the convolver's partition is the chunk, so it adds no latency");
+                  "the convolver stage takes at most one chunk per call");
     std::array<float, kChunkFrames> chunkConvL_{}, chunkConvR_{};
-    // The chunk's full-range stereo signal ahead of routing (see processInputStages()).
+    // The chunk's stereo signal through the input stages, left as the full-range path ahead of
+    // routing (see processInputStages()).
     std::array<float, kChunkFrames> chunkFullL_{}, chunkFullR_{};
-    // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
-    // gain, then the band's stereo-linked bus limiter.
-    void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);
-    // Bookkeeping for a band whose chain is silenced (highXoPass): resets its bus limiter.
-    void idleBandChain(NativeBmwRouting::Band band);
     // A validated configure() update, built on the config thread: everything configure() reads
     // from v[], with the all-pass coefficients built at sampleRate.
     struct ParsedConfig {
