@@ -205,6 +205,14 @@ class ParseNativeTruthSnapshotTest {
         assertEquals(6, snapshot.crossovers.size)
     }
 
+    @Test fun parsesTheEngineStatusBlockAtTheEnd() {
+        assertNull(parseNativeTruthSnapshot(buildArray())!!.status)  // an engine without it
+        val status = doubleArrayOf(1.0, 6.0, 0.0, 0.0, 3.0, 2.0, -1.0, 0.0, 0.0, 0.0, 0.0, -6.0, 48000.0, 2.0)
+        val snapshot = parseNativeTruthSnapshot(buildArray() + status)!!
+        assertEquals(3, snapshot.status!!.crossoverWays)
+        assertEquals(setOf(app.siphondsp.model.DspStage.CROSSOVER, app.siphondsp.model.DspStage.BAND_EQ), snapshot.status!!.activeStages)
+    }
+
     @Test fun nullOnTooShortArray() {
         assertNull(parseNativeTruthSnapshot(doubleArrayOf(1.0, 2.0)))
     }

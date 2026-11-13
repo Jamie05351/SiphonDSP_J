@@ -70,6 +70,7 @@ import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.ComplexAcc
 import app.siphondsp.dsp.ConvolverResponse
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
@@ -660,8 +661,8 @@ private fun drawCrossoverShading(
     maxFrequency: Double,
 ) {
     if (values.size != BmwSignalChain.VALUE_COUNT) return
-    // values[1] / values[2] = LPF-pass / HPF-pass bypass flags — no split active.
-    if (values[NativeBmwDspValues.INDEX_LPF_PASS] >= .5f || values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f) return
+    // No band split running (the crossover bypass, or measurement neutral): nothing to shade.
+    if (MeasurementNeutral.crossoverBypassed(values)) return
     val lowFreq = values[
         NativeBmwDspValues.outputIndex(NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
     ].toDouble().coerceIn(20.0, maxFrequency)

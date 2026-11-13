@@ -27,6 +27,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.Alignment
+import app.siphondsp.compose.controls.BmwSwitch
+import app.siphondsp.compose.state.SelfTestRunner
+import app.siphondsp.compose.state.SelfTestState
+import app.siphondsp.compose.state.rememberBmwDspState
+import app.siphondsp.compose.state.rememberEngineStatus
+import app.siphondsp.compose.state.rememberSelfTestState
+import app.siphondsp.compose.state.setMeasurementNeutral
+import app.siphondsp.compose.state.setNeutralStageAllowed
+import app.siphondsp.model.DspStage
+import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.interop.NativeDsp
 import app.siphondsp.interop.NativeConfigRevisionStatus
 import app.siphondsp.model.debug.CpuFrequencies
@@ -59,7 +73,11 @@ private const val REFRESH_INTERVAL_MS = 500L
  *     layout).
  *   - [RootlessAudioProcessorService.pipelineRuntimeSnapshot] (the running service's own
  *     AudioRecord/AudioTrack/health-watchdog state, read directly, not mirrored).
- * Read-only: this screen has no controls that change DSP configuration.
+ *   - [RootlessAudioProcessorService.engineStatus] (NativeBmwDspProcessor::readEngineStatus():
+ *     the stages the engine reports running, from its installed state).
+ * The one control here is MEASUREMENT: measurement neutral, the stages it lets back on, and the
+ * self-test (an impulse through an offline copy of the running chain). Everything it shows is
+ * the engine's report or the self-test's measurement, never the settings.
  */
 @Composable
 fun NativeTruthScreen(modifier: Modifier = Modifier) {
@@ -100,6 +118,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
                 fontSize = 14.sp,
             )
         }
+        item { MeasurementSection() }
         item { EngineSection(handleReady, engineSampleRate, truth) }
         item { PipelineSection(pipeline) }
         item { RealtimeSection(pipeline?.realtime, cpu) }
@@ -161,6 +180,119 @@ private fun KeyValueRow(label: String, value: String, valueColor: Color = Color.
 private fun fmt(value: Double, decimals: Int = 2): String {
     val scale = Math.pow(10.0, decimals.toDouble())
     return ((value * scale).roundToInt() / scale).toString()
+}
+
+
+/**
+ * Measurement neutral, the engine's own list of the stages it is running, and the self-test.
+ * While neutral is on, each stage in the neutral set has its own switch to run it again (the
+ * rest stay bypassed); the self-test reruns after each change.
+ */
+@Composable
+private fun MeasurementSection() {
+    val dsp = rememberBmwDspState()
+    val status by rememberEngineStatus()
+    val selfTest by rememberSelfTestState()
+    val neutralOn = MeasurementNeutral.isOn(dsp.values)
+    Column {
+        SectionHeader("MEASUREMENT")
+        DebugCard {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Measurement neutral", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Bypasses every stage below except the master volume; the settings are kept, " +
+                            "so switching it off restores them exactly.",
+                        color = Color.Gray,
+                        fontSize = 13.sp,
+                    )
+                }
+                BmwSwitch(
+                    checked = neutralOn,
+                    onCheckedChange = { setMeasurementNeutral(dsp, it) },
+                    contentDescription = "Measurement neutral",
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            val engine = status
+            KeyValueRow(
+                "Engine reports",
+                when {
+                    engine == null -> "no engine running"
+                    engine.measurementNeutral -> "neutral on"
+                    else -> "neutral off"
+                },
+                if (engine == null) BmwYellow else Color.White,
+            )
+            KeyValueRow(
+                "Crossover",
+                when (val ways = engine?.crossoverWays) {
+                    null -> "—"
+                    0 -> "off (one full-range path)"
+                    else -> "$ways-way"
+                },
+            )
+            KeyValueRow("Master volume (not bypassed)", engine?.let { "${fmt(it.masterVolumeDb.toDouble(), 1)} dB" } ?: "—")
+            Spacer(Modifier.height(8.dp))
+            Text("ACTIVE STAGES (engine-confirmed)", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            if (engine == null) {
+                Text("unknown: no engine running", color = BmwYellow, fontSize = 14.sp)
+            } else if (engine.activeStages.isEmpty()) {
+                Text("none: the output is the input", color = BmwGreen, fontSize = 14.sp)
+            }
+            for (stage in DspStage.entries) {
+                val active = engine?.isActive(stage) == true
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        (if (active) "● " else "○ ") + stage.label,
+                        color = if (active) BmwGreen else Color.Gray,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (neutralOn && stage.neutralised) {
+                        Text("run in neutral", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
+                        BmwSwitch(
+                            checked = MeasurementNeutral.isAllowed(dsp.values, stage),
+                            onCheckedChange = { setNeutralStageAllowed(dsp, stage, it) },
+                            contentDescription = "Run ${stage.label} in measurement neutral",
+                            width = 72.dp,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("SELF-TEST", color = Color.Gray, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = { SelfTestRunner.run() }, enabled = selfTest != SelfTestState.Running) {
+                    Text(if (selfTest == SelfTestState.Running) "Testing…" else "Run self-test")
+                }
+            }
+            when (val t = selfTest) {
+                SelfTestState.Idle -> Text(
+                    "An impulse through an offline copy of the running chain, compared with a wire.",
+                    color = Color.Gray,
+                    fontSize = 13.sp,
+                )
+                SelfTestState.Running -> Text("Measuring…", color = Color.Gray, fontSize = 14.sp)
+                SelfTestState.Unavailable -> Text("No engine running to test.", color = BmwYellow, fontSize = 14.sp)
+                is SelfTestState.Done -> {
+                    val r = t.report
+                    Text(r.headline, color = if (r.verified) BmwGreen else BmwYellow, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(r.detail, color = Color.White, fontSize = 13.sp)
+                    if (!r.verified && r.unexplained) {
+                        Text(
+                            "No single stage alters it on its own: stages altering it only together, or the " +
+                                "settings changed during the test. Run it again.",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    Text("Took ${fmt(r.durationMs, 0)} ms", color = Color.Gray, fontSize = 12.sp)
+                }
+            }
+        }
+    }
 }
 
 @Composable

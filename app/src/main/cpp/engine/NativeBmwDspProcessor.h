@@ -39,7 +39,7 @@ public:
     // generated from app/src/main/schema/native_bmw_dsp.schema into NativeBmwDspSchema.h (with the
     // Kotlin side and docs/NATIVE_BMW_DSP_SCHEMA.md). kConfigSize is pinned to it by a static_assert
     // there. Slots are append-only: saves are stored by index.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 309 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 312 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -197,8 +197,40 @@ public:
     //     then rawBandCount * [freqHz, gainDb, q, type, channel, active (0/1)]. "active" mirrors
     //     parsePeq()'s build() skip (peqBandSkipped()) -- a band this processor discarded
     //     as a no-op is reported as inactive even though its raw values are still shown.
+    //   then the engine status block: kEngineStatusSize doubles, laid out as readEngineStatus().
     enum : std::size_t { kTruthOutputWidth = 40 };
     std::vector<double> captureTruthSnapshot();
+
+    // Measurement neutral, as configure() applies it: in (a full kConfigSize config) copied to
+    // out with every neutralised stage's slots set to their bypass values. The stages are
+    // nbschema::kStage* bits 0 .. kStageNeutralCount - 1; those set in in[kNeutralAllow] are left
+    // as configured. PreEq, BandEq and DcBlocker aren't config slots (parseConfig() handles them).
+    static void applyMeasurementNeutral(const float* in, float* out);
+
+    // What the engine is actually running, from its installed state (never from what was
+    // requested): lock-free, any thread. kEngineStatusSize floats:
+    //   [0] 1 (valid)            [1] active stages (nbschema::kStage* bits, as an exact integer)
+    //   [2] measurement neutral  [3] neutral allow mask
+    //   [4] crossover: 0 bypassed (one full-range path), 2 = 2-way, 3 = 3-way
+    //   [5] tilt dB              [6] master limiter threshold dBFS
+    //   [7] MBC bands compressing (0 while the MBC is off)
+    //   [8] outputs with an all-pass section running
+    //   [9] master volume dB     [10] master mute     [11] headroom dB    [12] sample rate
+    //   [13] config revision: bumped by every install, so a reader can tell it caught up
+    enum : std::size_t { kEngineStatusSize = 14 };
+    void readEngineStatus(float* values, std::size_t count) const;
+
+    // Everything needed to rebuild this processor offline for the self-test: the last accepted
+    // config and PEQ as sent, the stream rate, and the running IR at that rate (null for none).
+    struct SelfTestSource {
+        std::vector<float> config;
+        bool peqValid = false, peqEnabled = false;
+        float peqPreampDb = 0.f;
+        std::array<std::vector<double>, 4> peqBanks;
+        float sampleRate = 48000.f;
+        std::shared_ptr<const NativeBmwDsp::ConvolverIr> ir;
+    };
+    bool selfTestSource(SelfTestSource& out);
 
     // Raw-input/final-output capture for the in-app measurement tool. Control requests:
     // startCapture() (re)allocates the capture buffers at the current sample rate on the calling
@@ -290,11 +322,9 @@ private:
         DirtyLimiter = 1u << 16,  // master limiter ceiling scalar (threshold dB); enable read live
         DirtyMeasGen = 1u << 17,  // measurement generator type/params -- restarts the run
         DirtyHighXo = 1u << 18,
-        DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass/highPass off): clear its state
+        DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass off): clear its state
         DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
-        DirtyLowResume = 1u << 22,  // Low's chain runs again (lpfPass off): clear its state
-        DirtyMidResume = 1u << 23,  // Mid's chain runs again (hpfPass off): clear its state
         DirtyLoudness = 1u << 24,   // volume or loudness settings changed: retune (keeps state)
         DirtyLoudnessResume = 1u << 25,  // loudness switched on: clear the state it froze with
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
@@ -323,14 +353,18 @@ private:
     // frame-by-frame loop, so bit-identical to it.
     enum : std::size_t { kChunkFrames = 64 };
     void processChunk(float* interleaved, std::size_t frames);
-    // DC blocker through the routing matrix: one input frame to the six routed outputs.
-    std::array<float, NativeBmwRouting::kOutputCount> processInputStages(float l, float r);
-    // One band's lanes over the chunk: its chain, its bypass latency, or silence.
+    // DC blocker through the routing matrix: one input frame to the six routed outputs, and the
+    // full-range stereo signal ahead of routing (fullL/fullR: the crossover bypass's path).
+    std::array<float, NativeBmwRouting::kOutputCount> processInputStages(float l, float r, float& fullL,
+                                                                         float& fullR);
+    // One band's lanes over the chunk: its chain, or silence.
     void processBandStage(NativeBmwRouting::Band band, std::size_t frames);
-    // Per-output polarity/mute, the sum, tilt, post gain, channel mute and measurement bus: the
-    // six band outputs of one frame to logical L / R.
-    void processOutputStages(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l,
-                             float& r);
+    // Every band chain's running state (filters, all-pass, delays, band EQ, bus limiters).
+    void clearBandState();
+    // Per-output polarity/mute and the sum: the six band outputs of one frame to logical L / R.
+    void sumBands(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l, float& r);
+    // Tilt, post gain, channel mute and measurement bus on logical L / R, in place.
+    void processOutputStages(float& l, float& r);
     // The master limiter, master volume, loudness and the hardware swap.
     void processFrameBack(float& l, float& r);
     // The float processing for one buffer.
@@ -372,11 +406,12 @@ private:
                       static_cast<std::size_t>(NativeBmwDsp::kConvolverBlockFrames),
                   "the convolver's partition is the chunk, so it adds no latency");
     std::array<float, kChunkFrames> chunkConvL_{}, chunkConvR_{};
+    // The chunk's full-range stereo signal ahead of routing (see processInputStages()).
+    std::array<float, kChunkFrames> chunkFullL_{}, chunkFullR_{};
     // One band's post-routing chain on its L/R outputs: crossover, PEQ, all-pass, delay, driver
     // gain, then the band's stereo-linked bus limiter.
     void processBandChain(NativeBmwRouting::Band band, float& xl, float& xr);
-    // Bookkeeping for a band whose chain is skipped (lpfPass/hpfPass/highXoPass): resets its bus
-    // limiter.
+    // Bookkeeping for a band whose chain is silenced (highXoPass): resets its bus limiter.
     void idleBandChain(NativeBmwRouting::Band band);
     // A validated configure() update, built on the config thread: everything configure() reads
     // from v[], with the all-pass coefficients built at sampleRate.
@@ -545,9 +580,30 @@ private:
     float loudnessStrength_ = 0.f;
     static constexpr float kLoudnessRampSeconds = 0.05f;
     float loudnessRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
-    // Fixed latency for a bypassed band, [LowL, LowR, MidL, MidR, HighL, HighR]: the
-    // AlignmentDelay kernel's plus the bus limiter's lookahead (set in rebuildBusLimiter()).
-    std::array<NativeBmwDsp::Delay, 6> bypassLatency_{};
+    // On/off crossfades, linear over kMixFadeSeconds (kCrossoverFadeSeconds for the crossover
+    // bypass) toward their targets, each stage skipped while its mix is 0 and started from a
+    // clean state when it comes back: the DC blocker, the Pre EQ, each band's EQ, and the band
+    // split (xoverMix_: 0 = the bands, 1 = the full-range path). Targets follow p_ and the PEQ
+    // switch (updateMixTargets()); snapped on start-up, a stream start and a full rebuild.
+    static constexpr float kMixFadeSeconds = 0.02f;
+    static constexpr float kCrossoverFadeSeconds = 0.02f;
+    float mixFadeStep_ = 1.f / (0.02f * 48000.f);
+    float xoverFadeStep_ = 1.f / (0.02f * 48000.f);
+    float dcMix_ = 1.f, dcTarget_ = 1.f;
+    float preEqMix_ = 0.f, preEqTarget_ = 0.f;
+    std::array<float, 3> bandEqMix_{};
+    float bandEqTarget_ = 0.f;
+    float xoverMix_ = 0.f;
+    bool peqPrimed_ = false;
+    static float stepMix(float mix, float target, float step) {
+        return mix < target ? std::min(target, mix + step) : mix > target ? std::max(target, mix - step) : mix;
+    }
+    float stepMix(float mix, float target) const { return stepMix(mix, target, mixFadeStep_); }
+    void updateMixTargets();
+    void snapMixes();
+    // Owner only: recomputes the engine status (activeStages() and friends) from what is
+    // installed. Called after every install.
+    void publishStatus();
     // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
     // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
     NativeBmwDsp::VirtualSourceStage virtual_;
@@ -568,6 +624,8 @@ private:
     std::atomic<bool> busLimLowEnabledMeterFlag_{false}, busLimMidEnabledMeterFlag_{false};
     std::atomic<bool> busLimHighEnabledMeterFlag_{false};
     std::atomic<bool> masterLimiterEnabledMeterFlag_{true};
+    // The engine status (see readEngineStatus()), published by the owner after each install.
+    std::array<std::atomic<float>, 16> status_{};
 
     // Measurement.
     NativeBmwDsp::MeasurementBus measBus_;
@@ -655,6 +713,16 @@ private:
     // rebuilt at install.
     std::mutex configMutex_;
     ParsedConfig configShadow_;
+    // The last accepted config as sent (before measurement neutral is applied) and the last
+    // accepted PEQ, for selfTestSource(); configure()'s neutral workspace.
+    std::array<float, kConfigSize> rawConfig_{};
+    bool rawConfigValid_ = false;
+    std::array<float, kConfigSize> neutralScratch_{};
+    struct RawPeq {
+        bool valid = false, enabled = false;
+        float preampDb = 0.f;
+        std::array<std::vector<double>, 4> banks;
+    } rawPeq_;
     std::atomic<float> configSampleRate_{48000.0f};
     NativeBmwDsp::TripleBuffer<ParsedConfig> configHandoff_;
     NativeBmwDsp::TripleBuffer<ParsedPeq> peqHandoff_;

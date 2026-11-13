@@ -1,12 +1,14 @@
 package app.siphondsp.dsp
 
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.DspStage
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqBandList
 import app.siphondsp.model.ParametricEqChannel
 import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.model.ThreeWayCrossover
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,7 +29,7 @@ class BmwSignalChainModelTest {
         val highBranchDb: Array<DoubleArray>,
         val preSplitDb: Array<DoubleArray>,
         val processorEnabled: Boolean,
-        val bothCrossoversBypassed: Boolean,
+        val crossoverBypassed: Boolean,
     )
 
     private fun compute(values: FloatArray, peq: BmwPeqState = BmwPeqState.empty()): Snapshot {
@@ -41,7 +43,7 @@ class BmwSignalChainModelTest {
             highBranchDb = Array(2) { curves.highBranchDb[it].copyOf() },
             preSplitDb = Array(2) { curves.preSplitDb[it].copyOf() },
             processorEnabled = curves.processorEnabled,
-            bothCrossoversBypassed = curves.bothCrossoversBypassed,
+            crossoverBypassed = curves.crossoverBypassed,
         )
     }
 
@@ -167,37 +169,85 @@ class BmwSignalChainModelTest {
     }
 
     @Test
-    fun highPassthroughCarriesThePreSplitSignalButHighXoPassStillSilencesIt() {
-        // INDEX_HIGH_PASS is the lpfPass/hpfPass contract for High: an identity branch (no HPF, no
-        // PEQ, no gain/delay), so the branch equals the pre-split signal even far below the corner.
-        fun activeHigh(values: FloatArray) = values.also {
-            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
-            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
-            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
-            it[NativeBmwDspValues.INDEX_HIGH_GAIN_L] = 6f
-            it[NativeBmwDspValues.INDEX_HIGH_PASS] = 1f
+    fun crossoverBypassSumIsThePreSplitSignalAndNoBandRuns() {
+        // Native's crossover bypass: one full-range path -- no band filter, PEQ, gain, delay,
+        // polarity or mute -- so the sum is the pre-split signal (here with tilt off) at every
+        // frequency, whatever the bands are set to.
+        val result = compute(
+            baseValues().also {
+                it[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] = 1f
+                it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
+                it[NativeBmwDspValues.INDEX_LOW_GAIN_L] = -6f
+                it[NativeBmwDspValues.INDEX_MID_DELAY_L] = 1f
+                setOutput(it, NativeBmwDspValues.OUTPUT_MID_LEFT, NativeBmwDspValues.FIELD_INVERT, 1f)
+                setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_MUTE, 1f)
+            },
+            peqWith(low = listOf(band(80.0, 6.0)), mid = listOf(band(2_000.0, -6.0))),
+        )
+        assertTrue(result.crossoverBypassed)
+        for (ch in 0 until 2) {
+            for (i in result.sumDb[ch].indices) assertEquals(result.preSplitDb[ch][i], result.sumDb[ch][i], 1e-9)
+            assertTrue(result.lowBranchDb[ch].all { it < -100.0 })
+            assertTrue(result.midBranchDb[ch].all { it < -100.0 })
+            assertTrue(result.highBranchDb[ch].all { it < -100.0 })
         }
-        val passed = compute(activeHigh(baseValues()), peqWith(high = listOf(band(6_000.0, -12.0))))
-        for (i in passed.highBranchDb[0].indices) {
-            assertEquals(passed.preSplitDb[0][i], passed.highBranchDb[0][i], 1e-6)
-        }
-        // highXoPass wins: High stays silent however its own passthrough is set.
-        val silenced = compute(activeHigh(baseValues()).also { it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 1f })
-        assertTrue(silenced.highBranchDb[0].all { it < -100.0 })
     }
 
     @Test
-    fun lowCrossoverBypassAlsoBypassesSubsonicLikeNative() {
-        val withSubsonicConfigured = compute(baseValues().also { it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f })
-        val subsonicDisabled = compute(baseValues().also {
-            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
-            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_LEFT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
-            setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
+    fun measurementNeutralIsAWireAndRestoresExactly() {
+        // Every stage configured away from identity, then neutral: the graph is flat 0 dB, 0 deg
+        // (the DC blocker goes too). Switching it off gives back exactly the original curves.
+        val tuned = baseValues().also {
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_POST_GAIN_L] = 3f
+            it[NativeBmwDspValues.INDEX_HEADROOM] = -6f
+            it[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] = 1f
+        }
+        val peq = peqWith(full = listOf(band(1_000.0, 6.0)), low = listOf(band(80.0, 6.0)))
+        val before = compute(tuned, peq)
+        val neutral = compute(tuned.copyOf().also { it[NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL] = 1f }, peq)
+        for (ch in 0 until 2) {
+            for (i in neutral.sumDb[ch].indices) {
+                assertEquals(0.0, neutral.sumDb[ch][i], 1e-9)
+                assertEquals(0.0, curves.sumPhase[ch][i], 1e-9)
+            }
+        }
+        val after = compute(tuned, peq)
+        for (ch in 0 until 2) assertArrayEquals(before.sumDb[ch], after.sumDb[ch], 0.0)
+    }
+
+    @Test
+    fun measurementNeutralRunsOnlyTheAllowedStages() {
+        val tuned = baseValues().also {
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_POST_GAIN_L] = 3f
+        }
+        val tiltOnly = compute(tuned.copyOf().also {
+            it[NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL] = 1f
+            it[NativeBmwDspValues.INDEX_NEUTRAL_ALLOW] = DspStage.TILT.mask.toFloat()
+        })
+        val tiltAlone = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] = 1f
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+            it[NativeBmwDspValues.INDEX_HEADROOM] = 0f
+            for (i in listOf(NativeBmwDspValues.INDEX_MASTER_LIMITER_ENABLED)) it[i] = 0f
+        })
+        val i = nearestIndex(100.0)
+        // Tilt with nothing else: the DC blocker is the only difference, far below 100 Hz.
+        assertEquals(tiltAlone.sumDb[0][i], tiltOnly.sumDb[0][i], 0.01)
+        assertTrue(abs(tiltOnly.sumDb[0][i]) > 1.0)
+    }
+
+    @Test
+    fun crossoverBypassAlsoBypassesSubsonicLikeNative() {
+        // The subsonic HPF is part of Low's chain: with the split removed it doesn't run.
+        val bypassed = compute(baseValues().also {
+            it[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] = 1f
+            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
         })
         val i = nearestIndex(20.0)
-
-        assertEquals(subsonicDisabled.lowBranchDb[0][i], withSubsonicConfigured.lowBranchDb[0][i], 1e-6)
-        assertEquals(subsonicDisabled.lowBranchDb[1][i], withSubsonicConfigured.lowBranchDb[1][i], 1e-6)
+        assertEquals(bypassed.preSplitDb[0][i], bypassed.sumDb[0][i], 1e-9)
+        assertEquals(bypassed.preSplitDb[1][i], bypassed.sumDb[1][i], 1e-9)
     }
 
     @Test
@@ -230,52 +280,6 @@ class BmwSignalChainModelTest {
             baseline.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             changed.lowBranchDb[BmwOutputChannel.LEFT.ordinal][i],
             1e-6,
-        )
-    }
-
-    @Test
-    fun bothCrossoversBypassedDoublesPreSplitSignalMatchingNativeRoutedSum() {
-        // Native's processFrame() has no bothBypassed shortcut -- it always feeds Low+Mid+High
-        // into sumToStereo() unconditionally (see NativeBmwDspProcessor.cpp's "Always use the
-        // routed sum here" comment). Under default routing, Low and Mid each independently carry
-        // the full pre-split signal (RoutingMatrix's default coefficients route the same channel
-        // to both), so bypassing both crossover filters means the sum is genuinely 2x pre, not
-        // 1x -- with High left at its default muted/silent state contributing nothing on top.
-        val result = compute(baseValues().also {
-            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
-            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
-            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
-        })
-        assertTrue(result.bothCrossoversBypassed)
-        for (i in result.sumDb[0].indices) {
-            assertEquals(result.preSplitDb[0][i] + 20.0 * kotlin.math.log10(2.0), result.sumDb[0][i], 1e-6)
-        }
-    }
-
-    @Test
-    fun bothCrossoversBypassedWithHighActiveIncludesHighBranchInSum() {
-        // Regression for the finding that bothBypassed's old sumAcc.setFrom(pre) shortcut
-        // silently dropped High's entire contribution from the response graph whenever both
-        // legacy crossovers were bypassed, even with High fully active -- a materially different
-        // displayed sum than the audible native output, which always includes High.
-        val result = compute(baseValues().also {
-            it[NativeBmwDspValues.INDEX_LPF_PASS] = 1f
-            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
-            it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
-            it[NativeBmwDspValues.INDEX_HIGH_XO_PASS] = 0f
-            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_LEFT, NativeBmwDspValues.FIELD_MUTE)] = 0f
-            it[NativeBmwDspValues.highOutputIndex(NativeBmwDspValues.OUTPUT_HIGH_RIGHT, NativeBmwDspValues.FIELD_MUTE)] = 0f
-            it[NativeBmwDspValues.INDEX_HIGH_GAIN_L] = 6f
-            it[NativeBmwDspValues.INDEX_HIGH_GAIN_R] = 6f
-        })
-        assertTrue(result.bothCrossoversBypassed)
-        // 10 kHz is well above the default 3 kHz LR4 High crossover corner, so the HPF itself
-        // contributes negligible attenuation here -- isolating the assertion to "did High's
-        // branch get summed in at all" rather than also depending on the filter's exact shape.
-        val i = nearestIndex(10_000.0)
-        assertTrue(
-            "expected High's contribution to raise the sum above plain 2x pre",
-            result.sumDb[0][i] > result.preSplitDb[0][i] + 20.0 * kotlin.math.log10(2.0) + 0.5,
         )
     }
 
@@ -327,9 +331,8 @@ class BmwSignalChainModelTest {
 
     @Test
     fun perOutputLowInvertChangesOnlyMappedPhysicalSum() {
-        val baseline = compute(baseValues().also { it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f })
+        val baseline = compute(baseValues())
         val inverted = compute(baseValues().also {
-            it[NativeBmwDspValues.INDEX_HPF_PASS] = 1f
             setOutput(it, NativeBmwDspValues.OUTPUT_LOW_RIGHT, NativeBmwDspValues.FIELD_INVERT, 1f)
         })
 

@@ -94,37 +94,3 @@ TEST_CASE("alignment delay: no-latency mode delays by exactly the requested amou
         }
     }
 }
-
-TEST_CASE("bypassed bands carry the alignment latency, so they stay aligned") {
-    // Both crossovers bypassed, every delay 0, master limiter off: the only latency left is the
-    // per-band alignment latency and bus-limiter lookahead, both carried by the bypass path.
-    NativeBmwDspProcessor proc;
-    auto c = defaultConfig();
-    c[nbschema::kLpfPass] = 1.f;
-    c[nbschema::kHpfPass] = 1.f;
-    c[nbschema::kMasterLimiterEnabled] = 0.f;  // its lookahead would add latency of its own
-    c[nbschema::kTiltEnabled] = 0.f;
-    // Low only: High silenced, Mid routing zeroed, so no other band can sum or cancel.
-    c[nbschema::kHighXoPass] = 1.f;
-    for (int i = 4; i < 8; ++i) {
-        c[nbschema::kRoutingBase + i] = 0.f;
-    }
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(c.data(), c.size()));
-
-    std::vector<float> buf(2 * 256, 0.f);
-    buf[2 * 32] = buf[2 * 32 + 1] = 0.5f;  // impulse at frame 32
-    proc.process(buf.data(), buf.size());
-    std::size_t peakFrame = 0;
-    float peak = 0.f;
-    for (std::size_t n = 0; n < 256; ++n) {
-        if (std::fabs(buf[2 * n]) > peak) {
-            peak = std::fabs(buf[2 * n]);
-            peakFrame = n;
-        }
-    }
-    INFO("impulse in at frame 32, peak out at frame ", peakFrame);
-    const std::size_t busLookahead = static_cast<std::size_t>(
-        std::lround(NativeBmwDsp::BusLimiter::kLookaheadMs * .001f * kSampleRate));
-    CHECK(peakFrame == 32 + kAlignmentLatency + busLookahead);
-}

@@ -142,9 +142,9 @@ struct CrossoverPairing {
     }
     bool operator!=(const CrossoverPairing& o) const { return !(*this == o); }
 };
-// One side's pairing. lowMidRuns: both the Low lowpass and the Mid highpass run (no lpfPass /
-// hpfPass); midHighRuns: Mid's highpass runs and High's chain runs (no hpfPass / highXoPass /
-// highPass) -- Mid's upper corner must also be enabled.
+// One side's pairing. lowMidRuns: both the Low lowpass and the Mid highpass run; midHighRuns:
+// Mid's highpass runs and High's chain runs (no highXoPass) -- Mid's upper corner must also be
+// enabled.
 CrossoverPairing pairCrossovers(const OutputConfig& low, const OutputConfig& mid,
                                 const OutputConfig& high, bool lowMidRuns, bool midHighRuns);
 

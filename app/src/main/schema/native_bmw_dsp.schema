@@ -19,10 +19,10 @@
 #         reserved read by nothing; kept so no later slot moves
 
 
-section Enabled, lpfPass, hpfPass, channelMute, measurementMute
+section Enabled, retired band passthroughs (1..2), channelMute, measurementMute
 slot 0   1           native   INDEX_ENABLED kEnabled enabled
-slot 1   0           native   INDEX_LPF_PASS kLpfPass lpfPass
-slot 2   0           native   INDEX_HPF_PASS kHpfPass hpfPass
+slot 1   0           reserved - - lpfPass (retired: replaced by the crossover bypass, slot 309)
+slot 2   0           reserved - - hpfPass (retired: replaced by the crossover bypass, slot 309)
 slot 3   0           native   INDEX_CHANNEL_MUTE kChannelMute channelMute
 slot 4   0           native   INDEX_MEASUREMENT_MUTE kMeasurementMute measurementMute
 
@@ -376,8 +376,8 @@ slot 288 2           native   INDEX_MID_UPPER_XO_TYPE kMidUpperXoTypeLeft Mid Le
 slot 289 2           native   - kMidUpperXoTypeRight Mid Right upper (lowpass) slope (2 = LR4)
 slot 290 0           kotlin   INDEX_MID_UPPER_XO_TYPE_MIGRATED kMidUpperXoTypeMigrated midUpperXoTypeMigrated (0 = seed from Mid's own type on next load)
 
-section High crossover passthrough
-slot 291 0           native   INDEX_HIGH_PASS kHighPass highPass (High crossover passthrough off)
+section Retired High crossover passthrough
+slot 291 0           reserved - - highPass (retired: replaced by the crossover bypass, slot 309)
 
 section Master volume dB, mute
 slot 292 0           native   INDEX_MASTER_VOLUME_DB kMasterVolumeDb masterVolumeDb (0 dB = full)
@@ -414,7 +414,37 @@ section Convolver (added in the 307 -> 309 growth; the IR itself is loaded separ
 slot 307 0           native   INDEX_CONVOLVER_ENABLED kConvolverEnabled convolverEnabled (off = bypass, crossfaded)
 slot 308 0           native   INDEX_CONVOLVER_GAIN kConvolverGain convolverGain (IR gain / headroom trim, dB, -30..+12)
 
+section Crossover bypass and measurement neutral (added in the 309 -> 312 growth)
+slot 309 0           native   INDEX_CROSSOVER_BYPASS kCrossoverBypass crossoverBypass (1 = band split removed: one full-range path, zero added latency)
+slot 310 0           native   INDEX_MEASUREMENT_NEUTRAL kMeasurementNeutral measurementNeutral (1 = every stage in the neutral set bypassed by native; saved settings untouched)
+slot 311 0           native   INDEX_NEUTRAL_ALLOW kNeutralAllow neutralAllow (bitmask of kStage* bits kept running while measurementNeutral is on)
+
 section Structure
+const kStagePreEq 0 stage bit: the full-range (Pre) PEQ bank and its preamp
+const kStageCrossover 1 stage bit: the band split (crossovers, band chains, band sum)
+const kStageBandEq 2 stage bit: the Low/Mid/High PEQ banks
+const kStageBandGain 3 stage bit: per-band driver gains
+const kStageBandDelay 4 stage bit: per-band alignment delays
+const kStagePolarity 5 stage bit: per-output polarity inversion
+const kStageAllPass 6 stage bit: per-output all-pass sections
+const kStageSubsonic 7 stage bit: Low's subsonic high-pass
+const kStageRouting 8 stage bit: a non-identity routing matrix
+const kStageBusLimiter 9 stage bit: the per-band bus limiters
+const kStageMonoBass 10 stage bit: Mono Bass
+const kStageVirtualCentre 11 stage bit: the virtual-centre stage
+const kStageVirtualBass 12 stage bit: Virtual Bass
+const kStageMbc 13 stage bit: the multiband compressor
+const kStageTilt 14 stage bit: tilt
+const kStageConvolver 15 stage bit: the convolver (on with an IR loaded)
+const kStageMasterLimiter 16 stage bit: the master limiter
+const kStageLoudness 17 stage bit: loudness compensation
+const kStageHeadroom 18 stage bit: headroom (manual or automatic)
+const kStagePostGain 19 stage bit: post gain L/R
+const kStageDcBlocker 20 stage bit: the 3 Hz input DC blocker
+const kStageMeasurementMute 21 stage bit: measurement mute (band isolation)
+const kStageNeutralCount 22 bits 0..21 are the stages measurement neutral bypasses
+const kStageChannelMute 22 stage bit (report only): channel mute
+const kStageSignalGenerator 23 stage bit (report only): the built-in signal generator
 const kRoutingStride 2
 const kAllPassSectionWidth 4
 const kAllPassSectionsPerOutput 2
