@@ -228,11 +228,8 @@ TEST_CASE("kHighGainL/kHighGainR slots shape the High band's level") {
     CHECK(boostedDb - unityDb == doctest::Approx(6.f).epsilon(0.05));
 }
 
-TEST_CASE("kHighXoPass alone fully silences High, unlike kLpfPass/kHpfPass's filter-only bypass") {
-    // Deliberately NOT the same contract as the existing kLpfPass/kHpfPass flags (see
-    // processFrame()'s own comment on that, and the design doc's note on why this flag's
-    // semantics differ for High specifically): a tweeter with no HPF ahead of it is a real
-    // speaker-damage risk from raw bass, and kHighXoPass doubles as the 3-way master-off
+TEST_CASE("kHighXoPass alone fully silences High") {
+    // A tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass, and kHighXoPass doubles as the 3-way master-off
     // switch's single write for High, so it must silence the band on its own -- proven here with
     // mute left explicitly off.
     auto c = defaultConfig();

@@ -63,6 +63,7 @@ output sample is finite and within ±1.
 | `limiter_test.cpp` | master limiter never exceeds −1 dBFS and doesn't touch a quiet signal; per-bus limiter GR engages only when hot / reads 0 when disabled |
 | `mbc_test.cpp` | MBC band GR follows the soft-knee gain computer and is monotone; meter idle while globally disabled |
 | `convolver_test.cpp` | the convolver kernel matches direct convolution for any chunking (mono and stereo IRs, partial blocks); off / no-IR is bit-identical to the chain without it; zero added latency and the gain trim; IR left = car left through the hardware swap; bypass, kernel swap and unload crossfade without a step; resampling keeps the response and a rate change rebuilds the kernel; rejected / odd WAVs leave the current IR running; loads on a control thread while audio runs |
+| `measurement_neutral_test.cpp` | the crossover bypass is one full-range path with zero added latency and no band setting reaching the output, and toggles without a step; measurement neutral is bit-exact unity (master volume aside) with every stage on, restores the chain exactly, and runs an allowed stage as set; the engine status reports the installed chain; the self-test verifies neutral and names the stages still altering it |
 | `truth_snapshot_test.cpp` | `captureTruthSnapshot()` reports the actual installed crossover topology (not the requested enum) per slope, changes across a type switch, and never adopts a rejected PEQ configure() call |
 | `third_party/doctest/` | vendored doctest 2.4.11 single header |
 

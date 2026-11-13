@@ -1,4 +1,5 @@
 #include "NativeBmwDspProcessor.h"
+#include "NativeBmwDspSchema.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -72,10 +73,13 @@ void NativeBmwDspProcessor::applySampleRate(float sr) {
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
         loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
         monoBassFadeStep_ = 1.f / (kMonoBassFadeSeconds * sr);
+        mixFadeStep_ = 1.f / (kMixFadeSeconds * sr);
+        xoverFadeStep_ = 1.f / (kCrossoverFadeSeconds * sr);
         fadeInStep_ = 1.f / (kFadeInSeconds * sr);
         fadeOutStep_ = 1.f / (kFadeOutSeconds * sr);
         convolver_.setSampleRate(sr);
         rebuildAll();
+        publishStatus();
     }
 }
 
@@ -111,8 +115,23 @@ void NativeBmwDspProcessor::processBandChain(NativeBmwRouting::Band band, float&
     } else {
         NativeBmwDsp::processHighCrossover(left, right, xl, xr);
     }
-    if (peqEnabled_) {
-        (band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_).process(xl, xr);
+    // Band EQ, crossfaded on/off (measurement neutral) like the Pre EQ: see stepMix().
+    const auto bi = static_cast<std::size_t>(band);
+    float& eqMix = bandEqMix_[bi];
+    PeqBank& bank = band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_;
+    if (eqMix == 0.f && bandEqTarget_ > 0.f) {
+        bank.clear();  // it hasn't run since it went off: start clean, not from stale state
+    }
+    eqMix = stepMix(eqMix, bandEqTarget_);
+    if (eqMix > 0.f) {
+        float wl = xl, wr = xr;
+        bank.process(wl, wr);
+        if (eqMix < 1.f) {
+            wl = xl + (wl - xl) * eqMix;
+            wr = xr + (wr - xr) * eqMix;
+        }
+        xl = wl;
+        xr = wr;
     }
     OutputRuntime::processAllPassPair(left, right, xl, xr);
     xl = left.delay.run(xl);
@@ -140,8 +159,21 @@ void NativeBmwDspProcessor::idleBandChain(NativeBmwRouting::Band band) {
     (band == Band::Low ? busLimLow_ : band == Band::Mid ? busLimMid_ : busLimHigh_).reset();
 }
 
-std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::processInputStages(float l, float r) {
-    float sL = inputDcL_.run(l, dcR_), sR = inputDcR_.run(r, dcR_);
+std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::processInputStages(
+    float l, float r, float& fullL, float& fullR) {
+    // The 3 Hz DC blocker, crossfaded out under measurement neutral (it turns the phase by ~8.5
+    // degrees at 20 Hz) and back in from a clean state.
+    float sL = l, sR = r;
+    if (dcMix_ == 0.f && dcTarget_ > 0.f) {
+        inputDcL_.clear();
+        inputDcR_.clear();
+    }
+    dcMix_ = stepMix(dcMix_, dcTarget_);
+    if (dcMix_ > 0.f) {
+        const float bl = inputDcL_.run(l, dcR_), br = inputDcR_.run(r, dcR_);
+        sL = dcMix_ == 1.f ? bl : l + (bl - l) * dcMix_;
+        sR = dcMix_ == 1.f ? br : r + (br - r) * dcMix_;
+    }
     if (p_.monoBassEnabled) {
         monoBassMix_ = std::min(1.f, monoBassMix_ + monoBassFadeStep_);
     } else if (monoBassMix_ > 0.f) {
@@ -164,10 +196,21 @@ std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::process
             NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, loudnessRampCoef_);
         virtualBass_.process(sL, sR, virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_, virtualBassCharacter_);
     }
-    if (peqEnabled_) {
-        sL *= peqPreamp_;
-        sR *= peqPreamp_;
-        inputPeq_.process(sL, sR);
+    // Pre EQ (the full-range bank and its preamp), crossfaded on/off: the PEQ switch and
+    // measurement neutral both land here.
+    if (preEqMix_ == 0.f && preEqTarget_ > 0.f) {
+        inputPeq_.clear();
+    }
+    preEqMix_ = stepMix(preEqMix_, preEqTarget_);
+    if (preEqMix_ > 0.f) {
+        float wl = sL * peqPreamp_, wr = sR * peqPreamp_;
+        inputPeq_.process(wl, wr);
+        if (preEqMix_ < 1.f) {
+            wl = sL + (wl - sL) * preEqMix_;
+            wr = sR + (wr - sR) * preEqMix_;
+        }
+        sL = wl;
+        sR = wr;
     }
     headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
     sL *= headroom_;
@@ -183,71 +226,59 @@ std::array<float, NativeBmwRouting::kOutputCount> NativeBmwDspProcessor::process
     if (p_.virtualStage.enabled) {
         virtual_.process(sL, sR);
     }
+    fullL = sL;
+    fullR = sR;
     return routing_.process({sL, sR});
 }
 
 void NativeBmwDspProcessor::processBandStage(NativeBmwRouting::Band band, std::size_t frames) {
     using Band = NativeBmwRouting::Band;
     const BandOutputs ids = bandOutputs(band);
-    const auto li = static_cast<std::size_t>(ids.left), ri = static_cast<std::size_t>(ids.right);
-    float* xl = chunkLanes_[li].data();
-    float* xr = chunkLanes_[ri].data();
-    // What the band does with its routed signal: its chain, the raw routed signal through (the
-    // lpfPass/hpfPass/highPass contract), or silence (highXoPass: a tweeter with no HPF ahead of
-    // it is a speaker-damage risk, and the 3-way master-off switch's single write for High).
-    enum class Mode { Chain, Bypass, Silent };
-    Mode mode;
-    if (band == Band::Low) {
-        mode = p_.lpfPass ? Mode::Bypass : Mode::Chain;
-    } else if (band == Band::Mid) {
-        mode = p_.hpfPass ? Mode::Bypass : Mode::Chain;
-    } else {
-        mode = p_.highXoPass ? Mode::Silent : p_.highPass ? Mode::Bypass : Mode::Chain;
-    }
-    auto& bypassL = bypassLatency_[li];
-    auto& bypassR = bypassLatency_[ri];
+    float* xl = chunkLanes_[static_cast<std::size_t>(ids.left)].data();
+    float* xr = chunkLanes_[static_cast<std::size_t>(ids.right)].data();
+    // A band runs its chain, or plays silence (highXoPass: a tweeter with no HPF ahead of it is
+    // a speaker-damage risk, and the 3-way master-off switch's single write for High).
+    const bool silent = band == Band::High && p_.highXoPass;
     for (std::size_t i = 0; i < frames; ++i) {
-        // A bypassed band skips the band chain -- its AlignmentDelay and its bus limiter's
-        // lookahead -- so it takes the same fixed latency here to stay aligned with the processed
-        // bands. Run every frame, bypassed or not, so a line is never stale the moment its bypass
-        // flag flips on.
-        const float lBypassed = bypassL.run(xl[i]), rBypassed = bypassR.run(xr[i]);
-        switch (mode) {
-            case Mode::Chain:
-                processBandChain(band, xl[i], xr[i]);
-                break;
-            case Mode::Bypass:
-                xl[i] = lBypassed;
-                xr[i] = rBypassed;
-                idleBandChain(band);
-                break;
-            case Mode::Silent:
-                xl[i] = 0.f;
-                xr[i] = 0.f;
-                idleBandChain(band);
-                break;
+        if (silent) {
+            xl[i] = 0.f;
+            xr[i] = 0.f;
+            idleBandChain(band);
+        } else {
+            processBandChain(band, xl[i], xr[i]);
         }
     }
 }
 
-void NativeBmwDspProcessor::processOutputStages(
-    std::array<float, NativeBmwRouting::kOutputCount> logical, float& l, float& r) {
+void NativeBmwDspProcessor::clearBandState() {
+    for (auto& out : outputs_) {
+        out.clearState();
+    }
+    lowPeq_.clear();
+    midPeq_.clear();
+    highPeq_.clear();
+    for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
+        b->clear();
+    }
+}
+
+void NativeBmwDspProcessor::sumBands(std::array<float, NativeBmwRouting::kOutputCount> logical, float& l,
+                                     float& r) {
     // Per-output polarity and mute, as one ramped multiplier (see OutputRuntime::outputGain).
-    // Indexed in OutputId order.
+    // Indexed in OutputId order. The sum always uses the routed lanes, so the routing matrix and
+    // the per-output polarity/mute always apply to it.
     for (std::size_t i = 0; i < logical.size(); ++i) {
         auto& out = outputs_[i];
         out.outputGain = NativeBmwDsp::rampToward(out.outputGain, out.outputGainTarget, outputRampCoef_);
         logical[i] *= out.outputGain;
     }
     const auto stereo = NativeBmwRouting::sumToStereo(logical);
-    // Always use the routed sum here, even with both lpfPass and hpfPass set (crossover filtering
-    // skipped on both bands). routing_.process() and the polarity/mute block above already ran
-    // unconditionally, so lowL/lowR/midL/midR -- and therefore stereo.left/right -- correctly
-    // reflect the user's routing matrix and per-output polarity/mute either way. The old
-    // "fall back to sL/sR" shortcut for the both-bypassed case instead discarded all of that: any
-    // non-identity routing matrix (e.g. mixing both front channels into one output) silently had
-    // no effect whenever both bypass flags were on, with no error or indication why.
-    float oL = stereo.left, oR = stereo.right;
+    l = stereo.left;
+    r = stereo.right;
+}
+
+void NativeBmwDspProcessor::processOutputStages(float& l, float& r) {
+    float oL = l, oR = r;
     if (p_.tilt) {
         tilt_.process(oL, oR);
     }
@@ -325,24 +356,50 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
         // input waits here until the frame's output is known.
         chunkRawIn_[2 * i] = l;
         chunkRawIn_[2 * i + 1] = r;
-        const auto routed = processInputStages(l, r);
+        const auto routed = processInputStages(l, r, chunkFullL_[i], chunkFullR_[i]);
         for (std::size_t o = 0; o < routed.size(); ++o) {
             chunkLanes_[o][i] = routed[o];
         }
     }
-    // Each band's chain over the whole chunk. The bands share no state, so this is the same
-    // arithmetic, in the same order per band, as running them frame by frame -- bit-identical --
-    // with each band's filter and limiter state kept hot while it runs.
-    processBandStage(Band::Low, frames);
-    processBandStage(Band::Mid, frames);
-    processBandStage(Band::High, frames);
-    // (a) The band sum and the output stages, frame by frame, into logical L/R.
-    for (std::size_t i = 0; i < frames; ++i) {
-        std::array<float, NativeBmwRouting::kOutputCount> logical;
-        for (std::size_t o = 0; o < logical.size(); ++o) {
-            logical[o] = chunkLanes_[o][i];
+    // The band split, or the full-range path (crossover bypass), crossfaded between the two over
+    // kCrossoverFadeSeconds. Fully bypassed, the bands don't run at all: the output is the input
+    // stages' stereo signal itself, with no routing, filter, delay or latency of any kind. They
+    // start clean when the split comes back. Each band's chain runs over the whole chunk: the
+    // bands share no state, so this is the same arithmetic, in the same order per band, as
+    // running them frame by frame -- bit-identical -- with each band's state kept hot.
+    const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
+    const bool bandsRun = xoverMix_ < 1.f || xoverTarget < 1.f;
+    if (bandsRun) {
+        if (xoverMix_ == 1.f) {
+            clearBandState();
         }
-        processOutputStages(logical, chunkConvL_[i], chunkConvR_[i]);
+        processBandStage(Band::Low, frames);
+        processBandStage(Band::Mid, frames);
+        processBandStage(Band::High, frames);
+    }
+    // (a) The band sum (or the full-range path) and the output stages, frame by frame, into
+    // logical L/R.
+    for (std::size_t i = 0; i < frames; ++i) {
+        float oL = chunkFullL_[i], oR = chunkFullR_[i];
+        if (bandsRun) {
+            std::array<float, NativeBmwRouting::kOutputCount> logical;
+            for (std::size_t o = 0; o < logical.size(); ++o) {
+                logical[o] = chunkLanes_[o][i];
+            }
+            float bL, bR;
+            sumBands(logical, bL, bR);
+            xoverMix_ = stepMix(xoverMix_, xoverTarget, xoverFadeStep_);
+            if (xoverMix_ == 0.f) {
+                oL = bL;
+                oR = bR;
+            } else if (xoverMix_ < 1.f) {
+                oL = bL + (oL - bL) * xoverMix_;
+                oR = bR + (oR - bR) * xoverMix_;
+            }
+        }
+        processOutputStages(oL, oR);
+        chunkConvL_[i] = oL;
+        chunkConvR_[i] = oR;
     }
     // (b) The convolver, over the chunk, right after the band sum and ahead of the master
     // limiter: an IR that corrects phase raises the crest factor without raising the magnitude,
@@ -438,6 +495,7 @@ void NativeBmwDspProcessor::clearChainState() {
     loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
     retuneLoudness();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
+    snapMixes();
     snapVirtualBass();
     mbc_.snapMix();
     convolver_.snap(p_.convolverEnabled, p_.convolverGainDb);
@@ -455,9 +513,6 @@ void NativeBmwDspProcessor::clearChainState() {
     virtual_.clear();
     for (auto& out : outputs_) {
         out.clearState();
-    }
-    for (auto& line : bypassLatency_) {
-        line.clear();
     }
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
         b->clear();
@@ -584,12 +639,165 @@ void NativeBmwDspProcessor::readMasterLimiterMeter(float* v, std::size_t n) cons
                ? limiter_.grDb() : 0.f;
 }
 
+
+// ---- Engine status: what is actually running --------------------------------------------------
+void NativeBmwDspProcessor::updateMixTargets() {
+    dcTarget_ = p_.dcBlockerOn ? 1.f : 0.f;
+    preEqTarget_ = peqEnabled_ && p_.preEqOn ? 1.f : 0.f;
+    bandEqTarget_ = peqEnabled_ && p_.bandEqOn ? 1.f : 0.f;
+}
+
+void NativeBmwDspProcessor::snapMixes() {
+    updateMixTargets();
+    dcMix_ = dcTarget_;
+    preEqMix_ = preEqTarget_;
+    bandEqMix_.fill(bandEqTarget_);
+    xoverMix_ = p_.crossoverBypass ? 1.f : 0.f;
+}
+
+void NativeBmwDspProcessor::publishStatus() {
+    namespace sch = nbschema;
+    std::uint32_t mask = 0;
+    auto mark = [&mask](int bit, bool on) {
+        if (on) {
+            mask |= 1u << bit;
+        }
+    };
+    const bool bands = !p_.crossoverBypass;
+    const bool highRuns = bands && !p_.highXoPass;
+    // A band's own stages only count while that band plays.
+    auto bandRuns = [&](std::size_t out) {
+        return bands && (NativeBmwRouting::band(out) != NativeBmwRouting::Band::High || highRuns);
+    };
+    mark(sch::kStagePreEq, peqEnabled_ && p_.preEqOn &&
+                               (inputPeq_.leftCount + inputPeq_.rightCount > 0 || peqPreampDb_ != 0.f));
+    mark(sch::kStageCrossover, bands);
+    const std::size_t bandEqSections = lowPeq_.leftCount + lowPeq_.rightCount + midPeq_.leftCount +
+                                       midPeq_.rightCount +
+                                       (highRuns ? highPeq_.leftCount + highPeq_.rightCount : 0);
+    mark(sch::kStageBandEq, bands && peqEnabled_ && p_.bandEqOn && bandEqSections > 0);
+    bool gain = false, delay = false, polarity = false, routing = false, subsonic = false;
+    int allPassOutputs = 0;
+    for (std::size_t out = 0; out < outputs_.size(); ++out) {
+        if (!bandRuns(out)) {
+            continue;
+        }
+        const auto& rt = outputs_[out];
+        gain = gain || rt.gain != 1.f;
+        delay = delay || rt.delay.delay != 0.f;
+        polarity = polarity || rt.polarityInverted;
+        bool ap = false;
+        for (const auto& section : rt.allPass) {
+            ap = ap || section.enabled;
+        }
+        allPassOutputs += ap ? 1 : 0;
+        const bool left = out % 2 == 0;
+        const auto& route = routing_.outputs[out];
+        routing = routing || route.inputLeft != (left ? 1.f : 0.f) || route.inputRight != (left ? 0.f : 1.f);
+        subsonic = subsonic || (NativeBmwRouting::band(out) == NativeBmwRouting::Band::Low &&
+                                outputConfigs_[out].subsonicEnabled);
+    }
+    mark(sch::kStageBandGain, gain);
+    mark(sch::kStageBandDelay, delay);
+    mark(sch::kStagePolarity, polarity);
+    mark(sch::kStageAllPass, allPassOutputs > 0);
+    mark(sch::kStageSubsonic, subsonic);
+    mark(sch::kStageRouting, routing);
+    mark(sch::kStageBusLimiter,
+         bands && (p_.busLimLowEnabled || p_.busLimMidEnabled || (highRuns && p_.busLimHighEnabled)));
+    mark(sch::kStageMonoBass, p_.monoBassEnabled);
+    mark(sch::kStageVirtualCentre, p_.virtualStage.enabled);
+    mark(sch::kStageVirtualBass, p_.virtualBassEnabled);
+    mark(sch::kStageMbc, p_.mbcEnabled);
+    mark(sch::kStageTilt, p_.tilt);
+    // Only while an IR is running too: readEngineStatus() checks that live.
+    mark(sch::kStageConvolver, p_.convolverEnabled);
+    mark(sch::kStageMasterLimiter, p_.limiterEnabled);
+    mark(sch::kStageLoudness, p_.loudnessEnabled && p_.loudnessStrength > 0.f);
+    mark(sch::kStageHeadroom, p_.headroom != 0.f);
+    mark(sch::kStagePostGain, p_.postGainL != 0.f || p_.postGainR != 0.f);
+    mark(sch::kStageDcBlocker, p_.dcBlockerOn);
+    mark(sch::kStageMeasurementMute, p_.measurementMute != 0);
+    mark(sch::kStageChannelMute, p_.channelMute != 0);
+    mark(sch::kStageSignalGenerator, p_.measGenType != 0);
+
+    const auto& midL = outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft)];
+    const auto& midR = outputConfigs_[static_cast<std::size_t>(OutputId::MidRight)];
+    const int ways = !bands ? 0 : highRuns && midL.upperCrossoverEnabled && midR.upperCrossoverEnabled ? 3 : 2;
+    int mbcBands = 0;
+    if (p_.mbcEnabled) {
+        for (const auto& band : p_.mbcBand) {
+            mbcBands += band.enabled ? 1 : 0;
+        }
+    }
+    const float values[kEngineStatusSize - 1] = {
+        1.f,
+        static_cast<float>(mask),
+        p_.measurementNeutral ? 1.f : 0.f,
+        static_cast<float>(p_.neutralAllow),
+        static_cast<float>(ways),
+        p_.tiltAmount,
+        p_.limiterThreshDb,
+        static_cast<float>(mbcBands),
+        static_cast<float>(allPassOutputs),
+        p_.masterVolumeDb,
+        p_.masterMute ? 1.f : 0.f,
+        p_.headroom,
+        sampleRate_,
+    };
+    for (std::size_t i = 0; i < kEngineStatusSize - 1; ++i) {
+        status_[i].store(values[i], std::memory_order_relaxed);
+    }
+    const float revision = status_[kEngineStatusSize - 1].load(std::memory_order_relaxed) + 1.f;
+    // Release: a reader that sees the new revision sees every value above.
+    status_[kEngineStatusSize - 1].store(revision >= 16777216.f ? 1.f : revision, std::memory_order_release);
+}
+
+void NativeBmwDspProcessor::readEngineStatus(float* v, std::size_t n) const {
+    if (!v) {
+        return;
+    }
+    const std::size_t count = std::min<std::size_t>(n, kEngineStatusSize);
+    const float revision = status_[kEngineStatusSize - 1].load(std::memory_order_acquire);
+    for (std::size_t i = 0; i + 1 < kEngineStatusSize && i < count; ++i) {
+        v[i] = status_[i].load(std::memory_order_relaxed);
+    }
+    if (count == kEngineStatusSize) {
+        v[kEngineStatusSize - 1] = revision;
+    }
+    if (count > 1) {
+        // The convolver counts only while a kernel is installed on the audio side.
+        auto mask = static_cast<std::uint32_t>(v[1]);
+        if (!convolver_.kernelActive()) {
+            mask &= ~(1u << nbschema::kStageConvolver);
+        }
+        v[1] = static_cast<float>(mask);
+    }
+}
+
+bool NativeBmwDspProcessor::selfTestSource(SelfTestSource& out) {
+    {
+        std::lock_guard<std::mutex> lock(configMutex_);
+        if (!rawConfigValid_) {
+            return false;
+        }
+        out.config.assign(rawConfig_.begin(), rawConfig_.end());
+        out.peqValid = rawPeq_.valid;
+        out.peqEnabled = rawPeq_.enabled;
+        out.peqPreampDb = rawPeq_.preampDb;
+        out.peqBanks = rawPeq_.banks;
+        out.sampleRate = configSampleRate_.load(std::memory_order_relaxed);
+    }
+    out.ir = convolverSnapshot().ir;
+    return true;
+}
+
 std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     std::vector<double> out;
     // Every value the snapshot can hold, so filling it never allocates (it may be the audio
     // thread that fills it).
     out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth +
-                4 * (3 + kMaxPeqSectionsPerChannel * 6));
+                4 * (3 + kMaxPeqSectionsPerChannel * 6) + kEngineStatusSize);
     std::lock_guard<std::mutex> lock(controlMutex_);
     request_.kind = RequestKind::TruthSnapshot;
     request_.truth = &out;
@@ -670,6 +878,12 @@ void NativeBmwDspProcessor::fillTruthSnapshot(std::vector<double>& out) {
     appendBank(lowPeqValues_, lowPeqValueCount_, lowPeq_);
     appendBank(midPeqValues_, midPeqValueCount_, midPeq_);
     appendBank(highPeqValues_, highPeqValueCount_, highPeq_);
+    // The engine status as of this same instant (installPending() above published it).
+    float status[kEngineStatusSize];
+    readEngineStatus(status, kEngineStatusSize);
+    for (float value : status) {
+        out.push_back(static_cast<double>(value));
+    }
 }
 
 void NativeBmwDspProcessor::startCapture() {

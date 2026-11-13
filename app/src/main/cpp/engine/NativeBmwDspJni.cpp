@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "NativeBmwDspProcessor.h"
+#include "NativeBmwSelfTest.h"
 #include "ScopedFlushToZero.h"
 
 namespace {
@@ -598,4 +599,86 @@ Java_app_siphondsp_interop_NativeDsp_checkConvolverIr(JNIEnv* env, jobject, jstr
     }
     env->ReleaseStringUTFChars(pathObj, path);
     return ok ? nullptr : toJava(env, error);
+}
+
+// The engine status (NativeBmwDspProcessor::readEngineStatus(), NativeDsp.ENGINE_STATUS_*): what
+// the processor is actually running. Lock-free. Null for a gone handle.
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_getEngineStatus(JNIEnv* env, jobject, jlong self) {
+    if (env == nullptr || self == 0) {
+        return nullptr;
+    }
+    constexpr auto kSize = static_cast<jsize>(NativeBmwDspProcessor::kEngineStatusSize);
+    float values[NativeBmwDspProcessor::kEngineStatusSize];
+    fromHandle(self)->processor.readEngineStatus(values, NativeBmwDspProcessor::kEngineStatusSize);
+    jfloatArray result = env->NewFloatArray(kSize);
+    if (result != nullptr) {
+        env->SetFloatArrayRegion(result, 0, kSize, values);
+    }
+    return result;
+}
+
+// What the self-test needs from the running engine (NativeBmwDspProcessor::selfTestSource()),
+// copied out so the app can take it under its engine-handle lock and run the test after letting
+// go. 0 before the first accepted config or for a gone handle. runSelfTest() frees it.
+extern "C" JNIEXPORT jlong JNICALL
+Java_app_siphondsp_interop_NativeDsp_takeSelfTestSource(JNIEnv*, jobject, jlong self) {
+    if (self == 0) {
+        return 0;
+    }
+    try {
+        auto source = std::make_unique<NativeBmwDspProcessor::SelfTestSource>();
+        if (!fromHandle(self)->processor.selfTestSource(*source)) {
+            return 0;
+        }
+        return reinterpret_cast<jlong>(source.release());
+    } catch (const std::bad_alloc&) {
+        return 0;
+    }
+}
+
+// Runs the self-test (NativeBmwSelfTest.h) on the calling thread -- an offline processor, a
+// second or so of work: never the main or audio thread -- and frees the source. Needs no engine
+// handle. NativeDsp.SELF_TEST_* layout; null for a null source.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_app_siphondsp_interop_NativeDsp_runSelfTest(JNIEnv* env, jobject, jlong sourceHandle) {
+    if (sourceHandle == 0) {
+        return nullptr;
+    }
+    std::unique_ptr<NativeBmwDspProcessor::SelfTestSource> source(
+        reinterpret_cast<NativeBmwDspProcessor::SelfTestSource*>(sourceHandle));
+    if (env == nullptr) {
+        return nullptr;
+    }
+    NativeBmwDsp::SelfTestResult r;
+    try {
+        const ScopedFlushToZero ftz;
+        r = NativeBmwDsp::runSelfTest(*source);
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+    const jdouble values[] = {
+        r.ran ? 1.0 : 0.0,
+        r.verified ? 1.0 : 0.0,
+        r.sampleRate,
+        static_cast<double>(r.latencyFrames),
+        r.magnitudeDevDb,
+        r.phaseDevDeg,
+        r.crosstalkDb,
+        r.lowHz,
+        r.highHz,
+        static_cast<double>(r.activeStages),
+        static_cast<double>(r.alteringStages),
+        static_cast<double>(r.levelDependentStages),
+        r.unexplained ? 1.0 : 0.0,
+        r.measurementNeutral ? 1.0 : 0.0,
+        r.masterVolumeDb,
+        r.durationMs,
+    };
+    constexpr auto kCount = static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+    jdoubleArray result = env->NewDoubleArray(kCount);
+    if (result != nullptr) {
+        env->SetDoubleArrayRegion(result, 0, kCount, values);
+    }
+    return result;
 }

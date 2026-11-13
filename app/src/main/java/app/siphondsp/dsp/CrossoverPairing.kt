@@ -71,17 +71,16 @@ data class CrossoverPairing(
             val low = if (left) 0 else 1
             val mid = if (left) 2 else 3
             val high = if (left) NativeBmwDspValues.OUTPUT_HIGH_LEFT else NativeBmwDspValues.OUTPUT_HIGH_RIGHT
-            val lpfPass = values[NativeBmwDspValues.INDEX_LPF_PASS] >= .5f
-            val hpfPass = values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f
+            // The crossover bypass takes no part (as native's updatePairing()): the pairing belongs
+            // to the split, so turning the bypass off brings back exactly the same crossover.
             val highXoPass = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f
-            val highPass = values[NativeBmwDspValues.INDEX_HIGH_PASS] >= .5f
             val type = NativeBmwDspValues.FIELD_CROSSOVER_TYPE
             val freq = NativeBmwDspValues.FIELD_CROSSOVER_FREQ
 
             var lowLowpass = 1f
             var midHighpass = 1f
             var midInverted = false
-            if (!lpfPass && !hpfPass) {
+            run {
                 val k = spread(
                     values[NativeBmwDspValues.outputIndex(low, type)],
                     values[NativeBmwDspValues.outputIndex(mid, type)],
@@ -98,7 +97,7 @@ data class CrossoverPairing(
             val upperEnabled = values[NativeBmwDspValues.midUpperXoIndex(
                 mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
             )] >= .5f
-            if (!hpfPass && !highXoPass && !highPass && upperEnabled) {
+            if (!highXoPass && upperEnabled) {
                 val k = spread(
                     values[NativeBmwDspValues.midUpperXoTypeIndex(mid)],
                     values[NativeBmwDspValues.highOutputIndex(high, type)],

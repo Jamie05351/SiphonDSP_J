@@ -21,8 +21,9 @@ object NativeBmwDspValues {
     const val SIZE = NativeBmwDspSchema.SIZE
 
     const val INDEX_ENABLED = NativeBmwDspSchema.INDEX_ENABLED
-    const val INDEX_LPF_PASS = NativeBmwDspSchema.INDEX_LPF_PASS
-    const val INDEX_HPF_PASS = NativeBmwDspSchema.INDEX_HPF_PASS
+    // Slots 1, 2 and 291 held the retired per-band passthroughs (lpfPass / hpfPass / highPass),
+    // replaced by [INDEX_CROSSOVER_BYPASS]: held at 0 on every load (see retirePassthroughs()).
+    private val RETIRED_PASSTHROUGH_SLOTS = intArrayOf(1, 2, 291)
     const val INDEX_CHANNEL_MUTE = NativeBmwDspSchema.INDEX_CHANNEL_MUTE
     const val INDEX_MEASUREMENT_MUTE = NativeBmwDspSchema.INDEX_MEASUREMENT_MUTE
     const val INDEX_HEADROOM = NativeBmwDspSchema.INDEX_HEADROOM
@@ -301,19 +302,14 @@ object NativeBmwDspValues {
     // to 6: those stay pinned at 4 forever so the legacy INDEX_ROUTING/INDEX_ALL_PASS/
     // INDEX_OUTPUT_CONFIG block offsets -- which every existing saved config already relies on --
     // can never shift. Use highOutputIndex()/highAllPassIndex() rather than outputIndex() for
-    // High. Ships silent via INDEX_HIGH_XO_PASS (both default true) -- unlike
-    // INDEX_LPF_PASS/INDEX_HPF_PASS (which only bypass the crossover filter, an accepted
-    // pre-existing risk for Low/Mid), true here fully silences High: a tweeter with no HPF ahead
-    // of it is a speaker-damage risk from raw bass, and this flag is also the 3-way master-off
+    // High. Ships silent via INDEX_HIGH_XO_PASS (both default true): true fully silences High: a
+    // tweeter with no HPF ahead of it is a speaker-damage risk from raw bass, and this flag is also the 3-way master-off
     // switch's single write for High, so it must not depend on the per-output mute field also
     // being set correctly. Same conservative opt-in launch as MBC and the bus limiters.
     const val OUTPUT_HIGH_LEFT = 4
     const val OUTPUT_HIGH_RIGHT = 5
 
     const val INDEX_HIGH_XO_PASS = NativeBmwDspSchema.INDEX_HIGH_XO_PASS
-    // High's own crossover passthrough (291): the INDEX_LPF_PASS/INDEX_HPF_PASS contract for High
-    // -- its chain skipped, the raw routed signal through. INDEX_HIGH_XO_PASS still wins.
-    const val INDEX_HIGH_PASS = NativeBmwDspSchema.INDEX_HIGH_PASS
 
     // Master volume: the DSP as the car's volume, applied last (after the limiter). -80..0 dB.
     const val INDEX_MASTER_VOLUME_DB = NativeBmwDspSchema.INDEX_MASTER_VOLUME_DB
@@ -375,6 +371,15 @@ object NativeBmwDspValues {
     // app storage, see ConvolverIrStore -- not part of this array.
     const val INDEX_CONVOLVER_ENABLED = NativeBmwDspSchema.INDEX_CONVOLVER_ENABLED
     const val INDEX_CONVOLVER_GAIN = NativeBmwDspSchema.INDEX_CONVOLVER_GAIN
+
+    // Crossover bypass (309): 1 removes the band split -- one full-range path, no routing,
+    // crossovers, band EQ, all-pass, band delays, gains or polarity, and no added latency.
+    const val INDEX_CROSSOVER_BYPASS = NativeBmwDspSchema.INDEX_CROSSOVER_BYPASS
+    // Measurement neutral (310) and the stages kept running under it (311, a [DspStage] bitmask):
+    // native bypasses every other stage in the neutral set; the saved settings are untouched, so
+    // switching neutral off restores the chain exactly. See [MeasurementNeutral].
+    const val INDEX_MEASUREMENT_NEUTRAL = NativeBmwDspSchema.INDEX_MEASUREMENT_NEUTRAL
+    const val INDEX_NEUTRAL_ALLOW = NativeBmwDspSchema.INDEX_NEUTRAL_ALLOW
     const val CONVOLVER_MIN_GAIN_DB = -30f
     const val CONVOLVER_MAX_GAIN_DB = 12f
     const val VIRTUAL_BASS_STEP_RESPONSE_MS = 25f
@@ -567,6 +572,7 @@ object NativeBmwDspValues {
         // DEFAULTS), and that copy must be migrated before anything uses it.
         runMigrations(values)
         retireStageDelay(values)
+        retirePassthroughs(values)
         // One checked save for the whole pass, rather than one per migration. Under storeLock with
         // the read above, so a save() from another thread can't land in between and be overwritten
         // by this (older) migrated snapshot.
@@ -595,6 +601,18 @@ object NativeBmwDspValues {
         migrateHighBusLimiterIfNeeded(values)
         migrateVirtualIfNeeded(values)
         migrateMidUpperXoTypeIfNeeded(values)
+    }
+
+    /** The retired per-band passthrough slots are held at 0 (nothing reads them). True if it changed anything. */
+    private fun retirePassthroughs(values: FloatArray): Boolean {
+        var changed = false
+        for (slot in RETIRED_PASSTHROUGH_SLOTS) {
+            if (values[slot] != 0f) {
+                values[slot] = 0f
+                changed = true
+            }
+        }
+        return changed
     }
 
     /**
@@ -658,8 +676,7 @@ object NativeBmwDspValues {
 
     /**
      * Seed the whole High band (indices 210..261, added in the 210 -> 262 growth) silent on
-     * configs saved before it existed. Sets both `highXoPass` (true fully silences High --
-     * unlike `INDEX_LPF_PASS`/`INDEX_HPF_PASS`, which only bypass the crossover filter) and the
+     * configs saved before it existed. Sets both `highXoPass` (true fully silences High) and the
      * per-output mute field, so the band stays silent even if some future caller sets only one
      * of the two. Same conservative opt-in launch as [migrateMbcIfNeeded]. The index-keyed
      * [NativeBmwDspStore] already backfills a missing index from [DEFAULTS] on load -- DEFAULTS
@@ -730,10 +747,11 @@ object NativeBmwDspValues {
         Timber.i("BMW DSP seeded master limiter enable/threshold default")
     }
 
-    /** Persists [values], zeroing the retired stage delay in place first (see [retireStageDelay]). */
+    /** Persists [values], zeroing the retired stage delay and passthroughs in place first (see [retireStageDelay]). */
     fun save(context: Context, values: FloatArray): Boolean {
         require(values.size == SIZE) { "Expected $SIZE BMW DSP values, got ${values.size}" }
         retireStageDelay(values)
+        retirePassthroughs(values)
         return synchronized(storeLock) { store(context).save(values) }
     }
 
@@ -769,6 +787,7 @@ object NativeBmwDspValues {
         padded[INDEX_ENABLED] = 1f
         runMigrations(padded)
         retireStageDelay(padded)
+        retirePassthroughs(padded)
         return padded
     }
 

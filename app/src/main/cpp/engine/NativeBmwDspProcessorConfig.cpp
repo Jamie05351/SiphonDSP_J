@@ -31,19 +31,100 @@ bool measGenChanged(const NativeBmwDsp::Params& a, const NativeBmwDsp::Params& b
 }
 }  // namespace
 
+void NativeBmwDspProcessor::applyMeasurementNeutral(const float* in, float* out) {
+    namespace sch = nbschema;
+    std::copy(in, in + kConfigSize, out);
+    const float allowRaw = std::isfinite(in[sch::kNeutralAllow]) ? in[sch::kNeutralAllow] : 0.f;
+    const auto allow = static_cast<std::uint32_t>(
+        clampf(allowRaw, 0.f, static_cast<float>((1u << sch::kStageNeutralCount) - 1u)));
+    auto bypassed = [allow](int bit) { return (allow & (1u << bit)) == 0; };
+    auto set = [out](int slot, float value) { out[slot] = value; };
+    // Low/Mid (4 outputs) and High (2 outputs) share the 13-wide output-config layout.
+    auto forEachOutput = [](auto&& fn) {
+        for (int o = 0; o < 4; ++o) fn(static_cast<int>(kOutputConfigBase) + o * sch::kOutputConfigWidth);
+        for (int o = 0; o < 2; ++o) fn(sch::kHighOutputConfigBase + o * sch::kOutputConfigWidth);
+    };
+    if (bypassed(sch::kStageCrossover)) set(sch::kCrossoverBypass, 1.f);
+    if (bypassed(sch::kStageBandGain)) {
+        for (int slot : {sch::kLowGainL, sch::kLowGainR, sch::kMidGainL, sch::kMidGainR, sch::kHighGainL,
+                         sch::kHighGainR}) {
+            set(slot, 0.f);
+        }
+    }
+    if (bypassed(sch::kStageBandDelay)) {
+        for (int slot : {sch::kLowDelayL, sch::kLowDelayR, sch::kMidDelayL, sch::kMidDelayR, sch::kHighDelayL,
+                         sch::kHighDelayR}) {
+            set(slot, 0.f);
+        }
+    }
+    if (bypassed(sch::kStagePolarity)) {
+        forEachOutput([&](int base) { set(base + sch::kOutPolarityInverted, 0.f); });
+    }
+    if (bypassed(sch::kStageSubsonic)) {
+        forEachOutput([&](int base) { set(base + sch::kOutSubsonicEnabled, 0.f); });
+    }
+    if (bypassed(sch::kStageAllPass)) {
+        for (int s = 0; s < 8; ++s) set(sch::kAllPassBase + s * sch::kAllPassSectionWidth, 0.f);
+        for (int s = 0; s < 4; ++s) set(sch::kHighAllPassBase + s * sch::kAllPassSectionWidth, 0.f);
+    }
+    if (bypassed(sch::kStageRouting)) {
+        // Identity: every Left output from Front L, every Right output from Front R.
+        for (int o = 0; o < 4; ++o) {
+            set(sch::kRoutingBase + o * 2, o % 2 == 0 ? 1.f : 0.f);
+            set(sch::kRoutingBase + o * 2 + 1, o % 2 == 0 ? 0.f : 1.f);
+        }
+        for (int o = 0; o < 2; ++o) {
+            set(sch::kHighRoutingBase + o * 2, o == 0 ? 1.f : 0.f);
+            set(sch::kHighRoutingBase + o * 2 + 1, o == 0 ? 0.f : 1.f);
+        }
+    }
+    if (bypassed(sch::kStageBusLimiter)) {
+        set(sch::kBusLimLowEnabled, 0.f);
+        set(sch::kBusLimMidEnabled, 0.f);
+        set(sch::kBusLimHighEnabled, 0.f);
+    }
+    if (bypassed(sch::kStageMonoBass)) set(sch::kMonoBassEnabled, 0.f);
+    if (bypassed(sch::kStageVirtualCentre)) set(sch::kVirtualEnabled, 0.f);
+    if (bypassed(sch::kStageVirtualBass)) set(sch::kVirtualBassEnabled, 0.f);
+    if (bypassed(sch::kStageMbc)) set(sch::kMbcEnabled, 0.f);
+    if (bypassed(sch::kStageTilt)) set(sch::kTiltEnabled, 0.f);
+    if (bypassed(sch::kStageConvolver)) set(sch::kConvolverEnabled, 0.f);
+    if (bypassed(sch::kStageMasterLimiter)) set(sch::kMasterLimiterEnabled, 0.f);
+    if (bypassed(sch::kStageLoudness)) set(sch::kLoudnessEnabled, 0.f);
+    if (bypassed(sch::kStageHeadroom)) set(sch::kHeadroom, 0.f);
+    if (bypassed(sch::kStagePostGain)) {
+        set(sch::kPostGainL, 0.f);
+        set(sch::kPostGainR, 0.f);
+    }
+    if (bypassed(sch::kStageMeasurementMute)) set(sch::kMeasurementMute, 0.f);
+    // PreEq, BandEq and DcBlocker aren't config slots: parseConfig() reads them from the allow
+    // mask itself.
+}
+
 bool NativeBmwDspProcessor::configure(const float* v, std::size_t n) {
     if (!v || n != kConfigSize) {
         return false;
     }
     // Never ownership_: see the threading comment in NativeBmwDspProcessor.h.
     std::lock_guard<std::mutex> lock(configMutex_);
+    // Measurement neutral is applied to a copy of the config, so every neutralised stage goes
+    // through its normal parse, diff, ramp and rebuild, and the saved settings are never touched:
+    // switching neutral off is the same config without the flag.
+    const float* src = v;
+    const float neutralFlag = v[nbschema::kMeasurementNeutral];
+    if (std::isfinite(neutralFlag) && neutralFlag >= .5f) {
+        applyMeasurementNeutral(v, neutralScratch_.data());
+        src = neutralScratch_.data();
+    }
     ParsedConfig& update = configHandoff_.back();
-    if (!parseConfig(v, update)) {
+    if (!parseConfig(src, update)) {
         return false;
     }
     configShadow_.params = update.params;
     configShadow_.outputConfigs = update.outputConfigs;
     configHandoff_.publish();
+    std::copy(v, v + n, rawConfig_.begin());
+    rawConfigValid_ = true;
     return true;
 }
 
@@ -68,11 +149,27 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
         return x >= .5f;
     };
     next.enabled = flagIn(v[0]);
-    next.lpfPass = flagIn(v[1]);
-    next.hpfPass = flagIn(v[2]);
+    // v[1], v[2] and v[291] (the retired per-band passthroughs) are not read.
+    next.crossoverBypass = flagIn(v[nbschema::kCrossoverBypass]);
+    next.measurementNeutral = flagIn(v[nbschema::kMeasurementNeutral]);
+    {
+        const float allowRaw = clampIn(v[nbschema::kNeutralAllow], 0.f,
+                                       static_cast<float>((1u << nbschema::kStageNeutralCount) - 1u));
+        next.neutralAllow = next.measurementNeutral ? static_cast<std::uint32_t>(allowRaw) : 0u;
+        auto runs = [&next](int bit) {
+            return !next.measurementNeutral || (next.neutralAllow & (1u << bit)) != 0;
+        };
+        next.preEqOn = runs(nbschema::kStagePreEq);
+        next.bandEqOn = runs(nbschema::kStageBandEq);
+        next.dcBlockerOn = runs(nbschema::kStageDcBlocker);
+    }
     next.channelMute = static_cast<int>(clampIn(v[3], 0, 2));
     // 0 off, 1 isolate Mid, 2 isolate Low, 3 isolate High -- see MeasurementBus::rebuild().
     next.measurementMute = static_cast<int>(clampIn(v[4], 0, 3));
+    // Measurement mute isolates one band; with the band split removed there is none to isolate.
+    if (next.crossoverBypass) {
+        next.measurementMute = 0;
+    }
     next.headroom = clampIn(v[5], -30, 0);
     next.lowGainL = clampIn(v[6], -6, 6);
     next.lowGainR = clampIn(v[7], -6, 6);
@@ -111,7 +208,6 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     // High band scalars (v[210..214], added in the 210 -> 262 growth). Routing/all-pass/
     // output-config for High are read further down, alongside the equivalent Low/Mid blocks.
     next.highXoPass = flagIn(v[210]);
-    next.highPass = flagIn(v[nbschema::kHighPass]);
     next.masterVolumeDb = clampIn(v[nbschema::kMasterVolumeDb], -80, 0);
     next.masterMute = flagIn(v[nbschema::kMasterMute]);
     next.loudnessEnabled = flagIn(v[nbschema::kLoudnessEnabled]);
@@ -501,21 +597,12 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
             dirty |= DirtyPolarity;
         }
     }
-    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it or highPass
-    // passes it through raw, so they still hold whatever was playing when its chain stopped.
-    // Clear them whenever the chain starts running again (either flag, or both, turning off),
-    // or that stale audio replays through the tweeter as a burst for the first few milliseconds.
-    const bool highChainWasFrozen = p_.highXoPass || p_.highPass;
-    const bool highChainRunsNow = !next.highXoPass && !next.highPass;
-    if (highChainWasFrozen && highChainRunsNow) {
+    // High's filters, all-pass, delay and PEQ don't run while highXoPass silences it, so they
+    // still hold whatever was playing when its chain stopped. Clear them when it runs again, or
+    // that stale audio replays through the tweeter as a burst for the first few milliseconds.
+    // (The crossover bypass handles its own resume: see processChunk().)
+    if (p_.highXoPass && !next.highXoPass) {
         dirty |= DirtyHighResume;
-    }
-    // Same for Low and Mid: lpfPass / hpfPass skip their chains just the same.
-    if (p_.lpfPass && !next.lpfPass) {
-        dirty |= DirtyLowResume;
-    }
-    if (p_.hpfPass && !next.hpfPass) {
-        dirty |= DirtyMidResume;
     }
     if (next.measurementMute != p_.measurementMute) {
         dirty |= DirtyPolarity | DirtyMeasBus;
@@ -668,6 +755,8 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
         // ...nor Virtual Bass.
         snapVirtualBass();
+        // ...nor the DC blocker, the EQ or the crossover bypass.
+        snapMixes();
         outputGainsPrimed_ = true;
     }
 }
@@ -685,6 +774,14 @@ bool NativeBmwDspProcessor::configurePeq(bool enabled, float preampDb, const dou
         return false;
     }
     peqHandoff_.publish();
+    rawPeq_.valid = true;
+    rawPeq_.enabled = enabled;
+    rawPeq_.preampDb = preampDb;
+    const double* banks[4] = {full, low, mid, high};
+    const std::size_t counts[4] = {fullCount, lowCount, midCount, highCount};
+    for (std::size_t b = 0; b < 4; ++b) {
+        rawPeq_.banks[b].assign(banks[b], banks[b] + (banks[b] ? counts[b] : 0));
+    }
     return true;
 }
 bool NativeBmwDspProcessor::parsePeq(bool enabled, float preampDb, const double* full,
@@ -792,6 +889,13 @@ void NativeBmwDspProcessor::installPeq(ParsedPeq& peq) {
     peqEnabled_ = update->enabled;
     peqPreampDb_ = update->preampDb;
     peqPreamp_ = dbToLin(update->preampDb);
+    // The first PEQ lands at once, rather than fading in at start-up.
+    if (!peqPrimed_) {
+        updateMixTargets();
+        preEqMix_ = preEqTarget_;
+        bandEqMix_.fill(bandEqTarget_);
+        peqPrimed_ = true;
+    }
 }
 void NativeBmwDspProcessor::rebuildPeqLocked() {
     // The saved values were accepted once already; a band that can't be built at the new rate
@@ -804,11 +908,18 @@ void NativeBmwDspProcessor::rebuildPeqLocked() {
     }
 }
 void NativeBmwDspProcessor::installPending() {
+    bool installed = false;
     if (ParsedConfig* config = configHandoff_.take()) {
         installConfig(*config);
+        installed = true;
     }
     if (ParsedPeq* peq = peqHandoff_.take()) {
         installPeq(*peq);
+        installed = true;
+    }
+    if (installed) {
+        updateMixTargets();
+        publishStatus();
     }
 }
 
@@ -832,8 +943,10 @@ void NativeBmwDspProcessor::rebuildSubsonic() {
 // The builders get the configured corners moved by pairing_ (identity unless a BW2/BW4 pair is
 // being auto-corrected); outputConfigs_ keeps the frequencies as set.
 bool NativeBmwDspProcessor::updatePairing() {
-    const bool lowMidRuns = !p_.lpfPass && !p_.hpfPass;
-    const bool midHighRuns = !p_.hpfPass && !p_.highXoPass && !p_.highPass;
+    // The crossover bypass doesn't take part: the pairing belongs to the split itself, so turning
+    // the bypass off brings back exactly the crossover that was running before.
+    const bool lowMidRuns = true;
+    const bool midHighRuns = !p_.highXoPass;
     bool changedAny = false;
     for (std::size_t side = 0; side < pairing_.size(); ++side) {
         const auto& low = outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft) + side];
@@ -907,10 +1020,6 @@ void NativeBmwDspProcessor::rebuildBusLimiter() {
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {
         b->setLookahead(sampleRate_);
     }
-    // Bypassed bands skip both the alignment kernel and the bus limiter, so they carry both.
-    for (auto& line : bypassLatency_) {
-        line.delay = static_cast<float>(NativeBmwDsp::kAlignmentLatency + busLimLow_.lookahead());
-    }
 }
 void NativeBmwDspProcessor::rebuildPolarityAndMute(bool snap) {
     for (std::size_t i = 0; i < outputs_.size(); ++i) {
@@ -964,18 +1073,6 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
         output(OutputId::HighRight).clearState();
         highPeq_.clear();
         busLimHigh_.clear();
-    }
-    if (d & DirtyLowResume) {
-        output(OutputId::LowLeft).clearState();
-        output(OutputId::LowRight).clearState();
-        lowPeq_.clear();
-        busLimLow_.clear();
-    }
-    if (d & DirtyMidResume) {
-        output(OutputId::MidLeft).clearState();
-        output(OutputId::MidRight).clearState();
-        midPeq_.clear();
-        busLimMid_.clear();
     }
     if (d & DirtyDelays) {
         updateDelays();
@@ -1067,6 +1164,7 @@ void NativeBmwDspProcessor::rebuildAll() {
     virtualBass_.rebuild(p_.virtualBassFreq, p_.virtualBassRange, p_.virtualBassResponseMs, sampleRate_);
     virtualBass_.clear();
     snapVirtualBass();
+    snapMixes();
     detector_.rebuild(sampleRate_);
     limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     mbc_.rebuild(p_.mbcXo, p_.mbcMix, p_.mbcBand, sampleRate_);
@@ -1082,9 +1180,6 @@ void NativeBmwDspProcessor::rebuildAll() {
         out.clearState();
     }
     limiter_.clear();
-    for (auto& line : bypassLatency_) {
-        line.clear();
-    }
     mbc_.resetState();
     mbc_.snapMix();
     for (BusLimiter* b : {&busLimLow_, &busLimMid_, &busLimHigh_}) {

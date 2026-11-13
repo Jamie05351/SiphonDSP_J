@@ -188,7 +188,7 @@ private:
 };
 // Hold windows: half the period of the lowest frequency each bus normally carries, so the window
 // always spans from one crest of |x| to the next. Low: 20 Hz. Mid: 40 Hz (its high-pass is
-// >= 60 Hz, with margin for the LR slope and for hpfPass running it full-range). High: 200 Hz
+// >= 60 Hz, with margin for the LR slope). High: 200 Hz
 // (its high-pass is >= 300 Hz). Longer than needed only delays the start of release by that much.
 constexpr float kBusLimLowHoldMs = 25.f, kBusLimMidHoldMs = 12.5f, kBusLimHighHoldMs = 2.5f;
 inline float busLimiterReleaseMix(float releaseMs, float sampleRate) {

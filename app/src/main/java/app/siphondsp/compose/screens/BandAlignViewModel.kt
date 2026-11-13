@@ -13,6 +13,7 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.bandalign.BandAlignSolver
 import app.siphondsp.dsp.bandalign.RewMeasurement
 import app.siphondsp.model.BmwPeqState
+import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.model.NativeBmwDspValues
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -176,8 +177,11 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
             )) if (values[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_MUTE)] >= .5f) add(label)
         }
         if (muted.isNotEmpty()) return "Unmute ${muted.joinToString()} first -- Band Align solves for the tune as it plays."
-        if (values[NativeBmwDspValues.INDEX_LPF_PASS] >= .5f || values[NativeBmwDspValues.INDEX_HPF_PASS] >= .5f) {
-            return "Switch LPF and HPF passthrough off -- a band in passthrough skips its delay and polarity."
+        if (MeasurementNeutral.isOn(values)) {
+            return "Switch Measurement neutral off first -- it bypasses the band delays and polarity being solved for."
+        }
+        if (values[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS] >= .5f) {
+            return "Switch the crossover back on -- with it off there are no bands to align."
         }
         // These feed one side's signal into the other side's bands, so a sweep on one channel
         // plays through both sides' Low (or Mid), and a "left Low" measurement isn't the left

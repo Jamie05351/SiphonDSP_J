@@ -31,8 +31,6 @@ class NativeBmwSchemaAgreementTest {
         "kSize" to NativeBmwDspValues.SIZE,
 
         "kEnabled" to NativeBmwDspValues.INDEX_ENABLED,
-        "kLpfPass" to NativeBmwDspValues.INDEX_LPF_PASS,
-        "kHpfPass" to NativeBmwDspValues.INDEX_HPF_PASS,
         "kChannelMute" to NativeBmwDspValues.INDEX_CHANNEL_MUTE,
         "kMeasurementMute" to NativeBmwDspValues.INDEX_MEASUREMENT_MUTE,
         "kHeadroom" to NativeBmwDspValues.INDEX_HEADROOM,
@@ -159,7 +157,6 @@ class NativeBmwSchemaAgreementTest {
         "kMidUpperXoTypeRight" to NativeBmwDspValues.midUpperXoTypeIndex(NativeBmwDspValues.OUTPUT_MID_RIGHT),
         "kMidUpperXoTypeMigrated" to NativeBmwDspValues.INDEX_MID_UPPER_XO_TYPE_MIGRATED,
 
-        "kHighPass" to NativeBmwDspValues.INDEX_HIGH_PASS,
         "kMasterVolumeDb" to NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
         "kMasterMute" to NativeBmwDspValues.INDEX_MASTER_MUTE,
         "kLoudnessEnabled" to NativeBmwDspValues.INDEX_LOUDNESS_ENABLED,
@@ -177,7 +174,17 @@ class NativeBmwSchemaAgreementTest {
         "kVirtualBassResponse" to NativeBmwDspValues.INDEX_VIRTUAL_BASS_RESPONSE,
         "kConvolverEnabled" to NativeBmwDspValues.INDEX_CONVOLVER_ENABLED,
         "kConvolverGain" to NativeBmwDspValues.INDEX_CONVOLVER_GAIN,
-    )
+        "kCrossoverBypass" to NativeBmwDspValues.INDEX_CROSSOVER_BYPASS,
+        "kMeasurementNeutral" to NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL,
+        "kNeutralAllow" to NativeBmwDspValues.INDEX_NEUTRAL_ALLOW,
+
+        // The stage bits native reports, neutralises and the self-test names (DspStage).
+        "kStageNeutralCount" to DspStage.NEUTRAL_COUNT,
+    ) + DspStage.entries.associate { stageConstant(it) to it.bit }
+
+    /** DspStage.PRE_EQ -> "kStagePreEq". */
+    private fun stageConstant(stage: DspStage): String =
+        "kStage" + stage.name.lowercase().split('_').joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
     @Test
     fun everyNativeSchemaConstantEqualsItsKotlinCounterpart() {

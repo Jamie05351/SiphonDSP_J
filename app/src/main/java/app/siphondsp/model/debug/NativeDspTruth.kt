@@ -143,6 +143,8 @@ data class NativeDspTruthSnapshot(
     val sampleRate: Double,
     val crossovers: Map<NativeDspOutput, NativeCrossoverSnapshot>,
     val peq: NativePeqSnapshot,
+    /** The engine status at the same instant (the snapshot's last block); null from an engine without it. */
+    val status: EngineStatus? = null,
 )
 
 /**
@@ -304,10 +306,17 @@ fun parseNativeTruthSnapshot(raw: DoubleArray?): NativeDspTruthSnapshot? {
     val low = readBank() ?: return null
     val mid = readBank() ?: return null
     val high = readBank() ?: return null
+    // The engine status block (NativeBmwDspProcessor::readEngineStatus()), last.
+    val status = if (raw.size - cursor >= EngineStatus.SIZE) {
+        EngineStatus.parse(FloatArray(EngineStatus.SIZE) { raw[cursor + it].toFloat() })
+    } else {
+        null
+    }
 
     return NativeDspTruthSnapshot(
         sampleRate = sampleRate,
         crossovers = crossovers,
         peq = NativePeqSnapshot(peqEnabled, peqPreampDb, full, low, mid, high),
+        status = status,
     )
 }

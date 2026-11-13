@@ -67,7 +67,7 @@ through slots 3/4 only when enabled.
 
 | Index | Name | Meaning |
 |---|---|---|
-| 210 | `INDEX_HIGH_XO_PASS` | **Not** the same contract as `INDEX_LPF_PASS`/`INDEX_HPF_PASS` (which only bypass the crossover filter, an accepted pre-existing risk for Low/Mid). `true` here fully silences High: a tweeter with no HPF ahead of it is a speaker-damage risk from raw bass, not just an audio-quality one, so this flag alone is sufficient — it does not depend on the per-output mute field also being set. It is also the 3-way master-off switch's single write for High. |
+| 210 | `INDEX_HIGH_XO_PASS` | **Not** the same contract as the (since retired) `INDEX_LPF_PASS`/`INDEX_HPF_PASS`, which only bypassed the crossover filter. `true` here fully silences High: a tweeter with no HPF ahead of it is a speaker-damage risk from raw bass, not just an audio-quality one, so this flag alone is sufficient — it does not depend on the per-output mute field also being set. It is also the 3-way master-off switch's single write for High. |
 | 211 | `INDEX_HIGH_GAIN_L` | |
 | 212 | `INDEX_HIGH_GAIN_R` | |
 | 213 | `INDEX_HIGH_DELAY_L` | |
@@ -134,7 +134,7 @@ following the same "never break an old save" discipline as the native schema:
 into every exhaustive `when` over it — most substantially `BmwResponseCalculator`, which gains a
 `highCascade`/`highAllPass`/`rebuildHighCascade()` mirroring Mid's original HPF-only shape (before
 Phase 2's bandpass addition), and `BmwResponseCurves` gains `highBranchDb`/`highBranchPhase`.
-Unlike `lpfPass`/`hpfPass` (raw passthrough when bypassed), `highXoPass` fully silences the High
+Unlike the retired `lpfPass`/`hpfPass` (raw passthrough when bypassed), `highXoPass` fully silences the High
 branch in the response graph too, matching the native semantics decided during Phase 3's review.
 `PeqScope` (the actual PEQ editing screen's Pre EQ/Low/Mid scope selector) is deliberately **not**
 extended to a High entry here — that's Phase 5; High's data model and native processing are fully
@@ -151,7 +151,7 @@ band settings.
 
 This flag's semantics went through two wrong drafts before landing here, both caught by
 native-tests failures during Phase 3's own review rather than assumed correct: the first draft
-had `INDEX_HIGH_XO_PASS` mirror `INDEX_LPF_PASS`/`INDEX_HPF_PASS` (bypass the filter only, not a
+had `INDEX_HIGH_XO_PASS` mirror the (since retired) `INDEX_LPF_PASS`/`INDEX_HPF_PASS` (bypass the filter only, not a
 mute); a review then pointed out that leaves a real speaker-damage path (raw bass reaching a
 tweeter) and breaks the "master toggle off is bit-identical to 2-way" contract if the per-output
 mute field isn't *also* kept in lockstep by every caller. Since High is a genuinely new band with
@@ -195,3 +195,10 @@ phase breakdown in the approved implementation plan for what each phase's tests 
 - The measurement generator's Acoustic Timing Reference is unchanged: its "Mid"/"Low" settings are
   REW's sweep-segment ranges, not this app's bands, and band isolation already picks which
   speakers play. Whether it needs any 3-way change is left to an on-device REW check.
+
+## Later: the crossover bypass replaces the per-band passthroughs
+
+`lpfPass` / `hpfPass` / `highPass` (slots 1, 2, 291) are retired: they skipped one band's chain
+but still split, delayed (by the band latency) and summed the bands, so with the default routing
+two passthrough bands doubled the signal. The crossover bypass (slot 309, `INDEX_CROSSOVER_BYPASS`)
+removes the whole split instead -- see docs/MEASUREMENT_TOOLS.md. `highXoPass` is unchanged.

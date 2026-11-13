@@ -218,10 +218,8 @@ TEST_CASE("High crossover BW2/BW3/LR4 each roll off at their real dB/octave slop
 }
 
 TEST_CASE("High: kHighXoPass alone fully silences it, independent of the per-output mute field") {
-    // Deliberately NOT the same contract as kLpfPass/kHpfPass (which only bypass the crossover
-    // filter, letting the raw routed signal through -- an accepted pre-existing risk for
-    // Low/Mid). A tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass,
-    // and kHighXoPass is also the 3-way master-off switch's single write for High, so it must be
+    // A tweeter with no HPF ahead of it is a real speaker-damage risk from raw bass, and
+    // kHighXoPass is also the 3-way master-off switch's single write for High, so it must be
     // sufficient on its own -- proven here by leaving mute explicitly OFF and confirming bypass
     // alone still produces silence, not just their combination.
     constexpr float fc = 3000.f;
@@ -233,99 +231,6 @@ TEST_CASE("High: kHighXoPass alone fully silences it, independent of the per-out
     auto buf = stereoSine(fc, 0.3, 8192, kSampleRate);
     proc.process(buf.data(), buf.size());
     CHECK(peakAbs(buf) < 1e-4f);
-}
-
-TEST_CASE("High: kHighPass passes the raw signal like kLpfPass/kHpfPass, but kHighXoPass still silences it") {
-    // kHighPass is High's own crossover passthrough (the 291 -> 292 growth): its chain is skipped,
-    // so a tone two octaves under the 3 kHz HPF comes through at full level instead of ~-48 dB.
-    constexpr float fc = 3000.f;
-    auto filtered = highOnlyConfig(fc, kLr4);
-    auto passed = highOnlyConfig(fc, kLr4);
-    passed[sch::kHighPass] = 1.f;
-    NativeBmwDspProcessor a, b;
-    const float filteredDb = outLevelDbAt(a, filtered, fc / 4);
-    const float passedDb = outLevelDbAt(b, passed, fc / 4);
-    INFO("750 Hz through High: filtered ", filteredDb, " dB, passthrough ", passedDb, " dB");
-    CHECK(passedDb - filteredDb > 30.f);
-
-    // The silence switch wins over the passthrough.
-    passed[sch::kHighXoPass] = 1.f;
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(passed.data(), passed.size()));
-    auto buf = stereoSine(fc / 4, 0.3, 8192, kSampleRate);
-    proc.process(buf.data(), buf.size());
-    CHECK(peakAbs(buf) < 1e-4f);
-}
-
-TEST_CASE("High: turning kHighPass back off clears the chain's frozen state (no stale burst)") {
-    // While kHighPass passes High through raw, its crossover/PEQ/all-pass/delay stop advancing and
-    // keep the audio from the moment passthrough went on. Going back to processing must start
-    // from clean state: with silence in, nothing may come out of the tweeter path.
-    constexpr float fc = 3000.f;
-    auto processing = highOnlyConfig(fc, kLr4);
-    processing[sch::kHighDelayL] = 2.f;  // a delay line full of tone is the loudest stale state
-    processing[sch::kHighDelayR] = 2.f;
-    auto passthrough = processing;
-    passthrough[sch::kHighPass] = 1.f;
-
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(processing.data(), processing.size()));
-    auto tone = stereoSine(fc * 2, 0.5, 8192, kSampleRate);
-    proc.process(tone.data(), tone.size());  // High's chain now holds loud history
-
-    REQUIRE(proc.configure(passthrough.data(), passthrough.size()));
-    std::vector<float> silence(8192 * 2, 0.f);
-    proc.process(silence.data(), silence.size());  // chain frozen, bypass line drains
-
-    REQUIRE(proc.configure(processing.data(), processing.size()));
-    std::vector<float> after(4096 * 2, 0.f);
-    proc.process(after.data(), after.size());
-    INFO("peak after resuming High's chain with silence in = ", peakAbs(after));
-    CHECK(peakAbs(after) < 1e-4f);
-}
-
-namespace {
-// Shared by the Low/Mid resume tests below: process a tone with the band's chain running, freeze
-// it with its passthrough flag over silence, then resume -- silence in must give silence out.
-float peakAfterPassthroughResume(std::array<float, kConfigSize> processing, int passIndex, float toneHz) {
-    auto passthrough = processing;
-    passthrough[passIndex] = 1.f;
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(processing.data(), processing.size()));
-    auto tone = stereoSine(toneHz, 0.5, 8192, kSampleRate);
-    proc.process(tone.data(), tone.size());
-    REQUIRE(proc.configure(passthrough.data(), passthrough.size()));
-    // 1 s of silence: long enough for the input DC blocker's own decay (3 Hz corner, ~53 ms time
-    // constant) to die away through the bypass path, so whatever is left after resuming can only
-    // be the frozen chain's state.
-    std::vector<float> silence(48000 * 2, 0.f);
-    proc.process(silence.data(), silence.size());
-    REQUIRE(proc.configure(processing.data(), processing.size()));
-    std::vector<float> after(4096 * 2, 0.f);
-    proc.process(after.data(), after.size());
-    return peakAbs(after);
-}
-}  // namespace
-
-TEST_CASE("Low: turning kLpfPass back off clears the chain's frozen state (no stale burst)") {
-    auto c = lowOnlyConfig(80.f, kLr4);
-    c[sch::kLowDelayL] = 2.f;
-    c[sch::kLowDelayR] = 2.f;
-    const float pk = peakAfterPassthroughResume(c, sch::kLpfPass, 50.f);
-    INFO("peak after resuming Low's chain with silence in = ", pk);
-    CHECK(pk < 1e-4f);
-}
-
-TEST_CASE("Mid: turning kHpfPass back off clears the chain's frozen state (no stale burst)") {
-    auto c = midOnlyConfig(300.f, kLr4);
-    c[sch::kMidDelayL] = 2.f;
-    c[sch::kMidDelayR] = 2.f;
-    const float pk = peakAfterPassthroughResume(c, sch::kHpfPass, 1000.f);
-    INFO("peak after resuming Mid's chain with silence in = ", pk);
-    CHECK(pk < 1e-4f);
 }
 
 // BW2 and BW4 can't sum flat as a plain pair (BW2 nulls at the corner, BW4 peaks +3 dB). When
@@ -345,7 +250,6 @@ std::array<float, kConfigSize> pairedConfig(float lowMidType, bool threeWay, flo
     }
     if (threeWay) {
         c[sch::kHighXoPass] = 0.f;
-        c[sch::kHighPass] = 0.f;
         for (int slot = 0; slot < 2; ++slot) {
             c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoFreq] = 2500.f;
             c[sch::kMidUpperXo + slot * sch::kMidUpperXoWidth + sch::kMidUpperXoEnabled] = 1.f;

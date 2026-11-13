@@ -48,6 +48,7 @@ import app.siphondsp.compose.launcher.LauncherHost
 import app.siphondsp.compose.launcher.LauncherOverlay
 import app.siphondsp.compose.nav.LocalAppNavigator
 import app.siphondsp.compose.nav.Routes
+import app.siphondsp.compose.state.rememberEngineStatus
 import app.siphondsp.launcher.AppEntry
 import app.siphondsp.launcher.AppSwipe
 import app.siphondsp.launcher.CarFunction
@@ -93,7 +94,11 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
     // The launcher is laid out for the head unit's 1280x480 display only.
     val launcher = remember(context) { context.isHeadUnitDisplay() }
 
-    var engineState by remember { mutableStateOf(HomeEngineState.from(NativeBmwDspValues.load(context))) }
+    // The saved values give the volume control its setting; every stage cell is the engine's own
+    // report (rememberEngineStatus), never the settings.
+    var savedValues by remember { mutableStateOf(NativeBmwDspValues.load(context)) }
+    val engineStatus by rememberEngineStatus()
+    val engineState = remember(engineStatus, savedValues) { HomeEngineState.from(engineStatus, savedValues) }
     var levelReadout by remember { mutableStateOf(LevelReadout.SILENT) }
     var levelFrame by remember { mutableStateOf(LevelReadout.SILENT) }
     var live by remember { mutableStateOf(false) }
@@ -124,7 +129,7 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
                 AppEvent.PresetLoaded, AppEvent.BackupRestored -> null
                 else -> return@collect
             } ?: NativeBmwDspValues.load(context)
-            engineState = HomeEngineState.from(values)
+            savedValues = values
         }
     }
 
@@ -143,7 +148,7 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
         // Back from a workspace: the glow and morph are done with.
         openingTile = null
         scope.launch { morph.snapTo(0f) }
-        engineState = HomeEngineState.from(NativeBmwDspValues.load(context))
+        savedValues = NativeBmwDspValues.load(context)
         levelFeed.running = true
         live = true
         if (launcher) {
@@ -207,6 +212,10 @@ fun HomeRoute(powered: Boolean, onTogglePower: () -> Unit, launcherHost: Launche
             // The master limiter lives on Output; ALLPASS opens Alignment on its page.
             GlobalStage.LIMITER -> navigator.openWorkspace(DspDestination.OUTPUT)
             GlobalStage.ALLPASS -> navigator.openWorkspace(DspDestination.ALIGNMENT, Routes.ALIGNMENT_PAGE_ALLPASS)
+            // The crossover's on/off lives on the Crossovers page; neutral, its stage list and the
+            // self-test on Native DSP Truth.
+            GlobalStage.XOVER -> navigator.openWorkspace(DspDestination.CROSSOVER_TILT)
+            GlobalStage.NEUTRAL -> navigator.open(Routes.NATIVE_TRUTH)
         }
     }
 

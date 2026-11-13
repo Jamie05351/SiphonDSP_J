@@ -1,6 +1,8 @@
 package app.siphondsp.compose.home
 
+import app.siphondsp.model.DspStage
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.debug.EngineStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -72,5 +74,32 @@ class HomeEngineStateTest {
         assertEquals("−1.0", formatDb(-1f))
         assertEquals("+1.5", formatDb(1.5f, signed = true))
         assertEquals("0.0", formatDb(0f, signed = true))
+    }
+
+    @Test
+    fun cellsComeFromTheEngineNotTheSettings() {
+        // Settings say tilt on; the engine says it isn't running (e.g. measurement neutral).
+        val v = values()
+        v[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+        v[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB] = -12f
+        val status = EngineStatus.parse(
+            floatArrayOf(1f, DspStage.MASTER_LIMITER.mask.toFloat(), 1f, 0f, 0f, 2f, -1.5f, 0f, 0f, -12f, 0f, 0f, 48000f, 1f),
+        )
+        val state = HomeEngineState.from(status, v)
+        assertTrue(state.known)
+        assertNull(state.tiltDb)
+        assertEquals(-1.5f, state.limiterDb!!, 0f)
+        assertEquals(0, state.crossoverWays)
+        assertTrue(state.neutral)
+        assertEquals(-12f, state.masterVolumeDb, 0f)
+    }
+
+    @Test
+    fun noEngineReadsAsUnknown() {
+        val v = values()
+        v[NativeBmwDspValues.INDEX_TILT_ENABLED] = 1f
+        val state = HomeEngineState.from(null, v)
+        assertFalse(state.known)
+        assertNull(state.tiltDb)
     }
 }

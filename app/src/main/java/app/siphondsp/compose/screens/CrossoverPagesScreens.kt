@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import app.siphondsp.R
 import app.siphondsp.compose.controls.ArtGroupHeader
+import app.siphondsp.compose.controls.DspColors
 import app.siphondsp.compose.controls.ArtLabelSize
 import app.siphondsp.compose.controls.ArtRow
 import app.siphondsp.compose.controls.ArtSwitchRow
@@ -112,17 +113,28 @@ fun CrossoverLowMidPage(
     val subsonicEnMirror = lowPair(NativeBmwDspValues.FIELD_SUBSONIC_ENABLED)
 
     val controls: @Composable (ControlRow) -> Unit = { row ->
+        // The band split itself, like every other stage's section switch. Off removes it entirely
+        // (INDEX_CROSSOVER_BYPASS): one full-range path, no filters, all-pass, band delays, gains
+        // or polarity, and no added latency -- for measuring. Covers the 3-way Mid/High split too.
+        // The settings below stay adjustable while it is off, and come back exactly as set.
+        ArtGroupHeader(
+            title = "Crossover",
+            accent = DspColors.Xover,
+            modifier = row(80, 40),
+            checked = !dsp.isOn(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS),
+            onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_CROSSOVER_BYPASS, if (on) 0f else 1f) },
+        )
         DspArtSlider(
             dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
-            row(80, 48), mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+            row(124, 48), mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
-        SlopeRow(lowCrossoverType, onLowType, row(136, 40), slopeLabel(pairL.lowMidCorrected || pairR.lowMidCorrected))
+        SlopeRow(lowCrossoverType, onLowType, row(180, 40), slopeLabel(pairL.lowMidCorrected || pairR.lowMidCorrected))
         DspArtSlider(
             dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 60f..320f, 1f, "Hz", midSlider,
-            row(196, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+            row(228, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
         SlopeRow(
-            midCrossoverType, onMidType, row(252, 40),
+            midCrossoverType, onMidType, row(284, 40),
             slopeLabel(
                 pairL.lowMidCorrected || pairR.lowMidCorrected,
                 inverted = pairL.midInverted || pairR.midInverted,
@@ -130,11 +142,11 @@ fun CrossoverLowMidPage(
         )
         DspArtSlider(
             dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
-            row(312, 48), mirrors = subsonicFreqMirror,
+            row(332, 48), mirrors = subsonicFreqMirror,
         )
         // On/off and the slope in one row: LR4 (24 dB/oct, the original) or BW2 (12 dB/oct, half
         // the phase turn through the bass, a little less excursion protection).
-        ArtRow("Subsonic", row(372, 36), labelWidth = ControlLabelWidth) {
+        ArtRow("Subsonic", row(384, 36), labelWidth = ControlLabelWidth) {
             BmwSwitch(
                 checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
                 onCheckedChange = { on ->

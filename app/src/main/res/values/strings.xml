@@ -281,6 +281,14 @@
     </plurals>
     <string name="home_chip_off">off</string>
     <string name="home_chip_bands">%1$d bands</string>
+    <string name="home_chip_xover">XOVER</string>
+    <string name="home_chip_ways">%1$d-way</string>
+    <string name="home_chip_neutral">NEUTRAL</string>
+    <string name="home_chip_neutral_on">on</string>
+    <string name="home_chip_neutral_testing">testing…</string>
+    <string name="home_chip_neutral_verified">✓ flat</string>
+    <string name="home_chip_neutral_altered">✗ %1$d altering</string>
+    <string name="home_chip_neutral_unexplained">✗ check</string>
     <string name="home_headroom">HEADROOM</string>
     <string name="home_to_ceiling">to %1$s dB ceiling</string>
     <string name="home_dsp_bypassed">DSP bypassed</string>
@@ -480,11 +488,8 @@
     <string name="signal_generator_band_isolation">Band isolation</string>
     <string name="signal_generator_meas_mute_stopband">Isolation stopband offset</string>
     <string name="signal_generator_section_routing">Routing</string>
-    <string name="signal_generator_lpf_passthrough">LPF passthrough</string>
-    <string name="signal_generator_hpf_passthrough">HPF passthrough</string>
     <string name="signal_generator_mute_low_band">Mute low band</string>
     <string name="signal_generator_mute_mid_band">Mute mid band</string>
-    <string name="signal_generator_high_passthrough">High passthrough</string>
     <string name="signal_generator_mute_high_band">Mute high band</string>
     <string name="signal_generator_channel_isolation">Channel isolation</string>
     <string name="signal_generator_section_timing_ref">Timing reference (REW)</string>

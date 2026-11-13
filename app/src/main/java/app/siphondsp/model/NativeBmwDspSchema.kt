@@ -8,12 +8,10 @@ package app.siphondsp.model
  * slot-by-slot reference is docs/NATIVE_BMW_DSP_SCHEMA.md.
  */
 object NativeBmwDspSchema {
-    const val SIZE = 309
+    const val SIZE = 312
 
-    // Enabled, lpfPass, hpfPass, channelMute, measurementMute
+    // Enabled, retired band passthroughs (1..2), channelMute, measurementMute
     const val INDEX_ENABLED = 0
-    const val INDEX_LPF_PASS = 1
-    const val INDEX_HPF_PASS = 2
     const val INDEX_CHANNEL_MUTE = 3
     const val INDEX_MEASUREMENT_MUTE = 4
     // Headroom dB, low gain L/R, mid gain L/R, post gain L/R
@@ -159,8 +157,6 @@ object NativeBmwDspSchema {
     // Mid's upper (Mid/High) lowpass slope, Left/Right, migration marker
     const val INDEX_MID_UPPER_XO_TYPE = 288
     const val INDEX_MID_UPPER_XO_TYPE_MIGRATED = 290
-    // High crossover passthrough
-    const val INDEX_HIGH_PASS = 291
     // Master volume dB, mute
     const val INDEX_MASTER_VOLUME_DB = 292
     const val INDEX_MASTER_MUTE = 293
@@ -187,12 +183,16 @@ object NativeBmwDspSchema {
     // Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
     const val INDEX_CONVOLVER_ENABLED = 307
     const val INDEX_CONVOLVER_GAIN = 308
+    // Crossover bypass and measurement neutral (added in the 309 -> 312 growth)
+    const val INDEX_CROSSOVER_BYPASS = 309
+    const val INDEX_MEASUREMENT_NEUTRAL = 310
+    const val INDEX_NEUTRAL_ALLOW = 311
 
     /** The canonical default config, one value per slot. */
     val DEFAULTS = floatArrayOf(
         1f, // 0 enabled
-        0f, // 1 lpfPass
-        0f, // 2 hpfPass
+        0f, // 1 lpfPass (retired: replaced by the crossover bypass, slot 309)
+        0f, // 2 hpfPass (retired: replaced by the crossover bypass, slot 309)
         0f, // 3 channelMute
         0f, // 4 measurementMute
         -6f, // 5 headroom
@@ -481,7 +481,7 @@ object NativeBmwDspSchema {
         2f, // 288 Mid Left upper (lowpass) slope (2 = LR4)
         2f, // 289 Mid Right upper (lowpass) slope (2 = LR4)
         0f, // 290 midUpperXoTypeMigrated (0 = seed from Mid's own type on next load)
-        0f, // 291 highPass (High crossover passthrough off)
+        0f, // 291 highPass (retired: replaced by the crossover bypass, slot 309)
         0f, // 292 masterVolumeDb (0 dB = full)
         0f, // 293 masterMute (off)
         0f, // 294 loudnessEnabled (off)
@@ -499,11 +499,14 @@ object NativeBmwDspSchema {
         200f, // 306 virtualBassResponse (detector release, ms, 100..500)
         0f, // 307 convolverEnabled (off = bypass, crossfaded)
         0f, // 308 convolverGain (IR gain / headroom trim, dB, -30..+12)
+        0f, // 309 crossoverBypass (1 = band split removed: one full-range path, zero added latency)
+        0f, // 310 measurementNeutral (1 = every stage in the neutral set bypassed by native; saved settings untouched)
+        0f, // 311 neutralAllow (bitmask of kStage* bits kept running while measurementNeutral is on)
     )
 
     /** Whether the native engine reads each slot; the rest are Kotlin-only or reserved. */
     val READ_BY_NATIVE = booleanArrayOf(
-        true, true, true, true, true, true, true, true,
+        true, false, false, true, true, true, true, true,
         true, true, true, true, false, false, false, false,
         false, false, false, false, false, true, true, true,
         true, true, true, true, false, false, false, false,
@@ -539,8 +542,8 @@ object NativeBmwDspSchema {
         true, false, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, false,
-        true, true, false, true, true, true, true, true,
+        true, true, false, false, true, true, true, true,
         false, true, true, true, true, true, true, true,
-        true, true, true, true, true,
+        true, true, true, true, true, true, true, true,
     )
 }

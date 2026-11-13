@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.siphondsp.R
 import app.siphondsp.compose.controls.DspColors
+import app.siphondsp.compose.state.SelfTestState
+import app.siphondsp.compose.state.rememberSelfTestState
 import app.siphondsp.compose.theme.BmwDspTheme
 import app.siphondsp.compose.theme.BmwTheme
 import app.siphondsp.view.LevelReadout
@@ -71,8 +74,8 @@ import kotlin.math.sin
  *   same length (see [ChainLayout]). Its edge is the grey hairline with, while on, a purple ring
  *   inside it and a purple glow that stays inside the screen.
  * - The top screen, [TopMargin] from the top, the same width as the chain screen: the global
- *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS), each in its menu's colour, then the
- *   live spectrum ([SpectrumStrip]), then the headroom and the L / R output meters, all at
+ *   stages as live-data cells (TILT, MBC, LIMITER, ALLPASS, then XOVER and NEUTRAL), each in its
+ *   menu's colour and each the engine's own report, then the headroom and the L / R output meters, all at
  *   [TopContentScale]; then, past a dividing line, Settings and More as bare glyphs ([ScreenButton]).
  * - Down the faceplate's left side, the DSP master volume ([VolumeColumn]) spanning the top
  *   screen's top edge to the chain screen's bottom edge: the level on its own small screen in the
@@ -145,7 +148,7 @@ fun HomeScreen(
                         .height(s.dp(TopHeight) + (spare * TopShare).dp),
                 ) {
                     TopScreen(
-                        engine, readout, meterLevels, g, onOpenGlobal, animateTiles,
+                        engine, readout, meterLevels, g, onOpenGlobal,
                         Modifier.padding(start = s.dp(ScreenLeft), end = s.dp(ChainRight)).fillMaxSize(),
                     ) {
                         ScreenButton(stringResource(R.string.title_activity_settings), onSettings) { drawSettingsGlyph() }
@@ -206,7 +209,6 @@ private fun TopScreen(
     meterLevels: () -> LevelReadout,
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
-    live: Boolean,
     modifier: Modifier,
     buttons: @Composable () -> Unit,
 ) {
@@ -216,7 +218,7 @@ private fun TopScreen(
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 CompositionLocalProvider(LocalHomeScale provides HomeScale(s.k * TopContentScale)) {
-                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off, live)
+                    TopScreenContent(engine, readout, meterLevels, g, onOpenGlobal, off)
                 }
             }
             Box(
@@ -235,8 +237,9 @@ private fun TopScreen(
 }
 
 /**
- * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, then
- * the output meter. [off] is the cells' text for a stage that is off.
+ * The top screen's content, at [TopContentScale]: the four live-data cells in a 2 x 2 grid, the
+ * crossover and measurement-neutral cells beside them, then the output meter. [off] is the cells'
+ * text for a stage that is off; every cell reads "—" while no engine reports ([HomeEngineState.known]).
  */
 @Composable
 private fun TopScreenContent(
@@ -246,43 +249,73 @@ private fun TopScreenContent(
     g: Float,
     onOpenGlobal: (GlobalStage) -> Unit,
     off: String,
-    live: Boolean,
 ) {
+    val selfTest by rememberSelfTestState()
+    val known = engine.known
+    fun shown(value: String) = if (known) value else UNKNOWN
     val s = LocalHomeScale.current
     Row(Modifier.fillMaxSize().padding(horizontal = s.dp(14f)), verticalAlignment = Alignment.CenterVertically) {
         Column(verticalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
             Row(horizontalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
                 Cell(
                     GlobalStage.TILT, stringResource(R.string.home_chip_tilt),
-                    engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off,
+                    shown(engine.tiltDb?.let { "${formatDb(it, signed = true)} dB" } ?: off),
                     BmwTheme.colors.sliderTilt, engine.tiltDb != null, g, onOpenGlobal,
                 )
                 Cell(
                     GlobalStage.MBC, stringResource(R.string.home_chip_mbc),
-                    if (engine.mbcBands > 0) stringResource(R.string.home_chip_bands, engine.mbcBands) else off,
+                    shown(if (engine.mbcBands > 0) stringResource(R.string.home_chip_bands, engine.mbcBands) else off),
                     DspColors.Comp, engine.mbcBands > 0, g, onOpenGlobal,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
                 Cell(
                     GlobalStage.LIMITER, stringResource(R.string.home_chip_limiter),
-                    engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off,
+                    shown(engine.limiterDb?.let { "${formatDb(it)} dB" } ?: off),
                     // The limiter lives on the Output screen, so it takes Output's colour.
                     DspColors.Output, engine.limiterDb != null, g, onOpenGlobal,
                 )
                 Cell(
                     GlobalStage.ALLPASS, stringResource(R.string.home_chip_allpass),
-                    if (engine.allPassOn) {
-                        pluralStringResource(R.plurals.home_chip_allpass_outputs, engine.allPassOutputs, engine.allPassOutputs)
-                    } else {
-                        off
-                    },
+                    shown(
+                        if (engine.allPassOn) {
+                            pluralStringResource(R.plurals.home_chip_allpass_outputs, engine.allPassOutputs, engine.allPassOutputs)
+                        } else {
+                            off
+                        },
+                    ),
                     DspColors.Allpass, engine.allPassOn, g, onOpenGlobal,
                 )
             }
         }
-        Spacer(Modifier.width(s.dp(MeterGap)))
-        SpectrumStrip(meterLevels, g, live, Modifier.weight(1f).fillMaxHeight())
+        Spacer(Modifier.width(s.dp(CellGap)))
+        // Where the spectrum used to be: the measurement cells, the same chips as the four above.
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+            Column(verticalArrangement = Arrangement.spacedBy(s.dp(CellGap))) {
+                val split = engine.crossoverWays > 0
+                Cell(
+                    GlobalStage.XOVER, stringResource(R.string.home_chip_xover),
+                    shown(if (split) stringResource(R.string.home_chip_ways, engine.crossoverWays) else off),
+                    DspColors.Xover, known && split, g, onOpenGlobal,
+                )
+                val neutralValue = when {
+                    !engine.neutral -> off
+                    else -> when (val t = selfTest) {
+                        SelfTestState.Running -> stringResource(R.string.home_chip_neutral_testing)
+                        is SelfTestState.Done -> when {
+                            t.report.verified -> stringResource(R.string.home_chip_neutral_verified)
+                            t.report.alteringStages.isEmpty() -> stringResource(R.string.home_chip_neutral_unexplained)
+                            else -> stringResource(R.string.home_chip_neutral_altered, t.report.alteringStages.size)
+                        }
+                        else -> stringResource(R.string.home_chip_neutral_on)
+                    }
+                }
+                Cell(
+                    GlobalStage.NEUTRAL, stringResource(R.string.home_chip_neutral), shown(neutralValue),
+                    DspColors.Output, known && engine.neutral, g, onOpenGlobal,
+                )
+            }
+        }
         Spacer(Modifier.width(s.dp(MeterGap)))
         OutputMeter(readout, meterLevels, engine.ceilingDb, g, Modifier.weight(MeterShare).fillMaxHeight())
     }
@@ -517,6 +550,7 @@ private const val TopContentScale = TopHeight / 179f
 private const val CellWidth = 168f
 private const val CellHeight = 64f
 private const val CellGap = 10f
+private const val UNKNOWN = "—"
 // Above and below the tiles: they stand 225 units tall in the chain screen, as in Figma.
 private const val TileInset = 40f
 // Between the cells and the output meter, which takes the rest of the top screen.

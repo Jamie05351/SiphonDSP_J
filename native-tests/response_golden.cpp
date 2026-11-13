@@ -99,10 +99,33 @@ std::vector<Scenario> scenarios() {
          with({{sch::kHeadroom, -10.f}, {sch::kLowGainL, -3.f}, {sch::kMidGainR, 2.f},
                {sch::kLowDelayL, 1.f}, {sch::kMidDelayR, 0.5f}}),
          {}},
-        {"subsonic_bw2_lowpass_bypass",
+        {"subsonic_bw2",
          with({{sch::kSubsonicSlope, 1.f}, {outField(0, sch::kOutSubsonicFreq), 45.f},
-               {outField(1, sch::kOutSubsonicFreq), 45.f}, {sch::kLpfPass, 1.f}}),
+               {outField(1, sch::kOutSubsonicFreq), 45.f}}),
          {}},
+        // The band split removed: one full-range path, so none of the band settings below may
+        // reach the output; the full-range PEQ and the summed-bus stages still do.
+        {"crossover_bypass",
+         with({{sch::kCrossoverBypass, 1.f}, {sch::kLowGainL, -3.f}, {sch::kMidGainR, 2.f},
+               {sch::kLowDelayL, 1.f}, {outField(2, sch::kOutPolarityInverted), 1.f},
+               {sch::kTiltEnabled, 1.f}}),
+         {{"full", 1000.0, 3.0, 1.0, 0, 0}, {"low", 80.0, 6.0, 1.0, 0, 0}, {"mid", 2000.0, -6.0, 1.0, 0, 0}}},
+        // Measurement neutral with only tilt let back on: everything else configured below
+        // (headroom, gains, PEQ, the band split, the DC blocker) must be gone.
+        {"measurement_neutral_tilt",
+         with({{sch::kMeasurementNeutral, 1.f}, {sch::kNeutralAllow, float(1u << sch::kStageTilt)},
+               {sch::kTiltEnabled, 1.f}, {sch::kTiltAmount, 4.f}, {sch::kHeadroom, -8.f}, {sch::kLowGainL, -3.f},
+               {sch::kPostGainR, 2.f}}),
+         {{"full", 1000.0, 3.0, 1.0, 0, 0}, {"low", 80.0, 6.0, 1.0, 0, 0}},
+         -2.f},
+        // Neutral with the crossover and band EQ let back on: the split and its band EQ run, the
+        // Pre EQ, band gains and the summed-bus stages don't.
+        {"measurement_neutral_crossover_band_eq",
+         with({{sch::kMeasurementNeutral, 1.f},
+               {sch::kNeutralAllow, float((1u << sch::kStageCrossover) | (1u << sch::kStageBandEq))},
+               {sch::kTiltEnabled, 1.f}, {sch::kLowGainL, -3.f}, {sch::kMidDelayR, 1.f}}),
+         {{"full", 1000.0, 3.0, 1.0, 0, 0}, {"low", 80.0, 6.0, 1.0, 0, 0}, {"mid", 2000.0, -6.0, 1.0, 0, 0}},
+         -2.f},
     };
 }
 

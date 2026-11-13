@@ -161,12 +161,13 @@ class NativeBmwDspValuesTest {
     @Test
     fun loadMigratesLegacySharedPreferencesBlobByPosition() {
         val prefs = context.getSharedPreferences(NativeBmwDspValues.PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString(NativeBmwDspValues.KEY, "1,2,3").apply()
+        prefs.edit().putString(NativeBmwDspValues.KEY, "1,2,3,1").apply()
 
         val loaded = NativeBmwDspValues.load(context)
 
+        // Slots 1 and 2 are the retired passthroughs, held at 0 on load.
         val expected = NativeBmwDspValues.DEFAULTS.copyOf().also {
-            it[0] = 1f; it[1] = 2f; it[2] = 3f
+            it[0] = 1f; it[1] = 0f; it[2] = 0f; it[3] = 1f
             seedIndependentOutputs(it)
             seedMbc(it)
             seedLegacyCompDisabled(it)
@@ -179,6 +180,21 @@ class NativeBmwDspValuesTest {
         }
         assertArrayEquals(expected, loaded, 0f)
         assertArrayEquals(expected, NativeBmwDspValues.load(context), 0f)
+    }
+
+    @Test
+    fun retiredPassthroughSlotsAreHeldAtZeroOnLoadAndSave() {
+        // A save from before the crossover bypass with a passthrough flag left on must not carry
+        // it: nothing reads those slots any more, and they stay 0 whatever writes them.
+        val values = migratedDefaults()
+        values[1] = 1f
+        values[2] = 1f
+        values[291] = 1f
+        assertTrue(NativeBmwDspValues.save(context, values))
+        assertEquals(0f, values[1], 0f)
+        val loaded = NativeBmwDspValues.load(context)
+        for (slot in intArrayOf(1, 2, 291)) assertEquals(0f, loaded[slot], 0f)
+        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS], 0f)
     }
 
     @Test
@@ -913,9 +929,23 @@ class NativeBmwDspValuesTest {
     @Test
     fun convolverShipsOffAtUnityGain() {
         // A save from before the 307 -> 309 growth loads these defaults: the chain sounds as before.
-        assertEquals(309, NativeBmwDspValues.SIZE)
+        assertTrue(NativeBmwDspValues.SIZE > NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CONVOLVER_ENABLED], 0f)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CONVOLVER_GAIN], 0f)
+    }
+
+    @Test
+    fun crossoverBypassAndMeasurementNeutralShipOff() {
+        // A save from before the 309 -> 312 growth loads these defaults: the split runs, neutral off.
+        assertEquals(312, NativeBmwDspValues.SIZE)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS], 0f)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL], 0f)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_NEUTRAL_ALLOW], 0f)
+        // The retired per-band passthrough slots read 0 and nothing native reads them.
+        for (slot in intArrayOf(1, 2, 291)) {
+            assertEquals(0f, NativeBmwDspValues.DEFAULTS[slot], 0f)
+            assertFalse(NativeBmwDspSchema.READ_BY_NATIVE[slot])
+        }
     }
 
     @Test

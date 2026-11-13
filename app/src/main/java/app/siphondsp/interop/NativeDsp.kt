@@ -87,6 +87,16 @@ object NativeDsp {
     // array layout (sample rate + PEQ enable/preamp, the per-output crossover blocks, then the
     // variable-length PEQ bank blocks).
     external fun getNativeTruthSnapshot(self: NativeDspHandle): DoubleArray?
+    // What the engine is actually running, from its installed state: EngineStatus.SIZE floats
+    // (see NativeBmwDspProcessor::readEngineStatus() and EngineStatus.parse()). Lock-free; null for
+    // a gone handle.
+    external fun getEngineStatus(self: NativeDspHandle): FloatArray?
+    // The measurement self-test (NativeBmwSelfTest.h): take the source under the handle lock (0
+    // before the first accepted config), then run it after releasing the lock -- an offline copy
+    // of the processor, about a second of work: never on the main or audio thread. runSelfTest()
+    // frees the source and returns SelfTestReport.SIZE doubles (SelfTestReport.parse()).
+    external fun takeSelfTestSource(self: NativeDspHandle): Long
+    external fun runSelfTest(source: Long): DoubleArray?
     external fun startNativeBmwCapture(self: NativeDspHandle)
     external fun stopNativeBmwCapture(self: NativeDspHandle)
     external fun getNativeBmwCaptureFrameCount(self: NativeDspHandle): Long

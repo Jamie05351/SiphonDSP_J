@@ -44,6 +44,7 @@ set(ENGINE_SOURCES
     ${WRAPPER_DIR}/NativeBmwDelayGain.cpp
     ${WRAPPER_DIR}/NativeBmwMeasurement.cpp
     ${WRAPPER_DIR}/NativeBmwVirtual.cpp
+    ${WRAPPER_DIR}/NativeBmwSelfTest.cpp
 )
 
 add_executable(native_tests
@@ -56,7 +57,6 @@ add_executable(native_tests
     input_validation_test.cpp
     limiter_test.cpp
     mbc_test.cpp
-    routing_bypass_test.cpp
     schema_agreement_test.cpp
     truth_snapshot_test.cpp
     virtual_test.cpp
@@ -70,6 +70,7 @@ add_executable(native_tests
     output_guard_test.cpp
     convolver_test.cpp
     stream_start_guard_test.cpp
+    measurement_neutral_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.
