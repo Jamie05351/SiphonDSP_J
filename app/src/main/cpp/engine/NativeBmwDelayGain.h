@@ -60,6 +60,8 @@ struct AlignmentDelay {
     unsigned fadeRemaining = 0;
     unsigned fadeBase = 0;
     std::array<float, kAlignmentTaps> fadeTaps{};
+    // unitTap() of taps / fadeTaps.
+    int unit = -1, fadeUnit = -1;
     // A setDelay() landing mid-fade is held here and started when the current fade ends, so each
     // fade begins exactly where the output is (no jump back to a previous target mid-drag).
     bool pendingSet = false;
@@ -67,6 +69,7 @@ struct AlignmentDelay {
 
     AlignmentDelay() {
         buildAlignmentTaps(0.f, taps);  // a zero delay (setDelay(0) would skip: delay is already 0)
+        unit = unitTap(taps);
     }
     // Config thread. Total delay = samples + kAlignmentLatency. Clamped so the kernel's oldest
     // tap stays inside the ring.
@@ -102,15 +105,16 @@ struct AlignmentDelay {
             taps[0] = 1.f - fraction;
             taps[1] = fraction;
         }
+        unit = unitTap(taps);
     }
     float run(float x) {
         data[write] = x;
-        float y = read(base, taps);
+        float y = read(base, taps, unit);
         if (fadeRemaining > 0) {
             // Linear crossfade from the old read point (fadeBase/fadeTaps) to the new one.
             const float oldWeight = std::min(1.f, static_cast<float>(fadeRemaining) /
                                                       static_cast<float>(std::max(1u, fadeLength)));
-            y += (read(fadeBase, fadeTaps) - y) * oldWeight;
+            y += (read(fadeBase, fadeTaps, fadeUnit) - y) * oldWeight;
             if (--fadeRemaining == 0 && pendingSet) {
                 // The fade has landed on the current target: start the held change from there.
                 pendingSet = false;
@@ -138,9 +142,27 @@ struct AlignmentDelay {
     }
 
 private:
-    float read(unsigned from, const std::array<float, kAlignmentTaps>& kernel) const {
+    // The tap index of a kernel that is a unit impulse (a whole-sample delay: one tap exactly 1,
+    // the rest exactly 0), else -1.
+    static int unitTap(const std::array<float, kAlignmentTaps>& kernel) {
+        int at = -1;
+        for (unsigned k = 0; k < kAlignmentTaps; ++k) {
+            if (kernel[k] == 1.f && at < 0) {
+                at = static_cast<int>(k);
+            } else if (kernel[k] != 0.f) {
+                return -1;
+            }
+        }
+        return at;
+    }
+    float read(unsigned from, const std::array<float, kAlignmentTaps>& kernel, int unitAt) const {
         constexpr unsigned mask = Capacity - 1;
         const unsigned newest = (write + Capacity - from) & mask;
+        if (unitAt >= 0) {
+            // A whole-sample delay: the one sample, as the kernel sum gives it (the zero taps add
+            // +0, which only turns a -0 into +0) -- bit-identical, without the 16 multiplies.
+            return data[(newest + Capacity - static_cast<unsigned>(unitAt)) & mask] + 0.f;
+        }
         float y = 0;
         for (unsigned k = 0; k < kAlignmentTaps; ++k) {
             y += kernel[k] * data[(newest + Capacity - k) & mask];
@@ -151,6 +173,7 @@ private:
         delay = d;
         base = static_cast<unsigned>(delay);
         buildAlignmentTaps(delay - static_cast<float>(base), taps);
+        unit = unitTap(taps);
     }
     // Remembers the current read point as the one to fade from (only ever called with no fade in
     // progress, so it is exactly where the output is).
@@ -160,6 +183,7 @@ private:
         }
         fadeBase = base;
         fadeTaps = taps;
+        fadeUnit = unit;
         fadeRemaining = fadeLength;
     }
 

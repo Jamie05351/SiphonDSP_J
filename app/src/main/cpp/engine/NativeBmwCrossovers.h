@@ -286,11 +286,22 @@ private:
     static constexpr float kWarmW2 = 1.f / kWarmSum, kWarmW3 = .15f / kWarmSum, kWarmW4 = .6f / kWarmSum;
     static constexpr float kPunchySum = 1.f + .8f + .2f;
     static constexpr float kPunchyW2 = 1.f / kPunchySum, kPunchyW3 = .8f / kPunchySum, kPunchyW4 = .2f / kPunchySum;
-    Biquad inHp_, inLpA1_, inLpB1_, inLpA2_, inLpB2_;  // the sub band of (L+R)/2 (LR8 = BW4 x BW4)
-    Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band
+    // The sub band and its harmonics never go above the harmonics' top (8 x the 60 Hz maximum
+    // reach: 480 Hz), so that whole path -- the input filters, the envelope, the harmonic
+    // generator and the harmonics' band filters -- runs at half the stream rate: every second
+    // frame takes the mean of the last two samples of (L+R)/2 (a zero at Nyquist, -50 dB within
+    // 50 Hz of it, so nothing up there folds into the sub band), and the harmonics are
+    // interpolated back up between those frames. Linear interpolation is flat to 0.003 dB at
+    // 480 Hz and only images above 23.5 kHz; the harmonics come one stream sample later. Half
+    // the work of that path, which was most of the stage.
+    Biquad inHp_, inLpA1_, inLpB1_, inLpA2_, inLpB2_;  // the sub band of (L+R)/2 (LR8 = BW4 x BW4), at half rate
+    Biquad outHp1_, outHp2_, outLp1_, outLp2_;  // the harmonics' band, at half rate
+    bool oddFrame_ = false;   // the frame between two half-rate frames
+    float subInPrev_ = 0.f;   // (L+R)/2 of the previous frame, for the decimation mean
+    float harmPrev_ = 0.f, harmLast_ = 0.f;  // the last two half-rate harmonics samples
     Biquad cutL_, cutR_;  // the original sub's removal, per channel
     float env_ = 0.f;
-    float release_ = 0.99989584f;      // env_: exp(-1 / (Response * 48 kHz)), 0.2 s here
+    float release_ = 0.99979169f;      // env_ (half rate): exp(-1 / (Response * 24 kHz)), 0.2 s here
     float peakRelease_ = 0.99989584f;  // peak_: exp(-1 / (kPeakReleaseSeconds * 48 kHz))
     // The peak cap: the recent stereo peak (either channel, input or base, whichever is largest;
     // instant attack, kPeakReleaseSeconds), and the harmonics' gain under the cap -- it drops

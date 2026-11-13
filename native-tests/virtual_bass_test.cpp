@@ -703,3 +703,23 @@ TEST_CASE("virtual bass stays silent on silence") {
         REQUIRE(r == 0.f);
     }
 }
+
+TEST_CASE("Virtual Bass at half rate: no images up top, nothing near Nyquist folds into the bass") {
+    // The sub band and the harmonics run at half the stream rate and are interpolated back up.
+    // A 30 Hz note's harmonics (60..120 Hz) come out; their images sit just under 24 kHz and must
+    // be far below them.
+    const auto out = runStage(40.f, 30.0, 0.5, 0.f, 1.f);
+    const double h2 = channelMagnitudeAt(out, 0, 60.0);
+    CHECK(h2 > 0.02);
+    for (const double image : {24000.0 - 60.0, 24000.0 - 90.0, 24000.0 - 120.0}) {
+        CAPTURE(image);
+        CHECK(linToDb(channelMagnitudeAt(out, 0, image) / h2) < -60.0);
+    }
+    // A tone just under Nyquist has no sub content: the decimation's two-sample mean keeps it out
+    // of the half-rate path, so no harmonics appear in the bass.
+    const auto top = runStage(40.f, 23960.0, 0.5, 0.f, 1.f);
+    for (const double bass : {40.0, 80.0, 120.0}) {
+        CAPTURE(bass);
+        CHECK(linToDb(channelMagnitudeAt(top, 0, bass) / 0.5) < -60.0);
+    }
+}

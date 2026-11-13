@@ -247,8 +247,18 @@ private:
         void clear();
     };
     struct Cell {
-        float rms = 0, peak = 0, gain = 1, lastDetectorDb = -60.f;
+        // target: the gain computer's latest reading (see kControlInterval).
+        float rms = 0, peak = 0, gain = 1, target = 1, lastDetectorDb = -60.f;
     };
+    // The detectors (RMS and peak) and the gain follower run every sample; the gain computer --
+    // sqrt, log10, the soft knee and the dB-to-gain -- every kControlInterval samples (6 kHz at
+    // 48 kHz), its target held in between. The fastest attack (1 ms) spans 48 samples, so the
+    // target is at most 7 samples (0.15 ms) late, inside the attack's own smoothing; it was most
+    // of the stage's cost.
+    static constexpr unsigned kControlInterval = 8;
+    unsigned controlCountdown_ = 0;
+    // The dry path's all-passes sat unused (Mix settled at 100%): cleared before they run again.
+    bool dryStale_ = false;
     // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMeter() can
     // be polled from the UI thread.
     struct BandMeter {
@@ -259,7 +269,7 @@ private:
     // RMS+peak detector and soft-knee gain computer, factored out so a stereo-linked band can
     // feed it one combined level. Returns the smoothed gain (<=1).
     float bandGain(float peakAbs, const MbcBandParams& p, Cell& cell, int band,
-                   const DetectorTiming& detector);
+                   const DetectorTiming& detector, bool control);
 
     // cell_[ch][band]: detector + gain follower. When a band is stereo-linked only [0][band] is
     // used (fed by max(|L|,|R|)); unlinked uses [0]=left, [1]=right.
