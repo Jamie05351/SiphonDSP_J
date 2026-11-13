@@ -32,10 +32,11 @@ clock read per chunk to time. The section shows, averaged over the last few seco
 
 Per 3840-frame buffer on an x86-64 host, the car's chain (Pre EQ 14 bands, 8192-tap IR, 2-way,
 tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, loudness): **4.53 ms
--> 2.76 ms**. On the head unit at ~600 MHz expect roughly ten times these figures.
+-> 2.40 ms**. On the head unit at ~600 MHz expect roughly ten times these figures.
 
 | Stage | Before | After | How |
 |---|---:|---:|---|
+| Pre EQ (14 bands) | 841 µs | 444 µs | the bank over the whole chunk, sections in skewed groups of three (bit-identical); band EQ the same |
 | MBC | 1000 µs | 570 µs | gain computer every 8 samples; dry all-passes off at 100 % Mix |
 | Convolver | 658 µs | 104 µs | 1024-frame partitions (21 ms latency while on; none when off) |
 | Master limiter | 501 µs | 182 µs | exact true-peak gate (bit-identical) |
@@ -44,4 +45,5 @@ tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, loudn
 | Band delay + gain | 81 µs | 20 µs | whole-sample delays skip the 16-tap kernel (bit-identical) |
 | Muted bands | full chain | none | a band muted on both outputs isn't run |
 
-Biggest left: the Pre EQ (14 bands, ~28 %), the MBC's crossover tree, the crossovers and tilt.
+Biggest left: the MBC's crossover tree, the Pre EQ, the crossovers and tilt. The Pre EQ's skewed
+block processing would carry over to those serial filter chains too.

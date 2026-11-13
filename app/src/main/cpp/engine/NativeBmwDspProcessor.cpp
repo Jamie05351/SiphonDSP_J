@@ -163,7 +163,20 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
     }
     profiler_.lap(P::VirtualBass);
     // Pre EQ (the full-range bank and its preamp), crossfaded on/off: the PEQ switch and
-    // measurement neutral both land here. Then the headroom gain.
+    // measurement neutral both land here. Then the headroom gain. Settled on, the bank runs over
+    // the whole chunk at once (PeqBank::processBlock(), bit-identical to frame by frame).
+    if (preEqMix_ == 1.f && preEqTarget_ == 1.f) {
+        for (std::size_t i = 0; i < frames; ++i) {
+            L[i] *= peqPreamp_;
+            R[i] *= peqPreamp_;
+        }
+        inputPeq_.processBlock(L, R, frames);
+        for (std::size_t i = 0; i < frames; ++i) {
+            headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
+            L[i] *= headroom_;
+            R[i] *= headroom_;
+        }
+    } else {
     for (std::size_t i = 0; i < frames; ++i) {
         if (preEqMix_ == 0.f && preEqTarget_ > 0.f) {
             inputPeq_.clear();
@@ -183,6 +196,7 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
         headroom_ = NativeBmwDsp::rampToward(headroom_, headroomTarget_, headroomRampCoef_);
         L[i] = sL * headroom_;
         R[i] = sR * headroom_;
+    }
     }
     profiler_.lap(P::PreEq);
     // Pre-crossover multiband compressor: full-range stereo, before any band split. Skipped
@@ -283,6 +297,10 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
             continue;
         }
         PeqBank& bank = band == Band::Low ? lowPeq_ : band == Band::Mid ? midPeq_ : highPeq_;
+        if (eqMix == 1.f && bandEqTarget_ == 1.f) {
+            bank.processBlock(xl, xr, frames);  // settled on: the whole chunk at once
+            continue;
+        }
         for (std::size_t i = 0; i < frames; ++i) {
             if (eqMix == 0.f && bandEqTarget_ > 0.f) {
                 bank.clear();  // it hasn't run since it went off: start clean, not from stale state

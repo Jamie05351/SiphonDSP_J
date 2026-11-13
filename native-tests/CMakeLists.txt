@@ -72,6 +72,7 @@ add_executable(native_tests
     stream_start_guard_test.cpp
     measurement_neutral_test.cpp
     profiler_test.cpp
+    peq_block_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.
