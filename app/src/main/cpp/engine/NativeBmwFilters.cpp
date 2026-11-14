@@ -149,18 +149,18 @@ namespace {
 // PeqBank::processBlock()). Position i goes through section 0 at step i, section 1 at step i + 1
 // and so on, so every section sees exactly the samples it would frame by frame, in order.
 template <std::size_t K>
-void runPairedGroup(SvfPair* sec, float* left, float* right, std::size_t n) {
+void runPairedGroup(SvfPair* const* sec, float* left, float* right, std::size_t n) {
 #if SIPHON_NEON
     float64x2_t a1[K], a2[K], a3[K], m0[K], m1[K], m2[K], ic1[K], ic2[K];
     for (std::size_t k = 0; k < K; ++k) {
-        a1[k] = vld1q_f64(sec[k].a1);
-        a2[k] = vld1q_f64(sec[k].a2);
-        a3[k] = vld1q_f64(sec[k].a3);
-        m0[k] = vld1q_f64(sec[k].m0);
-        m1[k] = vld1q_f64(sec[k].m1);
-        m2[k] = vld1q_f64(sec[k].m2);
-        ic1[k] = vld1q_f64(sec[k].ic1eq);
-        ic2[k] = vld1q_f64(sec[k].ic2eq);
+        a1[k] = vld1q_f64(sec[k]->a1);
+        a2[k] = vld1q_f64(sec[k]->a2);
+        a3[k] = vld1q_f64(sec[k]->a3);
+        m0[k] = vld1q_f64(sec[k]->m0);
+        m1[k] = vld1q_f64(sec[k]->m1);
+        m2[k] = vld1q_f64(sec[k]->m2);
+        ic1[k] = vld1q_f64(sec[k]->ic1eq);
+        ic2[k] = vld1q_f64(sec[k]->ic2eq);
     }
     for (std::size_t t = 0; t < n + K - 1; ++t) {
         for (std::size_t kk = K; kk-- > 0;) {
@@ -175,21 +175,21 @@ void runPairedGroup(SvfPair* sec, float* left, float* right, std::size_t n) {
         }
     }
     for (std::size_t k = 0; k < K; ++k) {
-        vst1q_f64(sec[k].ic1eq, ic1[k]);
-        vst1q_f64(sec[k].ic2eq, ic2[k]);
+        vst1q_f64(sec[k]->ic1eq, ic1[k]);
+        vst1q_f64(sec[k]->ic2eq, ic2[k]);
     }
 #else
     double c[K][2][6], st[K][2][2];
     for (std::size_t k = 0; k < K; ++k) {
         for (std::size_t lane = 0; lane < 2; ++lane) {
-            c[k][lane][0] = sec[k].a1[lane];
-            c[k][lane][1] = sec[k].a2[lane];
-            c[k][lane][2] = sec[k].a3[lane];
-            c[k][lane][3] = sec[k].m0[lane];
-            c[k][lane][4] = sec[k].m1[lane];
-            c[k][lane][5] = sec[k].m2[lane];
-            st[k][lane][0] = sec[k].ic1eq[lane];
-            st[k][lane][1] = sec[k].ic2eq[lane];
+            c[k][lane][0] = sec[k]->a1[lane];
+            c[k][lane][1] = sec[k]->a2[lane];
+            c[k][lane][2] = sec[k]->a3[lane];
+            c[k][lane][3] = sec[k]->m0[lane];
+            c[k][lane][4] = sec[k]->m1[lane];
+            c[k][lane][5] = sec[k]->m2[lane];
+            st[k][lane][0] = sec[k]->ic1eq[lane];
+            st[k][lane][1] = sec[k]->ic2eq[lane];
         }
     }
     float* io[2] = {left, right};
@@ -208,8 +208,8 @@ void runPairedGroup(SvfPair* sec, float* left, float* right, std::size_t n) {
     }
     for (std::size_t k = 0; k < K; ++k) {
         for (std::size_t lane = 0; lane < 2; ++lane) {
-            sec[k].ic1eq[lane] = st[k][lane][0];
-            sec[k].ic2eq[lane] = st[k][lane][1];
+            sec[k]->ic1eq[lane] = st[k][lane][0];
+            sec[k]->ic2eq[lane] = st[k][lane][1];
         }
     }
 #endif
@@ -245,7 +245,72 @@ void runLaneGroup(SvfPair* sec, std::size_t lane, float* x, std::size_t n) {
         sec[k].ic2eq[lane] = st[k][1];
     }
 }
+
 }  // namespace
+
+void runSvfChainBlock(SvfPair* const* chain, std::size_t count, float* left, float* right, std::size_t frames) {
+    if (frames == 0) {
+        return;
+    }
+    std::size_t i = 0;
+    for (; i + 3 <= count; i += 3) {
+        runPairedGroup<3>(chain + i, left, right, frames);
+    }
+    if (count - i == 2) {
+        runPairedGroup<2>(chain + i, left, right, frames);
+    } else if (count - i == 1) {
+        runPairedGroup<1>(chain + i, left, right, frames);
+    }
+}
+
+void runBiquadPairChainBlock(Biquad* const* chainL, Biquad* const* chainR, std::size_t count, float* left,
+                             float* right, std::size_t frames) {
+    if (frames == 0 || count == 0) {
+        return;
+    }
+    // Runs of Svf2 pairs go through the register path as SvfPair copies (each lane the same
+    // svf2Step math Biquad::run / runPair use), state written back after; any other topology
+    // runs pair by pair through Biquad::runPair, a section at a time over the block.
+    constexpr std::size_t kMax = 8;
+    SvfPair temp[kMax];
+    SvfPair* ptr[kMax];
+    std::size_t i = 0;
+    while (i < count) {
+        if (chainL[i]->topology != Biquad::Topology::Svf2 || chainR[i]->topology != Biquad::Topology::Svf2) {
+            for (std::size_t f = 0; f < frames; ++f) {
+                Biquad::runPair(*chainL[i], *chainR[i], left[f], right[f]);
+            }
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < count && j - i < kMax && chainL[j]->topology == Biquad::Topology::Svf2 &&
+               chainR[j]->topology == Biquad::Topology::Svf2) {
+            SvfPair& t = temp[j - i];
+            const Biquad* b[2] = {chainL[j], chainR[j]};
+            for (std::size_t lane = 0; lane < 2; ++lane) {
+                t.a1[lane] = b[lane]->a1;
+                t.a2[lane] = b[lane]->a2;
+                t.a3[lane] = b[lane]->a3;
+                t.m0[lane] = b[lane]->m0;
+                t.m1[lane] = b[lane]->m1;
+                t.m2[lane] = b[lane]->m2;
+                t.ic1eq[lane] = b[lane]->ic1eq;
+                t.ic2eq[lane] = b[lane]->ic2eq;
+            }
+            ptr[j - i] = &t;
+            ++j;
+        }
+        runSvfChainBlock(ptr, j - i, left, right, frames);
+        for (std::size_t k = i; k < j; ++k) {
+            chainL[k]->ic1eq = temp[k - i].ic1eq[0];
+            chainL[k]->ic2eq = temp[k - i].ic2eq[0];
+            chainR[k]->ic1eq = temp[k - i].ic1eq[1];
+            chainR[k]->ic2eq = temp[k - i].ic2eq[1];
+        }
+        i = j;
+    }
+}
 
 void PeqBank::processBlock(float* left, float* right, std::size_t frames) {
     if (frames == 0) {
@@ -253,15 +318,11 @@ void PeqBank::processBlock(float* left, float* right, std::size_t frames) {
     }
     // The sections both channels have, as pairs, three at a time.
     const std::size_t paired = std::min(leftCount, rightCount);
-    std::size_t i = 0;
-    for (; i + 3 <= paired; i += 3) {
-        runPairedGroup<3>(&sections[i], left, right, frames);
+    SvfPair* ptr[kMaxPeqSectionsPerChannel];
+    for (std::size_t k = 0; k < paired; ++k) {
+        ptr[k] = &sections[k];
     }
-    if (paired - i == 2) {
-        runPairedGroup<2>(&sections[i], left, right, frames);
-    } else if (paired - i == 1) {
-        runPairedGroup<1>(&sections[i], left, right, frames);
-    }
+    runSvfChainBlock(ptr, paired, left, right, frames);
     // The longer channel's remaining sections on its own lane.
     auto lane = [this, paired, frames](std::size_t ln, std::size_t count, float* x) {
         std::size_t j = paired;

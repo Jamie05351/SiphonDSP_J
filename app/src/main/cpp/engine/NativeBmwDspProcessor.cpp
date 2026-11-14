@@ -202,9 +202,7 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
     // Pre-crossover multiband compressor: full-range stereo, before any band split. Skipped
     // entirely while disabled (how it ships).
     if (p_.mbcEnabled) {
-        for (std::size_t i = 0; i < frames; ++i) {
-            mbc_.process(L[i], R[i], p_.mbcBand, detector_);
-        }
+        mbc_.processBlock(L, R, frames, p_.mbcBand, detector_);
     }
     profiler_.lap(P::Mbc);
     // Virtual-source stage: extracts the virtual centre and feeds it back into the internal L/R
@@ -268,20 +266,14 @@ void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
         auto& left = output(ids.left);
         auto& right = output(ids.right);
         // Filter stages run L and R together (NEON pairs on arm64); see NativeBmwCrossovers.h.
+        // Each band's sections as one chain over the chunk (skewed, see runBiquadPairChainBlock()).
         if (band == Band::Low) {
-            const auto& cfgL = outputConfig(ids.left);
-            const auto& cfgR = outputConfig(ids.right);
-            for (std::size_t i = 0; i < frames; ++i) {
-                NativeBmwDsp::processLowCrossover(left, cfgL, right, cfgR, xl[i], xr[i]);
-            }
+            NativeBmwDsp::processLowCrossoverBlock(left, outputConfig(ids.left), right, outputConfig(ids.right),
+                                                  xl, xr, frames);
         } else if (band == Band::Mid) {
-            for (std::size_t i = 0; i < frames; ++i) {
-                NativeBmwDsp::processMidCrossover(left, right, xl[i], xr[i]);
-            }
+            NativeBmwDsp::processMidCrossoverBlock(left, right, xl, xr, frames);
         } else {
-            for (std::size_t i = 0; i < frames; ++i) {
-                NativeBmwDsp::processHighCrossover(left, right, xl[i], xr[i]);
-            }
+            NativeBmwDsp::processHighCrossoverBlock(left, right, xl, xr, frames);
         }
     }
     profiler_.lap(P::Crossovers);
@@ -428,9 +420,7 @@ void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRu
     }
     profiler_.lap(P::BandSum);
     if (p_.tilt) {
-        for (std::size_t i = 0; i < frames; ++i) {
-            tilt_.process(L[i], R[i]);
-        }
+        tilt_.processBlock(L, R, frames);
     }
     profiler_.lap(P::Tilt);
     // Post gain, then channel mute (ramped like the per-output mute), then the measurement-mute
