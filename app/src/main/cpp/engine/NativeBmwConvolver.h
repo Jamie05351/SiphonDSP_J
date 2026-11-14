@@ -2,7 +2,7 @@
 #define SIPHONDSP_NATIVE_BMW_CONVOLVER_H
 
 // Stereo FIR convolver: right after the band sum (polarity/mute, tilt, post gain, channel mute,
-// measurement bus) and ahead of the master limiter, volume, loudness and the hardware swap (see
+// measurement bus) and ahead of the master limiter, volume, Deep bass and the hardware swap (see
 // NativeBmwDspProcessor::processChunk()). Ahead of the limiter because a phase-correcting IR
 // raises the crest factor without raising the magnitude: its peaks must pass through the limiter.
 //

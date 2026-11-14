@@ -249,28 +249,25 @@ void Tilt::rebuild(float amountDb, float freqHz, float sampleRate) {
     makeHighShelf(hiR1_, freqHz, -g, sampleRate);
     makeHighShelf(hiR2_, freqHz, -g, sampleRate);
 }
-void Loudness::liftDb(float volumeDb, float strength, float& bassDb, float& trebleDb) {
+void DeepBass::curve(float volumeDb, float strength, float maxDb, float& centreHz, float& gainDb) {
     const float cut = std::max(0.f, -volumeDb);
-    const float s = clampf(strength, 0.f, 1.f);
-    bassDb = std::min(kBassMaxDb, kBassPerDb * cut) * s;
-    trebleDb = std::min(kTrebleMaxDb, kTreblePerDb * cut) * s;
+    const float glide = std::min(cut, kGlideCutDb) / kGlideCutDb;
+    centreHz = kFullVolumeHz * std::pow(kQuietHz / kFullVolumeHz, glide);
+    gainDb = std::min(clampf(maxDb, kMinMaxDb, kMaxMaxDb), kPerDb * cut) * clampf(strength, 0.f, 1.f);
 }
-void Loudness::rebuild(float volumeDb, float strength, float sampleRate) {
-    float bassDb, trebleDb;
-    liftDb(volumeDb, strength, bassDb, trebleDb);
-    makeLowShelf(bassL_, kBassHz, bassDb, sampleRate);
-    makeLowShelf(bassR_, kBassHz, bassDb, sampleRate);
-    makeHighShelf(trebleL_, kTrebleHz, trebleDb, sampleRate);
-    makeHighShelf(trebleR_, kTrebleHz, trebleDb, sampleRate);
+void DeepBass::rebuild(float volumeDb, float strength, float maxDb, float sampleRate) {
+    float centreHz, gainDb;
+    curve(volumeDb, strength, maxDb, centreHz, gainDb);
+    // Always buildable: 32..50 Hz, 0..15 dB, Q 0.8 (makePeq only refuses out-of-range input).
+    makePeq(bellL_, centreHz, gainDb, kQ, /*bell*/ 0, sampleRate);
+    makePeq(bellR_, centreHz, gainDb, kQ, /*bell*/ 0, sampleRate);
 }
-void Loudness::clear() {
-    for (Biquad* b : {&bassL_, &bassR_, &trebleL_, &trebleR_}) {
-        b->clear();
-    }
+void DeepBass::clear() {
+    bellL_.clear();
+    bellR_.clear();
 }
-void Loudness::process(float& l, float& r) {
-    Biquad::runPair(bassL_, bassR_, l, r);
-    Biquad::runPair(trebleL_, trebleR_, l, r);
+void DeepBass::process(float& l, float& r) {
+    Biquad::runPair(bellL_, bellR_, l, r);
 }
 void Tilt::clear() {
     for (Biquad* b : {&loL1_, &loL2_, &hiL1_, &hiL2_, &loR1_, &loR2_, &hiR1_, &hiR2_}) {

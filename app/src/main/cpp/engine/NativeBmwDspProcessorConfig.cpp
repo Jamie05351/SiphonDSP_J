@@ -90,7 +90,7 @@ void NativeBmwDspProcessor::applyMeasurementNeutral(const float* in, float* out)
     if (bypassed(sch::kStageTilt)) set(sch::kTiltEnabled, 0.f);
     if (bypassed(sch::kStageConvolver)) set(sch::kConvolverEnabled, 0.f);
     if (bypassed(sch::kStageMasterLimiter)) set(sch::kMasterLimiterEnabled, 0.f);
-    if (bypassed(sch::kStageLoudness)) set(sch::kLoudnessEnabled, 0.f);
+    if (bypassed(sch::kStageDeepBass)) set(sch::kDeepBassEnabled, 0.f);
     if (bypassed(sch::kStageHeadroom)) set(sch::kHeadroom, 0.f);
     if (bypassed(sch::kStagePostGain)) {
         set(sch::kPostGainL, 0.f);
@@ -210,8 +210,10 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.highXoPass = flagIn(v[210]);
     next.masterVolumeDb = clampIn(v[nbschema::kMasterVolumeDb], -80, 0);
     next.masterMute = flagIn(v[nbschema::kMasterMute]);
-    next.loudnessEnabled = flagIn(v[nbschema::kLoudnessEnabled]);
-    next.loudnessStrength = clampIn(v[nbschema::kLoudnessStrength], 0, 100) * .01f;
+    next.deepBassEnabled = flagIn(v[nbschema::kDeepBassEnabled]);
+    next.deepBassStrength = clampIn(v[nbschema::kDeepBassStrength], 0, 100) * .01f;
+    next.deepBassMaxDb = clampIn(v[nbschema::kDeepBassMaxDb], NativeBmwDsp::DeepBass::kMinMaxDb,
+                                 NativeBmwDsp::DeepBass::kMaxMaxDb);
     next.monoBassEnabled = flagIn(v[nbschema::kMonoBassEnabled]);
     next.monoBassFreq = clampIn(v[nbschema::kMonoBassFreq], NativeBmwDsp::MonoBass::kMinHz,
                                 NativeBmwDsp::MonoBass::kMaxHz);
@@ -693,14 +695,15 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         dirty |= DirtyLimiter;
     }
     if (changed(next.masterVolumeDb, p_.masterVolumeDb) ||
-        changed(next.loudnessStrength, p_.loudnessStrength) ||
-        next.loudnessEnabled != p_.loudnessEnabled) {
-        dirty |= DirtyLoudness;
+        changed(next.deepBassStrength, p_.deepBassStrength) ||
+        changed(next.deepBassMaxDb, p_.deepBassMaxDb) ||
+        next.deepBassEnabled != p_.deepBassEnabled) {
+        dirty |= DirtyDeepBass;
     }
-    // Loudness is skipped once fully faded out; switching it back on then starts its shelves
+    // Deep bass is skipped once fully faded out; switching it back on then starts its bell
     // clean (its lift starts from 0, so the clean state is inaudible while it fades in).
-    if (!p_.loudnessEnabled && next.loudnessEnabled && loudnessStrength_ == 0.f) {
-        dirty |= DirtyLoudnessResume;
+    if (!p_.deepBassEnabled && next.deepBassEnabled && deepBassStrength_ == 0.f) {
+        dirty |= DirtyDeepBassResume;
     }
     if (changed(next.monoBassFreq, p_.monoBassFreq)) {
         dirty |= DirtyMonoBass;
@@ -748,9 +751,10 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         for (auto& out : outputs_) {
             out.delay.snap();  // nor crossfade the delays in from their defaults
         }
-        // ...nor fade loudness in at start-up.
-        loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
-        retuneLoudness();
+        // ...nor fade Deep bass in at start-up.
+        deepBassStrength_ = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
+        deepBassMaxDb_ = p_.deepBassMaxDb;
+        retuneDeepBass();
         // ...nor crossfade Mono Bass in.
         monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
         // ...nor Virtual Bass.
@@ -984,10 +988,10 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
         NativeBmwDsp::buildHighCrossover(output(id), cfg, sampleRate_);
     }
 }
-void NativeBmwDspProcessor::retuneLoudness() {
+void NativeBmwDspProcessor::retuneDeepBass() {
     auto cutDb = [](float gain) { return -20.f * std::log10(std::max(gain, 1e-6f)); };
     const float cut = std::min(cutDb(masterGain_), cutDb(masterGainTarget_));
-    loudness_.rebuild(-cut, loudnessStrength_, sampleRate_);
+    deepBass_.rebuild(-cut, deepBassStrength_, deepBassMaxDb_, sampleRate_);
 }
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;
@@ -1110,11 +1114,11 @@ void NativeBmwDspProcessor::applyDirty(uint32_t d) {
     if (d & DirtyLimiter) {
         limiter_.rebuild(sampleRate_, p_.limiterThreshDb);
     }
-    if (d & DirtyLoudness) {
-        retuneLoudness();
+    if (d & DirtyDeepBass) {
+        retuneDeepBass();
     }
-    if (d & DirtyLoudnessResume) {
-        loudness_.clear();
+    if (d & DirtyDeepBassResume) {
+        deepBass_.clear();
     }
     if (d & DirtyMonoBass) {
         monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
@@ -1156,8 +1160,8 @@ void NativeBmwDspProcessor::rebuildAll() {
     rebuildHighCrossover();
     tilt_.rebuild(p_.tiltAmount, p_.tiltFreq, sampleRate_);
     tilt_.clear();
-    retuneLoudness();
-    loudness_.clear();
+    retuneDeepBass();
+    deepBass_.clear();
     monoBass_.rebuild(p_.monoBassFreq, sampleRate_);
     monoBass_.clear();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;

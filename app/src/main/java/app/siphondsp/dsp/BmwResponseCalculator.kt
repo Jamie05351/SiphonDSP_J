@@ -4,6 +4,7 @@ import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.DspStage
 import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.model.NativeBmwDspValues
+import app.siphondsp.model.ParametricEqBand
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.log10
@@ -55,8 +56,8 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
     private val lowAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val midAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
     private val highAllPass = arrayOf(BiquadCascade(2), BiquadCascade(2))
-    // Tilt (4 shelves) + loudness (2 shelves): the summed-bus EQ.
-    private val tiltCascade = BiquadCascade(6)
+    // Tilt (4 shelves) + Deep bass (1 bell): the summed-bus EQ.
+    private val tiltCascade = BiquadCascade(5)
 
     private val dirty = HashSet<Stage>().apply { addAll(Stage.entries) }
     // Mono Bass split built into fullCascade (0 = off), so a change rebuilds it.
@@ -354,14 +355,13 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
                 tiltCascade.addHighShelf(freq, -shelfGainDb, sampleRate)
             }
         }
-        // Loudness compensation (native Loudness, after the master volume): same lift as native.
-        if (values[NativeBmwDspValues.INDEX_LOUDNESS_ENABLED] >= .5f) {
-            val cut = (-values[NativeBmwDspValues.INDEX_MASTER_VOLUME_DB].toDouble()).coerceAtLeast(0.0)
-            val strength = (values[NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH].toDouble() / 100.0).coerceIn(0.0, 1.0)
-            val bassDb = minOf(NativeBmwDspValues.LOUDNESS_BASS_MAX_DB, NativeBmwDspValues.LOUDNESS_BASS_PER_DB * cut) * strength
-            val trebleDb = minOf(NativeBmwDspValues.LOUDNESS_TREBLE_MAX_DB, NativeBmwDspValues.LOUDNESS_TREBLE_PER_DB * cut) * strength
-            tiltCascade.addLowShelf(NativeBmwDspValues.LOUDNESS_BASS_HZ, bassDb, sampleRate)
-            tiltCascade.addHighShelf(NativeBmwDspValues.LOUDNESS_TREBLE_HZ, trebleDb, sampleRate)
+        // Deep bass (native DeepBass, after the master volume): the same bell as native.
+        val deepBass = NativeBmwDspValues.deepBassCurve(values)
+        if (deepBass.gainDb > 0.0) {
+            tiltCascade.addPeqBand(
+                ParametricEqBand(deepBass.centreHz, deepBass.gainDb, NativeBmwDspValues.DEEP_BASS_Q),
+                sampleRate,
+            )
         }
     }
 
@@ -554,7 +554,7 @@ class BmwResponseCalculator(private val pointCount: Int = 192) {
         out.crossoverBypassed = crossoverBypassed
     }
 
-    /** The summed-bus stages on [sumAcc] at point [i], into [out]: tilt and loudness, post gain, channel mute, convolver. */
+    /** The summed-bus stages on [sumAcc] at point [i], into [out]: tilt and Deep bass, post gain, channel mute, convolver. */
     private fun finishSum(
         ch: Int,
         i: Int,

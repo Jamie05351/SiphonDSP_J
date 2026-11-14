@@ -16,7 +16,7 @@
 
 namespace nbschema {
 
-inline constexpr std::size_t kSize = 312;  // == NativeBmwDspValues.SIZE
+inline constexpr std::size_t kSize = 313;  // == NativeBmwDspValues.SIZE
 
 // --- Enabled, retired band passthroughs (1..2), channelMute, measurementMute
 inline constexpr int kEnabled = 0;
@@ -119,9 +119,9 @@ inline constexpr int kMidUpperXoTypeMigrated = 290;
 // --- Master volume dB, mute
 inline constexpr int kMasterVolumeDb = 292;
 inline constexpr int kMasterMute = 293;
-// --- Loudness compensation enabled, strength %
-inline constexpr int kLoudnessEnabled = 294;
-inline constexpr int kLoudnessStrength = 295;
+// --- Deep bass (volume-dependent bass boost) enabled, strength % -- Max boost is slot 312
+inline constexpr int kDeepBassEnabled = 294;
+inline constexpr int kDeepBassStrength = 295;
 // --- Automatic headroom (Kotlin computes the headroom and sends it in slot 5)
 inline constexpr int kHeadroomAuto = 296;
 // --- Mono Bass (added in the 297 -> 299 growth)
@@ -146,6 +146,8 @@ inline constexpr int kConvolverGain = 308;
 inline constexpr int kCrossoverBypass = 309;
 inline constexpr int kMeasurementNeutral = 310;
 inline constexpr int kNeutralAllow = 311;
+// --- Deep bass Max boost (added in the 312 -> 313 growth)
+inline constexpr int kDeepBassMaxDb = 312;
 
 // --- structure: block widths, strides and field offsets
 inline constexpr int kStagePreEq = 0;  // stage bit: the full-range (Pre) PEQ bank and its preamp
@@ -165,7 +167,7 @@ inline constexpr int kStageMbc = 13;  // stage bit: the multiband compressor
 inline constexpr int kStageTilt = 14;  // stage bit: tilt
 inline constexpr int kStageConvolver = 15;  // stage bit: the convolver (on with an IR loaded)
 inline constexpr int kStageMasterLimiter = 16;  // stage bit: the master limiter
-inline constexpr int kStageLoudness = 17;  // stage bit: loudness compensation
+inline constexpr int kStageDeepBass = 17;  // stage bit: Deep bass
 inline constexpr int kStageHeadroom = 18;  // stage bit: headroom (manual or automatic)
 inline constexpr int kStagePostGain = 19;  // stage bit: post gain L/R
 inline constexpr int kStageDcBlocker = 20;  // stage bit: the 3 Hz input DC blocker
@@ -209,7 +211,7 @@ inline constexpr int kVirtualFeedApQ = 5;
 inline constexpr int kVirtualFeedApOrder = 6;
 
 // Whether configure() reads each slot (see the reader column of the schema).
-inline constexpr std::array<bool, kSize> kReadByNative{{true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true}};
+inline constexpr std::array<bool, kSize> kReadByNative{{true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true}};
 
 // Pinned to the processor's own copies, so a drift is a build break.
 static_assert(kSize == NativeBmwDspProcessor::kConfigSize);

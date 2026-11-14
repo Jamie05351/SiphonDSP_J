@@ -35,7 +35,7 @@ std::array<float, kConfigSize> everythingOn() {
     c[sch::kMbcEnabled] = 1.f;
     c[sch::kTiltEnabled] = 1.f;
     c[sch::kMasterLimiterEnabled] = 1.f;
-    c[sch::kLoudnessEnabled] = 1.f;
+    c[sch::kDeepBassEnabled] = 1.f;
     c[sch::kMasterVolumeDb] = -20.f;
     c[sch::kHeadroom] = -6.f;
     c[sch::kPostGainL] = 2.f;
@@ -237,7 +237,7 @@ TEST_CASE("engine status reports the installed chain") {
                       sch::kStageBandDelay, sch::kStagePolarity, sch::kStageAllPass, sch::kStageRouting,
                       sch::kStageBusLimiter, sch::kStageMonoBass, sch::kStageVirtualCentre,
                       sch::kStageVirtualBass, sch::kStageMbc, sch::kStageTilt, sch::kStageMasterLimiter,
-                      sch::kStageLoudness, sch::kStageHeadroom, sch::kStagePostGain, sch::kStageDcBlocker}) {
+                      sch::kStageDeepBass, sch::kStageHeadroom, sch::kStagePostGain, sch::kStageDcBlocker}) {
         INFO("stage ", stage);
         CHECK((active & bit(stage)) != 0u);
     }

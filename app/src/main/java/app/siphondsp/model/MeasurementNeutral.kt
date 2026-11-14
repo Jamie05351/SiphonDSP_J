@@ -28,7 +28,7 @@ enum class DspStage(val bit: Int, val label: String, val neutralised: Boolean = 
     TILT(14, "Tilt"),
     CONVOLVER(15, "Convolver IR"),
     MASTER_LIMITER(16, "Limiter"),
-    LOUDNESS(17, "Loudness"),
+    DEEP_BASS(17, "Deep bass"),
     HEADROOM(18, "Headroom"),
     POST_GAIN(19, "Post gain"),
     DC_BLOCKER(20, "DC blocker"),
@@ -56,7 +56,7 @@ enum class DspStage(val bit: Int, val label: String, val neutralised: Boolean = 
 /**
  * Measurement neutral: one switch that makes the native engine bypass every stage in
  * [DspStage.NEUTRAL] -- Pre EQ, crossovers (one full-range path), band EQ / gains / delays /
- * polarity, mono bass, the convolver IR, MBC, limiters, loudness, tilt and the rest -- while the
+ * polarity, mono bass, the convolver IR, MBC, limiters, Deep bass, tilt and the rest -- while the
  * master volume keeps working. It is applied by native to a copy of the config
  * (NativeBmwDspProcessor::applyMeasurementNeutral()), so the saved settings are never touched and
  * switching it off brings the previous chain back exactly, also after a restart.
@@ -141,7 +141,7 @@ object MeasurementNeutral {
         if (bypassed(DspStage.TILT)) out[S.INDEX_TILT_ENABLED] = 0f
         if (bypassed(DspStage.CONVOLVER)) out[S.INDEX_CONVOLVER_ENABLED] = 0f
         if (bypassed(DspStage.MASTER_LIMITER)) out[S.INDEX_MASTER_LIMITER_ENABLED] = 0f
-        if (bypassed(DspStage.LOUDNESS)) out[S.INDEX_LOUDNESS_ENABLED] = 0f
+        if (bypassed(DspStage.DEEP_BASS)) out[S.INDEX_DEEP_BASS_ENABLED] = 0f
         if (bypassed(DspStage.HEADROOM)) out[S.INDEX_HEADROOM] = 0f
         if (bypassed(DspStage.POST_GAIN)) {
             out[S.INDEX_POST_GAIN_L] = 0f

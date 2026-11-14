@@ -383,9 +383,9 @@ section Master volume dB, mute
 slot 292 0           native   INDEX_MASTER_VOLUME_DB kMasterVolumeDb masterVolumeDb (0 dB = full)
 slot 293 0           native   INDEX_MASTER_MUTE kMasterMute masterMute (off)
 
-section Loudness compensation enabled, strength %
-slot 294 0           native   INDEX_LOUDNESS_ENABLED kLoudnessEnabled loudnessEnabled (off)
-slot 295 100         native   INDEX_LOUDNESS_STRENGTH kLoudnessStrength loudnessStrength (percent)
+section Deep bass (volume-dependent bass boost) enabled, strength % -- Max boost is slot 312
+slot 294 0           native   INDEX_DEEP_BASS_ENABLED kDeepBassEnabled deepBassEnabled (off)
+slot 295 100         native   INDEX_DEEP_BASS_STRENGTH kDeepBassStrength deepBassStrength (percent)
 
 section Automatic headroom (Kotlin computes the headroom and sends it in slot 5)
 slot 296 0           kotlin   INDEX_HEADROOM_AUTO kHeadroomAuto headroomAuto (0 = manual; Kotlin-only)
@@ -419,6 +419,9 @@ slot 309 0           native   INDEX_CROSSOVER_BYPASS kCrossoverBypass crossoverB
 slot 310 0           native   INDEX_MEASUREMENT_NEUTRAL kMeasurementNeutral measurementNeutral (1 = every stage in the neutral set bypassed by native; saved settings untouched)
 slot 311 0           native   INDEX_NEUTRAL_ALLOW kNeutralAllow neutralAllow (bitmask of kStage* bits kept running while measurementNeutral is on)
 
+section Deep bass Max boost (added in the 312 -> 313 growth)
+slot 312 12          native   INDEX_DEEP_BASS_MAX_DB kDeepBassMaxDb deepBassMaxDb (boost cap, dB, 3..15)
+
 section Structure
 const kStagePreEq 0 stage bit: the full-range (Pre) PEQ bank and its preamp
 const kStageCrossover 1 stage bit: the band split (crossovers, band chains, band sum)
@@ -437,7 +440,7 @@ const kStageMbc 13 stage bit: the multiband compressor
 const kStageTilt 14 stage bit: tilt
 const kStageConvolver 15 stage bit: the convolver (on with an IR loaded)
 const kStageMasterLimiter 16 stage bit: the master limiter
-const kStageLoudness 17 stage bit: loudness compensation
+const kStageDeepBass 17 stage bit: Deep bass
 const kStageHeadroom 18 stage bit: headroom (manual or automatic)
 const kStagePostGain 19 stage bit: post gain L/R
 const kStageDcBlocker 20 stage bit: the 3 Hz input DC blocker
