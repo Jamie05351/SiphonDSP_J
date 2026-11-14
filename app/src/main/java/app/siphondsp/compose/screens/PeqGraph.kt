@@ -1666,7 +1666,7 @@ private class PeqResponseModel {
 /**
  * Extra paints for the 10c-ii visual pass (`ANALYZER_VISUAL_SPEC.md` §1–5, §7) — constructed
  * once per composition, reused every frame. Real Gaussian blur comes from [BlurMaskFilter] (the
- * same mechanism `GlassSwitchThumbDrawable` / `BmwSwitch` use); no `RenderEffect` layer juggling.
+ * same mechanism `GlassSwitchThumbDrawable` uses); no `RenderEffect` layer juggling.
  */
 private class PeqGlassPaints(density: Float) {
     // §1: real blur glow beneath the summed curve.
