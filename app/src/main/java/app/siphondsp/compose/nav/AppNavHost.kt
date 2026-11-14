@@ -35,6 +35,7 @@ import app.siphondsp.compose.screens.CompressorBandPage
 import app.siphondsp.compose.screens.CompressorDriverPage
 import app.siphondsp.compose.screens.CompressorVisualiserPage
 import app.siphondsp.compose.screens.ConvolverScreen
+import app.siphondsp.compose.screens.DeepBassScreen
 import app.siphondsp.compose.screens.CrossoverGraphMode
 import app.siphondsp.compose.screens.CrossoverLowMidPage
 import app.siphondsp.compose.screens.CrossoverMidHighPage
@@ -92,8 +93,8 @@ object Routes {
 
     const val CROSSOVER_PAGE_COUNT = 4
 
-    /** Output: the end-of-chain stages, then the convolver. */
-    const val OUTPUT_PAGE_COUNT = 2
+    /** Output: the end-of-chain stages, the convolver, then Deep bass (after the master volume). */
+    const val OUTPUT_PAGE_COUNT = 3
 
     internal const val ARG_PAGE = "page"
 
@@ -343,12 +344,13 @@ private fun OutputWorkspace() {
     val pagerState = rememberPagerState { Routes.OUTPUT_PAGE_COUNT }
     Workspace(
         current = DspDestination.OUTPUT,
-        toolbarActions = { PagerControls(pagerState, listOf("OUTPUT", "CONVOLVER"), WorkspaceArt.finder2) },
+        toolbarActions = { PagerControls(pagerState, listOf("OUTPUT", "CONVOLVER", "DEEP BASS"), WorkspaceArt.finder3) },
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 0 -> HeadroomOutputScreen()
-                else -> ConvolverScreen()
+                1 -> ConvolverScreen()
+                else -> DeepBassScreen()
             }
         }
     }

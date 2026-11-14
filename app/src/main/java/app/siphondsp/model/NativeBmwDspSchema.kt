@@ -8,7 +8,7 @@ package app.siphondsp.model
  * slot-by-slot reference is docs/NATIVE_BMW_DSP_SCHEMA.md.
  */
 object NativeBmwDspSchema {
-    const val SIZE = 312
+    const val SIZE = 313
 
     // Enabled, retired band passthroughs (1..2), channelMute, measurementMute
     const val INDEX_ENABLED = 0
@@ -160,9 +160,9 @@ object NativeBmwDspSchema {
     // Master volume dB, mute
     const val INDEX_MASTER_VOLUME_DB = 292
     const val INDEX_MASTER_MUTE = 293
-    // Loudness compensation enabled, strength %
-    const val INDEX_LOUDNESS_ENABLED = 294
-    const val INDEX_LOUDNESS_STRENGTH = 295
+    // Deep bass (volume-dependent bass boost) enabled, strength % -- Max boost is slot 312
+    const val INDEX_DEEP_BASS_ENABLED = 294
+    const val INDEX_DEEP_BASS_STRENGTH = 295
     // Automatic headroom (Kotlin computes the headroom and sends it in slot 5)
     const val INDEX_HEADROOM_AUTO = 296
     // Mono Bass (added in the 297 -> 299 growth)
@@ -187,6 +187,8 @@ object NativeBmwDspSchema {
     const val INDEX_CROSSOVER_BYPASS = 309
     const val INDEX_MEASUREMENT_NEUTRAL = 310
     const val INDEX_NEUTRAL_ALLOW = 311
+    // Deep bass Max boost (added in the 312 -> 313 growth)
+    const val INDEX_DEEP_BASS_MAX_DB = 312
 
     /** The canonical default config, one value per slot. */
     val DEFAULTS = floatArrayOf(
@@ -484,8 +486,8 @@ object NativeBmwDspSchema {
         0f, // 291 highPass (retired: replaced by the crossover bypass, slot 309)
         0f, // 292 masterVolumeDb (0 dB = full)
         0f, // 293 masterMute (off)
-        0f, // 294 loudnessEnabled (off)
-        100f, // 295 loudnessStrength (percent)
+        0f, // 294 deepBassEnabled (off)
+        100f, // 295 deepBassStrength (percent)
         0f, // 296 headroomAuto (0 = manual; Kotlin-only)
         0f, // 297 monoBassEnabled (off)
         90f, // 298 monoBassFreq (Hz, 60..120)
@@ -502,6 +504,7 @@ object NativeBmwDspSchema {
         0f, // 309 crossoverBypass (1 = band split removed: one full-range path, zero added latency)
         0f, // 310 measurementNeutral (1 = every stage in the neutral set bypassed by native; saved settings untouched)
         0f, // 311 neutralAllow (bitmask of kStage* bits kept running while measurementNeutral is on)
+        12f, // 312 deepBassMaxDb (boost cap, dB, 3..15)
     )
 
     /** Whether the native engine reads each slot; the rest are Kotlin-only or reserved. */
@@ -545,5 +548,6 @@ object NativeBmwDspSchema {
         true, true, false, false, true, true, true, true,
         false, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
+        true,
     )
 }

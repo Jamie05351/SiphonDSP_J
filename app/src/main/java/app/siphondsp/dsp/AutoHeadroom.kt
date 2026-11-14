@@ -8,7 +8,7 @@ import kotlin.math.min
 /**
  * Automatic headroom: just enough cut ahead of the band split that the loudest point of the
  * response the PEQ graph draws -- preamp + Pre EQ, and each audible band's crossover, band PEQ and
- * gain -- sits [MARGIN_DB] below full scale. Worst band and channel wins. Tilt, loudness, post
+ * gain -- sits [MARGIN_DB] below full scale. Worst band and channel wins. Tilt, Deep bass, post
  * gain and the master volume come after the band sum and aren't part of it. Virtual Bass, ahead
  * of it all, isn't a filter the curves can show, so its worst case is added on top of the
  * response where it acts (see [AutoHeadroomCalculator.peakDb]).

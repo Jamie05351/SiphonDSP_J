@@ -31,7 +31,7 @@ clock read per chunk to time. The section shows, averaged over the last few seco
 ## What got cheaper
 
 Per 3840-frame buffer on an x86-64 host, the car's chain (Pre EQ 14 bands, 8192-tap IR, 2-way,
-tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, loudness): **4.53 ms
+tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, Deep bass): **4.53 ms
 -> 2.40 ms**. On the head unit at ~600 MHz expect roughly ten times these figures.
 
 | Stage | Before | After | How |
