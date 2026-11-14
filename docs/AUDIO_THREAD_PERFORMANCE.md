@@ -45,5 +45,10 @@ tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, loudn
 | Band delay + gain | 81 µs | 20 µs | whole-sample delays skip the 16-tap kernel (bit-identical) |
 | Muted bands | full chain | none | a band muted on both outputs isn't run |
 
-Biggest left: the MBC's crossover tree, the Pre EQ, the crossovers and tilt. The Pre EQ's skewed
-block processing would carry over to those serial filter chains too.
+The MBC's split tree, the band crossovers and tilt run the same way (`runSvfChainBlock()` /
+`runBiquadPairChainBlock()`), bit-identical. On the x86 host that makes no measurable
+difference -- an out-of-order core already overlaps those short (2-4 section) chains -- but it
+is aimed at the head unit's in-order cores, where a section waiting on the one before it stalls
+the core; Processing time on the device shows what it buys there.
+
+Biggest left: the MBC's split tree, the Pre EQ, the crossovers and tilt.

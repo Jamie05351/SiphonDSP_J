@@ -206,6 +206,38 @@ void processHighCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, 
     Biquad::runPair(left.crossover2, right.crossover2, xl, xr);
 }
 
+void processLowCrossoverBlock(OutputRuntime& left, const OutputConfig& leftConfig, OutputRuntime& right,
+                              const OutputConfig& rightConfig, float* xl, float* xr, std::size_t frames) {
+    // Subsonic on one side only: that channel's two sections on their own, each over the block
+    // (the other channel's samples don't pass through them).
+    if (leftConfig.subsonicEnabled != rightConfig.subsonicEnabled) {
+        OutputRuntime& side = leftConfig.subsonicEnabled ? left : right;
+        float* x = leftConfig.subsonicEnabled ? xl : xr;
+        for (std::size_t i = 0; i < frames; ++i) {
+            x[i] = side.subsonic2.run(side.subsonic1.run(x[i]));
+        }
+    }
+    if (leftConfig.subsonicEnabled && rightConfig.subsonicEnabled) {
+        Biquad* chainL[] = {&left.subsonic1, &left.subsonic2, &left.crossover1, &left.crossover2};
+        Biquad* chainR[] = {&right.subsonic1, &right.subsonic2, &right.crossover1, &right.crossover2};
+        runBiquadPairChainBlock(chainL, chainR, 4, xl, xr, frames);
+    } else {
+        Biquad* chainL[] = {&left.crossover1, &left.crossover2};
+        Biquad* chainR[] = {&right.crossover1, &right.crossover2};
+        runBiquadPairChainBlock(chainL, chainR, 2, xl, xr, frames);
+    }
+}
+void processMidCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames) {
+    Biquad* chainL[] = {&left.crossover1, &left.crossover2, &left.crossover3, &left.crossover4};
+    Biquad* chainR[] = {&right.crossover1, &right.crossover2, &right.crossover3, &right.crossover4};
+    runBiquadPairChainBlock(chainL, chainR, 4, xl, xr, frames);
+}
+void processHighCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames) {
+    Biquad* chainL[] = {&left.crossover1, &left.crossover2};
+    Biquad* chainR[] = {&right.crossover1, &right.crossover2};
+    runBiquadPairChainBlock(chainL, chainR, 2, xl, xr, frames);
+}
+
 void Tilt::rebuild(float amountDb, float freqHz, float sampleRate) {
     float g = amountDb * .75f;
     makeLowShelf(loL1_, freqHz, g, sampleRate);
@@ -244,6 +276,11 @@ void Tilt::clear() {
     for (Biquad* b : {&loL1_, &loL2_, &hiL1_, &hiL2_, &loR1_, &loR2_, &hiR1_, &hiR2_}) {
         b->clear();
     }
+}
+void Tilt::processBlock(float* left, float* right, std::size_t frames) {
+    Biquad* chainL[] = {&loL1_, &loL2_, &hiL1_, &hiL2_};
+    Biquad* chainR[] = {&loR1_, &loR2_, &hiR1_, &hiR2_};
+    runBiquadPairChainBlock(chainL, chainR, 4, left, right, frames);
 }
 void Tilt::process(float& l, float& r) {
     // Same Lo1 -> Lo2 -> Hi1 -> Hi2 order per channel, L/R as NEON pairs.

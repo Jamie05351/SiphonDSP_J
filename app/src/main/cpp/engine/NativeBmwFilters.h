@@ -177,6 +177,17 @@ struct PeqBank {
     void clear();
 };
 
+// A serial chain of sections over a block of frames, in place -- bit-identical to running each
+// frame through the chain section by section, and several times faster (see
+// PeqBank::processBlock()): sections three at a time, skewed by one sample, coefficients and
+// state in registers.
+void runSvfChainBlock(SvfPair* const* chain, std::size_t count, float* left, float* right, std::size_t frames);
+// The same for a chain of Biquad pairs (chainL[i] on the left channel, chainR[i] on the right),
+// bit-identical to Biquad::runPair() section by section per frame. Svf2 pairs take the register
+// path; any other topology runs a section at a time over the block.
+void runBiquadPairChainBlock(Biquad* const* chainL, Biquad* const* chainR, std::size_t count, float* left,
+                             float* right, std::size_t frames);
+
 // Coefficient builders. Each (re)writes q's topology + coefficients through Biquad::retune(), so
 // a running filter keeps its state across an edit; callers that need a clean start clear().
 void makeLowPass(Biquad& q, float fc, float Q, float sr);

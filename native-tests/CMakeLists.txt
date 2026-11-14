@@ -73,6 +73,7 @@ add_executable(native_tests
     measurement_neutral_test.cpp
     profiler_test.cpp
     peq_block_test.cpp
+    block_chain_test.cpp
 )
 
 # concurrency_test.cpp runs process() on a second thread.

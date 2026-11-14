@@ -161,6 +161,13 @@ void processLowCrossover(OutputRuntime& left, const OutputConfig& leftConfig, Ou
                          const OutputConfig& rightConfig, float& xl, float& xr);
 void processMidCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
 void processHighCrossover(OutputRuntime& left, OutputRuntime& right, float& xl, float& xr);
+// The same over a block of frames in place, bit-identical to calling the per-frame ones frame by
+// frame: the band's sections as one chain through runBiquadPairChainBlock() (three at a time,
+// skewed by one sample, coefficients and state in registers).
+void processLowCrossoverBlock(OutputRuntime& left, const OutputConfig& leftConfig, OutputRuntime& right,
+                              const OutputConfig& rightConfig, float* xl, float* xr, std::size_t frames);
+void processMidCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames);
+void processHighCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames);
 
 // Loudness compensation: as the master volume drops below full, a bass shelf and a small treble
 // shelf lift the ends of the spectrum the ear loses first at low level (equal-loudness contours),
@@ -190,6 +197,8 @@ public:
     void rebuild(float amountDb, float freqHz, float sampleRate);
     void clear();
     void process(float& left, float& right);
+    // process() over a block in place, bit-identical, as one skewed chain (runBiquadPairChainBlock()).
+    void processBlock(float* left, float* right, std::size_t frames);
 
 private:
     Biquad loL1_, loL2_, hiL1_, hiL2_;

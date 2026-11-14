@@ -456,7 +456,6 @@ float MultibandCompressor::bandGain(float peakAbs, const MbcBandParams& p, Cell&
 }
 void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
                                   const DetectorTiming& detector) {
-    const float rawL = l, rawR = r;
     float dryL = l, dryR = r;
     float band[2][4];
     {
@@ -509,6 +508,12 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
         band[0][3] = high2L;
         band[1][3] = high2R;
     }
+    mixFrame(l, r, band, dryL, dryR, bands, detector);
+}
+
+void MultibandCompressor::mixFrame(float& l, float& r, const float (&band)[2][4], float dryL, float dryR,
+                                   const MbcBands& bands, const DetectorTiming& detector) {
+    const float rawL = l, rawR = r;
     const bool publishMeter = (++meterCounter_ & 255u) == 0;
     const bool control = controlCountdown_ == 0;
     controlCountdown_ = control ? kControlInterval - 1 : controlCountdown_ - 1;
@@ -571,6 +576,75 @@ void MultibandCompressor::process(float& l, float& r, const MbcBands& bands,
     dryR = rawR + (dryR - rawR) * dryMatched_;
     l = ftz(dryL * (1.f - mix_) + wetL * mix_);
     r = ftz(dryR * (1.f - mix_) + wetR * mix_);
+}
+
+void MultibandCompressor::processBlock(float* left, float* right, std::size_t frames, const MbcBands& bands,
+                                       const DetectorTiming& detector) {
+    auto& t = tree_;
+    for (std::size_t done = 0; done < frames;) {
+        const std::size_t n = std::min(kBlock, frames - done);
+        float* L = left + done;
+        float* R = right + done;
+        auto copy = [n](const float* fromL, const float* fromR, float* toL, float* toR) {
+            std::copy(fromL, fromL + n, toL);
+            std::copy(fromR, fromR + n, toR);
+        };
+        // The split tree as seven chains, each over the block (the same sections in the same order
+        // per sample as process()): band 0 = LR4 low @ f0 + its two compensating all-passes;
+        // rest0 = LR4 high @ f0; band 1 = rest0's LR4 low @ f1 + its all-pass; rest1 = rest0's
+        // LR4 high @ f1; band 2 / band 3 = rest1's LR4 low / high @ f2.
+        float* b0[2] = {blockBand_[0][0], blockBand_[0][1]};
+        float* b1[2] = {blockBand_[1][0], blockBand_[1][1]};
+        float* b2[2] = {blockBand_[2][0], blockBand_[2][1]};
+        float* b3[2] = {blockBand_[3][0], blockBand_[3][1]};  // rest0, then rest1, then band 3
+        copy(L, R, b0[0], b0[1]);
+        SvfPair* low0[] = {&t.lp0a, &t.lp0b, &t.apB0X1, &t.apB0X2};
+        runSvfChainBlock(low0, 4, b0[0], b0[1], n);
+        copy(L, R, b3[0], b3[1]);
+        SvfPair* high0[] = {&t.hp0a, &t.hp0b};
+        runSvfChainBlock(high0, 2, b3[0], b3[1], n);
+        copy(b3[0], b3[1], b1[0], b1[1]);
+        SvfPair* low1[] = {&t.lp1a, &t.lp1b, &t.apB1X2};
+        runSvfChainBlock(low1, 3, b1[0], b1[1], n);
+        SvfPair* high1[] = {&t.hp1a, &t.hp1b};
+        runSvfChainBlock(high1, 2, b3[0], b3[1], n);
+        copy(b3[0], b3[1], b2[0], b2[1]);
+        SvfPair* low2[] = {&t.lp2a, &t.lp2b};
+        runSvfChainBlock(low2, 2, b2[0], b2[1], n);
+        SvfPair* high2[] = {&t.hp2a, &t.hp2b};
+        runSvfChainBlock(high2, 2, b3[0], b3[1], n);
+        // The dry path, as in process(): only run while it can be heard (Mix below 100%). Mix
+        // only settles at 100% while its target is 100%, and the target only changes between
+        // blocks, so "heard" holds for the whole block from its start.
+        copy(L, R, blockDry_[0], blockDry_[1]);
+        const bool dryHeard = !(mix_ == 1.f && mixTarget_ == 1.f);
+        if (dryHeard) {
+            if (dryStale_) {
+                t.apDry0.clear();
+                t.apDry1.clear();
+                t.apDry2.clear();
+                dryStale_ = false;
+            }
+            SvfPair* dry[] = {&t.apDry0, &t.apDry1, &t.apDry2};
+            runSvfChainBlock(dry, 3, blockDry_[0], blockDry_[1], n);
+        } else {
+            dryStale_ = true;
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            const float band[2][4] = {
+                {blockBand_[0][0][i], blockBand_[1][0][i], blockBand_[2][0][i], blockBand_[3][0][i]},
+                {blockBand_[0][1][i], blockBand_[1][1][i], blockBand_[2][1][i], blockBand_[3][1][i]},
+            };
+            mixFrame(L[i], R[i], band, blockDry_[0][i], blockDry_[1][i], bands, detector);
+        }
+        // Mix reached 100% during the block: process() would have stopped running the dry path
+        // from there and marked it stale; it isn't heard again until Mix leaves 100%, when it is
+        // cleared either way.
+        if (mix_ == 1.f && mixTarget_ == 1.f) {
+            dryStale_ = true;
+        }
+        done += n;
+    }
 }
 void MultibandCompressor::readMeter(float* v, bool active) const {
     for (int b = 0; b < kMbcBandCount; ++b) {
