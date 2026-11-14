@@ -366,7 +366,6 @@ private fun MeasurementSection() {
                             checked = MeasurementNeutral.isAllowed(dsp.values, stage),
                             onCheckedChange = { setNeutralStageAllowed(dsp, stage, it) },
                             contentDescription = "Run ${stage.label} in measurement neutral",
-                            width = 72.dp,
                         )
                     }
                 }
