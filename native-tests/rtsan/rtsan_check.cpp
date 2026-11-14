@@ -53,7 +53,7 @@ std::array<float, kConfigSize> everythingOn() {
     c[sch::kVirtualEnabled] = 1.f;
     c[sch::kMonoBassEnabled] = 1.f;
     c[sch::kVirtualBassEnabled] = 1.f;
-    c[sch::kLoudnessEnabled] = 1.f;
+    c[sch::kDeepBassEnabled] = 1.f;
     c[sch::kMasterVolumeDb] = -20.f;
     c[sch::kHighXoPass] = 0.f;
     c[sch::kConvolverEnabled] = 1.f;

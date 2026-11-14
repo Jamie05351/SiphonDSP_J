@@ -7,7 +7,7 @@ Measurement setups you can trust: every state the UI shows comes from the native
 
 `INDEX_CROSSOVER_BYPASS` / `kCrossoverBypass`. On: the band split is removed entirely. The input
 stages (DC blocker, Mono Bass, Virtual Bass, Pre EQ, headroom, MBC, virtual centre) feed the
-summed-bus stages (tilt, post gain, channel mute, convolver, master limiter, volume, loudness, the
+summed-bus stages (tilt, post gain, channel mute, convolver, master limiter, volume, Deep bass, the
 hardware swap) as one full-range stereo path. Nothing of the bands runs: no routing matrix,
 crossover or subsonic filter, band EQ, all-pass, band delay, band gain, per-output polarity or
 mute, bus limiter or measurement mute, and **no added latency** (the band chain's alignment kernel
@@ -29,7 +29,7 @@ restart). The neutral set is `kStage*` bits 0..21:
 
 Pre EQ, crossover (forces the bypass), band EQ, band gains, band delays, polarity, all-pass,
 subsonic, routing, bus limiters, Mono Bass, virtual centre, Virtual Bass, MBC, tilt, convolver IR,
-master limiter, loudness, headroom (manual or automatic), post gain, the 3 Hz DC blocker and
+master limiter, Deep bass, headroom (manual or automatic), post gain, the 3 Hz DC blocker and
 measurement mute.
 
 Not in it: the **master volume** (the car's only adjustable volume while playing), channel mute

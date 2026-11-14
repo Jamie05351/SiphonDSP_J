@@ -38,9 +38,11 @@ struct Params {
     // the limiter, ramped so a step never clicks.
     float masterVolumeDb = 0.f;
     bool masterMute = false;
-    // Loudness compensation (v[294..295]): on/off and strength 0..1 (v[295] is percent).
-    bool loudnessEnabled = false;
-    float loudnessStrength = 1.f;
+    // Deep bass (v[294..295], v[312]): on/off, strength 0..1 (v[295] is percent) and the boost
+    // cap, dB.
+    bool deepBassEnabled = false;
+    float deepBassStrength = 1.f;
+    float deepBassMaxDb = 12.f;
     // Mono Bass (v[297..298]): on/off and the split frequency, Hz.
     bool monoBassEnabled = false;
     float monoBassFreq = 90.f;

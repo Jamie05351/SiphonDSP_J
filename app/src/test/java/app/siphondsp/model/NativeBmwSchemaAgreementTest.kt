@@ -159,8 +159,8 @@ class NativeBmwSchemaAgreementTest {
 
         "kMasterVolumeDb" to NativeBmwDspValues.INDEX_MASTER_VOLUME_DB,
         "kMasterMute" to NativeBmwDspValues.INDEX_MASTER_MUTE,
-        "kLoudnessEnabled" to NativeBmwDspValues.INDEX_LOUDNESS_ENABLED,
-        "kLoudnessStrength" to NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH,
+        "kDeepBassEnabled" to NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED,
+        "kDeepBassStrength" to NativeBmwDspValues.INDEX_DEEP_BASS_STRENGTH,
         "kHeadroomAuto" to NativeBmwDspValues.INDEX_HEADROOM_AUTO,
         "kMonoBassEnabled" to NativeBmwDspValues.INDEX_MONO_BASS_ENABLED,
         "kMonoBassFreq" to NativeBmwDspValues.INDEX_MONO_BASS_FREQ,
@@ -177,6 +177,7 @@ class NativeBmwSchemaAgreementTest {
         "kCrossoverBypass" to NativeBmwDspValues.INDEX_CROSSOVER_BYPASS,
         "kMeasurementNeutral" to NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL,
         "kNeutralAllow" to NativeBmwDspValues.INDEX_NEUTRAL_ALLOW,
+        "kDeepBassMaxDb" to NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB,
 
         // The stage bits native reports, neutralises and the self-test names (DspStage).
         "kStageNeutralCount" to DspStage.NEUTRAL_COUNT,

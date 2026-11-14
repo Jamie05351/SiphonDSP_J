@@ -169,25 +169,28 @@ void processLowCrossoverBlock(OutputRuntime& left, const OutputConfig& leftConfi
 void processMidCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames);
 void processHighCrossoverBlock(OutputRuntime& left, OutputRuntime& right, float* xl, float* xr, std::size_t frames);
 
-// Loudness compensation: as the master volume drops below full, a bass shelf and a small treble
-// shelf lift the ends of the spectrum the ear loses first at low level (equal-loudness contours),
-// so quiet listening keeps its body. Zero lift at full volume. Each lift is a fixed fraction of the
-// volume cut, capped, and always smaller than the cut itself -- it runs after the master volume,
+// Deep bass: a volume-dependent bass boost. As the master volume drops below full, one broad bell
+// lifts the lowest octave the ear loses first at low level, and slides deeper as it grows: 0 dB at
+// 50 Hz at full volume, +0.3 dB per dB of cut, the centre gliding down to 32 Hz at a 40 dB cut.
+// The gain is capped at the Max boost setting and scaled by Strength; the frequency follows the
+// volume alone. The lift is always smaller than the cut itself -- it runs after the master volume,
 // so it can never push the output above what full volume would produce.
-class Loudness {
+class DeepBass {
 public:
-    static constexpr float kBassHz = 100.f, kTrebleHz = 8000.f;
-    static constexpr float kBassPerDb = 0.3f, kTreblePerDb = 0.1f;  // dB of lift per dB of cut
-    static constexpr float kBassMaxDb = 12.f, kTrebleMaxDb = 4.f;
-    // The lift for a given volume (dB, <= 0) and strength (0..1), as [bass, treble] dB.
-    static void liftDb(float volumeDb, float strength, float& bassDb, float& trebleDb);
-    // Retunes the shelves for this volume/strength, keeping their state.
-    void rebuild(float volumeDb, float strength, float sampleRate);
+    static constexpr float kFullVolumeHz = 50.f, kQuietHz = 32.f;
+    static constexpr float kGlideCutDb = 40.f;  // the cut at which the centre reaches kQuietHz
+    static constexpr float kPerDb = 0.3f;       // dB of boost per dB of volume cut
+    static constexpr float kQ = 0.8f;
+    static constexpr float kMinMaxDb = 3.f, kMaxMaxDb = 15.f;
+    // The bell for a given volume (dB, <= 0), strength (0..1) and cap (dB): centre Hz and gain dB.
+    static void curve(float volumeDb, float strength, float maxDb, float& centreHz, float& gainDb);
+    // Retunes the bell for this volume/strength/cap, keeping its state.
+    void rebuild(float volumeDb, float strength, float maxDb, float sampleRate);
     void clear();
     void process(float& left, float& right);
 
 private:
-    Biquad bassL_, bassR_, trebleL_, trebleR_;
+    Biquad bellL_, bellR_;
 };
 
 // Output-bus tilt EQ: two low shelves (+g) and two high shelves (-g) per channel at one corner.

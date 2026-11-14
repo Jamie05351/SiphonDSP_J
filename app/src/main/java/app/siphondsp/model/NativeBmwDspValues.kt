@@ -317,9 +317,10 @@ object NativeBmwDspValues {
     const val MASTER_VOLUME_MIN_DB = -80f
     const val MASTER_VOLUME_MAX_DB = 0f
 
-    // Loudness compensation: bass/treble lift that follows the master volume (none at full volume).
-    const val INDEX_LOUDNESS_ENABLED = NativeBmwDspSchema.INDEX_LOUDNESS_ENABLED
-    const val INDEX_LOUDNESS_STRENGTH = NativeBmwDspSchema.INDEX_LOUDNESS_STRENGTH // percent, 0..100
+    // Deep bass: a bass bell that follows the master volume (none at full volume), see deepBassCurve().
+    const val INDEX_DEEP_BASS_ENABLED = NativeBmwDspSchema.INDEX_DEEP_BASS_ENABLED
+    const val INDEX_DEEP_BASS_STRENGTH = NativeBmwDspSchema.INDEX_DEEP_BASS_STRENGTH // percent, 0..100
+    const val INDEX_DEEP_BASS_MAX_DB = NativeBmwDspSchema.INDEX_DEEP_BASS_MAX_DB // boost cap, dB
     // Automatic headroom on (1) or manual (0). Kotlin-only -- native never reads this index; the
     // manual value stays in INDEX_HEADROOM either way, so switching back to manual restores it.
     const val INDEX_HEADROOM_AUTO = NativeBmwDspSchema.INDEX_HEADROOM_AUTO
@@ -458,13 +459,35 @@ object NativeBmwDspValues {
         if (values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } < .5f) return 0.0
         return virtualBassCutHz(values) * VIRTUAL_BASS_REMOVAL_RATIO
     }
-    // Mirrors native Loudness (NativeBmwCrossovers.h) -- the response graph draws the same lift.
-    const val LOUDNESS_BASS_HZ = 100.0
-    const val LOUDNESS_TREBLE_HZ = 8000.0
-    const val LOUDNESS_BASS_PER_DB = 0.3
-    const val LOUDNESS_TREBLE_PER_DB = 0.1
-    const val LOUDNESS_BASS_MAX_DB = 12.0
-    const val LOUDNESS_TREBLE_MAX_DB = 4.0
+    // Mirrors native DeepBass (NativeBmwCrossovers.h) -- the response graph and the Deep bass page
+    // draw the same bell.
+    const val DEEP_BASS_FULL_VOLUME_HZ = 50.0
+    const val DEEP_BASS_QUIET_HZ = 32.0
+    const val DEEP_BASS_GLIDE_CUT_DB = 40.0
+    const val DEEP_BASS_PER_DB = 0.3
+    const val DEEP_BASS_Q = 0.8
+    const val DEEP_BASS_MIN_MAX_DB = 3f
+    const val DEEP_BASS_MAX_MAX_DB = 15f
+
+    /** Deep bass's bell at this master volume: centre Hz and gain dB (0 dB when off). */
+    data class DeepBassCurve(val centreHz: Double, val gainDb: Double)
+
+    /**
+     * The bell native DeepBass::curve() builds: +[DEEP_BASS_PER_DB] dB per dB of volume cut, capped
+     * at Max boost and scaled by Strength, centred from [DEEP_BASS_FULL_VOLUME_HZ] at full volume
+     * down to [DEEP_BASS_QUIET_HZ] at a [DEEP_BASS_GLIDE_CUT_DB] cut. [volumeDb] overrides the
+     * stored master volume (the page draws the quietest curve too); off, the gain is 0.
+     */
+    fun deepBassCurve(values: FloatArray, volumeDb: Double? = null): DeepBassCurve {
+        val cut = (-(volumeDb ?: values[INDEX_MASTER_VOLUME_DB].toDouble())).coerceAtLeast(0.0)
+        val glide = minOf(cut, DEEP_BASS_GLIDE_CUT_DB) / DEEP_BASS_GLIDE_CUT_DB
+        val centre = DEEP_BASS_FULL_VOLUME_HZ * Math.pow(DEEP_BASS_QUIET_HZ / DEEP_BASS_FULL_VOLUME_HZ, glide)
+        if (values[INDEX_DEEP_BASS_ENABLED] < .5f) return DeepBassCurve(centre, 0.0)
+        val strength = (values[INDEX_DEEP_BASS_STRENGTH].toDouble() / 100.0).coerceIn(0.0, 1.0)
+        val cap = values.getOrElse(INDEX_DEEP_BASS_MAX_DB) { 12f }
+            .coerceIn(DEEP_BASS_MIN_MAX_DB, DEEP_BASS_MAX_MAX_DB).toDouble()
+        return DeepBassCurve(centre, minOf(cap, DEEP_BASS_PER_DB * cut) * strength)
+    }
     const val INDEX_HIGH_GAIN_L = NativeBmwDspSchema.INDEX_HIGH_GAIN_L
     const val INDEX_HIGH_GAIN_R = NativeBmwDspSchema.INDEX_HIGH_GAIN_R
     const val INDEX_HIGH_DELAY_L = NativeBmwDspSchema.INDEX_HIGH_DELAY_L

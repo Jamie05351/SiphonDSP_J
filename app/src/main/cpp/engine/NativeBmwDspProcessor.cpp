@@ -71,7 +71,7 @@ void NativeBmwDspProcessor::applySampleRate(float sr) {
         masterRampCoef_ = 1.f - std::exp(-1.f / (0.01f * sr));
         headroomRampCoef_ = 1.f - std::exp(-1.f / (kHeadroomRampSeconds * sr));
         outputRampCoef_ = 1.f - std::exp(-1.f / (kOutputRampSeconds * sr));
-        loudnessRampCoef_ = 1.f - std::exp(-1.f / (kLoudnessRampSeconds * sr));
+        levelRampCoef_ = 1.f - std::exp(-1.f / (kLevelRampSeconds * sr));
         monoBassFadeStep_ = 1.f / (kMonoBassFadeSeconds * sr);
         mixFadeStep_ = 1.f / (kMixFadeSeconds * sr);
         xoverFadeStep_ = 1.f / (kCrossoverFadeSeconds * sr);
@@ -153,9 +153,9 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
                 virtualBassRemoveMix_ = p_.virtualBassRemoveSub
                                             ? std::min(1.f, virtualBassRemoveMix_ + monoBassFadeStep_)
                                             : std::max(0.f, virtualBassRemoveMix_ - monoBassFadeStep_);
-                virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, loudnessRampCoef_);
+                virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, levelRampCoef_);
                 virtualBassCharacter_ =
-                    NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, loudnessRampCoef_);
+                    NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, levelRampCoef_);
                 virtualBass_.process(L[i], R[i], virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_,
                                      virtualBassCharacter_);
             }
@@ -463,22 +463,22 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
     }
     profiler_.lap(P::MasterLimiter);
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
-    // ramped toward its target so a steering-wheel step never clicks. Loudness compensation
-    // follows the volume, after it: its lift is always less than the cut. The switch and strength
+    // ramped toward its target so a steering-wheel step never clicks. Deep bass follows the
+    // volume, after it: its boost is always less than the cut. The switch and strength
     // ramp the effective strength (so on/off fades, no thump), and while that or the volume is
-    // moving the lift is retuned every 8 samples (see retuneLoudness()), so it never runs ahead
+    // moving the lift is retuned every 8 samples (see retuneDeepBass()), so it never runs ahead
     // of the attenuation. Fully off, the stage is skipped.
-    const float strengthTarget = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
+    const float strengthTarget = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
     for (std::size_t i = 0; i < frames; ++i) {
         masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
         float oL = L[i] * masterGain_, oR = R[i] * masterGain_;
-        const bool loudnessMoving = loudnessStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
-        loudnessStrength_ = NativeBmwDsp::rampToward(loudnessStrength_, strengthTarget, loudnessRampCoef_);
-        if (loudnessMoving && (++loudnessRetuneCounter_ & 7u) == 0) {
-            retuneLoudness();
+        const bool deepBassMoving = deepBassStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
+        deepBassStrength_ = NativeBmwDsp::rampToward(deepBassStrength_, strengthTarget, levelRampCoef_);
+        if (deepBassMoving && (++deepBassRetuneCounter_ & 7u) == 0) {
+            retuneDeepBass();
         }
-        if (loudnessStrength_ > 0.f) {
-            loudness_.process(oL, oR);
+        if (deepBassStrength_ > 0.f) {
+            deepBass_.process(oL, oR);
         }
         // Deliberate final-output swap -- DO NOT REMOVE OR "FIX" THIS.
         // The target vehicle's factory speaker wiring harness is physically reversed (L/R swapped
@@ -493,7 +493,7 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
         L[i] = oR;
         R[i] = oL;
     }
-    profiler_.lap(P::VolumeLoudness);
+    profiler_.lap(P::VolumeDeepBass);
 }
 
 void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
@@ -538,7 +538,7 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     convolver_.process(chunkConvL_.data(), chunkConvR_.data(), frames, p_.convolverEnabled,
                        p_.convolverGainDb);
     profiler_.lap(P::Convolver);
-    // The master limiter, volume, loudness and the hardware swap.
+    // The master limiter, volume, Deep bass and the hardware swap.
     processBackStages(frames);
     // The fault check, the output fade, the output guard and the capture tap.
     bool nonFinite = false, overRange = false;
@@ -618,8 +618,8 @@ void NativeBmwDspProcessor::clearChainState() {
     headroom_ = headroomTarget_;
     masterGain_ = masterGainTarget_;
     rebuildPolarityAndMute(/*snap=*/true);
-    loudnessStrength_ = p_.loudnessEnabled ? p_.loudnessStrength : 0.f;
-    retuneLoudness();
+    deepBassStrength_ = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
+    retuneDeepBass();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
     snapMixes();
     snapVirtualBass();
@@ -647,7 +647,7 @@ void NativeBmwDspProcessor::clearChainState() {
     measBus_.clear();
     convolver_.clearHistory();
     limiter_.clear();
-    loudness_.clear();
+    deepBass_.clear();
 }
 
 NativeBmwDspProcessor::GuardCounters NativeBmwDspProcessor::guardCounters() const {
@@ -843,7 +843,7 @@ void NativeBmwDspProcessor::publishStatus() {
     // Only while an IR is running too: readEngineStatus() checks that live.
     mark(sch::kStageConvolver, p_.convolverEnabled);
     mark(sch::kStageMasterLimiter, p_.limiterEnabled);
-    mark(sch::kStageLoudness, p_.loudnessEnabled && p_.loudnessStrength > 0.f);
+    mark(sch::kStageDeepBass, p_.deepBassEnabled && p_.deepBassStrength > 0.f);
     mark(sch::kStageHeadroom, p_.headroom != 0.f);
     mark(sch::kStagePostGain, p_.postGainL != 0.f || p_.postGainR != 0.f);
     mark(sch::kStageDcBlocker, p_.dcBlockerOn);

@@ -5,17 +5,20 @@
 using namespace nbtest;
 namespace sch = nbschema;
 
-// Loudness compensation: bass and a little treble lift that follows the master volume, applied
-// after it. No effect at full volume; the lift is always smaller than the volume cut.
+// Deep bass: a bell after the master volume that grows 0.3 dB per dB of volume cut (capped at Max
+// boost, scaled by Strength) and slides from 50 Hz down to 32 Hz as the volume drops. No effect at
+// full volume, nothing above the bass, and the boost is always smaller than the volume cut.
 
 namespace {
 
-std::array<float, kConfigSize> config(float volumeDb, bool loudness, float strengthPct = 100.f) {
+std::array<float, kConfigSize> config(float volumeDb, bool deepBass, float strengthPct = 100.f,
+                                      float maxDb = 12.f) {
     auto c = defaultConfig();
     c[sch::kTiltEnabled] = 0.f;
     c[sch::kMasterVolumeDb] = volumeDb;
-    c[sch::kLoudnessEnabled] = loudness ? 1.f : 0.f;
-    c[sch::kLoudnessStrength] = strengthPct;
+    c[sch::kDeepBassEnabled] = deepBass ? 1.f : 0.f;
+    c[sch::kDeepBassStrength] = strengthPct;
+    c[sch::kDeepBassMaxDb] = maxDb;
     return c;
 }
 
@@ -25,47 +28,70 @@ double levelDb(const std::array<float, kConfigSize>& c, double freqHz, double am
     return linToDb(channelMagnitudeAt(out, 0, freqHz) / amp);
 }
 
+// The boost Deep bass adds at freqHz, at this volume / strength / cap.
+double boostDb(float volumeDb, double freqHz, float strengthPct = 100.f, float maxDb = 12.f) {
+    return levelDb(config(volumeDb, true, strengthPct, maxDb), freqHz) - levelDb(config(volumeDb, false), freqHz);
+}
+
 }  // namespace
 
-TEST_CASE("loudness does nothing at full volume") {
-    for (double f : {40.0, 1000.0, 12000.0}) {
+TEST_CASE("deep bass does nothing at full volume") {
+    for (double f : {32.0, 50.0, 1000.0}) {
         INFO("f = ", f);
-        CHECK(std::fabs(levelDb(config(0.f, true), f) - levelDb(config(0.f, false), f)) < 0.01);
+        CHECK(std::fabs(boostDb(0.f, f)) < 0.01);
     }
 }
 
-TEST_CASE("loudness lifts bass a lot and treble a little as the volume drops") {
-    // -30 dB: bass shelf +9 dB (0.3 dB per dB of cut), treble shelf +3 dB (0.1 dB per dB).
-    const double bass = levelDb(config(-30.f, true), 40.0) - levelDb(config(-30.f, false), 40.0);
-    const double mid = levelDb(config(-30.f, true), 1000.0) - levelDb(config(-30.f, false), 1000.0);
-    const double treble = levelDb(config(-30.f, true), 14000.0) - levelDb(config(-30.f, false), 14000.0);
-    INFO("lift at 40 Hz ", bass, " dB, 1 kHz ", mid, " dB, 14 kHz ", treble, " dB");
-    CHECK(bass > 7.0);
-    CHECK(bass < 9.5);
-    CHECK(std::fabs(mid) < 1.0);
-    CHECK(treble > 2.0);
-    CHECK(treble < 3.5);
+TEST_CASE("deep bass boosts the low bass and leaves the mids and treble alone") {
+    // -20 dB: +6 dB (0.3 dB per dB of cut) centred near 40 Hz.
+    const double bass = boostDb(-20.f, 40.0);
+    const double mid = boostDb(-20.f, 1000.0);
+    const double treble = boostDb(-20.f, 12000.0);
+    INFO("boost at 40 Hz ", bass, " dB, 1 kHz ", mid, " dB, 12 kHz ", treble, " dB");
+    CHECK(bass > 5.0);
+    CHECK(bass < 6.3);
+    CHECK(std::fabs(mid) < 0.1);
+    CHECK(std::fabs(treble) < 0.01);
 }
 
-TEST_CASE("loudness strength scales the lift") {
-    const double full = levelDb(config(-30.f, true, 100.f), 40.0) - levelDb(config(-30.f, false), 40.0);
-    const double half = levelDb(config(-30.f, true, 50.f), 40.0) - levelDb(config(-30.f, false), 40.0);
+TEST_CASE("the boost slides deeper as the volume drops") {
+    // Loud-ish: centred near 47 Hz, so 55 Hz gets more than 28 Hz. Quiet: centred at 32 Hz.
+    const double loud28 = boostDb(-5.f, 28.0), loud55 = boostDb(-5.f, 55.0);
+    const double quiet28 = boostDb(-40.f, 28.0), quiet55 = boostDb(-40.f, 55.0);
+    INFO("-5 dB: 28 Hz ", loud28, " / 55 Hz ", loud55, "   -40 dB: 28 Hz ", quiet28, " / 55 Hz ", quiet55);
+    CHECK(loud55 > loud28);
+    CHECK(quiet28 > quiet55);
+    // At -40 dB the full 12 dB lands on the centre.
+    CHECK(std::fabs(boostDb(-40.f, 32.0) - 12.0) < 0.5);
+}
+
+TEST_CASE("max boost caps the deep bass") {
+    const double capped = boostDb(-60.f, 32.0, 100.f, 6.f);
+    INFO("-60 dB with a 6 dB cap: ", capped, " dB");
+    CHECK(std::fabs(capped - 6.0) < 0.3);
+    // The cap only bites once the volume asks for more: -10 dB wants +3, under a 6 dB cap.
+    CHECK(std::fabs(boostDb(-10.f, 45.0, 100.f, 6.f) - boostDb(-10.f, 45.0)) < 0.01);
+}
+
+TEST_CASE("deep bass strength scales the boost") {
+    const double full = boostDb(-30.f, 35.0, 100.f);
+    const double half = boostDb(-30.f, 35.0, 50.f);
     INFO("100% ", full, " dB, 50% ", half, " dB");
-    CHECK(std::fabs(half - full / 2) < 0.6);
+    CHECK(std::fabs(half - full / 2) < 0.3);
 }
 
-TEST_CASE("loudness never lifts anything above its full-volume level") {
-    for (float volumeDb : {-3.f, -10.f, -40.f}) {
-        for (double f : {30.0, 60.0, 15000.0}) {
+TEST_CASE("deep bass never lifts anything above its full-volume level") {
+    for (float volumeDb : {-3.f, -10.f, -40.f, -60.f}) {
+        for (double f : {25.0, 32.0, 45.0, 60.0}) {
             INFO("volume ", volumeDb, " dB, f = ", f);
-            CHECK(levelDb(config(volumeDb, true), f) <= levelDb(config(0.f, false), f) + 0.01);
+            CHECK(levelDb(config(volumeDb, true, 100.f, 15.f), f) <= levelDb(config(0.f, false), f) + 0.01);
         }
     }
 }
 
-TEST_CASE("a volume step down with loudness on never spikes above full-volume level") {
-    // The master volume ramps over ~10 ms; the loudness lift must follow that ramp, not jump to
-    // the new volume's lift while the gain is still near full -- that would boost bass above
+TEST_CASE("a volume step down with deep bass on never spikes above full-volume level") {
+    // The master volume ramps over ~10 ms; the deep bass boost must follow that ramp, not jump to
+    // the new volume's boost while the gain is still near full -- that would boost bass above
     // full-volume level, after the limiter.
     auto peakOf = [](NativeBmwDspProcessor& proc, std::size_t frames, std::size_t& pos) {
         const double w = 2.0 * kPi * 40.0 / kSampleRate;
@@ -98,7 +124,7 @@ TEST_CASE("a volume step down with loudness on never spikes above full-volume le
     CHECK(duringStep <= fullVolumePeak * 1.01f);
 }
 
-TEST_CASE("switching loudness on or off at low volume fades instead of stepping") {
+TEST_CASE("switching deep bass on or off at low volume fades instead of stepping") {
     const double w = 2.0 * kPi * 50.0 / kSampleRate;
     auto block = [&](std::size_t pos, std::size_t frames) {
         std::vector<float> buf(2 * frames);
@@ -130,7 +156,7 @@ TEST_CASE("switching loudness on or off at low volume fades instead of stepping"
         pos += 4096;
         proc.process(steady.data(), steady.size());
         const float steadyStep = maxStep(steady, last);
-        c[sch::kLoudnessEnabled] = turnOn ? 1.f : 0.f;
+        c[sch::kDeepBassEnabled] = turnOn ? 1.f : 0.f;
         REQUIRE(proc.configure(c.data(), c.size()));
         auto after = block(pos, 4096);
         proc.process(after.data(), after.size());

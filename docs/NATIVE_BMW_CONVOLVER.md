@@ -1,7 +1,7 @@
 # Convolver
 
 A stereo FIR convolver, right after the band sum (per-output polarity/mute, tilt, post gain,
-channel mute, measurement bus) and **ahead of the master limiter**, master volume, loudness, the
+channel mute, measurement bus) and **ahead of the master limiter**, master volume, Deep bass, the
 deliberate hardware L/R swap and the output guard (`NativeBmwDspProcessor::processChunk()`). It
 runs on logical L/R, so the IR's left channel is the car's left. It sits ahead of the limiter
 because a phase-correcting IR raises the crest factor without raising the magnitude: those peaks

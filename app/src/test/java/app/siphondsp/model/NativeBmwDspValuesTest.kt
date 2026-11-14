@@ -935,9 +935,43 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun deepBassShipsOffWithA12DbCap() {
+        // A save from before the 312 -> 313 growth loads the 12 dB cap the old loudness used.
+        assertEquals(313, NativeBmwDspValues.SIZE)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED], 0f)
+        assertEquals(100f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_STRENGTH], 0f)
+        assertEquals(12f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB], 0f)
+    }
+
+    @Test
+    fun deepBassCurveMatchesNative() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        values[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED] = 1f
+        // Full volume: nothing, centred at 50 Hz.
+        var c = NativeBmwDspValues.deepBassCurve(values, volumeDb = 0.0)
+        assertEquals(50.0, c.centreHz, 1e-9)
+        assertEquals(0.0, c.gainDb, 0.0)
+        // -20 dB: +6 dB at 50 * (32/50)^0.5 = 40 Hz.
+        c = NativeBmwDspValues.deepBassCurve(values, volumeDb = -20.0)
+        assertEquals(40.0, c.centreHz, 1e-9)
+        assertEquals(6.0, c.gainDb, 1e-9)
+        // -60 dB: capped at Max boost, centre held at 32 Hz.
+        values[NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB] = 9f
+        c = NativeBmwDspValues.deepBassCurve(values, volumeDb = -60.0)
+        assertEquals(32.0, c.centreHz, 1e-9)
+        assertEquals(9.0, c.gainDb, 1e-9)
+        // Strength scales the gain.
+        values[NativeBmwDspValues.INDEX_DEEP_BASS_STRENGTH] = 50f
+        assertEquals(4.5, NativeBmwDspValues.deepBassCurve(values, volumeDb = -60.0).gainDb, 1e-9)
+        // Off: no gain.
+        values[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED] = 0f
+        assertEquals(0.0, NativeBmwDspValues.deepBassCurve(values, volumeDb = -60.0).gainDb, 0.0)
+    }
+
+    @Test
     fun crossoverBypassAndMeasurementNeutralShipOff() {
         // A save from before the 309 -> 312 growth loads these defaults: the split runs, neutral off.
-        assertEquals(312, NativeBmwDspValues.SIZE)
+        assertTrue(NativeBmwDspValues.SIZE > NativeBmwDspValues.INDEX_NEUTRAL_ALLOW)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_CROSSOVER_BYPASS], 0f)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_MEASUREMENT_NEUTRAL], 0f)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_NEUTRAL_ALLOW], 0f)

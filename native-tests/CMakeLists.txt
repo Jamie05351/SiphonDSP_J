@@ -62,7 +62,7 @@ add_executable(native_tests
     virtual_test.cpp
     alignment_delay_test.cpp
     retune_continuity_test.cpp
-    loudness_test.cpp
+    deep_bass_test.cpp
     mono_bass_test.cpp
     virtual_bass_test.cpp
     flush_to_zero_test.cpp

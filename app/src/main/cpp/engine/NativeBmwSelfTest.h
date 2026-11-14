@@ -10,7 +10,7 @@
 // touching the live audio. Only three things differ, so the result describes the chain and not
 // the moment: the built-in signal generator and channel mute are off, and a master mute is lifted.
 // The master volume runs as set and is divided back out: it is the only volume the car can change
-// while playing, so it is reported, not counted as a deviation (and loudness, which follows it,
+// while playing, so it is reported, not counted as a deviation (and Deep bass, which follows it,
 // is measured at the volume it really runs at).
 //
 // An impulse goes into Left, then (after a stream start) into Right, each through kSelfTestSeconds

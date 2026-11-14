@@ -72,7 +72,7 @@ object SelfTestRunner {
     init {
         // A shown result describes the config it measured: dropped as soon as that changes. The
         // master volume (the car's volume, turned while driving) is excluded from the test, so a
-        // volume step keeps it -- unless loudness, which follows the volume, is running.
+        // volume step keeps it -- unless Deep bass, which follows the volume, is running.
         scope.launch {
             AppEvents.of<AppEvent.NativeBmwDspUpdated>().collect { event ->
                 synchronized(this@SelfTestRunner) {
@@ -87,12 +87,12 @@ object SelfTestRunner {
 
     private fun sameButVolume(a: FloatArray?, b: FloatArray): Boolean {
         if (a == null || a.size != b.size) return false
-        val loudness = b[NativeBmwDspValues.INDEX_LOUDNESS_ENABLED] >= .5f &&
-            MeasurementNeutral.runs(b, DspStage.LOUDNESS)
+        val deepBass = b[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED] >= .5f &&
+            MeasurementNeutral.runs(b, DspStage.DEEP_BASS)
         for (i in a.indices) {
             if (a[i] == b[i]) continue
             val volume = i == NativeBmwDspValues.INDEX_MASTER_VOLUME_DB || i == NativeBmwDspValues.INDEX_MASTER_MUTE
-            if (!volume || loudness) return false
+            if (!volume || deepBass) return false
         }
         return true
     }
