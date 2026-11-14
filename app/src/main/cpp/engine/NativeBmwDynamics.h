@@ -226,6 +226,11 @@ public:
     void snapMix();
     // Splits the stereo bus into 4 bands, compresses each, sums flat, blends dry/wet.
     void process(float& left, float& right, const MbcBands& bands, const DetectorTiming& detector);
+    // process() over a block of frames in place, bit-identical to calling it frame by frame: the
+    // split tree's seven chains each run over the block (runSvfChainBlock(): skewed, coefficients
+    // and state in registers), then the detectors, gains and mix frame by frame as before.
+    void processBlock(float* left, float* right, std::size_t frames, const MbcBands& bands,
+                      const DetectorTiming& detector);
     // 12 floats: 4 bands x [inputDb, outputDb, gainReductionDb]; idle values when !active.
     void readMeter(float* values, bool active) const;
 
@@ -259,6 +264,13 @@ private:
     unsigned controlCountdown_ = 0;
     // The dry path's all-passes sat unused (Mix settled at 100%): cleared before they run again.
     bool dryStale_ = false;
+    // The bands' output for frame i, after the split (each sample of one band, per channel).
+    void mixFrame(float& l, float& r, const float (&band)[2][4], float dryL, float dryR,
+                  const MbcBands& bands, const DetectorTiming& detector);
+    // processBlock()'s working buffers: one block of each band and the dry path, per channel.
+    static constexpr std::size_t kBlock = 64;
+    float blockBand_[4][2][kBlock]{};
+    float blockDry_[2][kBlock]{};
     // Per-band published meter, aggregated across L/R. Atomics (not a lock) so readMeter() can
     // be polled from the UI thread.
     struct BandMeter {
