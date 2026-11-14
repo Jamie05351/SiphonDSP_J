@@ -465,15 +465,17 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
     // Master volume -- the very last gain, after the limiter (which so always sees full level),
     // ramped toward its target so a steering-wheel step never clicks. Deep bass follows the
     // volume, after it: its boost is always less than the cut. The switch and strength
-    // ramp the effective strength (so on/off fades, no thump), and while that or the volume is
-    // moving the lift is retuned every 8 samples (see retuneDeepBass()), so it never runs ahead
+    // ramp the effective strength (so on/off fades, no thump) and Max boost ramps the same way;
+    // while any of those or the volume is moving the boost is retuned every 8 samples (see retuneDeepBass()), so it never runs ahead
     // of the attenuation. Fully off, the stage is skipped.
     const float strengthTarget = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
     for (std::size_t i = 0; i < frames; ++i) {
         masterGain_ = NativeBmwDsp::rampToward(masterGain_, masterGainTarget_, masterRampCoef_);
         float oL = L[i] * masterGain_, oR = R[i] * masterGain_;
-        const bool deepBassMoving = deepBassStrength_ != strengthTarget || masterGain_ != masterGainTarget_;
+        const bool deepBassMoving = deepBassStrength_ != strengthTarget || deepBassMaxDb_ != p_.deepBassMaxDb ||
+                                    masterGain_ != masterGainTarget_;
         deepBassStrength_ = NativeBmwDsp::rampToward(deepBassStrength_, strengthTarget, levelRampCoef_);
+        deepBassMaxDb_ = NativeBmwDsp::rampToward(deepBassMaxDb_, p_.deepBassMaxDb, levelRampCoef_);
         if (deepBassMoving && (++deepBassRetuneCounter_ & 7u) == 0) {
             retuneDeepBass();
         }
@@ -619,6 +621,7 @@ void NativeBmwDspProcessor::clearChainState() {
     masterGain_ = masterGainTarget_;
     rebuildPolarityAndMute(/*snap=*/true);
     deepBassStrength_ = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
+    deepBassMaxDb_ = p_.deepBassMaxDb;
     retuneDeepBass();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
     snapMixes();

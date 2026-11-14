@@ -165,3 +165,52 @@ TEST_CASE("switching deep bass on or off at low volume fades instead of stepping
         CHECK(edit < steadyStep * 3.f);
     }
 }
+
+TEST_CASE("a max boost change at a deep cut glides instead of stepping") {
+    // -60 dB asks for the full cap: 15 -> 3 dB would drop the bell 12 dB at once without the ramp.
+    const double w = 2.0 * kPi * 32.0 / kSampleRate;
+    auto block = [&](std::size_t pos, std::size_t frames) {
+        std::vector<float> buf(2 * frames);
+        for (std::size_t n = 0; n < frames; ++n) {
+            buf[2 * n] = buf[2 * n + 1] = static_cast<float>(0.8 * std::sin(w * (pos + n)));
+        }
+        return buf;
+    };
+    auto maxStep = [](const std::vector<float>& b, float& last) {
+        float worst = 0.f;
+        for (std::size_t n = 0; n < b.size(); n += 2) {
+            worst = std::max(worst, std::fabs(b[n] - last));
+            last = b[n];
+        }
+        return worst;
+    };
+    for (bool down : {true, false}) {
+        NativeBmwDspProcessor proc;
+        auto c = config(-60.f, true, 100.f, down ? 15.f : 3.f);
+        proc.setSampleRate(kSampleRate);
+        REQUIRE(proc.configure(c.data(), c.size()));
+        std::size_t pos = 0;
+        auto warm = block(pos, 48000);
+        pos += 48000;
+        proc.process(warm.data(), warm.size());
+        float last = warm[warm.size() - 2];
+        auto steady = block(pos, 4096);
+        pos += 4096;
+        proc.process(steady.data(), steady.size());
+        const float steadyStep = maxStep(steady, last);
+        c[sch::kDeepBassMaxDb] = down ? 3.f : 15.f;
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto after = block(pos, 4096);
+        pos += 4096;
+        proc.process(after.data(), after.size());
+        const float edit = maxStep(after, last);
+        auto settled = block(pos, 4096);
+        proc.process(settled.data(), settled.size());
+        const float settledStep = maxStep(settled, last);
+        // A step jumps far past both the old and the new level's own sample-to-sample movement
+        // (an unramped 12 dB cap change measures 70..150x); the ramp stays within ~1.2x.
+        INFO((down ? "15 -> 3 dB" : "3 -> 15 dB"), ": before ", steadyStep, "  across the change ", edit,
+             "  settled ", settledStep);
+        CHECK(edit < std::max(steadyStep, settledStep) * 1.5f);
+    }
+}

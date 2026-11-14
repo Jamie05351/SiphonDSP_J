@@ -753,6 +753,7 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         }
         // ...nor fade Deep bass in at start-up.
         deepBassStrength_ = p_.deepBassEnabled ? p_.deepBassStrength : 0.f;
+        deepBassMaxDb_ = p_.deepBassMaxDb;
         retuneDeepBass();
         // ...nor crossfade Mono Bass in.
         monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
@@ -990,7 +991,7 @@ void NativeBmwDspProcessor::rebuildHighCrossover() {
 void NativeBmwDspProcessor::retuneDeepBass() {
     auto cutDb = [](float gain) { return -20.f * std::log10(std::max(gain, 1e-6f)); };
     const float cut = std::min(cutDb(masterGain_), cutDb(masterGainTarget_));
-    deepBass_.rebuild(-cut, deepBassStrength_, p_.deepBassMaxDb, sampleRate_);
+    deepBass_.rebuild(-cut, deepBassStrength_, deepBassMaxDb_, sampleRate_);
 }
 void NativeBmwDspProcessor::updateDelays() {
     using NativeBmwDsp::delaySamples;

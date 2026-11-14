@@ -585,6 +585,9 @@ private:
     // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
     // enough that the stepwise retunes are far smaller than the signal's own movement.
     float deepBassStrength_ = 0.f;
+    // Effective Max boost (dB), ramped toward p_ the same way, so a cap change at a deep volume
+    // cut glides instead of stepping the bell's gain (up to 12 dB) at once.
+    float deepBassMaxDb_ = 12.f;
     static constexpr float kLevelRampSeconds = 0.05f;
     float levelRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
     // On/off crossfades, linear over kMixFadeSeconds (kCrossoverFadeSeconds for the crossover
