@@ -43,6 +43,9 @@ struct Params {
     bool deepBassEnabled = false;
     float deepBassStrength = 1.f;
     float deepBassMaxDb = 12.f;
+    // v[313..314]: the BW2/BW4 pair auto-correction, opted into per boundary (see
+    // NativeBmwDsp::pairCrossovers). Off, a pair runs exactly as set.
+    bool lowMidAutoPair = false, midHighAutoPair = false;
     // Mono Bass (v[297..298]): on/off and the split frequency, Hz.
     bool monoBassEnabled = false;
     float monoBassFreq = 90.f;

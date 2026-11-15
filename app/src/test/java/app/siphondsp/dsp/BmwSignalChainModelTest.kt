@@ -440,10 +440,10 @@ class BmwSignalChainModelTest {
             setOutput(values, output, NativeBmwDspValues.FIELD_SUBSONIC_ENABLED, 0f)
         }
         val result = compute(values)
-        // Low and Mid both BW4 is a pair the engine auto-corrects (CrossoverPairing): the lowpass
-        // sits at 200 / k and the highpass at 200 * k (in the prewarped domain).
-        val lowCorner = CrossoverPairing.corner(200.0, (1f / CrossoverPairing.BW4_SPREAD).toDouble(), SAMPLE_RATE)
-        val highCorner = CrossoverPairing.corner(200.0, CrossoverPairing.BW4_SPREAD.toDouble(), SAMPLE_RATE)
+        // Low and Mid both BW4 is a pair auto-pair would correct, but it ships off: both corners
+        // sit at 200 Hz exactly as set.
+        val lowCorner = 200.0
+        val highCorner = 200.0
         for (channel in 0..1) {
             for (i in curves.frequencies.indices) {
                 // |H_LP|^2 = 1 / (1 + (w/wc)^8); the digital bilinear warp uses tan(pi f / fs).

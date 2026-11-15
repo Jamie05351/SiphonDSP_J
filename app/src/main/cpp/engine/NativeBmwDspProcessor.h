@@ -40,7 +40,7 @@ public:
     // generated from app/src/main/schema/native_bmw_dsp.schema into NativeBmwDspSchema.h (with the
     // Kotlin side and docs/NATIVE_BMW_DSP_SCHEMA.md). kConfigSize is pinned to it by a static_assert
     // there. Slots are append-only: saves are stored by index.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 313 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 315 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -205,7 +205,12 @@ public:
     //     parsePeq()'s build() skip (peqBandSkipped()) -- a band this processor discarded
     //     as a no-op is reported as inactive even though its raw values are still shown.
     //   then the engine status block: kEngineStatusSize doubles, laid out as readEngineStatus().
-    enum : std::size_t { kTruthOutputWidth = 40 };
+    //   then the crossover auto-pair block (kTruthPairingWidth doubles): lowMidAutoPair,
+    //   midHighAutoPair (the switches, 0/1), then for Left and Right: the corners the filters are
+    //   really built at -- Low lowpass, Mid highpass, Mid lowpass, High highpass (Hz) -- then
+    //   lowMidCorrected, midHighCorrected, midInverted, highInverted (0/1; the polarity flips are
+    //   the ones the pairing adds on top of the user's own).
+    enum : std::size_t { kTruthOutputWidth = 40, kTruthPairingWidth = 2 + 2 * 8 };
     std::vector<double> captureTruthSnapshot();
 
     // Measurement neutral, as configure() applies it: in (a full kConfigSize config) copied to

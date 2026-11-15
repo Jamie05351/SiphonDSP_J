@@ -214,6 +214,8 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
     next.deepBassStrength = clampIn(v[nbschema::kDeepBassStrength], 0, 100) * .01f;
     next.deepBassMaxDb = clampIn(v[nbschema::kDeepBassMaxDb], NativeBmwDsp::DeepBass::kMinMaxDb,
                                  NativeBmwDsp::DeepBass::kMaxMaxDb);
+    next.lowMidAutoPair = flagIn(v[nbschema::kLowMidAutoPair]);
+    next.midHighAutoPair = flagIn(v[nbschema::kMidHighAutoPair]);
     next.monoBassEnabled = flagIn(v[nbschema::kMonoBassEnabled]);
     next.monoBassFreq = clampIn(v[nbschema::kMonoBassFreq], NativeBmwDsp::MonoBass::kMinHz,
                                 NativeBmwDsp::MonoBass::kMaxHz);
@@ -948,9 +950,10 @@ void NativeBmwDspProcessor::rebuildSubsonic() {
 // being auto-corrected); outputConfigs_ keeps the frequencies as set.
 bool NativeBmwDspProcessor::updatePairing() {
     // The crossover bypass doesn't take part: the pairing belongs to the split itself, so turning
-    // the bypass off brings back exactly the crossover that was running before.
-    const bool lowMidRuns = true;
-    const bool midHighRuns = !p_.highXoPass;
+    // the bypass off brings back exactly the crossover that was running before. Each boundary is
+    // corrected only while its auto-pair switch is on (v[313..314]); off, the pair runs as set.
+    const bool lowMidRuns = p_.lowMidAutoPair;
+    const bool midHighRuns = p_.midHighAutoPair && !p_.highXoPass;
     bool changedAny = false;
     for (std::size_t side = 0; side < pairing_.size(); ++side) {
         const auto& low = outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft) + side];
