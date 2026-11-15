@@ -200,7 +200,6 @@ bool bandStage(int bit) {
         case sch::kStagePolarity:
         case sch::kStageAllPass:
         case sch::kStageSubsonic:
-        case sch::kStageRouting:
         case sch::kStageBusLimiter:
         case sch::kStageMeasurementMute:
             return true;

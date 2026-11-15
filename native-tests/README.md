@@ -4,7 +4,7 @@ Host-side unit tests for the custom BMW DSP core (`NativeBmwDspProcessor`).
 
 The app has ~130 JVM tests, but they only cover the Kotlin side and the *frequency-domain
 mirror* of the DSP (`BmwResponseCalculator`). The actual per-sample C++ — compressor detectors,
-the multiband compressor, the master and per-bus limiters, the routing matrix and the deliberate
+the multiband compressor, the master and per-bus limiters, the band split and the deliberate
 L/R swap — had no automated coverage. Every recent bug in that layer (the old Mono Bass stereo
 cancellation, since removed; the makeup-slider zipper) lived exactly there.
 

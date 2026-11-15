@@ -28,8 +28,8 @@ class StageProfileTest {
     @Test
     fun layoutMatchesTheNativeStageCount() {
         // NativeBmwDsp::StageProfiler: 8 header values, then [total, max] per stage.
-        assertEquals(20, StageProfile.STAGE_NAMES.size)
-        assertEquals(8 + 2 * 20, StageProfile.SIZE)
+        assertEquals(19, StageProfile.STAGE_NAMES.size)
+        assertEquals(8 + 2 * 19, StageProfile.SIZE)
         assertNull(StageProfile.parse(DoubleArray(10)))
     }
 

@@ -8,7 +8,7 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 
 **Reader**: *native* = `configure()` reads and validates it (a non-finite value rejects the whole update; native-tests checks this for every slot); *Kotlin only* = native never reads it (migration markers, UI state, legacy values Kotlin migrates from); *reserved* = nothing reads it.
 
-229 native, 80 Kotlin only, 6 reserved.
+217 native, 80 Kotlin only, 18 reserved.
 
 
 ## Enabled, retired band passthroughs (1..2), channelMute, measurementMute
@@ -97,18 +97,18 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | 44 | 100 | reserved |  |  | unused (was monoBassBlend) |
 | 45 | 0 | reserved |  |  | unused (was monoBassMakeup) |
 
-## Routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
+## Retired routing matrix (Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]) -- removed: no UI ever set it, the engine feeds every Left band from Front L and every Right band from Front R
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 46 | 1 | native | `INDEX_ROUTING`, `INDEX_ROUTE_LOW_LEFT_FRONT_LEFT` | `kRoutingBase` | LowL <- FrontL |
-| 47 | 0 | native | `INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT` |  | LowL <- FrontR |
-| 48 | 0 | native | `INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT` |  | LowR <- FrontL |
-| 49 | 1 | native | `INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT` |  | LowR <- FrontR |
-| 50 | 1 | native | `INDEX_ROUTE_MID_LEFT_FRONT_LEFT` |  | MidL <- FrontL |
-| 51 | 0 | native | `INDEX_ROUTE_MID_LEFT_FRONT_RIGHT` |  | MidL <- FrontR |
-| 52 | 0 | native | `INDEX_ROUTE_MID_RIGHT_FRONT_LEFT` |  | MidR <- FrontL |
-| 53 | 1 | native | `INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT` |  | MidR <- FrontR |
+| 46 | 1 | reserved |  |  | LowL <- FrontL (retired routing coefficient) |
+| 47 | 0 | reserved |  |  | LowL <- FrontR (retired routing coefficient) |
+| 48 | 0 | reserved |  |  | LowR <- FrontL (retired routing coefficient) |
+| 49 | 1 | reserved |  |  | LowR <- FrontR (retired routing coefficient) |
+| 50 | 1 | reserved |  |  | MidL <- FrontL (retired routing coefficient) |
+| 51 | 0 | reserved |  |  | MidL <- FrontR (retired routing coefficient) |
+| 52 | 0 | reserved |  |  | MidR <- FrontL (retired routing coefficient) |
+| 53 | 1 | reserved |  |  | MidR <- FrontR (retired routing coefficient) |
 
 ## Eight all-pass sections (2 per output x 4 outputs), each [enabled, order, freq Hz, Q] -- all disabled by default
 
@@ -361,14 +361,14 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | 213 | 0 | native | `INDEX_HIGH_DELAY_L` | `kHighDelayL` | highDelayL |
 | 214 | 0 | native | `INDEX_HIGH_DELAY_R` | `kHighDelayR` | highDelayR |
 
-## High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR] -- same identity default as Low/Mid.
+## Retired High routing ([High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR]) -- removed with the Low/Mid matrix
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 215 | 1 | native | `INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT` | `kHighRoutingBase` | routeHighLeftFrontLeft |
-| 216 | 0 | native | `INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT` |  | routeHighLeftFrontRight |
-| 217 | 0 | native | `INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT` |  | routeHighRightFrontLeft |
-| 218 | 1 | native | `INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT` |  | routeHighRightFrontRight |
+| 215 | 1 | reserved |  |  | routeHighLeftFrontLeft (retired routing coefficient) |
+| 216 | 0 | reserved |  |  | routeHighLeftFrontRight (retired routing coefficient) |
+| 217 | 0 | reserved |  |  | routeHighRightFrontLeft (retired routing coefficient) |
+| 218 | 1 | reserved |  |  | routeHighRightFrontRight (retired routing coefficient) |
 
 ## High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
 
@@ -568,7 +568,6 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | `kStagePolarity` | 5 | stage bit: per-output polarity inversion |
 | `kStageAllPass` | 6 | stage bit: per-output all-pass sections |
 | `kStageSubsonic` | 7 | stage bit: Low's subsonic high-pass |
-| `kStageRouting` | 8 | stage bit: a non-identity routing matrix |
 | `kStageBusLimiter` | 9 | stage bit: the per-band bus limiters |
 | `kStageMonoBass` | 10 | stage bit: Mono Bass |
 | `kStageVirtualCentre` | 11 | stage bit: the virtual-centre stage |
@@ -585,7 +584,6 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | `kStageNeutralCount` | 22 | bits 0..21 are the stages measurement neutral bypasses |
 | `kStageChannelMute` | 22 | stage bit (report only): channel mute |
 | `kStageSignalGenerator` | 23 | stage bit (report only): the built-in signal generator |
-| `kRoutingStride` | 2 |  |
 | `kAllPassSectionWidth` | 4 |  |
 | `kAllPassSectionsPerOutput` | 2 |  |
 | `kOutputConfigWidth` | 13 |  |
@@ -609,7 +607,6 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | `kMidUpperXoWidth` | 2 |  |
 | `kMidUpperXoFreq` | 0 |  |
 | `kMidUpperXoEnabled` | 1 |  |
-| `kHighRoutingStride` | 2 |  |
 | `kVirtualFeedBase` | 273 |  |
 | `kVirtualFeedWidth` | 7 |  |
 | `kVirtualFeedGain` | 0 |  |

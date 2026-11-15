@@ -149,4 +149,8 @@ struct NativeBmwDspProcessorTestAccess {
     static void poisonMasterGain(NativeBmwDspProcessor& proc) {
         proc.masterGain_ = std::numeric_limits<float>::quiet_NaN();
     }
+    // The same for the headroom ramp, ahead of the band split.
+    static void poisonHeadroom(NativeBmwDspProcessor& proc) {
+        proc.headroom_ = std::numeric_limits<float>::quiet_NaN();
+    }
 };

@@ -171,16 +171,36 @@ TEST_CASE("isolate-Mid bus upper LPF follows each side's own upper-corner enable
     }
 }
 
-TEST_CASE("kRoutingBase / kRoutingStride locate the routing matrix") {
-    NativeBmwDspProcessor proc;
-    auto c = defaultConfig();
-    for (int i = 0; i < 4 * sch::kRoutingStride; ++i) c[sch::kRoutingBase + i] = 0.f;  // route nothing
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(c.data(), c.size()));
-
-    auto buf = stereoSine(500.0, 0.3, 8192);
-    proc.process(buf.data(), buf.size());
-    CHECK(peakAbs(buf) < 1e-4f);
+TEST_CASE("the retired routing slots (46..53, 215..218) change nothing") {
+    // Every band's Left lane is fed from Front L and every Right lane from Front R, whatever the
+    // retired routing coefficients hold: zeroing them all (once "route nothing") must leave the
+    // output bit-identical, Left still on the swapped output channel.
+    NativeBmwDspProcessor deflt, zeroed;
+    auto base = defaultConfig();
+    base[sch::kHighXoPass] = 0.f;
+    for (int slot = 0; slot < 2; ++slot) {
+        base[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
+    }
+    auto c = base;
+    for (int i = 46; i <= 53; ++i) c[i] = 0.f;
+    for (int i = 215; i <= 218; ++i) c[i] = 0.f;
+    deflt.setSampleRate(kSampleRate);
+    zeroed.setSampleRate(kSampleRate);
+    REQUIRE(deflt.configure(base.data(), base.size()));
+    REQUIRE(zeroed.configure(c.data(), c.size()));
+    auto a = stereoSine(500.0, 0.3, 8192);
+    for (std::size_t i = 0; i < a.size(); i += 2) a[i + 1] = 0.f;  // Left only
+    auto b = a;
+    deflt.process(a.data(), a.size());
+    zeroed.process(b.data(), b.size());
+    CHECK(a == b);
+    float left = 0.f, right = 0.f;
+    for (std::size_t i = a.size() / 2; i < a.size(); i += 2) {
+        left = std::max(left, std::fabs(a[i]));
+        right = std::max(right, std::fabs(a[i + 1]));
+    }
+    CHECK(right > 0.1f);  // input Left plays on output channel 1: the hardware swap
+    CHECK(left < 1e-3f);
 }
 
 TEST_CASE("per-output block base/width/field offsets: crossover and mute") {
@@ -241,30 +261,6 @@ TEST_CASE("kHighXoPass alone fully silences High") {
         c[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
     }
     c[sch::kHighXoPass] = 1.f;
-    NativeBmwDspProcessor proc;
-    proc.setSampleRate(kSampleRate);
-    REQUIRE(proc.configure(c.data(), c.size()));
-    auto buf = stereoSine(3000.0, 0.3, 8192, kSampleRate);
-    proc.process(buf.data(), buf.size());
-    CHECK(peakAbs(buf) < 1e-4f);
-}
-
-TEST_CASE("kHighRoutingBase locates High's routing coefficients") {
-    // Isolate High, then zero just its routing coefficients (215..218) -- if those are really
-    // what feeds High's input, the output must go silent despite High's crossover/gain/mute
-    // otherwise being fully "on".
-    auto c = defaultConfig();
-    c[sch::kTiltEnabled] = 0.f;
-    for (int out = 0; out < 4; ++out) {
-        c[sch::kOutputConfigBase + out * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
-    }
-    c[sch::kHighXoPass] = 0.f;
-    for (int slot = 0; slot < 2; ++slot) {
-        c[sch::kHighOutputConfigBase + slot * sch::kOutputConfigWidth + sch::kOutMuted] = 0.f;
-    }
-    for (int i = 0; i < 4; ++i) {
-        c[sch::kHighRoutingBase + i] = 0.f;
-    }
     NativeBmwDspProcessor proc;
     proc.setSampleRate(kSampleRate);
     REQUIRE(proc.configure(c.data(), c.size()));

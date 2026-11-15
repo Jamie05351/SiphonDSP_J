@@ -262,19 +262,6 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
-    fun resetRoutingToDefaultsRestoresIdentityRoutingWithoutTouchingOtherIndices() {
-        val values = migratedDefaults()
-        values[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT] = 0.5f
-        values[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT] = 0.5f
-        values[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f
-
-        NativeBmwDspValues.resetRoutingToDefaults(values)
-
-        val expected = migratedDefaults().also { it[NativeBmwDspValues.INDEX_TILT_FREQ] = 777f }
-        assertArrayEquals(expected, values, 0f)
-    }
-
-    @Test
     fun loadSeedsMeasMuteStopbandOffsetOnConfigsSavedBeforeTheControlExisted() {
         // A pre-control config: slot 139 still holds the leftover Pultec 0, marker at 140 unset.
         val values = migratedDefaults().also {

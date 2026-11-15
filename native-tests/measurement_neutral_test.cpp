@@ -27,7 +27,6 @@ std::array<float, kConfigSize> everythingOn() {
     c[sch::kMidDelayR] = 1.f;
     c[sch::kOutputConfigBase + 1 * sch::kOutputConfigWidth + sch::kOutPolarityInverted] = 1.f;
     c[sch::kAllPassBase] = 1.f;  // Low Left section 0
-    c[sch::kRoutingBase + 1] = 0.5f;
     c[sch::kBusLimLowEnabled] = 1.f;
     c[sch::kMonoBassEnabled] = 1.f;
     c[sch::kVirtualEnabled] = 1.f;
@@ -96,9 +95,6 @@ TEST_CASE("crossover bypass: one full-range path, zero added latency, band setti
         c[sch::kOutputConfigBase + o * sch::kOutputConfigWidth + sch::kOutPolarityInverted] = 1.f;
         c[sch::kOutputConfigBase + o * sch::kOutputConfigWidth + sch::kOutMuted] = 1.f;
     }
-    for (int i = 0; i < 8; ++i) {
-        c[sch::kRoutingBase + i] = 0.f;
-    }
     c[sch::kBusLimLowEnabled] = c[sch::kBusLimMidEnabled] = 1.f;
     c[sch::kMeasurementMute] = 2.f;
     NativeBmwDspProcessor p;
@@ -118,7 +114,7 @@ TEST_CASE("crossover bypass: one full-range path, zero added latency, band setti
     CHECK(s[4] == 0.f);  // crossover: bypassed
     const auto active = static_cast<std::uint32_t>(s[1]);
     for (int stage : {sch::kStageCrossover, sch::kStageBandGain, sch::kStageBandDelay, sch::kStagePolarity,
-                      sch::kStageRouting, sch::kStageBusLimiter, sch::kStageMeasurementMute}) {
+                      sch::kStageBusLimiter, sch::kStageMeasurementMute}) {
         INFO("stage ", stage);
         CHECK((active & bit(stage)) == 0u);
     }
@@ -234,7 +230,7 @@ TEST_CASE("engine status reports the installed chain") {
     const auto s = status(p);
     const auto active = static_cast<std::uint32_t>(s[1]);
     for (int stage : {sch::kStagePreEq, sch::kStageCrossover, sch::kStageBandEq, sch::kStageBandGain,
-                      sch::kStageBandDelay, sch::kStagePolarity, sch::kStageAllPass, sch::kStageRouting,
+                      sch::kStageBandDelay, sch::kStagePolarity, sch::kStageAllPass,
                       sch::kStageBusLimiter, sch::kStageMonoBass, sch::kStageVirtualCentre,
                       sch::kStageVirtualBass, sch::kStageMbc, sch::kStageTilt, sch::kStageMasterLimiter,
                       sch::kStageDeepBass, sch::kStageHeadroom, sch::kStagePostGain, sch::kStageDcBlocker}) {

@@ -70,7 +70,7 @@ data class StageProfile(
         /** In NativeBmwDsp::StageProfiler::Stage order. */
         val STAGE_NAMES = listOf(
             "Input", "DC blocker", "Mono bass", "Virtual bass", "Pre EQ + headroom", "MBC", "Virtual centre",
-            "Routing", "Crossovers", "Band EQ", "All-pass", "Band delay + gain", "Bus limiters", "Band sum",
+            "Crossovers", "Band EQ", "All-pass", "Band delay + gain", "Bus limiters", "Band sum",
             "Tilt", "Post gain / mutes", "Convolver", "Master limiter", "Volume + Deep bass", "Output guard",
         )
         private const val HEADER = 8

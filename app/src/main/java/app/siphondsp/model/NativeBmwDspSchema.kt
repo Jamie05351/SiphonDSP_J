@@ -59,16 +59,6 @@ object NativeBmwDspSchema {
     const val INDEX_MID_COMPRESSOR_MAKEUP = 41
     // Reclaimed from the removed Mono Bass feature (enabled, freq Hz, blend %, makeup dB). 42 is now crossoverTypeMigrated (Kotlin-only marker); 43..45 still unused/unread.
     const val INDEX_CROSSOVER_TYPE_MIGRATED = 42
-    // Routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
-    const val INDEX_ROUTING = 46
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = 46
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT = 47
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT = 48
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT = 49
-    const val INDEX_ROUTE_MID_LEFT_FRONT_LEFT = 50
-    const val INDEX_ROUTE_MID_LEFT_FRONT_RIGHT = 51
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = 52
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = 53
     // Eight all-pass sections (2 per output x 4 outputs), each [enabled, order, freq Hz, Q] -- all disabled by default
     const val INDEX_ALL_PASS = 54
     // Independent-output schema marker (0 = seed from legacy on next load)
@@ -129,11 +119,6 @@ object NativeBmwDspSchema {
     const val INDEX_HIGH_GAIN_R = 212
     const val INDEX_HIGH_DELAY_L = 213
     const val INDEX_HIGH_DELAY_R = 214
-    // High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR] -- same identity default as Low/Mid.
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT = 215
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT = 216
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT = 217
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT = 218
     // High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
     const val INDEX_HIGH_ALL_PASS = 219
     // High output-config: 2 outputs x 13-wide, same layout as the Low/Mid block. XO Hz matches Mid's upper-corner default; sub fields retained for a uniform block but ignored by native (same as Mid); muted (1 = ships muted).
@@ -241,14 +226,14 @@ object NativeBmwDspSchema {
         80f, // 43 unused (was monoBassFreq)
         100f, // 44 unused (was monoBassBlend)
         0f, // 45 unused (was monoBassMakeup)
-        1f, // 46 LowL <- FrontL
-        0f, // 47 LowL <- FrontR
-        0f, // 48 LowR <- FrontL
-        1f, // 49 LowR <- FrontR
-        1f, // 50 MidL <- FrontL
-        0f, // 51 MidL <- FrontR
-        0f, // 52 MidR <- FrontL
-        1f, // 53 MidR <- FrontR
+        1f, // 46 LowL <- FrontL (retired routing coefficient)
+        0f, // 47 LowL <- FrontR (retired routing coefficient)
+        0f, // 48 LowR <- FrontL (retired routing coefficient)
+        1f, // 49 LowR <- FrontR (retired routing coefficient)
+        1f, // 50 MidL <- FrontL (retired routing coefficient)
+        0f, // 51 MidL <- FrontR (retired routing coefficient)
+        0f, // 52 MidR <- FrontL (retired routing coefficient)
+        1f, // 53 MidR <- FrontR (retired routing coefficient)
         0f, // 54 LowL sec0 enabled
         2f, // 55 LowL sec0 order
         150f, // 56 LowL sec0 freq
@@ -410,10 +395,10 @@ object NativeBmwDspSchema {
         0f, // 212 highGainR
         0f, // 213 highDelayL
         0f, // 214 highDelayR
-        1f, // 215 routeHighLeftFrontLeft
-        0f, // 216 routeHighLeftFrontRight
-        0f, // 217 routeHighRightFrontLeft
-        1f, // 218 routeHighRightFrontRight
+        1f, // 215 routeHighLeftFrontLeft (retired routing coefficient)
+        0f, // 216 routeHighLeftFrontRight (retired routing coefficient)
+        0f, // 217 routeHighRightFrontLeft (retired routing coefficient)
+        1f, // 218 routeHighRightFrontRight (retired routing coefficient)
         0f, // 219 highLeft section0 enabled
         2f, // 220 highLeft section0 order
         150f, // 221 highLeft section0 freq
@@ -519,8 +504,8 @@ object NativeBmwDspSchema {
         false, false, false, false, false, true, true, true,
         true, true, true, true, false, false, false, false,
         false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, true, true,
-        true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
@@ -540,8 +525,8 @@ object NativeBmwDspSchema {
         true, true, true, true, false, true, true, false,
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
-        true, false, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true,
+        true, false, true, true, true, true, true, false,
+        false, false, false, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
         true, false, false, false, false, false, false, false,

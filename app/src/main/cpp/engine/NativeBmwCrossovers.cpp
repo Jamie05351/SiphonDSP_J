@@ -355,7 +355,7 @@ void VirtualBass::clear() {
     harmPrev_ = harmLast_ = 0.f;
 }
 void VirtualBass::process(float& l, float& r, float onMix, float removeMix, float gain, float character) {
-    // As VirtualSourceStage / RoutingMatrix: a non-finite sample is silenced rather than let into
+    // As VirtualSourceStage and the band-lane copy: a non-finite sample is silenced rather than let into
     // the envelope and filter state, where it would stick until the stage was cleared.
     if (!std::isfinite(l) || !std::isfinite(r)) {
         l = std::isfinite(l) ? l : 0.f;
