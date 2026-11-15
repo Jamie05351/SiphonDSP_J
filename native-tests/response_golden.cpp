@@ -76,6 +76,15 @@ std::vector<Scenario> scenarios() {
                {outField(2, sch::kOutCrossoverFreq), 120.f}, {outField(3, sch::kOutCrossoverFreq), 120.f},
                {outField(2, sch::kOutPolarityInverted), 1.f}, {outField(3, sch::kOutPolarityInverted), 1.f}}),
          {}},
+        // The same BW2 pair at 120 Hz with Low/Mid auto-pair on: corners spread, Mid inverted by
+        // the pairing (on top of nothing here).
+        {"bw2_crossover_auto_pair",
+         with({{outField(0, sch::kOutCrossoverType), 0.f}, {outField(1, sch::kOutCrossoverType), 0.f},
+               {outField(2, sch::kOutCrossoverType), 0.f}, {outField(3, sch::kOutCrossoverType), 0.f},
+               {outField(0, sch::kOutCrossoverFreq), 120.f}, {outField(1, sch::kOutCrossoverFreq), 120.f},
+               {outField(2, sch::kOutCrossoverFreq), 120.f}, {outField(3, sch::kOutCrossoverFreq), 120.f},
+               {sch::kLowMidAutoPair, 1.f}}),
+         {}},
         {"lr4_300_tilt_post_gain",
          with({{outField(0, sch::kOutCrossoverFreq), 300.f}, {outField(1, sch::kOutCrossoverFreq), 300.f},
                {outField(2, sch::kOutCrossoverFreq), 300.f}, {outField(3, sch::kOutCrossoverFreq), 300.f},

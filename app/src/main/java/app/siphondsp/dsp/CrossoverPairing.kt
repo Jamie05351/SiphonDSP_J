@@ -8,7 +8,8 @@ import app.siphondsp.model.NativeBmwDspValues
  * same BW2 or BW4 type at the same corner (within [CORNER_TOLERANCE]), the corners spread apart
  * around it (lowpass at f / k, highpass at f * k, in the prewarped domain -- see [corner]) and,
  * for BW2, the band above is inverted -- within about +/-0.5 dB. The set frequency stays the
- * crossover point.
+ * crossover point. Each boundary is corrected only while its auto-pair switch is on
+ * ([NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR], [NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR]).
  *
  * [lowLowpass] .. [highHighpass] are each corner's spread factor; [midInverted] / [highInverted]
  * flip that band's polarity on top of the user's own.
@@ -66,8 +67,12 @@ data class CrossoverPairing(
             }
         }
 
-        /** One side's pairing; [left] picks the Low/Mid/High Left outputs, else the Right ones. */
-        fun of(values: FloatArray, left: Boolean): CrossoverPairing {
+        /**
+         * One side's pairing; [left] picks the Low/Mid/High Left outputs, else the Right ones.
+         * With [ignoreSwitches] it is what the correction would be with both auto-pair switches
+         * on -- for the page's "this pair needs it" hint.
+         */
+        fun of(values: FloatArray, left: Boolean, ignoreSwitches: Boolean = false): CrossoverPairing {
             val low = if (left) 0 else 1
             val mid = if (left) 2 else 3
             val high = if (left) NativeBmwDspValues.OUTPUT_HIGH_LEFT else NativeBmwDspValues.OUTPUT_HIGH_RIGHT
@@ -76,11 +81,12 @@ data class CrossoverPairing(
             val highXoPass = values[NativeBmwDspValues.INDEX_HIGH_XO_PASS] >= .5f
             val type = NativeBmwDspValues.FIELD_CROSSOVER_TYPE
             val freq = NativeBmwDspValues.FIELD_CROSSOVER_FREQ
+            fun on(index: Int) = ignoreSwitches || values.getOrElse(index) { 0f } >= .5f
 
             var lowLowpass = 1f
             var midHighpass = 1f
             var midInverted = false
-            run {
+            if (on(NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR)) {
                 val k = spread(
                     values[NativeBmwDspValues.outputIndex(low, type)],
                     values[NativeBmwDspValues.outputIndex(mid, type)],
@@ -97,7 +103,7 @@ data class CrossoverPairing(
             val upperEnabled = values[NativeBmwDspValues.midUpperXoIndex(
                 mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_ENABLED,
             )] >= .5f
-            if (!highXoPass && upperEnabled) {
+            if (!highXoPass && upperEnabled && on(NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR)) {
                 val k = spread(
                     values[NativeBmwDspValues.midUpperXoTypeIndex(mid)],
                     values[NativeBmwDspValues.highOutputIndex(high, type)],

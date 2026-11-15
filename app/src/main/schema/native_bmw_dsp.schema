@@ -422,6 +422,10 @@ slot 311 0           native   INDEX_NEUTRAL_ALLOW kNeutralAllow neutralAllow (bi
 section Deep bass Max boost (added in the 312 -> 313 growth)
 slot 312 12          native   INDEX_DEEP_BASS_MAX_DB kDeepBassMaxDb deepBassMaxDb (boost cap, dB, 3..15)
 
+section Crossover auto-pair, Low/Mid and Mid/High boundary (added in the 313 -> 315 growth)
+slot 313 0           native   INDEX_LOW_MID_AUTO_PAIR kLowMidAutoPair lowMidAutoPair (1 = a same-corner BW2/BW4 Low/Mid pair has its corners spread and Mid inverted; off by default)
+slot 314 0           native   INDEX_MID_HIGH_AUTO_PAIR kMidHighAutoPair midHighAutoPair (1 = the same for the Mid/High pair, inverting High; off by default)
+
 section Structure
 const kStagePreEq 0 stage bit: the full-range (Pre) PEQ bank and its preamp
 const kStageCrossover 1 stage bit: the band split (crossovers, band chains, band sum)
