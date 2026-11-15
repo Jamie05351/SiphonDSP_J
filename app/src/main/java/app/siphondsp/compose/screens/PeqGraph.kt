@@ -3,10 +3,12 @@ package app.siphondsp.compose.screens
 import android.content.Context
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
+import android.graphics.RectF
 import android.graphics.Shader
 import android.util.TypedValue
 import androidx.compose.animation.core.Animatable
@@ -35,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +68,7 @@ import app.siphondsp.dsp.BmwOutputChannel
 import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.CarBaseline
+import app.siphondsp.dsp.HouseCurve
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.ComplexAcc
@@ -275,6 +279,11 @@ fun PeqGraph(
     onNodeTapped: (ParametricEqBand) -> Unit = {},
     graphOptions: PeqGraphOptions? = null,
     carBaseline: CarBaseline? = null,
+    // The house-curve overlay (display only): drawn dashed, offset onto the displayed full curve's
+    // 200 Hz - 5 kHz mean. [onShowHouseCurveChange] is the legend toggle; null = no toggle.
+    houseCurve: HouseCurve? = null,
+    showHouseCurve: Boolean = true,
+    onShowHouseCurveChange: ((Boolean) -> Unit)? = null,
 ) {
     val paints = rememberPeqSurfacePaints()
     val glass = rememberGlassPaints()
@@ -349,6 +358,8 @@ fun PeqGraph(
     // The last tapped node stays lit until you tap somewhere else (independent of the callout,
     // which auto-hides). Cleared when peqState / bank changes so a stale uuid never lingers.
     var tappedNodeId by remember(peqState, activeBank) { mutableStateOf<UUID?>(null) }
+    val houseShown by rememberUpdatedState(showHouseCurve)
+    val onHouseToggle by rememberUpdatedState(onShowHouseCurveChange)
 
     Box(modifier.graphPanel()) {
         ComposeCanvas(
@@ -356,6 +367,12 @@ fun PeqGraph(
                 .fillMaxSize()
                 .pointerInput(peqState, activeBank, channelDisplay, mode, maxFrequency, showIndividualFilters, sampleRate) {
                     detectTapGestures { offset ->
+                        // The legend's house-curve item toggles the overlay, and nothing else.
+                        val toggle = onHouseToggle
+                        if (toggle != null && model.houseLegendHit.contains(offset.x, offset.y)) {
+                            toggle(!houseShown)
+                            return@detectTapGestures
+                        }
                         // While the full curve has focus the nodes aren't showing, so a tap only
                         // brings the bank back into focus; it doesn't pick a node it can't see.
                         val wasIdle = focus.value < 0.5f
@@ -401,6 +418,7 @@ fun PeqGraph(
             val bottom = size.height - PlotPadBottom.toPx()
             if (right <= left || bottom <= top) return@ComposeCanvas
             val geometry = model.geometry(left, right, top, bottom, maxFrequency)
+            val house = houseCurve?.let { model.houseOverlay(it, channelDisplay) }
             val ctx = PeqDrawContext(
                 geometry = geometry,
                 paints = paints,
@@ -424,6 +442,8 @@ fun PeqGraph(
                 leftMeter = leftMeter,
                 rightMeter = rightMeter,
                 baselineKey = System.identityHashCode(carBaseline),
+                house = house,
+                houseShown = showHouseCurve,
             )
             drawIntoCanvas { canvas ->
                 renderPeqGraph(
@@ -567,6 +587,8 @@ private fun staticKeyOf(ctx: PeqDrawContext, w: Int, h: Int): Int {
     k = 31 * k + ctx.geometry.maxGain.hashCode()
     k = 31 * k + ctx.geometry.minGain.hashCode()
     k = 31 * k + ctx.baselineKey
+    k = 31 * k + (ctx.house?.let { System.identityHashCode(it.source) * 31 + it.offsetDb.hashCode() } ?: 0)
+    k = 31 * k + if (ctx.houseShown) 1 else 0
     k = 31 * k + (ctx.focus * 12f).roundToInt() // bucketed: ~12 rebuilds across the 400ms fade
     return k
 }
@@ -583,6 +605,7 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
             // curve, then its nodes on top.
             drawBandAreas(fg, ctx)
             if (ctx.showIndividualFilters) drawFocusedFilterShapes(fg, ctx)
+            if (ctx.houseShown) drawHouseCurve(fg, ctx)
             drawSumCurve(fg, ctx)
             drawFocusedBankCurve(fg, ctx)
             if (ctx.showTiltHandles) drawTiltHandles(fg, ctx)
@@ -595,7 +618,11 @@ private fun renderStaticLayers(bg: Canvas, fg: Canvas, ctx: PeqDrawContext) {
             drawPhaseCurves(fg, ctx)
         }
     }
-    drawLegend(fg, g, ctx.paints, ctx.density, ctx.mode, focusedBank = ctx.activeBank.takeIf { ctx.focus >= 0.5f })
+    val houseItem = ctx.house?.takeIf { ctx.mode == PeqGraphMode.MAGNITUDE }
+    drawLegend(
+        fg, g, ctx.paints, ctx.density, ctx.mode, focusedBank = ctx.activeBank.takeIf { ctx.focus >= 0.5f },
+        house = houseItem, houseShown = ctx.houseShown, houseHit = ctx.model.houseLegendHit, housePaint = ctx.glass.houseCurvePaint,
+    )
     drawVignette(fg, ctx)
 }
 
@@ -706,7 +733,12 @@ private fun drawLegend(
     density: Float,
     mode: PeqGraphMode,
     focusedBank: BmwPeqBank? = null,
+    house: HouseOverlay? = null,
+    houseShown: Boolean = true,
+    houseHit: RectF? = null,
+    housePaint: Paint? = null,
 ) {
+    houseHit?.setEmpty()
     val baseline = g.top - 8f * density
     fun tinted(color: Int) = Paint(p.unifiedLegendPaint).apply { this.color = color }
     when (mode) {
@@ -753,6 +785,33 @@ private fun drawLegend(
             nc.drawLine(right, midY, right + sample, midY, line)
             right -= 12f * density + labelPaint.measureText(focusLabel)
             nc.drawText(focusLabel, right, baseline, labelPaint)
+            if (house != null && housePaint != null) {
+                // The house curve's key and its applied offset, between the bank key and the
+                // focus key. Tapping it toggles the overlay; hidden, it stays here dimmed so it
+                // can be brought back. Where the label doesn't fit (a narrow graph) only the key
+                // line is drawn; where even that doesn't, nothing (the chip menu still toggles it).
+                val start = x + 10f * density
+                val limit = right - 12f * density
+                val sampleLength = 20f * density
+                val label = if (houseShown) "HOUSE ${formatOffsetDb(house.offsetDb)}" else "HOUSE (hidden)"
+                val alpha = if (houseShown) 230 else 110
+                val text = tinted(AndroidColor.argb(alpha, 220, 222, 228))
+                val textX = start + sampleLength + 6f * density
+                val withLabel = textX + text.measureText(label) <= limit
+                if (withLabel || start + sampleLength <= limit) {
+                    val sample = Paint(housePaint).apply { this.alpha = alpha }
+                    nc.drawLine(start, midY, start + sampleLength, midY, sample)
+                    var end = start + sampleLength
+                    if (withLabel) {
+                        nc.drawText(label, textX, baseline, text)
+                        end = textX + text.measureText(label)
+                    }
+                    // A finger-sized target over the legend strip only: it stops at the plot's top
+                    // edge, so a tap on the plot under it still reaches the plot. A margin either
+                    // side, but never into the focus key.
+                    houseHit?.set(start - 8f * density, 0f, minOf(end + 8f * density, limit), g.top)
+                }
+            }
         }
     }
 }
@@ -870,6 +929,39 @@ private fun curvePath(g: PeqPlotGeometry, values: DoubleArray, into: Path = Path
         if (i == 0) into.moveTo(x, y) else into.lineTo(x, y)
     }
     return into
+}
+
+/** "+1.2 dB", "-0.4 dB", "0.0 dB". */
+private fun formatOffsetDb(db: Double): String {
+    // + 0.0 turns a -0.0 (an offset rounding to nothing from below) into 0.0.
+    val rounded = (db * 10.0).roundToInt() / 10.0 + 0.0
+    val sign = if (rounded > 0.0) "+" else ""
+    return "$sign${"%.1f".format(java.util.Locale.ROOT, rounded)} dB"
+}
+
+/**
+ * The house curve as a dashed neutral line, one for both channels, on the same log grid as the
+ * other curves; broken wherever the file has no data (it's never extended past its own range).
+ */
+private fun drawHouseCurve(nc: Canvas, ctx: PeqDrawContext) {
+    val house = ctx.house ?: return
+    val values = house.db
+    val g = ctx.geometry
+    val path = ctx.model.scratchPath
+    path.rewind()
+    var drawing = false
+    for (i in values.indices) {
+        val v = values[i]
+        if (!v.isFinite()) {
+            drawing = false
+            continue
+        }
+        val x = g.left + (i.toFloat() / (values.size - 1).coerceAtLeast(1)) * (g.right - g.left)
+        val y = g.yForGain(v)
+        if (drawing) path.lineTo(x, y) else path.moveTo(x, y)
+        drawing = true
+    }
+    nc.drawPath(path, ctx.glass.houseCurvePaint)
 }
 
 /**
@@ -1519,6 +1611,10 @@ private class PeqDrawContext(
     val rightMeter: PeakHoldMeter? = null,
     /** Identity of the car baseline added to the curves (0 = none), for the static-layer key. */
     val baselineKey: Int = 0,
+    /** The house curve on the grid, offset onto the displayed curve (null = none loaded). */
+    val house: HouseOverlay? = null,
+    /** The legend toggle: draw [house] or only its (dimmed) legend item. */
+    val houseShown: Boolean = true,
 ) {
     val curves: BmwResponseCurves get() = model.curves
 
@@ -1542,6 +1638,9 @@ private class PeqDrawContext(
         BmwPeqBank.HIGH -> highBands
     }
 }
+
+/** The house curve as drawn: [db] on the curves' grid with [offsetDb] applied (NaN = no data). */
+private class HouseOverlay(val source: HouseCurve, val db: DoubleArray, val offsetDb: Double)
 
 /**
  * The calculator + curves + all the reused per-frame scratch, held across recompositions by a
@@ -1589,6 +1688,37 @@ private class PeqResponseModel {
     /** Plot geometry on the fitted gain window; draw and hit-test both build theirs here. */
     fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
         PeqPlotGeometry(left, right, top, bottom, maxFrequency, axisBottom, axisTop)
+
+    // The house curve resampled onto the curves' grid, kept until the curve or the grid changes.
+    private var houseSource: HouseCurve? = null
+    private var houseAxis = DoubleArray(0)
+    private var houseGrid = DoubleArray(0)
+    private val houseOut = DoubleArray(SYSTEM_POINT_COUNT)
+
+    /** Where the legend's house item was last drawn (empty = none): the tap target. */
+    val houseLegendHit = RectF()
+
+    /**
+     * [house] on the curves' grid, offset so its 200 Hz - 5 kHz mean equals the displayed full
+     * curve's (both channels' joint mean with L+R shown). Read at draw time, after [recompute],
+     * so the offset follows every EQ, baseline or channel-view change.
+     */
+    fun houseOverlay(house: HouseCurve, display: PeqChannelDisplay): HouseOverlay {
+        val axis = curves.frequencies
+        if (house !== houseSource || !houseAxis.contentEquals(axis)) {
+            houseGrid = house.onGrid(axis)
+            houseAxis = axis.copyOf()
+            houseSource = house
+        }
+        val shown = when (display) {
+            PeqChannelDisplay.LEFT -> listOf(curves.sumDb[BmwOutputChannel.LEFT.ordinal])
+            PeqChannelDisplay.RIGHT -> listOf(curves.sumDb[BmwOutputChannel.RIGHT.ordinal])
+            PeqChannelDisplay.BOTH -> listOf(curves.sumDb[BmwOutputChannel.LEFT.ordinal], curves.sumDb[BmwOutputChannel.RIGHT.ordinal])
+        }
+        val offset = HouseCurve.alignmentOffset(houseGrid, shown, axis)
+        for (i in houseOut.indices) houseOut[i] = houseGrid.getOrElse(i) { Double.NaN } + offset
+        return HouseOverlay(house, houseOut, offset)
+    }
 
     /** Bumped by every [recompute]: the static layers' cache key for "the curves changed". */
     var version = 0
@@ -1707,6 +1837,15 @@ private class PeqGlassPaints(density: Float) {
         strokeWidth = 1.4f * density
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
+    }
+
+    // The house-curve overlay: a dashed neutral grey, clear of every channel and bank colour.
+    val houseCurvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.6f * density
+        strokeJoin = Paint.Join.ROUND
+        color = AndroidColor.argb(230, 214, 216, 222)
+        pathEffect = DashPathEffect(floatArrayOf(7f * density, 5f * density), 0f)
     }
 
     // §4: octave-boundary verticals (100 / 1k / 10k) — brighter than the mesh, dimmer than 0 dB.

@@ -11,7 +11,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.siphondsp.dsp.CarBaseline
+import app.siphondsp.dsp.HouseCurve
 import app.siphondsp.fragment.CarBaselineStore
+import app.siphondsp.fragment.HouseCurveStore
 import app.siphondsp.fragment.PeqBandEditResult
 import app.siphondsp.fragment.PeqBandEditor
 import app.siphondsp.fragment.PeqScope
@@ -115,6 +117,67 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             baselineLock.withLock {
                 withContext(Dispatchers.IO) { baselineStore.clear() }
                 carBaseline = null
+            }
+        }
+    }
+
+    private val houseStore = HouseCurveStore(appContext)
+
+    /** The house curve drawn over the graph (display only, see [HouseCurve]), or null if none.
+     *  Null until [loadHouseCurve] has read the stored file. */
+    var houseCurve: HouseCurve? by mutableStateOf(null)
+        private set
+
+    /** The graph legend's overlay toggle; persisted. */
+    var showHouseCurve: Boolean by mutableStateOf(houseStore.showOnGraph)
+        private set
+
+    /** The imported file's name (null = none), read with the curve on IO: never a disk read in
+     *  composition. */
+    var houseCurveSource: String? by mutableStateOf(null)
+        private set
+
+    // Same scope and lock as the car baseline (see above): file work on IO, state published on main.
+    suspend fun loadHouseCurve() {
+        baselineLock.withLock {
+            val (curve, name) = withContext(Dispatchers.IO) { houseStore.load().let { it to it?.let { houseStore.sourceName() } } }
+            houseCurve = curve
+            houseCurveSource = name
+        }
+    }
+
+    fun importHouseCurve(uri: Uri) {
+        baselineScope.launch {
+            baselineLock.withLock {
+                val (error, loaded, name) = withContext(Dispatchers.IO) {
+                    val error = houseStore.import(uri)
+                    val curve = if (error == null) houseStore.load() else null
+                    Triple(error, curve, curve?.let { houseStore.sourceName() })
+                }
+                if (error != null) {
+                    toast("$error; previous house curve kept")
+                    return@withLock
+                }
+                houseCurve = loaded
+                houseCurveSource = name
+                // A newly loaded curve is meant to be seen.
+                setHouseCurveShown(true)
+                toast("House curve loaded")
+            }
+        }
+    }
+
+    fun setHouseCurveShown(show: Boolean) {
+        houseStore.showOnGraph = show
+        showHouseCurve = show
+    }
+
+    fun clearHouseCurve() {
+        baselineScope.launch {
+            baselineLock.withLock {
+                withContext(Dispatchers.IO) { houseStore.clear() }
+                houseCurve = null
+                houseCurveSource = null
             }
         }
     }
