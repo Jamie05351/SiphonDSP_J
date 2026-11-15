@@ -425,6 +425,10 @@ private:
     // The chunk's stereo signal through the input stages, left as the full-range path ahead of
     // the band split (see processInputStages()).
     std::array<float, kChunkFrames> chunkFullL_{}, chunkFullR_{};
+    // The chunk's first frame with a NaN/Inf ahead of the band split (kNoInputFault: none), set
+    // by processInputStages() and handled as a fault by the output guard.
+    static constexpr std::size_t kNoInputFault = static_cast<std::size_t>(-1);
+    std::size_t inputFaultFrame_ = kNoInputFault;
     // A validated configure() update, built on the config thread: everything configure() reads
     // from v[], with the all-pass coefficients built at sampleRate.
     struct ParsedConfig {

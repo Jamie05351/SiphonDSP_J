@@ -216,9 +216,17 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
     profiler_.lap(P::VirtualCentre);
     // L/R as they stand here are also the crossover bypass's full-range path. Every band's Left
     // lane is fed from L and every Right lane from R, directly: there is no routing matrix (it
-    // was removed; nothing in the app set it). A non-finite sample enters the bands as silence.
-    // The copy's time is charged to the stage timed next.
+    // was removed; nothing in the app set it). A non-finite sample enters the bands as silence,
+    // so it can't stick in their filter state, and is a fault: the first one's frame is kept
+    // for the output guard (processChunk()), which handles it as a NaN reaching the output --
+    // counted, the rest of the chunk silenced, the chain cleared and faded back in -- since the
+    // bands would otherwise hide it. The copy's time is charged to the stage timed next.
+    inputFaultFrame_ = kNoInputFault;
     for (std::size_t i = 0; i < frames; ++i) {
+        const bool finite = std::isfinite(L[i]) && std::isfinite(R[i]);
+        if (!finite && inputFaultFrame_ == kNoInputFault) {
+            inputFaultFrame_ = i;
+        }
         const float l = std::isfinite(L[i]) ? L[i] : 0.f;
         const float r = std::isfinite(R[i]) ? R[i] : 0.f;
         for (std::size_t o = 0; o < NativeBmwRouting::kOutputCount; o += 2) {
@@ -551,6 +559,11 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
     std::int64_t clipped = 0;
     for (std::size_t i = 0; i < frames; ++i) {
         float l = chunkConvL_[i], r = chunkConvR_[i];
+        if (i == inputFaultFrame_ && !overRange) {
+            // A NaN/Inf ahead of the band split (processInputStages()): the same fault as one
+            // reaching the output, from the frame it appeared on.
+            nonFinite = true;
+        }
         if (!nonFinite && !overRange) {
             // fabs(NaN) <= x is false, so a NaN fails the range test too; told apart for the count.
             if (!(std::fabs(l) <= kFaultLevel) || !(std::fabs(r) <= kFaultLevel)) {
