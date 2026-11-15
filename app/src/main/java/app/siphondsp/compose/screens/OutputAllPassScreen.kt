@@ -2,18 +2,19 @@ package app.siphondsp.compose.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -37,6 +38,7 @@ import app.siphondsp.compose.controls.artDp
 import app.siphondsp.compose.state.BmwDspState
 import app.siphondsp.compose.state.rememberBmwDspState
 import app.siphondsp.compose.theme.BmwDspTheme
+import app.siphondsp.model.BmwPeqState
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.view.isHeadUnitDisplay
 import kotlin.math.abs
@@ -45,16 +47,23 @@ private val OrderOptions = listOf("First order" to 1f, "Second order" to 2f)
 
 /**
  * The Alignment workspace's ALLPASS page: one output at a time, picked with LEFT / RIGHT and the
- * Delay page's High / Mid / Low tabs, instead of the six swipe pages All-pass had as its own menu
- * (Figma "Menus · PROPOSED", frame 3). The output's sections are an [OutputAllPassScreen].
+ * Delay page's High / Mid / Low tabs, beside the same response graph as the Crossovers pages
+ * (opening on PHASE), so each step of a section's Frequency or Q shows on the band sum as it's
+ * made. The output's two sections share one controls column, one at a time on Section 1 / 2 tabs.
  */
 @Composable
 fun AllPassPage(modifier: Modifier = Modifier) {
     var right by rememberSaveable { mutableStateOf(false) }
     var bandIndex by rememberSaveable { mutableIntStateOf(GainsBand.LOW.ordinal) }
+    var sectionIndex by rememberSaveable { mutableIntStateOf(0) }
+    var graphMode by rememberSaveable { mutableStateOf(CrossoverGraphMode.PHASE) }
     val band = GainsBand.entries[bandIndex.coerceIn(0, GainsBand.entries.size - 1)]
     val output = if (right) band.rightOutput else band.leftOutput
     val title = "${if (right) "Right" else "Left"} ${band.title}"
+    val dsp = rememberBmwDspState()
+    val context = LocalContext.current
+    val peqState = remember { BmwPeqState.load(context) }
+
     val sides: @Composable (Modifier) -> Unit = { m ->
         BmwSegmentedControl(
             options = listOf("LEFT", "RIGHT"),
@@ -66,60 +75,73 @@ fun AllPassPage(modifier: Modifier = Modifier) {
         )
     }
     val bands: @Composable (Modifier) -> Unit = { m -> BandTabs(band, { bandIndex = it.ordinal }, m) }
-    val page: @Composable (Modifier) -> Unit = { m ->
-        // Keyed so each output's page starts fresh rather than reusing the last one's state.
-        key(output) { OutputAllPassScreen(output, title, band.slider, m) }
+    val graph: @Composable (Modifier) -> Unit = { m ->
+        CrossoverResponseGraph(mode = graphMode, systemValues = dsp.values, peqState = peqState, modifier = m)
+    }
+    val picker: @Composable () -> Unit = { GraphModePicker(graphMode) { graphMode = it } }
+    val controls: @Composable (SectionRow) -> Unit = { row ->
+        // Keyed so each output's controls start fresh rather than reusing the last one's state.
+        key(output) { OutputAllPassControls(dsp, output, title, band.slider, sectionIndex, { sectionIndex = it }, row) }
     }
 
     BmwDspTheme {
         if (LocalContext.current.isHeadUnitDisplay()) {
-            Box(modifier.fillMaxSize()) {
-                page(Modifier.fillMaxSize())
-                WorkspaceArtBox(Modifier.fillMaxSize()) {
-                    sides(Modifier.artRect(artDp(SectionLeftX, SelectorTop, 170, 44)))
-                    bands(Modifier.artRect(artDp(SectionLeftX + 186, SelectorTop, 420, 44)))
+            WorkspaceArtBox(modifier.fillMaxSize()) {
+                sides(Modifier.artRect(artDp(GraphX, SelectorTop, 170, 44)))
+                bands(Modifier.artRect(artDp(GraphX + 186, SelectorTop, 420, 44)))
+                graph(Modifier.artRect(artDp(GraphX, GraphTop, GraphWidth, GraphHeight)))
+                Box(Modifier.artRect(artDp(GraphX, GraphTop + GraphHeight + 6, GraphWidth, 42)), contentAlignment = Alignment.Center) {
+                    picker()
                 }
+                controls { y, h -> Modifier.artRect(artDp(ControlX, y, ControlColumnWidth, h)) }
             }
         } else {
-            Column(modifier.fillMaxSize()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+            Column(modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     sides(Modifier.width(150.dp).height(44.dp))
                     bands(Modifier.weight(1f).height(44.dp))
                 }
-                page(Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        graph(Modifier.fillMaxWidth().weight(1f))
+                        Spacer(Modifier.height(8.dp))
+                        picker()
+                    }
+                    Column(
+                        Modifier.width(ControlColumnWidth.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        controls { _, h -> Modifier.fillMaxWidth().height(h.dp) }
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Where one row of a section goes: [y] dp down the section (its head-unit position) and [h] tall.
- * The head unit places the row there; the phone stacks the rows and uses only [h].
+ * Where one row of the controls column goes: [y] down the head unit's 1280x480 editor space and
+ * [h] tall. The head unit places the row there; the phone stacks the rows and uses only [h].
  */
 private typealias SectionRow = (y: Int, h: Int) -> Modifier
 
 /**
- * Phase 9 of COMPOSE_MIGRATION_ROADMAP.md -- one Output all-pass page (per physical output).
- * Each section reads/writes its own `base..base+3` slots (enabled / order / freq / Q); the
- * shared [rememberBmwDspState] snapshot keeps recomposition scoped per section.
- *
- * Laid out the same way on both screens (Figma "SiphonDSP Front Panel (from code)", Steppers
- * page): the output's name across the top, then its two sections side by side -- each a header
- * with its on/off switch, the order, and Frequency and Q steppers -- everything in the output's
- * band colour ([colorArgb]). [AllPassPage] shows one of these at a time, for the output picked
- * on it (Low / Mid / High x L/R).
+ * One output's all-pass controls (Phase 9 of COMPOSE_MIGRATION_ROADMAP.md): its name, the
+ * Section 1 / 2 tabs, and the picked section -- a header with its on/off switch, the order, and
+ * Frequency and Q steppers -- in the output's band colour ([colorArgb]). Each section reads and
+ * writes its own `base..base+3` slots (enabled / order / freq / Q).
  */
 @Composable
-fun OutputAllPassScreen(
+private fun OutputAllPassControls(
+    dsp: BmwDspState,
     output: Int,
     title: String,
     colorArgb: Int,
-    modifier: Modifier = Modifier,
+    sectionIndex: Int,
+    onSection: (Int) -> Unit,
+    row: SectionRow,
 ) {
-    val dsp = rememberBmwDspState()
     val color = Color(colorArgb)
     val isHigh = output == NativeBmwDspValues.OUTPUT_HIGH_LEFT || output == NativeBmwDspValues.OUTPUT_HIGH_RIGHT
     val isMid = output == NativeBmwDspValues.OUTPUT_MID_LEFT || output == NativeBmwDspValues.OUTPUT_MID_RIGHT
@@ -142,26 +164,22 @@ fun OutputAllPassScreen(
             (output * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT + section) *
             NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
     }
+    val section = sectionIndex.coerceIn(0, NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT - 1)
 
-    val section: @Composable (Int, SectionRow) -> Unit = { i, row ->
-        AllPassSection(dsp, i, sectionBase(i), freqRange(i), freqStep, color, row)
+    Box(row(TitleTop, 36), contentAlignment = Alignment.CenterStart) {
+        ArtLabel(title.uppercase(), color = color, size = 20.sp)
     }
-    val heading: @Composable (Modifier) -> Unit = { m ->
-        Box(m, contentAlignment = Alignment.CenterStart) { ArtLabel(title.uppercase(), color = color, size = 20.sp) }
-    }
-
-    BmwDspTheme {
-        if (LocalContext.current.isHeadUnitDisplay()) {
-            WorkspaceArtBox(modifier.fillMaxSize()) {
-                heading(Modifier.artRect(artDp(SectionLeftX, PageTop, SectionRightX + SectionWidth - SectionLeftX, 30)))
-                repeat(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { i ->
-                    val x = if (i == 0) SectionLeftX else SectionRightX
-                    section(i) { y, h -> Modifier.artRect(artDp(x, PageTop + 44 + y, SectionWidth, h)) }
-                }
-            }
-        } else {
-            PhoneAllPassPage(heading, section, modifier)
-        }
+    BmwSegmentedControl(
+        options = List(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { "SECTION ${it + 1}" },
+        selectedIndex = section,
+        onSelect = onSection,
+        optionAccents = List(NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) { color },
+        modifier = row(GraphTop, 40),
+        segmentHeight = 40.dp,
+        segmentGap = 6.dp,
+    )
+    AllPassSection(dsp, section, sectionBase(section), freqRange(section), freqStep, color) { y, h ->
+        row(GraphTop + 54 + y, h)
     }
 }
 
@@ -213,54 +231,14 @@ private fun setEnabled(dsp: BmwDspState, base: Int, freqRange: ClosedFloatingPoi
     }
 }
 
-/** Phone: the heading, then the two sections side by side, centred. A phone too narrow for both
- *  stacks them, and the page scrolls only if it doesn't fit. */
-@Composable
-private fun PhoneAllPassPage(
-    heading: @Composable (Modifier) -> Unit,
-    section: @Composable (Int, SectionRow) -> Unit,
-    modifier: Modifier,
-) {
-    val stack: SectionRow = { _, h -> Modifier.fillMaxWidth().height(h.dp) }
-    val column: @Composable (Int) -> Unit = { i ->
-        Column(Modifier.width(SectionWidth.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { section(i, stack) }
-    }
-    val pageWidth = (SectionRightX + SectionWidth - SectionLeftX).dp
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val sideBySide = maxWidth >= pageWidth + 24.dp
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .heightIn(min = maxHeight)
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                Modifier.width(if (sideBySide) pageWidth else SectionWidth.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                heading(Modifier.fillMaxWidth().height(30.dp))
-                if (sideBySide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy((SectionRightX - SectionLeftX - SectionWidth).dp)) {
-                        column(0)
-                        column(1)
-                    }
-                } else {
-                    column(0)
-                    column(1)
-                }
-            }
-        }
-    }
-}
-
-// Head-unit layout, in the 1280x480 editor's dp: the same two 333dp columns as the Output and
-// Compressor pages (x 317 and 770), under the output's name, under [AllPassPage]'s selectors. The
-// phone uses the same widths.
-private const val SectionLeftX = 317
-private const val SectionRightX = 770
-private const val SectionWidth = 333
-private const val PageTop = 120
+// Head-unit layout, in the 1280x480 editor's dp, matching the Crossovers pages: the graph from
+// x 168 (under the output selectors), then the 333dp controls column ending at x 1250.
+private const val GraphX = 168
+private const val GraphWidth = 719
+private const val GraphTop = 120
+private const val GraphHeight = 260
+private const val ControlX = 917
+private const val ControlColumnWidth = 333
 private const val SelectorTop = 68
+private const val TitleTop = 72
 private val SectionLabelWidth = 150.dp
