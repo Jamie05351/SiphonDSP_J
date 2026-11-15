@@ -937,7 +937,7 @@ class NativeBmwDspValuesTest {
     @Test
     fun deepBassShipsOffWithA12DbCap() {
         // A save from before the 312 -> 313 growth loads the 12 dB cap the old loudness used.
-        assertEquals(313, NativeBmwDspValues.SIZE)
+        assertTrue(NativeBmwDspValues.SIZE > NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB)
         assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_ENABLED], 0f)
         assertEquals(100f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_STRENGTH], 0f)
         assertEquals(12f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_DEEP_BASS_MAX_DB], 0f)

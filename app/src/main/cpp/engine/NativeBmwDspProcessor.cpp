@@ -930,7 +930,7 @@ std::vector<double> NativeBmwDspProcessor::captureTruthSnapshot() {
     // Every value the snapshot can hold, so filling it never allocates (it may be the audio
     // thread that fills it).
     out.reserve(3 + NativeBmwRouting::kOutputCount * kTruthOutputWidth +
-                4 * (3 + kMaxPeqSectionsPerChannel * 6) + kEngineStatusSize);
+                4 * (3 + kMaxPeqSectionsPerChannel * 6) + kEngineStatusSize + kTruthPairingWidth);
     std::lock_guard<std::mutex> lock(controlMutex_);
     request_.kind = RequestKind::TruthSnapshot;
     request_.truth = &out;
@@ -1016,6 +1016,26 @@ void NativeBmwDspProcessor::fillTruthSnapshot(std::vector<double>& out) {
     readEngineStatus(status, kEngineStatusSize);
     for (float value : status) {
         out.push_back(static_cast<double>(value));
+    }
+    // The crossover auto-pair: the switches, then each side's applied corners and flags.
+    out.push_back(p_.lowMidAutoPair ? 1.0 : 0.0);
+    out.push_back(p_.midHighAutoPair ? 1.0 : 0.0);
+    for (std::size_t side = 0; side < pairing_.size(); ++side) {
+        const auto& pairing = pairing_[side];
+        const auto& low = outputConfigs_[static_cast<std::size_t>(OutputId::LowLeft) + side];
+        const auto& mid = outputConfigs_[static_cast<std::size_t>(OutputId::MidLeft) + side];
+        const auto& high = outputConfigs_[static_cast<std::size_t>(OutputId::HighLeft) + side];
+        auto applied = [this](float fc, float k) {
+            return static_cast<double>(NativeBmwDsp::spreadCorner(fc, k, sampleRate_));
+        };
+        out.push_back(applied(low.crossoverFreq, pairing.lowLowpass));
+        out.push_back(applied(mid.crossoverFreq, pairing.midHighpass));
+        out.push_back(applied(mid.upperCrossoverFreq, pairing.midLowpass));
+        out.push_back(applied(high.crossoverFreq, pairing.highHighpass));
+        out.push_back(pairing.midHighpass != 1.f ? 1.0 : 0.0);
+        out.push_back(pairing.highHighpass != 1.f ? 1.0 : 0.0);
+        out.push_back(pairing.midInverted ? 1.0 : 0.0);
+        out.push_back(pairing.highInverted ? 1.0 : 0.0);
     }
 }
 

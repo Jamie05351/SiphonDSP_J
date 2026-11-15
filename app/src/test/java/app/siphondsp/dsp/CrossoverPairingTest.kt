@@ -16,8 +16,10 @@ class CrossoverPairingTest {
     private val calculator = BmwResponseCalculator(pointCount = 192)
     private val curves = BmwResponseCurves(192)
 
-    private fun twoWay(type: Float): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
+    private fun twoWay(type: Float, autoPair: Boolean = true): FloatArray = NativeBmwDspValues.DEFAULTS.copyOf().also {
         it[NativeBmwDspValues.INDEX_OUTPUT_SCHEMA_VERSION] = NativeBmwDspValues.OUTPUT_SCHEMA_VERSION
+        it[NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR] = if (autoPair) 1f else 0f
+        it[NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR] = if (autoPair) 1f else 0f
         it[NativeBmwDspValues.INDEX_TILT_ENABLED] = 0f
         it[NativeBmwDspValues.INDEX_MID_GAIN_L] = 0f
         it[NativeBmwDspValues.INDEX_MID_GAIN_R] = 0f
@@ -80,5 +82,32 @@ class CrossoverPairingTest {
         assertFalse(CrossoverPairing.of(gap, left = true).lowMidCorrected)
         assertFalse(CrossoverPairing.of(gap, left = true).midInverted)
         assertFalse(CrossoverPairing.of(twoWay(NativeBmwDspValues.CROSSOVER_TYPE_LR4), left = true).lowMidCorrected)
+    }
+
+    @Test
+    fun bw4PairWithAutoPairOffSumsToPlus3DbAt150HzInTheGraph() {
+        // BW4 LP 150 + BW4 HP 150, auto-pair off: the graph shows the +3 dB summing bump.
+        calculator.invalidateAll()
+        calculator.configureAxis(48_000.0, 20.0, 20_000.0)
+        calculator.compute(twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW4, autoPair = false), BmwPeqState.empty(), curves)
+        val i = curves.frequencies.indices.minBy { abs(curves.frequencies[it] - 150.0) }
+        val atCorner = curves.sumDb[0][i] - curves.preSplitDb[0][i]
+        assertEquals("at ${curves.frequencies[i]} Hz", 3.0, atCorner, 0.1)
+    }
+
+    @Test
+    fun autoPairShipsOffAndOffLeavesThePairAsSet() {
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR], 0f)
+        assertEquals(0f, NativeBmwDspValues.DEFAULTS[NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR], 0f)
+        val off = twoWay(NativeBmwDspValues.CROSSOVER_TYPE_BW2, autoPair = false)
+        val pairing = CrossoverPairing.of(off, left = true)
+        assertFalse(pairing.lowMidCorrected)
+        assertFalse(pairing.midInverted)
+        // ...but the page can still tell the pair would need it.
+        val would = CrossoverPairing.of(off, left = true, ignoreSwitches = true)
+        assertTrue(would.lowMidCorrected)
+        assertTrue(would.midInverted)
+        // Uncorrected, the graph shows the BW2 null at the corner.
+        assertTrue(worstSumDeviationDb(off) > 6.0)
     }
 }

@@ -321,6 +321,9 @@ object NativeBmwDspValues {
     const val INDEX_DEEP_BASS_ENABLED = NativeBmwDspSchema.INDEX_DEEP_BASS_ENABLED
     const val INDEX_DEEP_BASS_STRENGTH = NativeBmwDspSchema.INDEX_DEEP_BASS_STRENGTH // percent, 0..100
     const val INDEX_DEEP_BASS_MAX_DB = NativeBmwDspSchema.INDEX_DEEP_BASS_MAX_DB // boost cap, dB
+    // Crossover auto-pair per boundary (see CrossoverPairing): off by default, a pair runs as set.
+    const val INDEX_LOW_MID_AUTO_PAIR = NativeBmwDspSchema.INDEX_LOW_MID_AUTO_PAIR
+    const val INDEX_MID_HIGH_AUTO_PAIR = NativeBmwDspSchema.INDEX_MID_HIGH_AUTO_PAIR
     // Automatic headroom on (1) or manual (0). Kotlin-only -- native never reads this index; the
     // manual value stays in INDEX_HEADROOM either way, so switching back to manual restores it.
     const val INDEX_HEADROOM_AUTO = NativeBmwDspSchema.INDEX_HEADROOM_AUTO

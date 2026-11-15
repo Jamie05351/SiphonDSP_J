@@ -8,7 +8,7 @@ package app.siphondsp.model
  * slot-by-slot reference is docs/NATIVE_BMW_DSP_SCHEMA.md.
  */
 object NativeBmwDspSchema {
-    const val SIZE = 313
+    const val SIZE = 315
 
     // Enabled, retired band passthroughs (1..2), channelMute, measurementMute
     const val INDEX_ENABLED = 0
@@ -189,6 +189,9 @@ object NativeBmwDspSchema {
     const val INDEX_NEUTRAL_ALLOW = 311
     // Deep bass Max boost (added in the 312 -> 313 growth)
     const val INDEX_DEEP_BASS_MAX_DB = 312
+    // Crossover auto-pair, Low/Mid and Mid/High boundary (added in the 313 -> 315 growth)
+    const val INDEX_LOW_MID_AUTO_PAIR = 313
+    const val INDEX_MID_HIGH_AUTO_PAIR = 314
 
     /** The canonical default config, one value per slot. */
     val DEFAULTS = floatArrayOf(
@@ -505,6 +508,8 @@ object NativeBmwDspSchema {
         0f, // 310 measurementNeutral (1 = every stage in the neutral set bypassed by native; saved settings untouched)
         0f, // 311 neutralAllow (bitmask of kStage* bits kept running while measurementNeutral is on)
         12f, // 312 deepBassMaxDb (boost cap, dB, 3..15)
+        0f, // 313 lowMidAutoPair (1 = a same-corner BW2/BW4 Low/Mid pair has its corners spread and Mid inverted; off by default)
+        0f, // 314 midHighAutoPair (1 = the same for the Mid/High pair, inverting High; off by default)
     )
 
     /** Whether the native engine reads each slot; the rest are Kotlin-only or reserved. */
@@ -548,6 +553,6 @@ object NativeBmwDspSchema {
         true, true, false, false, true, true, true, true,
         false, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, true,
-        true,
+        true, true, true,
     )
 }

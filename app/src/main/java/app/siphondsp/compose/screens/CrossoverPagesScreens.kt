@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
@@ -128,25 +129,26 @@ fun CrossoverLowMidPage(
             dsp, LowLowpassLabel, NativeBmwDspValues.INDEX_LOW_CROSSOVER_FREQ, 80f..320f, 1f, "Hz", lowSlider,
             row(124, 48), mirrors = lowPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
-        SlopeRow(lowCrossoverType, onLowType, row(180, 40), slopeLabel(pairL.lowMidCorrected || pairR.lowMidCorrected))
+        SlopeRow(lowCrossoverType, onLowType, row(176, 40), slopeLabel(pairL.lowMidCorrected || pairR.lowMidCorrected))
         DspArtSlider(
             dsp, MidHighpassLabel, NativeBmwDspValues.INDEX_MID_CROSSOVER_FREQ, 60f..320f, 1f, "Hz", midSlider,
-            row(228, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
+            row(220, 48), mirrors = midPair(NativeBmwDspValues.FIELD_CROSSOVER_FREQ),
         )
         SlopeRow(
-            midCrossoverType, onMidType, row(284, 40),
+            midCrossoverType, onMidType, row(272, 40),
             slopeLabel(
                 pairL.lowMidCorrected || pairR.lowMidCorrected,
                 inverted = pairL.midInverted || pairR.midInverted,
             ),
         )
+        AutoPairRows(dsp, NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR, lowMid = true, row(316, 34), row(350, 24))
         DspArtSlider(
             dsp, subsonicLabel, NativeBmwDspValues.INDEX_SUBSONIC_FREQ, 20f..60f, 1f, "Hz", DefaultAccent,
-            row(332, 48), mirrors = subsonicFreqMirror,
+            row(378, 48), mirrors = subsonicFreqMirror,
         )
         // On/off and the slope in one row: LR4 (24 dB/oct, the original) or BW2 (12 dB/oct, half
         // the phase turn through the bass, a little less excursion protection).
-        ArtRow("Subsonic", row(384, 36), labelWidth = ControlLabelWidth) {
+        ArtRow("Subsonic", row(430, 36), labelWidth = ControlLabelWidth) {
             BmwSwitch(
                 checked = dsp.isOn(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED),
                 onCheckedChange = { on ->
@@ -219,31 +221,32 @@ fun CrossoverMidHighPage(
         )
         DspArtSlider(
             dsp, MidLowpassLabel, ThreeWayCrossover.midLowpassIndex, 300f..8000f, 10f, "Hz", midSlider,
-            row(120, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
+            row(118, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
         )
-        SlopeRow(midLowpassType, onMidLowpassType, row(172, 40), slopeLabel(pairL.midHighCorrected || pairR.midHighCorrected))
+        SlopeRow(midLowpassType, onMidLowpassType, row(168, 40), slopeLabel(pairL.midHighCorrected || pairR.midHighCorrected))
         DspArtSlider(
             dsp, HighHighpassLabel, ThreeWayCrossover.highHighpassIndex, 1000f..8000f, 10f, "Hz", highSlider,
-            row(220, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
+            row(210, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
         )
         SlopeRow(
-            highCrossoverType, onHighType, row(272, 40),
+            highCrossoverType, onHighType, row(260, 40),
             slopeLabel(
                 pairL.midHighCorrected || pairR.midHighCorrected,
                 inverted = pairL.highInverted || pairR.highInverted,
             ),
         )
+        AutoPairRows(dsp, NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR, lowMid = false, row(302, 32), row(334, 22))
         ArtSwitchRow(
             label = "Mid align",
             checked = dsp.isOn(midLeftBase),
             onCheckedChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-            modifier = row(320, 36),
+            modifier = row(358, 32),
             labelWidth = ControlLabelWidth,
         )
         // "Mid align (all-pass)" is too long for the label column, so it sits over the stepper.
         DspArtSlider(
             dsp, MidAlignLabel, midLeftBase + 2, 20f..1000f, 1f, "Hz", midSlider,
-            row(360, 76), labelAbove = true, mirrors = midAlignFreqMirror,
+            row(392, 74), labelAbove = true, mirrors = midAlignFreqMirror,
         )
     }
 
@@ -526,6 +529,91 @@ private fun slopeLabel(corrected: Boolean, inverted: Boolean = false) = when {
     inverted -> "Auto, inverted"
     else -> "Slope (auto)"
 }
+
+/**
+ * A boundary's Auto-pair switch and, under it, what the pairing is doing there:
+ * - on and correcting: the corners as set and as really built, "LP 150 → 133, HP 150 → 169 Hz";
+ * - on with nothing to correct: "Idle: no BW2/BW4 pair here";
+ * - off on a same-corner BW2/BW4 pair: what the pair does uncorrected (a BW2 null, a BW4 +3 dB
+ *   bump), stated plainly -- it may be wanted, e.g. ahead of a factory split;
+ * - off otherwise: nothing.
+ * Off by default (INDEX_LOW_MID_AUTO_PAIR / INDEX_MID_HIGH_AUTO_PAIR); L and R are switched together.
+ */
+@Composable
+private fun AutoPairRows(dsp: BmwDspState, index: Int, lowMid: Boolean, switchRow: Modifier, statusRow: Modifier) {
+    ArtSwitchRow(
+        label = "Auto-pair",
+        checked = dsp.isOn(index),
+        onCheckedChange = { on -> dsp.commit(index, if (on) 1f else 0f) },
+        modifier = switchRow,
+        labelWidth = ControlLabelWidth,
+    )
+    val status = autoPairStatus(dsp.values, lowMid) ?: return
+    Box(statusRow, contentAlignment = Alignment.CenterStart) {
+        Text(
+            status.text,
+            color = status.color,
+            fontSize = ArtLabelSize,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private data class AutoPairStatus(val text: String, val color: Color)
+
+/** See [AutoPairRows]. Left's corners, or Right's if only Right is paired (set elsewhere). */
+internal fun autoPairStatusText(values: FloatArray, lowMid: Boolean): Pair<String, Boolean>? {
+    val index = if (lowMid) NativeBmwDspValues.INDEX_LOW_MID_AUTO_PAIR else NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR
+    val on = values[index] >= .5f
+    fun corrected(p: CrossoverPairing) = if (lowMid) p.lowMidCorrected else p.midHighCorrected
+    val sides = listOf(true, false).map { left -> left to CrossoverPairing.of(values, left, ignoreSwitches = !on) }
+    val (left, pairing) = sides.firstOrNull { corrected(it.second) } ?: return if (on) "Idle: no BW2/BW4 pair here" to false else null
+    val low = if (left) NativeBmwDspValues.OUTPUT_LOW_LEFT else NativeBmwDspValues.OUTPUT_LOW_RIGHT
+    val mid = if (left) NativeBmwDspValues.OUTPUT_MID_LEFT else NativeBmwDspValues.OUTPUT_MID_RIGHT
+    val high = if (left) NativeBmwDspValues.OUTPUT_HIGH_LEFT else NativeBmwDspValues.OUTPUT_HIGH_RIGHT
+    val freq = NativeBmwDspValues.FIELD_CROSSOVER_FREQ
+    val (lp, hp, lpFactor, hpFactor) = if (lowMid) {
+        listOf(
+            values[NativeBmwDspValues.outputIndex(low, freq)].toDouble(),
+            values[NativeBmwDspValues.outputIndex(mid, freq)].toDouble(),
+            pairing.lowLowpass, pairing.midHighpass,
+        )
+    } else {
+        listOf(
+            values[NativeBmwDspValues.midUpperXoIndex(mid, NativeBmwDspValues.MID_UPPER_XO_FIELD_FREQ)].toDouble(),
+            values[NativeBmwDspValues.highOutputIndex(high, freq)].toDouble(),
+            pairing.midLowpass, pairing.highHighpass,
+        )
+    }
+    if (!on) {
+        // Uncorrected, an in-phase BW2 pair nulls at the corner and a BW4 pair peaks +3 dB; with
+        // one band's own polarity flipped (Gains/Delay, Band Align) it's the other way round.
+        val bw2 = hpFactor.toFloat() == CrossoverPairing.BW2_SPREAD
+        val inverted = if (lowMid) {
+            values[NativeBmwDspValues.outputIndex(low, NativeBmwDspValues.FIELD_INVERT)] >= .5f !=
+                values[NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_INVERT)] >= .5f
+        } else {
+            values[NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_INVERT)] >= .5f !=
+                values[NativeBmwDspValues.highOutputIndex(high, NativeBmwDspValues.FIELD_INVERT)] >= .5f
+        }
+        val effect = if (bw2 != inverted) "null" else "+3 dB"
+        return "${if (bw2) "BW2" else "BW4"} pair: $effect at ${hp.roundToInt()} Hz" to false
+    }
+    fun applied(fc: Double, k: Double) = CrossoverPairing.corner(fc, k, AutoPairDisplayRate).roundToInt()
+    return "LP ${lp.roundToInt()} → ${applied(lp, lpFactor)}, HP ${hp.roundToInt()} → ${applied(hp, hpFactor)} Hz" to true
+}
+
+private fun autoPairStatus(values: FloatArray, lowMid: Boolean): AutoPairStatus? =
+    autoPairStatusText(values, lowMid)?.let { (text, active) ->
+        AutoPairStatus(text, if (active) AutoPairActiveColor else AutoPairInfoColor)
+    }
+
+// The applied corners shown at the same 48 kHz the response graph models (native's own, at the
+// running rate, are in Native DSP Truth; they differ by well under 1 Hz below 3 kHz).
+private const val AutoPairDisplayRate = 48_000.0
+private val AutoPairActiveColor = Color(0xFF9FE0B0)
+private val AutoPairInfoColor = Color(0xFFAAAABB)
 
 /** Both sides' pairings, so a label covers a Right side that differs from Left. */
 private fun pairings(values: FloatArray) =

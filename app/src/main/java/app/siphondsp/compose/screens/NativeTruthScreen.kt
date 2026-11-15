@@ -49,6 +49,8 @@ import app.siphondsp.model.debug.NativeBiquadStage
 import app.siphondsp.model.debug.NativeCrossoverSnapshot
 import app.siphondsp.model.debug.NativeDspOutput
 import app.siphondsp.model.debug.NativeDspTruthSnapshot
+import app.siphondsp.model.debug.NativePairingSide
+import app.siphondsp.model.debug.NativePairingSnapshot
 import app.siphondsp.model.debug.NativePeqBand
 import app.siphondsp.model.debug.NativePeqBank
 import app.siphondsp.model.debug.RealtimeDiagnostics
@@ -163,6 +165,7 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
             ) { output ->
                 crossovers[output]?.let { CrossoverCard(output, it) }
             }
+            truth?.pairing?.let { pairing -> item { AutoPairCard(pairing, crossovers) } }
         }
         truth?.peq?.let { peq ->
             item { SectionHeader("PEQ") }
@@ -174,6 +177,52 @@ fun NativeTruthScreen(modifier: Modifier = Modifier) {
         item { SyncErrorsSection(revision) }
     }
 }
+
+/**
+ * The crossover auto-pair: both switches, then each side's corners as set and as the filters are
+ * really built (they differ only while a boundary is being corrected), and the polarity flips the
+ * pairing adds.
+ */
+@Composable
+private fun AutoPairCard(pairing: NativePairingSnapshot, crossovers: Map<NativeDspOutput, NativeCrossoverSnapshot>) {
+    fun onOff(on: Boolean) = if (on) "ON" else "OFF"
+    fun corner(set: Double?, applied: Double) =
+        if (set == null || kotlin.math.abs(set - applied) < 0.05) "${fmt(applied, 1)} Hz"
+        else "${fmt(set, 1)} → ${fmt(applied, 1)} Hz"
+    DebugCard {
+        Text("Auto-pair", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        KeyValueRow("Low/Mid switch", onOff(pairing.lowMidAutoPair))
+        KeyValueRow("Mid/High switch", onOff(pairing.midHighAutoPair))
+        for ((name, side, low, mid, high) in listOf(
+            PairingSideRow("L", pairing.left, NativeDspOutput.LOW_LEFT, NativeDspOutput.MID_LEFT, NativeDspOutput.HIGH_LEFT),
+            PairingSideRow("R", pairing.right, NativeDspOutput.LOW_RIGHT, NativeDspOutput.MID_RIGHT, NativeDspOutput.HIGH_RIGHT),
+        )) {
+            val corrected = Color(0xFF9FE0B0)
+            KeyValueRow("$name Low LP", corner(crossovers[low]?.crossoverFreqHz, side.lowLowpassHz),
+                if (side.lowMidCorrected) corrected else Color.White)
+            KeyValueRow("$name Mid HP", corner(crossovers[mid]?.crossoverFreqHz, side.midHighpassHz),
+                if (side.lowMidCorrected) corrected else Color.White)
+            KeyValueRow("$name Mid LP", corner(null, side.midLowpassHz),
+                if (side.midHighCorrected) corrected else Color.White)
+            KeyValueRow("$name High HP", corner(crossovers[high]?.crossoverFreqHz, side.highHighpassHz),
+                if (side.midHighCorrected) corrected else Color.White)
+            KeyValueRow("$name added inversion", when {
+                side.midInverted && side.highInverted -> "Mid, High"
+                side.midInverted -> "Mid"
+                side.highInverted -> "High"
+                else -> "none"
+            })
+        }
+    }
+}
+
+private data class PairingSideRow(
+    val name: String,
+    val side: NativePairingSide,
+    val low: NativeDspOutput,
+    val mid: NativeDspOutput,
+    val high: NativeDspOutput,
+)
 
 @Composable
 private fun SectionHeader(title: String) {

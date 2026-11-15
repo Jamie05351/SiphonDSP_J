@@ -122,7 +122,8 @@ void buildSubsonic(OutputRuntime& out, const OutputConfig& cfg, float sampleRate
 // filters are designed in -- see spreadCorner) and, for BW2, the band above is inverted: within
 // about +/-0.5 dB at any corner and sample rate, and the set frequency stays the crossover point.
 // The factors minimise the pair's worst deviation (BW2 inverted: 1.304 -> 0.47 dB; BW4:
-// 1.128 -> 0.49 dB). Mirrored by Kotlin's CrossoverPairing.
+// 1.128 -> 0.49 dB). Opt-in per boundary (v[kLowMidAutoPair], v[kMidHighAutoPair], both off by
+// default): off, the pair runs exactly as set. Mirrored by Kotlin's CrossoverPairing.
 constexpr float kBw2PairSpread = 1.304f;
 constexpr float kBw4PairSpread = 1.128f;
 // How far apart (as a ratio) the two corners can be and still count as one boundary.
