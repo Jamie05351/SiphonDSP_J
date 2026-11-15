@@ -40,7 +40,7 @@ public:
     // generated from app/src/main/schema/native_bmw_dsp.schema into NativeBmwDspSchema.h (with the
     // Kotlin side and docs/NATIVE_BMW_DSP_SCHEMA.md). kConfigSize is pinned to it by a static_assert
     // there. Slots are append-only: saves are stored by index.
-    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 312 };
+    enum : std::size_t { kLegacyConfigSize = 86, kConfigSize = 313 };
     enum : std::size_t {
         kMaxPeqSectionsPerChannel = NativeBmwDsp::kMaxPeqSectionsPerChannel,
         kPeqBandWidth = NativeBmwDsp::kPeqBandWidth,
@@ -332,8 +332,8 @@ private:
         DirtyHighResume = 1u << 19,  // High's chain runs again (highXoPass off): clear its state
         DirtyVirtual = 1u << 20,       // virtual-stage coefficients (keeps filter/delay state)
         DirtyVirtualState = 1u << 21,  // virtual stage switched on/off: clear its state + meter
-        DirtyLoudness = 1u << 24,   // volume or loudness settings changed: retune (keeps state)
-        DirtyLoudnessResume = 1u << 25,  // loudness switched on: clear the state it froze with
+        DirtyDeepBass = 1u << 24,   // volume or Deep bass settings changed: retune (keeps state)
+        DirtyDeepBassResume = 1u << 25,  // Deep bass switched on: clear the state it froze with
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
         DirtyMonoBass = 1u << 27,        // Mono Bass split frequency: retune (keeps state)
         DirtyMonoBassResume = 1u << 28,  // Mono Bass switched on from silent: clear its state
@@ -364,7 +364,7 @@ private:
     // the input stages from chunkFullL_/R_ (left there as the full-range path) through routing
     // into chunkLanes_; every band's sub-stages in place on chunkLanes_; the band sum (or the
     // full-range path), tilt, post gain, channel mute and measurement bus into chunkConvL_/R_;
-    // then the master limiter, volume, loudness and the hardware swap in place there.
+    // then the master limiter, volume, Deep bass and the hardware swap in place there.
     void processInputStages(std::size_t frames);
     void processBandStages(std::size_t frames);
     void processOutputStages(std::size_t frames, bool bandsRun);
@@ -565,7 +565,7 @@ private:
     // Virtual Bass, right after Mono Bass. virtualBassMix_ crossfades from the input (0) to the
     // processed signal (1) and virtualBassRemoveMix_ the base from the input to the input
     // high-passed at the cut, both linear ramps over kMonoBassFadeSeconds; virtualBassGain_ follows
-    // the harmonics level on a one-pole (loudnessRampCoef_). At virtualBassMix_ 0 the stage is
+    // the harmonics level on a one-pole (levelRampCoef_). At virtualBassMix_ 0 the stage is
     // skipped, so with Virtual Bass off the signal is untouched. Snapped on a full rebuild and on
     // the first configure().
     NativeBmwDsp::VirtualBass virtualBass_;
@@ -573,20 +573,23 @@ private:
     float virtualBassRemoveMix_ = 0.f;
     float virtualBassGain_ = 0.f;
     float virtualBassCharacter_ = .5f;  // follows p_.virtualBassCharacter like virtualBassGain_
-    // Loudness compensation, after the master volume (see Loudness).
-    NativeBmwDsp::Loudness loudness_;
-    // Retunes loudness_ for the volume actually reaching the output: the smaller of the cut at the
-    // ramping masterGain_ and at its target, so the lift never exceeds the attenuation in effect
+    // Deep bass, after the master volume (see DeepBass).
+    NativeBmwDsp::DeepBass deepBass_;
+    // Retunes deepBass_ for the volume actually reaching the output: the smaller of the cut at the
+    // ramping masterGain_ and at its target, so the boost never exceeds the attenuation in effect
     // while the volume ramps either way.
-    void retuneLoudness();
+    void retuneDeepBass();
     // Lands Virtual Bass's on/off, sub-removal and level ramps on their settings at once.
     void snapVirtualBass();
-    unsigned loudnessRetuneCounter_ = 0;
+    unsigned deepBassRetuneCounter_ = 0;
     // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
     // enough that the stepwise retunes are far smaller than the signal's own movement.
-    float loudnessStrength_ = 0.f;
-    static constexpr float kLoudnessRampSeconds = 0.05f;
-    float loudnessRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
+    float deepBassStrength_ = 0.f;
+    // Effective Max boost (dB), ramped toward p_ the same way, so a cap change at a deep volume
+    // cut glides instead of stepping the bell's gain (up to 12 dB) at once.
+    float deepBassMaxDb_ = 12.f;
+    static constexpr float kLevelRampSeconds = 0.05f;
+    float levelRampCoef_ = 0.00041658f;  // 1 - exp(-1 / (50 ms * 48 kHz))
     // On/off crossfades, linear over kMixFadeSeconds (kCrossoverFadeSeconds for the crossover
     // bypass) toward their targets, each stage skipped while its mix is 0 and started from a
     // clean state when it comes back: the DC blocker, the Pre EQ, each band's EQ, and the band

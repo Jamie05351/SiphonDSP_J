@@ -448,8 +448,8 @@ private fun DriverCard(
                     offColor = PolNormalGreen,
                     onLabel = "INVERT",
                     offLabel = "NORMAL",
-                    // Wider than a value box so INVERT / NORMAL clears the thumb.
-                    width = 132.dp,
+                    // Wider than the 72dp on/off pill so INVERT / NORMAL fits.
+                    width = 96.dp,
                 )
             }
         }

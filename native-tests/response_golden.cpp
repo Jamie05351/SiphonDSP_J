@@ -58,7 +58,7 @@ int outField(int output, int field) {
 std::vector<std::pair<int, float>> quietDynamics() {
     return {{sch::kMasterLimiterEnabled, 0.f}, {sch::kBusLimLowEnabled, 0.f},
             {sch::kBusLimMidEnabled, 0.f},     {sch::kBusLimHighEnabled, 0.f},
-            {sch::kMbcEnabled, 0.f},           {sch::kLoudnessEnabled, 0.f}};
+            {sch::kMbcEnabled, 0.f},           {sch::kDeepBassEnabled, 0.f}};
 }
 
 std::vector<Scenario> scenarios() {

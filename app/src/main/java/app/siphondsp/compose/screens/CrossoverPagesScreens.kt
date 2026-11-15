@@ -152,10 +152,9 @@ fun CrossoverLowMidPage(
                 onCheckedChange = { on ->
                     dsp.commit(NativeBmwDspValues.INDEX_SUBSONIC_ENABLED, if (on) 1f else 0f, subsonicEnMirror)
                 },
+                // The 72dp pill leaves room for the selector in the 333dp column beside the 150dp
+                // label: 150 + 72 + 8 + 100 = 330.
                 contentDescription = "Subsonic",
-                // Narrower than the usual 100dp so the selector fits the 333dp column beside the
-                // 150dp label: 150 + 72 + 8 + 100 = 330.
-                width = 72.dp,
             )
             Spacer(Modifier.width(8.dp))
             BmwSegmentedControl(

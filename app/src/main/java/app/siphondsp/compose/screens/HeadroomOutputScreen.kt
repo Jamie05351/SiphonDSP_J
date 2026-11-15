@@ -71,8 +71,8 @@ private typealias GroupRow = (y: Int, h: Int) -> Modifier
  * - **Output**: the Pre EQ Preamp (blue), Headroom (purple) with its Auto switch, Post gain L and
  *   R (green), each a label + value box + −/+ row.
  * - **Limiter** (cyan): the master limiter's on/off switch in the group's header, its Threshold,
- *   and the live gain-reduction meter ([LimiterGrMeter]); then **Volume** and **Loudness**, which
- *   follows the volume in the chain.
+ *   and the live gain-reduction meter ([LimiterGrMeter]); then **Volume**. Deep bass, which
+ *   follows the volume in the chain, has its own page ([DeepBassScreen]).
  *
  * Each group lists its rows once against a [GroupRow] that the head unit ([HeadUnitOutputPage])
  * or the phone ([PhoneOutputPage]) turns into a position.
@@ -89,7 +89,6 @@ fun HeadroomOutputScreen(modifier: Modifier = Modifier) {
     val limiter: @Composable (GroupRow) -> Unit = { row ->
         LimiterGroup(dsp, row)
         VolumeGroup(dsp, row)
-        LoudnessGroup(dsp, row)
     }
 
     BmwDspTheme {
@@ -224,26 +223,6 @@ private fun PreampRow(peq: PeqStateHolder, modifier: Modifier) {
     )
 }
 
-/**
- * Loudness compensation: as the master volume drops, lifts the bass (and a little treble) the ear
- * loses first at low level, so quiet listening keeps its body. None at full volume. Header switch
- * = on/off; Strength scales the whole lift.
- */
-@Composable
-private fun LoudnessGroup(dsp: BmwDspState, row: GroupRow) {
-    ArtGroupHeader(
-        title = "Loudness",
-        accent = LoudnessAccent,
-        modifier = row(300, HeaderHeight),
-        checked = dsp.isOn(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED),
-        onCheckedChange = { on -> dsp.commit(NativeBmwDspValues.INDEX_LOUDNESS_ENABLED, if (on) 1f else 0f) },
-    )
-    DspArtSlider(
-        dsp, "Strength", NativeBmwDspValues.INDEX_LOUDNESS_STRENGTH, 0f..100f, 5f, "%", LoudnessAccent,
-        row(352, 48),
-    )
-}
-
 @Composable
 private fun LimiterGroup(dsp: BmwDspState, row: GroupRow) {
     ArtGroupHeader(
@@ -373,14 +352,12 @@ private const val AutoHeadroomPollMs = 250L
 private val PostGainAccent = Color(BmwDashboardSkin.M_GREEN)
 private val LimiterAccent = Color(BmwDashboardSkin.SLIDER_LIMITER_COLOR)
 private val VolumeAccent = Color.White
-private val LoudnessAccent = Color(BmwDashboardSkin.SLIDER_TILT_COLOR)
 
 // Head-unit layout, in the 1280x480 editor's dp: two 333dp groups (a 150dp label column, then a
 // stepper) with 120dp between them, centred across the content area (x 190..1230). Both columns
 // start at 70, just under the 69dp toolbar line (status strip + OUTPUT/CONVOLVER finder), which
-// they used to run into from 44. To fit below it, Loudness moved from under Output (a 432dp
-// column) to under Volume: Output is 312dp, Limiter + Volume + Loudness 400dp, ending at 470,
-// inside the 8dp bezel. Rows stay 8dp apart.
+// they used to run into from 44. Output is 312dp, Limiter + Volume 284dp, inside the 8dp bezel.
+// Rows stay 8dp apart.
 private const val GroupWidth = 333
 private const val OutputX = 317
 private const val LimiterX = 770

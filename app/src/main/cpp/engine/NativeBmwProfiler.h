@@ -47,7 +47,7 @@ public:
         OutputGains,     // post gain, channel mute, measurement-mute bus
         Convolver,
         MasterLimiter,
-        VolumeLoudness,  // master volume, loudness, the hardware swap
+        VolumeDeepBass,  // master volume, Deep bass, the hardware swap
         OutputGuard,     // fault check, output fade, guard clamp, capture tap
         kStageCount
     };
