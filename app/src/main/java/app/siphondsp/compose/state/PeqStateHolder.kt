@@ -132,27 +132,34 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
     var showHouseCurve: Boolean by mutableStateOf(houseStore.showOnGraph)
         private set
 
-    fun houseCurveSource(): String? = houseStore.sourceName()
+    /** The imported file's name (null = none), read with the curve on IO: never a disk read in
+     *  composition. */
+    var houseCurveSource: String? by mutableStateOf(null)
+        private set
 
     // Same scope and lock as the car baseline (see above): file work on IO, state published on main.
     suspend fun loadHouseCurve() {
         baselineLock.withLock {
-            houseCurve = withContext(Dispatchers.IO) { houseStore.load() }
+            val (curve, name) = withContext(Dispatchers.IO) { houseStore.load().let { it to it?.let { houseStore.sourceName() } } }
+            houseCurve = curve
+            houseCurveSource = name
         }
     }
 
     fun importHouseCurve(uri: Uri) {
         baselineScope.launch {
             baselineLock.withLock {
-                val (error, loaded) = withContext(Dispatchers.IO) {
+                val (error, loaded, name) = withContext(Dispatchers.IO) {
                     val error = houseStore.import(uri)
-                    error to if (error == null) houseStore.load() else null
+                    val curve = if (error == null) houseStore.load() else null
+                    Triple(error, curve, curve?.let { houseStore.sourceName() })
                 }
                 if (error != null) {
                     toast("$error; previous house curve kept")
                     return@withLock
                 }
                 houseCurve = loaded
+                houseCurveSource = name
                 // A newly loaded curve is meant to be seen.
                 setHouseCurveShown(true)
                 toast("House curve loaded")
@@ -170,6 +177,7 @@ class PeqStateHolder internal constructor(private val appContext: Context) {
             baselineLock.withLock {
                 withContext(Dispatchers.IO) { houseStore.clear() }
                 houseCurve = null
+                houseCurveSource = null
             }
         }
     }

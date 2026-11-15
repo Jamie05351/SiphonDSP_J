@@ -762,23 +762,6 @@ private fun drawLegend(
                 nc.drawText(label, x, baseline, paint)
                 x += paint.measureText(label) + 14f * density
             }
-            if (house != null && housePaint != null) {
-                // The house curve's key and its applied offset, after the bank key. Tapping it
-                // toggles the overlay; hidden, it stays here dimmed so it can be brought back.
-                x += 10f * density
-                val sampleLength = 20f * density
-                val keyY = baseline - p.unifiedLegendPaint.textSize * 0.32f
-                val label = if (houseShown) "HOUSE ${formatOffsetDb(house.offsetDb)}" else "HOUSE (hidden)"
-                val alpha = if (houseShown) 230 else 110
-                val sample = Paint(housePaint).apply { this.alpha = alpha }
-                nc.drawLine(x, keyY, x + sampleLength, keyY, sample)
-                val text = tinted(AndroidColor.argb(alpha, 220, 222, 228))
-                val textX = x + sampleLength + 6f * density
-                nc.drawText(label, textX, baseline, text)
-                val end = textX + text.measureText(label)
-                // A finger-sized target: the legend strip's full height and a margin either side.
-                houseHit?.set(x - 8f * density, 0f, end + 8f * density, g.top + 4f * density)
-            }
             val focusLabel = focusedBank?.let { bankShortLabel(it) } ?: "SUM"
             val focusColor = focusedBank?.let { bankColor(p, it) } ?: SumCurveColor
             val sample = 20f * density
@@ -802,6 +785,33 @@ private fun drawLegend(
             nc.drawLine(right, midY, right + sample, midY, line)
             right -= 12f * density + labelPaint.measureText(focusLabel)
             nc.drawText(focusLabel, right, baseline, labelPaint)
+            if (house != null && housePaint != null) {
+                // The house curve's key and its applied offset, between the bank key and the
+                // focus key. Tapping it toggles the overlay; hidden, it stays here dimmed so it
+                // can be brought back. Where the label doesn't fit (a narrow graph) only the key
+                // line is drawn; where even that doesn't, nothing (the chip menu still toggles it).
+                val start = x + 10f * density
+                val limit = right - 12f * density
+                val sampleLength = 20f * density
+                val label = if (houseShown) "HOUSE ${formatOffsetDb(house.offsetDb)}" else "HOUSE (hidden)"
+                val alpha = if (houseShown) 230 else 110
+                val text = tinted(AndroidColor.argb(alpha, 220, 222, 228))
+                val textX = start + sampleLength + 6f * density
+                val withLabel = textX + text.measureText(label) <= limit
+                if (withLabel || start + sampleLength <= limit) {
+                    val sample = Paint(housePaint).apply { this.alpha = alpha }
+                    nc.drawLine(start, midY, start + sampleLength, midY, sample)
+                    var end = start + sampleLength
+                    if (withLabel) {
+                        nc.drawText(label, textX, baseline, text)
+                        end = textX + text.measureText(label)
+                    }
+                    // A finger-sized target over the legend strip only: it stops at the plot's top
+                    // edge, so a tap on the plot under it still reaches the plot. A margin either
+                    // side, but never into the focus key.
+                    houseHit?.set(start - 8f * density, 0f, minOf(end + 8f * density, limit), g.top)
+                }
+            }
         }
     }
 }

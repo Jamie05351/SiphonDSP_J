@@ -584,7 +584,7 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
 /**
  * Load / clear the house curve: a REW-style target (frequency, dB per line) drawn over the graph
  * as a dashed line, lined up with the full curve over 200 Hz - 5 kHz. Display only. Whether it
- * shows is the graph legend's toggle.
+ * shows is the graph legend's toggle, mirrored here as "Show on graph".
  */
 @Composable
 private fun HouseCurveChip(holder: PeqStateHolder) {
@@ -604,7 +604,7 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
             modifier = Modifier.bmwFocusRing(interactionSource),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            MenuNote("Current: ${holder.houseCurveSource() ?: "none"}")
+            MenuNote("Current: ${holder.houseCurveSource ?: "none"}")
             HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Load house curve…") },
@@ -612,6 +612,13 @@ private fun HouseCurveChip(holder: PeqStateHolder) {
                     expanded = false
                     launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
                 },
+            )
+            // The same toggle as the graph legend's item, here too so rotary / D-pad navigation
+            // (which can't reach a tap on the graph) can hide or show it without clearing it.
+            DropdownMenuItem(
+                text = { Text("Show on graph" + if (holder.showHouseCurve) "  ✓" else "") },
+                enabled = holder.houseCurve != null,
+                onClick = { expanded = false; holder.setHouseCurveShown(!holder.showHouseCurve) },
             )
             DropdownMenuItem(
                 text = { Text("Clear") },
