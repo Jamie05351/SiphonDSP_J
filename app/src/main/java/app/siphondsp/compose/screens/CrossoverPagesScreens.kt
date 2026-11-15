@@ -1,9 +1,5 @@
 package app.siphondsp.compose.screens
 
-import app.siphondsp.compose.nav.LocalAppNavigator
-import app.siphondsp.compose.nav.Routes
-import app.siphondsp.view.DspDestination
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,8 +61,7 @@ private typealias ControlRow = (y: Int, h: Int) -> Modifier
  * Phase 5 of the 3-way crossover (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md): the Crossovers
  * controls split into one swipe page per split point, each beside the same full response graph --
  * [CrossoverLowMidPage] (Low lowpass, Mid highpass, Subsonic) and [CrossoverMidHighPage] (the
- * master 3-way switch, Mid lowpass, High highpass + slope, the linked Mid all-pass alignment
- * and, on the phone, a deep link to the full per-output All-pass screen) -- then [CrossoverTiltPage]. The graph mode is
+ * master 3-way switch, Mid lowpass, High highpass + slope and Auto-pair) -- then [CrossoverTiltPage]. The graph mode is
  * hoisted by the pager so all three pages keep the same MAG / PHASE / BOTH / DELAY choice.
  *
  * Both screens lay a page out the same way (Figma "SiphonDSP Front Panel (from code)", Steppers
@@ -185,20 +179,9 @@ fun CrossoverMidHighPage(
     modifier: Modifier = Modifier,
 ) {
     val dsp = rememberBmwDspState()
-    val context = LocalContext.current
     val midSlider = Color(BmwDashboardSkin.SLIDER_MID_BAND_COLOR)
     val highSlider = Color(BmwDashboardSkin.SLIDER_HIGH_BAND_COLOR)
 
-    // Section-1 Mid all-pass block for each Mid output: the frequency handle aligns the Mid
-    // branch's phase through the handoff; L drives, R mirrors.
-    val midLeftBase = NativeBmwDspValues.INDEX_ALL_PASS +
-        (NativeBmwDspValues.OUTPUT_MID_LEFT * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) *
-        NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-    val midRightBase = NativeBmwDspValues.INDEX_ALL_PASS +
-        (NativeBmwDspValues.OUTPUT_MID_RIGHT * NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT) *
-        NativeBmwDspValues.ALL_PASS_SECTION_WIDTH
-    val midAlignFreqMirror = intArrayOf(midRightBase + 2)
-    val midAlignEnMirror = intArrayOf(midRightBase)
     val midLowpassType = dsp.get(ThreeWayCrossover.midLowpassTypeIndex).toInt().coerceIn(0, 4)
     val onMidLowpassType: (Int) -> Unit = {
         dsp.commit(ThreeWayCrossover.midLowpassTypeIndex, it.toFloat(), ThreeWayCrossover.midLowpassTypeMirrors)
@@ -210,8 +193,9 @@ fun CrossoverMidHighPage(
     }
 
     val controls: @Composable (ControlRow) -> Unit = { row ->
-        // Each switch sits directly over the values it enables: 3-way over the Mid lowpass and
-        // High highpass (each with its own slope), Mid align over its frequency.
+        // The 3-way switch sits directly over the values it enables: the Mid lowpass and High
+        // highpass, each with its own slope. Mid's all-pass alignment is on the All-pass page,
+        // beside the same graph.
         ArtSwitchRow(
             label = "3-way",
             checked = ThreeWayCrossover.isEnabled(dsp.values),
@@ -221,49 +205,24 @@ fun CrossoverMidHighPage(
         )
         DspArtSlider(
             dsp, MidLowpassLabel, ThreeWayCrossover.midLowpassIndex, 300f..8000f, 10f, "Hz", midSlider,
-            row(118, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
+            row(120, 48), mirrors = ThreeWayCrossover.midLowpassMirrors,
         )
-        SlopeRow(midLowpassType, onMidLowpassType, row(168, 40), slopeLabel(pairL.midHighCorrected || pairR.midHighCorrected))
+        SlopeRow(midLowpassType, onMidLowpassType, row(172, 40), slopeLabel(pairL.midHighCorrected || pairR.midHighCorrected))
         DspArtSlider(
             dsp, HighHighpassLabel, ThreeWayCrossover.highHighpassIndex, 1000f..8000f, 10f, "Hz", highSlider,
-            row(210, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
+            row(220, 48), mirrors = ThreeWayCrossover.highHighpassMirrors,
         )
         SlopeRow(
-            highCrossoverType, onHighType, row(260, 40),
+            highCrossoverType, onHighType, row(272, 40),
             slopeLabel(
                 pairL.midHighCorrected || pairR.midHighCorrected,
                 inverted = pairL.highInverted || pairR.highInverted,
             ),
         )
-        AutoPairRows(dsp, NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR, lowMid = false, row(302, 32), row(334, 22))
-        ArtSwitchRow(
-            label = "Mid align",
-            checked = dsp.isOn(midLeftBase),
-            onCheckedChange = { on -> dsp.commit(midLeftBase, if (on) 1f else 0f, midAlignEnMirror) },
-            modifier = row(358, 32),
-            labelWidth = ControlLabelWidth,
-        )
-        // "Mid align (all-pass)" is too long for the label column, so it sits over the stepper.
-        DspArtSlider(
-            dsp, MidAlignLabel, midLeftBase + 2, 20f..1000f, 1f, "Hz", midSlider,
-            row(392, 74), labelAbove = true, mirrors = midAlignFreqMirror,
-        )
+        AutoPairRows(dsp, NativeBmwDspValues.INDEX_MID_HIGH_AUTO_PAIR, lowMid = false, row(320, 36), row(358, 24))
     }
 
-    val navigator = LocalAppNavigator.current
-    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls) {
-        // Phone only: the All-pass page (Alignment's ALLPASS) is a sidebar tap away on the head unit.
-        Text(
-            text = "Open full All-pass ›",
-            color = Color(BmwDashboardSkin.LIGHT_BLUE),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            textDecoration = TextDecoration.Underline,
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .clickable { navigator.openWorkspace(DspDestination.ALIGNMENT, Routes.ALIGNMENT_PAGE_ALLPASS) },
-        )
-    }
+    CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
 }
 
 /**
@@ -390,7 +349,7 @@ fun CrossoverVirtualBassPage(
     CrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
 }
 
-/** A Crossovers page on either screen; [phoneExtra] is shown under the phone's controls. */
+/** A Crossovers page on either screen. */
 @Composable
 private fun CrossoverPage(
     dsp: BmwDspState,
@@ -398,12 +357,11 @@ private fun CrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
-    phoneExtra: @Composable () -> Unit = {},
 ) {
     if (LocalContext.current.isHeadUnitDisplay()) {
         HeadUnitCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
     } else {
-        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls, phoneExtra)
+        PhoneCrossoverPage(dsp, graphMode, onGraphModeChange, modifier, controls)
     }
 }
 
@@ -447,7 +405,6 @@ private fun PhoneCrossoverPage(
     onGraphModeChange: (CrossoverGraphMode) -> Unit,
     modifier: Modifier,
     controls: @Composable (ControlRow) -> Unit,
-    extra: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val peqState = remember { BmwPeqState.load(context) }
@@ -477,14 +434,13 @@ private fun PhoneCrossoverPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 controls { _, h -> Modifier.fillMaxWidth().height(h.dp) }
-                extra()
             }
         }
     }
 }
 
 @Composable
-private fun GraphModePicker(graphMode: CrossoverGraphMode, onGraphModeChange: (CrossoverGraphMode) -> Unit) {
+internal fun GraphModePicker(graphMode: CrossoverGraphMode, onGraphModeChange: (CrossoverGraphMode) -> Unit) {
     BmwSegmentedControl(
         options = listOf("MAG", "PHASE", "BOTH", "DELAY", "ALIGN"),
         selectedIndex = graphMode.ordinal,
@@ -633,4 +589,3 @@ private const val LowLowpassLabel = "Low lowpass"
 private const val MidHighpassLabel = "Mid highpass"
 private const val MidLowpassLabel = "Mid lowpass"
 private const val HighHighpassLabel = "High highpass"
-private const val MidAlignLabel = "Mid align (all-pass)"
