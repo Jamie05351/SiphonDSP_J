@@ -130,6 +130,43 @@ TEST_CASE("A bad ramp state is cleared by the fault reset, not tripped on foreve
     CHECK(rms(buf, 2 * kFadeFrames, 2 * kFadeFrames + 4800) > 0.1);
 }
 
+TEST_CASE("A NaN ahead of the band split is a counted fault and the chain recovers") {
+    // The band lanes silence a non-finite sample, so without the lane check it would never
+    // reach the output guard: a stage stuck on NaN ahead of the split would play silence with
+    // no fault counted. Both ways in: a bad ramp state, and a NaN in the input stream.
+    SUBCASE("a bad headroom ramp") {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        auto c = defaultConfig();
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto warm = stereoSine(220.0, 0.5, 4800);
+        proc.process(warm.data(), warm.size());
+        NativeBmwDspProcessorTestAccess::poisonHeadroom(proc);
+        auto buf = stereoSine(220.0, 0.5, 2 * kFadeFrames + 4800);
+        proc.process(buf.data(), buf.size());
+        CHECK(proc.guardCounters().nonFiniteFaults == 1);
+        CHECK(rms(buf, 2 * kFadeFrames, 2 * kFadeFrames + 4800) > 0.1);
+    }
+    SUBCASE("a NaN input sample") {
+        NativeBmwDspProcessor proc;
+        proc.setSampleRate(kSampleRate);
+        auto c = defaultConfig();
+        REQUIRE(proc.configure(c.data(), c.size()));
+        auto warm = stereoSine(220.0, 0.5, 4800);
+        proc.process(warm.data(), warm.size());
+        auto buf = stereoSine(220.0, 0.5, 2 * kFadeFrames + 4800);
+        buf[2 * 100] = std::numeric_limits<float>::quiet_NaN();
+        proc.process(buf.data(), buf.size());
+        // The first stage it meets flushes it to 0, so it is no fault: nothing bad ever reached
+        // the split. Either way it must not leave the chain stuck silent.
+        CHECK(proc.guardCounters().nonFiniteFaults == 0);
+        for (float v : buf) {
+            CHECK(std::isfinite(v));
+        }
+        CHECK(rms(buf, 2 * kFadeFrames, 2 * kFadeFrames + 4800) > 0.1);
+    }
+}
+
 TEST_CASE("Without a stream start nothing fades: the output is untouched") {
     NativeBmwDspProcessor a, b;
     for (auto* p : {&a, &b}) {

@@ -19,7 +19,7 @@ enum class DspStage(val bit: Int, val label: String, val neutralised: Boolean = 
     POLARITY(5, "Polarity"),
     ALL_PASS(6, "All-pass"),
     SUBSONIC(7, "Subsonic"),
-    ROUTING(8, "Routing"),
+    // Bit 8 is retired (it was the routing matrix, removed): never reported, never reused.
     BUS_LIMITER(9, "Bus limiters"),
     MONO_BASS(10, "Mono bass"),
     VIRTUAL_CENTRE(11, "Virtual centre"),
@@ -47,7 +47,7 @@ enum class DspStage(val bit: Int, val label: String, val neutralised: Boolean = 
         /** Bits 0 until this are the stages measurement neutral bypasses. */
         const val NEUTRAL_COUNT = 22
         val NEUTRAL: List<DspStage> = entries.filter { it.neutralised }
-        private val BAND_STAGES = setOf(BAND_EQ, BAND_GAIN, BAND_DELAY, POLARITY, ALL_PASS, SUBSONIC, ROUTING, BUS_LIMITER, MEASUREMENT_MUTE)
+        private val BAND_STAGES = setOf(BAND_EQ, BAND_GAIN, BAND_DELAY, POLARITY, ALL_PASS, SUBSONIC, BUS_LIMITER, MEASUREMENT_MUTE)
 
         fun fromMask(mask: Int): List<DspStage> = entries.filter { mask and it.mask != 0 }
     }
@@ -118,16 +118,6 @@ object MeasurementNeutral {
         if (bypassed(DspStage.ALL_PASS)) {
             for (s in 0 until 8) out[S.INDEX_ALL_PASS + s * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH] = 0f
             for (s in 0 until 4) out[S.INDEX_HIGH_ALL_PASS + s * NativeBmwDspValues.ALL_PASS_SECTION_WIDTH] = 0f
-        }
-        if (bypassed(DspStage.ROUTING)) {
-            for (o in 0 until 4) {
-                out[S.INDEX_ROUTING + o * 2] = if (o % 2 == 0) 1f else 0f
-                out[S.INDEX_ROUTING + o * 2 + 1] = if (o % 2 == 0) 0f else 1f
-            }
-            for (o in 0 until 2) {
-                out[S.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT + o * 2] = if (o == 0) 1f else 0f
-                out[S.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT + o * 2 + 1] = if (o == 0) 0f else 1f
-            }
         }
         if (bypassed(DspStage.BUS_LIMITER)) {
             out[S.INDEX_BUS_LIMITER_LOW_ENABLED] = 0f

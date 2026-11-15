@@ -88,16 +88,6 @@ object NativeBmwDspValues {
     const val CROSSOVER_TYPE_MIGRATED_MARKER = 2f
 
     // Advanced stereo routing matrix: four logical outputs x Front L/Front R source.
-    const val INDEX_ROUTING = NativeBmwDspSchema.INDEX_ROUTING
-    const val ROUTING_VALUE_COUNT = 8
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT
-    const val INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT
-    const val INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT
-    const val INDEX_ROUTE_MID_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_MID_LEFT_FRONT_LEFT
-    const val INDEX_ROUTE_MID_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_MID_LEFT_FRONT_RIGHT
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_MID_RIGHT_FRONT_LEFT
-    const val INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT
 
     // Two all-pass sections per exact output: [enabled, order(1|2), frequencyHz, Q].
     const val INDEX_ALL_PASS = NativeBmwDspSchema.INDEX_ALL_PASS
@@ -299,7 +289,7 @@ object NativeBmwDspValues {
     // High band (210..261) -- a genuinely new third output, added in the 210 -> 262 growth
     // (docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md). Kept entirely in the schema's tail (its own
     // routing/all-pass/output-config sub-blocks) rather than growing OUTPUT_COUNT/outputIndex()
-    // to 6: those stay pinned at 4 forever so the legacy INDEX_ROUTING/INDEX_ALL_PASS/
+    // to 6: those stay pinned at 4 forever so the legacy (retired) routing/INDEX_ALL_PASS/
     // INDEX_OUTPUT_CONFIG block offsets -- which every existing saved config already relies on --
     // can never shift. Use highOutputIndex()/highAllPassIndex() rather than outputIndex() for
     // High. Ships silent via INDEX_HIGH_XO_PASS (both default true): true fully silences High: a
@@ -496,10 +486,6 @@ object NativeBmwDspValues {
     const val INDEX_HIGH_DELAY_L = NativeBmwDspSchema.INDEX_HIGH_DELAY_L
     const val INDEX_HIGH_DELAY_R = NativeBmwDspSchema.INDEX_HIGH_DELAY_R
 
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT
-    const val INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT
-    const val INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT = NativeBmwDspSchema.INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT
 
     const val INDEX_HIGH_ALL_PASS = NativeBmwDspSchema.INDEX_HIGH_ALL_PASS
     const val INDEX_HIGH_OUTPUT_CONFIG = NativeBmwDspSchema.INDEX_HIGH_OUTPUT_CONFIG
@@ -938,11 +924,6 @@ object NativeBmwDspValues {
         Timber.i("BMW DSP migrated legacy SharedPreferences blob size=${parsed.size} success=$migrated")
         if (migrated) prefs.edit { remove(KEY) }
         return values
-    }
-
-    /** Same-side unity routing, zero crossfeed. */
-    fun resetRoutingToDefaults(values: FloatArray) {
-        DEFAULTS.copyInto(values, INDEX_ROUTING, INDEX_ROUTING, INDEX_ROUTING + ROUTING_VALUE_COUNT)
     }
 
     /** Tells the engine and every screen; [origin], when given, lets the sender recognise its own echo. */

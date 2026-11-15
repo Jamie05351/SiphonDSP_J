@@ -50,9 +50,6 @@ class NativeBmwSchemaAgreementTest {
         "kTiltAmount" to NativeBmwDspValues.INDEX_TILT_AMOUNT,
         "kTiltFreq" to NativeBmwDspValues.INDEX_TILT_FREQ,
 
-        "kRoutingBase" to NativeBmwDspValues.INDEX_ROUTING,
-        "kRoutingStride" to 2,
-
         "kAllPassBase" to NativeBmwDspValues.INDEX_ALL_PASS,
         "kAllPassSectionWidth" to NativeBmwDspValues.ALL_PASS_SECTION_WIDTH,
         "kAllPassSectionsPerOutput" to NativeBmwDspValues.ALL_PASS_SECTIONS_PER_OUTPUT,
@@ -124,8 +121,6 @@ class NativeBmwSchemaAgreementTest {
         "kHighGainR" to NativeBmwDspValues.INDEX_HIGH_GAIN_R,
         "kHighDelayL" to NativeBmwDspValues.INDEX_HIGH_DELAY_L,
         "kHighDelayR" to NativeBmwDspValues.INDEX_HIGH_DELAY_R,
-        "kHighRoutingBase" to NativeBmwDspValues.INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT,
-        "kHighRoutingStride" to 2,
         "kHighAllPassBase" to NativeBmwDspValues.INDEX_HIGH_ALL_PASS,
         "kHighOutputConfigBase" to NativeBmwDspValues.INDEX_HIGH_OUTPUT_CONFIG,
         "kHighBandMigrated" to NativeBmwDspValues.INDEX_HIGH_BAND_MIGRATED,

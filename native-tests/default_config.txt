@@ -72,15 +72,15 @@
 100          # 44  unused (was monoBassBlend)
 0            # 45  unused (was monoBassMakeup)
 
-# Routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
-1            # 46  LowL <- FrontL
-0            # 47  LowL <- FrontR
-0            # 48  LowR <- FrontL
-1            # 49  LowR <- FrontR
-1            # 50  MidL <- FrontL
-0            # 51  MidL <- FrontR
-0            # 52  MidR <- FrontL
-1            # 53  MidR <- FrontR
+# Retired routing matrix (Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]) -- removed: no UI ever set it, the engine feeds every Left band from Front L and every Right band from Front R
+1            # 46  LowL <- FrontL (retired routing coefficient)
+0            # 47  LowL <- FrontR (retired routing coefficient)
+0            # 48  LowR <- FrontL (retired routing coefficient)
+1            # 49  LowR <- FrontR (retired routing coefficient)
+1            # 50  MidL <- FrontL (retired routing coefficient)
+0            # 51  MidL <- FrontR (retired routing coefficient)
+0            # 52  MidR <- FrontL (retired routing coefficient)
+1            # 53  MidR <- FrontR (retired routing coefficient)
 
 # Eight all-pass sections (2 per output x 4 outputs), each [enabled, order, freq Hz, Q] -- all disabled by default
 0            # 54  LowL sec0 enabled
@@ -279,11 +279,11 @@
 0            # 213 highDelayL
 0            # 214 highDelayR
 
-# High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR] -- same identity default as Low/Mid.
-1            # 215 routeHighLeftFrontLeft
-0            # 216 routeHighLeftFrontRight
-0            # 217 routeHighRightFrontLeft
-1            # 218 routeHighRightFrontRight
+# Retired High routing ([High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR]) -- removed with the Low/Mid matrix
+1            # 215 routeHighLeftFrontLeft (retired routing coefficient)
+0            # 216 routeHighLeftFrontRight (retired routing coefficient)
+0            # 217 routeHighRightFrontLeft (retired routing coefficient)
+1            # 218 routeHighRightFrontRight (retired routing coefficient)
 
 # High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
 0            # 219 highLeft section0 enabled

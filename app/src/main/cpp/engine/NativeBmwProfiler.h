@@ -36,7 +36,6 @@ public:
         PreEq,           // the full-range PEQ bank, its preamp and the headroom gain
         Mbc,
         VirtualCentre,
-        Routing,
         Crossovers,      // every band's crossover filters (and subsonic)
         BandEq,
         AllPass,
