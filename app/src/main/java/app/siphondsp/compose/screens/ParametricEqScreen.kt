@@ -107,6 +107,7 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(holder) { holder.loadCarBaseline() }
+    LaunchedEffect(holder) { holder.loadHouseCurve() }
 
     LifecycleResumeEffect(Unit) {
         reloadEverything()
@@ -198,6 +199,9 @@ fun ParametricEqScreen(holder: PeqStateHolder, modifier: Modifier = Modifier) {
                         onShowConvolverChange = { graphPrefs.showConvolverInGraphs = it },
                     ),
                     carBaseline = holder.graphBaseline,
+                    houseCurve = holder.houseCurve,
+                    showHouseCurve = holder.showHouseCurve,
+                    onShowHouseCurveChange = holder::setHouseCurveShown,
                 )
                 else -> PeqBandList(holder, Modifier.fillMaxSize())
             }
@@ -319,6 +323,7 @@ fun PeqToolbarActions(holder: PeqStateHolder, modifier: Modifier = Modifier) {
         Chip("Export") { exportLauncher.launch(holder.selectedScope.fileName) }
         FilterToolsChip(holder, { copyWholeScopeTarget = it }) { message -> context.toast(message) }
         CarBaselineChip(holder)
+        HouseCurveChip(holder)
         Chip("Diagnostics") {
             val sampleRate = RootlessAudioProcessorService.nativeBmwPeqSampleRate()
             val graphPrefs = PeqGraphPreferences(context)
@@ -571,6 +576,57 @@ private fun CarBaselineChip(holder: PeqStateHolder) {
             message = "Remove the stored Left and Right measurements? The graph goes back to assuming a flat car.",
             confirmLabel = "Clear",
             onConfirm = { showClearConfirm = false; holder.clearCarBaseline() },
+            onDismiss = { showClearConfirm = false },
+        )
+    }
+}
+
+/**
+ * Load / clear the house curve: a REW-style target (frequency, dB per line) drawn over the graph
+ * as a dashed line, lined up with the full curve over 200 Hz - 5 kHz. Display only. Whether it
+ * shows is the graph legend's toggle.
+ */
+@Composable
+private fun HouseCurveChip(holder: PeqStateHolder) {
+    var expanded by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { holder.importHouseCurve(it) }
+    }
+
+    Box {
+        val interactionSource = remember { MutableInteractionSource() }
+        AssistChip(
+            onClick = { expanded = true },
+            label = { Text(if (holder.houseCurve != null) "House curve ✓" else "House curve") },
+            trailingIcon = { Text("▾") },
+            interactionSource = interactionSource,
+            modifier = Modifier.bmwFocusRing(interactionSource),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MenuNote("Current: ${holder.houseCurveSource() ?: "none"}")
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Load house curve…") },
+                onClick = {
+                    expanded = false
+                    launcher.launch(arrayOf("text/plain", "text/*", "application/octet-stream"))
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Clear") },
+                enabled = holder.houseCurve != null,
+                onClick = { expanded = false; showClearConfirm = true },
+            )
+        }
+    }
+
+    if (showClearConfirm) {
+        ConfirmDialog(
+            title = "Clear house curve?",
+            message = "Remove the stored house curve from the graph?",
+            confirmLabel = "Clear",
+            onConfirm = { showClearConfirm = false; holder.clearHouseCurve() },
             onDismiss = { showClearConfirm = false },
         )
     }
