@@ -156,7 +156,6 @@ def gen_header(sections, slots, consts):
         "",
         "// Pinned to the processor's own copies, so a drift is a build break.",
         "static_assert(kSize == NativeBmwDspProcessor::kConfigSize);",
-        "static_assert(kRoutingBase == NativeBmwDspProcessor::kRoutingBase);",
         "static_assert(kAllPassBase == NativeBmwDspProcessor::kAllPassBase);",
         "static_assert(kOutputConfigBase == NativeBmwDspProcessor::kOutputConfigBase);",
         "static_assert(kOutputConfigWidth == NativeBmwDspProcessor::kOutputConfigWidth);",

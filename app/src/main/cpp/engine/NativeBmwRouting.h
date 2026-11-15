@@ -88,44 +88,6 @@ struct StereoFrame {
     float right = 0.0f;
 };
 
-struct Route {
-    float inputLeft = 0.0f;
-    float inputRight = 0.0f;
-};
-
-/**
- * Default routing preserves the existing BMW two-way stereo topology:
- * L -> Low L / Mid L and R -> Low R / Mid R, all cross-channel terms zero.
- */
-struct RoutingMatrix {
-    std::array<Route, kOutputCount> outputs{{
-        {1.0f, 0.0f},
-        {0.0f, 1.0f},
-        {1.0f, 0.0f},
-        {0.0f, 1.0f},
-    }};
-
-    std::array<float, kOutputCount> process(const StereoFrame& input) const {
-        // Sanitize each input channel once, before it's used in any mix: 0.0f * NaN is NaN, not
-        // 0.0f, so without this an output whose routing coefficient for a channel is exactly
-        // zero (i.e. one this file's own contract says is fully isolated from that channel) can
-        // still get silenced by a NaN on it -- the per-output isfinite(sum) check below alone
-        // doesn't provide that isolation. Falling back to silence for the poisoned sample itself
-        // (rather than letting NaN propagate into an output that *does* depend on it) matches
-        // the same graceful-degradation choice already made for a malformed coefficient.
-        const float safeLeft = std::isfinite(input.left) ? input.left : 0.0f;
-        const float safeRight = std::isfinite(input.right) ? input.right : 0.0f;
-        std::array<float, kOutputCount> result{};
-        for (std::size_t i = 0; i < outputs.size(); ++i) {
-            const float sum = safeLeft * outputs[i].inputLeft + safeRight * outputs[i].inputRight;
-            // A malformed/NaN routing coefficient must never reach the mix -- fall back
-            // to silence for that one output rather than poisoning the whole frame.
-            result[i] = std::isfinite(sum) ? sum : 0.0f;
-        }
-        return result;
-    }
-};
-
 /**
  * Flush a non-finite or sub-denormal double to exact zero. Used after every SVF/one-pole state
  * update on the audio thread to keep denormals (which are catastrophically slow on most FPUs)

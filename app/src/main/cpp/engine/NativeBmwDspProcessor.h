@@ -51,7 +51,7 @@ public:
     static constexpr float kStageDelayMaxMs = 10.f;
     // kRoutingBase is the one literal anchor here (the first slot after the earlier scalar
     // fields, index 46) -- kAllPassBase/kOutputSchemaMarkerIndex/kOutputConfigBase are all
-    // derived from it and the routing/all-pass block sizes, rather than being independent
+    // derived from it and the (retired) routing/all-pass block sizes, rather than being independent
     // literals that would silently misalign with configure()'s actual v[] reads (and with
     // NativeBmwDspSchema.h's own copies of these same offsets) if kLegacyOutputCount/kInputCount/
     // kAllPassSectionsPerOutput ever changed without every bare-literal copy being updated too.
@@ -366,7 +366,7 @@ private:
     enum : std::size_t { kChunkFrames = 64 };
     void processChunk(float* interleaved, std::size_t frames);
     // The chain, each stage over the whole chunk before the next (see processChunk()):
-    // the input stages from chunkFullL_/R_ (left there as the full-range path) through routing
+    // the input stages from chunkFullL_/R_ (left there as the full-range path), copied
     // into chunkLanes_; every band's sub-stages in place on chunkLanes_; the band sum (or the
     // full-range path), tilt, post gain, channel mute and measurement bus into chunkConvL_/R_;
     // then the master limiter, volume, Deep bass and the hardware swap in place there.
@@ -423,13 +423,12 @@ private:
                   "the convolver stage takes at most one chunk per call");
     std::array<float, kChunkFrames> chunkConvL_{}, chunkConvR_{};
     // The chunk's stereo signal through the input stages, left as the full-range path ahead of
-    // routing (see processInputStages()).
+    // the band split (see processInputStages()).
     std::array<float, kChunkFrames> chunkFullL_{}, chunkFullR_{};
     // A validated configure() update, built on the config thread: everything configure() reads
     // from v[], with the all-pass coefficients built at sampleRate.
     struct ParsedConfig {
         Params params;
-        NativeBmwRouting::RoutingMatrix routing{};
         std::array<OutputConfig, NativeBmwRouting::kOutputCount> outputConfigs{};
         std::array<std::array<NativeBmwRouting::AllPassSection, NativeBmwRouting::kAllPassSectionsPerOutput>,
                    NativeBmwRouting::kOutputCount>
@@ -511,7 +510,6 @@ private:
     // Per-output state, indexed by OutputId.
     std::array<OutputRuntime, NativeBmwRouting::kOutputCount> outputs_{};
     std::array<OutputConfig, NativeBmwRouting::kOutputCount> outputConfigs_{};
-    NativeBmwRouting::RoutingMatrix routing_{};
     float sampleRate_ = 48000.0f;
 
     // Master volume (v[292..293]). masterGain_ ramps toward masterGainTarget_ every sample with
@@ -619,7 +617,7 @@ private:
     // Owner only: recomputes the engine status (activeStages() and friends) from what is
     // installed. Called after every install.
     void publishStatus();
-    // Virtual-source stage (the virtual centre), between the MBC and routing_. Skipped entirely
+    // Virtual-source stage (the virtual centre), between the MBC and the band split. Skipped entirely
     // while p_.virtualStage.enabled is false; see docs/NATIVE_BMW_VIRTUAL_CHANNELS.md.
     NativeBmwDsp::VirtualSourceStage virtual_;
 

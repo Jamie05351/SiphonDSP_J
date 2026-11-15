@@ -206,7 +206,7 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
     }
     profiler_.lap(P::Mbc);
     // Virtual-source stage: extracts the virtual centre and feeds it back into the internal L/R
-    // with its own per-side level/delay/polarity/all-pass, ahead of routing so it then runs
+    // with its own per-side level/delay/polarity/all-pass, ahead of the band split so it then runs
     // through every band chain. Skipped entirely while disabled (how it ships).
     if (p_.virtualStage.enabled) {
         for (std::size_t i = 0; i < frames; ++i) {
@@ -214,14 +214,18 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
         }
     }
     profiler_.lap(P::VirtualCentre);
-    // L/R as they stand here are also the crossover bypass's full-range path.
+    // L/R as they stand here are also the crossover bypass's full-range path. Every band's Left
+    // lane is fed from L and every Right lane from R, directly: there is no routing matrix (it
+    // was removed; nothing in the app set it). A non-finite sample enters the bands as silence.
+    // The copy's time is charged to the stage timed next.
     for (std::size_t i = 0; i < frames; ++i) {
-        const auto routed = routing_.process({L[i], R[i]});
-        for (std::size_t o = 0; o < routed.size(); ++o) {
-            chunkLanes_[o][i] = routed[o];
+        const float l = std::isfinite(L[i]) ? L[i] : 0.f;
+        const float r = std::isfinite(R[i]) ? R[i] : 0.f;
+        for (std::size_t o = 0; o < NativeBmwRouting::kOutputCount; o += 2) {
+            chunkLanes_[o][i] = l;
+            chunkLanes_[o + 1][i] = r;
         }
     }
-    profiler_.lap(P::Routing);
 }
 
 void NativeBmwDspProcessor::processBandStages(std::size_t frames) {
@@ -392,8 +396,8 @@ void NativeBmwDspProcessor::processOutputStages(std::size_t frames, bool bandsRu
     float* L = chunkConvL_.data();
     float* R = chunkConvR_.data();
     // The band sum (per-output polarity and mute as one ramped multiplier, see
-    // OutputRuntime::outputGain; the routed lanes, so the routing matrix and per-output
-    // polarity/mute always apply), or the full-range path (crossover bypass), crossfaded between
+    // OutputRuntime::outputGain, so per-output polarity/mute always
+    // apply), or the full-range path (crossover bypass), crossfaded between
     // the two over kCrossoverFadeSeconds.
     const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
     for (std::size_t i = 0; i < frames; ++i) {
@@ -487,7 +491,7 @@ void NativeBmwDspProcessor::processBackStages(std::size_t frames) {
         // at the amp/speaker connectors, not something this DSP can see or control). This swap
         // cancels that physical fault: oL (built from the LowLeft/MidLeft chain) is written to
         // output param r, and oR (LowRight/MidRight) to output param l. Because of this, every
-        // "Left"/"Right"-labeled control elsewhere in the app (gains, routing, delay, PEQ, and the
+        // "Left"/"Right"-labeled control elsewhere in the app (gains, delay, PEQ, and the
         // BmwSignalChain preview-graph mapping) is correct as a direct, unswapped index -- they all
         // rely on this line already correcting the physical fault. If a future review flags this as
         // "controls wired backwards", the bug is almost certainly elsewhere; do not add a
@@ -513,12 +517,12 @@ void NativeBmwDspProcessor::processChunk(float* w, std::size_t frames) {
         chunkFullR_[i] = r;
     }
     profiler_.lap(P::Input);
-    // Front of the chain up to the routing matrix: into one lane per output, and the full-range
-    // stereo signal ahead of routing (the crossover bypass's path).
+    // Front of the chain up to the band split: into one lane per output, and the full-range
+    // stereo signal (the crossover bypass's path).
     processInputStages(frames);
     // The band split, or the full-range path (crossover bypass), crossfaded between the two over
     // kCrossoverFadeSeconds. Fully bypassed, the bands don't run at all: the output is the input
-    // stages' stereo signal itself, with no routing, filter, delay or latency of any kind. They
+    // stages' stereo signal itself, with no filter, delay or latency of any kind. They
     // start clean when the split comes back.
     const float xoverTarget = p_.crossoverBypass ? 1.f : 0.f;
     const bool bandsRun = xoverMix_ < 1.f || xoverTarget < 1.f;
@@ -809,7 +813,7 @@ void NativeBmwDspProcessor::publishStatus() {
                                        midPeq_.rightCount +
                                        (highRuns ? highPeq_.leftCount + highPeq_.rightCount : 0);
     mark(sch::kStageBandEq, bands && peqEnabled_ && p_.bandEqOn && bandEqSections > 0);
-    bool gain = false, delay = false, polarity = false, routing = false, subsonic = false;
+    bool gain = false, delay = false, polarity = false, subsonic = false;
     int allPassOutputs = 0;
     for (std::size_t out = 0; out < outputs_.size(); ++out) {
         if (!bandRuns(out)) {
@@ -824,9 +828,6 @@ void NativeBmwDspProcessor::publishStatus() {
             ap = ap || section.enabled;
         }
         allPassOutputs += ap ? 1 : 0;
-        const bool left = out % 2 == 0;
-        const auto& route = routing_.outputs[out];
-        routing = routing || route.inputLeft != (left ? 1.f : 0.f) || route.inputRight != (left ? 0.f : 1.f);
         subsonic = subsonic || (NativeBmwRouting::band(out) == NativeBmwRouting::Band::Low &&
                                 outputConfigs_[out].subsonicEnabled);
     }
@@ -835,7 +836,6 @@ void NativeBmwDspProcessor::publishStatus() {
     mark(sch::kStagePolarity, polarity);
     mark(sch::kStageAllPass, allPassOutputs > 0);
     mark(sch::kStageSubsonic, subsonic);
-    mark(sch::kStageRouting, routing);
     mark(sch::kStageBusLimiter,
          bands && (p_.busLimLowEnabled || p_.busLimMidEnabled || (highRuns && p_.busLimHighEnabled)));
     mark(sch::kStageMonoBass, p_.monoBassEnabled);

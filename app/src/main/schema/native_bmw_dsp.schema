@@ -81,15 +81,15 @@ slot 43  80          reserved - - unused (was monoBassFreq)
 slot 44  100         reserved - - unused (was monoBassBlend)
 slot 45  0           reserved - - unused (was monoBassMakeup)
 
-section Routing gains -- Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]
-slot 46  1           native   INDEX_ROUTING,INDEX_ROUTE_LOW_LEFT_FRONT_LEFT kRoutingBase LowL <- FrontL
-slot 47  0           native   INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT - LowL <- FrontR
-slot 48  0           native   INDEX_ROUTE_LOW_RIGHT_FRONT_LEFT - LowR <- FrontL
-slot 49  1           native   INDEX_ROUTE_LOW_RIGHT_FRONT_RIGHT - LowR <- FrontR
-slot 50  1           native   INDEX_ROUTE_MID_LEFT_FRONT_LEFT - MidL <- FrontL
-slot 51  0           native   INDEX_ROUTE_MID_LEFT_FRONT_RIGHT - MidL <- FrontR
-slot 52  0           native   INDEX_ROUTE_MID_RIGHT_FRONT_LEFT - MidR <- FrontL
-slot 53  1           native   INDEX_ROUTE_MID_RIGHT_FRONT_RIGHT - MidR <- FrontR
+section Retired routing matrix (Low L, Low R, Mid L, Mid R, each [from Front L, from Front R]) -- removed: no UI ever set it, the engine feeds every Left band from Front L and every Right band from Front R
+slot 46  1           reserved - - LowL <- FrontL (retired routing coefficient)
+slot 47  0           reserved - - LowL <- FrontR (retired routing coefficient)
+slot 48  0           reserved - - LowR <- FrontL (retired routing coefficient)
+slot 49  1           reserved - - LowR <- FrontR (retired routing coefficient)
+slot 50  1           reserved - - MidL <- FrontL (retired routing coefficient)
+slot 51  0           reserved - - MidL <- FrontR (retired routing coefficient)
+slot 52  0           reserved - - MidR <- FrontL (retired routing coefficient)
+slot 53  1           reserved - - MidR <- FrontR (retired routing coefficient)
 
 section Eight all-pass sections (2 per output x 4 outputs), each [enabled, order, freq Hz, Q] -- all disabled by default
 slot 54  0           native   INDEX_ALL_PASS kAllPassBase LowL sec0 enabled
@@ -288,11 +288,11 @@ slot 212 0           native   INDEX_HIGH_GAIN_R kHighGainR highGainR
 slot 213 0           native   INDEX_HIGH_DELAY_L kHighDelayL highDelayL
 slot 214 0           native   INDEX_HIGH_DELAY_R kHighDelayR highDelayR
 
-section High routing: [High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR] -- same identity default as Low/Mid.
-slot 215 1           native   INDEX_ROUTE_HIGH_LEFT_FRONT_LEFT kHighRoutingBase routeHighLeftFrontLeft
-slot 216 0           native   INDEX_ROUTE_HIGH_LEFT_FRONT_RIGHT - routeHighLeftFrontRight
-slot 217 0           native   INDEX_ROUTE_HIGH_RIGHT_FRONT_LEFT - routeHighRightFrontLeft
-slot 218 1           native   INDEX_ROUTE_HIGH_RIGHT_FRONT_RIGHT - routeHighRightFrontRight
+section Retired High routing ([High Left fromFrontL, fromFrontR], [High Right fromFrontL, fromFrontR]) -- removed with the Low/Mid matrix
+slot 215 1           reserved - - routeHighLeftFrontLeft (retired routing coefficient)
+slot 216 0           reserved - - routeHighLeftFrontRight (retired routing coefficient)
+slot 217 0           reserved - - routeHighRightFrontLeft (retired routing coefficient)
+slot 218 1           reserved - - routeHighRightFrontRight (retired routing coefficient)
 
 section High all-pass: 2 outputs x 2 sections x [enabled, order, freq, q], both disabled.
 slot 219 0           native   INDEX_HIGH_ALL_PASS kHighAllPassBase highLeft section0 enabled
@@ -435,7 +435,7 @@ const kStageBandDelay 4 stage bit: per-band alignment delays
 const kStagePolarity 5 stage bit: per-output polarity inversion
 const kStageAllPass 6 stage bit: per-output all-pass sections
 const kStageSubsonic 7 stage bit: Low's subsonic high-pass
-const kStageRouting 8 stage bit: a non-identity routing matrix
+# bit 8 is retired (it was the routing matrix); never reported, never reused
 const kStageBusLimiter 9 stage bit: the per-band bus limiters
 const kStageMonoBass 10 stage bit: Mono Bass
 const kStageVirtualCentre 11 stage bit: the virtual-centre stage
@@ -452,7 +452,6 @@ const kStageMeasurementMute 21 stage bit: measurement mute (band isolation)
 const kStageNeutralCount 22 bits 0..21 are the stages measurement neutral bypasses
 const kStageChannelMute 22 stage bit (report only): channel mute
 const kStageSignalGenerator 23 stage bit (report only): the built-in signal generator
-const kRoutingStride 2
 const kAllPassSectionWidth 4
 const kAllPassSectionsPerOutput 2
 const kOutputConfigWidth 13
@@ -476,7 +475,6 @@ const kMbcBandStereoLink 7
 const kMidUpperXoWidth 2
 const kMidUpperXoFreq 0
 const kMidUpperXoEnabled 1
-const kHighRoutingStride 2
 const kVirtualFeedBase 273
 const kVirtualFeedWidth 7
 const kVirtualFeedGain 0

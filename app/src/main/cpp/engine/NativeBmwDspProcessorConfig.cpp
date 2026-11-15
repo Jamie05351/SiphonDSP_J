@@ -67,17 +67,6 @@ void NativeBmwDspProcessor::applyMeasurementNeutral(const float* in, float* out)
         for (int s = 0; s < 8; ++s) set(sch::kAllPassBase + s * sch::kAllPassSectionWidth, 0.f);
         for (int s = 0; s < 4; ++s) set(sch::kHighAllPassBase + s * sch::kAllPassSectionWidth, 0.f);
     }
-    if (bypassed(sch::kStageRouting)) {
-        // Identity: every Left output from Front L, every Right output from Front R.
-        for (int o = 0; o < 4; ++o) {
-            set(sch::kRoutingBase + o * 2, o % 2 == 0 ? 1.f : 0.f);
-            set(sch::kRoutingBase + o * 2 + 1, o % 2 == 0 ? 0.f : 1.f);
-        }
-        for (int o = 0; o < 2; ++o) {
-            set(sch::kHighRoutingBase + o * 2, o == 0 ? 1.f : 0.f);
-            set(sch::kHighRoutingBase + o * 2 + 1, o == 0 ? 0.f : 1.f);
-        }
-    }
     if (bypassed(sch::kStageBusLimiter)) {
         set(sch::kBusLimLowEnabled, 0.f);
         set(sch::kBusLimMidEnabled, 0.f);
@@ -317,24 +306,13 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
         }
     }
 
-    // These four loops (routing, all-pass, output-config x2) are deliberately scoped to
+    // These loops (all-pass, output-config x2) are deliberately scoped to
     // kLegacyOutputCount (4), not the in-memory kOutputCount (6): High has no persisted schema
     // slots yet, so reading v[] at the offsets a 6-output loop would visit for outputs 4/5 would
     // read into the *next* block (all-pass would misread output-config bytes as its own, etc).
     // High's runtime entries (outputs_[4]/[5], outputConfigs_[4]/[5]) are left at their
-    // constructor defaults -- muted, identity routing -- untouched by configure() until a later
+    // constructor defaults -- muted -- untouched by configure() until a later
     // phase adds its own tail block. See docs/NATIVE_BMW_3WAY_OUTPUT_CROSSOVER.md.
-    NativeBmwRouting::RoutingMatrix& nextRouting = parsed.routing;
-    nextRouting = {};
-    for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
-        const float fromLeft = v[kRoutingBase + out * 2], fromRight = v[kRoutingBase + out * 2 + 1];
-        if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
-            std::fabs(fromRight) > 2.f) {
-            return false;
-        }
-        nextRouting.outputs[out] = {fromLeft, fromRight};
-    }
-
     for (std::size_t out = 0; out < NativeBmwRouting::kLegacyOutputCount; ++out) {
         for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
              ++section) {
@@ -426,22 +404,14 @@ bool NativeBmwDspProcessor::parseConfig(const float* v, ParsedConfig& parsed) co
         midRightCfg.upperCrossoverType = decodeType(midRightType);
     }
 
-    // High band: routing/all-pass/output-config, v[215..260] (added in the 210 -> 262 growth).
+    // High band: all-pass/output-config, v[219..260] (215..218 are the retired routing slots) (added in the 210 -> 262 growth).
     // A genuinely new third output -- unlike Mid's tail block above, this populates real
-    // nextRouting/allPass/nextOutputConfigs entries for OutputId::HighLeft/HighRight, the
+    // allPass/nextOutputConfigs entries for OutputId::HighLeft/HighRight, the
     // same shape as the Low/Mid loops earlier in this function, just at the schema's tail
     // instead of the legacy per-output block (kOutputConfigBase etc are frozen at their
     // kLegacyOutputCount-derived offsets -- see NativeBmwDspProcessor.h's kRoutingBase comment).
     for (std::size_t slot = 0; slot < 2; ++slot) {
         const std::size_t out = static_cast<std::size_t>(OutputId::HighLeft) + slot;
-        const std::size_t routingBase = 215 + slot * 2;
-        const float fromLeft = v[routingBase], fromRight = v[routingBase + 1];
-        if (!std::isfinite(fromLeft) || !std::isfinite(fromRight) || std::fabs(fromLeft) > 2.f ||
-            std::fabs(fromRight) > 2.f) {
-            return false;
-        }
-        nextRouting.outputs[out] = {fromLeft, fromRight};
-
         for (std::size_t section = 0; section < NativeBmwRouting::kAllPassSectionsPerOutput;
              ++section) {
             const std::size_t base =
@@ -731,7 +701,6 @@ void NativeBmwDspProcessor::installConfig(ParsedConfig& parsed) {
         masterGain_ = masterGainTarget_;
         masterGainPrimed_ = true;
     }
-    routing_ = parsed.routing;
     outputConfigs_ = nextOutputConfigs;
     // See mbcEnabledMeterFlag_ etc's declaration: the read*Meter() functions are lock-free and
     // read these atomics instead of the plain bools inside p_ to avoid racing this assignment.

@@ -1,9 +1,8 @@
 #ifndef SIPHONDSP_NATIVE_BMW_DELAY_GAIN_H
 #define SIPHONDSP_NATIVE_BMW_DELAY_GAIN_H
 
-// Delay lines, the DC-blocking input stage, and the ms -> samples conversion. Routing itself is
-// NativeBmwRouting::RoutingMatrix (NativeBmwRouting.h); per-output gain/polarity/mute are plain
-// fields on OutputRuntime (NativeBmwCrossovers.h), applied by the processor's frame loop.
+// Delay lines, the DC-blocking input stage, and the ms -> samples conversion. Per-output
+// gain/polarity/mute are plain fields on OutputRuntime (NativeBmwCrossovers.h), applied by the processor's frame loop.
 
 #include <array>
 #include <cmath>

@@ -120,7 +120,7 @@ void VirtualSourceStage::clear() {
 }
 
 void VirtualSourceStage::process(float& l, float& r) {
-    // Same graceful degradation as RoutingMatrix::process(): a non-finite input sample is
+    // Same graceful degradation as the band-lane copy (processInputStages()): a non-finite input sample is
     // silenced rather than allowed into the detector state, where it would stick.
     if (!std::isfinite(l) || !std::isfinite(r)) {
         l = std::isfinite(l) ? l : 0.f;

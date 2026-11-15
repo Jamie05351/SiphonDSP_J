@@ -105,8 +105,6 @@ class NativeBmwDspStoreTest {
         val loaded = NativeBmwDspStore(directory).load()!!
 
         assertArrayEquals(NativeBmwDspValues.DEFAULTS, loaded, 0f)
-        assertEquals(1f, loaded[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_LEFT])
-        assertEquals(0f, loaded[NativeBmwDspValues.INDEX_ROUTE_LOW_LEFT_FRONT_RIGHT])
         assertEquals(0f, loaded[NativeBmwDspValues.INDEX_ALL_PASS])
     }
 
