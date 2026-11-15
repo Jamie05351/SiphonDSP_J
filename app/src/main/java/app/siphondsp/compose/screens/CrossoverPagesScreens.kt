@@ -587,8 +587,18 @@ internal fun autoPairStatusText(values: FloatArray, lowMid: Boolean): Pair<Strin
         )
     }
     if (!on) {
+        // Uncorrected, an in-phase BW2 pair nulls at the corner and a BW4 pair peaks +3 dB; with
+        // one band's own polarity flipped (Gains/Delay, Band Align) it's the other way round.
         val bw2 = hpFactor.toFloat() == CrossoverPairing.BW2_SPREAD
-        return (if (bw2) "BW2 pair: null at ${hp.roundToInt()} Hz" else "BW4 pair: +3 dB at ${hp.roundToInt()} Hz") to false
+        val inverted = if (lowMid) {
+            values[NativeBmwDspValues.outputIndex(low, NativeBmwDspValues.FIELD_INVERT)] >= .5f !=
+                values[NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_INVERT)] >= .5f
+        } else {
+            values[NativeBmwDspValues.outputIndex(mid, NativeBmwDspValues.FIELD_INVERT)] >= .5f !=
+                values[NativeBmwDspValues.highOutputIndex(high, NativeBmwDspValues.FIELD_INVERT)] >= .5f
+        }
+        val effect = if (bw2 != inverted) "null" else "+3 dB"
+        return "${if (bw2) "BW2" else "BW4"} pair: $effect at ${hp.roundToInt()} Hz" to false
     }
     fun applied(fc: Double, k: Double) = CrossoverPairing.corner(fc, k, AutoPairDisplayRate).roundToInt()
     return "LP ${lp.roundToInt()} → ${applied(lp, lpFactor)}, HP ${hp.roundToInt()} → ${applied(hp, hpFactor)} Hz" to true

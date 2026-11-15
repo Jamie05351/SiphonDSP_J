@@ -37,4 +37,19 @@ class AutoPairStatusTest {
         )
         assertNull(autoPairStatusText(lowMid(NativeBmwDspValues.CROSSOVER_TYPE_LR4, autoPair = false), lowMid = true))
     }
+
+    @Test
+    fun offAccountsForOneBandsOwnPolarity() {
+        fun midInverted(type: Float) = lowMid(type, autoPair = false).also {
+            for (output in 2 until 4) it[NativeBmwDspValues.outputIndex(output, NativeBmwDspValues.FIELD_INVERT)] = 1f
+        }
+        assertEquals(
+            "BW2 pair: +3 dB at 150 Hz" to false,
+            autoPairStatusText(midInverted(NativeBmwDspValues.CROSSOVER_TYPE_BW2), lowMid = true),
+        )
+        assertEquals(
+            "BW4 pair: null at 150 Hz" to false,
+            autoPairStatusText(midInverted(NativeBmwDspValues.CROSSOVER_TYPE_BW4), lowMid = true),
+        )
+    }
 }
