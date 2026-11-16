@@ -11,8 +11,14 @@ import java.nio.ShortBuffer
 
 class StreamStartLogTest {
 
-    private fun status(volumeDb: Float, headroomDb: Float, convolver: Boolean = false) = EngineStatus(
-        activeStages = if (convolver) setOf(DspStage.CONVOLVER) else emptySet(),
+    private fun status(
+        volumeDb: Float,
+        headroomDb: Float,
+        convolver: Boolean = false,
+        preEq: Boolean = true,
+        muted: Boolean = false,
+    ) = EngineStatus(
+        activeStages = setOfNotNull(DspStage.CONVOLVER.takeIf { convolver }, DspStage.PRE_EQ.takeIf { preEq }),
         measurementNeutral = false,
         neutralAllowed = emptySet(),
         crossoverWays = 2,
@@ -21,7 +27,7 @@ class StreamStartLogTest {
         mbcBands = 0,
         allPassOutputs = 0,
         masterVolumeDb = volumeDb,
-        masterMute = false,
+        masterMute = muted,
         headroomDb = headroomDb,
         sampleRate = 48_000f,
         revision = 1,
@@ -82,5 +88,53 @@ class StreamStartLogTest {
         assertEquals(-6.02f, StreamStartLog.peakDb(ShortBuffer.wrap(shortArrayOf(16384, -100)), 2), 0.01f)
         // Only the first [count] samples count.
         assertEquals(-120f, StreamStartLog.peakDb(FloatBuffer.wrap(floatArrayOf(0f, 1f)), 1), 0f)
+    }
+
+    @Test
+    fun flagsAudibleOutputWhileMutedAndNonFiniteOutput() {
+        StreamStartLog.begin("muted", 48_000, 7680, true, nowMs = 0)
+        StreamStartLog.record(0, 7680, -10f, -60f, true, false)
+        StreamStartLog.recordEngine(status(-25f, -6f, muted = true), true, -2f)
+        StreamStartLog.record(80, 7680, -10f, -120f, true, false)
+        var start = StreamStartLog.snapshot().first()
+        assertTrue(start.suspicious(start.buffers[0]))   // audible while muted
+        assertFalse(start.suspicious(start.buffers[1]))  // silent while muted
+        StreamStartLog.begin("nan", 48_000, 7680, true, nowMs = 0)
+        StreamStartLog.record(0, 7680, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, true, false)
+        start = StreamStartLog.snapshot().first()
+        assertTrue(start.suspicious(start.buffers[0]))
+    }
+
+    @Test
+    fun aBypassedPreEqDoesNotCountItsPreamp() {
+        StreamStartLog.begin("neutral", 48_000, 7680, true, nowMs = 0)
+        StreamStartLog.record(0, 7680, -10f, -41f, true, false)
+        StreamStartLog.recordEngine(status(-25f, -6f, preEq = false), true, -20f)
+        val start = StreamStartLog.snapshot().first()
+        assertEquals(-31f, start.expectedGainDb, 1e-6f)  // the -20 dB preamp isn't running
+        assertFalse(start.suspicious(start.buffers[0]))
+    }
+
+    @Test
+    fun anUnreadableStatusStaysUnknownAndIsRetried() {
+        // A slot that held a muted start is reused: nothing of it may show.
+        repeat(StreamStartLog.STARTS) {
+            StreamStartLog.begin("old", 48_000, 7680, true, nowMs = 0)
+            StreamStartLog.record(0, 7680, -10f, -60f, true, false)
+            StreamStartLog.recordEngine(status(-40f, -6f, muted = true), true, -2f)
+        }
+        StreamStartLog.begin("new", 48_000, 7680, true, nowMs = 0)
+        StreamStartLog.record(0, 7680, -10f, -45f, true, false)
+        StreamStartLog.recordEngine(null, true, -2f)
+        var start = StreamStartLog.snapshot().first()
+        assertFalse(start.engineRead)
+        assertFalse(start.muted)
+        assertEquals(0f, start.volumeDb, 0f)
+        assertTrue(StreamStartLog.wantsEngine)  // tried again after the next buffer
+        StreamStartLog.record(80, 7680, -10f, -45f, true, false)
+        StreamStartLog.recordEngine(status(-25f, -6f), true, -2f)
+        start = StreamStartLog.snapshot().first()
+        assertTrue(start.engineRead)
+        assertEquals(-25f, start.volumeDb, 0f)
     }
 }

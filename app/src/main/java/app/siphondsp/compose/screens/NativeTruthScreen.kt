@@ -523,7 +523,11 @@ private fun StreamStartSection(starts: List<StreamStartLog.Start>, nowMs: Long) 
                 )
                 if (start.engineRead) {
                     val volume = if (start.muted) "muted" else "${fmt(start.volumeDb.toDouble(), 1)} dB"
-                    val preamp = if (start.peqEnabled) "${fmt(start.preampDb.toDouble(), 1)} dB" else "off"
+                    val preamp = when {
+                        !start.peqEnabled -> "off"
+                        !start.preEqRunning -> "${fmt(start.preampDb.toDouble(), 1)} dB (bypassed)"
+                        else -> "${fmt(start.preampDb.toDouble(), 1)} dB"
+                    }
                     KeyValueRow(
                         "Engine",
                         "vol $volume · headroom ${fmt(start.headroomDb.toDouble(), 1)} · preamp $preamp",

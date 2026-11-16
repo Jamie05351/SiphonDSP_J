@@ -50,6 +50,7 @@ object StreamStartLog {
         var neutral = false
         var preampDb = 0f
         var peqEnabled = false
+        var preEqRunning = false
     }
 
     private val slots = Array(STARTS) { Slot() }
@@ -65,7 +66,16 @@ object StreamStartLog {
         val slot = slots[next]
         next = (next + 1) % STARTS
         slot.count = 0
+        // A reused slot: nothing of the start it held may show as this one's engine reading.
         slot.statusRead = false
+        slot.volumeDb = 0f
+        slot.muted = false
+        slot.headroomDb = 0f
+        slot.convolverRunning = false
+        slot.neutral = false
+        slot.preampDb = 0f
+        slot.peqEnabled = false
+        slot.preEqRunning = false
         slot.atMs = nowMs
         slot.reason = reason
         slot.sampleRate = sampleRate
@@ -90,7 +100,8 @@ object StreamStartLog {
         slot.processed[i] = processed
         slot.generated[i] = generated
         slot.count = i + 1
-        // Kept active past the last buffer until the engine's status is in (taken after buffer 1).
+        // Kept active past the last buffer for one more try at the engine's status (see
+        // recordEngine); then it's left unknown.
         if (slot.count >= BUFFERS && slot.statusRead) active = null
     }
 
@@ -98,16 +109,24 @@ object StreamStartLog {
     fun recordEngine(status: EngineStatus?, peqEnabled: Boolean, preampDb: Float) {
         val slot = active ?: return
         if (slot.statusRead) return
-        slot.statusRead = true
+        if (status == null) {
+            // No reading (no handle, or nothing installed yet): try again after the next buffer;
+            // past the last one the start stays "no status", never another start's values.
+            if (slot.count >= BUFFERS) active = null
+            return
+        }
         slot.peqEnabled = peqEnabled
         slot.preampDb = preampDb
-        if (slot.count >= BUFFERS) active = null
-        if (status == null) return
+        // The preamp only counts while the engine runs the Pre EQ (measurement neutral bypasses
+        // it while the saved PEQ stays enabled).
+        slot.preEqRunning = status.isActive(DspStage.PRE_EQ)
         slot.volumeDb = status.masterVolumeDb
         slot.muted = status.masterMute
         slot.headroomDb = status.headroomDb
         slot.convolverRunning = status.isActive(DspStage.CONVOLVER)
         slot.neutral = status.measurementNeutral
+        slot.statusRead = true
+        if (slot.count >= BUFFERS) active = null
     }
 
     /** Whether the active start still wants the engine's status. */
@@ -159,10 +178,12 @@ object StreamStartLog {
         val neutral: Boolean,
         val peqEnabled: Boolean,
         val preampDb: Float,
+        val preEqRunning: Boolean,
         val buffers: List<Buffer>,
     ) {
-        /** The level change the engine's own gains should give (volume + headroom + preamp), dB. */
-        val expectedGainDb: Float get() = volumeDb + headroomDb + if (peqEnabled) preampDb else 0f
+        /** The level change the engine's own gains should give (volume + headroom + the preamp
+         *  while the Pre EQ runs), dB. */
+        val expectedGainDb: Float get() = volumeDb + headroomDb + if (peqEnabled && preEqRunning) preampDb else 0f
 
         /**
          * A buffer that came out louder than the settings allow: more than [TOLERANCE_DB] over the
@@ -170,9 +191,17 @@ object StreamStartLog {
          * normal), or passed through unprocessed while the volume cuts.
          */
         fun suspicious(b: Buffer): Boolean {
-            if (!b.processed && (volumeDb < -3f || muted)) return b.outPeakDb > -119f
+            // Non-finite or over full scale out is always wrong (a NaN reads as +inf here, and
+            // inf - inf would hide it from the gain test below).
+            if (!b.outPeakDb.isFinite() || b.outPeakDb > 0.5f) return true
+            val audible = b.outPeakDb > -119f
+            // Raw out with the volume cutting, or with nothing known about the engine.
+            if (!b.processed) return audible && (!engineRead || volumeDb < -3f || muted)
+            if (!engineRead) return false
+            // Anything audible while the engine reports master mute.
+            if (muted) return audible
             val gain = b.gainDb ?: return false
-            return engineRead && gain > expectedGainDb + TOLERANCE_DB
+            return gain > expectedGainDb + TOLERANCE_DB
         }
     }
 
@@ -199,6 +228,7 @@ object StreamStartLog {
                 neutral = slot.neutral,
                 peqEnabled = slot.peqEnabled,
                 preampDb = slot.preampDb,
+                preEqRunning = slot.preEqRunning,
                 buffers = List(n) { i ->
                     Buffer(slot.tMs[i], slot.samples[i], slot.inPeakDb[i], slot.outPeakDb[i], slot.processed[i], slot.generated[i])
                 },
