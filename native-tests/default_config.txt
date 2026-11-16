@@ -385,21 +385,21 @@
 0            # 297 monoBassEnabled (off)
 90           # 298 monoBassFreq (Hz, 60..120)
 
-# Retired: Virtual Bass (added in the 299 -> 303 growth; the feature was removed, read by nothing)
-0            # 299 virtualBassEnabled (off) (retired: Virtual Bass removed)
-40           # 300 virtualBassFreq (woofer reach, Hz, 25..60) (retired: Virtual Bass removed)
-50           # 301 virtualBassAmount (harmonics level, percent) (retired: Virtual Bass removed)
-0            # 302 virtualBassRemoveSub (off) (retired: Virtual Bass removed)
+# Virtual Bass (added in the 299 -> 303 growth)
+0            # 299 virtualBassEnabled (off)
+40           # 300 virtualBassFreq (woofer reach, Hz, 25..60)
+50           # 301 virtualBassAmount (harmonics level, percent)
+0            # 302 virtualBassRemoveSub (off)
 
-# Retired: Virtual Bass character (added in the 303 -> 304 growth)
-50           # 303 virtualBassCharacter (Warm 0 .. Punchy 100 %) (retired: Virtual Bass removed)
+# Virtual Bass character (added in the 303 -> 304 growth)
+50           # 303 virtualBassCharacter (Warm 0 .. Punchy 100 %)
 
 # Subsonic slope (added in the 304 -> 305 growth)
 0            # 304 subsonicSlope (0 = LR4, 1 = BW2)
 
-# Retired: Virtual Bass range and response (added in the 305 -> 307 growth)
-5            # 305 virtualBassRange (harmonics kept up to x the reach, 3..8) (retired: Virtual Bass removed)
-200          # 306 virtualBassResponse (detector release, ms, 100..500) (retired: Virtual Bass removed)
+# Virtual Bass range and response (added in the 305 -> 307 growth)
+5            # 305 virtualBassRange (harmonics kept up to x the reach, 3..8)
+200          # 306 virtualBassResponse (detector release, ms, 100..500)
 
 # Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
 0            # 307 convolverEnabled (off = bypass, crossfaded)

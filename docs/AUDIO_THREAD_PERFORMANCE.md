@@ -40,7 +40,7 @@ tilt, virtual bass, virtual centre, mono bass, MBC, master + bus limiters, Deep 
 | MBC | 1000 µs | 570 µs | gain computer every 8 samples; dry all-passes off at 100 % Mix |
 | Convolver | 658 µs | 104 µs | 1024-frame partitions (21 ms latency while on; none when off) |
 | Master limiter | 501 µs | 182 µs | exact true-peak gate (bit-identical) |
-| Virtual bass | 348 µs | 190 µs | sub band and harmonics at half rate (Virtual Bass has since been removed) |
+| Virtual bass | 348 µs | 190 µs | sub band and harmonics at half rate |
 | Virtual centre | 193 µs | 111 µs | detector filters as NEON pairs (bit-identical) |
 | Band delay + gain | 81 µs | 20 µs | whole-sample delays skip the 16-tap kernel (bit-identical) |
 | Muted bands | full chain | none | a band muted on both outputs isn't run |

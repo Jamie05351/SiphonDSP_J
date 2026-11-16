@@ -40,6 +40,7 @@ import app.siphondsp.compose.screens.CrossoverGraphMode
 import app.siphondsp.compose.screens.CrossoverLowMidPage
 import app.siphondsp.compose.screens.CrossoverMidHighPage
 import app.siphondsp.compose.screens.CrossoverTiltPage
+import app.siphondsp.compose.screens.CrossoverVirtualBassPage
 import app.siphondsp.compose.screens.GainsDelayScreen
 import app.siphondsp.compose.screens.HeadroomOutputScreen
 import app.siphondsp.compose.screens.NativeTruthScreen
@@ -90,7 +91,7 @@ object Routes {
     /** Dynamics: the visualiser, one page per MBC band, then the bus limiters. */
     val DYNAMICS_PAGE_COUNT = 2 + NativeBmwDspValues.MBC_BAND_COUNT
 
-    const val CROSSOVER_PAGE_COUNT = 3
+    const val CROSSOVER_PAGE_COUNT = 4
 
     /** Output: the end-of-chain stages, the convolver, then Deep bass (after the master volume). */
     const val OUTPUT_PAGE_COUNT = 3
@@ -304,13 +305,14 @@ private fun CrossoverWorkspace() {
     var graphMode by rememberSaveable { mutableStateOf(CrossoverGraphMode.MAGNITUDE) }
     Workspace(
         current = DspDestination.CROSSOVER_TILT,
-        toolbarActions = { PagerControls(pagerState, listOf("LOW/MID", "MID/HIGH", "TILT"), WorkspaceArt.finder3) },
+        toolbarActions = { PagerControls(pagerState, listOf("LOW/MID", "MID/HIGH", "TILT", "V-BASS"), WorkspaceArt.finder4) },
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             when (page) {
                 0 -> CrossoverLowMidPage(graphMode, { graphMode = it })
                 1 -> CrossoverMidHighPage(graphMode, { graphMode = it })
-                else -> CrossoverTiltPage(graphMode, { graphMode = it })
+                2 -> CrossoverTiltPage(graphMode, { graphMode = it })
+                else -> CrossoverVirtualBassPage(graphMode, { graphMode = it })
             }
         }
     }

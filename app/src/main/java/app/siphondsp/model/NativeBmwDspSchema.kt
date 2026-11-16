@@ -153,8 +153,18 @@ object NativeBmwDspSchema {
     // Mono Bass (added in the 297 -> 299 growth)
     const val INDEX_MONO_BASS_ENABLED = 297
     const val INDEX_MONO_BASS_FREQ = 298
+    // Virtual Bass (added in the 299 -> 303 growth)
+    const val INDEX_VIRTUAL_BASS_ENABLED = 299
+    const val INDEX_VIRTUAL_BASS_FREQ = 300
+    const val INDEX_VIRTUAL_BASS_AMOUNT = 301
+    const val INDEX_VIRTUAL_BASS_REMOVE_SUB = 302
+    // Virtual Bass character (added in the 303 -> 304 growth)
+    const val INDEX_VIRTUAL_BASS_CHARACTER = 303
     // Subsonic slope (added in the 304 -> 305 growth)
     const val INDEX_SUBSONIC_SLOPE = 304
+    // Virtual Bass range and response (added in the 305 -> 307 growth)
+    const val INDEX_VIRTUAL_BASS_RANGE = 305
+    const val INDEX_VIRTUAL_BASS_RESPONSE = 306
     // Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
     const val INDEX_CONVOLVER_ENABLED = 307
     const val INDEX_CONVOLVER_GAIN = 308
@@ -469,14 +479,14 @@ object NativeBmwDspSchema {
         0f, // 296 headroomAuto (0 = manual; Kotlin-only)
         0f, // 297 monoBassEnabled (off)
         90f, // 298 monoBassFreq (Hz, 60..120)
-        0f, // 299 virtualBassEnabled (off) (retired: Virtual Bass removed)
-        40f, // 300 virtualBassFreq (woofer reach, Hz, 25..60) (retired: Virtual Bass removed)
-        50f, // 301 virtualBassAmount (harmonics level, percent) (retired: Virtual Bass removed)
-        0f, // 302 virtualBassRemoveSub (off) (retired: Virtual Bass removed)
-        50f, // 303 virtualBassCharacter (Warm 0 .. Punchy 100 %) (retired: Virtual Bass removed)
+        0f, // 299 virtualBassEnabled (off)
+        40f, // 300 virtualBassFreq (woofer reach, Hz, 25..60)
+        50f, // 301 virtualBassAmount (harmonics level, percent)
+        0f, // 302 virtualBassRemoveSub (off)
+        50f, // 303 virtualBassCharacter (Warm 0 .. Punchy 100 %)
         0f, // 304 subsonicSlope (0 = LR4, 1 = BW2)
-        5f, // 305 virtualBassRange (harmonics kept up to x the reach, 3..8) (retired: Virtual Bass removed)
-        200f, // 306 virtualBassResponse (detector release, ms, 100..500) (retired: Virtual Bass removed)
+        5f, // 305 virtualBassRange (harmonics kept up to x the reach, 3..8)
+        200f, // 306 virtualBassResponse (detector release, ms, 100..500)
         0f, // 307 convolverEnabled (off = bypass, crossfaded)
         0f, // 308 convolverGain (IR gain / headroom trim, dB, -30..+12)
         0f, // 309 crossoverBypass (1 = band split removed: one full-range path, zero added latency)
@@ -526,8 +536,8 @@ object NativeBmwDspSchema {
         true, true, true, true, true, true, true, true,
         true, true, true, true, true, true, true, false,
         true, true, false, false, true, true, true, true,
-        false, true, true, false, false, false, false, false,
-        true, false, false, true, true, true, true, true,
+        false, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true,
         true, true, true,
     )
 }

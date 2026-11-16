@@ -885,6 +885,35 @@ class NativeBmwDspValuesTest {
     }
 
     @Test
+    fun virtualBassShipsOffAndOnlyItsSubRemovalIsAFilter() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED], 0f)
+        assertEquals(40f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_AMOUNT], 0f)
+        assertEquals(0f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB], 0f)
+        assertEquals(50f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_CHARACTER], 0f)
+        // The subsonic slope defaults to LR4, so older saves sound the same.
+        assertEquals(NativeBmwDspValues.SUBSONIC_SLOPE_LR4, values[NativeBmwDspValues.INDEX_SUBSONIC_SLOPE], 0f)
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // On, but keeping the sub: still no filter to draw.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // Removal is an HP2 at 0.8 x the reach: 32 Hz for the default 40 Hz reach.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_REMOVE_SUB] = 1f
+        assertEquals(32.0, NativeBmwDspValues.virtualBassRemovalHz(values), 1e-9)
+        // The reach is capped at 60 Hz, so removal never reaches into the woofers' band.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 400f
+        assertEquals(48.0, NativeBmwDspValues.virtualBassRemovalHz(values), 1e-9)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = Float.NaN
+        assertEquals(32.0, NativeBmwDspValues.virtualBassRemovalHz(values), 1e-9)
+        // Remove sub set but Virtual Bass off: nothing.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 0f
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values), 0.0)
+        // A save from before the 299 -> 303 growth has none of the slots: off.
+        assertEquals(0.0, NativeBmwDspValues.virtualBassRemovalHz(values.copyOf(299)), 0.0)
+    }
+
+    @Test
     fun convolverShipsOffAtUnityGain() {
         // A save from before the 307 -> 309 growth loads these defaults: the chain sounds as before.
         assertTrue(NativeBmwDspValues.SIZE > NativeBmwDspValues.INDEX_CONVOLVER_GAIN)
@@ -940,4 +969,33 @@ class NativeBmwDspValuesTest {
         }
     }
 
+    @Test
+    fun virtualBassRangeAndResponseDefaultToTheFixedValuesTheyReplace() {
+        val values = NativeBmwDspValues.DEFAULTS.copyOf()
+        // 5x the reach and a 200 ms release: what the engine used before they were adjustable.
+        assertEquals(5f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE], 0f)
+        assertEquals(200f, values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RESPONSE], 0f)
+        // Off: no harmonics, so no top.
+        assertEquals(0.0, NativeBmwDspValues.virtualBassTopHz(values), 0.0)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 1f
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_FREQ] = 35f
+        assertEquals(175.0, NativeBmwDspValues.virtualBassTopHz(values), 1e-9)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 3f
+        assertEquals(105.0, NativeBmwDspValues.virtualBassTopHz(values), 1e-9)
+        // Clamped as native clamps it; a non-finite value falls back to the default.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 20f
+        assertEquals(8.0, NativeBmwDspValues.virtualBassRange(values), 1e-9)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = Float.NaN
+        assertEquals(5.0, NativeBmwDspValues.virtualBassRange(values), 1e-9)
+        // The harmonics mostly reach the 4th of a note at the input corner (0.85 x 35 x 4 = 119 Hz),
+        // with only a steep tail above; a narrower band trims them.
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 5f
+        assertEquals(119.0, NativeBmwDspValues.virtualBassHarmonicsTopHz(values), 1e-9)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_RANGE] = 3f
+        assertEquals(105.0, NativeBmwDspValues.virtualBassHarmonicsTopHz(values), 1e-9)
+        values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] = 0f
+        assertEquals(0.0, NativeBmwDspValues.virtualBassHarmonicsTopHz(values), 0.0)
+        // A save from before the 305 -> 307 growth reads as the default range.
+        assertEquals(5.0, NativeBmwDspValues.virtualBassRange(values.copyOf(305)), 1e-9)
+    }
 }

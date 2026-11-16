@@ -32,6 +32,7 @@ public:
         Input,           // the measurement generator and the capture's raw-input copy
         DcBlocker,
         MonoBass,
+        VirtualBass,
         PreEq,           // the full-range PEQ bank, its preamp and the headroom gain
         Mbc,
         VirtualCentre,

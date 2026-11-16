@@ -311,18 +311,6 @@ int main(int argc, char** argv) {
          false},
         {"multiband", [](Config& c) { multiband(c); }, true},
         {"dynamics", [](Config& c) { dynamics(c); enableThreeWay(c); }, true},
-        // The stages either side of where Virtual Bass ran (it was removed): Mono bass ahead of
-        // it, the Pre EQ and virtual centre after, Deep bass at the back, at a real volume.
-        {"front-stages",
-         [](Config& c) {
-             c[nbschema::kMonoBassEnabled] = 1;
-             c[nbschema::kVirtualEnabled] = 1;
-             c[nbschema::kVirtualFeedBase + nbschema::kVirtualFeedDelay] = 0.6f;
-             c[nbschema::kVirtualFeedBase + nbschema::kVirtualFeedApEnabled] = 1;
-             c[nbschema::kDeepBassEnabled] = 1;
-             c[nbschema::kMasterVolumeDb] = -20;
-         },
-         true},
         {"everything",
          [](Config& c) {
              mixedCrossovers(c);

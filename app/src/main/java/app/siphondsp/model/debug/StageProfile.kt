@@ -69,7 +69,7 @@ data class StageProfile(
     companion object {
         /** In NativeBmwDsp::StageProfiler::Stage order. */
         val STAGE_NAMES = listOf(
-            "Input", "DC blocker", "Mono bass", "Pre EQ + headroom", "MBC", "Virtual centre",
+            "Input", "DC blocker", "Mono bass", "Virtual bass", "Pre EQ + headroom", "MBC", "Virtual centre",
             "Crossovers", "Band EQ", "All-pass", "Band delay + gain", "Bus limiters", "Band sum",
             "Tilt", "Post gain / mutes", "Convolver", "Master limiter", "Volume + Deep bass", "Output guard",
         )
