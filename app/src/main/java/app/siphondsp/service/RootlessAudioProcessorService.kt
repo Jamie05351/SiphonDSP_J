@@ -1013,14 +1013,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // All zeros (allocateDirect clears it): the start-up priming block and the input
             // while the measurement generator runs.
             val silence = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
-            // Bytes already in [audio] when the loop leaves the idle suspend: the first captured
-            // block of the resumed stream, read while checking for it (see the suspend below).
-            var heldBytes = 0
-            // While the session list says idle, audio the capture still delivers holds the loop
-            // awake until this time (each audible block moves it on): an audio-only wake (see the
-            // suspend below) lasts as long as the audio, never longer, so a playback the session
-            // polling missed can't keep the pipeline from suspending again.
-            var audioHoldUntil = 0L
 
             while (!isProcessorDisposing && !isServiceDisposing) {
                 if (diagnostics?.isFinished == true) diagnostics = null
@@ -1039,7 +1031,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         lastRecreationPackages = recreationPackages
                         lastRecreationAt = SystemClock.elapsedRealtime()
                         recreationPackages = emptySet()
-                        heldBytes = 0  // read from the recorder being released
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
@@ -1092,55 +1083,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val currentTrack = track ?: break
 
                 if(isProcessorIdle && suspendOnIdle && !measGenActive &&
-                    idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS &&
-                    SystemClock.elapsedRealtime() >= audioHoldUntil) {
+                    idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
                     diagnostics?.markExpectedIdle()
                     // Locked for the same reason stopRecording() and
                     // unblockRecorderForMeasurementGenerator() lock their own stop() calls: so
                     // this can never race either of those stopping/releasing the same
                     // AudioRecord/AudioTrack concurrently from another thread.
-                    // Only the output stops (and with it all processing); the recorder keeps
-                    // capturing. Stopping it ends the playback capture, so a paused app (Spotify
-                    // drops its session the moment it pauses) was no longer held, and on resume it
-                    // played straight to the speakers -- unprocessed, at the head unit's full
-                    // volume -- until this loop noticed and restarted the recorder: a burst at
-                    // every resume. Held, the resumed audio is captured from its first sample and
-                    // waits in the recorder's buffer until the loop is back. A capture with nothing
-                    // playing costs next to nothing.
                     synchronized(recorderLifecycleLock) {
                         recorderSuspended = true
+                        safeStop(currentRecorder)
                         safeStop(currentTrack)
                     }
                     currentTrack.flush()
-                    // Wake on the audio itself, not only on the session list (which in polling
-                    // mode can be seconds late, longer than the recorder holds): the held capture
-                    // having anything means playback resumed. That block is kept and processed
-                    // first, and the loop runs again at once, held awake by the audio (see
-                    // audioHoldUntil); the idle timer is left as it is, so once the audio stops the
-                    // loop suspends again even if no session change ever arrives.
-                    // Everything waiting is read, not one block per check: a capture that delivers
-                    // zeros with nothing playing (in blocks shorter than the check interval) would
-                    // otherwise build a backlog the wake had to work through first, waking late on
-                    // audio older than live. Only real audio counts: waking on those zeros would
-                    // keep the pipeline from ever suspending. (A zero sample is all zero bytes in
-                    // both encodings.) Bounded, in case a capture delivers as fast as it's read.
-                    var woke = false
-                    for (attempt in 0 until MAX_IDLE_DRAIN_READS) {
-                        audio.clear()
-                        val waiting = try {
-                            currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_NON_BLOCKING)
-                        } catch (_: IllegalStateException) {
-                            0
-                        }
-                        if (waiting <= 0) break
-                        if (isAudible(audio, waiting)) {
-                            heldBytes = waiting
-                            audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
-                            woke = true
-                            break
-                        }
-                    }
-                    if (woke) continue
                     try {
                         Thread.sleep(50)
                     }
@@ -1192,34 +1146,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // real-time pacing since the output device drains at its own clock regardless.
                 val generatedInput = measGenActive
                 val readCount = if (generatedInput) {
-                    heldBytes = 0  // the generator replaces the input anyway
                     audio.clear()
                     silence.clear()
                     audio.put(silence)
                     audio.clear()
                     bufferSamples
-                } else if (heldBytes > 0) {
-                    // The block the idle suspend found waiting: already in [audio] at position 0.
-                    val bytes = heldBytes
-                    heldBytes = 0
-                    bytes / bytesPerSample
                 } else {
                     // Bytes from AudioRecord (written at position 0, which read() leaves as it
                     // is); a negative value is an error code, passed through.
                     audio.clear()
                     Trace.beginSection("SiphonDSP read")
-                    // While the session list says idle (and the pipeline may suspend), don't block:
-                    // with nothing playing a blocking read may never return, and the loop has to
-                    // come round to suspend again.
-                    val readMode =
-                        if (isProcessorIdle && suspendOnIdle) AudioRecord.READ_NON_BLOCKING else AudioRecord.READ_BLOCKING
                     val bytes = try {
-                        currentRecorder.read(audio, bufferSizeBytes, readMode)
+                        currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_BLOCKING)
                     } finally {
                         Trace.endSection()
-                    }
-                    if (bytes > 0 && isProcessorIdle && isAudible(audio, bytes)) {
-                        audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
                     }
                     if (bytes > 0) bytes / bytesPerSample else bytes
                 }
@@ -1241,12 +1181,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     continue
                 }
                 if(readCount == 0) {
-                    // Inside an audio hold (awake on the audio alone, the reads non-blocking so a
-                    // capture that goes quiet can't park the loop), real audio is flowing: retry
-                    // within a couple of ms, well inside the track's block of slack, rather than
-                    // leave 20 ms gaps in the stream.
-                    val holding = SystemClock.elapsedRealtime() < audioHoldUntil
-                    Thread.sleep(if (holding) AUDIO_HOLD_RETRY_MS else AudioPipelineHealth.IO_RETRY_DELAY_MS)
+                    Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
                     continue
                 }
 
@@ -1567,15 +1502,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    /** Whether the first [bytes] of [buffer] hold any non-zero sample (a zero sample is all zero
-     *  bytes in both encodings). Absolute reads: the buffer's position is left as it is. */
-    private fun isAudible(buffer: ByteBuffer, bytes: Int): Boolean {
-        for (i in 0 until bytes.coerceAtMost(buffer.capacity())) {
-            if (buffer.get(i).toInt() != 0) return true
-        }
-        return false
-    }
-
     private fun alignUp(value: Int, alignment: Int): Int {
         if(alignment <= 1)
             return value
@@ -1609,10 +1535,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val TRACK_BUFFER_BLOCKS = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
-        // Reads per idle check at most when draining the held capture (see the idle suspend).
-        private const val MAX_IDLE_DRAIN_READS = 64
-        // An empty non-blocking read while audio holds the loop awake is retried this soon.
-        private const val AUDIO_HOLD_RETRY_MS = 2L
         // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
         private const val EXCLUSION_RECHECK_DEBOUNCE_MS = 2_000L
         private const val EXCLUSION_RECHECK_MAX_WAIT_MS = 10_000L
