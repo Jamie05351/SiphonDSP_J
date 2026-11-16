@@ -49,17 +49,6 @@ struct Params {
     // Mono Bass (v[297..298]): on/off and the split frequency, Hz.
     bool monoBassEnabled = false;
     float monoBassFreq = 90.f;
-    // Virtual Bass (v[299..302]): on/off, cut Hz, harmonics level 0..1 (v[301] is percent), and
-    // whether the original sub below the cut is high-passed away.
-    bool virtualBassEnabled = false;
-    float virtualBassFreq = 50.f;
-    float virtualBassAmount = .5f;
-    bool virtualBassRemoveSub = false;
-    // v[303]: the harmonic mix, Warm 0 .. Punchy 1 (v[303] is percent).
-    float virtualBassCharacter = .5f;
-    // v[305]: harmonics kept up to this x the cut; v[306]: detector release, ms.
-    float virtualBassRange = 5.f;
-    float virtualBassResponseMs = 200.f;
     // Convolver (v[307..308]): on/off (off is a crossfaded bypass) and the IR gain trim, dB.
     bool convolverEnabled = false;
     float convolverGainDb = 0.f;

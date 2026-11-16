@@ -23,7 +23,7 @@ enum class DspStage(val bit: Int, val label: String, val neutralised: Boolean = 
     BUS_LIMITER(9, "Bus limiters"),
     MONO_BASS(10, "Mono bass"),
     VIRTUAL_CENTRE(11, "Virtual centre"),
-    VIRTUAL_BASS(12, "Virtual bass"),
+    // Bit 12 is retired (it was Virtual Bass, removed): never reported, never reused.
     MBC(13, "MBC"),
     TILT(14, "Tilt"),
     CONVOLVER(15, "Convolver IR"),
@@ -126,7 +126,6 @@ object MeasurementNeutral {
         }
         if (bypassed(DspStage.MONO_BASS)) out[S.INDEX_MONO_BASS_ENABLED] = 0f
         if (bypassed(DspStage.VIRTUAL_CENTRE)) out[S.INDEX_VIRTUAL_ENABLED] = 0f
-        if (bypassed(DspStage.VIRTUAL_BASS)) out[S.INDEX_VIRTUAL_BASS_ENABLED] = 0f
         if (bypassed(DspStage.MBC)) out[S.INDEX_MBC_ENABLED] = 0f
         if (bypassed(DspStage.TILT)) out[S.INDEX_TILT_ENABLED] = 0f
         if (bypassed(DspStage.CONVOLVER)) out[S.INDEX_CONVOLVER_ENABLED] = 0f

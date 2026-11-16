@@ -142,26 +142,6 @@ void NativeBmwDspProcessor::processInputStages(std::size_t frames) {
         }
     }
     profiler_.lap(P::MonoBass);
-    if (p_.virtualBassEnabled || virtualBassMix_ > 0.f) {
-        for (std::size_t i = 0; i < frames; ++i) {
-            if (p_.virtualBassEnabled) {
-                virtualBassMix_ = std::min(1.f, virtualBassMix_ + monoBassFadeStep_);
-            } else if (virtualBassMix_ > 0.f) {
-                virtualBassMix_ = std::max(0.f, virtualBassMix_ - monoBassFadeStep_);
-            }
-            if (virtualBassMix_ > 0.f) {
-                virtualBassRemoveMix_ = p_.virtualBassRemoveSub
-                                            ? std::min(1.f, virtualBassRemoveMix_ + monoBassFadeStep_)
-                                            : std::max(0.f, virtualBassRemoveMix_ - monoBassFadeStep_);
-                virtualBassGain_ = NativeBmwDsp::rampToward(virtualBassGain_, p_.virtualBassAmount, levelRampCoef_);
-                virtualBassCharacter_ =
-                    NativeBmwDsp::rampToward(virtualBassCharacter_, p_.virtualBassCharacter, levelRampCoef_);
-                virtualBass_.process(L[i], R[i], virtualBassMix_, virtualBassRemoveMix_, virtualBassGain_,
-                                     virtualBassCharacter_);
-            }
-        }
-    }
-    profiler_.lap(P::VirtualBass);
     // Pre EQ (the full-range bank and its preamp), crossfaded on/off: the PEQ switch and
     // measurement neutral both land here. Then the headroom gain. Settled on, the bank runs over
     // the whole chunk at once (PeqBank::processBlock(), bit-identical to frame by frame).
@@ -642,7 +622,6 @@ void NativeBmwDspProcessor::clearChainState() {
     retuneDeepBass();
     monoBassMix_ = p_.monoBassEnabled ? 1.f : 0.f;
     snapMixes();
-    snapVirtualBass();
     mbc_.snapMix();
     convolver_.snap(p_.convolverEnabled, p_.convolverGainDb);
     // Every stage that keeps history, front to back. Coefficients, settings and the convolver's
@@ -650,7 +629,6 @@ void NativeBmwDspProcessor::clearChainState() {
     inputDcL_.clear();
     inputDcR_.clear();
     monoBass_.clear();
-    virtualBass_.clear();
     inputPeq_.clear();
     lowPeq_.clear();
     midPeq_.clear();
@@ -853,7 +831,6 @@ void NativeBmwDspProcessor::publishStatus() {
          bands && (p_.busLimLowEnabled || p_.busLimMidEnabled || (highRuns && p_.busLimHighEnabled)));
     mark(sch::kStageMonoBass, p_.monoBassEnabled);
     mark(sch::kStageVirtualCentre, p_.virtualStage.enabled);
-    mark(sch::kStageVirtualBass, p_.virtualBassEnabled);
     mark(sch::kStageMbc, p_.mbcEnabled);
     mark(sch::kStageTilt, p_.tilt);
     // Only while an IR is running too: readEngineStatus() checks that live.

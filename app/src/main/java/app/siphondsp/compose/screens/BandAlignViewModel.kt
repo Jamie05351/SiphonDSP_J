@@ -189,7 +189,6 @@ class BandAlignViewModel(application: Application) : AndroidViewModel(applicatio
         val mixing = buildList {
             if (values[NativeBmwDspValues.INDEX_MONO_BASS_ENABLED] >= .5f) add("Mono Bass")
             if (values[NativeBmwDspValues.INDEX_VIRTUAL_ENABLED] >= .5f) add("Virtual Centre")
-            if (values[NativeBmwDspValues.INDEX_VIRTUAL_BASS_ENABLED] >= .5f) add("Virtual Bass")
         }
         if (mixing.isNotEmpty()) {
             return "Switch ${mixing.joinToString(" and ")} off while measuring and analysing -- they mix the two " +
