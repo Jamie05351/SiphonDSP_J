@@ -639,4 +639,9 @@ class BmwSignalChainModelTest {
         for (k in offPhase.indices) assertEquals("phase at point $k", offPhase[k], curves.sumPhase[0][k], 1e-9)
     }
 
+    companion object {
+        private const val POINT_COUNT = 192
+        private const val SAMPLE_RATE = 48_000.0
+        private const val FLOOR_DB = -120.0
+    }
 }
