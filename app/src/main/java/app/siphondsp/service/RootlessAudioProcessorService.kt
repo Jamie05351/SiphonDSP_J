@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
@@ -64,7 +65,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
@@ -240,6 +244,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // The excluded apps, as last read from the database (null until the first read).
     @Volatile
     private var blockedApps: List<BlockedApp>? = null
+    // Both writers of blockedApps (the database collector and the first capture build's own
+    // read) go through this, so the build's read can never replace a newer list.
+    private val blockedAppsLock = Any()
+    // When this service was created: an unread Excluded apps list is only a reason to hold off
+    // stopping for an app problem for so long after that (see onAppProblemDetected()).
+    private val createdAtMs = SystemClock.elapsedRealtime()
 
     // The exclusions the live AudioRecord was built with (null before the first build). Written
     // by buildAudioRecord() on the worker, read by recheckExclusions() on the main thread.
@@ -321,7 +331,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         mainScope.launch {
             blockedAppRepository.blocklist.collect {
-                blockedApps = it
+                synchronized(blockedAppsLock) { blockedApps = it }
                 Timber.d("Excluded apps changed; ignored=${!workerAlive}")
                 if (workerAlive) exclusionRecheckGate.request("Excluded apps list changed")
             }
@@ -619,6 +629,29 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     private val onAppProblemListener = object : RootlessSessionDatabase.OnAppProblemListener {
         override fun onAppProblemDetected(uid: Int) {
+            // An app on the Excluded apps list is never processed, so it can't be a reason to stop.
+            // Its sessions can still reach this before the list has been read (the first read is
+            // asynchronous) or before a rebuild has applied it. While the list isn't known yet
+            // there's no telling, so hold off -- but only for BLOCKLIST_GRACE_MS after the service
+            // started: a list that never loads must not hide a genuinely incompatible app for good
+            // (after that, it stops as it always did; a non-excluded one comes back here each poll).
+            val blocked = blockedApps
+            if (blocked == null) {
+                if (SystemClock.elapsedRealtime() - createdAtMs < BLOCKLIST_GRACE_MS) {
+                    Timber.w("App problem for uid %d ignored: excluded apps not read yet", uid)
+                    return
+                }
+            } else if (blocked.any { it.uid == uid } || run {
+                    // A reinstalled excluded app has a new uid: match its package instead -- but
+                    // only when that uid is that one package alone. A shared uid (system or vendor
+                    // ones on head units) also holds other apps, and a genuinely incompatible one
+                    // among them must still stop the service.
+                    val packages = packageManager.getPackagesForUid(uid)
+                    packages != null && packages.size == 1 && blocked.any { it.packageName == packages[0] }
+                }) {
+                Timber.w("App problem for uid %d ignored: it's on the Excluded apps list", uid)
+                return
+            }
             if(!preferences.get<Boolean>(R.string.key_session_app_problem_ignore)) {
                 notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
@@ -702,10 +735,29 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // What the next AudioRecord should exclude, from the current settings and capture-policy log.
     private fun computeExclusions(): ExclusionSet = ExclusionSet(
         restricted = if (excludeRestrictedSessions) sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet() else emptySet(),
-        blocked = blockedApps?.map { it.uid }?.toSet().orEmpty(),
+        blocked = blockedUids(),
         self = Process.myUid(),
         excludeRestricted = excludeRestrictedSessions,
     )
+
+    /**
+     * The Excluded apps' UIDs: each one's stored UID and its package's UID now. A reinstall can
+     * give an app a new UID, and the excluded app must still be excluded from the capture and the
+     * session database, not only kept from stopping the service (see onAppProblemDetected()).
+     */
+    private fun blockedUids(): Set<Int> {
+        val apps = blockedApps ?: return emptySet()
+        val uids = HashSet<Int>(apps.size * 2)
+        for (app in apps) {
+            uids += app.uid
+            try {
+                uids += packageManager.getPackageUid(app.packageName, 0)
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Uninstalled: its stored UID is all there is.
+            }
+        }
+        return uids
+    }
 
     // Main thread, from exclusionRecheckGate: rebuilds only if the exclusions must change.
     private fun recheckExclusions(reasons: Set<String>, packages: Set<String>) {
@@ -1013,14 +1065,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // All zeros (allocateDirect clears it): the start-up priming block and the input
             // while the measurement generator runs.
             val silence = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
-            // Bytes already in [audio] when the loop leaves the idle suspend: the first captured
-            // block of the resumed stream, read while checking for it (see the suspend below).
-            var heldBytes = 0
-            // While the session list says idle, audio the capture still delivers holds the loop
-            // awake until this time (each audible block moves it on): an audio-only wake (see the
-            // suspend below) lasts as long as the audio, never longer, so a playback the session
-            // polling missed can't keep the pipeline from suspending again.
-            var audioHoldUntil = 0L
+            // Why the next stream start happens, for the stream-start log (Native DSP Truth).
+            var startReason = "service start"
 
             while (!isProcessorDisposing && !isServiceDisposing) {
                 if (diagnostics?.isFinished == true) diagnostics = null
@@ -1039,7 +1085,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         lastRecreationPackages = recreationPackages
                         lastRecreationAt = SystemClock.elapsedRealtime()
                         recreationPackages = emptySet()
-                        heldBytes = 0  // read from the recorder being released
+                        startReason = "rebuild: $recreationReason"
                         safeStop(recorder)
                         safeStop(track)
                         track?.flush()
@@ -1092,55 +1138,19 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val currentTrack = track ?: break
 
                 if(isProcessorIdle && suspendOnIdle && !measGenActive &&
-                    idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS &&
-                    SystemClock.elapsedRealtime() >= audioHoldUntil) {
+                    idleSinceMillis != 0L && SystemClock.elapsedRealtime() - idleSinceMillis >= IDLE_SUSPEND_DEBOUNCE_MS) {
                     diagnostics?.markExpectedIdle()
                     // Locked for the same reason stopRecording() and
                     // unblockRecorderForMeasurementGenerator() lock their own stop() calls: so
                     // this can never race either of those stopping/releasing the same
                     // AudioRecord/AudioTrack concurrently from another thread.
-                    // Only the output stops (and with it all processing); the recorder keeps
-                    // capturing. Stopping it ends the playback capture, so a paused app (Spotify
-                    // drops its session the moment it pauses) was no longer held, and on resume it
-                    // played straight to the speakers -- unprocessed, at the head unit's full
-                    // volume -- until this loop noticed and restarted the recorder: a burst at
-                    // every resume. Held, the resumed audio is captured from its first sample and
-                    // waits in the recorder's buffer until the loop is back. A capture with nothing
-                    // playing costs next to nothing.
                     synchronized(recorderLifecycleLock) {
                         recorderSuspended = true
+                        startReason = "resume after idle"
+                        safeStop(currentRecorder)
                         safeStop(currentTrack)
                     }
                     currentTrack.flush()
-                    // Wake on the audio itself, not only on the session list (which in polling
-                    // mode can be seconds late, longer than the recorder holds): the held capture
-                    // having anything means playback resumed. That block is kept and processed
-                    // first, and the loop runs again at once, held awake by the audio (see
-                    // audioHoldUntil); the idle timer is left as it is, so once the audio stops the
-                    // loop suspends again even if no session change ever arrives.
-                    // Everything waiting is read, not one block per check: a capture that delivers
-                    // zeros with nothing playing (in blocks shorter than the check interval) would
-                    // otherwise build a backlog the wake had to work through first, waking late on
-                    // audio older than live. Only real audio counts: waking on those zeros would
-                    // keep the pipeline from ever suspending. (A zero sample is all zero bytes in
-                    // both encodings.) Bounded, in case a capture delivers as fast as it's read.
-                    var woke = false
-                    for (attempt in 0 until MAX_IDLE_DRAIN_READS) {
-                        audio.clear()
-                        val waiting = try {
-                            currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_NON_BLOCKING)
-                        } catch (_: IllegalStateException) {
-                            0
-                        }
-                        if (waiting <= 0) break
-                        if (isAudible(audio, waiting)) {
-                            heldBytes = waiting
-                            audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
-                            woke = true
-                            break
-                        }
-                    }
-                    if (woke) continue
                     try {
                         Thread.sleep(50)
                     }
@@ -1177,6 +1187,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     // rather than whatever the last stream left in its filters, delays, limiters
                     // and convolver. No fade, so a measurement sweep plays untouched.
                     engine.notifyStreamStart()
+                    StreamStartLog.begin(
+                        startReason, sampleRate, bufferSamples, encoding == AudioEncoding.PcmFloat,
+                        SystemClock.elapsedRealtime(),
+                    )
+                    startReason = "track restart"
                     writeFully(currentTrack, silence, bufferSizeBytes, bytesPerSample, diagnostics)
                 }
 
@@ -1192,34 +1207,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 // real-time pacing since the output device drains at its own clock regardless.
                 val generatedInput = measGenActive
                 val readCount = if (generatedInput) {
-                    heldBytes = 0  // the generator replaces the input anyway
                     audio.clear()
                     silence.clear()
                     audio.put(silence)
                     audio.clear()
                     bufferSamples
-                } else if (heldBytes > 0) {
-                    // The block the idle suspend found waiting: already in [audio] at position 0.
-                    val bytes = heldBytes
-                    heldBytes = 0
-                    bytes / bytesPerSample
                 } else {
                     // Bytes from AudioRecord (written at position 0, which read() leaves as it
                     // is); a negative value is an error code, passed through.
                     audio.clear()
                     Trace.beginSection("SiphonDSP read")
-                    // While the session list says idle (and the pipeline may suspend), don't block:
-                    // with nothing playing a blocking read may never return, and the loop has to
-                    // come round to suspend again.
-                    val readMode =
-                        if (isProcessorIdle && suspendOnIdle) AudioRecord.READ_NON_BLOCKING else AudioRecord.READ_BLOCKING
                     val bytes = try {
-                        currentRecorder.read(audio, bufferSizeBytes, readMode)
+                        currentRecorder.read(audio, bufferSizeBytes, AudioRecord.READ_BLOCKING)
                     } finally {
                         Trace.endSection()
-                    }
-                    if (bytes > 0 && isProcessorIdle && isAudible(audio, bytes)) {
-                        audioHoldUntil = SystemClock.elapsedRealtime() + IDLE_SUSPEND_DEBOUNCE_MS
                     }
                     if (bytes > 0) bytes / bytesPerSample else bytes
                 }
@@ -1241,12 +1242,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     continue
                 }
                 if(readCount == 0) {
-                    // Inside an audio hold (awake on the audio alone, the reads non-blocking so a
-                    // capture that goes quiet can't park the loop), real audio is flowing: retry
-                    // within a couple of ms, well inside the track's block of slack, rather than
-                    // leave 20 ms gaps in the stream.
-                    val holding = SystemClock.elapsedRealtime() < audioHoldUntil
-                    Thread.sleep(if (holding) AUDIO_HOLD_RETRY_MS else AudioPipelineHealth.IO_RETRY_DELAY_MS)
+                    Thread.sleep(AudioPipelineHealth.IO_RETRY_DELAY_MS)
                     continue
                 }
 
@@ -1272,8 +1268,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     diagnostics?.recordFloatInput(audioFloats, processCount)
                     if (spectrum) SpectrumEngine.captureDry(audioFloats, processCount)
                 }
+                // Only for the first buffers after a stream start (see StreamStartLog).
+                val logStart = StreamStartLog.recording
+                val inPeakDb = if (!logStart) 0f
+                    else if (encoding == AudioEncoding.PcmShort) StreamStartLog.peakDb(audioShorts, processCount)
+                    else StreamStartLog.peakDb(audioFloats, processCount)
                 val processStart = System.nanoTime()
-                try {
+                val processed = try {
                     // In place; a bypassed or refused buffer is left as it was read and played as is.
                     engine.processDirect(audio, processCount, encoding)
                 } catch (e: Throwable) {
@@ -1285,6 +1286,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 tuning.reportWork(processNanos)
                 lastSuccessfulProcess = SystemClock.elapsedRealtime()
                 diagnostics?.recordDspSuccess(processCount)
+                if (logStart) {
+                    val outPeakDb = if (encoding == AudioEncoding.PcmShort) StreamStartLog.peakDb(audioShorts, processCount)
+                        else StreamStartLog.peakDb(audioFloats, processCount)
+                    StreamStartLog.record(SystemClock.elapsedRealtime(), processCount, inPeakDb, outPeakDb, processed, generatedInput)
+                }
+                if (StreamStartLog.wantsEngine) {
+                    val peq = engine.appliedPeqState
+                    StreamStartLog.recordEngine(engine.engineStatus(), peq.enabled, peq.preampDb)
+                }
                 if (encoding == AudioEncoding.PcmShort) {
                     diagnostics?.recordShortOutput(audioShorts, processCount)
                     if (spectrum) SpectrumEngine.publishWet(audioShorts, sampleRate)
@@ -1496,6 +1506,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
 
         if (!excludeRestrictedSessions) sessionManager.pollOnce(false)
+        // The first build can come before the Excluded apps list's first (asynchronous) read:
+        // read it here (the worker thread; a small table) so the capture excludes those apps
+        // from the start instead of until a rebuild a few seconds later.
+        if (blockedApps == null) {
+            runBlocking {
+                withTimeoutOrNull(BLOCKLIST_READ_TIMEOUT_MS) { blockedAppRepository.blocklist.first() }
+            }?.let { read -> synchronized(blockedAppsLock) { if (blockedApps == null) blockedApps = read } }
+        }
         val exclusions = computeExclusions()
         // Published the moment it's read: a re-check finding null means this read hasn't happened
         // yet and will see the change itself, so nothing can fall between the two.
@@ -1567,15 +1585,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
     }
 
-    /** Whether the first [bytes] of [buffer] hold any non-zero sample (a zero sample is all zero
-     *  bytes in both encodings). Absolute reads: the buffer's position is left as it is. */
-    private fun isAudible(buffer: ByteBuffer, bytes: Int): Boolean {
-        for (i in 0 until bytes.coerceAtMost(buffer.capacity())) {
-            if (buffer.get(i).toInt() != 0) return true
-        }
-        return false
-    }
-
     private fun alignUp(value: Int, alignment: Int): Int {
         if(alignment <= 1)
             return value
@@ -1609,10 +1618,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val TRACK_BUFFER_BLOCKS = 2
         private const val STOP_JOIN_TIMEOUT_MS = 2000L
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
-        // Reads per idle check at most when draining the held capture (see the idle suspend).
-        private const val MAX_IDLE_DRAIN_READS = 64
-        // An empty non-blocking read while audio holds the loop awake is retried this soon.
-        private const val AUDIO_HOLD_RETRY_MS = 2L
+        // How long the first capture build waits for the Excluded apps list (see buildAudioRecord).
+        private const val BLOCKLIST_READ_TIMEOUT_MS = 2_000L
+        // How long after the service starts an unread Excluded apps list holds off an app-problem stop.
+        private const val BLOCKLIST_GRACE_MS = 10_000L
         // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
         private const val EXCLUSION_RECHECK_DEBOUNCE_MS = 2_000L
         private const val EXCLUSION_RECHECK_MAX_WAIT_MS = 10_000L
