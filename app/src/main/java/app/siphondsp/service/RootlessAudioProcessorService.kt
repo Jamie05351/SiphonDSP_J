@@ -244,6 +244,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // The excluded apps, as last read from the database (null until the first read).
     @Volatile
     private var blockedApps: List<BlockedApp>? = null
+    // Both writers of blockedApps (the database collector and the first capture build's own
+    // read) go through this, so the build's read can never replace a newer list.
+    private val blockedAppsLock = Any()
+    // When this service was created: an unread Excluded apps list is only a reason to hold off
+    // stopping for an app problem for so long after that (see onAppProblemDetected()).
+    private val createdAtMs = SystemClock.elapsedRealtime()
 
     // The exclusions the live AudioRecord was built with (null before the first build). Written
     // by buildAudioRecord() on the worker, read by recheckExclusions() on the main thread.
@@ -325,7 +331,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         mainScope.launch {
             blockedAppRepository.blocklist.collect {
-                blockedApps = it
+                synchronized(blockedAppsLock) { blockedApps = it }
                 Timber.d("Excluded apps changed; ignored=${!workerAlive}")
                 if (workerAlive) exclusionRecheckGate.request("Excluded apps list changed")
             }
@@ -625,16 +631,22 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         override fun onAppProblemDetected(uid: Int) {
             // An app on the Excluded apps list is never processed, so it can't be a reason to stop.
             // Its sessions can still reach this before the list has been read (the first read is
-            // asynchronous) or before a rebuild has applied it; and while the list isn't known yet
-            // there's no telling, so don't stop on that either -- once it is, a genuinely
-            // incompatible app that isn't excluded comes back here on the next poll.
+            // asynchronous) or before a rebuild has applied it. While the list isn't known yet
+            // there's no telling, so hold off -- but only for BLOCKLIST_GRACE_MS after the service
+            // started: a list that never loads must not hide a genuinely incompatible app for good
+            // (after that, it stops as it always did; a non-excluded one comes back here each poll).
             val blocked = blockedApps
-            val packages = packageManager.getPackagesForUid(uid)?.toSet().orEmpty()
-            if (blocked == null || blocked.any { it.uid == uid || it.packageName in packages }) {
-                Timber.w(
-                    "App problem for uid %d (%s) ignored: %s", uid, packages.joinToString(),
-                    if (blocked == null) "excluded apps not read yet" else "it's on the Excluded apps list",
-                )
+            if (blocked == null) {
+                if (SystemClock.elapsedRealtime() - createdAtMs < BLOCKLIST_GRACE_MS) {
+                    Timber.w("App problem for uid %d ignored: excluded apps not read yet", uid)
+                    return
+                }
+            } else if (blocked.any { it.uid == uid } || run {
+                    // A reinstalled excluded app has a new uid: match its package instead.
+                    val packages = packageManager.getPackagesForUid(uid)?.toSet().orEmpty()
+                    blocked.any { it.packageName in packages }
+                }) {
+                Timber.w("App problem for uid %d ignored: it's on the Excluded apps list", uid)
                 return
             }
             if(!preferences.get<Boolean>(R.string.key_session_app_problem_ignore)) {
@@ -1474,7 +1486,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         if (blockedApps == null) {
             runBlocking {
                 withTimeoutOrNull(BLOCKLIST_READ_TIMEOUT_MS) { blockedAppRepository.blocklist.first() }
-            }?.let { if (blockedApps == null) blockedApps = it }
+            }?.let { read -> synchronized(blockedAppsLock) { if (blockedApps == null) blockedApps = read } }
         }
         val exclusions = computeExclusions()
         // Published the moment it's read: a re-check finding null means this read hasn't happened
@@ -1582,6 +1594,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         private const val IDLE_SUSPEND_DEBOUNCE_MS = 400L
         // How long the first capture build waits for the Excluded apps list (see buildAudioRecord).
         private const val BLOCKLIST_READ_TIMEOUT_MS = 2_000L
+        // How long after the service starts an unread Excluded apps list holds off an app-problem stop.
+        private const val BLOCKLIST_GRACE_MS = 10_000L
         // A burst of app-session churn is re-checked once, 2 s after it goes quiet (10 s at most).
         private const val EXCLUSION_RECHECK_DEBOUNCE_MS = 2_000L
         private const val EXCLUSION_RECHECK_MAX_WAIT_MS = 10_000L
