@@ -759,3 +759,27 @@ TEST_CASE("Schema reader column: configure() reads exactly the slots marked nati
         CHECK(rejected == nbschema::kReadByNative[i]);
     }
 }
+
+TEST_CASE("the retired Virtual Bass slots (299..303, 305, 306) change nothing") {
+    // Virtual Bass was removed. A config saved with it on (and set hard) must load and play
+    // exactly as one with it off: the slots are reserved, configure() reads none of them.
+    auto base = defaultConfig();
+    auto old = base;
+    old[299] = 1.f;    // enabled
+    old[300] = 60.f;   // reach
+    old[301] = 100.f;  // amount
+    old[302] = 1.f;    // remove sub
+    old[303] = 100.f;  // character
+    old[305] = 8.f;    // range
+    old[306] = 100.f;  // response
+    NativeBmwDspProcessor off, saved;
+    off.setSampleRate(kSampleRate);
+    saved.setSampleRate(kSampleRate);
+    REQUIRE(off.configure(base.data(), base.size()));
+    REQUIRE(saved.configure(old.data(), old.size()));
+    auto a = stereoSine(40.0, 0.5, 9600);
+    auto b = a;
+    off.process(a.data(), a.size());
+    saved.process(b.data(), b.size());
+    CHECK(a == b);
+}

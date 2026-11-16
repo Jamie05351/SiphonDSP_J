@@ -240,7 +240,7 @@ SelfTestResult runSelfTest(const NativeBmwDspProcessor::SelfTestSource& source) 
     result.crosstalkDb = dev.crosstalkDb;
     constexpr std::uint32_t kLevelDependent =
         (1u << sch::kStageMbc) | (1u << sch::kStageBusLimiter) | (1u << sch::kStageMasterLimiter) |
-        (1u << sch::kStageVirtualCentre) | (1u << sch::kStageVirtualBass);
+        (1u << sch::kStageVirtualCentre);
     result.levelDependentStages = result.activeStages & kLevelDependent;
 
     if (!result.verified) {
