@@ -342,8 +342,6 @@ private:
         DirtyMbcEnable = 1u << 26,  // the MBC as a whole switched on/off: start at the set Mix
         DirtyMonoBass = 1u << 27,        // Mono Bass split frequency: retune (keeps state)
         DirtyMonoBassResume = 1u << 28,  // Mono Bass switched on from silent: clear its state
-        DirtyVirtualBass = 1u << 29,        // Virtual Bass cut, range or response: retune (keeps state)
-        DirtyVirtualBassResume = 1u << 30,  // Virtual Bass switched on from silent: clear its state
         DirtyAll = 0xffffffffu,
     };
 
@@ -569,25 +567,12 @@ private:
     float monoBassMix_ = 0.f;
     static constexpr float kMonoBassFadeSeconds = 0.02f;
     float monoBassFadeStep_ = 1.f / (0.02f * 48000.f);
-    // Virtual Bass, right after Mono Bass. virtualBassMix_ crossfades from the input (0) to the
-    // processed signal (1) and virtualBassRemoveMix_ the base from the input to the input
-    // high-passed at the cut, both linear ramps over kMonoBassFadeSeconds; virtualBassGain_ follows
-    // the harmonics level on a one-pole (levelRampCoef_). At virtualBassMix_ 0 the stage is
-    // skipped, so with Virtual Bass off the signal is untouched. Snapped on a full rebuild and on
-    // the first configure().
-    NativeBmwDsp::VirtualBass virtualBass_;
-    float virtualBassMix_ = 0.f;
-    float virtualBassRemoveMix_ = 0.f;
-    float virtualBassGain_ = 0.f;
-    float virtualBassCharacter_ = .5f;  // follows p_.virtualBassCharacter like virtualBassGain_
     // Deep bass, after the master volume (see DeepBass).
     NativeBmwDsp::DeepBass deepBass_;
     // Retunes deepBass_ for the volume actually reaching the output: the smaller of the cut at the
     // ramping masterGain_ and at its target, so the boost never exceeds the attenuation in effect
     // while the volume ramps either way.
     void retuneDeepBass();
-    // Lands Virtual Bass's on/off, sub-removal and level ramps on their settings at once.
-    void snapVirtualBass();
     unsigned deepBassRetuneCounter_ = 0;
     // Effective strength (0..1), ramped toward p_ (0 while switched off) over ~50 ms -- slow
     // enough that the stepwise retunes are far smaller than the signal's own movement.

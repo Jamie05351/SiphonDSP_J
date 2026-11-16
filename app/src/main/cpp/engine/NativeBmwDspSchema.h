@@ -123,18 +123,8 @@ inline constexpr int kHeadroomAuto = 296;
 // --- Mono Bass (added in the 297 -> 299 growth)
 inline constexpr int kMonoBassEnabled = 297;
 inline constexpr int kMonoBassFreq = 298;
-// --- Virtual Bass (added in the 299 -> 303 growth)
-inline constexpr int kVirtualBassEnabled = 299;
-inline constexpr int kVirtualBassFreq = 300;
-inline constexpr int kVirtualBassAmount = 301;
-inline constexpr int kVirtualBassRemoveSub = 302;
-// --- Virtual Bass character (added in the 303 -> 304 growth)
-inline constexpr int kVirtualBassCharacter = 303;
 // --- Subsonic slope (added in the 304 -> 305 growth)
 inline constexpr int kSubsonicSlope = 304;
-// --- Virtual Bass range and response (added in the 305 -> 307 growth)
-inline constexpr int kVirtualBassRange = 305;
-inline constexpr int kVirtualBassResponse = 306;
 // --- Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
 inline constexpr int kConvolverEnabled = 307;
 inline constexpr int kConvolverGain = 308;
@@ -160,7 +150,6 @@ inline constexpr int kStageSubsonic = 7;  // stage bit: Low's subsonic high-pass
 inline constexpr int kStageBusLimiter = 9;  // stage bit: the per-band bus limiters
 inline constexpr int kStageMonoBass = 10;  // stage bit: Mono Bass
 inline constexpr int kStageVirtualCentre = 11;  // stage bit: the virtual-centre stage
-inline constexpr int kStageVirtualBass = 12;  // stage bit: Virtual Bass
 inline constexpr int kStageMbc = 13;  // stage bit: the multiband compressor
 inline constexpr int kStageTilt = 14;  // stage bit: tilt
 inline constexpr int kStageConvolver = 15;  // stage bit: the convolver (on with an IR loaded)
@@ -207,7 +196,7 @@ inline constexpr int kVirtualFeedApQ = 5;
 inline constexpr int kVirtualFeedApOrder = 6;
 
 // Whether configure() reads each slot (see the reader column of the schema).
-inline constexpr std::array<bool, kSize> kReadByNative{{true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true}};
+inline constexpr std::array<bool, kSize> kReadByNative{{true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, false, false, true, false, false, true, true, true, true, true, true, true, true}};
 
 // Pinned to the processor's own copies, so a drift is a build break.
 static_assert(kSize == NativeBmwDspProcessor::kConfigSize);

@@ -85,7 +85,7 @@ fun BandAlignScreen(model: BandAlignViewModel = viewModel()) {
 
             Section("1  HOW TO MEASURE") {
                 Body(
-                    "With SiphonDSP on and your tune as it is now, but Mono Bass, Virtual Bass and Virtual Centre off (they mix the two sides). Same mic position for " +
+                    "With SiphonDSP on and your tune as it is now, but Mono Bass and Virtual Centre off (they mix the two sides). Same mic position for " +
                         "every measurement at a seat, and REW's acoustic timing reference on. For each side, play " +
                         "REW's sweep on that channel only:",
                     small = true,

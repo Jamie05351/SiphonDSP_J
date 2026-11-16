@@ -6,7 +6,7 @@ Measurement setups you can trust: every state the UI shows comes from the native
 ## Crossover bypass (slot 309)
 
 `INDEX_CROSSOVER_BYPASS` / `kCrossoverBypass`. On: the band split is removed entirely. The input
-stages (DC blocker, Mono Bass, Virtual Bass, Pre EQ, headroom, MBC, virtual centre) feed the
+stages (DC blocker, Mono Bass, Pre EQ, headroom, MBC, virtual centre) feed the
 summed-bus stages (tilt, post gain, channel mute, convolver, master limiter, volume, Deep bass, the
 hardware swap) as one full-range stereo path. Nothing of the bands runs: no
 crossover or subsonic filter, band EQ, all-pass, band delay, band gain, per-output polarity or
@@ -28,7 +28,7 @@ switching neutral off is the same config without the flag, restored exactly (als
 restart). The neutral set is `kStage*` bits 0..21:
 
 Pre EQ, crossover (forces the bypass), band EQ, band gains, band delays, polarity, all-pass,
-subsonic, bus limiters, Mono Bass, virtual centre, Virtual Bass, MBC, tilt, convolver IR,
+subsonic, bus limiters, Mono Bass, virtual centre, MBC, tilt, convolver IR,
 master limiter, Deep bass, headroom (manual or automatic), post gain, the 3 Hz DC blocker and
 measurement mute.
 

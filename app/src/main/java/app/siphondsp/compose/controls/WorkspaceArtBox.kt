@@ -21,7 +21,8 @@ object WorkspaceArt {
 
     class Frac(val x: Float, val y: Float, val w: Float, val h: Float)
 
-    /** The 3-segment page finder (Output: OUTPUT, CONVOLVER, DEEP BASS). Ends where the others do. */
+    /** The 3-segment page finder (Output: OUTPUT, CONVOLVER, DEEP BASS; Crossovers: LOW/MID, MID/HIGH,
+     *  TILT). Ends where the others do. */
     val finder3 = Frac(0.629f, 0.048f, 0.341f, 0.0693f)
 
     /** A 4-segment page finder. Ends where the 3- and 5-segment ones do. (Gains & Delay used it

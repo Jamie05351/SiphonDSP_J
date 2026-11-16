@@ -8,7 +8,7 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 
 **Reader**: *native* = `configure()` reads and validates it (a non-finite value rejects the whole update; native-tests checks this for every slot); *Kotlin only* = native never reads it (migration markers, UI state, legacy values Kotlin migrates from); *reserved* = nothing reads it.
 
-217 native, 80 Kotlin only, 18 reserved.
+210 native, 80 Kotlin only, 25 reserved.
 
 
 ## Enabled, retired band passthroughs (1..2), channelMute, measurementMute
@@ -500,20 +500,20 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | 297 | 0 | native | `INDEX_MONO_BASS_ENABLED` | `kMonoBassEnabled` | monoBassEnabled (off) |
 | 298 | 90 | native | `INDEX_MONO_BASS_FREQ` | `kMonoBassFreq` | monoBassFreq (Hz, 60..120) |
 
-## Virtual Bass (added in the 299 -> 303 growth)
+## Retired: Virtual Bass (added in the 299 -> 303 growth; the feature was removed, read by nothing)
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 299 | 0 | native | `INDEX_VIRTUAL_BASS_ENABLED` | `kVirtualBassEnabled` | virtualBassEnabled (off) |
-| 300 | 40 | native | `INDEX_VIRTUAL_BASS_FREQ` | `kVirtualBassFreq` | virtualBassFreq (woofer reach, Hz, 25..60) |
-| 301 | 50 | native | `INDEX_VIRTUAL_BASS_AMOUNT` | `kVirtualBassAmount` | virtualBassAmount (harmonics level, percent) |
-| 302 | 0 | native | `INDEX_VIRTUAL_BASS_REMOVE_SUB` | `kVirtualBassRemoveSub` | virtualBassRemoveSub (off) |
+| 299 | 0 | reserved |  |  | virtualBassEnabled (off) (retired: Virtual Bass removed) |
+| 300 | 40 | reserved |  |  | virtualBassFreq (woofer reach, Hz, 25..60) (retired: Virtual Bass removed) |
+| 301 | 50 | reserved |  |  | virtualBassAmount (harmonics level, percent) (retired: Virtual Bass removed) |
+| 302 | 0 | reserved |  |  | virtualBassRemoveSub (off) (retired: Virtual Bass removed) |
 
-## Virtual Bass character (added in the 303 -> 304 growth)
+## Retired: Virtual Bass character (added in the 303 -> 304 growth)
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 303 | 50 | native | `INDEX_VIRTUAL_BASS_CHARACTER` | `kVirtualBassCharacter` | virtualBassCharacter (Warm 0 .. Punchy 100 %) |
+| 303 | 50 | reserved |  |  | virtualBassCharacter (Warm 0 .. Punchy 100 %) (retired: Virtual Bass removed) |
 
 ## Subsonic slope (added in the 304 -> 305 growth)
 
@@ -521,12 +521,12 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 |---:|---:|---|---|---|---|
 | 304 | 0 | native | `INDEX_SUBSONIC_SLOPE` | `kSubsonicSlope` | subsonicSlope (0 = LR4, 1 = BW2) |
 
-## Virtual Bass range and response (added in the 305 -> 307 growth)
+## Retired: Virtual Bass range and response (added in the 305 -> 307 growth)
 
 | slot | default | reader | Kotlin | C++ | meaning |
 |---:|---:|---|---|---|---|
-| 305 | 5 | native | `INDEX_VIRTUAL_BASS_RANGE` | `kVirtualBassRange` | virtualBassRange (harmonics kept up to x the reach, 3..8) |
-| 306 | 200 | native | `INDEX_VIRTUAL_BASS_RESPONSE` | `kVirtualBassResponse` | virtualBassResponse (detector release, ms, 100..500) |
+| 305 | 5 | reserved |  |  | virtualBassRange (harmonics kept up to x the reach, 3..8) (retired: Virtual Bass removed) |
+| 306 | 200 | reserved |  |  | virtualBassResponse (detector release, ms, 100..500) (retired: Virtual Bass removed) |
 
 ## Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
 
@@ -571,7 +571,6 @@ Slots are append-only: a retired slot is never reused for a different meaning wi
 | `kStageBusLimiter` | 9 | stage bit: the per-band bus limiters |
 | `kStageMonoBass` | 10 | stage bit: Mono Bass |
 | `kStageVirtualCentre` | 11 | stage bit: the virtual-centre stage |
-| `kStageVirtualBass` | 12 | stage bit: Virtual Bass |
 | `kStageMbc` | 13 | stage bit: the multiband compressor |
 | `kStageTilt` | 14 | stage bit: tilt |
 | `kStageConvolver` | 15 | stage bit: the convolver (on with an IR loaded) |

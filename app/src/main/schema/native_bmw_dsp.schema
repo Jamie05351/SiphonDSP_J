@@ -394,21 +394,21 @@ section Mono Bass (added in the 297 -> 299 growth)
 slot 297 0           native   INDEX_MONO_BASS_ENABLED kMonoBassEnabled monoBassEnabled (off)
 slot 298 90          native   INDEX_MONO_BASS_FREQ kMonoBassFreq monoBassFreq (Hz, 60..120)
 
-section Virtual Bass (added in the 299 -> 303 growth)
-slot 299 0           native   INDEX_VIRTUAL_BASS_ENABLED kVirtualBassEnabled virtualBassEnabled (off)
-slot 300 40          native   INDEX_VIRTUAL_BASS_FREQ kVirtualBassFreq virtualBassFreq (woofer reach, Hz, 25..60)
-slot 301 50          native   INDEX_VIRTUAL_BASS_AMOUNT kVirtualBassAmount virtualBassAmount (harmonics level, percent)
-slot 302 0           native   INDEX_VIRTUAL_BASS_REMOVE_SUB kVirtualBassRemoveSub virtualBassRemoveSub (off)
+section Retired: Virtual Bass (added in the 299 -> 303 growth; the feature was removed, read by nothing)
+slot 299 0           reserved - - virtualBassEnabled (off) (retired: Virtual Bass removed)
+slot 300 40          reserved - - virtualBassFreq (woofer reach, Hz, 25..60) (retired: Virtual Bass removed)
+slot 301 50          reserved - - virtualBassAmount (harmonics level, percent) (retired: Virtual Bass removed)
+slot 302 0           reserved - - virtualBassRemoveSub (off) (retired: Virtual Bass removed)
 
-section Virtual Bass character (added in the 303 -> 304 growth)
-slot 303 50          native   INDEX_VIRTUAL_BASS_CHARACTER kVirtualBassCharacter virtualBassCharacter (Warm 0 .. Punchy 100 %)
+section Retired: Virtual Bass character (added in the 303 -> 304 growth)
+slot 303 50          reserved - - virtualBassCharacter (Warm 0 .. Punchy 100 %) (retired: Virtual Bass removed)
 
 section Subsonic slope (added in the 304 -> 305 growth)
 slot 304 0           native   INDEX_SUBSONIC_SLOPE kSubsonicSlope subsonicSlope (0 = LR4, 1 = BW2)
 
-section Virtual Bass range and response (added in the 305 -> 307 growth)
-slot 305 5           native   INDEX_VIRTUAL_BASS_RANGE kVirtualBassRange virtualBassRange (harmonics kept up to x the reach, 3..8)
-slot 306 200         native   INDEX_VIRTUAL_BASS_RESPONSE kVirtualBassResponse virtualBassResponse (detector release, ms, 100..500)
+section Retired: Virtual Bass range and response (added in the 305 -> 307 growth)
+slot 305 5           reserved - - virtualBassRange (harmonics kept up to x the reach, 3..8) (retired: Virtual Bass removed)
+slot 306 200         reserved - - virtualBassResponse (detector release, ms, 100..500) (retired: Virtual Bass removed)
 
 section Convolver (added in the 307 -> 309 growth; the IR itself is loaded separately, see NativeBmwConvolver.h)
 slot 307 0           native   INDEX_CONVOLVER_ENABLED kConvolverEnabled convolverEnabled (off = bypass, crossfaded)
@@ -439,7 +439,7 @@ const kStageSubsonic 7 stage bit: Low's subsonic high-pass
 const kStageBusLimiter 9 stage bit: the per-band bus limiters
 const kStageMonoBass 10 stage bit: Mono Bass
 const kStageVirtualCentre 11 stage bit: the virtual-centre stage
-const kStageVirtualBass 12 stage bit: Virtual Bass
+# bit 12 is retired (it was Virtual Bass, removed); never reported, never reused
 const kStageMbc 13 stage bit: the multiband compressor
 const kStageTilt 14 stage bit: tilt
 const kStageConvolver 15 stage bit: the convolver (on with an IR loaded)

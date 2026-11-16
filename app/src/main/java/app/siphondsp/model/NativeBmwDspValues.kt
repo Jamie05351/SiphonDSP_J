@@ -335,31 +335,11 @@ object NativeBmwDspValues {
         val hz = values.getOrElse(INDEX_MONO_BASS_FREQ) { MONO_BASS_DEFAULT_HZ }
         return (if (hz.isFinite()) hz else MONO_BASS_DEFAULT_HZ).coerceIn(MONO_BASS_MIN_HZ, MONO_BASS_MAX_HZ).toDouble()
     }
-    // Virtual Bass: the sub below the cut rebuilt as harmonics the woofers can play (native
-    // VirtualBass, right after Mono Bass); optionally the original sub high-passed away (LR4 at the
-    // cut). Ranges mirror native VirtualBass.
-    const val INDEX_VIRTUAL_BASS_ENABLED = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_ENABLED
-    const val INDEX_VIRTUAL_BASS_FREQ = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_FREQ // cut, Hz
-    const val INDEX_VIRTUAL_BASS_AMOUNT = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_AMOUNT // harmonics level, percent
-    const val INDEX_VIRTUAL_BASS_REMOVE_SUB = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_REMOVE_SUB
-    const val INDEX_VIRTUAL_BASS_CHARACTER = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_CHARACTER // Warm 0 .. Punchy 100, percent
     // The subsonic high-pass's slope, both sides: LR4 (24 dB/oct) or BW2 (12 dB/oct, half the
     // phase turn through the bass).
     const val INDEX_SUBSONIC_SLOPE = NativeBmwDspSchema.INDEX_SUBSONIC_SLOPE
     const val SUBSONIC_SLOPE_LR4 = 0f
     const val SUBSONIC_SLOPE_BW2 = 1f
-    // Virtual Bass Range: the harmonics are kept from the reach up to this x the reach (native
-    // VirtualBass::kMinRange..kMaxRange). Response: the detector's release, ms (native
-    // kMinResponseMs..kMaxResponseMs) -- faster is punchier, slower smoother.
-    const val INDEX_VIRTUAL_BASS_RANGE = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_RANGE
-    const val INDEX_VIRTUAL_BASS_RESPONSE = NativeBmwDspSchema.INDEX_VIRTUAL_BASS_RESPONSE
-    const val VIRTUAL_BASS_MIN_RANGE = 3f
-    const val VIRTUAL_BASS_MAX_RANGE = 8f
-    const val VIRTUAL_BASS_DEFAULT_RANGE = 5f
-    const val VIRTUAL_BASS_STEP_RANGE = 0.5f
-    const val VIRTUAL_BASS_MIN_RESPONSE_MS = 100f
-    const val VIRTUAL_BASS_MAX_RESPONSE_MS = 500f
-    const val VIRTUAL_BASS_DEFAULT_RESPONSE_MS = 200f
     // Convolver, after the band sum and ahead of the master limiter: on/off (off is a crossfaded bypass) and the IR gain trim, dB
     // (native clamps to CONVOLVER_MIN_GAIN_DB..CONVOLVER_MAX_GAIN_DB). The IR itself is a WAV in
     // app storage, see ConvolverIrStore -- not part of this array.
@@ -376,82 +356,6 @@ object NativeBmwDspValues {
     const val INDEX_NEUTRAL_ALLOW = NativeBmwDspSchema.INDEX_NEUTRAL_ALLOW
     const val CONVOLVER_MIN_GAIN_DB = -30f
     const val CONVOLVER_MAX_GAIN_DB = 12f
-    const val VIRTUAL_BASS_STEP_RESPONSE_MS = 25f
-    // The cut is the woofers' reach: the lowest note they really play (e.g. where the subsonic HPF
-    // starts). Notes below it are rebuilt as harmonics; notes above it are left alone. Capped at
-    // 60 Hz so it can't be set into the band the woofers carry.
-    const val VIRTUAL_BASS_MIN_HZ = 25f
-    const val VIRTUAL_BASS_MAX_HZ = 60f
-    const val VIRTUAL_BASS_DEFAULT_HZ = 40f
-    // Remove sub is a gentle HP2 this far below the reach (native VirtualBass::kRemovalRatio).
-    const val VIRTUAL_BASS_REMOVAL_RATIO = 0.8
-    const val VIRTUAL_BASS_STEP_HZ = 5f
-    const val VIRTUAL_BASS_DEFAULT_AMOUNT = 50f
-    const val VIRTUAL_BASS_DEFAULT_CHARACTER = 50f
-    /** How far up Virtual Bass keeps its harmonics, x its cut, as native clamps it. */
-    fun virtualBassRange(values: FloatArray): Double {
-        val r = values.getOrElse(INDEX_VIRTUAL_BASS_RANGE) { VIRTUAL_BASS_DEFAULT_RANGE }
-        return (if (r.isFinite()) r else VIRTUAL_BASS_DEFAULT_RANGE).coerceIn(VIRTUAL_BASS_MIN_RANGE, VIRTUAL_BASS_MAX_RANGE).toDouble()
-    }
-
-    /** The top of Virtual Bass's harmonics band in Hz (cut x range), or 0 while it's off. */
-    fun virtualBassTopHz(values: FloatArray): Double = virtualBassCutHz(values) * virtualBassRange(values)
-
-    // Virtual Bass's input lowpass (native VirtualBass::kInputRatio x the cut, an LR8) is -6 dB at
-    // its corner and falls 48 dB/oct above it, and the highest harmonic it makes is a note's 4th.
-    const val VIRTUAL_BASS_INPUT_RATIO = 0.85
-    const val VIRTUAL_BASS_HIGHEST_HARMONIC = 4
-
-    /**
-     * Where Virtual Bass's harmonics mostly land, in Hz: up to the 4th harmonic of a note at its
-     * input lowpass corner (where that note is already 6 dB down; notes above it, and so higher
-     * harmonics, fall off steeply), or the top of its band ([virtualBassTopHz]) if that is lower.
-     * Not a hard ceiling: a note at the reach still gives a 4th harmonic about 13 dB down, which
-     * Range's band filter shapes. 0 while off.
-     */
-    fun virtualBassHarmonicsTopHz(values: FloatArray): Double {
-        val made = virtualBassCutHz(values) * VIRTUAL_BASS_INPUT_RATIO * VIRTUAL_BASS_HIGHEST_HARMONIC
-        return minOf(made, virtualBassTopHz(values))
-    }
-
-    /** Virtual Bass's cut in Hz as native runs it, or 0 while it's off. */
-    fun virtualBassCutHz(values: FloatArray): Double {
-        if (values.getOrElse(INDEX_VIRTUAL_BASS_ENABLED) { 0f } < .5f) return 0.0
-        val hz = values.getOrElse(INDEX_VIRTUAL_BASS_FREQ) { VIRTUAL_BASS_DEFAULT_HZ }
-        return (if (hz.isFinite()) hz else VIRTUAL_BASS_DEFAULT_HZ).coerceIn(VIRTUAL_BASS_MIN_HZ, VIRTUAL_BASS_MAX_HZ).toDouble()
-    }
-
-    /**
-     * The most Virtual Bass can raise the peak level below [virtualBassTopHz], in dB,
-     * or 0 while it's off: 20 log10(1 + rise x Amount) (native VirtualBass::kPeakRiseKept /
-     * kPeakRiseRemoved). A lone note's harmonics stay inside it on their own -- they never peak in
-     * step with the sub, and with Remove sub on what's taken away almost cancels what's added --
-     * and where a note's own harmonics line up with the added ones, the native stage turns its
-     * harmonics down for that peak, so the allowance holds for any signal (a native test pins it).
-     * A bigger allowance would only turn the whole system down.
-     */
-    fun virtualBassWorstCaseBoostDb(values: FloatArray): Double {
-        if (virtualBassCutHz(values) <= 0.0) return 0.0
-        val pct = values.getOrElse(INDEX_VIRTUAL_BASS_AMOUNT) { VIRTUAL_BASS_DEFAULT_AMOUNT }
-        val amount = (if (pct.isFinite()) pct else VIRTUAL_BASS_DEFAULT_AMOUNT).coerceIn(0f, 100f) / 100.0
-        val removing = values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } >= .5f
-        val rise = if (removing) VIRTUAL_BASS_PEAK_RISE_REMOVED else VIRTUAL_BASS_PEAK_RISE_KEPT
-        return 20.0 * kotlin.math.log10(1.0 + rise * amount)
-    }
-    // Mirrors native VirtualBass::kPeakRiseKept / kPeakRiseRemoved.
-    const val VIRTUAL_BASS_PEAK_RISE_KEPT = 0.55
-    const val VIRTUAL_BASS_PEAK_RISE_REMOVED = 0.12
-
-    /**
-     * The corner of Virtual Bass's Remove sub high-pass (an HP2 at [VIRTUAL_BASS_REMOVAL_RATIO] x
-     * the reach), in Hz as native runs it, or 0 when it doesn't run (Virtual Bass off, or Remove
-     * sub off). The only part of Virtual Bass a linear response can show -- the harmonics it adds
-     * are not a filter.
-     */
-    fun virtualBassRemovalHz(values: FloatArray): Double {
-        if (values.getOrElse(INDEX_VIRTUAL_BASS_REMOVE_SUB) { 0f } < .5f) return 0.0
-        return virtualBassCutHz(values) * VIRTUAL_BASS_REMOVAL_RATIO
-    }
     // Mirrors native DeepBass (NativeBmwCrossovers.h) -- the response graph and the Deep bass page
     // draw the same bell.
     const val DEEP_BASS_FULL_VOLUME_HZ = 50.0
