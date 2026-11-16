@@ -642,9 +642,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     return
                 }
             } else if (blocked.any { it.uid == uid } || run {
-                    // A reinstalled excluded app has a new uid: match its package instead.
-                    val packages = packageManager.getPackagesForUid(uid)?.toSet().orEmpty()
-                    blocked.any { it.packageName in packages }
+                    // A reinstalled excluded app has a new uid: match its package instead -- but
+                    // only when that uid is that one package alone. A shared uid (system or vendor
+                    // ones on head units) also holds other apps, and a genuinely incompatible one
+                    // among them must still stop the service.
+                    val packages = packageManager.getPackagesForUid(uid)
+                    packages != null && packages.size == 1 && blocked.any { it.packageName == packages[0] }
                 }) {
                 Timber.w("App problem for uid %d ignored: it's on the Excluded apps list", uid)
                 return
