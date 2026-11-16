@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
+import app.siphondsp.compose.state.GraphDbRangeState
+import app.siphondsp.view.GraphDbRange
 import app.siphondsp.audio.SpectrumEngine
 import app.siphondsp.compose.controls.bmwFocusRing
 import app.siphondsp.compose.home.HomePalette
@@ -133,7 +135,6 @@ private const val SAMPLE_RATE = 48_000.0
 private const val SPECTRUM_ALPHA = 110
 private const val SPECTRUM_TICK_MS = 33L
 
-private val DbGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 /** ALIGN draws a phase difference only where Low and Mid are both within this of each other. */
 private const val ALIGN_OVERLAP_DB = 15.0
@@ -341,6 +342,9 @@ fun CrossoverResponseGraph(
         }
     }
 
+    // The dB axis: the user's fixed choice, shared with every response graph (see GraphDbRange).
+    val dbRange = GraphDbRangeState.current()
+    val axis = DbAxis(dbRange)
     val view = CrossoverGraphView
     val showLeft = view.channels != GraphChannels.RIGHT
     val showRight = view.channels != GraphChannels.LEFT
@@ -362,12 +366,12 @@ fun CrossoverResponseGraph(
             if (mode == CrossoverGraphMode.ALIGN) drawAlignKey(nc, left, top, density, legendPaint)
             val toY: (Float) -> Float = when (mode) {
                 CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE ->
-                    { v -> dbToY(v, top, bottom) }
+                    { v -> dbToY(v, axis, top, bottom) }
                 CrossoverGraphMode.PHASE, CrossoverGraphMode.ALIGN -> { v -> valueToY(v, -180f, 180f, top, bottom) }
                 CrossoverGraphMode.GROUP_DELAY -> { v -> valueToY(v, -2f, 10f, top, bottom) }
             }
             val gridLines = when (mode) {
-                CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE -> DbGridLines
+                CrossoverGraphMode.MAGNITUDE, CrossoverGraphMode.MAGNITUDE_PHASE -> axis.gridLines
                 CrossoverGraphMode.PHASE, CrossoverGraphMode.ALIGN -> PhaseGridLines
                 CrossoverGraphMode.GROUP_DELAY -> GroupDelayGridLines
             }
@@ -383,25 +387,27 @@ fun CrossoverResponseGraph(
                     maxHz = 20000.0,
                     xForHz = { hz -> left + (log10(hz / 20.0) / 3.0).toFloat() * (right - left) },
                     yForDb = { db ->
+                        // The spectrum fills the plot whatever the dB range: it isn't a curve on it.
                         dbToY(
-                            (db - SpectrumEngine.FLOOR_DB) / (SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB) * 36f - 24f,
-                            top, bottom,
+                            (db - SpectrumEngine.FLOOR_DB) / (SpectrumEngine.CEILING_DB - SpectrumEngine.FLOOR_DB) *
+                                (axis.top - axis.bottom) + axis.bottom,
+                            axis, top, bottom,
                         )
                     },
                 )
             }
             if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
-                drawBandAreas(nc, curves, morph, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint, view.channels)
+                drawBandAreas(nc, curves, morph, axis, left, right, top, bottom, intArrayOf(lowArgb, midArgb, highArgb), bandWashPaint, bandEdgePaint, view.channels)
             }
             drawResponse(
-                nc, mode, curves, morph, left, right, top, bottom, lowPaint, midPaint, highPaint,
+                nc, mode, curves, morph, axis, left, right, top, bottom, lowPaint, midPaint, highPaint,
                 ChannelPaints(leftPaint, rightPaint, leftGlowPaint, rightGlowPaint),
                 rightPhasePaints, phaseOverlayLeft, phaseOverlayRight,
                 showLeft, showRight, bandLines,
             )
         }
     }
-    GraphOverlay(mode, curves.highBranchActive, lowArgb, midArgb, highArgb)
+    GraphOverlay(mode, curves.highBranchActive, lowArgb, midArgb, highArgb, dbRange)
     }
 }
 
@@ -411,7 +417,15 @@ fun CrossoverResponseGraph(
  * they'd overlap). Tappable and reachable with the iDrive knob.
  */
 @Composable
-private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb: Int, midArgb: Int, highArgb: Int) {
+private fun GraphOverlay(
+    mode: CrossoverGraphMode,
+    highActive: Boolean,
+    lowArgb: Int,
+    midArgb: Int,
+    highArgb: Int,
+    dbRange: GraphDbRange,
+) {
+    val context = LocalContext.current
     val view = CrossoverGraphView
     Box(Modifier.fillMaxSize().padding(start = PAD_LEFT_DP.dp, end = PAD_RIGHT_DP.dp, bottom = PAD_BOTTOM_DP.dp)) {
         if (mode == CrossoverGraphMode.PHASE) {
@@ -419,6 +433,16 @@ private fun GraphOverlay(mode: CrossoverGraphMode, highActive: Boolean, lowArgb:
                 GraphChip("LOW", view.lowPhase, ComposeColor(lowArgb)) { view.lowPhase = !view.lowPhase }
                 GraphChip("MID", view.midPhase, ComposeColor(midArgb)) { view.midPhase = !view.midPhase }
                 if (highActive) GraphChip("HIGH", view.highPhase, ComposeColor(highArgb)) { view.highPhase = !view.highPhase }
+            }
+        }
+        if (mode == CrossoverGraphMode.MAGNITUDE || mode == CrossoverGraphMode.MAGNITUDE_PHASE) {
+            // The dB axis, stepped through the fixed ranges on each tap (or knob press); saved and
+            // shared with every response graph, including the PEQ graph's ⋮ "dB range".
+            Row(Modifier.align(Alignment.BottomStart)) {
+                GraphChip(dbRange.label, on = true, tint = ComposeColor.White) {
+                    val ranges = GraphDbRange.entries
+                    GraphDbRangeState.set(context, ranges[(dbRange.ordinal + 1) % ranges.size])
+                }
             }
         }
         Row(Modifier.align(Alignment.TopEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -530,6 +554,7 @@ private fun drawResponse(
     mode: CrossoverGraphMode,
     curves: BmwResponseCurves,
     morph: MagnitudeMorph,
+    axis: DbAxis,
     left: Float,
     right: Float,
     top: Float,
@@ -558,8 +583,8 @@ private fun drawResponse(
     fun strokeChannelSums() {
         val leftSum = morph.shown[MagnitudeMorph.SUM_L]
         val rightSum = morph.shown[MagnitudeMorph.SUM_R]
-        val leftPath = pathFor { i -> dbToY(leftSum[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
-        val rightPath = pathFor { i -> dbToY(rightSum[i].toFloat().coerceIn(-24f, 12f), top, bottom) }
+        val leftPath = pathFor { i -> dbToY(axis.clip(leftSum[i]), axis, top, bottom) }
+        val rightPath = pathFor { i -> dbToY(axis.clip(rightSum[i]), axis, top, bottom) }
         if (showRight) {
             nc.drawPath(rightPath, channels.rightGlow)
             nc.drawPath(rightPath, channels.right)
@@ -764,6 +789,7 @@ private fun drawBandAreas(
     nc: Canvas,
     curves: BmwResponseCurves,
     morph: MagnitudeMorph,
+    axis: DbAxis,
     left: Float,
     right: Float,
     top: Float,
@@ -786,11 +812,11 @@ private fun drawBandAreas(
         for (i in 0 until POINT_COUNT) {
             val x = left + (i.toFloat() / lastIndex) * (right - left)
             val db = when (channels) {
-                GraphChannels.BOTH -> averageDb(leftDb[i], rightDb[i])
-                GraphChannels.LEFT -> leftDb[i].toFloat().coerceIn(-24f, 12f)
-                GraphChannels.RIGHT -> rightDb[i].toFloat().coerceIn(-24f, 12f)
+                GraphChannels.BOTH -> axis.clip((leftDb[i] + rightDb[i]) * 0.5)
+                GraphChannels.LEFT -> axis.clip(leftDb[i])
+                GraphChannels.RIGHT -> axis.clip(rightDb[i])
             }
-            val y = dbToY(db, top, bottom)
+            val y = dbToY(db, axis, top, bottom)
             if (i == 0) edge.moveTo(x, y) else edge.lineTo(x, y)
         }
         val area = Path(edge).apply {
@@ -848,8 +874,14 @@ private fun drawCrossoverMarkers(
 
 // --- axis mapping, 1:1 with the View's private helpers -------------------------------------
 
-private fun averageDb(left: Double, right: Double): Float =
-    ((left + right) * 0.5).toFloat().coerceIn(-24f, 12f)
+/** The magnitude axis in use: the chosen [GraphDbRange], with curves clipped at its edges. */
+private class DbAxis(range: GraphDbRange) {
+    val top = range.topDb.toFloat()
+    val bottom = range.bottomDb.toFloat()
+    val gridLines = FloatArray(range.gridLines.size) { range.gridLines[it].toFloat() }
+
+    fun clip(db: Double): Float = db.toFloat().coerceIn(bottom, top)
+}
 
 private fun deg(rad: Double): Float = Math.toDegrees(rad).toFloat().coerceIn(-180f, 180f)
 
@@ -861,7 +893,7 @@ private fun wrapDeg(degrees: Double): Float {
     return d.toFloat()
 }
 
-private fun dbToY(db: Float, top: Float, bottom: Float): Float = valueToY(db, -24f, 12f, top, bottom)
+private fun dbToY(db: Float, axis: DbAxis, top: Float, bottom: Float): Float = valueToY(db, axis.bottom, axis.top, top, bottom)
 
 private fun valueToY(value: Float, min: Float, max: Float, top: Float, bottom: Float): Float {
     val clamped = value.coerceIn(min, max)
