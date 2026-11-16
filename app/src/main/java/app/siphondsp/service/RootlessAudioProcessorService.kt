@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
@@ -719,10 +720,29 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // What the next AudioRecord should exclude, from the current settings and capture-policy log.
     private fun computeExclusions(): ExclusionSet = ExclusionSet(
         restricted = if (excludeRestrictedSessions) sessionManager.sessionPolicyDatabase.getRestrictedUids().toSet() else emptySet(),
-        blocked = blockedApps?.map { it.uid }?.toSet().orEmpty(),
+        blocked = blockedUids(),
         self = Process.myUid(),
         excludeRestricted = excludeRestrictedSessions,
     )
+
+    /**
+     * The Excluded apps' UIDs: each one's stored UID and its package's UID now. A reinstall can
+     * give an app a new UID, and the excluded app must still be excluded from the capture and the
+     * session database, not only kept from stopping the service (see onAppProblemDetected()).
+     */
+    private fun blockedUids(): Set<Int> {
+        val apps = blockedApps ?: return emptySet()
+        val uids = HashSet<Int>(apps.size * 2)
+        for (app in apps) {
+            uids += app.uid
+            try {
+                uids += packageManager.getPackageUid(app.packageName, 0)
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Uninstalled: its stored UID is all there is.
+            }
+        }
+        return uids
+    }
 
     // Main thread, from exclusionRecheckGate: rebuilds only if the exclusions must change.
     private fun recheckExclusions(reasons: Set<String>, packages: Set<String>) {
