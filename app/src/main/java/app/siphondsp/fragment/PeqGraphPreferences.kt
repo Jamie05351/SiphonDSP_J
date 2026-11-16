@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import app.siphondsp.compose.screens.PeqChannelDisplay
 import app.siphondsp.compose.screens.PeqGraphMode
+import app.siphondsp.view.GraphDbRange
 
 /**
  * Typed access to the Parametric EQ graph's `peq_graph_display` SharedPreferences: overlay
@@ -61,6 +62,13 @@ class PeqGraphPreferences(context: Context) {
             prefs.edit { putString(KEY_LIST_MODE, value) }
         }
 
+    /** The dB axis of every frequency-response graph (see [GraphDbRange]); +12 / -24 by default. */
+    var dbRange: GraphDbRange
+        get() = GraphDbRange.fromName(prefs.getString(KEY_DB_RANGE, null))
+        set(value) {
+            prefs.edit { putString(KEY_DB_RANGE, value.name) }
+        }
+
     /** Single-transaction write used by the private backup restore. */
     fun writeBackupGraphDisplay(showIndividualFilters: Boolean, channelDisplayName: String) {
         prefs.edit {
@@ -78,5 +86,6 @@ class PeqGraphPreferences(context: Context) {
         // Unrelated to KEY_LIST_MODE above (that's the Graph/List toggle) -- this persists the
         // graph's PeqGraphMode (Magnitude / Phase).
         private const val KEY_RESPONSE_MODE = "response_display_mode"
+        private const val KEY_DB_RANGE = "response_db_range"
     }
 }

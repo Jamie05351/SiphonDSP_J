@@ -69,6 +69,8 @@ import app.siphondsp.dsp.BmwPeqBank
 import app.siphondsp.dsp.BmwResponseCalculator
 import app.siphondsp.dsp.CarBaseline
 import app.siphondsp.dsp.HouseCurve
+import app.siphondsp.compose.state.GraphDbRangeState
+import app.siphondsp.view.GraphDbRange
 import app.siphondsp.dsp.BmwResponseCurves
 import app.siphondsp.dsp.BmwSignalChain
 import app.siphondsp.dsp.ComplexAcc
@@ -78,7 +80,6 @@ import app.siphondsp.model.MeasurementNeutral
 import app.siphondsp.model.NativeBmwDspValues
 import app.siphondsp.model.ParametricEqBand
 import app.siphondsp.model.ParametricEqChannel
-import app.siphondsp.model.ParametricEqFilterType
 import app.siphondsp.utils.extensions.prettyNumberFormat
 import app.siphondsp.view.PeakHoldMeter
 import app.siphondsp.view.PeqGraphMath
@@ -89,7 +90,6 @@ import android.graphics.Color as AndroidColor
 import java.util.UUID
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.hypot
@@ -118,7 +118,7 @@ import kotlin.math.sin
  * redesign"): band areas instead of branch lines and crossover shading, one bank in focus at a
  * time with its filters as translucent per-filter shapes and its nodes on its own curve, a
  * 5 s idle that hands focus back to the full curve, a cool-white sum, per-filter colours clear of
- * the bank colours, and a gain axis fitted to the curves. The phase view is unchanged.
+ * the bank colours, and a gain axis on the user's fixed [GraphDbRange] (no longer fitted to the curves). The phase view is unchanged.
  */
 
 /**
@@ -182,7 +182,6 @@ private val PlotPadRight = 52.dp
 private val PlotPadBottom = 30.dp
 
 // Horizontal gridline values per mode — 1:1 with drawUnifiedGrid / drawPhaseGrid.
-private val MagnitudeGridLines = floatArrayOf(12f, 6f, 0f, -6f, -12f, -18f, -24f)
 private val PhaseGridLines = floatArrayOf(180f, 90f, 0f, -90f, -180f)
 
 // Decade-ish vertical frequency markers — 1:1 with ParametricEqSurface.FREQ_SCALE.
@@ -213,14 +212,15 @@ fun PeqGraphFrame(
     val maxFrequency = remember(sampleRate) {
         min(PeqGraphMath.MAX_FREQUENCY, sampleRate * 0.5 * 0.999)
     }
+    val dbRange = GraphDbRangeState.current()
     ComposeCanvas(modifier.graphPanel()) {
         val left = PlotPadLeft.toPx()
         val top = PlotPadTop.toPx()
         val right = size.width - PlotPadRight.toPx()
         val bottom = size.height - PlotPadBottom.toPx()
         if (right <= left || bottom <= top) return@ComposeCanvas
-        val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency)
-        val gridLines = if (mode == PeqGraphMode.PHASE) PhaseGridLines else MagnitudeGridLines
+        val geometry = PeqPlotGeometry(left, right, top, bottom, maxFrequency, dbRange.bottomDb, dbRange.topDb)
+        val gridLines = if (mode == PeqGraphMode.PHASE) PhaseGridLines else gainGridLines(geometry)
         val toY: (Double) -> Float =
             if (mode == PeqGraphMode.PHASE) geometry::yForPhaseDeg else geometry::yForGain
         drawIntoCanvas { canvas ->
@@ -301,6 +301,14 @@ fun PeqGraph(
         responseGrid(SYSTEM_POINT_COUNT, sampleRate, 20.0, min(20_000.0, sampleRate * 0.5 * 0.999))
     }
     val convolver = rememberConvolverResponse(showConvolver, convolverGrid)
+    // The dB axis is the user's fixed choice, shared by every response graph: never fitted to the
+    // curves, which are clipped at its edges instead.
+    // The ⋮ menu's check mark comes from this; the draw and the tap handler each read the live
+    // state themselves (GraphDbRangeState.read), so a change redraws the canvas from the draw
+    // phase and a tap always hit-tests the window that is on screen. Nothing is written to the
+    // model during composition.
+    val dbRange = GraphDbRangeState.current()
+    val rangeContext = LocalContext.current
     remember(ValuesKey(systemValues), peqState, sampleRate, carBaseline, convolver) {
         model.recompute(systemValues, peqState, sampleRate, carBaseline, convolver)
     }
@@ -386,7 +394,7 @@ fun PeqGraph(
                         val right = size.width - PlotPadRight.toPx()
                         val bottom = size.height - PlotPadBottom.toPx()
                         if (right <= left || bottom <= top) return@detectTapGestures
-                        val geometry = model.geometry(left, right, top, bottom, maxFrequency)
+                        val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))
                         val hit = hitTestFocusedBank(
                             offset, geometry, model.curves, peqState, activeBank, channelDisplay, maxFrequency, density,
                             model, showIndividualFilters, sampleRate,
@@ -417,7 +425,7 @@ fun PeqGraph(
             val right = size.width - PlotPadRight.toPx()
             val bottom = size.height - PlotPadBottom.toPx()
             if (right <= left || bottom <= top) return@ComposeCanvas
-            val geometry = model.geometry(left, right, top, bottom, maxFrequency)
+            val geometry = model.geometry(left, right, top, bottom, maxFrequency, GraphDbRangeState.read(rangeContext))
             val house = houseCurve?.let { model.houseOverlay(it, channelDisplay) }
             val ctx = PeqDrawContext(
                 geometry = geometry,
@@ -475,6 +483,7 @@ fun PeqGraph(
                 showIndividualFilters = showIndividualFilters,
                 showConvolver = showConvolver,
                 options = opts,
+                dbRange = dbRange,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
         }
@@ -1530,8 +1539,10 @@ private fun PeqGraphOptionsButton(
     showIndividualFilters: Boolean,
     showConvolver: Boolean,
     options: PeqGraphOptions,
+    dbRange: GraphDbRange,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     Box(modifier) {
@@ -1566,6 +1577,14 @@ private fun PeqGraphOptionsButton(
                 DropdownMenuItem(
                     text = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() } + if (option == mode) "  ✓" else "") },
                     onClick = { options.onModeChange(option); expanded = false },
+                )
+            }
+            // Every response graph's (fixed) dB axis; saved, and shared with the crossover graphs.
+            MenuSectionLabel("dB range")
+            GraphDbRange.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label + if (option == dbRange) "  ✓" else "") },
+                    onClick = { GraphDbRangeState.set(context, option); expanded = false },
                 )
             }
         }
@@ -1681,13 +1700,10 @@ private class PeqResponseModel {
         staticKey = Int.MIN_VALUE
     }
 
-    // The gain window, fitted to the curves in fitAxis(). Starts as the old fixed -24..+12.
-    var axisTop = PeqGraphMath.MAX_GAIN
-    var axisBottom = PeqGraphMath.MIN_GAIN
-
-    /** Plot geometry on the fitted gain window; draw and hit-test both build theirs here. */
-    fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double) =
-        PeqPlotGeometry(left, right, top, bottom, maxFrequency, axisBottom, axisTop)
+    /** Plot geometry on [range], the user's fixed gain window (see [GraphDbRange]); draw and
+     *  hit-test both build theirs here, each passing the range it is working with. */
+    fun geometry(left: Float, right: Float, top: Float, bottom: Float, maxFrequency: Double, range: GraphDbRange) =
+        PeqPlotGeometry(left, right, top, bottom, maxFrequency, range.bottomDb, range.topDb)
 
     // The house curve resampled onto the curves' grid, kept until the curve or the grid changes.
     private var houseSource: HouseCurve? = null
@@ -1741,55 +1757,6 @@ private class PeqResponseModel {
         calculator.invalidateAll()
         calculator.compute(autoHeadroom.effectiveValues(values, peq, sampleRate), peq, curves)
         baseline?.applyTo(curves)
-        fitAxis(peq, measured = baseline != null)
-    }
-
-    /**
-     * Fits the gain window to what's drawn, so the curves use the plot's height instead of sitting
-     * in the bottom of a fixed -24..+12: the top is the first 6 dB line at least 3 dB above the
-     * highest point of the full curve, any bank's curve or any filter's own peak (uncapped, so a big stacked boost still
-     * shows its real height); the window is 24 dB tall, or 36 dB when
-     * the full curve dips further than that (ignoring the rolled-off ends below 40 Hz / above
-     * 16 kHz). With a car baseline added ([measured]) the curves carry the cabin's real peaks and
-     * dips, so the window may grow to 48 dB.
-     */
-    private fun fitAxis(peq: BmwPeqState, measured: Boolean = false) {
-        var high = Double.NEGATIVE_INFINITY
-        var low = Double.POSITIVE_INFINITY
-        val freqs = curves.frequencies
-        for (ch in 0..1) {
-            for (arr in arrayOf(curves.sumDb[ch], curves.preSplitDb[ch], curves.lowBranchDb[ch], curves.midBranchDb[ch])) {
-                for (v in arr) if (v.isFinite() && v > high) high = v
-            }
-            if (curves.highBranchActive) for (v in curves.highBranchDb[ch]) if (v.isFinite() && v > high) high = v
-            val sum = curves.sumDb[ch]
-            for (i in sum.indices) {
-                if (i < freqs.size && freqs[i] in 40.0..16_000.0 && sum[i].isFinite() && sum[i] < low) low = sum[i]
-            }
-        }
-        // Each filter's own extreme too: the graph draws every filter's own shape from 0 dB, and a
-        // boost that its neighbours (or the crossover) cancel in the curves above would otherwise
-        // be flattened against the top edge with its node pinned there. A peaking / shelf
-        // filter's own response tops out at its gain; a notch has no finite extreme, so skip it.
-        val banks = mutableListOf(peq.fullRangeBands, peq.lowBandBands, peq.midBandBands)
-        if (curves.highBranchActive) banks.add(peq.highBandBands)
-        for (bank in banks) for (band in bank) {
-            if (band.filterType == ParametricEqFilterType.NOTCH || !band.gain.isFinite()) continue
-            if (band.gain > high) high = band.gain
-            if (band.gain < low) low = band.gain
-        }
-        if (!high.isFinite() || !low.isFinite()) return
-        // Filter shapes hang from the 0 dB line, so keep it on screen even when every curve sits
-        // below it (all cuts, or headroom pulling the curves down).
-        high = maxOf(high, 0.0)
-        val top = ceil((high + 3.0) / 6.0) * 6.0
-        val span = when {
-            top - low <= 22.0 -> 24.0
-            top - low <= 34.0 || !measured -> 36.0
-            else -> 48.0
-        }
-        axisTop = top
-        axisBottom = top - span
     }
 }
 
